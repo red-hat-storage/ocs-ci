@@ -18,8 +18,8 @@ from tests import helpers
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, NonUpgradedImagesFoundError, UnavailableResourceException,
-    TimeoutExpiredError
+    CommandFailed, NonUpgradedImagesFoundError, ResourceWrongStatusException,
+    TimeoutExpiredError, UnavailableResourceException
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
@@ -1246,53 +1246,46 @@ def download_file_from_pod(pod_name, remotepath, localpath, namespace=None):
     run_cmd(cmd)
 
 
-def verify_pods_status(
-    namespace=None,
-    selector=None,
-    selector_label=None,
-    exclude_selector=False,
-    status_list=None
-):
+def wait_for_storage_pods(timeout=200):
     """
-    Verify status of pods.
+    Check all OCS pods status, they should be in Running or Completed state
 
     Args:
-        namespace (str): Name of the namespace
-            If namespace is None - get all pods
-        selector (list) : List of the resource selector to search with.
-            Example: ['alertmanager','prometheus']
-        selector_label (str): Label of selector (default: app)
-        exclude_selector (bool): If list of the resource selector not to search
-            with
-        status_list (list): List of statuses that pods should have.
-            If None is provided then ['Running', 'Completed'] is used
-
-    Returns:
-        bool: If pods were in correct status
+        timeout (int): Number of seconds to wait for pods to get into correct
+            state
 
     """
-    status_list = status_list or [constants.STATUS_RUNNING, constants.STATUS_SUCCEEDED]
-    pods = get_all_pods(
-        namespace=namespace,
-        selector=selector,
-        selector_label=selector_label,
-        exclude_selector=exclude_selector
+    all_pod_obj = get_all_pods(
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
-    logger.info(
-        f"Checking that pods {[pod.name for pod in pods]} "
-        f"are in correct states: {status_list}"
-    )
+    for pod_obj in all_pod_obj:
+        state = constants.STATUS_RUNNING
+        if any(i in pod_obj.name for i in ['-1-deploy', 'ocs-deviceset']):
+            state = constants.STATUS_COMPLETED
 
-    correct_status = True
-    for pod in pods:
-        if pod.pod_data['status']['phase'] in status_list:
-            logger.info(f"Status of {pod.name}: {pod.pod_data['status']['phase']}")
-        else:
-            correct_status = False
-            logger.error(f"Status of {pod.name}: {pod.pod_data['status']['phase']}")
-            logger.debug(pod.pod_data)
-
-    return correct_status
+        try:
+            helpers.wait_for_resource_state(
+                resource=pod_obj,
+                state=state,
+                timeout=timeout
+            )
+        except ResourceWrongStatusException:
+            # 'rook-ceph-crashcollector' on the failed node stucks at
+            # pending state. BZ 1810014 tracks it.
+            # Ignoring 'rook-ceph-crashcollector' pod health check as
+            # WA and deleting its deployment so that the pod
+            # disappears. Will revert this WA once the BZ is fixed
+            if 'rook-ceph-crashcollector' in pod_obj.name:
+                ocp_obj = ocp.OCP(
+                    namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                )
+                pod_name = pod_obj.name
+                deployment_name = '-'.join(pod_name.split("-")[:-2])
+                command = f"delete deployment {deployment_name}"
+                ocp_obj.exec_oc_cmd(command=command)
+                logger.info(f"Deleted deployment for pod {pod_obj.name}")
+            else:
+                raise
 
 
 def verify_pods_upgraded(old_images, selector, count=1, timeout=720):

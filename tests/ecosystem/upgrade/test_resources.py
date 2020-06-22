@@ -7,7 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import ocp
-from ocs_ci.ocs.resources.pod import verify_pods_status
+from ocs_ci.ocs.resources.pod import wait_for_storage_pods
 from tests import helpers
 
 log = logging.getLogger(__name__)
@@ -21,10 +21,7 @@ def test_storage_pods_running():
     or Completed after upgrade is completed.
 
     """
-    assert verify_pods_status(), (
-        'Some pods were not in expected Phase. Look into DEBUG messages in '
-        'logs for details of failed pods.'
-    )
+    wait_for_storage_pods(timeout=10), 'Some pods were not in expected state'
 
 
 @pre_upgrade
