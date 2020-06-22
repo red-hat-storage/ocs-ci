@@ -190,8 +190,9 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             # DC app pods on the failed node will get automatically created on other
             # running node. Waiting for all dc app pod to reach running state
             try:
+                timeout = 1 if failure == "shutdown" else 720
                 wait_for_dc_app_pods_to_reach_running_state(
-                    dc_pod_obj, timeout=720
+                    dc_pod_obj, timeout=timeout
                 )
             except ResourceWrongStatusException:
                 # Apply WA in BZ-1841611; ocs-ci issue-2212
