@@ -55,7 +55,8 @@ class TestPgSQLWorkload(E2ETest):
         # Calculate the time from running state to completed state
         end_time = datetime.now()
         diff_time = end_time - start_time
-        log.info(f"\npgbench pod reached to completed state after {diff_time.seconds} seconds\n")
+        log.info(f"\npgbench pod reached to completed state after "
+                 f"{diff_time.seconds} seconds\n")
 
         # Get pgbench pods
         pgbench_pods = pgsql.get_pgbench_pods()

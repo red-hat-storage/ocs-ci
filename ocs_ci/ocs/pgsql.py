@@ -310,18 +310,21 @@ class Postgresql(RipSaw):
         if print_table:
             pgbench_pod_table = PrettyTable()
             pgbench_pod_table.field_names = [
-                'pod_name', 'scaling_factor', 'num_clients', 'num_threads', 'trans_client',
-                'actually_trans', 'latency_avg', 'lat_stddev', 'tps_incl', 'tps_excl'
+                'pod_name', 'scaling_factor', 'num_clients', 'num_threads',
+                'trans_client', 'actually_trans', 'latency_avg', 'lat_stddev',
+                'tps_incl', 'tps_excl'
             ]
             for pgbench_pod_out in all_pgbench_pods_output:
                 for pod_output in pgbench_pod_out[0]:
                     for pod in pod_output.values():
-                        pgbench_pod_table.add_row([
-                            pgbench_pod_out[1], pod['scaling_factor'], pod['num_clients'],
-                            pod['num_threads'], pod['number_of_transactions_per_client'],
-                            pod['number_of_transactions_actually_processed'], pod['latency_avg'],
-                            pod['lat_stddev'], pod['tps_incl'], pod['tps_excl']
-                        ])
+                        pgbench_pod_table.add_row(
+                            [pgbench_pod_out[1], pod['scaling_factor'],
+                             pod['num_clients'], pod['num_threads'],
+                             pod['number_of_transactions_per_client'],
+                             pod['number_of_transactions_actually_processed'],
+                             pod['latency_avg'], pod['lat_stddev'],
+                             pod['tps_incl'], pod['tps_excl']]
+                        )
             log.info(f'\n{pgbench_pod_table}\n')
 
         return all_pgbench_pods_output
@@ -334,11 +337,16 @@ class Postgresql(RipSaw):
             list: Cluster node OCP objects
 
         """
-        pgsql_pod_objs = self.pod_obj.get(selector=constants.PGSQL_APP_LABEL, all_namespaces=True)
+        pgsql_pod_objs = self.pod_obj.get(
+            selector=constants.PGSQL_APP_LABEL, all_namespaces=True
+        )
         log.info("Create a list of nodes that contain a pgsql app pod")
         nodes_set = set()
         for pod in pgsql_pod_objs['items']:
-            log.info(f"pod {pod['metadata']['name']} located on node {pod['spec']['nodeName']}")
+            log.info(
+                f"pod {pod['metadata']['name']} located on "
+                f"node {pod['spec']['nodeName']}"
+            )
             nodes_set.add(pod['spec']['nodeName'])
         return list(nodes_set)
 
@@ -350,7 +358,9 @@ class Postgresql(RipSaw):
             pod status
 
         """
-        app_pod_list = get_operator_pods(constants.PGSQL_APP_LABEL, constants.RIPSAW_NAMESPACE)
+        app_pod_list = get_operator_pods(
+            constants.PGSQL_APP_LABEL, constants.RIPSAW_NAMESPACE
+        )
         app_pod = app_pod_list[random.randint(0, len(app_pod_list) - 1)]
         log.info(f"respin pod {app_pod.name}")
         app_pod.delete(wait=True, force=False)
@@ -368,19 +378,23 @@ class Postgresql(RipSaw):
         """
         pgbench_pod_table = PrettyTable()
         pgbench_pod_table.field_names = [
-            'pod_name', 'scaling_factor', 'num_clients', 'num_threads', 'trans_client',
-            'actually_trans', 'latency_avg', 'lat_stddev', 'tps_incl', 'tps_excl'
+            'pod_name', 'scaling_factor', 'num_clients', 'num_threads',
+            'trans_client', 'actually_trans', 'latency_avg', 'lat_stddev',
+            'tps_incl', 'tps_excl'
         ]
         for pgbench_pod in pgbench_pods:
             output = run_cmd(f'oc logs {pgbench_pod.name}')
             pg_output = utils.parse_pgsql_logs(output)
             for pod_output in pg_output:
                 for pod in pod_output.values():
-                    pgbench_pod_table.add_row([
-                        pgbench_pod.name, pod['scaling_factor'], pod['num_clients'], pod['num_threads'],
-                        pod['number_of_transactions_per_client'], pod['number_of_transactions_actually_processed'],
-                        pod['latency_avg'], pod['lat_stddev'], pod['tps_incl'], pod['tps_excl']
-                    ])
+                    pgbench_pod_table.add_row(
+                        [pgbench_pod.name, pod['scaling_factor'],
+                         pod['num_clients'], pod['num_threads'],
+                         pod['number_of_transactions_per_client'],
+                         pod['number_of_transactions_actually_processed'],
+                         pod['latency_avg'], pod['lat_stddev'],
+                         pod['tps_incl'], pod['tps_excl']]
+                    )
         log.info(f'\n{pgbench_pod_table}\n')
 
     def export_pgoutput_to_googlesheet(self, pg_output, sheet_name, sheet_index):
@@ -399,24 +413,22 @@ class Postgresql(RipSaw):
         )
         log.info("Exporting pgoutput data to google spreadsheet")
         for i in range(len(pg_output)):
-            for j in range(len(pg_output[i])):
-                run_id = list(pg_output[i][j].keys())[0]
-                lat_avg = pg_output[i][j][run_id]['latency_avg']
-                lat_stddev = pg_output[i][j][run_id]['lat_stddev']
-                tps_incl = pg_output[i][j][run_id]['lat_stddev']
-                tps_excl = pg_output[i][j][run_id]['tps_excl']
+            for j in range(len(pg_output[i][0])):
+                run_id = list(pg_output[i][0][j].keys())[0]
+                lat_avg = pg_output[i][0][j][run_id]['latency_avg']
+                lat_stddev = pg_output[i][0][j][run_id]['lat_stddev']
+                tps_incl = pg_output[i][0][j][run_id]['lat_stddev']
+                tps_excl = pg_output[i][0][j][run_id]['tps_excl']
                 g_sheet.insert_row(
-                    [f"Pgbench-pod{i}-run-{run_id}",
+                    [f"Pgbench-pod{pg_output[i][1]}-run-{run_id}",
                      int(lat_avg),
                      int(lat_stddev),
                      int(tps_incl),
                      int(tps_excl)], 2
                 )
-        g_sheet.insert_row(["",
-                            "latency_avg",
-                            "lat_stddev",
-                            "lat_stddev",
-                            "tps_excl"], 2)
+        g_sheet.insert_row(
+            ["", "latency_avg", "lat_stddev", "lat_stddev", "tps_excl"], 2
+        )
 
         # Capturing versions(OCP, OCS and Ceph) and test run name
         g_sheet.insert_row(
