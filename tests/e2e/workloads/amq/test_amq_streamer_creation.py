@@ -29,13 +29,10 @@ class TestAMQBasics(E2ETest):
         argvalues=[
             pytest.param(
                 constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2217")
-            ),
-            pytest.param(
-                constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2218")
             )
         ]
     )
-    def test_install_amq_cephfs(self, interface, test_fixture_amq):
+    def test_install_and_run_amq_benchmark(self, interface, test_fixture_amq):
         """
         Create amq cluster and run open messages on it
 
