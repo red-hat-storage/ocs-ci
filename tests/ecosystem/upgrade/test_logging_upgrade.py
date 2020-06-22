@@ -48,9 +48,10 @@ def get_csv_version(channel):
         channel (int) : Logging Channel
 
     Returns:
-        cluster_logging_csv (str) : Name of the cluster-logging CSV
-        elasticsearch_csv (str) : Name of the elasticsearch CSV
-        dict: Images dict like: {'image_name': 'image.url.to:tag', ...}
+        tuple: Tuple containing three elements
+            cluster_logging_csv (str) : Name of the cluster-logging CSV
+            elasticsearch_csv (str) : Name of the elasticsearch CSV
+            dict: Images dict like: {'image_name': 'image.url.to:tag', ...}
 
     """
 
@@ -83,8 +84,9 @@ def check_csv_version_post_upgrade(channel):
     """
 
     cluster_logging_csv, elasticsearch_csv, images = get_csv_version(channel)
-    if config.UPGRADE['upgrade_logging_channel'] in (
-        cluster_logging_csv and elasticsearch_csv
+    if (
+        config.UPGRADE['upgrade_logging_channel'] in cluster_logging_csv
+        and config.UPGRADE['upgrade_logging_channel'] in elasticsearch_csv
     ):
         logger.info(
             f"Upgraded version of Cluster-logging "
@@ -98,12 +100,11 @@ def check_csv_version_post_upgrade(channel):
     return False
 
 
-@retry(AttributeError, 5, 30, 2)
+@retry(AttributeError, 8, 30, 2)
 def check_csv_logging_phase(channel):
     """
     The function checks in the CSV for the phase "Succeeded"
-    for cluster-logging operator and Elastic-search
-    operator
+    for cluster-logging operator and Elastic-search operator
 
     Args:
         channel (int) : Logging channel
@@ -161,7 +162,7 @@ def upgrade_info(channel):
 
 @post_ocp_upgrade
 @pytest.mark.polarion_id("OCS-2201")
-class TestUpgradeLoggingAfterOCPUpgrade():
+class TestUpgradeLogging():
     """
     This class contains test for upgrade openshift-logging
     after OCP upgrade
@@ -184,6 +185,7 @@ class TestUpgradeLoggingAfterOCPUpgrade():
         with CephHealthMonitor(ceph_cluster):
 
             #  Pre-check
+            logger.info("Checking cluster logging before starting to upgrade")
             check_cluster_logging()
 
             # Matching the OCP version and cluster-Logging version
@@ -201,14 +203,14 @@ class TestUpgradeLoggingAfterOCPUpgrade():
                 es_subscription_cmd = (
                     'oc patch subscription elasticsearch-operator '
                     f'-n {constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE} '
-                    '--type merge -p \'{{"spec":{{"channel": '
+                    '--type merge -p \'{"spec":{"channel": '
                     f'"{upgrade_channel}"}}}}\''
                 )
                 # Upgrade Cluster-logging operator subscription
                 clo_subscription_cmd = (
                     'oc patch subscription cluster-logging '
                     f'-n {constants.OPENSHIFT_LOGGING_NAMESPACE} '
-                    '--type merge -p \'{{"spec":{{"channel": '
+                    '--type merge -p \'{"spec":{"channel": '
                     f'"{upgrade_channel}"}}}}\''
                 )
                 run_cmd(es_subscription_cmd)
