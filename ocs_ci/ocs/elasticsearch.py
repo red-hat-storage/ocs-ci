@@ -10,6 +10,7 @@ import urllib.error
 import base64
 import signal
 import subprocess
+import time
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -59,6 +60,19 @@ class ElasticSearch(object):
         self._deploy_eck()
         # Deploy the Elastic-Search server
         self._deploy_es()
+
+        # Verify that ES is Up & Running
+        timeout = 600
+        while timeout > 0:
+            if self.get_health():
+                log.info('The ElasticSearch server is ready !')
+                break
+            else:
+                log.warning('The ElasticSearch server is not ready yet')
+                log.info('going to sleep gor 30 sec. before next check')
+                time.sleep(30)
+                timeout -= 30
+
         # Starting LocalServer process - port forwarding
         self.local_server()
 
