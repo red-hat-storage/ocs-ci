@@ -42,7 +42,8 @@ class TestAddCapacityWithOSDPodDelete(ManageTest):
 
         max_osds = 15
         osd_pods_before = pod_helpers.get_osd_pods()
-        if len(osd_pods_before) >= max_osds:
+        number_of_osd_pods_before = len(osd_pods_before)
+        if number_of_osd_pods_before >= max_osds:
             pytest.skip("We have maximum of osd's in the cluster")
 
         d = Disruptions()
@@ -55,7 +56,7 @@ class TestAddCapacityWithOSDPodDelete(ManageTest):
 
         # OSD number go down by one and then gradually go up by 1
         # and finally the OSD number will be storagedeviceset_count*3
-        pod_helpers.wait_for_new_osd_pods_to_come_up()
+        pod_helpers.wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before)
         logging.info("Delete an osd pod while storage capacity is getting increased")
         d.delete_resource(1)
 
