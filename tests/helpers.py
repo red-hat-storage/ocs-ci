@@ -2357,4 +2357,4 @@ def get_pv_size(storageclass=None):
     for pv_obj in pv_objs:
         if pv_obj['spec']['storageClassName'] == storageclass:
             return_list.append(pv_obj['spec']['capacity']['storage'])
-    logger.info(return_list)
+    return return_list
