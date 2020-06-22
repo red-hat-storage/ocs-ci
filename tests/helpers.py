@@ -2337,3 +2337,24 @@ def retrieve_default_ingress_crt():
 
     with open(constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, 'w') as crtfile:
         crtfile.write(decoded_crt)
+
+
+def get_pv_size(storageclass=None):
+    """
+    Get Pv size from requested storageclass
+
+    Args:
+        storageclass (str): Name of storageclass
+
+    Returns:
+        list: list of pv's size
+
+    """
+    return_list = []
+
+    ocp_obj = ocp.OCP(kind=constants.PV)
+    pv_objs = ocp_obj.get()['items']
+    for pv_obj in pv_objs:
+        if pv_obj['spec']['storageClassName'] == storageclass:
+            return_list.append(pv_obj['spec']['capacity']['storage'])
+    logger.info(return_list)

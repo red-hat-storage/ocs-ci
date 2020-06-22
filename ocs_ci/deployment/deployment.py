@@ -375,9 +375,16 @@ class Deployment(object):
         device_size = int(
             config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
         )
-        deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
-            'storage'
-        ] = f"{device_size}Gi"
+        if self.platform.lower() == constants.BAREMETAL_PLATFORM:
+            pv_size_list = helpers.get_pv_size(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
+            pv_size_list.sort()
+            deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
+                'storage'
+            ] = f"{pv_size_list[0]}"
+        else:
+            deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
+                'storage'
+            ] = f"{device_size}Gi"
 
         if self.platform.lower() == constants.VSPHERE_PLATFORM:
             deviceset_data['dataPVCTemplate']['spec'][

@@ -171,6 +171,7 @@ LOCAL_STORAGE_NAMESPACE = 'local-storage'
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
 DEFAULT_STORAGECLASS_RBD = f'{DEFAULT_CLUSTERNAME}-ceph-rbd'
+DEFAULT_STORAGECLASS_LSO = 'local-block'
 
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
