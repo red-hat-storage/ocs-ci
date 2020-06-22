@@ -32,8 +32,7 @@ class OBC(object):
         Initializer function
 
         Args:
-            mcg (obj): Multi cloud gateway object
-            obc (str): Name of the Object Bucket Claim
+            obc_name (str): Name of the Object Bucket Claim
         """
         self.obc_name = obc_name
         self.namespace = config.ENV_DATA['cluster_namespace']
@@ -46,10 +45,23 @@ class OBC(object):
 
         obc_configmap = OCP(namespace=self.namespace, kind='ConfigMap', resource_name=self.obc_name).get()
         obc_configmap_data = obc_configmap.get('data')
-        self.s3_endpoint = (
-            'http://' + obc_configmap_data.get('BUCKET_HOST') + ':'
-            + obc_configmap_data.get('BUCKET_PORT')
-        )
+
+        obc_provisioner = obc_resource.get('metadata').get('labels').get('bucket-provisioner')
+
+        if 'noobaa' in obc_provisioner:
+            get_noobaa = OCP(kind='noobaa', namespace=self.namespace).get()
+            self.s3_endpoint = (
+                get_noobaa.get('items')[0].get('status').get('services')
+                .get('serviceS3').get('externalDNS')[0]
+            )
+
+        elif 'rook' in obc_provisioner:
+            # TODO: implement network forwarding to access the internal address
+            self.s3_endpoint = (
+                'http://' + obc_configmap_data.get('BUCKET_HOST') + ':'
+                + obc_configmap_data.get('BUCKET_PORT')
+            )
+
         self.region = obc_configmap_data.get('BUCKET_REGION')
 
         self.access_key_id = base64.b64decode(
@@ -343,10 +355,9 @@ class MCG_OCBucket(OCBucket):
         obc_data['spec']['bucketName'] = self.name
         obc_data['spec']['storageClassName'] = self.namespace + '.noobaa.io'
         obc_data['metadata']['namespace'] = self.namespace
-        if 'bucketclass' in kwargs:
-            obc_data.setdefault('spec', {}).setdefault('additionalConfig', {}).setdefault(
-                'bucketclass', kwargs['bucketclass']
-            )
+        obc_data.setdefault('spec', {}).setdefault('additionalConfig', {}).setdefault(
+            'bucketclass', 'aws2'
+        )
         create_resource(**obc_data)
 
 
