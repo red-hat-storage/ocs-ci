@@ -412,15 +412,21 @@ class Postgresql(RipSaw):
             sheet_name=sheet_name, sheet_index=sheet_index
         )
         log.info("Exporting pgoutput data to google spreadsheet")
-        for i in range(len(pg_output)):
-            for j in range(len(pg_output[i][0])):
-                run_id = list(pg_output[i][0][j].keys())[0]
-                lat_avg = pg_output[i][0][j][run_id]['latency_avg']
-                lat_stddev = pg_output[i][0][j][run_id]['lat_stddev']
-                tps_incl = pg_output[i][0][j][run_id]['lat_stddev']
-                tps_excl = pg_output[i][0][j][run_id]['tps_excl']
+        for pgbench_pod in range(len(pg_output)):
+            for run in range(len(pg_output[pgbench_pod][0])):
+                run_id = list(pg_output[pgbench_pod][0][run].keys())[0]
+                lat_avg = pg_output[
+                    pgbench_pod
+                ][0][run][run_id]['latency_avg']
+                lat_stddev = pg_output[
+                    pgbench_pod
+                ][0][run][run_id]['lat_stddev']
+                tps_incl = pg_output[
+                    pgbench_pod
+                ][0][run][run_id]['lat_stddev']
+                tps_excl = pg_output[pgbench_pod][0][run][run_id]['tps_excl']
                 g_sheet.insert_row(
-                    [f"Pgbench-pod{pg_output[i][1]}-run-{run_id}",
+                    [f"Pgbench-pod{pg_output[pgbench_pod][1]}-run-{run_id}",
                      int(lat_avg),
                      int(lat_stddev),
                      int(tps_incl),
