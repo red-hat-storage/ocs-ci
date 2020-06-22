@@ -71,7 +71,7 @@ class TestAddCapacityWithOSDPodDelete(ManageTest):
             resource_count=storagedeviceset_count * 3
         )
 
-        logging.info("Finished verifying add capacity osd storage with node restart")
+        logging.info("Finished verifying add capacity when one of the osd pods gets deleted")
         logging.info("Waiting for ceph health check to finished...")
         ceph_health_check(
             namespace=config.ENV_DATA['cluster_namespace'], tries=80
