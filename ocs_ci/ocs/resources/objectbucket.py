@@ -220,7 +220,7 @@ class ObjectBucket(ABC):
         raise NotImplementedError()
 
 
-class MCG_CLIBucket(ObjectBucket):
+class MCGCLIBucket(ObjectBucket):
     """
     Implementation of an MCG bucket using the NooBaa CLI
     """
@@ -265,7 +265,7 @@ class MCG_CLIBucket(ObjectBucket):
         return self.name not in self.mcg.cli_get_all_bucket_names()
 
 
-class MCG_S3Bucket(ObjectBucket):
+class MCGS3Bucket(ObjectBucket):
     """
     Implementation of an MCG bucket using the S3 API
     """
@@ -342,7 +342,7 @@ class OCBucket(ObjectBucket):
         return self.name not in oc_get_all_obc_names()
 
 
-class MCG_OCBucket(OCBucket):
+class MCGOCBucket(OCBucket):
     """
     Implementation of an MCG bucket using the OC CLI
     """
@@ -361,7 +361,7 @@ class MCG_OCBucket(OCBucket):
         create_resource(**obc_data)
 
 
-class RGW_OCBucket(OCBucket):
+class RGWOCBucket(OCBucket):
     """
     Implementation of an RGW bucket using the S3 API
     """
@@ -378,8 +378,8 @@ class RGW_OCBucket(OCBucket):
 
 
 BUCKET_MAP = {
-    's3': MCG_S3Bucket,
-    'oc': MCG_OCBucket,
-    'cli': MCG_CLIBucket,
-    'rgw-oc': RGW_OCBucket
+    's3': MCGS3Bucket,
+    'oc': MCGOCBucket,
+    'cli': MCGCLIBucket,
+    'rgw-oc': RGWOCBucket
 }

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class TestObjectIntegrity(ManageTest):
     """
-    Test data integrity of various objects
+    Test data integrity of RGW buckets
     """
     @tier1
     def test_check_object_integrity(self, awscli_pod, rgw_bucket_factory):
@@ -37,8 +37,7 @@ class TestObjectIntegrity(ManageTest):
             awscli_pod, original_dir, full_object_path, obc_obj
         )
 
-        # Retrieve all objects from MCG bucket to result dir in Pod
-        logger.info('Downloading all objects from MCG bucket to awscli pod')
+        logger.info('Downloading all objects from RGW bucket to awscli pod')
         sync_object_directory(
             awscli_pod, full_object_path, result_dir, obc_obj
         )
@@ -53,14 +52,15 @@ class TestObjectIntegrity(ManageTest):
     @pytest.mark.polarion_id("OCS-1945")
     @tier2
     def test_empty_file_integrity(
-        self, mcg_obj, awscli_pod, bucket_factory
+        self, awscli_pod, rgw_bucket_factory
     ):
         """
         Test write empty files to bucket and check integrity
         """
         original_dir = '/data'
         result_dir = "/result"
-        bucketname = bucket_factory(1)[0].name
+        bucketname = rgw_bucket_factory(1, 'rgw-oc')[0].name
+        obc_obj = OBC(bucketname)
         full_object_path = f"s3://{bucketname}"
 
         # Touch create 1000 empty files in pod
@@ -72,13 +72,13 @@ class TestObjectIntegrity(ManageTest):
         )
         # Write all empty objects to the new bucket
         sync_object_directory(
-            awscli_pod, original_dir, full_object_path, mcg_obj
+            awscli_pod, original_dir, full_object_path, obc_obj
         )
 
-        # Retrieve all objects from MCG bucket to result dir in Pod
-        logger.info('Downloading objects from MCG bucket to awscli pod')
+        # Retrieve all objects from RGW bucket to result dir in Pod
+        logger.info('Downloading objects from RGW bucket to awscli pod')
         sync_object_directory(
-            awscli_pod, full_object_path, result_dir, mcg_obj
+            awscli_pod, full_object_path, result_dir, obc_obj
         )
 
         # Checksum is compared between original and result object

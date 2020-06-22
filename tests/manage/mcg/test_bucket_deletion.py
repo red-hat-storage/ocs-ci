@@ -9,7 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.objectbucket import MCG_S3Bucket, BUCKET_MAP
+from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket, BUCKET_MAP
 from ocs_ci.ocs.bucket_utils import (
     retrieve_test_objects_to_pod,
     sync_object_directory,
@@ -198,7 +198,7 @@ class TestBucketDeletion:
             resource_description='bucket', resource_type='s3'
         )
         try:
-            bucket = MCG_S3Bucket(bucketname, mcg_obj)
+            bucket = MCGS3Bucket(bucketname, mcg_obj)
             logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
             logger.info(f"aws region is {mcg_obj.region}")
             data_dir = '/data'
