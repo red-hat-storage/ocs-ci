@@ -203,8 +203,12 @@ def ocs_install_verification(
         timeout=timeout
     )
 
-    # rgw check only for VmWare
-    if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
+    # rgw check only for VmWare and Bare Metal
+    if (
+        config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM
+    ) or (
+        config.ENV_DATA.get('platform') == constants.BAREMETAL_PLATFORM
+    ):
         assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=constants.RGW_APP_LABEL,
