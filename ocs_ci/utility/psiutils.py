@@ -4,9 +4,9 @@ A module for all PSI-openstack related utilities
 
 import logging
 
-from keystoneauth1 import loading
-from keystoneauth1 import session
 from cinderclient import client as cinderc
+from cinderclient import exceptions as cinderexception
+from keystoneauth1 import loading, session
 from novaclient import client as novac
 
 from ocs_ci.framework import config
@@ -21,11 +21,11 @@ class PSIUtils(object):
     A class for handling PSI functionalities
     """
     def __init__(self, psi_conf):
-        self.auth_url = psi_conf.get('auth_url')
-        self.username = psi_conf.get('username')
-        self.password = psi_conf.get('password')
-        self.project_id = psi_conf.get('project_id')
-        self.user_domain_name = psi_conf.get('user_domain_name')
+        self.auth_url = psi_conf['auth_url']
+        self.username = psi_conf.get['username']
+        self.password = psi_conf.get['password']
+        self.project_id = psi_conf.get['project_id']
+        self.user_domain_name = psi_conf.get['user_domain_name']
 
         self.loader = loading.get_plugin_loader('password')
         self.auth = self.loader.load_from_options(
@@ -56,7 +56,7 @@ class PSIUtils(object):
             metadata (dict): Any {k,v} to be associated with volume
 
         Returns:
-            Instance of "Volume" class
+           Volume : cinderclient.Client.Volumes
 
         """
         cluster_tag = {'cluster_name': config.ENV_DATA['cluster_name']}
@@ -80,7 +80,7 @@ class PSIUtils(object):
         Attach the given volume to the specific PSI openstack instance
 
         Args:
-            vol_id (Volume): cinder volume object
+            vol (Volume): cinder volume object
             instance_id (str): uuid of the instance
             mnt_pnt (str): path where volume will be mounted
 
@@ -125,27 +125,71 @@ class PSIUtils(object):
 
         return matching_vols
 
-    def detach_and_delete_vols(self, vollist):
+    def detach_and_delete_vols(self, volumes):
         """
         Detach and delete volumes from the list
 
         Args:
-            list: of Volume objects
+            volumes (list): of Volume objects
 
         """
-        for v in vollist:
+        for v in volumes:
             if v.status == 'in-use':
                 v.detach()
                 v.get()
-                if v.status == 'available':
-                    logger.info(f"Volume {v.name} detached successfully ")
-                else:
-                    for res in TimeoutSampler(60, 1, v.status == 'available'):
-                        if not res:
-                            logger.info(f"Waiting for {v.name} to detach")
-                            v.get()
+                sample = TimeoutSampler(
+                    60,
+                    1,
+                    self.check_expected_vol_status,
+                    vol=v,
+                    expected_state='available'
+                )
+                if not sample.wait_for_func_status(True):
+                    logger.error(f"Volume {v.name} failed to detach")
+                    raise exceptions.PSIVolumeNotInExpectedState()
+
             v.delete()
-            try:
-                v.get()
-            except Exception:
-                logger.info(f"Volume {v.name} deleted successfully")
+            sample = TimeoutSampler(
+                60,
+                2,
+                self.check_vol_deleted,
+                vol=v
+            )
+            if not sample.wait_for_func_status(True):
+                logger.error(f"Failed to delete Volume {v.name}")
+                raise exceptions.PSIVolumeDeletionFailed()
+
+    def check_vol_deleted(self, vol):
+        """
+        Check whether its delete
+
+        Args:
+            vol (cinderclient.Volume): volume object
+
+        Returns:
+            bool: True if deleted else False
+
+        """
+        try:
+            vol.get()
+            return False
+        except cinderexception.NotFound:
+            logger.info(f"Volume {vol.name} deleted successfully")
+            return True
+
+    def check_expected_vol_status(self, vol, expected_state):
+        """
+        Check status of the volume and return true if it matches
+        the expected state
+
+        Args:
+            vol (cinderclient.volume): Volume object for which state needs
+                to be checked
+            expected_state (str): Expected state of the volume
+
+        Returns:
+            bool: True if state is same as expected else False
+
+        """
+        vol.get()
+        return vol.status == expected_state

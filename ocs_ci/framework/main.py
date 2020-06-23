@@ -67,6 +67,10 @@ def init_ocsci_conf(arguments=None):
         '--ocs-version', action='store', choices=['4.2', '4.3', '4.4', '4.5', '4.6']
     )
     parser.add_argument('--ocs-registry-image')
+    parser.add_argument(
+        '--flexy-env-file',
+        help="Path to flexy env file"
+    )
     args, unknown = parser.parse_known_args(args=arguments)
     ocs_version = args.ocs_version
     load_config(args.ocsci_conf)
@@ -92,6 +96,8 @@ def init_ocsci_conf(arguments=None):
             CONF_DIR, 'ocp_version', f'ocp-{default_ocp_version}-config.yaml'
         )
         load_config([ocp_version_config])
+    if args.flexy_env_file:
+        framework.config.ENV_DATA['flexy-env-file'] = args.flexy_env_file
 
     framework.config.RUN['run_id'] = int(time.time())
     bin_dir = framework.config.RUN.get('bin_dir')

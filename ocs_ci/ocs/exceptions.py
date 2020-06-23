@@ -174,6 +174,14 @@ class PSIVolumeCreationFailed(Exception):
     pass
 
 
+class PSIVolumeNotInExpectedState(Exception):
+    pass
+
+
+class PSIVolumeDeletionFailed(Exception):
+    pass
+
+
 class PendingCSRException(Exception):
     pass
 

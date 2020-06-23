@@ -5,7 +5,7 @@ from ocs_ci.ocs import exceptions
 from .aws import AWSIPI, AWSUPI
 from .azure import AZUREIPI
 from .vmware import VSPHEREUPI
-from .baremetal import BAREMETALUPI, BAREMETALPSIUPI
+from .baremetal import BAREMETALUPI, BaremetalPSIUPI
 
 logger = logging.getLogger(__name__)
 

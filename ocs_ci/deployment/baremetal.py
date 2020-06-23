@@ -1,13 +1,12 @@
 import logging
 import os
-import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from .deployment import Deployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from .flexy import FlexyBaremetalPSI
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler, load_auth_config
 from ocs_ci.utility import psiutils
 
 from ocs_ci.deployment.deployment import Deployment
@@ -26,7 +25,7 @@ class BAREMETALUPI(Deployment):
         # TODO: OCP,deployment
 
 
-class BAREMETALPSIUPI(Deployment):
+class BaremetalPSIUPI(Deployment):
     """
     All the functionalities related to BaremetalPSI- UPI deployment
     lives here
@@ -39,7 +38,7 @@ class BAREMETALPSIUPI(Deployment):
         def __init__(self):
             super().__init__()
             self.flexy_instance = FlexyBaremetalPSI()
-            self.build_psi_conf()
+            self.psi_conf = load_auth_config()['psi']
             self.utils = psiutils.PSIUtils(self.psi_conf)
 
         def deploy_prereq(self):
@@ -67,47 +66,29 @@ class BAREMETALPSIUPI(Deployment):
             logger.info("creating ntp chrony")
             run_cmd(f"oc create -f {constants.NTP_CHRONY_CONF}")
             # add disks to instances
-            self.build_psi_conf()
-            self.utils = psiutils.PSIUtils(self.psi_conf)
             # Get all instances and for each instance add
             # one disk
             pattern = config.ENV_DATA['cluster_name']
             for instance in self.utils.get_instances_with_pattern(pattern):
                 vol = self.utils.create_volume(
-                    name=f'disk0',
+                    name='disk0',
                     size=config.ENV_DATA['volume_size'],
                 )
                 # wait till volume is available
-                for res in TimeoutSampler(300, 1, vol.status == "available"):
+                for res in TimeoutSampler(300, 10, vol.status == "available"):
                     if not res:
                         logger("waiting for volume to be avaialble")
 
                 # attach the volume
                 self.utils.attach_volume(vol, instance.id, "/dev/vdb")
 
-        def build_psi_conf(self):
-            """
-            Get PSI config so that we can access the
-            PSI openstack instances and volumes
-
-            """
-            self.psi_conf = dict()
-            fd = open(constants.FLEXY_SERVICE_CONF, "r")
-            conf = yaml.safe_load(fd)
-            upshift_conf = conf['services']['openstack_upshift']
-            self.psi_conf['auth_url'] = upshift_conf['url']
-            self.psi_conf['username'] = upshift_conf['user']
-            self.psi_conf['password'] = upshift_conf['password']
-            self.psi_conf['project_id'] = upshift_conf['project_id']
-            self.psi_conf['user_domain_name'] = upshift_conf['domain']['name']
-
         def destroy(self):
             """
             Destroy volumes attached if any and then the cluster
             """
             # Get all the additional volumes and detach,delete.
-            vollist = self.utils.get_volumes_with_tag(
+            volumes = self.utils.get_volumes_with_tag(
                 {'cluster_name': config.ENV_DATA['cluster_name']}
             )
-            self.utils.detach_and_delete_vols(vollist)
+            self.utils.detach_and_delete_vols(volumes)
             self.flexy_instance.destroy()
