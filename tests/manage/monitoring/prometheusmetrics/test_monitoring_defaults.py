@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 @tier1
+@pytest.mark.post_ocp_upgrade
 @pytest.mark.first
 @pytest.mark.polarion_id("OCS-1261")
 def test_monitoring_enabled():
@@ -409,6 +410,7 @@ def test_ceph_metrics_available():
 
 
 @tier1
+@pytest.mark.post_ocp_upgrade
 @pytest.mark.polarion_id("OCS-1302")
 def test_monitoring_reporting_ok_when_idle(workload_idle):
     """
