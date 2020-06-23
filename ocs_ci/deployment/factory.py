@@ -22,6 +22,7 @@ class DeploymentFactory(object):
             'aws_upi': AWSUPI,
             'azure_ipi': AZUREIPI,
             'vsphere_upi': VSPHEREUPI,
+            'baremetalpsi_upi': BaremetalPSIUPI,
             'baremetal_upi': BAREMETALUPI,
         }
 
