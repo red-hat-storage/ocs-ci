@@ -3,6 +3,7 @@ Jenkins Class to run jenkins specific tests
 """
 import logging
 import re
+import random
 
 from ocs_ci.ocs.exceptions import (
     CommandFailed, ResourceWrongStatusException, UnexpectedBehaviour
@@ -16,6 +17,7 @@ from tests.helpers import create_pvc
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from tests.helpers import wait_for_resource_state
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.ocs.node import get_typed_nodes
 
 
 log = logging.getLogger(__name__)
@@ -199,6 +201,10 @@ class Jenkins(object):
     ):
         """
         Get build name by pattern
+
+        Returns:
+            list: build name
+
         """
         ocp_obj = OCP(kind='Build', namespace=namespace)
         build_names = ocp_obj.exec_oc_cmd('get build -o name', out_yaml_format=False)
@@ -212,6 +218,41 @@ class Jenkins(object):
                 log.info(f'pod name match found appending {name}')
                 build_list.append(name)
         return build_list
+
+    def get_jenkins_nodes(self):
+        """
+        Get nodes that contain a pgsql app pod
+
+        Returns:
+            list: Cluster node OCP objects
+
+        """
+        pod_obj = OCP(kind='pod', namespace=constants.JENKINS_NAMESPACE)
+        jenkins_pod_objs = pod_obj.get()
+        log.info("Create a list of nodes that contain a jenkins app pod")
+        nodes_set = set()
+        for pod in jenkins_pod_objs['items']:
+            log.info(f"pod {pod['metadata']['name']} located on node {pod['spec']['nodeName']}")
+            nodes_set.add(pod['spec']['nodeName'])
+        return list(nodes_set)
+
+    def get_node(self, node_type):
+        """
+        Get node
+
+        Returns:
+            OCP object: Cluster node
+
+        """
+        node_list = get_typed_nodes(node_type=node_type)
+        if node_type == 'worker':
+            jenkins_nodes = self.get_jenkins_nodes()
+            for node in node_list:
+                for jenkins_node in jenkins_nodes:
+                    if node.name == jenkins_node:
+                        node_list.remove(node)
+
+        return node_list[random.randint(0, len(node_list) - 1)]
 
     def cleanup(self):
         """
