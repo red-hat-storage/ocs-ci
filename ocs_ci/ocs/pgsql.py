@@ -169,7 +169,7 @@ class Postgresql(RipSaw):
         """
         return [
             get_pod_obj(
-                pod
+                pod, RIPSAW_NAMESPACE
             ) for pod in get_pod_name_by_pattern('pgbench', RIPSAW_NAMESPACE)
         ]
 
@@ -287,7 +287,7 @@ class Postgresql(RipSaw):
         all_pgbench_pods_output = []
         for pgbench_pod in pgbench_pods:
             log.info(f"pgbench_client_pod===={pgbench_pod.name}====")
-            output = run_cmd(f'oc logs {pgbench_pod.name}')
+            output = run_cmd(f'oc logs {pgbench_pod.name} -n {RIPSAW_NAMESPACE}')
             pg_output = utils.parse_pgsql_logs(output)
             log.info(
                 "*******PGBench output log*********\n"
