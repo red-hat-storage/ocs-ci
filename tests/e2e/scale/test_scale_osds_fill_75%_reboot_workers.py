@@ -107,4 +107,4 @@ class TestScaleOSDsRebootNodes(E2ETest):
             nodes.restart_nodes(nodes=[node])
             wait_for_nodes_status()
 
-        assert ceph_health_check(delay=180, tries=50), "Failed, Ceph health bad after nodes reboot"
+        assert ceph_health_check(delay=180), "Failed, Ceph health bad after nodes reboot"
