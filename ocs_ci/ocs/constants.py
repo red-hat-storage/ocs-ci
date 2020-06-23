@@ -485,6 +485,11 @@ FIO_DC_YAML = os.path.join(
     TEMPLATE_FIO_DIR, "fio_dc.yaml"
 )
 
+# fio configuration files
+FIO_S3 = os.path.join(
+    TEMPLATE_FIO_DIR, 'config_s3.fio'
+)
+
 # Openshift infra yamls:
 RSYNC_POD_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "rsync-pod.yaml"

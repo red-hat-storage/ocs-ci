@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import os
@@ -1998,6 +1999,22 @@ def destroy_cluster(installer, cluster_path, log_level="DEBUG"):
         raise
     except Exception:
         log.error(traceback.format_exc())
+
+
+def config_to_string(config):
+    """
+    Convert ConfigParser object to string in INI format.
+
+    Args:
+        config (obj): ConfigParser object
+
+    Returns:
+        str: Config in one string
+
+    """
+    strio = io.StringIO()
+    config.write(strio)
+    return strio.getvalue()
 
 
 class AZInfo(object):
