@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import (
-    E2ETest, workloads
+    E2ETest, workloads, ignore_leftovers
 )
 from ocs_ci.ocs.jenkins import Jenkins
 
@@ -20,6 +20,7 @@ def jenkins(request):
     return jenkins
 
 
+@ignore_leftovers
 @workloads
 @pytest.mark.polarion_id("OCS-2175")
 class TestJenkinsNodeReboot(E2ETest):
