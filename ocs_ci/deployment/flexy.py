@@ -124,17 +124,18 @@ class FlexyBase(object):
 
         """
         cmd = shlex.split("sudo podman run --rm=true")
-        flexy_container_args = self.build_container_args()
+        flexy_container_args = self.build_container_args('destroy')
         cmd_string = list2cmdline(cmd + flexy_container_args + ['destroy'])
         return cmd_string
 
-    def build_container_args(self, purpose):
+    def build_container_args(self, purpose=''):
         """
         Builds most commonly used arguments for flexy container
 
         Args:
             purpose (str): purpose for which we are building these args
-                eg: destroy, debug
+                eg: destroy, debug. By default it will be empty string
+                which turns into 'deploy' mode for flexy
 
         Returns:
             list: of flexy container args
@@ -149,12 +150,12 @@ class FlexyBase(object):
         if purpose == 'destroy':
             args.append(
                 f"--mount=type=bind,source={self.flexy_host_dir},"
-                f"destination=f{self.flexy_mnt_container_dir}"
+                f"destination={self.flexy_mnt_container_dir}"
             )
         else:
             args.append(
                 f"--mount=type=bind,source={self.flexy_host_dir},"
-                f"destination=f{self.flexy_mnt_container_dir},relabel=shared"
+                f"destination={self.flexy_mnt_container_dir},relabel=shared"
             )
         args.append(f"{self.flexy_img_url}")
         return args
