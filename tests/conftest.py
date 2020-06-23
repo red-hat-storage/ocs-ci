@@ -11,7 +11,6 @@ from math import floor
 from random import randrange
 from time import sleep
 from shutil import copyfile
-import subprocess
 from functools import partial
 
 import pytest
