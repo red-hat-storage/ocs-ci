@@ -69,7 +69,7 @@ DEPLOYMENT:
   live_deployment: False
   preserve_bootstrap_node: False
   # Following options are defaults for the max Noobaa endpoints
-  noobaa_endpoints: 1
+  noobaa_endpoints: 2
 
 # Section for reporting configuration
 REPORTING:
