@@ -81,7 +81,10 @@ class TestBucketIO(ManageTest):
         download_dir = '/aws/deduplication/'
         for i in range(2, 4):
             awscli_pod.exec_cmd_on_pod(
-                f'wget {constants.TEST_FILES_BUCKET_URL}danny{i}.webm -O {download_dir}danny{1}.webm'
+                command=helpers.craft_s3_command(
+                    f'cp s3://{constants.TEST_FILES_BUCKET}/danny{i}.webm {download_dir}', mcg_obj
+                ),
+                out_yaml_format=False
             )
         bucket = bucket_factory(1)[0]
         bucketname = bucket.name
@@ -108,7 +111,10 @@ class TestBucketIO(ManageTest):
         """
         download_dir = '/aws/reduction'
         awscli_pod.exec_cmd_on_pod(
-            f'wget {constants.TEST_FILES_BUCKET_URL}enwik8 -O {download_dir}/enwik8'
+            command=helpers.craft_s3_command(
+                f'cp s3://{constants.TEST_FILES_BUCKET}/enwik8 {download_dir}', mcg_obj
+            ),
+            out_yaml_format=False
         )
         bucket = bucket_factory(1)[0]
         bucketname = bucket.name
@@ -116,8 +122,6 @@ class TestBucketIO(ManageTest):
         helpers.sync_object_directory(
             awscli_pod, download_dir, full_object_path, mcg_obj
         )
-
-        # TODO: new function to test any reduction at all
         assert mcg_obj.check_data_reduction(bucketname, 35 * 1024 * 1024), (
             'Data reduction did not work as anticipated.'
         )
