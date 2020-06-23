@@ -7,15 +7,58 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_OPTIMAL
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from tests.manage.mcg.helpers import (
     retrieve_test_objects_to_pod, sync_object_directory
 )
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
 LOCAL_TESTOBJS_DIR_PATH = '/aws/original'
 LOCAL_TEMP_PATH = '/aws/temp'
 DOWNLOADED_OBJS = []
+
+
+# TODO: move this to ocs_ci/ocs/resources/job.py when the file is created
+def wait_for_active_pods(job, desired_count, timeout=3):
+    """
+    Wait for job to load desired number of active pods in time specified
+    in timeout.
+
+    Args:
+        job (obj): OCS job object
+        desired_count (str): Number of desired active pods for provided job
+        timeout (int): Number of seconds to wait for the job to get into state
+
+    Returns:
+        bool: If job has desired number of active pods
+
+    """
+    job_name = job.ocp.resource_name
+    logger.info(f"Checking number of active pods for job {job_name}")
+
+    def _retrieve_job_state():
+        job_obj = job.ocp.get(resource_name=job_name, out_yaml_format=True)
+        return job_obj.get('items').get(0).get('status').get('active')
+
+    try:
+        for state in TimeoutSampler(
+            timeout=timeout,
+            sleep=3,
+            func=_retrieve_job_state
+        ):
+            if state == desired_count:
+                return True
+            else:
+                logger.debug(
+                    f"Number of active pods for job {job_name}: {state}"
+                )
+    except TimeoutExpiredError:
+        logger.error(
+            f"Job {job_name} doesn't have correct number of active pods ({desired_count})"
+        )
+        return False
 
 
 @aws_platform_required
@@ -159,3 +202,21 @@ def test_buckets_after_upgrade(upgrade_buckets, mcg_obj_session):
     """
     for bucket in mcg_obj_session.read_system().get('buckets'):
         assert bucket.get('mode') == BS_OPTIMAL
+
+
+@pre_upgrade
+def test_start_upgrade_mcg_io(mcg_workload_job):
+    """
+    Confirm that there is MCG workload job running before upgrade.
+    """
+    # wait a few seconds for fio job to start
+    assert wait_for_active_pods(mcg_workload_job, 1, timeout=20)
+
+
+@post_upgrade
+@pytest.mark.polarion_id("OCS-2207")
+def test_upgrade_mcg_io(mcg_workload_job):
+    """
+    Confirm that there is MCG workload job running after upgrade.
+    """
+    assert wait_for_active_pods(mcg_workload_job, 1)

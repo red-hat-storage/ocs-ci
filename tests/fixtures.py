@@ -1,4 +1,6 @@
 import pytest
+
+from ocs_ci.ocs.resources.pod import delete_deploymentconfig_pods
 from tests import helpers
 from ocs_ci.ocs import constants, ocp
 
@@ -295,7 +297,7 @@ def create_dc_pods(request):
         """
         if hasattr(class_instance, 'dc_pod_objs'):
             for pod in class_instance.dc_pod_objs:
-                helpers.delete_deploymentconfig_pods(pod_obj=pod)
+                delete_deploymentconfig_pods(pod_obj=pod)
 
     request.addfinalizer(finalizer)
 

@@ -72,6 +72,7 @@ STATUS_BOUND = 'Bound'
 STATUS_RELEASED = 'Released'
 STATUS_COMPLETED = 'Completed'
 STATUS_ERROR = 'Error'
+STATUS_CLBO = 'CrashLoopBackOff'
 
 # NooBaa statuses
 BS_AUTH_FAILED = 'AUTH_FAILED'
@@ -130,6 +131,7 @@ OPENSHIFT_IMAGE_REGISTRY_NAMESPACE = "openshift-image-registry"
 OPENSHIFT_IMAGE_REGISTRY_DEPLOYMENT = "image-registry"
 OPENSHIFT_IMAGE_SELECTOR = "docker-registry=default"
 OPENSHIFT_INGRESS_NAMESPACE = "openshift-ingress"
+OPENSHIFT_MONITORING_NAMESPACE = "openshift-monitoring"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 MOUNT_POINT = '/var/lib/www/html'
@@ -140,6 +142,7 @@ CRITICAL_ERRORS = [
     "core dumped", "oom_reaper"
 ]
 must_gather_pod_label = "must-gather"
+drain_canary_pod_label = "rook-ceph-drain-canary"
 
 # AMQ
 AMQ_NAMESPACE = "myproject"
@@ -201,6 +204,7 @@ LOCAL_STORAGE_OPERATOR_LABEL = "name=local-storage-operator"
 NOOBAA_APP_LABEL = "app=noobaa"
 NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
 NOOBAA_OPERATOR_POD_LABEL = "noobaa-operator=deployment"
+NOOBAA_DB_LABEL = "noobaa-db=noobaa"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
@@ -384,6 +388,8 @@ COUCHBASE_WORKER_EXAMPLE = os.path.join(
     TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-example.yaml"
 )
 
+COUCHBASE_OPERATOR = 'couchbase-operator-namespace'
+
 HELLO_WORLD_PRODUCER_YAML = os.path.join(
     TEMPLATE_AMQ_DIR, "hello-world-producer.yaml"
 )
@@ -479,6 +485,14 @@ FIO_IO_PARAMS_YAML = os.path.join(
 FIO_IO_RW_PARAMS_YAML = os.path.join(
     TEMPLATE_FIO_DIR, "workload_io_rw.yaml"
 )
+FIO_DC_YAML = os.path.join(
+    TEMPLATE_FIO_DIR, "fio_dc.yaml"
+)
+
+# fio configuration files
+FIO_S3 = os.path.join(
+    TEMPLATE_FIO_DIR, 'config_s3.fio'
+)
 
 # Openshift infra yamls:
 RSYNC_POD_YAML = os.path.join(
@@ -539,6 +553,7 @@ ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
+TOPOLOGY_ROOK_LABEL = "topology.rook.io/rack"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
 OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
 MARKETPLACE_NAMESPACE = "openshift-marketplace"
@@ -606,6 +621,10 @@ INSTALLER_DEFAULT_DNS = "1.1.1.1"
 
 LIFECYCLE = 'lifecycle { ignore_changes = ["disk"] }'
 CSR_BOOTSTRAPPER_NODE = "node-bootstrapper"
+
+# VMware Datastore types
+VMFS = "VMFS"
+VSAN = "vsan"
 
 # Config related constants
 config_keys_patterns_to_censor = ['passw', 'token', 'secret']
@@ -857,6 +876,7 @@ VMDK = "VMDK"
 DIRECTPATH = "VMDirectPath"
 DISK_MODE = "independent_persistent"
 COMPATABILITY_MODE = "physicalMode"
+DISK_PATH_PREFIX = "/vmfs/devices/disks/"
 
 # OS
 RHEL_OS = "RHEL"
@@ -866,3 +886,9 @@ RHCOS = "RHCOS"
 ES_SERVER_IP = '10.0.78.167'
 ES_SERVER_PORT = '9200'
 ES_SERVER_URL = 'https://10.0.78.167:9200'
+
+# Cluster metrics
+THROUGHPUT_QUERY = "(sum(rate(ceph_pool_wr_bytes[1m]) + rate(ceph_pool_rd_bytes[1m])))"
+LATENCY_QUERY = "cluster:ceph_disk_latency:join_ceph_node_disk_irate1m"
+IOPS_QUERY = "sum(rate(ceph_pool_wr[1m])) + sum(rate(ceph_pool_rd[1m]))"
+USED_SPACE_QUERY = "ceph_cluster_total_used_bytes"

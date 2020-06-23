@@ -1,3 +1,4 @@
+import configparser
 import copy
 import logging
 import textwrap
@@ -7,7 +8,9 @@ import pytest
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import Pod
+from ocs_ci.utility.utils import config_to_string
 from tests import helpers
 
 log = logging.getLogger(__name__)
@@ -202,6 +205,30 @@ def fio_conf_block():
 
 
 @pytest.fixture(scope='session')
+def fio_conf_mcg(mcg_obj_session, bucket_factory_session):
+    """
+    Basic fio configuration for upgrade utilization for NooBaa S3 bucket.
+
+    """
+    workload_bucket = bucket_factory_session()
+    config = configparser.ConfigParser()
+    config.read_file(open(constants.FIO_S3))
+    config.set('global', 'name', workload_bucket[0].name)
+    config.set('global', 'http_s3_key', mcg_obj_session.access_key)
+    config.set('global', 'http_s3_keyid', mcg_obj_session.access_key_id)
+    config.set(
+        'global',
+        'http_host',
+        mcg_obj_session.s3_endpoint.lstrip('https://').rstrip(':443')
+    )
+    config.set('global', 'http_s3_region', mcg_obj_session.region)
+    config.set('global', 'filename', f"/{workload_bucket[0].name}/object")
+    config.set('create', 'time_based', '1')
+    config.set('create', 'runtime', '24h')
+    return config_to_string(config)
+
+
+@pytest.fixture(scope='session')
 def pre_upgrade_filesystem_pods(
     request,
     pvc_factory_session,
@@ -223,6 +250,12 @@ def pre_upgrade_filesystem_pods(
     pods = []
     pvc_size = 10
     fio_configmap_dict_session["data"]["workload.fio"] = fio_conf_fs
+    # By setting ``backoffLimit`` to 1, fio job would be restarted if it fails.
+    # One such restart may be necessary to make sure the job is running IO
+    # during whole upgrade.
+    # See also:
+    # https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/
+    fio_job_dict_session["spec"]["backoffLimit"] = 1
 
     for reclaim_policy in (
         constants.RECLAIM_POLICY_DELETE,
@@ -308,6 +341,10 @@ def pre_upgrade_block_pods(
 
     pvc_size = 10
     fio_configmap_dict_session["data"]["workload.fio"] = fio_conf_block
+    # By setting ``backoffLimit`` to 1, fio job would be restarted if it fails.
+    # One such restart may be necessary to make sure the job is running IO
+    # during whole upgrade.
+    fio_job_dict_session["spec"]["backoffLimit"] = 1
 
     for reclaim_policy in (
         constants.RECLAIM_POLICY_DELETE,
@@ -514,6 +551,91 @@ def pre_upgrade_pods_running_io(
     pre_upgrade_block_pods,
 ):
     return pre_upgrade_filesystem_pods + pre_upgrade_block_pods
+
+
+@pytest.fixture(scope='session')
+def fio_configmap_dict_mcg(fio_configmap_dict_session, fio_job_dict_mcg):
+    """
+    Fio configmap dictionary with configuration set for MCG workload.
+    """
+    configmap = copy.deepcopy(fio_configmap_dict_session)
+    config_name = f"{fio_job_dict_mcg['metadata']['name']}-config"
+    configmap['metadata']['name'] = config_name
+    return configmap
+
+
+@pytest.fixture(scope='session')
+def fio_job_dict_mcg(fio_job_dict_session):
+    """
+    Fio job dictionary with configuration set for MCG workload.
+    """
+    fio_job_dict_mcg = copy.deepcopy(fio_job_dict_session)
+
+    job_name = 'mcg-workload'
+    config_name = f"{job_name}-config"
+    volume_name = f"{config_name}-vol"
+
+    fio_job_dict_mcg['metadata']['name'] = job_name
+    fio_job_dict_mcg['spec']['template']['metadata']['name'] = job_name
+
+    job_spec = fio_job_dict_mcg['spec']['template']['spec']
+    job_spec['volumes'][1]['name'] = volume_name
+    job_spec['volumes'][1]['configMap']['name'] = config_name
+    job_spec['containers'][0]['volumeMounts'][1]['name'] = volume_name
+
+    job_spec['volumes'].pop(0)
+    job_spec['containers'][0]['volumeMounts'].pop(0)
+
+    return fio_job_dict_mcg
+
+
+@pytest.fixture(scope='session')
+def mcg_workload_job(
+    fio_job_dict_mcg,
+    fio_configmap_dict_mcg,
+    fio_conf_mcg,
+    fio_project,
+    tmp_path,
+    request
+):
+    """
+    Creates kubernetes job that should utilize MCG during upgrade.
+
+    Returns:
+        object: Job object
+
+    """
+    fio_configmap_dict_mcg["data"]["workload.fio"] = fio_conf_mcg
+    fio_objs = [fio_configmap_dict_mcg, fio_job_dict_mcg]
+
+    job_name = fio_job_dict_mcg['metadata']['name']
+
+    log.info(f"Creating job {job_name}")
+    job_file = ObjectConfFile(
+        "fio_continuous",
+        fio_objs,
+        fio_project,
+        tmp_path
+    )
+
+    # deploy the Job to the cluster and start it
+    job_file.create()
+    log.info(f"Job {job_name} created")
+
+    # get job object
+    ocp_job_obj = ocp.OCP(kind=constants.JOB, namespace=fio_project.namespace)
+    job = OCS(**ocp_job_obj.get(resource_name=job_name))
+
+    def teardown():
+        """
+        Delete mcg job
+        """
+        job.delete()
+        job.ocp.wait_for_delete(job.name)
+
+    request.addfinalizer(teardown)
+
+    return job
 
 
 @pytest.fixture(scope='session')

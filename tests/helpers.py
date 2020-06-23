@@ -30,7 +30,12 @@ from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler, ocsci_log_path, run_cmd
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    ocsci_log_path,
+    run_cmd,
+    update_container_with_mirrored_image,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +116,8 @@ def create_pod(
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
     raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1,
-    pod_name=None, node_selector=None, deploy_pod_status=constants.STATUS_COMPLETED
+    pod_name=None, node_selector=None, command=None, command_args=None,
+    deploy_pod_status=constants.STATUS_COMPLETED
 ):
     """
     Create a pod
@@ -131,6 +137,9 @@ def create_pod(
         pod_name (str): Name of the pod to create
         node_selector (dict): dict of key-value pair to be used for nodeSelector field
             eg: {'nodetype': 'app-pod'}
+        command (list): The command to be executed on the pod
+        command_args (list): The arguments to be sent to the command running
+            on the pod
         deploy_pod_status (str): Expected status of deploy pod. Applicable
             only if dc_deployment is True
 
@@ -139,6 +148,7 @@ def create_pod(
 
     Raises:
         AssertionError: In case of any failure
+
     """
     if interface_type == constants.CEPHBLOCKPOOL:
         pod_dict = pod_dict_path if pod_dict_path else constants.CSI_RBD_POD_YAML
@@ -169,12 +179,13 @@ def create_pod(
             pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
 
     if interface_type == constants.CEPHBLOCKPOOL and raw_block_pv:
-        if pod_dict_path == constants.FEDORA_DC_YAML:
+        if pod_dict_path in [constants.FEDORA_DC_YAML, constants.FIO_DC_YAML]:
             temp_dict = [
                 {'devicePath': raw_block_device, 'name': pod_data.get('spec').get(
                     'template').get('spec').get('volumes')[0].get('name')}
             ]
-            del pod_data['spec']['template']['spec']['containers'][0]['volumeMounts']
+            if pod_dict_path == constants.FEDORA_DC_YAML:
+                del pod_data['spec']['template']['spec']['containers'][0]['volumeMounts']
             pod_data['spec']['template']['spec']['containers'][0]['volumeDevices'] = temp_dict
         elif pod_dict_path == constants.NGINX_POD_YAML:
             temp_dict = [
@@ -187,6 +198,17 @@ def create_pod(
             pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = raw_block_device
             pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data.get('spec').get('volumes')[
                 0].get('name')
+
+    if command:
+        if dc_deployment:
+            pod_data['spec']['template']['spec']['containers'][0]['command'] = command
+        else:
+            pod_data['spec']['containers'][0]['command'] = command
+    if command_args:
+        if dc_deployment:
+            pod_data['spec']['template']['spec']['containers'][0]['args'] = command_args
+        else:
+            pod_data['spec']['containers'][0]['args'] = command_args
 
     if node_name:
         if dc_deployment:
@@ -202,6 +224,35 @@ def create_pod(
 
     if sa_name and dc_deployment:
         pod_data['spec']['template']['spec']['serviceAccountName'] = sa_name
+
+    # overwrite used image (required for disconnected installation)
+    update_container_with_mirrored_image(pod_data)
+
+    # configure http[s]_proxy env variable, if required
+    try:
+        if 'http_proxy' in config.ENV_DATA:
+            if 'containers' in pod_data['spec']:
+                container = pod_data['spec']['containers'][0]
+            else:
+                container = pod_data['spec']['template']['spec']['containers'][0]
+            if 'env' not in container:
+                container['env'] = []
+            container['env'].append({
+                'name': 'http_proxy',
+                'value': config.ENV_DATA['http_proxy'],
+            })
+            container['env'].append({
+                'name': 'https_proxy',
+                'value': config.ENV_DATA.get(
+                    'https_proxy', config.ENV_DATA['http_proxy']
+                ),
+            })
+    except KeyError as err:
+        logging.warning(
+            "Http(s)_proxy variable wasn't configured, "
+            "'%s' key not found.", err
+        )
+
     if dc_deployment:
         ocs_obj = create_resource(**pod_data)
         logger.info(ocs_obj.name)
@@ -227,15 +278,18 @@ def create_pod(
         return pod_obj
 
 
-def create_project():
+def create_project(project_name=None):
     """
     Create a project
+
+    Args:
+        project_name (str): The name for the new project
 
     Returns:
         OCP: Project object
 
     """
-    namespace = create_unique_resource_name('test', 'namespace')
+    namespace = project_name or create_unique_resource_name('test', 'namespace')
     project_obj = ocp.OCP(kind='Project', namespace=namespace)
     assert project_obj.new_project(namespace), f"Failed to create namespace {namespace}"
     return project_obj
@@ -1360,10 +1414,13 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
     """
     ct_pod = pod.get_ceph_tools_pod()
     if interface == constants.CEPHBLOCKPOOL:
-        valid_error = f"error opening image csi-vol-{image_uuid}"
+        valid_error = [f"error opening image csi-vol-{image_uuid}"]
         cmd = f"rbd info -p {pool_name} csi-vol-{image_uuid}"
     if interface == constants.CEPHFILESYSTEM:
-        valid_error = f"Subvolume 'csi-vol-{image_uuid}' not found"
+        valid_error = [
+            f"Subvolume 'csi-vol-{image_uuid}' not found",
+            f"subvolume 'csi-vol-{image_uuid}' does not exist"
+        ]
         cmd = (
             f"ceph fs subvolume getpath {defaults.CEPHFILESYSTEM_NAME}"
             f" csi-vol-{image_uuid} csi"
@@ -1377,7 +1434,7 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
         )
         return True
     except CommandFailed as ecf:
-        assert valid_error in str(ecf), (
+        assert any([error in str(ecf) for error in valid_error]), (
             f"Error occurred while verifying volume is present in backend: "
             f"{str(ecf)} ImageUUID: {image_uuid}. Interface type: {interface}"
         )
@@ -1429,7 +1486,7 @@ def verify_volume_deleted_in_backend(
         )
         # Log 'ceph progress' and 'ceph rbd task list' for debugging purpose
         ct_pod = pod.get_ceph_tools_pod()
-        ct_pod.exec_ceph_cmd('ceph progress')
+        ct_pod.exec_ceph_cmd('ceph progress json', format=None)
         ct_pod.exec_ceph_cmd('ceph rbd task list')
         return False
 
@@ -1532,22 +1589,6 @@ def remove_scc_policy(sa_name, namespace):
     )
 
     logger.info(out)
-
-
-def delete_deploymentconfig_pods(pod_obj):
-    """
-    Delete deploymentconfig pod
-
-    Args:
-         pod_obj (object): Pod object
-    """
-    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG, namespace=pod_obj.namespace)
-    pod_data_list = dc_ocp_obj.get()['items']
-    if pod_data_list:
-        for pod_data in pod_data_list:
-            if pod_obj.get_labels().get('name') == pod_data.get('metadata').get('name'):
-                dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
-                dc_ocp_obj.wait_for_delete(resource_name=pod_obj.get_labels().get('name'))
 
 
 def craft_s3_command(cmd, mcg_obj=None, api=False):

@@ -15,6 +15,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     E2ETest, performance, rh_internal_lab_required
 )
+from ocs_ci.utility.performance_dashboard import push_perf_dashboard
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ def ripsaw(request):
     return ripsaw
 
 
-def analyze_regression(io_pattern, es_username):
+def analyze_regression(io_pattern, storage_class, es_username):
     """
     Analyzes the FIO result for variance and regression
     The test fails ff the test run has more than 5% regression
@@ -48,6 +49,11 @@ def analyze_regression(io_pattern, es_username):
     fio_analyzed_result = es.search(index='ripsaw-fio-analyzed-result',
                                     body={"query": {"match": {'user': es_username}}})
     assert fio_analyzed_result['hits']['hits'], 'Results not found in Elasticsearch'
+    # Initialize variables for codespeed results
+    reads = 0
+    writes = 0
+    r_bw = 0
+    w_bw = 0
     for result in fio_analyzed_result['hits']['hits']:
         test_data = result['_source']['ceph_benchmark_test']['test_data']
         object_size = test_data['object_size']
@@ -65,8 +71,22 @@ def analyze_regression(io_pattern, es_username):
         if io_pattern == 'sequential':
             std_dev = 'std-dev-' + object_size
             variance = test_data[std_dev]
-            log.warning(f'variance - {variance} is greater than 5%')
+            log.info(f'variance - {variance}')
         # Todo: Fail test if 5% deviation from benchmark value
+
+        # Extracting results for code speed
+        if operation == "randread":
+            if object_size == "4KiB":
+                reads = total_iops
+            if object_size == "1024KiB":  # if BS is 1M, then IOPS == Bandwidth
+                r_bw = total_iops
+        if operation == "randwrite":
+            if object_size == "4KiB":
+                writes = total_iops
+            if object_size == "1024KiB":  # if BS is 1M, then IOPS == Bandwidth
+                w_bw = total_iops
+    # Pushing the results into codespeed
+    push_perf_dashboard(storage_class, reads, writes, r_bw, w_bw)
 
 
 @rh_internal_lab_required
@@ -110,8 +130,10 @@ class TestFIOBenchmark(E2ETest):
         # Todo: have pvc_size set to 'get_osd_pods_memory_sum * 5'
         #  once pr-2037 is merged
         fio_cr['spec']['clustername'] = config.ENV_DATA['platform'] + get_build() + get_ocs_version()
-        fio_cr['spec']['test_user'] = interface + io_pattern
+        fio_cr['spec']['test_user'] = get_ocs_version() + interface + io_pattern
         fio_cr['spec']['workload']['args']['storageclass'] = sc
+        if io_pattern == 'sequential':
+            fio_cr['spec']['workload']['args']['jobs'] = ['write', 'read']
         log.info(f'fio_cr: {fio_cr}')
         fio_cr_obj = OCS(**fio_cr)
         fio_cr_obj.create()
@@ -133,7 +155,7 @@ class TestFIOBenchmark(E2ETest):
         pod_obj.wait_for_resource(
             condition='Completed',
             resource_name=fio_client_pod,
-            timeout=36000,
+            timeout=18000,
             sleep=300,
         )
 
@@ -148,6 +170,6 @@ class TestFIOBenchmark(E2ETest):
         # Clean up fio benchmark
         log.info("Deleting FIO benchmark")
         fio_cr_obj.delete()
-        analyze_regression(io_pattern, es_username=fio_cr['spec']['test_user'])
+        analyze_regression(io_pattern, sc, es_username=fio_cr['spec']['test_user'])
 
         # todo: push results to codespeed

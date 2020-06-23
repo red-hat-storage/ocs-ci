@@ -104,10 +104,10 @@ def pytest_addoption(parser):
         help="IOs throughput target percentage. Value should be between 0 to 100",
     )
     parser.addoption(
-        '--enable-bg-io-logs',
-        dest='enable_bg_io_logs',
+        '--log-cluster-utilization',
+        dest='log_cluster_utilization',
         action="store_true",
-        help="Enable background IO logs, if --io-in-bg is passed",
+        help="Enable logging of cluster utilization metrics every 10 seconds"
     )
     parser.addoption(
         '--ocs-version',
@@ -316,9 +316,9 @@ def process_cluster_cli_params(config):
         io_load = get_cli_param(config, 'io_load')
         if io_load:
             ocsci_config.RUN['io_load'] = io_load
-        io_bg_logs = get_cli_param(config, 'enable_bg_io_logs')
-        if io_bg_logs:
-            ocsci_config.RUN['io_bg_logs'] = True
+    log_utilization = get_cli_param(config, 'log_cluster_utilization')
+    if log_utilization:
+        ocsci_config.RUN['log_utilization'] = True
     upgrade_ocs_version = get_cli_param(config, "upgrade_ocs_version")
     if upgrade_ocs_version:
         ocsci_config.UPGRADE['upgrade_ocs_version'] = upgrade_ocs_version
@@ -386,7 +386,8 @@ def pytest_runtest_makereport(item, call):
         and ocsci_config.RUN.get('cli_params').get('collect-logs')
     ):
         test_case_name = item.name
-        collect_ocs_logs(test_case_name)
+        mcg = True if any(x in item.location[0] for x in ['mcg', 'ecosystem']) else False
+        collect_ocs_logs(dir_name=test_case_name, mcg=mcg)
 
     # Collect Prometheus metrics if specified in gather_metrics_on_fail marker
     if (

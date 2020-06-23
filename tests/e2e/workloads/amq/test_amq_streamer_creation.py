@@ -28,10 +28,10 @@ class TestAMQBasics(E2ETest):
         argnames=["interface"],
         argvalues=[
             pytest.param(
-                constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-612")
+                constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2217")
             ),
             pytest.param(
-                constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-612")
+                constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2218")
             )
         ]
     )

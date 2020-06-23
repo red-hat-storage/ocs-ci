@@ -67,8 +67,8 @@ class AMQ(object):
             )
             self.amq_dir = "strimzi-kafka-operator/install/cluster-operator/"
             self.amq_kafka_pers_yaml = "strimzi-kafka-operator/examples/kafka/kafka-persistent.yaml"
-            self.amq_kafka_connect_yaml = "strimzi-kafka-operator/examples/kafka-connect/kafka-connect.yaml"
-            self.amq_kafka_bridge_yaml = "strimzi-kafka-operator/examples/kafka-bridge/kafka-bridge.yaml"
+            self.amq_kafka_connect_yaml = "strimzi-kafka-operator/examples/connect/kafka-connect.yaml"
+            self.amq_kafka_bridge_yaml = "strimzi-kafka-operator/examples/bridge/kafka-bridge.yaml"
             self.kafka_topic_yaml = "strimzi-kafka-operator/examples/topic/kafka-topic.yaml"
             self.kafka_user_yaml = "strimzi-kafka-operator/examples/user/kafka-user.yaml"
             self.hello_world_producer_yaml = constants.HELLO_WORLD_PRODUCER_YAML

@@ -82,6 +82,10 @@ post_ocs_upgrade = compose(pytest.mark.post_ocs_upgrade, order_post_ocs_upgrade)
 # mark the test class with marker below to ignore leftover check
 ignore_leftovers = pytest.mark.ignore_leftovers
 
+# Mark the test class with marker below to ignore leftover of resources having
+# the app labels specified
+ignore_leftover_label = pytest.mark.ignore_leftover_label
+
 # testing marker this is just for testing purpose if you want to run some test
 # under development, you can mark it with @run_this and run pytest -m run_this
 run_this = pytest.mark.run_this
