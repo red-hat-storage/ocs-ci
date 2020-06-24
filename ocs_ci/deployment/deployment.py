@@ -24,7 +24,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods
 )
-from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.node import get_typed_nodes, check_nodes_specs
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -32,6 +32,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
 )
+from ocs_ci.ocs.resources.storage_cluster import change_noobaa_endpoints_count
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state
@@ -609,6 +610,19 @@ class Deployment(object):
         )
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
+        if check_nodes_specs(min_cpu=constants.MIN_NODE_CPU, min_memory=constants.MIN_NODE_MEMORY):
+            logger.info(
+                "The cluster specs meet the minimum requirements and "
+                "therefore, NooBaa auto scale will be enabled"
+            )
+            min_nb_eps = config.DEPLOYMENT.get('min_noobaa_endpoints')
+            max_nb_eps = config.DEPLOYMENT.get('max_noobaa_endpoints')
+            change_noobaa_endpoints_count(min_nb_eps=min_nb_eps, max_nb_eps=max_nb_eps)
+        else:
+            logger.warning(
+                "The cluster specs do not meet the minimum requirements"
+                " and therefore, NooBaa auto scale will remain disabled"
+            )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """

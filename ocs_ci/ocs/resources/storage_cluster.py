@@ -11,6 +11,7 @@ from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator, PackageManifest
 from ocs_ci.ocs.node import get_compute_node_names
 from ocs_ci.utility import utils, localstorage
+from ocs_ci.ocs.resources.pod import get_pods_having_label
 
 
 log = logging.getLogger(__name__)
@@ -125,6 +126,13 @@ def ocs_install_verification(
     pod = OCP(
         kind=constants.POD, namespace=namespace
     )
+    # resources_dict = {
+    #     constants.OCS_OPERATOR_LABEL: 1,
+    #     constants.OPERATOR_LABEL: 1,
+    #     constants.NOOBAA_DB_LABEL: 1,
+    #     constants.NOOBAA_OPERATOR_POD_LABEL: 1,
+    #     constants.NOOBAA_CORE_POD_LABEL: 1,
+    # }
     # ocs-operator
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
@@ -140,10 +148,40 @@ def ocs_install_verification(
     # noobaa
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=constants.NOOBAA_APP_LABEL,
-        resource_count=2,
+        selector=constants.NOOBAA_DB_LABEL,
+        resource_count=1,
         timeout=timeout
     )
+    assert pod.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=constants.NOOBAA_OPERATOR_POD_LABEL,
+        resource_count=1,
+        timeout=timeout
+    )
+    assert pod.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=constants.NOOBAA_CORE_POD_LABEL,
+        resource_count=1,
+        timeout=timeout
+    )
+    # check noobaa CR for min number of noobaa endpoint pods
+    nb_obj = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    min_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('minCount')
+    max_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('maxCount')
+    assert pod.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=constants.NOOBAA_ENDPOINT_POD_LABEL,
+        resource_count=min_eps,
+        timeout=timeout
+    )
+    nb_ep_pods = get_pods_having_label(
+        label=constants.NOOBAA_ENDPOINT_POD_LABEL, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    assert len(nb_ep_pods) <= max_eps, (
+        f"The number of running NooBaa endpoint pods ({len(nb_ep_pods)}) "
+        f"is greater than the maximum defined in the NooBaa CR ({max_eps})"
+    )
+
     # mons
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
@@ -509,15 +547,21 @@ def get_all_storageclass():
     return storageclass
 
 
-def change_noobaa_endpoints_count(nb_eps):
+def change_noobaa_endpoints_count(min_nb_eps=None, max_nb_eps=None):
     """
     Scale up or down the number of maximum NooBaa emdpoints
 
     Args:
-        nb_eps (int): The number of required Noobaa endpoints
+        min_nb_eps (int): The number of required minimum Noobaa endpoints
+        max_nb_eps (int): The number of required maximum Noobaa endpoints
 
     """
-    log.info(f"Scaling up Noobaa endpoints to a maximum of {nb_eps}")
-    params = f'{{"spec":{{"endpoints":{{"maxCount":{nb_eps},"minCount":1}}}}}}'
     noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+    if min_nb_eps:
+        log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
+        params = f'{{"spec":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}'
+        noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+    if max_nb_eps:
+        log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
+        params = f'{{"spec":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}'
+        noobaa.patch(resource_name='noobaa', params=params, format_type='merge')

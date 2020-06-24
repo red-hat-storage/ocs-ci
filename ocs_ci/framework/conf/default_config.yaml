@@ -74,6 +74,9 @@ DEPLOYMENT:
   noobaa_endpoints: 2
   # Terraform version
   terraform_version: "0.12.26"
+  # Following options are defaults for the min and max Noobaa endpoints
+  min_noobaa_endpoints: 2
+  max_noobaa_endpoints: 3
 
 # Section for reporting configuration
 REPORTING:

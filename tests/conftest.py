@@ -28,6 +28,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
+from ocs_ci.ocs.node import check_nodes_specs
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.ocs import OCS
@@ -123,40 +124,16 @@ def supported_configuration():
         64 GB memory
     Last documentation check: 2020-02-21
     """
-    min_cpu = 16
-    min_memory = 64 * 10 ** 9
+    min_cpu = constants.MIN_NODE_CPU
+    min_memory = constants.MIN_NODE_MEMORY
 
-    node_obj = ocp.OCP(kind=constants.NODE)
     log.info('Checking if system meets minimal requirements')
-    nodes = node_obj.get(selector=constants.WORKER_LABEL).get('items')
-    log.info(
-        f"Checking following nodes with worker selector (assuming that "
-        f"this is ran in CI and there are no worker nodes without OCS):\n"
-        f"{[item.get('metadata').get('name') for item in nodes]}"
-    )
-    for node_info in nodes:
-        real_cpu = int(node_info['status']['capacity']['cpu'])
-        real_memory = node_info['status']['capacity']['memory']
-        if real_memory.endswith('Ki'):
-            real_memory = int(real_memory[0:-2]) * 2 ** 10
-        elif real_memory.endswith('Mi'):
-            real_memory = int(real_memory[0:-2]) * 2 ** 20
-        elif real_memory.endswith('Gi'):
-            real_memory = int(real_memory[0:-2]) * 2 ** 30
-        elif real_memory.endswith('Ti'):
-            real_memory = int(real_memory[0:-2]) * 2 ** 40
-        else:
-            real_memory = int(real_memory)
-
-        if (real_cpu < min_cpu or real_memory < min_memory):
-            error_msg = (
-                f"Node {node_info.get('metadata').get('name')} doesn't have "
-                f"minimum of required reasources for running the test:\n"
-                f"{min_cpu} CPU and {min_memory} Memory\nIt has:\n{real_cpu} "
-                f"CPU and {real_memory} Memory"
-            )
-            log.error(error_msg)
-            pytest.xfail(error_msg)
+    if not check_nodes_specs(min_memory=min_memory, min_cpu=min_cpu):
+        err_msg = (
+            f"At least one of the worker nodes doesn't meet the "
+            f"required minimum specs of {min_cpu} vCPUs and {min_memory} RAM"
+        )
+        pytest.xfail(err_msg)
 
 
 @pytest.fixture(scope='class')
