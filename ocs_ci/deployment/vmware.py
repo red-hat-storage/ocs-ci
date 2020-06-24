@@ -384,6 +384,10 @@ class VSPHEREUPI(VSPHEREBASE):
             create_directory_path(self.terraform_data_dir)
             self.terraform_work_dir = constants.VSPHERE_DIR
             self.terraform = Terraform(self.terraform_work_dir)
+            ocp_version = get_ocp_version()
+            self.folder_structure = False
+            if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+                self.folder_structure = True
 
         def deploy_prereq(self):
             """
@@ -392,77 +396,21 @@ class VSPHEREUPI(VSPHEREBASE):
             super(VSPHEREUPI.OCPDeployment, self).deploy_prereq()
             # create ignitions
             self.create_ignitions()
-            self.kubeconfig = os.path.join(self.cluster_path, config.RUN.get('kubeconfig_location'))
+            self.kubeconfig = os.path.join(
+                self.cluster_path,
+                config.RUN.get('kubeconfig_location')
+            )
+            self.terraform_var = os.path.join(
+                config.ENV_DATA['cluster_path'],
+                constants.TERRAFORM_DATA_DIR,
+                "terraform.tfvars"
+            )
 
             # git clone repo from openshift installer
             clone_openshift_installer()
 
-            # upload bootstrap ignition to public access server
-            bootstrap_path = os.path.join(config.ENV_DATA.get('cluster_path'), constants.BOOTSTRAP_IGN)
-            remote_path = os.path.join(
-                config.ENV_DATA.get('path_to_upload'),
-                f"{config.RUN.get('run_id')}_{constants.BOOTSTRAP_IGN}"
-            )
-            upload_file(
-                config.ENV_DATA.get('httpd_server'),
-                bootstrap_path,
-                remote_path,
-                config.ENV_DATA.get('httpd_server_user'),
-                config.ENV_DATA.get('httpd_server_password')
-            )
-
-            # generate bootstrap ignition url
-            path_to_bootstrap_on_remote = remote_path.replace("/var/www/html/", "")
-            bootstrap_ignition_url = (
-                f"http://{config.ENV_DATA.get('httpd_server')}/"
-                f"{path_to_bootstrap_on_remote}"
-            )
-            logger.info(f"bootstrap_ignition_url: {bootstrap_ignition_url}")
-            config.ENV_DATA['bootstrap_ignition_url'] = bootstrap_ignition_url
-
-            # load master and worker ignitions to variables
-            master_ignition_path = os.path.join(
-                config.ENV_DATA.get('cluster_path'),
-                constants.MASTER_IGN
-            )
-            master_ignition = read_file_as_str(f"{master_ignition_path}")
-            config.ENV_DATA['control_plane_ignition'] = master_ignition
-
-            worker_ignition_path = os.path.join(
-                config.ENV_DATA.get('cluster_path'),
-                constants.WORKER_IGN
-            )
-            worker_ignition = read_file_as_str(f"{worker_ignition_path}")
-            config.ENV_DATA['compute_ignition'] = worker_ignition
-
-            cluster_domain = (
-                f"{config.ENV_DATA.get('cluster_name')}."
-                f"{config.ENV_DATA.get('base_domain')}"
-            )
-            config.ENV_DATA['cluster_domain'] = cluster_domain
-
-            # generate terraform variables from template
-            logger.info("Generating terraform variables")
-            _templating = Templating()
-            terraform_var_template = "terraform.tfvars.j2"
-            terraform_var_template_path = os.path.join(
-                "ocp-deployment", terraform_var_template
-            )
-            terraform_config_str = _templating.render_template(
-                terraform_var_template_path, config.ENV_DATA
-            )
-
-            terraform_var_yaml = os.path.join(
-                self.cluster_path,
-                constants.TERRAFORM_DATA_DIR,
-                "terraform.tfvars.yaml"
-            )
-            with open(terraform_var_yaml, "w") as f:
-                f.write(terraform_config_str)
-            self.terraform_var = convert_yaml2tfvars(terraform_var_yaml)
-
-            # update the machine configurations
-            update_machine_conf()
+            # generate terraform variable file
+            generate_terraform_vars_and_update_machine_conf()
 
             # sync guest time with host
             if config.ENV_DATA.get('sync_time_with_host'):
@@ -848,3 +796,101 @@ def update_machine_conf():
 
     # change root disk size
     change_vm_root_disk_size(constants.INSTALLER_MACHINE_CONF)
+
+
+def generate_terraform_vars_and_update_machine_conf():
+    """
+    Generates the terraform.tfvars file
+    """
+    ocp_version = get_ocp_version()
+    folder_structure = True
+    if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+        # TODO: changes for ocp45
+        pass
+    else:
+        # generate terraform variable file
+        generate_terraform_vars_with_out_folder()
+
+        # update the machine configurations
+        update_machine_conf()
+
+
+def create_terraform_var_file(terraform_var_template):
+    """
+    Creates the terraform variable file from jinja template
+
+    Args:
+        terraform_var_template (str): terraform template in jinja format
+
+    """
+    _templating = Templating()
+    terraform_var_template_path = os.path.join(
+        "ocp-deployment", terraform_var_template
+    )
+    terraform_config_str = _templating.render_template(
+        terraform_var_template_path, config.ENV_DATA
+    )
+
+    terraform_var_yaml = os.path.join(
+        config.ENV_DATA['cluster_path'],
+        constants.TERRAFORM_DATA_DIR,
+        "terraform.tfvars.yaml"
+    )
+    with open(terraform_var_yaml, "w") as f:
+        f.write(terraform_config_str)
+
+    convert_yaml2tfvars(terraform_var_yaml)
+
+
+def generate_terraform_vars_with_out_folder():
+    """
+    Generates the normal ( old structure ) terraform.tfvars file
+    """
+    logger.info("Generating terraform variables without folder structure")
+
+    # upload bootstrap ignition to public access server
+    bootstrap_path = os.path.join(config.ENV_DATA.get('cluster_path'), constants.BOOTSTRAP_IGN)
+    remote_path = os.path.join(
+        config.ENV_DATA.get('path_to_upload'),
+        f"{config.RUN.get('run_id')}_{constants.BOOTSTRAP_IGN}"
+    )
+    upload_file(
+        config.ENV_DATA.get('httpd_server'),
+        bootstrap_path,
+        remote_path,
+        config.ENV_DATA.get('httpd_server_user'),
+        config.ENV_DATA.get('httpd_server_password')
+    )
+
+    # generate bootstrap ignition url
+    path_to_bootstrap_on_remote = remote_path.replace("/var/www/html/", "")
+    bootstrap_ignition_url = (
+        f"http://{config.ENV_DATA.get('httpd_server')}/"
+        f"{path_to_bootstrap_on_remote}"
+    )
+    logger.info(f"bootstrap_ignition_url: {bootstrap_ignition_url}")
+    config.ENV_DATA['bootstrap_ignition_url'] = bootstrap_ignition_url
+
+    # load master and worker ignitions to variables
+    master_ignition_path = os.path.join(
+        config.ENV_DATA.get('cluster_path'),
+        constants.MASTER_IGN
+    )
+    master_ignition = read_file_as_str(f"{master_ignition_path}")
+    config.ENV_DATA['control_plane_ignition'] = master_ignition
+
+    worker_ignition_path = os.path.join(
+        config.ENV_DATA.get('cluster_path'),
+        constants.WORKER_IGN
+    )
+    worker_ignition = read_file_as_str(f"{worker_ignition_path}")
+    config.ENV_DATA['compute_ignition'] = worker_ignition
+
+    cluster_domain = (
+        f"{config.ENV_DATA.get('cluster_name')}."
+        f"{config.ENV_DATA.get('base_domain')}"
+    )
+    config.ENV_DATA['cluster_domain'] = cluster_domain
+
+    # generate terraform variables from template
+    create_terraform_var_file("terraform.tfvars.j2")
