@@ -418,8 +418,12 @@ class VSPHEREUPI(VSPHEREBASE):
             generate_terraform_vars_and_update_machine_conf()
 
             # sync guest time with host
+            vm_file = (
+                constants.VM_MAIN if self.folder_structure
+                else constants.INSTALLER_MACHINE_CONF
+            )
             if config.ENV_DATA.get('sync_time_with_host'):
-                sync_time_with_host(constants.INSTALLER_MACHINE_CONF, True)
+                sync_time_with_host(vm_file, True)
 
         def create_config(self):
             """
@@ -700,8 +704,10 @@ def sync_time_with_host(machine_file, enable=False):
          machine_file (str): machine file to sync the guest time with host
          enable (bool): True to sync guest time with host
     """
+    # terraform will support only lowercase bool
+    enable = str(enable).lower()
     to_change = 'enable_disk_uuid = "true"'
-    sync_time = f"{to_change} sync_time_with_host = \"{enable}\""
+    sync_time = f"{to_change}\n sync_time_with_host = \"{enable}\""
 
     replace_content_in_file(
         machine_file,

@@ -618,15 +618,19 @@ MASTER_IGN = "master.ign"
 WORKER_IGN = "worker.ign"
 
 # vSphere related constants
+VSPHERE_NODE_USER = "core"
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
 VSPHERE_SCALEUP_REPO = "https://code.engineering.redhat.com/gerrit/openshift-misc"
 VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
 INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
+VM_IFCFG = os.path.join(VSPHERE_DIR, "vm/ifcfg.tmpl")
 INSTALLER_ROUTE53 = os.path.join(VSPHERE_DIR, "route53/main.tf")
 INSTALLER_MACHINE_CONF = os.path.join(VSPHERE_DIR, "machine/main.tf")
+VM_MAIN = os.path.join(VSPHERE_DIR, "vm/main.tf")
 VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
 VSPHERE_MAIN = os.path.join(VSPHERE_DIR, "main.tf")
+VSPHERE_VAR = os.path.join(VSPHERE_DIR, "variables.tf")
 TERRAFORM_DATA_DIR = "terraform_data"
 SCALEUP_TERRAFORM_DATA_DIR = "scaleup_terraform_data"
 SCALEUP_VSPHERE_DIR = os.path.join(
@@ -920,3 +924,10 @@ USED_SPACE_QUERY = "ceph_cluster_total_used_bytes"
 # files
 REMOTE_FILE_URL = "http://download.ceph.com/tarballs/ceph_15.1.0.orig.tar.gz"
 FILE_PATH = '/tmp/ceph.tar.gz'
+
+# terraform tfstate modules
+BOOTSTRAP_MODULE = "module.ipam_bootstrap"
+LOAD_BALANCER_MODULE = "module.ipam_lb"
+
+# proxy location
+HAPROXY_LOCATION = "/etc/haproxy/haproxy.conf"
