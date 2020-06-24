@@ -45,7 +45,7 @@ class TestJenkinsWorkload(E2ETest):
         for project_id in range(1, num_projects + 1):
             project_names.append('myjenkins-' + str(project_id))
 
-        # Init project names in Jenkins class
+        # Init project names
         jenkins.project_names = project_names
 
         # Create app jenkins
@@ -54,13 +54,13 @@ class TestJenkinsWorkload(E2ETest):
         # Create jenkins pvc
         jenkins.create_jenkins_pvc()
 
-        # Jenkins build config
+        # Create jenkins build config
         jenkins.create_jenkins_build_config()
 
-        # wait_for_jenkins_deploy_status
+        # wait jenkins deploy pod reach to completed state
         jenkins.wait_for_jenkins_deploy_status(status=STATUS_COMPLETED)
 
-        # Number of builds per project
+        # Init number of builds per project
         jenkins.number_builds_per_project = num_of_builds
 
         # Start Builds
