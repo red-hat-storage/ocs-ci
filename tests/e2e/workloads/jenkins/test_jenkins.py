@@ -66,5 +66,5 @@ class TestJenkinsWorkload(E2ETest):
         # Start Builds
         jenkins.start_build()
 
-        # Wait build reach Complete state
+        # Wait build reach 'Complete' state
         jenkins.wait_for_build_status(status='Complete')
