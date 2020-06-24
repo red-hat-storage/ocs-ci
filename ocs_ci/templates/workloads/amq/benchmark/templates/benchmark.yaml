@@ -29,6 +29,9 @@ spec:
     - name: {{ .Release.Name }}-driver
       imagePullPolicy: {{ .Values.imagePullPolicy }}
       image: {{ .Values.image }}
+      securityContext:
+        privileged: true
+        runAsUser: 0
       env:
         - name: NUM_WORKERS
           value: "{{ .Values.numWorkers }}"

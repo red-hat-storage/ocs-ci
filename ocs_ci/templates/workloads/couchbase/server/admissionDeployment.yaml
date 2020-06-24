@@ -27,6 +27,9 @@ spec:
         command:
         - couchbase-operator-admission
         image: registry.connect.redhat.com/couchbase/admission-controller:1.2.1-1
+        securityContext:
+          privileged: true
+          runAsUser: 0
         name: couchbase-operator-admission
         ports:
         - containerPort: 8443

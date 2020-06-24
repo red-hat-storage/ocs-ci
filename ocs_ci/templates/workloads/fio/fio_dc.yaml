@@ -17,6 +17,8 @@ spec:
           securityContext:
              capabilities:
                add: ["SYS_ADMIN"]
+             privileged: true
+             runAsUser: 0
           volumeDevices:
             - devicePath: /dev/rbdblock
               name: my-volume

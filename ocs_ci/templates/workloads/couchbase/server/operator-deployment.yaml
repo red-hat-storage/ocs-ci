@@ -32,6 +32,9 @@ spec:
             fieldRef:
               fieldPath: metadata.name
         image: registry.connect.redhat.com/couchbase/operator:1.2.1-1
+        securityContext:
+          privileged: true
+          runAsUser: 0
         name: couchbase-operator
         ports:
         - containerPort: 8080
