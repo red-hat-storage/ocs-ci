@@ -422,6 +422,10 @@ NGINX_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "nginx.yaml"
 )
 
+AWSCLI_SERVICE_CA_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "aws-cli-service-ca-configmap.yaml"
+)
+
 AWSCLI_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "awscli.yaml"
 )
@@ -857,8 +861,10 @@ NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
 DEFAULT_INGRESS_CRT = "router-ca.crt"
 DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
-DEFAULT_INGRESS_CRT_REMOTE_PATH = f"/cert/{DEFAULT_INGRESS_CRT}"
+SERVICE_CA_CRT = "service-ca.crt"
+SERVICE_CA_CRT_AWSCLI_PATH = f"/cert/{SERVICE_CA_CRT}"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
+AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [
