@@ -3,8 +3,10 @@ Testing the Elasticsearch server deployment
 
 """
 import logging
-import pytest
 import time
+
+import pytest
+
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from elasticsearch import (Elasticsearch, exceptions as esexp)
 from subprocess import run
