@@ -5,7 +5,6 @@ from ocs_ci.framework.testlib import (
     E2ETest, workloads
 )
 from ocs_ci.ocs.jenkins import Jenkins
-from ocs_ci.framework.testlib import ignore_leftovers
 from ocs_ci.ocs.constants import STATUS_COMPLETED
 
 log = logging.getLogger(__name__)
@@ -22,7 +21,6 @@ def jenkins(request):
     return jenkins
 
 
-@ignore_leftovers
 @workloads
 @pytest.mark.polarion_id("OCS-2175")
 class TestJenkinsWorkload(E2ETest):
