@@ -11,7 +11,7 @@ from botocore.client import ClientError
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed, CredReqSecretNotFound, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import cal_md5sum
@@ -392,7 +392,16 @@ class MCG(object):
         sleep(5)
 
         secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
-        cred_req_secret_dict = secret_ocp_obj.get(resource_name=creds_request.name, retry=5)
+        try:
+            cred_req_secret_dict = secret_ocp_obj.get(resource_name=creds_request.name, retry=5)
+        except CommandFailed:
+            logger.error(
+                'Failed to retrieve credentials request secret'
+            )
+            raise CredReqSecretNotFound(
+                'Please make sure that the cluster used is an AWS cluster, '
+                'or that the `platform` var in your config is correct.'
+            )
 
         aws_access_key_id = base64.b64decode(
             cred_req_secret_dict.get('data').get('aws_access_key_id')

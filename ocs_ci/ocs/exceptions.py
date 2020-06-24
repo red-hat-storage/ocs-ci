@@ -176,3 +176,7 @@ class PendingCSRException(Exception):
 
 class RDMDiskNotFound(Exception):
     pass
+
+
+class CredReqSecretNotFound(Exception):
+    pass
