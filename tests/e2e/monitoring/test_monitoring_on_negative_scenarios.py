@@ -18,6 +18,7 @@ from ocs_ci.ocs.node import (
     get_typed_nodes, drain_nodes, schedule_nodes, get_node_objs
 )
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3
 
@@ -44,7 +45,7 @@ def wait_to_update_mgrpod_info_prometheus_pod():
     log.info("Ceph health status metrics is updated")
 
 
-@retry((CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException), tries=30, delay=3, backoff=1)
+@retry((CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException), tries=60, delay=15, backoff=1)
 def wait_for_nodes_status_and_prometheus_health_check(pods):
     """
     Waits for the all the nodes to be in running state
@@ -53,7 +54,8 @@ def wait_for_nodes_status_and_prometheus_health_check(pods):
     """
 
     # Validate all nodes are in READY state
-    wait_for_nodes_status(timeout=900)
+    ocp.wait_for_cluster_connectivity(tries=400)
+    wait_for_nodes_status(timeout=1800)
 
     # Check for the created pvc metrics after rebooting the master nodes
     for pod_obj in pods:
@@ -242,6 +244,19 @@ class TestMonitoringBackedByOCS(E2ETest):
             # Mark the nodes back to schedulable
             schedule_nodes([prometheus_node])
 
+            # Wait some time after node scheduling back
+            waiting_time = 30
+            log.info(f"Waiting {waiting_time} seconds...")
+            time.sleep(waiting_time)
+
+            # Validate node is in Ready State
+            wait_for_nodes_status(
+                [prometheus_node], status=constants.NODE_READY
+            )
+
+            # Validate ceph health OK
+            ceph_health_check(tries=40, delay=30)
+
         # Check the node are Ready state and check cluster is health ok
         self.sanity_helpers.health_check()
 
@@ -325,7 +340,12 @@ class TestMonitoringBackedByOCS(E2ETest):
             nodes.restart_nodes([pod_node_obj])
 
             # Validate all nodes are in READY state
-            wait_for_nodes_status()
+            retry(
+                (CommandFailed, ResourceWrongStatusException),
+                tries=20,
+                delay=15)(
+                wait_for_nodes_status()
+            )
 
         # Check the node are Ready state and check cluster is health ok
         self.sanity_helpers.health_check(tries=40)
@@ -356,7 +376,12 @@ class TestMonitoringBackedByOCS(E2ETest):
 
         # Reboot one after one master nodes
         for node in master_nodes:
-            nodes.restart_nodes([node])
+            nodes.restart_nodes([node], wait=False)
+
+            # Wait some time after rebooting master
+            waiting_time = 40
+            log.info(f"Waiting {waiting_time} seconds...")
+            time.sleep(waiting_time)
 
             wait_for_nodes_status_and_prometheus_health_check(pods)
 
@@ -381,7 +406,12 @@ class TestMonitoringBackedByOCS(E2ETest):
         nodes.restart_nodes([mgr_node_obj])
 
         # Validate all nodes are in READY state
-        wait_for_nodes_status()
+        retry(
+            (CommandFailed, ResourceWrongStatusException),
+            tries=20,
+            delay=15)(
+            wait_for_nodes_status()
+        )
 
         # Check for Ceph pods
         pod_obj = ocp.OCP(
@@ -439,7 +469,12 @@ class TestMonitoringBackedByOCS(E2ETest):
             nodes.start_nodes(nodes=[prometheus_node_obj])
 
             # Validate all nodes are in READY state
-            wait_for_nodes_status()
+            retry(
+                (CommandFailed, ResourceWrongStatusException),
+                tries=20,
+                delay=15)(
+                wait_for_nodes_status()
+            )
 
         # Check all the prometheus pods are up
         for pod_obj in prometheus_pod_obj_list:

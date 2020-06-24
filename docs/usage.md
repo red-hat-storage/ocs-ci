@@ -105,8 +105,9 @@ to the pytest.
    provided. In case `--io-load` is not provided, IO load is set to 30% of
    the cluster throughput limit.
 * `--io-load` - IOs throughput target percentage. The value should be
-   between 0 to 100. The default is 30 (30%)
-* `--enable-bg-io-logs` - If passed, background IO log messages will be printed
+   between 0 to 100. The default is 50 (50%)
+* `--log-cluster-utilization` - If passed, metrics of the cluster utilization will be
+   printed every 10 seconds
 
 ## Examples
 
@@ -191,9 +192,12 @@ run-ci tests/
 
 #### Running tests with background IO load
 
-If you would like to run tests with IO load of 50% in the tests background,
-while background IO log messages are printed, append these arguments to the
-`run-ci` command: `--io-in-bg --io-load 50 --enable-bg-io-logs`
+If you would like to run tests with IO load of 75% of the cluster throughput limit,
+in the tests background, append these arguments to the `run-ci` command:
+`--io-in-bg --io-load 75`
+
+If you would like metrics of cluster utilization to be logged, every 10 seconds, during
+the test execution, append the `--log-cluster-utilization` argument to the `run-ci` command
 
 #### Destroy of cluster
 

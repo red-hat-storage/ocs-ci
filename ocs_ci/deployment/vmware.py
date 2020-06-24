@@ -292,14 +292,28 @@ class VSPHEREBASE(Deployment):
 
         """
         logger.info("Adding RDM disk to all compute nodes")
+        datastore_type = self.vsphere.get_datastore_type_by_name(
+            self.datastore,
+            self.datacenter
+        )
+
         compute_vms = self.get_compute_vms(self.datacenter, self.cluster)
         for vm in compute_vms:
             host = self.vsphere.get_host(vm)
             logger.info(f"{vm.name} belongs to host {host.name}")
-            devices_available = self.vsphere.available_storage_devices(host)
+            devices_available = self.vsphere.available_storage_devices(
+                host,
+                datastore_type=datastore_type
+            )
             if not devices_available:
                 raise RDMDiskNotFound
-            self.attach_rdm_disk(vm, devices_available[0])
+
+            # Erase the partition on the disk before adding to node
+            device = devices_available[0]
+            self.vsphere.erase_partition(host, device)
+
+            # Attach RDM disk to node
+            self.attach_rdm_disk(vm, device)
 
     def attach_rdm_disk(self, vm, device_name):
         """
@@ -526,13 +540,16 @@ class VSPHEREUPI(VSPHEREBASE):
                         logger.error(ex)
                 raise e
 
-            if not config.DEPLOYMENT['preserve_bootstrap_node']:
-                logger.info("removing bootstrap node")
-                os.chdir(self.terraform_data_dir)
-                self.terraform.apply(
-                    self.terraform_var, bootstrap_complete=True
-                )
-                os.chdir(self.previous_dir)
+            # Disabling the bootstrap removal code due to vSphere provider
+            # issue
+            # https://github.com/hashicorp/terraform-provider-vsphere/issues/1111
+            # if not config.DEPLOYMENT['preserve_bootstrap_node']:
+            #     logger.info("removing bootstrap node")
+            #     os.chdir(self.terraform_data_dir)
+            #     self.terraform.apply(
+            #         self.terraform_var, bootstrap_complete=True
+            #     )
+            #     os.chdir(self.previous_dir)
 
             OCP.set_kubeconfig(self.kubeconfig)
 

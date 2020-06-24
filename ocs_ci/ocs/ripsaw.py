@@ -45,7 +45,7 @@ class RipSaw(object):
         self.namespace = self.args.get('namespace', RIPSAW_NAMESPACE)
         self.pgsql_is_setup = False
         self.ocp = OCP()
-        self.ns_obj = OCP(kind='namespace')
+        self.ns_obj = OCP(namespace=RIPSAW_NAMESPACE, kind='namespace')
         self.pod_obj = OCP(kind='pod')
         self._create_namespace()
         self._clone_ripsaw()
@@ -92,10 +92,6 @@ class RipSaw(object):
         run(f'oc delete -f {self.crd}', shell=True, cwd=self.dir)
         run(f'oc delete -f {self.operator}', shell=True, cwd=self.dir)
         run('oc delete -f deploy', shell=True, cwd=self.dir)
-        if self.pgsql_is_setup:
-            self.pgsql_sset.delete()
-            self.pgsql_cmap.delete()
-            self.pgsql_service.delete()
         run_cmd(f'oc delete project {self.namespace}')
         self.ns_obj.wait_for_delete(resource_name=self.namespace)
         # Reset namespace to default

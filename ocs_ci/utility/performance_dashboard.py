@@ -10,16 +10,15 @@ environment: The platform we are testing. E.g, AWS
 result_value: The value of this benchmark.
 
 """
+import re
 import requests
 import json
-from datetime import datetime
-from ocs_ci.framework import config
-from ocs_ci.ocs import ocp, defaults
-from ocs_ci.ocs.node import get_typed_nodes
-from ocs_ci.ocs import constants
 
-now = datetime.now()
-date_time = now.strftime("%m.%d.%Y")
+from ocs_ci.ocs import constants
+from ocs_ci.framework import config
+from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.version import get_ocs_version
+
 
 data_template = {
     "commitid": None,
@@ -39,21 +38,21 @@ def initialize_data():
     Returns:
         dict: A dictionary contains the data to push to the dashboard
     """
-    csv = ocp.OCP(kind='csv', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     worker_type = get_typed_nodes(num_of_nodes=1)[0].data['metadata'][
         'labels'
     ]['beta.kubernetes.io/instance-type']
 
-    csv_vers = csv.get()['items'][0]['spec']['version'][:-3].split("-")
-    min_version = csv_vers[0]
-    build_id = csv_vers[1]
-    ocs_ver = ".".join(min_version.split(".")[:-1])
+    (ocs_ver_info, _) = get_ocs_version()
+    ocs_ver_full = ocs_ver_info['status']['desired']['version']
+    m = re.match(r"(\d.\d).(\d)-", ocs_ver_full)
+    if m.group(1) is not None:
+        ocs_ver = m.group(1)
     platform = config.ENV_DATA['platform']
     if platform.lower() == 'aws':
         platform = platform.upper() + " " + worker_type
-    data_template['commitid'] = build_id + date_time
+    data_template['commitid'] = ocs_ver_full
     data_template['project'] = f"OCS{ocs_ver}"
-    data_template['branch'] = min_version
+    data_template['branch'] = ocs_ver_info['spec']['channel']
     data_template['executable'] = ocs_ver
     data_template['environment'] = platform
 
