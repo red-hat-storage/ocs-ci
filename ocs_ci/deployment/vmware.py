@@ -532,7 +532,7 @@ class VSPHEREUPI(VSPHEREBASE):
             #             self.terraform_var, bootstrap_complete=True
             #         )
             #     os.chdir(self.previous_dir)
-            
+
             OCP.set_kubeconfig(self.kubeconfig)
 
             # wait for all nodes to generate CSR
@@ -647,10 +647,18 @@ class VSPHEREUPI(VSPHEREBASE):
         ):
             os.rename(f"{constants.VSPHERE_MAIN}.json", f"{constants.VSPHERE_MAIN}.json.backup")
 
+        # getting OCP version here since we run destroy job as
+        # separate job in jenkins
+        ocp_version = get_ocp_version()
+        self.folder_structure = False
+        if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+            self.folder_structure = True
+
+        # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
         terraform.initialize(upgrade=True)
-        terraform.destroy(tfvars)
+        terraform.destroy(tfvars, refresh=(not self.folder_structure))
         os.chdir(previous_dir)
 
         # post destroy checks
