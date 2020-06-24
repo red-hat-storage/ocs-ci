@@ -522,11 +522,17 @@ class VSPHEREUPI(VSPHEREBASE):
             # if not config.DEPLOYMENT['preserve_bootstrap_node']:
             #     logger.info("removing bootstrap node")
             #     os.chdir(self.terraform_data_dir)
-            #     self.terraform.apply(
-            #         self.terraform_var, bootstrap_complete=True
-            #     )
+            #     if self.folder_structure:
+            #         self.terraform.destroy_module(
+            #             self.terraform_var,
+            #             constants.BOOTSTRAP_MODULE
+            #         )
+            #     else:
+            #         self.terraform.apply(
+            #             self.terraform_var, bootstrap_complete=True
+            #         )
             #     os.chdir(self.previous_dir)
-
+            
             OCP.set_kubeconfig(self.kubeconfig)
 
             # wait for all nodes to generate CSR
