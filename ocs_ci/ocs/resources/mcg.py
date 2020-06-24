@@ -34,10 +34,10 @@ class MCG(object):
     """
 
     (
-        s3_resource, s3_endpoint, ocp_resource,
+        s3_resource, s3_endpoint, s3_internal_endpoint, ocp_resource,
         mgmt_endpoint, region, access_key_id, access_key,
         namespace, noobaa_user, noobaa_password, noobaa_token
-    ) = (None,) * 11
+    ) = (None,) * 12
 
     def __init__(self):
         """
@@ -67,6 +67,10 @@ class MCG(object):
         self.s3_endpoint = (
             get_noobaa.get('items')[0].get('status').get('services')
             .get('serviceS3').get('externalDNS')[0]
+        )
+        self.s3_internal_endpoint = (
+            get_noobaa.get('items')[0].get('status').get('services')
+            .get('serviceS3').get('internalDNS')[0]
         )
         self.mgmt_endpoint = (
             get_noobaa.get('items')[0].get('status').get('services')

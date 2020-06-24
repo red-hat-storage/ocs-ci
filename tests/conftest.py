@@ -11,11 +11,9 @@ from math import floor
 from random import randrange
 from time import sleep
 from shutil import copyfile
-import subprocess
 from functools import partial
 
 import pytest
-import pathlib
 import yaml
 from botocore.exceptions import ClientError
 
@@ -1608,78 +1606,48 @@ def mcg_obj_fixture(request):
 
 
 @pytest.fixture()
-def created_pods(request):
-    return created_pods_fixture(request)
+def awscli_pod(request, mcg_obj):
+    return awscli_pod_fixture(request, mcg_obj)
 
 
 @pytest.fixture(scope='session')
-def created_pods_session(request):
-    return created_pods_fixture(request)
+def awscli_pod_session(request, mcg_obj_session):
+    return awscli_pod_fixture(request, mcg_obj_session)
 
 
-def created_pods_fixture(request):
-    """
-    Deletes all pods that were created as part of the test
-
-    Returns:
-        list: An empty list of pods
-    """
-    created_pods_objects = []
-
-    def pod_cleanup():
-        for pod in created_pods_objects:
-            log.info(f'Deleting pod {pod.name}')
-            pod.delete()
-
-    request.addfinalizer(pod_cleanup)
-    return created_pods_objects
-
-
-@pytest.fixture()
-def awscli_pod(mcg_obj, created_pods):
-    return awscli_pod_fixture(mcg_obj, created_pods)
-
-
-@pytest.fixture(scope='session')
-def awscli_pod_session(mcg_obj_session, created_pods_session):
-    return awscli_pod_fixture(mcg_obj_session, created_pods_session)
-
-
-def awscli_pod_fixture(mcg_obj, created_pods):
+def awscli_pod_fixture(request, mcg_obj):
     """
     Creates a new AWSCLI pod for relaying commands
 
     Args:
-        created_pods (Fixture/list): A fixture used to keep track of created
-             pods and clean them up in the teardown
+        mcg_obj: An object representing the current
+        state of the MCG in the cluster
 
     Returns:
         pod: A pod running the AWS CLI
 
     """
+    # Create the service-ca configmap to be mounted upon pod creation
+    service_ca_configmap = helpers.create_resource(
+        **templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
+    )
     awscli_pod_obj = helpers.create_pod(
-        namespace=mcg_obj.namespace,
+        namespace=constants.DEFAULT_NAMESPACE,
         pod_dict_path=constants.AWSCLI_POD_YAML,
         pod_name=constants.AWSCLI_RELAY_POD_NAME
     )
-    helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
-    created_pods.append(awscli_pod_obj)
-
-    # FIXME: Use service-ca.crt instead of copying the Ingress crt into the pod
-    # https://github.com/red-hat-storage/ocs-ci/issues/2260
-
-    # Verify that the target dir for the self-signed MCG cert exists
-    cert_dir = pathlib.PurePath(constants.DEFAULT_INGRESS_CRT_REMOTE_PATH).parent
-    awscli_pod_obj.exec_cmd_on_pod(f'mkdir --parents {cert_dir}')
-
-    # Copy the self-signed certificate to use with AWSCLI
-    # Use cat and sed since the pod does not have tar or rsync
-    cmd = (
-        f"cat {constants.DEFAULT_INGRESS_CRT_LOCAL_PATH} | "
-        f"oc exec -i -n {mcg_obj.namespace} {constants.AWSCLI_RELAY_POD_NAME} "
-        f"-- sed -n 'w {constants.DEFAULT_INGRESS_CRT_REMOTE_PATH}'"
+    OCP(namespace=constants.DEFAULT_NAMESPACE, kind='ConfigMap').wait_for_resource(
+        resource_name=service_ca_configmap.name,
+        column='DATA',
+        condition='1'
     )
-    subprocess.run(cmd, shell=True)
+    helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
+
+    def _awscli_pod_cleanup():
+        awscli_pod_obj.delete()
+        service_ca_configmap.delete()
+
+    request.addfinalizer(_awscli_pod_cleanup)
 
     return awscli_pod_obj
 
