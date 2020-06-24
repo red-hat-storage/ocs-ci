@@ -73,11 +73,12 @@ class Terraform(object):
 
         """
         logger.info("Destroying the cluster")
-        cmd = f"{self.terraform_installer} destroy '-var-file={tfvars}' -auto-approve {self.path}"
-        if not refresh:
-            cmd = f"{self.terraform_installer} destroy -refresh=false '-var-file={tfvars}' -auto-approve {self.path}"
+        refresh_param = "-refresh=false" if not refresh else ""
+        cmd = (
+            f"{self.terraform_installer} destroy {refresh_param}"
+            f" '-var-file={tfvars}' -auto-approve {self.path}"
+        )
         run_cmd(cmd, timeout=1200)
-
 
     def output(self, tfstate, module, json_format=True):
         """
@@ -116,4 +117,3 @@ class Terraform(object):
         logger.info(f"Destroying the module: {module}")
         cmd = f"terraform destroy -auto-approve -target={module} '-var-file={tfvars}' '{self.path}'"
         run_cmd(cmd, timeout=1200)
-

@@ -1778,6 +1778,7 @@ def convert_yaml2tfvars(yaml):
     from ocs_ci.utility.templating import load_yaml
     data = load_yaml(yaml)
     tfvars_file = os.path.splitext(yaml)[0]
+    log.debug(f"Converting {yaml} to {tfvars_file}")
     with open(tfvars_file, "w+") as fd:
         for key, val in data.items():
             if key == "control_plane_ignition":
@@ -1790,6 +1791,10 @@ def convert_yaml2tfvars(yaml):
                 fd.write("compute_ignition = <<END_OF_WORKER_IGNITION\n")
                 fd.write(f"{val}\n")
                 fd.write("END_OF_WORKER_IGNITION\n")
+                continue
+
+            if key == "vm_dns_addresses":
+                fd.write(f'vm_dns_addresses = ["{val}"]\n')
                 continue
 
             fd.write(key)
@@ -2320,6 +2325,31 @@ def get_terraform(version=None, bin_dir=None):
     os.chdir(previous_dir)
 
     return terraform_binary_path
+
+
+def get_module_ip(terraform_state_file, module):
+    """
+    Gets the bootstrap node IP from terraform.tfstate file
+
+    Args:
+        terraform_state_file (str): Path to terraform state file
+        module (str): Module name in terraform.tfstate file
+            e.g: constants.LOAD_BALANCER_MODULE
+
+    Returns:
+        str: IP of bootstrap node
+
+    """
+    with open(terraform_state_file) as fd:
+        obj = hcl.load(fd)
+
+        resources = obj['resources']
+        log.debug(f"Extracting module information for {module}")
+        log.debug(f"Resource in {terraform_state_file}: {resources}")
+        for resource in resources:
+            if resource['module'] == module:
+                resource_body = resource['instances'][0]['attributes']['body']
+                return resource_body.split("\"")[3]
 
 
 def set_aws_region(region=None):
