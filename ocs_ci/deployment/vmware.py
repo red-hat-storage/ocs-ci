@@ -516,22 +516,20 @@ class VSPHEREUPI(VSPHEREBASE):
                 lb.remove_boostrap_in_proxy()
                 lb.restart_haproxy()
 
-            # Disabling the bootstrap removal code due to vSphere provider
-            # issue
-            # https://github.com/hashicorp/terraform-provider-vsphere/issues/1111
-            # if not config.DEPLOYMENT['preserve_bootstrap_node']:
-            #     logger.info("removing bootstrap node")
-            #     os.chdir(self.terraform_data_dir)
-            #     if self.folder_structure:
-            #         self.terraform.destroy_module(
-            #             self.terraform_var,
-            #             constants.BOOTSTRAP_MODULE
-            #         )
-            #     else:
-            #         self.terraform.apply(
-            #             self.terraform_var, bootstrap_complete=True
-            #         )
-            #     os.chdir(self.previous_dir)
+            # remove bootstrap node
+            if not config.DEPLOYMENT['preserve_bootstrap_node']:
+                logger.info("removing bootstrap node")
+                os.chdir(self.terraform_data_dir)
+                if self.folder_structure:
+                    self.terraform.destroy_module(
+                        self.terraform_var,
+                        constants.BOOTSTRAP_MODULE
+                    )
+                else:
+                    self.terraform.apply(
+                        self.terraform_var, bootstrap_complete=True
+                    )
+                os.chdir(self.previous_dir)
 
             OCP.set_kubeconfig(self.kubeconfig)
 
@@ -652,6 +650,7 @@ class VSPHEREUPI(VSPHEREBASE):
         ocp_version = get_ocp_version()
         self.folder_structure = False
         if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+            set_aws_region()
             self.folder_structure = True
 
         # terraform initialization and destroy cluster
@@ -717,6 +716,7 @@ def sync_time_with_host(machine_file, enable=False):
     Args:
          machine_file (str): machine file to sync the guest time with host
          enable (bool): True to sync guest time with host
+
     """
     # terraform will support only lowercase bool
     enable = str(enable).lower()
@@ -746,6 +746,7 @@ def clone_openshift_installer():
         'installer'
     )
     ocp_version = get_ocp_version()
+    # supporting folder structure from ocp4.5
     if Version.coerce(ocp_version) >= Version.coerce('4.5'):
         clone_repo(
             constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
@@ -800,6 +801,7 @@ def update_gw(str_to_replace, config_file):
     Args:
         str_to_replace (str): string to replace in config file
         config_file (str): file to replace the string
+
     """
     # update gateway
     if config.ENV_DATA.get('gateway'):
@@ -835,8 +837,9 @@ def update_zone():
 
 def update_path():
     """
-    Updates Path to var.folder
+    Updates Path to var.folder in resource vsphere_folder
     """
+    logger.debug(f"Updating path to var.folder in {constants.VSPHERE_MAIN}")
     replace_str = "path          = var.cluster_id"
     replace_content_in_file(
         constants.VSPHERE_MAIN,
@@ -849,9 +852,14 @@ def add_var_folder():
     """
     Add folder variable to vsphere variables.tf
     """
+    # read the variables.tf data to var_data
     with open(constants.VSPHERE_VAR, "r") as fd:
         var_data = fd.read()
+
+    # backup the variables.tf
     os.rename(constants.VSPHERE_VAR, f"{constants.VSPHERE_VAR}.backup")
+
+    # write var_data along with folder variable at the end of file
     with open(constants.VSPHERE_VAR, "w+") as fd:
         fd.write(var_data)
         fd.write('\nvariable "folder" {\n')
@@ -904,8 +912,10 @@ def generate_terraform_vars_and_update_machine_conf():
     Generates the terraform.tfvars file
     """
     ocp_version = get_ocp_version()
-    folder_structure = True
+    folder_structure = False
     if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+
+        folder_structure = True
         # export AWS_REGION
         set_aws_region()
 
@@ -919,7 +929,7 @@ def generate_terraform_vars_and_update_machine_conf():
         generate_terraform_vars_with_out_folder()
 
         # update the machine configurations
-        update_machine_conf()
+        update_machine_conf(folder_structure)
 
 
 def generate_terraform_vars_with_folder():
@@ -1009,7 +1019,10 @@ def generate_terraform_vars_with_out_folder():
     logger.info("Generating terraform variables without folder structure")
 
     # upload bootstrap ignition to public access server
-    bootstrap_path = os.path.join(config.ENV_DATA.get('cluster_path'), constants.BOOTSTRAP_IGN)
+    bootstrap_path = os.path.join(
+        config.ENV_DATA.get('cluster_path'),
+        constants.BOOTSTRAP_IGN
+    )
     remote_path = os.path.join(
         config.ENV_DATA.get('path_to_upload'),
         f"{config.RUN.get('run_id')}_{constants.BOOTSTRAP_IGN}"
