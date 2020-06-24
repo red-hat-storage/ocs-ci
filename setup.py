@@ -16,7 +16,7 @@ setup(
     install_requires=[
         'apache-libcloud==3.1.0',
         'docopt==0.6.2',
-        'gevent==1.4.0',
+        'gevent==20.6.2',
         'reportportal-client==3.2.3',
         'requests==2.23.0',
         'paramiko==2.4.2',
