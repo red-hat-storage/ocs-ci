@@ -2320,3 +2320,16 @@ def get_terraform(version=None, bin_dir=None):
     os.chdir(previous_dir)
 
     return terraform_binary_path
+
+
+def set_aws_region(region=None):
+    """
+    Exports environment variable AWS_REGION
+
+    Args:
+        region (str): AWS region to export
+
+    """
+    log.debug("Exporting environment variable AWS_REGION")
+    region = region or config.ENV_DATA['region']
+    os.environ['AWS_REGION'] = region
