@@ -40,8 +40,8 @@ def test_upgrade():
     upgrade_ocs.load_version_config_file(upgrade_version)
     with CephHealthMonitor(ceph_cluster):
         channel = upgrade_ocs.set_upgrade_channel()
-        upgrade_ocs.update_subscription(channel)
         upgrade_ocs.set_upgrade_images()
+        upgrade_ocs.update_subscription(channel)
         for sample in TimeoutSampler(
             timeout=725,
             sleep=5,
