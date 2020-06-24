@@ -7,7 +7,7 @@ import shutil
 import yaml
 import json
 
-from ocs_ci.utility.utils import clone_repo, run_cmd
+from ocs_ci.utility.utils import clone_repo, get_ocp_version, run_cmd
 from ocs_ci.ocs.node import get_typed_nodes
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.ocp import OCP
@@ -154,3 +154,18 @@ def get_local_volume_cr():
     """
     ocp_obj = OCP(kind=constants.LOCAL_VOLUME, namespace=constants.LOCAL_STORAGE_NAMESPACE)
     return ocp_obj
+
+
+def get_lso_channel():
+    """
+    Get the channel to use for installing the local storage operator
+
+    Returns:
+        str: local storage operator channel
+
+    """
+    channel = get_ocp_version()
+    # Workaround for https://github.com/red-hat-storage/ocs-ci/issues/2324
+    if channel == '4.5':
+        channel = '4.4'
+    return channel
