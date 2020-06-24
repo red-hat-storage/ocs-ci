@@ -40,12 +40,12 @@ from ocs_ci.ocs.utils import (
     setup_ceph_toolbox, collect_ocs_logs
 )
 from ocs_ci.utility import templating
+from ocs_ci.utility.localstorage import get_lso_channel
 from ocs_ci.utility.openshift_console import OpenshiftConsole
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_latest_ds_olm_tag,
-    get_ocp_version,
     is_cluster_running,
     run_cmd,
     set_selinux_permissions,
@@ -390,7 +390,9 @@ class Deployment(object):
             deviceset_data['portable'] = False
             deviceset_data['dataPVCTemplate']['spec'][
                 'storageClassName'
-            ] = 'local-block'
+            ] = 'localblock'
+            if self.platform.lower() == constants.AWS_PLATFORM:
+                deviceset_data['count'] = 2
 
         # Allow lower instance requests and limits for OCS deployment
         if config.DEPLOYMENT.get('allow_lower_instance_requirements'):
@@ -485,6 +487,22 @@ class Deployment(object):
             condition=constants.STATUS_RUNNING,
             selector='app=rook-ceph-tools', resource_count=1, timeout=600
         )
+
+        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1847098
+        if config.DEPLOYMENT.get('local_storage'):
+            tools_pod = run_cmd(
+                f"oc -n {self.namespace} get pod -l 'app=rook-ceph-tools' "
+                f"-o jsonpath='{{.items[0].metadata.name}}'"
+            )
+            pgs_to_autoscale = [
+                'ocs-storagecluster-cephblockpool',
+                'ocs-storagecluster-cephfilesystem-data0'
+            ]
+            for pg in pgs_to_autoscale:
+                run_cmd(
+                    f"oc -n {self.namespace} exec {tools_pod} -- "
+                    f"ceph osd pool set {pg} pg_autoscale_mode on"
+                )
 
         # Check for CephFilesystem creation in ocp
         cfs_data = cfs.get()
@@ -674,7 +692,7 @@ def setup_local_storage():
     # Update local-storage-operator subscription data with channel
     for data in lso_data:
         if data['kind'] == 'Subscription':
-            data['spec']['channel'] = get_ocp_version()
+            data['spec']['channel'] = get_lso_channel()
 
     # Create temp yaml file and create local storage operator
     logger.info(
@@ -687,6 +705,8 @@ def setup_local_storage():
     templating.dump_data_to_temp_yaml(
         lso_data, lso_data_yaml.name
     )
+    with open(lso_data_yaml.name, 'r') as f:
+        logger.info(f.read())
     logger.info("Creating local-storage-operator")
     run_cmd(f"oc create -f {lso_data_yaml.name}")
 
@@ -749,7 +769,10 @@ def setup_local_storage():
     logger.info("Creating LocalVolume CR")
     run_cmd(f"oc create -f {lv_data_yaml.name}")
     logger.info("Waiting 30 seconds for PVs to create")
-    verify_pvs_created(len(worker_names))
+    storage_class_device_count = 1
+    if platform == constants.AWS_PLATFORM:
+        storage_class_device_count = 2
+    verify_pvs_created(len(worker_names) * storage_class_device_count)
 
 
 @retry(AssertionError, 12, 10, 1)
@@ -813,11 +836,7 @@ def get_device_paths(worker_names):
         )
     for worker in worker_names:
         logger.info("Retrieving device path for node: %s", worker)
-        cmd = (
-            f"oc debug nodes/{worker} "
-            f"-- chroot /host ls -la /dev/disk/by-id/"
-        )
-        out = run_cmd(cmd)
+        out = _get_disk_by_id(worker)
         out_lines = out.split('\n')
         nvme_lines = [
             line for line in out_lines if (
@@ -832,3 +851,22 @@ def get_device_paths(worker_names):
             device_paths.append(f'/dev/disk/by-id/{device_path}')
 
     return device_paths
+
+
+@retry(CommandFailed)
+def _get_disk_by_id(worker):
+    """
+    Retrieve disk by-id on a worker node using the debug pod
+
+    Args:
+        worker: worker node to get disks by-id for
+
+    Returns:
+        str: stdout of disk by-id command
+
+    """
+    cmd = (
+        f"oc debug nodes/{worker} "
+        f"-- chroot /host ls -la /dev/disk/by-id/"
+    )
+    return run_cmd(cmd)
