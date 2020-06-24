@@ -411,7 +411,6 @@ class MCG(object):
         except CommandFailed:
             logger.error(
                 'Failed to retrieve credentials request secret'
-
             )
             raise CredReqSecretNotFound(
                 'Please make sure that the cluster used is an AWS cluster, '
