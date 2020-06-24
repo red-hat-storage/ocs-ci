@@ -8,6 +8,9 @@ spec:
   containers:
    - name: web-server
      image: nginx
+     securityContext:
+       privileged: true
+       runAsUser: 0
      volumeMounts:
        - name: mypvc
          mountPath: /var/lib/www/html

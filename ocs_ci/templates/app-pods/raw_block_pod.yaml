@@ -7,8 +7,10 @@ spec:
     - name: my-container
       image: nginx
       securityContext:
-         capabilities:
-           add: ["SYS_ADMIN"]
+        privileged: true
+        runAsUser: 0
+        capabilities:
+          add: ["SYS_ADMIN"]
       volumeDevices:
         - devicePath: /dev/rbdblock
           name: my-volume

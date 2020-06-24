@@ -21,6 +21,9 @@ spec:
       containers:
       - name: fedora
         image: fedora
+        securityContext:
+          privileged: true
+          runAsUser: 0
         resources:
           limits:
             memory: "800Mi"

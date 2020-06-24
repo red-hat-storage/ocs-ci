@@ -7,6 +7,9 @@ spec:
   containers:
     - name: awscli
       image: amazon/aws-cli:2.0.13
+      securityContext:
+        privileged: true
+        runAsUser: 0
       # Override the default `aws` entrypoint in order to 
       # allow the pod to run continuously and act as a relay
       command: ['/bin/sh']
