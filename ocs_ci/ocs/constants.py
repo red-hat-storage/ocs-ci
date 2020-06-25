@@ -913,3 +913,7 @@ THROUGHPUT_QUERY = "(sum(rate(ceph_pool_wr_bytes[1m]) + rate(ceph_pool_rd_bytes[
 LATENCY_QUERY = "cluster:ceph_disk_latency:join_ceph_node_disk_irate1m"
 IOPS_QUERY = "sum(rate(ceph_pool_wr[1m])) + sum(rate(ceph_pool_rd[1m]))"
 USED_SPACE_QUERY = "ceph_cluster_total_used_bytes"
+
+# files
+REMOTE_FILE_URL = "http://download.ceph.com/tarballs/ceph_15.1.0.orig.tar.gz"
+FILE_PATH = '/tmp/ceph.tar.gz'
