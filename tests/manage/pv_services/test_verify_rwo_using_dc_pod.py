@@ -4,9 +4,7 @@ from itertools import cycle
 
 from ocs_ci.framework.testlib import ManageTest, tier2
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import (
-    ResourceWrongStatusException, UnexpectedBehaviour
-)
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.ocp import OCP
