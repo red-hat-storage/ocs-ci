@@ -1,12 +1,27 @@
 """
 Test to exercise Small File Workload
-"""
-import logging
-import pytest
-import time
 
-from ocs_ci.ocs.ocp import (OCP, get_clustername, get_ocs_version,
-                            get_build, get_ocp_channel)
+Note:
+This test is using the ripsaw and the elastic search, so it start process with
+port forwarding on port 9200 from the host that run the test (localhost) to
+the elastic-search within the open-shift cluster, so, if you host is listen to
+port 9200, this test can not be running in your host.
+
+"""
+
+# Builtin modules
+import logging
+import time
+import re
+
+# 3ed party modules
+import pytest
+import numpy as np
+from elasticsearch import (Elasticsearch, exceptions as ESExp)
+
+# Local modules
+from ocs_ci.ocs.version import get_ocs_version
+from ocs_ci.ocs.ocp import (OCP, get_clustername, get_build, get_ocp_channel)
 from ocs_ci.ocs.node import get_provider
 from ocs_ci.utility.utils import TimeoutSampler, get_ocp_version, run_cmd
 from ocs_ci.ocs.resources.ocs import OCS
@@ -17,8 +32,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest, performance
 from tests.helpers import get_logs_with_errors
 from ocs_ci.ocs.exceptions import CommandFailed
-from elasticsearch import (Elasticsearch, exceptions as ESExp)
-import numpy as np
+from ocs_ci.ocs.elasticsearch import ElasticSearch
 
 log = logging.getLogger(__name__)
 
@@ -105,12 +119,44 @@ class SmallFileResultsAnalyse(object):
         """
         self.results.update({key: value})
 
+    def _copy(self):
+        """
+        Copy All data from the internal ES server to the main ES
+
+        """
+
+        # connecting to the internal ES via the local_server
+        try:
+            int_es = Elasticsearch([{'host': 'localhost',
+                                     'port': '9200'}])
+        except ESExp.ConnectionError:
+            log.error('Can not connect to the internal elastic-search server')
+            return
+
+        query = {'size': 10000, 'query': {'match_all': {}}}
+        for ind in ['ripsaw-smallfile-rsptimes', 'ripsaw-smallfile-results']:
+            log.info(f'Reading {ind} from internal ES server')
+            try:
+                result = int_es.search(index=ind, body=query)
+            except ESExp.NotFoundError:
+                log.warning(f'{ind} Not found in the Internal ES.')
+                continue
+
+            log.debug(f'The results from internal ES for {ind} are :{result}')
+            log.info(f'Writing {ind} into main ES server')
+            for doc in result['hits']['hits']:
+                log.debug(f'Going to write : {doc}')
+                self.es.index(index=ind, doc_type='_doc', body=doc['_source'])
+
     def read(self):
         """
         Reading all test records from the elasticsearch server into dictionary
         inside this object
 
         """
+
+        # Copying all results from internal ES to main ES
+        self._copy()
 
         query = {'query': {'match': {'uuid': self.uuid}}}
         log.info('Reading all data from ES server')
@@ -120,7 +166,7 @@ class SmallFileResultsAnalyse(object):
             )
             log.info(self.all_results)
 
-            if self.all_results['hits']['hits'] == []:
+            if not self.all_results['hits']['hits']:
                 log.warning(
                     'No data in ES server, disabling results calculation')
                 self.dont_check = True
@@ -135,7 +181,8 @@ class SmallFileResultsAnalyse(object):
 
         """
         log.info('Writing all data to ES server')
-        log.info(f'Params : index={self.new_index}, doc_type=_doc,body={self.results},id={self.uuid}')
+        log.info(f'Params : index={self.new_index}')
+        log.info(f'         doc_type=_doc,body={self.results},id={self.uuid}')
         log.info(f'the results data is {self.results}')
         self.es.index(index=self.new_index,
                       doc_type='_doc',
@@ -282,9 +329,9 @@ class SmallFileResultsAnalyse(object):
                         mean = np.mean(results[self.managed_keys[key]["name"]])
 
                         pct_dev = (st_deviation / mean) * 100
-                        if pct_dev > 5:
+                        if pct_dev > 20:
                             log.error(
-                                f'Deviation for {op} IOPS is more the 5% ({pct_dev})')
+                                f'Deviation for {op} IOPS is more the 20% ({pct_dev})')
                             test_pass = False
                     del results[self.managed_keys[key]["name"]]
                 self.results["full-res"][op] = results
@@ -310,7 +357,7 @@ class SmallFileResultsAnalyse(object):
 
     def init_full_results(self):
         """
-        Initialaze the full results Internal DB as dictionary.
+        Initialize the full results Internal DB as dictionary.
 
         """
 
@@ -329,6 +376,18 @@ class SmallFileResultsAnalyse(object):
                 for host in self.results['hosts']:
                     self.results['full-res'][op][sample][
                         host] = self.thread_read(host, op, sample)
+
+
+@pytest.fixture(scope='function')
+def es(request):
+    def teardown():
+        es.cleanup()
+
+    request.addfinalizer(teardown)
+
+    es = ElasticSearch()
+
+    return es
 
 
 @pytest.fixture(scope='function')
@@ -360,7 +419,6 @@ class TestSmallFileWorkload(E2ETest):
                 *[4, 50000, 4, 3, constants.CEPHBLOCKPOOL],
                 marks=pytest.mark.polarion_id("OCS-1295"),
             ),
-
             pytest.param(
                 *[16, 50000, 4, 3, constants.CEPHBLOCKPOOL],
                 marks=pytest.mark.polarion_id("OCS-2020"),
@@ -377,16 +435,16 @@ class TestSmallFileWorkload(E2ETest):
                 *[16, 50000, 4, 3, constants.CEPHFILESYSTEM],
                 marks=pytest.mark.polarion_id("OCS-2023"),
             ),
-
         ]
     )
     @pytest.mark.polarion_id("OCS-1295")
-    def test_smallfile_workload(self, ripsaw, file_size, files, threads,
+    def test_smallfile_workload(self, ripsaw, es, file_size, files, threads,
                                 samples, interface):
         """
         Run SmallFile Workload
         """
 
+        # Loading the main template yaml file for the benchmark
         sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
 
         # getting the name and email  of the user that running the test.
@@ -397,6 +455,21 @@ class TestSmallFileWorkload(E2ETest):
             # if no git user define, use the default user from the CR file
             user = sf_data['spec']['test_user']
             email = ''
+
+        # Saving the Original elastic-search IP and PORT - if defined in yaml
+        es_server = ""
+        es_port = ""
+        if 'elasticsearch' in sf_data['spec']:
+            if 'server' in sf_data['spec']['elasticsearch']:
+                es_server = sf_data['spec']['elasticsearch']['server']
+            if 'port' in sf_data['spec']['elasticsearch']:
+                es_port = sf_data['spec']['elasticsearch']['port']
+        else:
+            sf_data['spec']['elasticsearch'] = {}
+
+        # Use the internal define elastic-search server in the test
+        sf_data['spec']['elasticsearch'] = {'server': es.get_ip(),
+                                            'port': es.get_port()}
 
         log.info("Apply Operator CRD")
         ripsaw.apply_crd('resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml')
@@ -437,7 +510,7 @@ class TestSmallFileWorkload(E2ETest):
 
         # wait for benchmark pods to get created - takes a while
         for bench_pod in TimeoutSampler(
-            120, 3, get_pod_name_by_pattern, 'smallfile-client', 'my-ripsaw'
+            240, 10, get_pod_name_by_pattern, 'smallfile-client', 'my-ripsaw'
         ):
             try:
                 if bench_pod[0] is not None:
@@ -460,11 +533,16 @@ class TestSmallFileWorkload(E2ETest):
         timeout = 3600
 
         # Getting the UUID from inside the benchmark pod
-        output = bench_pod.exec_oc_cmd(f'exec {small_file_client_pod} env')
+        output = bench_pod.exec_oc_cmd(f'exec {small_file_client_pod} -- env')
         for line in output.split():
             if 'uuid=' in line:
                 uuid = line.split('=')[1]
         log.info(f'the UUID of the test is : {uuid}')
+
+        # Setting back the original elastic-search information
+        sf_data['spec']['elasticsearch'] = {'server': es_server,
+                                            'port': es_port}
+
         full_results = SmallFileResultsAnalyse(uuid, sf_data)
 
         # Initialaize the results doc file.
@@ -472,7 +550,15 @@ class TestSmallFileWorkload(E2ETest):
         full_results.add_key('ocp_version', get_ocp_version())
         full_results.add_key('ocp_build', get_build())
         full_results.add_key('ocp_channel', get_ocp_channel())
-        full_results.add_key('ocs_version', get_ocs_version())
+
+        # Getting the OCS version
+        (ocs_ver_info, _) = get_ocs_version()
+        ocs_ver_full = ocs_ver_info['status']['desired']['version']
+        m = re.match(r"(\d.\d).(\d)-", ocs_ver_full)
+        if m.group(1) is not None:
+            ocs_ver = m.group(1)
+
+        full_results.add_key('ocs_version', ocs_ver)
         full_results.add_key('vendor', get_provider())
         full_results.add_key('start_time',
                              time.strftime('%Y-%m-%dT%H:%M:%SGMT',
@@ -507,6 +593,14 @@ class TestSmallFileWorkload(E2ETest):
                     full_results.aggregate_host_results()
                     test_status = full_results.aggregate_samples_results()
                     full_results.write()
+
+                    # Creating full link to the kibana on the elastic search
+                    # server with full test results.
+                    res_link = 'http://'
+                    res_link += f'{full_results.server}:{full_results.port}/'
+                    res_link += f'{full_results.new_index}/_search?q='
+                    res_link += f'uuid:{full_results.uuid}'
+                    log.info(f'Full results can be found as : {res_link}')
                 else:
                     test_status = True
 
