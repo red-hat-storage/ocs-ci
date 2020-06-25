@@ -45,14 +45,14 @@ class TestVerifyRwoUsingReplica2DcPod(ManageTest):
         self, interface, pvc_factory, service_account_factory, teardown_factory
     ):
         """
-        Create dc pod with replica 2
+        Create dc pod with replica 5
         """
         pvc_obj = pvc_factory(interface=interface, size=3)
         sa_obj = service_account_factory(project=pvc_obj.project)
         pod1 = create_pod(
             interface_type=interface, pvc_name=pvc_obj.name,
             namespace=pvc_obj.namespace, sa_name=sa_obj.name,
-            dc_deployment=True, replica_count=2,
+            dc_deployment=True, replica_count=5,
             deploy_pod_status=constants.STATUS_RUNNING
         )
         self.name = pod1.labels['name']
@@ -75,40 +75,50 @@ class TestVerifyRwoUsingReplica2DcPod(ManageTest):
         """
         # Wait for pods
         for pods in TimeoutSampler(
-            180, 2, func=pod.get_all_pods, namespace=self.namespace,
+            360, 2, func=pod.get_all_pods, namespace=self.namespace,
             selector=[self.name], selector_label='name'
         ):
-            if len(pods) == 2:
+            if len(pods) == 5:
                 break
 
         pods_iter = cycle(pods)
 
         # Wait for one pod to be in Running state
-        sampler = TimeoutSampler(180, 2, next(pods_iter).get)
+        curr_pod = next(pods_iter)
+        sampler = TimeoutSampler(360, 2, curr_pod.get)
         for pod_info in sampler:
-            sampler.func = next(pods_iter).get
             if pod_info['status']['phase'] == constants.STATUS_RUNNING:
-                self.running_pod = next(pods_iter)
+                self.running_pod = curr_pod
+                log.info(f"Pod {curr_pod.name} reached state Running.")
                 break
+            curr_pod = next(pods_iter)
+            sampler.func = curr_pod.get
 
-        # Verify the other pod is not coming up Running
-        try:
-            self.pod_not_running = next(pods_iter)
-            wait_for_resource_state(
-                resource=self.pod_not_running, state=constants.STATUS_RUNNING,
-                timeout=10
-            )
-            # ResourceWrongStatusException exception should be raised in
-            # wait_for_resource_state. If not, raise UnexpectedBehaviour.
-            raise UnexpectedBehaviour(
-                f"Unexpected: Pod {self.pod_not_running.name} is in "
-                f"Running state"
-            )
-        except ResourceWrongStatusException:
-            log.info(
-                f"Verified: Only one pod {self.running_pod.name} is in "
-                f"running state."
-            )
+        pods.remove(self.running_pod)
+        pod_running_node = self.running_pod.get()['spec']['nodeName']
+        # Verify the other pods are not coming up Running
+        for pod_obj in pods:
+            try:
+                wait_for_resource_state(
+                    resource=pod_obj, state=constants.STATUS_RUNNING,
+                    timeout=10
+                )
+                assert (
+                    pod_obj.get()['spec']['nodeName'] == pod_running_node
+                ), (
+                    f"Unexpected: Pod {pod_obj.name} is in Running state. "
+                    f"RWO PVC is mounted on pods which are on different nodes."
+                )
+                log.info(
+                    f"Expected: Pod {pod_obj.name} is Running. "
+                    f"Pods which are running are on the same node "
+                    f"{pod_running_node}"
+                )
+            except ResourceWrongStatusException:
+                log.info(
+                    f"Verified: Pod {pod_obj.name} is not in "
+                    f"running state."
+                )
 
     def test_verify_rwo_using_replica_2_dc_pod(self):
         """
