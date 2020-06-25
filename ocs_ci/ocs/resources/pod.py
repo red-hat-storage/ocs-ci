@@ -18,8 +18,8 @@ from tests import helpers
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, NonUpgradedImagesFoundError, UnavailableResourceException,
-    TimeoutExpiredError
+    CommandFailed, NonUpgradedImagesFoundError, ResourceWrongStatusException,
+    TimeoutExpiredError, UnavailableResourceException
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
@@ -1244,6 +1244,48 @@ def download_file_from_pod(pod_name, remotepath, localpath, namespace=None):
     namespace = namespace or constants.DEFAULT_NAMESPACE
     cmd = f"oc -n {namespace} cp {pod_name}:{remotepath} {os.path.expanduser(localpath)}"
     run_cmd(cmd)
+
+
+def wait_for_storage_pods(timeout=200):
+    """
+    Check all OCS pods status, they should be in Running or Completed state
+
+    Args:
+        timeout (int): Number of seconds to wait for pods to get into correct
+            state
+
+    """
+    all_pod_obj = get_all_pods(
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    for pod_obj in all_pod_obj:
+        state = constants.STATUS_RUNNING
+        if any(i in pod_obj.name for i in ['-1-deploy', 'ocs-deviceset']):
+            state = constants.STATUS_COMPLETED
+
+        try:
+            helpers.wait_for_resource_state(
+                resource=pod_obj,
+                state=state,
+                timeout=timeout
+            )
+        except ResourceWrongStatusException:
+            # 'rook-ceph-crashcollector' on the failed node stucks at
+            # pending state. BZ 1810014 tracks it.
+            # Ignoring 'rook-ceph-crashcollector' pod health check as
+            # WA and deleting its deployment so that the pod
+            # disappears. Will revert this WA once the BZ is fixed
+            if 'rook-ceph-crashcollector' in pod_obj.name:
+                ocp_obj = ocp.OCP(
+                    namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                )
+                pod_name = pod_obj.name
+                deployment_name = '-'.join(pod_name.split("-")[:-2])
+                command = f"delete deployment {deployment_name}"
+                ocp_obj.exec_oc_cmd(command=command)
+                logger.info(f"Deleted deployment for pod {pod_obj.name}")
+            else:
+                raise
 
 
 def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
