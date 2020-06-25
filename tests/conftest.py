@@ -2410,9 +2410,6 @@ def fio_job_dict_fixture():
               containers:
                 - name: fio
                   image: quay.io/fbalak/fio-fedora:latest
-                  securityContext:
-                    privileged: true
-                    runAsUser: 0
                   command:
                     - "/usr/bin/fio"
                     - "--output-format=json"
