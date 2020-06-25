@@ -2377,7 +2377,7 @@ def fio_job_dict_fixture():
             spec:
               containers:
                 - name: fio
-                  image: quay.io/fbalak/fio-fedora:latest
+                  image: quay.io/multiarch-origin-e2e/fio-fedora:latest
                   command:
                     - "/usr/bin/fio"
                     - "--output-format=json"
