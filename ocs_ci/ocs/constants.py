@@ -907,3 +907,21 @@ THROUGHPUT_QUERY = "(sum(rate(ceph_pool_wr_bytes[1m]) + rate(ceph_pool_rd_bytes[
 LATENCY_QUERY = "cluster:ceph_disk_latency:join_ceph_node_disk_irate1m"
 IOPS_QUERY = "sum(rate(ceph_pool_wr[1m])) + sum(rate(ceph_pool_rd[1m]))"
 USED_SPACE_QUERY = "ceph_cluster_total_used_bytes"
+
+#Bare Metal constants
+bm_httpd_server = "10.8.128.12"
+bm_path_to_upload = "/var/www/html/pratik/ocs4qe/"
+bm_httpd_server_user = "root"
+bm_tftp_base_dir = "/var/lib/tftpboot/"
+bm_tftp_dir = bm_tftp_base_dir + "ocs4qe/baremetal"
+bm_dnsmasq_dir = "/etc/dnsmasq.d/"
+PXE_CONF_FILE = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "dnsmasq.pxe.conf"
+)
+COMMON_CONF_FILE = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "dnsmasq.common.conf"
+)
+RHCOS_IMAGES_FILE = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "rhcos_images.yaml"
+)
+coreos_url_prefix = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos"

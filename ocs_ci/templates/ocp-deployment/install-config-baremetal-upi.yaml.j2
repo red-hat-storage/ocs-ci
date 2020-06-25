@@ -1,0 +1,21 @@
+apiVersion: {{ api_version | default('v1') }}
+baseDomain: {{ base_domain | default('qe.rh-ocs.com') }}
+metadata:
+  name: '{{ cluster_name }}'
+networking:
+  clusterNetwork:
+  - cidr: 10.128.0.0/14
+    hostPrefix: 23
+  machineNetwork:
+  - cidr: 10.0.0.0/16
+  networkType: OpenShiftSDN
+  serviceNetwork:
+  - 172.30.0.0/16
+{% if fips %}
+fips: {{ fips }}
+{% endif %}
+platform:
+  none: {}
+pullSecret: ''
+sshKey: |
+  ''

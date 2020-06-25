@@ -1,0 +1,12 @@
+'4.3':
+    installer_initramfs_url: '/4.3/4.3.8/rhcos-4.3.8-x86_64-installer-initramfs.x86_64.img'
+    installer_kernel_url:    '/4.3/4.3.8/rhcos-4.3.8-x86_64-installer-kernel-x86_64'
+    metal_bios_url:          '/4.3/4.3.8/rhcos-4.3.8-x86_64-metal.x86_64.raw.gz'
+'4.4':
+    installer_initramfs_url: '/4.4/4.4.3/rhcos-4.4.3-x86_64-installer-initramfs.x86_64.img'
+    installer_kernel_url:    '/4.4/4.4.3/rhcos-4.4.3-x86_64-installer-kernel-x86_64'
+    metal_bios_url:          '/4.4/4.4.3/rhcos-4.4.3-x86_64-metal.x86_64.raw.gz'
+'4.5':
+    installer_initramfs_url: '/4.5/latest/rhcos-4.5.0-0.nightly-2020-03-18-115438-x86_64-installer-initramfs.x86_64.img'
+    installer_kernel_url:    '/4.5/latest/rhcos-4.5.0-0.nightly-2020-03-18-115438-x86_64-installer-kernel-x86_64'
+    metal_bios_url:          '/4.5/latest/rhcos-4.5.0-0.nightly-2020-03-18-115438-x86_64-metal.x86_64.raw.gz'
