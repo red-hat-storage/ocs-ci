@@ -2294,9 +2294,16 @@ def get_terraform(version=None, bin_dir=None):
         str: Path to the terraform binary
 
     """
+    if platform.system() == "Darwin":
+        os_type = "darwin"
+    elif platform.system() == "Linux":
+        os_type = "linux"
+    else:
+        raise UnsupportedOSType
+
     version = version or config.DEPLOYMENT['terraform_version']
     bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
-    terraform_zip_file = f"terraform_{version}_linux_amd64.zip"
+    terraform_zip_file = f"terraform_{version}_{os_type}_amd64.zip"
     terraform_filename = "terraform"
     terraform_binary_path = os.path.join(bin_dir, terraform_filename)
     log.info(f"Downloading terraform version {version}")
