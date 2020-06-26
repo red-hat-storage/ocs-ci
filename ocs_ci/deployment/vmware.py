@@ -382,7 +382,7 @@ class VSPHEREUPI(VSPHEREBASE):
             terraform_installer = get_terraform(version=terraform_version)
             config.ENV_DATA['terraform_installer'] = terraform_installer
 
-
+            # Initialize Terraform
             self.terraform_data_dir = os.path.join(self.cluster_path, constants.TERRAFORM_DATA_DIR)
             create_directory_path(self.terraform_data_dir)
             self.terraform_work_dir = constants.VSPHERE_DIR
@@ -677,8 +677,6 @@ class VSPHEREUPI(VSPHEREBASE):
             and os.path.exists(f"{constants.VSPHERE_MAIN}.json")
         ):
             os.rename(f"{constants.VSPHERE_MAIN}.json", f"{constants.VSPHERE_MAIN}.json.backup")
-
-
 
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
