@@ -453,7 +453,7 @@ class AMQ(object):
         self, benchmark_pod_name="benchmark", kafka_namespace=constants.AMQ_NAMESPACE,
         tiller_namespace=AMQ_BENCHMARK_NAMESPACE,
         num_of_clients=8, worker=None, timeout=3600,
-        amq_workload_yaml=None
+        amq_workload_yaml=None, run_in_bg=False
     ):
         """
         Run benchmark pod and get the results
@@ -479,6 +479,7 @@ class AMQ(object):
                 :producer_rate (int): Producer rate
                 :consumer_backlog_sizegb (int): Size of block in gb
                 :test_duration_minutes (int): Time to run the workloads
+            run_in_bg (bool): On true the workload will run in background
 
         Return:
             result (str): Returns benchmark run information
@@ -569,10 +570,39 @@ class AMQ(object):
         else:
             cmd = "bin/benchmark --drivers /driver_kafka /amq_workload.yaml"
         log.info(f"Run benchmark and running command {cmd} inside the benchmark pod ")
+
+        if run_in_bg:
+            thread = Thread(
+                target=self.run_amq_workload_in_bg, args=(
+                    cmd, benchmark_pod_name, tiller_namespace, timeout
+                ))
+            thread.start()
+            time.sleep(60)
+            return thread
+
         pod_obj = get_pod_obj(name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace)
         result = pod_obj.exec_cmd_on_pod(command=cmd, out_yaml_format=False, timeout=timeout)
 
         return result
+
+    def run_amq_workload_in_bg(
+        self, command, benchmark_pod_name, tiller_namespace, timeout
+    ):
+        """
+        Runs amq workload in bg
+
+        Args:
+             command (str): Command to run on pod
+             benchmark_pod_name (str): Pod name
+             tiller_namespace (str): Namespace of pod
+             timeout (int)
+
+        Returns:
+            Thread: A thread of the amq workload execution
+
+        """
+        pod_obj = get_pod_obj(name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace)
+        return pod_obj.exec_cmd_on_pod(command=command, out_yaml_format=False, timeout=timeout)
 
     def validate_amq_benchmark(self, result, amq_workload_yaml, benchmark_pod_name="benchmark"):
         """
