@@ -26,6 +26,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
@@ -42,7 +43,10 @@ from ocs_ci.utility.environment_check import (
 )
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
-    TimeoutSampler, get_rook_repo, get_ocp_version, ceph_health_check,
+    ceph_health_check,
+    get_rook_repo,
+    get_ocp_version,
+    TimeoutSampler,
     update_container_with_mirrored_image,
 )
 from ocs_ci.utility.utils import (
@@ -1049,8 +1053,9 @@ def cluster(request, log_cli_level):
 
     teardown = config.RUN['cli_params']['teardown']
     deploy = config.RUN['cli_params']['deploy']
-    factory = dep_factory.DeploymentFactory()
-    deployer = factory.get_deployment()
+    if teardown or deploy:
+        factory = dep_factory.DeploymentFactory()
+        deployer = factory.get_deployment()
 
     # Add a finalizer to teardown the cluster after test execution is finished
     if teardown:
@@ -2561,3 +2566,15 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
         return dc_pods
 
     return factory
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ceph_toolbox(request):
+    """
+    This fixture initiates ceph toolbox pod for manually created deployment
+    and if it does not already exist.
+    """
+    deploy = config.RUN['cli_params']['deploy']
+    if not deploy:
+        # Creating toolbox pod
+        setup_ceph_toolbox()
