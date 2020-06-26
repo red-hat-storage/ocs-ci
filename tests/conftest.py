@@ -2575,6 +2575,7 @@ def ceph_toolbox(request):
     and if it does not already exist.
     """
     deploy = config.RUN['cli_params']['deploy']
-    if not deploy:
+    teardown = config.RUN['cli_params'].get('teardown')
+    if not deploy and not teardown:
         # Creating toolbox pod
         setup_ceph_toolbox()
