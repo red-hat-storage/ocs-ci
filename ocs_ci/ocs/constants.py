@@ -896,7 +896,8 @@ object_version_action_list = ['PutObject', 'GetObjectVersion', 'DeleteObjectVers
 
 # Flexy config constants
 FLEXY_MNT_CONTAINER_DIR = '/mnt'
-FLEXY_HOST_DIR = os.path.join(DATA_DIR, 'flexy')
+FLEXY_HOST_DIR = 'flexy-dir'
+FLEXY_HOST_DIR_PATH = os.path.join(DATA_DIR, FLEXY_HOST_DIR)
 FLEXY_DEFAULT_ENV_FILE = "ocs-osp.env"
 OPENSHIFT_MISC_BASE = "private-openshift-misc/v3-launch_templates/functionality-testing"
 FLEXY_BAREMETAL_UPI_TEMPLATE = "upi-on-baremetal/versioned-installer-openstack"
@@ -905,6 +906,9 @@ NTP_CHRONY_CONF = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "ntp_chrony.yaml"
 )
 FLEXY_DEFAULT_PRIVATE_CONF_URL = 'git@gitlab.cee.redhat.com:ocs/flexy-ocs-private.git'
+FLEXY_JENKINS_USER = "jenkins"
+JENKINS_NFS_CURRENT_CLUSTER_DIR = "/home/jenkins/current-cluster-dir"
+FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"

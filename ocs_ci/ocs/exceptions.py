@@ -182,6 +182,10 @@ class PSIVolumeDeletionFailed(Exception):
     pass
 
 
+class FlexyDataNotFound(Exception):
+    pass
+
+
 class PendingCSRException(Exception):
     pass
 

@@ -10,6 +10,7 @@ import configparser
 import subprocess
 from subprocess import list2cmdline, CalledProcessError
 import shlex
+import shutil
 
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants
@@ -21,6 +22,47 @@ from ocs_ci.ocs import exceptions
 logger = logging.getLogger(__name__)
 
 
+def flexy_post_processing(func):
+    """
+    Perform copying of flexy-dir to nfs mount
+    and do this only if its jenkins run
+
+    Args:
+        func : run_container function
+    """
+    # Check whether its a jenkins run
+    if is_jenkins_mount():
+        def wrapper(*args, **kwargs):
+            flexy_nfs_path = os.path.join(
+                constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
+                constants.FLEXY_HOST_DIR
+            )
+            func(*args, **kwargs)
+            if not os.path.exists(flexy_nfs_path):
+                shutil.copytree(
+                    constants.FLEXY_HOST_DIR_PATH,
+                    flexy_nfs_path
+                )
+        return wrapper
+    else:
+        return func
+
+
+def is_jenkins_mount():
+    """
+    Find if this is jenkins run based on current-cluster-dir and
+    NFS mount
+
+    Returns:
+        bool: True if this is jenkins run else False
+
+    """
+    return (
+        os.path.exists(constants.JENKINS_NFS_CURRENT_CLUSTER_DIR)
+        and os.path.ismount(constants.JENKINS_NFS_CURRENT_CLUSTER_DIR)
+    )
+
+
 class FlexyBase(object):
     """
     A base class for all types of flexy installs
@@ -30,7 +72,7 @@ class FlexyBase(object):
         # Host dir path which will be mounted inside flexy container
         # This will be root for all flexy housekeeping
         self.flexy_host_dir = os.path.expanduser(
-            config.ENV_DATA['flexy_host_dir'], constants.FLEXY_HOST_DIR
+            constants.FLEXY_HOST_DIR_PATH
         )
 
         # Path inside container where flexy_host_dir will be mounted
@@ -47,6 +89,10 @@ class FlexyBase(object):
             self.flexy_private_conf_url = config.ENV_DATA.get(
                 'flexy_private_conf_url',
                 constants.FLEXY_DEFAULT_PRIVATE_CONF_URL
+            )
+            self.flexy_private_conf_branch = config.ENV_DATA.get(
+                'flexy_private_conf_branch',
+                constants.FLEXY_DEFAULT_PRIVATE_CONF_BRANCH
             )
             # Host dir path for private_conf dir where private-conf will be
             # cloned
@@ -82,6 +128,7 @@ class FlexyBase(object):
             config.FLEXY['INSTANCE_NAME_PREFIX'] = self.cluster_name
             self.merge_flexy_env()
 
+    @flexy_post_processing
     def run_container(self, cmd_string):
         """
         Actual container run happens here, a thread will be
@@ -146,10 +193,23 @@ class FlexyBase(object):
         args.append(f"-w={self.flexy_mnt_container_dir}")
         # For destroy on NFS mount, relabel=shared will not work
         # with podman hence we will keep 'relable=shared' only for
-        # deploy which happens on Jenkins slave's local fs
+        # deploy which happens on Jenkins slave's local fs.
+        # Also during destroy we assume that copying of flexy
+        # would be done during deployment and we can rely on
         if purpose == 'destroy':
+            if is_jenkins_mount():
+                flexy_dir = os.path.join(
+                    constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
+                    constants.FLEXY_HOST_DIR
+                )
+                if not os.path.exists(flexy_dir):
+                    raise exceptions.FlexyDataNotFound(
+                        "Failed to find flexy data"
+                    )
+            else:
+                flexy_dir = self.flexy_host_dir
             args.append(
-                f"--mount=type=bind,source={self.flexy_host_dir},"
+                f"--mount=type=bind,source={flexy_dir},"
                 f"destination={self.flexy_mnt_container_dir}"
             )
         else:
@@ -166,7 +226,11 @@ class FlexyBase(object):
         flexy_host_dir
 
         """
-        clone_repo(self.flexy_private_conf_url, self.flexy_host_private_conf_dir_path)
+        clone_repo(
+            self.flexy_private_conf_url,
+            self.flexy_host_private_conf_dir_path,
+            self.flexy_private_conf_branch
+        )
         # git-crypt unlock /path/to/keyfile
         cp = subprocess.run(
             f'git-crypt unlock {constants.FLEXY_GIT_CRYPT_KEYFILE}',
