@@ -2280,3 +2280,39 @@ def add_stage_cert():
         f"oc patch image.config.openshift.io cluster --type=merge"
         f" -p '{additional_trusted_ca_patch}'"
     )
+
+
+def get_terraform(version=None, bin_dir=None):
+    """
+    Downloads the terraform binary
+
+    Args:
+        version (str): Version of the terraform to download
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+
+    Returns:
+        str: Path to the terraform binary
+
+    """
+    version = version or config.DEPLOYMENT['terraform_version']
+    bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
+    terraform_zip_file = f"terraform_{version}_linux_amd64.zip"
+    terraform_filename = "terraform"
+    terraform_binary_path = os.path.join(bin_dir, terraform_filename)
+    log.info(f"Downloading terraform version {version}")
+    previous_dir = os.getcwd()
+    os.chdir(bin_dir)
+    url = (
+        f"https://releases.hashicorp.com/terraform/{version}/"
+        f"{terraform_zip_file}"
+    )
+    download_file(url, terraform_zip_file)
+    run_cmd(f"unzip -o {terraform_zip_file}")
+    delete_file(terraform_zip_file)
+    # return to the previous working directory
+    os.chdir(previous_dir)
+
+    terraform_version = run_cmd(f"{terraform_binary_path} version")
+    log.debug(f"Terraform version: {terraform_version}")
+
+    return terraform_binary_path
