@@ -558,7 +558,7 @@ class VSPHEREUPI(VSPHEREBASE):
             # for all the nodes
             ocp_version = get_ocp_version()
             if Version.coerce(ocp_version) >= Version.coerce('4.4'):
-                wait_for_all_nodes_csr_and_approve()
+                wait_for_all_nodes_csr_and_approve(timeout=1200, sleep=30)
 
             # wait for image registry to show-up
             co = "image-registry"
