@@ -2375,8 +2375,22 @@ def fio_job_dict_fixture():
     """
     Job template for fio workloads.
     """
+    node_obj = ocp.OCP(kind=constants.NODE)
+
+    log.info('Checking architecture of system')
+    node = node_obj.get(
+        selector=constants.WORKER_LABEL
+    ).get('items')[0]['metadata']['name']
+    arch = node_obj.exec_oc_debug_cmd(node, ['uname -m'])
+    if arch.startswith('x86'):
+        image = 'quay.io/fbalak/fio-fedora:latest'
+    else:
+        image = 'quay.io/multiarch-origin-e2e/fio-fedora:latest'
+    log.info(f'Discovered architecture: {arch.strip()}')
+    log.info(f'Using image: {image}')
+
     # TODO(fbalak): load dictionary fixtures from one place
-    template = textwrap.dedent("""
+    template = textwrap.dedent(f"""
         apiVersion: batch/v1
         kind: Job
         metadata:
@@ -2389,7 +2403,7 @@ def fio_job_dict_fixture():
             spec:
               containers:
                 - name: fio
-                  image: quay.io/fbalak/fio-fedora:latest
+                  image: {image}
                   command:
                     - "/usr/bin/fio"
                     - "--output-format=json"
