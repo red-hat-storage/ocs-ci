@@ -9,7 +9,7 @@ from ocs_ci.ocs import machine, constants, defaults, node
 from ocs_ci.ocs.resources.pod import (
     get_all_pods, get_osd_pods, get_pod_node,
     wait_for_dc_app_pods_to_reach_running_state,
-    run_io_in_bg
+    run_io_in_bg, wait_for_storage_pods
 )
 from ocs_ci.utility.utils import ceph_health_check
 from tests.sanity_helpers import Sanity
@@ -50,7 +50,6 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             remove_label_from_worker_node(worker_nodes, label_key="dc")
             for thread in self.threads:
                 thread.join()
-            ceph_health_check()
 
             # Start the nodes which are in poweredoff state
             not_ready_nodes = [
@@ -185,12 +184,11 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 f"Successfully terminated node : "
                 f"{failure_node_obj[0].name} instance"
             )
-
+        timeout = 1 if failure == "shutdown" else 720
         try:
             # DC app pods on the failed node will get automatically created on other
             # running node. Waiting for all dc app pod to reach running state
             try:
-                timeout = 1 if failure == "shutdown" else 720
                 wait_for_dc_app_pods_to_reach_running_state(
                     dc_pod_obj, timeout=timeout
                 )
@@ -206,7 +204,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 else:
                     raise
                 log.info("All the dc pods reached running state")
-                pod.wait_for_all_pods()
+                wait_for_storage_pods(timeout)
         except ResourceWrongStatusException:
             if failure == "shutdown":
                 nodes.terminate_nodes(failure_node_obj, wait=True)
