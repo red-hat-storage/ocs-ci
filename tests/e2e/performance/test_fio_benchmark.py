@@ -3,7 +3,8 @@ Module to perform FIO workload
 """
 import logging
 import pytest
-from elasticsearch import Elasticsearch
+from elasticsearch import (Elasticsearch, exceptions as ESExp)
+
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.ocp import OCP, get_ocs_version, get_build
@@ -12,12 +13,23 @@ from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import (
-    E2ETest, performance, rh_internal_lab_required
-)
+from ocs_ci.framework.testlib import (E2ETest, performance)
 from ocs_ci.utility.performance_dashboard import push_perf_dashboard
+from ocs_ci.ocs.elasticsearch import ElasticSearch
 
 log = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope='function')
+def es(request):
+    def teardown():
+        es.cleanup()
+
+    request.addfinalizer(teardown)
+
+    es = ElasticSearch()
+
+    return es
 
 
 @pytest.fixture(scope='function')
@@ -42,7 +54,41 @@ def analyze_regression(io_pattern, storage_class, es_username):
         es_username (str): ocs_build used in the CR object
 
     """
+    def _copy(es):
+        """
+        Copy All data from the internal ES server to the main ES
+
+        Args:
+            es (obj): elasticsearch object which connected to the main ES
+
+        """
+
+        # connecting to the internal ES via the local_server
+        try:
+            int_es = Elasticsearch([{'host': 'localhost',
+                                     'port': '9200'}])
+        except ESExp.ConnectionError:
+            log.error('Can not connect to the internal elastic-search server')
+            return
+
+        query = {'size': 10000, 'query': {'match_all': {}}}
+        for ind in ['ripsaw-fio-logs', 'ripsaw-fio-results',
+                    'ripsaw-fio-analyzed-result']:
+            log.info(f'Reading {ind} from internal ES server')
+            try:
+                result = int_es.search(index=ind, body=query)
+            except ESExp.NotFoundError:
+                log.warning(f'{ind} Not found in the Internal ES.')
+                continue
+
+            log.debug(f'The results from internal ES for {ind} are :{result}')
+            log.info(f'Writing {ind} into main ES server')
+            for doc in result['hits']['hits']:
+                log.debug(f'Going to write : {doc}')
+                es.index(index=ind, doc_type='_doc', body=doc['_source'])
+
     es = Elasticsearch([{'host': constants.ES_SERVER_IP, 'port': constants.ES_SERVER_PORT}])
+    _copy(es)
     # Todo: Fetch benchmark values for FIO, which
     #  Will be implemented after finalizing on h/w
     # fetch results for the current run with unique es_username
@@ -89,7 +135,6 @@ def analyze_regression(io_pattern, storage_class, es_username):
     push_perf_dashboard(storage_class, reads, writes, r_bw, w_bw)
 
 
-@rh_internal_lab_required
 @performance
 @pytest.mark.parametrize(
     argnames=["interface", "io_pattern"],
@@ -112,7 +157,7 @@ class TestFIOBenchmark(E2ETest):
     """
     Run FIO perf test using ripsaw benchmark
     """
-    def test_fio_workload_simple(self, ripsaw, interface, io_pattern):
+    def test_fio_workload_simple(self, ripsaw, es, interface, io_pattern):
         """
         This is a basic fio perf test
         """
@@ -127,6 +172,22 @@ class TestFIOBenchmark(E2ETest):
         # Create fio benchmark
         log.info("Create resource file for fio workload")
         fio_cr = templating.load_yaml(constants.FIO_CR_YAML)
+
+        # Saving the Original elastic-search IP and PORT - if defined in yaml
+        es_server = ""
+        es_port = ""
+        if 'elasticsearch' in fio_cr['spec']:
+            if 'server' in fio_cr['spec']['elasticsearch']:
+                es_server = fio_cr['spec']['elasticsearch']['server']
+            if 'port' in fio_cr['spec']['elasticsearch']:
+                es_port = fio_cr['spec']['elasticsearch']['port']
+        else:
+            fio_cr['spec']['elasticsearch'] = {}
+
+        # Use the internal define elastic-search server in the test
+        fio_cr['spec']['elasticsearch'] = {'server': es.get_ip(),
+                                           'port': es.get_port()}
+
         # Todo: have pvc_size set to 'get_osd_pods_memory_sum * 5'
         #  once pr-2037 is merged
         fio_cr['spec']['clustername'] = config.ENV_DATA['platform'] + get_build() + get_ocs_version()
@@ -170,6 +231,10 @@ class TestFIOBenchmark(E2ETest):
         # Clean up fio benchmark
         log.info("Deleting FIO benchmark")
         fio_cr_obj.delete()
+
+        # Setting back the original elastic-search information
+        fio_cr['spec']['elasticsearch'] = {'server': es_server,
+                                           'port': es_port}
         analyze_regression(io_pattern, sc, es_username=fio_cr['spec']['test_user'])
 
         # todo: push results to codespeed
