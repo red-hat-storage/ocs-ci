@@ -554,8 +554,8 @@ class TestSmallFileWorkload(E2ETest):
         # Getting the OCS version
         (ocs_ver_info, _) = get_ocs_version()
         ocs_ver_full = ocs_ver_info['status']['desired']['version']
-        m = re.match(r"(\d.\d).(\d)-", ocs_ver_full)
-        if m.group(1) is not None:
+        m = re.match(r"(\d.\d).(\d)", ocs_ver_full)
+        if m and m.group(1) is not None:
             ocs_ver = m.group(1)
 
         full_results.add_key('ocs_version', ocs_ver)
