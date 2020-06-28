@@ -42,9 +42,6 @@ spec:
         - name: {{ .Release.Name }}-worker
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           image: {{ .Values.image }}
-          securityContext:
-            privileged: true
-            runAsUser: 0
           command: ["sh", "-c"]
           args:
             - >

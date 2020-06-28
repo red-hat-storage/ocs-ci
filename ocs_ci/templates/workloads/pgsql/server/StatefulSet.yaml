@@ -18,9 +18,6 @@ spec:
       containers:
         - name: postgres
           image: postgres:10.4
-          securityContext:
-            privileged: true
-            runAsUser: 0
           imagePullPolicy: "IfNotPresent"
           ports:
             - containerPort: 5432

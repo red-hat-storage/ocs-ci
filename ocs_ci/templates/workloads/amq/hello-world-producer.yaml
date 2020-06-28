@@ -17,9 +17,6 @@ spec:
       containers:
       - name: hello-world-producer
         image: strimzi/hello-world-producer:latest
-        securityContext:
-          privileged: true
-          runAsUser: 0
         env:
           - name: BOOTSTRAP_SERVERS
             value: my-cluster-kafka-bootstrap:9092

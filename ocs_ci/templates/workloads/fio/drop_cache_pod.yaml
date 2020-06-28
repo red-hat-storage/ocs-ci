@@ -18,7 +18,6 @@ spec:
             key: admin-secret
             name: rook-ceph-mon
     securityContext:
-      runAsUser: 0
       privileged: true
     volumeMounts:
       - mountPath: /dev
