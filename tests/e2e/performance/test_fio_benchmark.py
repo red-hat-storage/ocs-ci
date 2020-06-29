@@ -201,7 +201,8 @@ class TestFIOBenchmark(E2ETest):
 
         # Wait for fio client pod to be created
         for fio_pod in TimeoutSampler(
-            300, 20, get_pod_name_by_pattern, 'fio-client', 'my-ripsaw'
+            300, 20, get_pod_name_by_pattern, 'fio-client',
+            constants.RIPSAW_NAMESPACE
         ):
             try:
                 if fio_pod[0] is not None:
