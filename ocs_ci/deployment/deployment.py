@@ -411,6 +411,26 @@ class Deployment(object):
                     'mon', 'mds', 'rgw', 'mgr', 'noobaa-core', 'noobaa-db',
                 ]
             }
+        else:
+            local_storage = config.DEPLOYMENT.get('local_storage')
+            platform = config.ENV_DATA.get('platform', '').lower()
+            if local_storage and platform == 'aws':
+                resources = {
+                    'mds': {
+                        'limits': {'cpu': 3},
+                        'requests': {'cpu': 1}
+                    },
+                    'noobaa-core': {
+                        'limits': {'cpu': 2, 'memory': '8Gi'},
+                        'requests': {'cpu': 1, 'memory': '8Gi'}
+                    },
+                    'noobaa-db': {
+                        'limits': {'cpu': 2, 'memory': '8Gi'},
+                        'requests': {'cpu': 1, 'memory': '8Gi'}
+                    }
+
+                }
+                cluster_data['spec']['resources'] = resources
 
         # Enable host network if enabled in config (this require all the
         # rules to be enabled on underlaying platform).
