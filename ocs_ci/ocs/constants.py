@@ -330,10 +330,6 @@ JENKINS_BUILDCONFIG_YAML = os.path.join(
     TEMPLATE_JENKINS_DIR, "buildconfig.yaml"
 )
 
-JENKINS_TEMPLATE = os.path.join(
-    TEMPLATE_JENKINS_DIR, "jenkins_template"
-)
-
 SMALLFILE_BENCHMARK_YAML = os.path.join(
     TEMPLATE_SMALLFILE_DIR, "SmallFile.yaml"
 )
