@@ -1,18 +1,18 @@
 """
 StorageCluster related functionalities
 """
-from ocs_ci.ocs.exceptions import ResourceNotFoundError
-from ocs_ci.ocs.ocp import OCP, get_images
-from jsonschema import validate
-from ocs_ci.framework import config
 import logging
-from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.resources.csv import CSV
-from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator, PackageManifest
-from ocs_ci.ocs.node import get_compute_node_names
-from ocs_ci.utility import utils, localstorage
-from ocs_ci.ocs.resources.pod import get_pods_having_label
 
+from jsonschema import validate
+
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs.exceptions import ResourceNotFoundError
+from ocs_ci.ocs.node import get_compute_node_names
+from ocs_ci.ocs.ocp import get_images, OCP
+from ocs_ci.ocs.resources.ocs import get_ocs_csv
+from ocs_ci.ocs.resources.pod import get_pods_having_label
+from ocs_ci.utility import localstorage, utils
 
 log = logging.getLogger(__name__)
 
@@ -66,17 +66,7 @@ def ocs_install_verification(
 
     # Verify OCS CSV is in Succeeded phase
     log.info("verifying ocs csv")
-    operator_selector = get_selector_for_ocs_operator()
-    ocs_package_manifest = PackageManifest(
-        resource_name=defaults.OCS_OPERATOR_NAME, selector=operator_selector,
-    )
-    channel = config.DEPLOYMENT.get('ocs_csv_channel')
-    ocs_csv_name = ocs_package_manifest.get_current_csv(channel=channel)
-    ocs_csv = CSV(
-        resource_name=ocs_csv_name, namespace=namespace
-    )
-    log.info(f"Check if OCS operator: {ocs_csv_name} is in Succeeded phase.")
-    ocs_csv.wait_for_phase(phase="Succeeded", timeout=timeout)
+    ocs_csv = get_ocs_csv()
     # Verify if OCS CSV has proper version.
     csv_version = ocs_csv.data['spec']['version']
     ocs_version = config.ENV_DATA['ocs_version']
