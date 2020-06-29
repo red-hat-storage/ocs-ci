@@ -3,7 +3,7 @@ Module to perform FIO workload
 """
 import logging
 import pytest
-from elasticsearch import (Elasticsearch, exceptions as ESExp)
+from elasticsearch import Elasticsearch, exceptions as ESExp
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.ocs import OCS
@@ -13,7 +13,7 @@ from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import (E2ETest, performance)
+from ocs_ci.framework.testlib import E2ETest, performance
 from ocs_ci.utility.performance_dashboard import push_perf_dashboard
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 
@@ -24,11 +24,8 @@ log = logging.getLogger(__name__)
 def es(request):
     def teardown():
         es.cleanup()
-
     request.addfinalizer(teardown)
-
     es = ElasticSearch()
-
     return es
 
 
