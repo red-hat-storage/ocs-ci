@@ -403,14 +403,32 @@ class Deployment(object):
 
         # Allow lower instance requests and limits for OCS deployment
         if config.DEPLOYMENT.get('allow_lower_instance_requirements'):
-            none_resources = {'Requests': None, 'Limits': None}
-            deviceset_data["resources"] = deepcopy(none_resources)
-            cluster_data['spec']['resources'] = {
-                resource: deepcopy(none_resources) for resource
-                in [
-                    'mon', 'mds', 'rgw', 'mgr', 'noobaa-core', 'noobaa-db',
-                ]
-            }
+            if config.DEPLOYMENT.get('local_storage'):
+                resources = {
+                    'mds': {
+                        'limits': {'cpu': 3},
+                        'requests': {'cpu': 1}
+                    },
+                    'noobaa-core': {
+                        'limits': {'cpu': 2, 'memory': '8Gi'},
+                        'requests': {'cpu': 1, 'memory': '8Gi'}
+                    },
+                    'noobaa-db': {
+                        'limits': {'cpu': 2, 'memory': '8Gi'},
+                        'requests': {'cpu': 1, 'memory': '8Gi'}
+                    }
+
+                }
+                cluster_data['spec']['resources'] = resources
+            else:
+                none_resources = {'Requests': None, 'Limits': None}
+                deviceset_data["resources"] = deepcopy(none_resources)
+                cluster_data['spec']['resources'] = {
+                    resource: deepcopy(none_resources) for resource
+                    in [
+                        'mon', 'mds', 'rgw', 'mgr', 'noobaa-core', 'noobaa-db',
+                    ]
+                }
 
         # Enable host network if enabled in config (this require all the
         # rules to be enabled on underlaying platform).
