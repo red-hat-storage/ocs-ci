@@ -2574,6 +2574,65 @@ def couchbase_factory_fixture(request):
     return factory
 
 
+@pytest.fixture(scope='function')
+def amq_factory_fixture(request):
+    """
+    AMQ factory fixture
+    """
+    amq = AMQ()
+
+    def factory(
+        sc_name, tiller_namespace, kafka_namespace=constants.AMQ_NAMESPACE,
+        size=100, replicas=3, benchmark_pod_name="benchmark",
+        num_of_clients=8, worker=None, timeout=3600,
+        amq_workload_yaml=None, run_in_bg=False
+    ):
+        """
+        Factory to start amq workload
+
+        Args:
+            sc_name (str): Name of storage clase
+            tiller_namespace (str): Namespace where benchmark pods to be created
+            kafka_namespace (str): Namespace where kafka cluster to be created
+            size (int): Size of the storage
+            replicas (int): Number of kafka and zookeeper pods to be created
+            benchmark_pod_name (str): Name of the benchmark pod
+            num_of_clients (int): Number of clients to be created
+            worker (str) : Loads to create on workloads separated with commas
+                e.g http://benchmark-worker-0.benchmark-worker:8080,
+                http://benchmark-worker-1.benchmark-worker:8080
+            timeout (int): Time to complete the run
+            amq_workload_yaml (dict): Contains amq workloads information keys and values
+            run_in_bg (bool): On true the workload will run in background
+
+        """
+        # Setup kafka cluster
+        amq.setup_amq_cluster(
+            sc_name=sc_name, namespace=kafka_namespace, size=size, replicas=replicas
+        )
+
+        # Run amq benchmark
+        result = amq.run_amq_benchmark(
+            benchmark_pod_name=benchmark_pod_name, kafka_namespace=kafka_namespace,
+            tiller_namespace=tiller_namespace, num_of_clients=num_of_clients, worker=worker,
+            timeout=timeout, amq_workload_yaml=amq_workload_yaml, run_in_bg=run_in_bg
+        )
+
+        return amq, result
+
+    def finalizer():
+        """
+        Clean up
+
+        """
+
+        # Clean up
+        amq.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
 @pytest.fixture
 def measurement_dir(tmp_path):
     """
@@ -2684,62 +2743,3 @@ def ceph_toolbox(request):
     if not (deploy or teardown or skip_ocs):
         # Creating toolbox pod
         setup_ceph_toolbox()
-
-
-@pytest.fixture(scope='function')
-def amq_factory_fixture(request):
-    """
-    AMQ factory fixture
-    """
-    amq = AMQ()
-
-    def factory(
-        sc_name, tiller_namespace, kafka_namespace=constants.AMQ_NAMESPACE,
-        size=100, replicas=3, benchmark_pod_name="benchmark",
-        num_of_clients=8, worker=None, timeout=3600,
-        amq_workload_yaml=None, run_in_bg=False
-    ):
-        """
-        Factory to start amq workload
-
-        Args:
-            sc_name (str): Name of storage clase
-            tiller_namespace (str): Namespace where benchmark pods to be created
-            kafka_namespace (str): Namespace where kafka cluster to be created
-            size (int): Size of the storage
-            replicas (int): Number of kafka and zookeeper pods to be created
-            benchmark_pod_name (str): Name of the benchmark pod
-            num_of_clients (int): Number of clients to be created
-            worker (str) : Loads to create on workloads separated with commas
-                e.g http://benchmark-worker-0.benchmark-worker:8080,
-                http://benchmark-worker-1.benchmark-worker:8080
-            timeout (int): Time to complete the run
-            amq_workload_yaml (dict): Contains amq workloads information keys and values
-            run_in_bg (bool): On true the workload will run in background
-
-        """
-        # Setup kafka cluster
-        amq.setup_amq_cluster(
-            sc_name=sc_name, namespace=kafka_namespace, size=size, replicas=replicas
-        )
-
-        # Run amq benchmark
-        result = amq.run_amq_benchmark(
-            benchmark_pod_name=benchmark_pod_name, kafka_namespace=kafka_namespace,
-            tiller_namespace=tiller_namespace, num_of_clients=num_of_clients, worker=worker,
-            timeout=timeout, amq_workload_yaml=amq_workload_yaml, run_in_bg=run_in_bg
-        )
-
-        return amq, result
-
-    def finalizer():
-        """
-        Clean up
-
-        """
-
-        # Clean up
-        amq.cleanup()
-
-    request.addfinalizer(finalizer)
-    return factory
