@@ -48,7 +48,7 @@ class TestAMQPodRespin(E2ETest):
         """
         sc_name = default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
         self.amq_workload_dict = templating.load_yaml(constants.AMQ_WORKLOAD_YAML)
-        self.amq, self.proc = amq_factory_fixture(
+        self.amq, self.thread = amq_factory_fixture(
             sc_name=sc_name.name, tiller_namespace="tiller",
             amq_workload_yaml=self.amq_workload_dict, run_in_bg=True
         )
