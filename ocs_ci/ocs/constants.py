@@ -171,6 +171,7 @@ LOCAL_STORAGE_NAMESPACE = 'local-storage'
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
 DEFAULT_STORAGECLASS_RBD = f'{DEFAULT_CLUSTERNAME}-ceph-rbd'
+DEFAULT_STORAGECLASS_LSO = 'local-block'
 
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
@@ -604,6 +605,7 @@ VDBENCH_MIN_CAPACITY = 300  # minimum storage capacity (in GB) for the test to r
 AWS_PLATFORM = 'aws'
 AZURE_PLATFORM = 'azure'
 VSPHERE_PLATFORM = 'vsphere'
+BAREMETAL_PLATFORM = 'baremetal'
 CLOUD_PLATFORMS = (AWS_PLATFORM, AZURE_PLATFORM)
 
 # Default SC based on platforms
