@@ -602,8 +602,9 @@ VDBENCH_MIN_CAPACITY = 300  # minimum storage capacity (in GB) for the test to r
 
 # Platforms
 AWS_PLATFORM = 'aws'
+AZURE_PLATFORM = 'azure'
 VSPHERE_PLATFORM = 'vsphere'
-CLOUD_PLATFORMS = (AWS_PLATFORM)
+CLOUD_PLATFORMS = (AWS_PLATFORM, AZURE_PLATFORM)
 
 # Default SC based on platforms
 DEFAULT_SC_AWS = "gp2"
