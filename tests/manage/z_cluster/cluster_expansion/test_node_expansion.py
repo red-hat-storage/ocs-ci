@@ -41,7 +41,7 @@ class TestAddNode(ManageTest):
                 logger.info(f'The worker nodes number after expansion {len(helpers.get_worker_nodes())}')
 
         elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
-            pytest.skip(" Skipping add node in Vmware pf due to https://bugzilla.redhat.com/show_bug.cgi?id=1844521")
+            pytest.skip("Skipping add node in Vmware platform due to https://bugzilla.redhat.com/show_bug.cgi?id=1844521")
             # logger.info(f'The worker nodes number before expansion {len(helpers.get_worker_nodes())}')
             # if config.ENV_DATA.get('rhel_user'):
             #     pytest.skip("Skipping add RHEL node, code unavailable")
