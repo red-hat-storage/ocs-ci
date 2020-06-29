@@ -379,7 +379,6 @@ def test_ceph_metrics_available():
         "ceph_pool_recovering_keys_per_sec",
         "ceph_pool_recovering_objects_per_sec"]
 
-    platforms_without_rgw = [constants.AWS_PLATFORM]
     current_platform = config.ENV_DATA['platform'].lower()
 
     prometheus = PrometheusAPI()
@@ -395,7 +394,7 @@ def test_ceph_metrics_available():
             is_rgw_metric = (
                 metric.startswith("ceph_rgw")
                 or metric.startswith("ceph_objecter"))
-            if current_platform in platforms_without_rgw and is_rgw_metric:
+            if current_platform in constants.CLOUD_PLATFORMS and is_rgw_metric:
                 msg = (
                     f"failed to get results for {metric}, "
                     f"but it is expected on {current_platform}")
