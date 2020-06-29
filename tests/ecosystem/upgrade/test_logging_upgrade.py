@@ -38,14 +38,14 @@ def check_cluster_logging():
     assert check_health_of_clusterlogging(), "Cluster is not Healthy"
 
 
-@retry(CommandFailed, 5, 30, 2)
+@retry(CommandFailed, tries=5, delay=120, backoff=1)
 def get_csv_version(channel):
     """
     Get the cluster-logging and Elasticsearch CSV version
     and Images of the pods
 
     Args:
-        channel (int) : Logging Channel
+        channel (str) : Logging Channel
 
     Returns:
         tuple: Tuple containing three elements
@@ -76,7 +76,7 @@ def check_csv_version_post_upgrade(channel):
     This function is to check the CSV version post upgrade
 
     Args:
-        channel (int) : logging channel
+        channel (str) : logging channel
 
     Returns:
         bool : Returns True if version matches, False otherwise
@@ -100,14 +100,14 @@ def check_csv_version_post_upgrade(channel):
     return False
 
 
-@retry(AttributeError, 8, 30, 2)
+@retry(AttributeError, tries=10, delay=120, backoff=1)
 def check_csv_logging_phase(channel):
     """
     The function checks in the CSV for the phase "Succeeded"
     for cluster-logging operator and Elastic-search operator
 
     Args:
-        channel (int) : Logging channel
+        channel (str) : Logging channel
 
     Returns:
         bool: True if CSV status is Succeeded, False otherwise
@@ -141,7 +141,7 @@ def upgrade_info(channel):
      Function to provide CSV names and images pre and post upgrade
 
      Args:
-         channel (int): Logging channel
+         channel (str): Logging channel
 
     """
 
