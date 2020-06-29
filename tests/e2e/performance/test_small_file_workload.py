@@ -510,7 +510,8 @@ class TestSmallFileWorkload(E2ETest):
 
         # wait for benchmark pods to get created - takes a while
         for bench_pod in TimeoutSampler(
-            240, 10, get_pod_name_by_pattern, 'smallfile-client', 'my-ripsaw'
+            240, 10, get_pod_name_by_pattern, 'smallfile-client',
+            constants.RIPSAW_NAMESPACE
         ):
             try:
                 if bench_pod[0] is not None:
@@ -519,7 +520,7 @@ class TestSmallFileWorkload(E2ETest):
             except IndexError:
                 log.info("Bench pod not ready yet")
 
-        bench_pod = OCP(kind='pod', namespace='my-ripsaw')
+        bench_pod = OCP(kind='pod', namespace=constants.RIPSAW_NAMESPACE)
         log.info("Waiting for SmallFile benchmark to Run")
         assert bench_pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
@@ -594,8 +595,7 @@ class TestSmallFileWorkload(E2ETest):
                     test_status = full_results.aggregate_samples_results()
                     full_results.write()
 
-                    # Creating full link to the kibana on the elastic search
-                    # server with full test results.
+                    # Creating full link to the results on the ES server
                     res_link = 'http://'
                     res_link += f'{full_results.server}:{full_results.port}/'
                     res_link += f'{full_results.new_index}/_search?q='
