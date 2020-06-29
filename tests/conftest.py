@@ -63,6 +63,7 @@ from tests.manage.mcg.helpers import (
     cli_create_pv_backingstore
 )
 from ocs_ci.ocs.pgsql import Postgresql
+from ocs_ci.ocs.couchbase import CouchBase
 
 log = logging.getLogger(__name__)
 
@@ -2479,6 +2480,40 @@ def pgsql_factory_fixture(request):
         Clean up
         """
         pgsql.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope='function')
+def couchbase_factory_fixture(request):
+    """
+    Couchbase factory fixture
+    """
+    couchbase = CouchBase()
+
+    def factory(replicas=3):
+        """
+        Factory to start couchbase workload
+
+        Args:
+            replicas (int): Number of couchbase workers to be deployed
+        """
+        # Setup couchbase
+        couchbase.setup_cb()
+        # Create couchbase workers
+        couchbase.create_couchbase_worker(replicas=replicas)
+        # Run couchbase workload
+        couchbase.run_workload(replicas=replicas)
+        # Run sanity check on data logs
+        couchbase.analyze_run()
+        return couchbase
+
+    def finalizer():
+        """
+        Clean up
+        """
+        couchbase.teardown()
 
     request.addfinalizer(finalizer)
     return factory
