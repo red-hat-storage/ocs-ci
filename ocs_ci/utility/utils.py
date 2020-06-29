@@ -2319,7 +2319,4 @@ def get_terraform(version=None, bin_dir=None):
     # return to the previous working directory
     os.chdir(previous_dir)
 
-    terraform_version = run_cmd(f"{terraform_binary_path} version")
-    log.debug(f"Terraform version: {terraform_version}")
-
     return terraform_binary_path
