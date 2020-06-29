@@ -931,3 +931,6 @@ LOAD_BALANCER_MODULE = "module.ipam_lb"
 
 # proxy location
 HAPROXY_LOCATION = "/etc/haproxy/haproxy.conf"
+
+# Disruptions pod names
+ROOK_OPERATOR = 'operator'
