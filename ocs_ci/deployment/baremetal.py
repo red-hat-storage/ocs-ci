@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 
@@ -6,7 +7,8 @@ import yaml
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.node import get_typed_nodes
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.utils import run_cmd, upload_file, get_ocp_version
@@ -156,13 +158,13 @@ class BAREMETALUPI(Deployment):
             logger.info(rhcos_images_file)
             image_data = rhcos_images_file[ocp_version]
             # Download installer_initramfs
-            cmd = f"wget {constants.coreos_url_prefix}{image_data['installer_initramfs_url']} --directory-prefix={constants.bm_tftp_dir}"
+            cmd = f"wget -O rhcos-installer-initramfs.x86_64.img {constants.coreos_url_prefix}{image_data['installer_initramfs_url']} --directory-prefix={constants.bm_tftp_dir}"
             assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
             # Download installer_kernel
-            cmd = f"wget {constants.coreos_url_prefix}{image_data['installer_kernel_url']} --directory-prefix={constants.bm_tftp_dir}"
+            cmd = f"wget -O rhcos-installer-kernel-x86_64 {constants.coreos_url_prefix}{image_data['installer_kernel_url']} --directory-prefix={constants.bm_tftp_dir}"
             assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
             # Download metal_bios
-            cmd = f"wget {constants.coreos_url_prefix}{image_data['metal_bios_url']} --directory-prefix={constants.bm_path_to_upload}"
+            cmd = f"wget -O rhcos-metal.x86_64.raw.gz {constants.coreos_url_prefix}{image_data['metal_bios_url']} --directory-prefix={constants.bm_path_to_upload}"
             assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
             # Create pxelinux.cfg directory
             cmd = f"mkdir -m 755 {constants.bm_tftp_dir}/pxelinux.cfg"
@@ -174,7 +176,6 @@ class BAREMETALUPI(Deployment):
             Returns:
             """
             # Creating pxe files
-            for
 
 
         def create_config(self):
@@ -220,3 +221,75 @@ class BAREMETALUPI(Deployment):
                 f"{self.installer} create ignition-configs "
                 f"--dir {self.cluster_path} "
             )
+
+        def clean_disk(self):
+            """
+            Perform disk cleanup
+            """
+            device_to_clean_list = []
+            workers = get_typed_nodes(node_type='worker')
+            ocp_obj = ocp.OCP()
+            for worker in workers:
+                cmd = (
+                    f"debug nodes/{worker.name} "
+                    f"-- chroot /host lsblk -nd -e252,7 --output NAME --json"
+                )
+                out = ocp_obj.exec_oc_cmd(
+                    command=cmd, out_yaml_format=False,
+                )
+                lsblk_output = json.loads(str(out))
+                lsblk_devices = lsblk_output['blockdevices']
+                for lsblk_device in lsblk_devices:
+                    base_cmd = """pvs --config "devices{filter = [ 'a|/dev/%s.*|', 'r|.*|' ] }" --reportformat json""" \
+                               % lsblk_device['name']
+                    cmd = (
+                        f"debug nodes/{worker.name} "
+                        f"-- chroot /host {base_cmd}"
+                    )
+                    out = ocp_obj.exec_oc_cmd(
+                        command=cmd, out_yaml_format=False,
+                    )
+                    pvs_output = json.loads(str(out))
+                    pvs_list = pvs_output['report']
+                    for pvs in pvs_list:
+                        pv_list = pvs['pv']
+                        for pv in pv_list:
+                            logger.debug(pv)
+                            device_dict = {
+                                'hostname': f"{worker.name}", 'pv_name': f"{pv['pv_name']}",
+                                'vg_name': f"{pv['vg_name']}"
+                            }
+                            device_to_clean_list.append(device_dict)
+
+            for devices in device_to_clean_list:
+                cmd = (
+                    f"debug nodes/{devices['hostname']} "
+                    f"-- chroot /host vgremove {devices['vg_name']} -y"
+                )
+                logger.info("Removing vg")
+                out = ocp_obj.exec_oc_cmd(
+                    command=cmd, out_yaml_format=False,
+                )
+                logger.info(out)
+
+            for devices in device_to_clean_list:
+                cmd = (
+                    f"debug nodes/{devices['hostname']} "
+                    f"-- chroot /host pvremove {devices['pv_name']} -y"
+                )
+                logger.info("Removing pv")
+                out = ocp_obj.exec_oc_cmd(
+                    command=cmd, out_yaml_format=False,
+                )
+                logger.info(out)
+
+            for devices in device_to_clean_list:
+                cmd = (
+                    f"debug nodes/{devices['hostname']} "
+                    f"-- chroot /host wipefs -a -f {devices['pv_name']}"
+                )
+                logger.info("Removing pv")
+                out = ocp_obj.exec_oc_cmd(
+                    command=cmd, out_yaml_format=False,
+                )
+                logger.info(out)
