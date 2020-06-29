@@ -9,6 +9,7 @@ import json
 from subprocess import run, CalledProcessError
 from prettytable import PrettyTable
 from threading import Thread
+from queue import Queue
 
 from ocs_ci.ocs.exceptions import (ResourceWrongStatusException, CommandFailed)
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
@@ -572,13 +573,14 @@ class AMQ(object):
         log.info(f"Run benchmark and running command {cmd} inside the benchmark pod ")
 
         if run_in_bg:
+            queue = Queue()
             thread = Thread(
                 target=self.run_amq_workload_in_bg, args=(
-                    cmd, benchmark_pod_name, tiller_namespace, timeout
+                    cmd, benchmark_pod_name, tiller_namespace, timeout, queue
                 ))
             thread.start()
             time.sleep(60)
-            return thread
+            return thread, queue
 
         pod_obj = get_pod_obj(name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace)
         result = pod_obj.exec_cmd_on_pod(command=cmd, out_yaml_format=False, timeout=timeout)
@@ -586,7 +588,7 @@ class AMQ(object):
         return result
 
     def run_amq_workload_in_bg(
-        self, command, benchmark_pod_name, tiller_namespace, timeout
+        self, command, benchmark_pod_name, tiller_namespace, timeout, queue
     ):
         """
         Runs amq workload in bg
@@ -595,14 +597,16 @@ class AMQ(object):
              command (str): Command to run on pod
              benchmark_pod_name (str): Pod name
              tiller_namespace (str): Namespace of pod
-             timeout (int)
+             timeout (int): Time to complete the run
+             queue (obj): Queue obj
 
         Returns:
             Thread: A thread of the amq workload execution
 
         """
         pod_obj = get_pod_obj(name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace)
-        return pod_obj.exec_cmd_on_pod(command=command, out_yaml_format=False, timeout=timeout)
+        result = pod_obj.exec_cmd_on_pod(command=command, out_yaml_format=False, timeout=timeout)
+        return queue.put(result)
 
     def validate_amq_benchmark(self, result, amq_workload_yaml, benchmark_pod_name="benchmark"):
         """

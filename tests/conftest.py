@@ -2612,13 +2612,13 @@ def amq_factory_fixture(request):
         )
 
         # Run amq benchmark
-        result = amq.run_amq_benchmark(
+        result, queue = amq.run_amq_benchmark(
             benchmark_pod_name=benchmark_pod_name, kafka_namespace=kafka_namespace,
             tiller_namespace=tiller_namespace, num_of_clients=num_of_clients, worker=worker,
             timeout=timeout, amq_workload_yaml=amq_workload_yaml, run_in_bg=run_in_bg
         )
 
-        return amq, result
+        return amq, result, queue
 
     def finalizer():
         """
