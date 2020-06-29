@@ -223,7 +223,7 @@ class TestUpgradeLogging():
                 )
                 assert check_csv_version_post_upgrade(
                     upgrade_channel
-                ), "Unable to get version"
+                ), "Unable to get version "
                 logger.info("Version Matches!")
                 upgrade_info(upgrade_channel)
                 check_cluster_logging()
