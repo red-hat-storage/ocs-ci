@@ -16,6 +16,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest, performance
 from ocs_ci.utility.performance_dashboard import push_perf_dashboard
 from ocs_ci.ocs.elasticsearch import ElasticSearch
+from ocs_ci.ocs.cluster import CephCluster
 
 log = logging.getLogger(__name__)
 
@@ -185,8 +186,21 @@ class TestFIOBenchmark(E2ETest):
         fio_cr['spec']['elasticsearch'] = {'server': es.get_ip(),
                                            'port': es.get_port()}
 
-        # Todo: have pvc_size set to 'get_osd_pods_memory_sum * 5'
-        #  once pr-2037 is merged
+        # Setting the data set to 40% of the total storage capacity but
+        # not more then 600GiB
+        ceph_cluster = CephCluster()
+        total_data_set = int(ceph_cluster.get_ceph_capacity() * 0.4)
+        filesize = int(fio_cr['spec']['workload']['args']['filesize'].replace('GiB', ''))
+        # To make sure the number of App pods will not be more then 50, in case
+        # of large data set, changing the size of the file each pod will work on
+        if total_data_set > 500:
+            filesize = int(ceph_cluster.get_ceph_capacity() * 0.008)
+            fio_cr['spec']['workload']['args']['filesize'] = f'{filesize}GiB'
+            # make sure that the storage size is larger then the file size
+            fio_cr['spec']['workload']['args']['storagesize'] = f'{int(filesize * 1.2)}Gi'
+        fio_cr['spec']['workload']['args']['servers'] = int(total_data_set / filesize)
+        log.info(f'Total Data set to work on is : {total_data_set} GiB')
+
         fio_cr['spec']['clustername'] = config.ENV_DATA['platform'] + get_build() + get_ocs_version()
         fio_cr['spec']['test_user'] = get_ocs_version() + interface + io_pattern
         fio_cr['spec']['workload']['args']['storageclass'] = sc
