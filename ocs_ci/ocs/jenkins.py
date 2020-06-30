@@ -3,6 +3,7 @@ Jenkins Class to run jenkins specific tests
 """
 import logging
 import re
+import time
 
 from prettytable import PrettyTable
 from ocs_ci.ocs.exceptions import (
@@ -190,6 +191,7 @@ class Jenkins(object):
         """
         pvc_objs = []
         for project in self.projects:
+            log.info(f'create jenkins pvc on project {project}')
             pvc_obj = create_pvc(
                 pvc_name='dependencies', size='10Gi',
                 sc_name=constants.DEFAULT_STORAGECLASS_RBD,
@@ -204,6 +206,7 @@ class Jenkins(object):
 
         """
         for project in self.projects:
+            log.info(f'create app jenkins on project {project}')
             ocp_obj = OCP(namespace=project)
             ocp_obj.new_project(project)
             cmd = 'new-app --name=jenkins-ocs-rbd --template=jenkins-persistent-ocs'
@@ -258,6 +261,7 @@ class Jenkins(object):
 
         Create OCS Jenkins Template
         """
+        log.info("Create Jenkins Template, jenkins-persistent-ocs")
         ocp_obj = OCP(namespace='openshift', kind='template')
         tmp_dict = ocp_obj.get(
             resource_name='jenkins-persistent', out_yaml_format=True
@@ -287,6 +291,7 @@ class Jenkins(object):
 
         Get builds logs and print them on table
         """
+        log.info('Print builds results')
         build_table = PrettyTable()
         build_table.field_names = ["Project", "Build", "Duration"]
         for build in self.build_completed:
@@ -311,3 +316,5 @@ class Jenkins(object):
         ocp_obj = OCP()
         cmd = "delete template.template.openshift.io/jenkins-persistent-ocs -n openshift"
         ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
+        # Add Sleep because leftovers issue
+        time.sleep(120)
