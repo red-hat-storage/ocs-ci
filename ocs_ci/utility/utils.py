@@ -2013,7 +2013,7 @@ def config_to_string(config):
 
     """
     strio = io.StringIO()
-    config.write(strio)
+    config.write(strio, space_around_delimiters=False)
     return strio.getvalue()
 
 
