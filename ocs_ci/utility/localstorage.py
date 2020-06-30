@@ -53,7 +53,7 @@ def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
         list : List containing added device paths
 
     """
-    ocp_obj = OCP(kind='localvolume')
+    ocp_obj = OCP(kind='localvolume', namespace=constants.LOCAL_STORAGE_NAMESPACE)
     workers = get_typed_nodes(node_type="worker")
     worker_names = [worker.name for worker in workers]
     config.ENV_DATA['worker_replicas'] = len(worker_names)
@@ -88,13 +88,14 @@ def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
     lvcr = yaml.load(local_block_yaml, Loader=yaml.FullLoader)
     new_dev_paths = lvcr["spec"]["storageClassDevices"][0]["devicePaths"]
     logger.info(f"Newly added devices are: {new_dev_paths}")
-    assert len(new_dev_paths) == (len(worker_names) * device_sets_required), (
-        f"Current devices available = {len(new_dev_paths)}"
-    )
-    os.chdir(constants.TOP_DIR)
-    shutil.rmtree(path)
-    # Return list of old device paths and newly added device paths
-    cur_device_list.extend(new_dev_paths)
+    if new_dev_paths:
+        assert len(new_dev_paths) == (len(worker_names) * device_sets_required), (
+            f"Current devices available = {len(new_dev_paths)}"
+        )
+        os.chdir(constants.TOP_DIR)
+        shutil.rmtree(path)
+        # Return list of old device paths and newly added device paths
+        cur_device_list.extend(new_dev_paths)
     return cur_device_list
 
 
