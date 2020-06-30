@@ -8,7 +8,7 @@ from ocs_ci.framework.testlib import (
 from tests.helpers import default_storage_class
 from tests.disruption_helpers import Disruptions
 from ocs_ci.utility import templating
-from ocs_ci.ocs.resources.pod import get_all_pods
+from ocs_ci.ocs.resources.pod import get_all_pods, delete_pods
 
 
 log = logging.getLogger(__name__)
@@ -24,11 +24,10 @@ def respin_amq_app_pod(kafka_namespace):
     """
     pod = ocp.OCP(kind=constants.POD, namespace=kafka_namespace)
     pod_obj_list = get_all_pods(namespace=kafka_namespace)
-    for pod_obj in pod_obj_list:
-        pod_obj.delete(force=True)
-        assert pod.wait_for_resource(
-            resource_name=pod_obj.name, condition='Running', timeout=300
-        )
+    delete_pods(pod_obj_list)
+    assert pod.wait_for_resource(
+        condition='Running', resource_count=len(pod_obj_list), timeout=300
+    )
 
 
 @ignore_leftovers
@@ -77,7 +76,7 @@ class TestAMQPodRespin(E2ETest):
                 *['operator'], marks=pytest.mark.polarion_id("OCS-2223")
             ),
             pytest.param(
-                *['kafka'], marks=pytest.mark.polarion_id("OCS-1280")
+                *['amq'], marks=pytest.mark.polarion_id("OCS-1280")
             )
         ]
     )
