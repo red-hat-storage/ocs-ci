@@ -28,7 +28,7 @@ from ocs_ci.utility.templating import dump_data_to_json, Templating
 from ocs_ci.utility.utils import (
     clone_repo, convert_yaml2tfvars, create_directory_path, read_file_as_str,
     remove_keys_from_tf_variable_file, replace_content_in_file, run_cmd,
-    upload_file, wait_for_co, get_ocp_version
+    upload_file, wait_for_co, get_ocp_version, get_terraform,
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from semantic_version import Version
@@ -371,6 +371,15 @@ class VSPHEREUPI(VSPHEREBASE):
                 'installer'
             )
             self.previous_dir = os.getcwd()
+
+            # Download terraform binary based on ocp version and
+            # update the installer path in ENV_DATA
+            # use "0.11.14" for releases below OCP 4.5
+            terraform_version = config.DEPLOYMENT['terraform_version']
+            terraform_installer = get_terraform(version=terraform_version)
+            config.ENV_DATA['terraform_installer'] = terraform_installer
+
+            # Initialize Terraform
             self.terraform_data_dir = os.path.join(self.cluster_path, constants.TERRAFORM_DATA_DIR)
             create_directory_path(self.terraform_data_dir)
             self.terraform_work_dir = constants.VSPHERE_DIR
@@ -614,6 +623,15 @@ class VSPHEREUPI(VSPHEREBASE):
 
         """
         previous_dir = os.getcwd()
+
+        # Download terraform binary based on ocp version and
+        # update the installer path in ENV_DATA
+        # use "0.11.14" for releases below OCP 4.5
+        # TODO: For cluster installed by old version of terraform we need to
+        # still run old version for destroy ( upgrade scenario )
+        terraform_version = config.DEPLOYMENT['terraform_version']
+        terraform_installer = get_terraform(version=terraform_version)
+        config.ENV_DATA['terraform_installer'] = terraform_installer
 
         # delete the extra disks
         self.delete_disks()
