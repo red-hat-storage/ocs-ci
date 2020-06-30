@@ -934,3 +934,4 @@ HAPROXY_LOCATION = "/etc/haproxy/haproxy.conf"
 
 # Disruptions pod names
 ROOK_OPERATOR = 'operator'
+MON_DAEMON = 'mon'
