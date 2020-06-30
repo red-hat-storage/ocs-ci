@@ -304,7 +304,7 @@ def add_new_node_and_label_it(machineset_name):
 
 def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True):
     """
-    Add a new node for aws upi platform and label it
+    Add a new node for aws/vmware upi platform and label it
 
     Args:
         node_type (str): Type of node, RHEL or RHCOS
