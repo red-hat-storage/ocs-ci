@@ -924,4 +924,8 @@ COMMON_CONF_FILE = os.path.join(
 RHCOS_IMAGES_FILE = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "rhcos_images.yaml"
 )
+PXE_FILE = os.path.join(
+    TEMPLATE_DIR, "baremetal-pxefile"
+)
 coreos_url_prefix = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos"
+BM_DEFAULT_CLUSTER_NAME = "ocp-baremetal-auto"
