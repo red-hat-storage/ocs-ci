@@ -614,9 +614,6 @@ BOOTSTRAP_IGN = "bootstrap.ign"
 MASTER_IGN = "master.ign"
 WORKER_IGN = "worker.ign"
 
-# Terraform version
-TERRAFORM_OLD_VERSION = "0.11.14"
-
 # vSphere related constants
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"

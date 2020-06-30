@@ -54,16 +54,14 @@ class Terraform(object):
             bootstrap_complete (bool): Removes bootstrap node if True
 
         """
-        if bootstrap_complete:
-            cmd = (
-                f"{self.terraform_installer} apply '-var-file={tfvars}'"
-                f" -auto-approve -var bootstrap_complete=true '{self.path}'"
-            )
-        else:
-            cmd = (
-                f"{self.terraform_installer} apply '-var-file={tfvars}'"
-                f" -auto-approve '{self.path}'"
-            )
+        bootstrap_complete_param = (
+            "-var bootstrap_complete=true" if bootstrap_complete else ""
+        )
+        cmd = (
+            f"{self.terraform_installer} apply '-var-file={tfvars}'"
+            f" -auto-approve {bootstrap_complete_param} '{self.path}'"
+        )
+
         run_cmd(cmd, timeout=1500)
 
     def destroy(self, tfvars):

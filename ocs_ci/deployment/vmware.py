@@ -373,12 +373,9 @@ class VSPHEREUPI(VSPHEREBASE):
             self.previous_dir = os.getcwd()
 
             # Download terraform binary based on ocp version and
-            # update in ENV_DATA
+            # update the installer path in ENV_DATA
             # use "0.11.14" for releases below OCP 4.5
-            ocp_version = get_ocp_version()
-            terraform_version = constants.TERRAFORM_OLD_VERSION
-            if Version.coerce(ocp_version) >= Version.coerce('4.5'):
-                terraform_version = config.DEPLOYMENT['terraform_version']
+            terraform_version = config.DEPLOYMENT['terraform_version']
             terraform_installer = get_terraform(version=terraform_version)
             config.ENV_DATA['terraform_installer'] = terraform_installer
 
@@ -631,12 +628,11 @@ class VSPHEREUPI(VSPHEREBASE):
         previous_dir = os.getcwd()
 
         # Download terraform binary based on ocp version and
-        # update in ENV_DATA
+        # update the installer path in ENV_DATA
         # use "0.11.14" for releases below OCP 4.5
-        ocp_version = get_ocp_version()
-        terraform_version = constants.TERRAFORM_OLD_VERSION
-        if Version.coerce(ocp_version) >= Version.coerce('4.5'):
-            terraform_version = config.DEPLOYMENT['terraform_version']
+        # TODO: For cluster installed by old version of terraform we need to
+        # still run old version for destroy ( upgrade scenario )
+        terraform_version = config.DEPLOYMENT['terraform_version']
         terraform_installer = get_terraform(version=terraform_version)
         config.ENV_DATA['terraform_installer'] = terraform_installer
 
