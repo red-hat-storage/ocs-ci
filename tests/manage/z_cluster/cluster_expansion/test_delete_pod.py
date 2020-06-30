@@ -15,9 +15,19 @@ from tests.disruption_helpers import Disruptions
 
 
 class AddCapacityWithResourceDelete:
+    """
+    Automates delete resource while adding capacity to the cluster
+    """
     new_pods_in_status_running = False
 
     def kill_resource_repeatedly(self, resource_name, resource_id):
+        """
+        The function get the resource name, and id and kill the resource repeatedly
+        until the new pods reached status running.
+        Args:
+            resource_name (str): the name of the resource to kill
+            resource_id (int): the id of the resource to kill
+        """
         d = Disruptions()
         logging.info("starting function 'kill_resource_repeatedly'")
         try:
@@ -35,6 +45,16 @@ class AddCapacityWithResourceDelete:
             )
 
     def add_capacity_with_resource_delete(self, resource_name, resource_id, is_kill_resource_repeatedly=False):
+        """
+        The function get the resource name, and id.
+        The function adds capacity to the cluster, and then delete the resource while
+        storage capacity is getting increased.
+        Args:
+            resource_name (str): the name of the resource to delete
+            resource_id (int): the id of the resource to delete
+            is_kill_resource_repeatedly (bool): If True then kill the resource repeatedly. Else, if False
+                delete the resource only once.
+        """
         used_percentage = get_percent_used_capacity()
         logging.info(f"storageutilization is completed. used capacity = {used_percentage}")
 
@@ -48,11 +68,15 @@ class AddCapacityWithResourceDelete:
         d.set_resource(resource_name)
 
         self.new_pods_in_status_running = False
+
         osd_size = storage_cluster.get_osd_size()
         logging.info(f"Adding one new set of OSDs. osd size = {osd_size}")
         storagedeviceset_count = storage_cluster.add_capacity(osd_size)
         logging.info("Adding one new set of OSDs was issued without problems")
 
+        # Wait for new osd's to come up. After the first new osd in status Init - delete the resource.
+        # After deleting the resource we expect that all the new osd's will be in status running,
+        # and the delete resource will be also in status running.
         pod_helpers.wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before)
         logging.info(f"Delete a {resource_name} pod while storage capacity is getting increased")
         if is_kill_resource_repeatedly:
