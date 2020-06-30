@@ -70,6 +70,8 @@ DEPLOYMENT:
   preserve_bootstrap_node: False
   # Following options are defaults for the max Noobaa endpoints
   noobaa_endpoints: 2
+  # Terraform version
+  terraform_version: "0.12.26"
 
 # Section for reporting configuration
 REPORTING:
