@@ -75,7 +75,6 @@ def wait_for_active_pods(job, desired_count, timeout=3):
                 f"Logs from job pod {job_pod['metadata']['name']}: {pod_logs}"
             )
 
-
         return False
 
 
