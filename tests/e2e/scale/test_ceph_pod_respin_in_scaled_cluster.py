@@ -22,7 +22,7 @@ def fioscale(request):
         node_selector=constants.SCALE_NODE_SELECTOR
     )
     fioscale.create_scale_pods(
-        scale_count=500, pods_per_iter=15, io_runtime=36000,
+        scale_count=1500, pods_per_iter=15, io_runtime=36000,
         start_io=True
     )
 
