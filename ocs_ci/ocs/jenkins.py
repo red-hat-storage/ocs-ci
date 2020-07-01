@@ -319,4 +319,5 @@ class Jenkins(object):
         cmd = "delete template.template.openshift.io/jenkins-persistent-ocs -n openshift"
         ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
         # Wait for the resources to delete
+        # https://github.com/red-hat-storage/ocs-ci/issues/2417
         time.sleep(120)
