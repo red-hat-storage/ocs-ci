@@ -27,7 +27,6 @@ def fioscale(request):
     )
 
     def teardown():
-        pass
         fioscale.cleanup()
     request.addfinalizer(teardown)
     return fioscale
