@@ -158,11 +158,11 @@ class Jenkins(object):
             pod_objs (list): jenkins deploy pod objects list
 
         """
-        pod_objs = []
-        pod_names = get_pod_name_by_pattern('deploy', namespace=namespace)
-        for pod_name in pod_names:
-            pod_objs.append(get_pod_obj(pod_name, namespace=namespace))
-        return pod_objs
+        return [
+            get_pod_obj(
+                pod, namespace=namespace
+            ) for pod in get_pod_name_by_pattern('deploy', namespace=namespace)
+        ]
 
     def get_builds_obj(self, namespace):
         """
@@ -188,6 +188,8 @@ class Jenkins(object):
         """
         create jenkins pvc
 
+        Returns:
+            List: pvc_objs
         """
         pvc_objs = []
         for project in self.projects:
@@ -198,7 +200,7 @@ class Jenkins(object):
                 namespace=project
             )
             pvc_objs.append(pvc_obj)
-        return pvc_obj
+        return pvc_objs
 
     def create_app_jenkins(self):
         """
@@ -316,5 +318,5 @@ class Jenkins(object):
         ocp_obj = OCP()
         cmd = "delete template.template.openshift.io/jenkins-persistent-ocs -n openshift"
         ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
-        # Add Sleep because leftovers issue
+        # Wait for the resources to delete
         time.sleep(120)
