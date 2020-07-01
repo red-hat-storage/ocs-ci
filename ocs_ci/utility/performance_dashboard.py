@@ -98,3 +98,29 @@ def push_perf_dashboard(
 
     json_data = {'json': json.dumps(sample_data)}
     requests.post(constants.CODESPEED_URL + 'result/add/json/', data=json_data)
+
+
+def push_to_pvc_time_dashboard(
+    interface, action, duration
+):
+    """
+    Push JSON data to time pvc dashboard
+
+    Args:
+        interface (str): The interface used for getting the results
+        action (str): Can be either creation or deletion
+        duration(str); the duration of corresponding action
+    """
+    data = initialize_data()
+    interface = (
+        constants.RBD_INTERFACE if interface == constants.CEPHBLOCKPOOL else (
+            constants.CEPHFS_INTERFACE
+        )
+    )
+    sample_data = []
+    data['benchmark'] = f"{interface}-pvc-{action}-time"
+    data['result_value'] = duration
+    sample_data.append(data.copy())
+
+    json_data = {'json': json.dumps(sample_data)}
+    requests.post(constants.CODESPEED_URL + 'result/add/json/', data=json_data)
