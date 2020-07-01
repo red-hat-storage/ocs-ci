@@ -1,6 +1,7 @@
 """
 StorageCluster related functionalities
 """
+from ocs_ci.ocs.exceptions import ResourceNotFoundError
 from ocs_ci.ocs.ocp import OCP, get_images
 from jsonschema import validate
 from ocs_ci.framework import config
@@ -393,7 +394,14 @@ def add_capacity(osd_size_capacity_requested):
     new_storage_devices_sets_count = int(device_sets_required + old_storage_devices_sets_count)
     lvpresent = localstorage.check_local_volume()
     if lvpresent:
+        ocp_obj = OCP(kind='localvolume', namespace=constants.LOCAL_STORAGE_NAMESPACE)
+        localvolume_data = ocp_obj.get(resource_name='local-block')
+        device_list = localvolume_data['spec']['storageClassDevices'][0]['devicePaths']
         final_device_list = localstorage.get_new_device_paths(device_sets_required, osd_size_capacity_requested)
+        device_list.sort()
+        final_device_list.sort()
+        if device_list == final_device_list:
+            raise ResourceNotFoundError("No Extra device found")
         param = f"""[{{ "op": "replace", "path": "/spec/storageClassDevices/0/devicePaths",
                                                  "value": {final_device_list}}}]"""
         log.info(f"Final device list : {final_device_list}")
