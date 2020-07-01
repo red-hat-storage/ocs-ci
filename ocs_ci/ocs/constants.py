@@ -937,3 +937,19 @@ LOAD_BALANCER_MODULE = "module.ipam_lb"
 
 # proxy location
 HAPROXY_LOCATION = "/etc/haproxy/haproxy.conf"
+
+# Scale constants
+SCALE_NODE_SELECTOR = {'scale-label': 'app-scale'}
+SCALE_LABEL = 'scale-label=app-scale'
+# TODO: Revisit the dict value once there is change in instance/vm/server type
+# TODO: Generic worker count value to support all kind of pods.
+# Note: Below worker count value is based on nginx pod
+# aws dict value is based on the manual execution result with m5.4xlarge instance and nginx pod
+# vmware dict value is based on each worker vm config of min 12CPU and 64G RAM
+# bm dict value is based on each worker BM machine of config 40CPU and 256G/184G RAM
+# azure dict value is based on assumption similar to vmware vms min worker config of 12CPU and 64G RAM
+SCALE_WORKER_DICT = {
+    1500: {'aws': 12, 'vmware': 15, 'bm': 5, 'azure': 15},
+    3000: {'aws': 24, 'vmware': 30, 'bm': 10, 'azure': 30},
+    4500: {'aws': 36, 'vmware': 45, 'bm': 15, 'azure': 45},
+}

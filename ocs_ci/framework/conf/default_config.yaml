@@ -32,6 +32,8 @@ RUN:
   io_in_bg: False
   io_load: 50
   log_utilization: False
+  # This config file disables scale app pods to use OCS workers
+  use_ocs_worker_for_scale: False
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
