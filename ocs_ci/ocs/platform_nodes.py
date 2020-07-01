@@ -16,7 +16,7 @@ from ocs_ci.deployment.vmware import (
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
-from ocs_ci.utility import aws, vsphere, templating, baremetal
+from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.ocs import constants, ocp, exceptions
@@ -48,9 +48,9 @@ class PlatformNodesFactory:
         self.cls_map = {
             'AWS': AWSNodes,
             'vsphere': VMWareNodes,
-            'azure': NodesBase,
             'aws': AWSNodes,
-            'baremetal': BaremetalNodes
+            'baremetal': BaremetalNodes,
+            'azure': AZURENodes
         }
 
     def get_nodes_platform(self):
@@ -1642,3 +1642,95 @@ class BaremetalNodes(NodesBase):
             default_config_dict = yaml.safe_load(f)
 
         return default_config_dict
+
+
+class AZURENodes(NodesBase):
+    """
+    Azure Nodes class
+    """
+    def __init__(self):
+        super(AZURENodes, self).__init__()
+        self.subscription_id = config.ENV_DATA.get("azure_subscription_id")
+        self.client_id = config.ENV_DATA['azure_client_id']
+        self.client_secret = config.ENV_DATA['azure_client_secret']
+        self.tenant_id = config.ENV_DATA['azure_tenant_id']
+        self.resourcegroup = config.ENV_DATA['azure_resourcegroup']
+        self.azure = azure_utils.AZURE(self.subscription_id, self.client_id,
+                                       self.client_secret, self.tenant_id, self.resourcegroup)
+
+    def stop_nodes(self, nodes):
+        raise NotImplementedError(
+            "Stop nodes functionality is not implemented"
+        )
+
+    def start_nodes(self, nodes):
+        raise NotImplementedError(
+            "Start nodes functionality is not implemented"
+        )
+
+    def restart_nodes(self, nodes, wait=True):
+        raise NotImplementedError(
+            "Restart nodes functionality is not implemented"
+        )
+
+    def get_data_volumes(self):
+        """
+        Get the data Azure volume name
+
+        Returns:
+            list: azure volume names
+
+        """
+        pvs = get_deviceset_pvs()
+        return azure_utils.get_data_volumes(pvs)
+
+    def get_node_by_attached_volume(self, volume):
+        """
+        Get the Azure Vm instance that has the volume attached to
+
+        Args:
+            volume (str): The volume to get the Azure Vm according to
+
+        Returns:
+            Vm: An Azure Vm instance
+
+        """
+        return self.azure.get_node_by_attached_volume(volume)
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        """
+        Detach a volume from an Azure Vm instance
+
+        Args:
+            volume (str): The volume to delete
+            node (Vm): An Azure Vm instance
+            delete_from_backend (bool): True for deleting the disk from the
+                storage backend, False otherwise
+
+        """
+        self.azure.detach_volume(volume, node)
+
+    def attach_volume(self, volume, node):
+        raise NotImplementedError(
+            "Attach volume functionality is not implemented"
+        )
+
+    def wait_for_volume_attach(self, volume):
+        raise NotImplementedError(
+            "Wait for volume attach functionality is not implemented"
+        )
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def attach_nodes_to_cluster(self, node_list):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )

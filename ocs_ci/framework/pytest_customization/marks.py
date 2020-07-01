@@ -17,6 +17,7 @@ from ocs_ci.ocs.constants import (
     ORDER_AFTER_OCP_UPGRADE,
     ORDER_AFTER_OCS_UPGRADE,
     ORDER_AFTER_UPGRADE,
+    CLOUD_PLATFORMS,
 )
 
 # tier marks
@@ -100,6 +101,11 @@ google_api_required = pytest.mark.skipif(
 aws_platform_required = pytest.mark.skipif(
     config.ENV_DATA['platform'].lower() != 'aws',
     reason="Test runs ONLY on AWS deployed cluster"
+)
+
+cloud_platform_required = pytest.mark.skipif(
+    config.ENV_DATA['platform'].lower() not in CLOUD_PLATFORMS,
+    reason="Test runs ONLY on cloud based deployed cluster"
 )
 
 rh_internal_lab_required = pytest.mark.skipif(
