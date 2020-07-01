@@ -14,10 +14,14 @@ from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from tests.disruption_helpers import Disruptions
 
 
-class AddCapacityWithResourceDelete:
+@ignore_leftovers
+@tier4a
+class TestAddCapacityWithResourceDelete:
     """
-    Automates delete resource while adding capacity to the cluster
+    Test add capacity when one of the resources gets deleted
+    in the middle of the process.
     """
+
     new_pods_in_status_running = False
 
     def kill_resource_repeatedly(self, resource_name, resource_id):
@@ -44,7 +48,22 @@ class AddCapacityWithResourceDelete:
                 f"New osd pods are not in status running after {timeout} seconds"
             )
 
-    def add_capacity_with_resource_delete(self, resource_name, resource_id, is_kill_resource_repeatedly=False):
+    @pytest.mark.parametrize(
+        argnames="workload_storageutilization_rbd, resource_name, resource_id, is_kill_resource_repeatedly",
+        argvalues=[
+            pytest.param(
+                *[(0.11, True, 120), constants.ROOK_OPERATOR, 0, False],
+                marks=pytest.mark.polarion_id("OCS-1206")
+            ),
+            pytest.param(
+                *[(0.11, True, 120), constants.MON_DAEMON, 0, True],
+                marks=pytest.mark.polarion_id("OCS-1207")
+            ),
+        ],
+        indirect=["workload_storageutilization_rbd"],
+    )
+    def test_add_capacity_with_resource_delete(self, workload_storageutilization_rbd, resource_name,
+                                               resource_id, is_kill_resource_repeatedly):
         """
         The function get the resource name, and id.
         The function adds capacity to the cluster, and then delete the resource while
@@ -103,57 +122,3 @@ class AddCapacityWithResourceDelete:
         ceph_health_check(
             namespace=config.ENV_DATA['cluster_namespace'], tries=80
         )
-
-
-@pytest.mark.parametrize(
-    argnames=["workload_storageutilization_rbd", "resource_name", "resource_id"],
-    argvalues=[
-        pytest.param(
-            *[(0.11, True, 120), constants.ROOK_OPERATOR, 0],
-            marks=pytest.mark.polarion_id("OCS-1206")
-        ),
-    ],
-    indirect=["workload_storageutilization_rbd"],
-)
-@ignore_leftovers
-@tier4a
-class TestAddCapacityRookOperatorPodDelete(ManageTest):
-    """
-    Test add capacity when rook operator pod gets deleted
-    in the middle of the process.
-    """
-    def test_add_capacity_with_rook_operator_pod_delete(self, workload_storageutilization_rbd,
-                                                        resource_name, resource_id):
-        """
-        Test add capacity when rook operator pod gets deleted
-        in the middle of the process.
-        """
-        a = AddCapacityWithResourceDelete()
-        a.add_capacity_with_resource_delete(resource_name, resource_id)
-
-
-@pytest.mark.parametrize(
-    argnames=["workload_storageutilization_rbd", "resource_name", "resource_id"],
-    argvalues=[
-        pytest.param(
-            *[(0.11, True, 120), constants.MON_DAEMON, 0],
-            marks=pytest.mark.polarion_id("OCS-1207")
-        ),
-    ],
-    indirect=["workload_storageutilization_rbd"],
-)
-@ignore_leftovers
-@tier4a
-class TestAddCapacityMonDaemonPodDelete(ManageTest):
-    """
-    Test add capacity when mon daemon pod gets deleted
-    in the middle of the process.
-    """
-    def test_add_capacity_with_rook_operator_pod_delete(self, workload_storageutilization_rbd,
-                                                        resource_name, resource_id):
-        """
-        Test add capacity when mon daemon pod gets deleted
-        in the middle of the process.
-        """
-        a = AddCapacityWithResourceDelete()
-        a.add_capacity_with_resource_delete(resource_name, resource_id, is_kill_resource_repeatedly=True)
