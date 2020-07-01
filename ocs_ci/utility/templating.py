@@ -222,3 +222,18 @@ def dump_data_to_json(data, json_file):
     """
     with open(json_file, 'w') as fd:
         json.dump(data, fd)
+
+
+def json_to_dict(json_file):
+    """
+    Converts JSON to dictionary format
+
+    Args:
+        json_file (str): file path to json file
+
+    Returns:
+         dict: JSON data in dictionary format
+
+    """
+    with open(json_file, 'r') as fd:
+        return json.loads(fd.read())
