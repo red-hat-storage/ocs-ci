@@ -1153,7 +1153,7 @@ def delete_cluster_buckets(cluster_name):
 
     # patterns for mcg target bucket and image-registry buckets
     patterns = [
-        f"nb.(\\d+).{cluster_name}.apps.{base_domain}",
+        f"nb.(\\d+).apps.{cluster_name}.{base_domain}",
         f"{cluster_name}-(\\w+)-image-registry-{region}-(\\w+)"
     ]
     for pattern in patterns:
