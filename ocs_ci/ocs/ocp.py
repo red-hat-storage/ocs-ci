@@ -401,19 +401,28 @@ class OCP(object):
             f"{project_name} was not deleted"
         )
 
-    def login(self, user, password):
+    def login(self, user, password=None):
         """
         Logs user in
 
         Args:
             user (str): Name of user to be logged in
-            password (str): Password of user to be logged in
+            password (str): Password of user to be logged in. If not provided
+                then kubeconfig is used to authenticate the user.
 
         Returns:
             str: output of login command
+
         """
-        command = f"oc login -u {user} -p {password}"
-        status = run_cmd(command)
+        command = f"oc login -u {user}"
+        kubeconfig = os.getenv('KUBECONFIG')
+        secrets = None
+        if password:
+            command += f" -p {password}"
+            secrets = [password]
+        elif kubeconfig:
+            command += f"--kubeconfig {kubeconfig}"
+        status = run_cmd(command, secrets=secrets)
         return status
 
     def login_as_sa(self):
@@ -422,13 +431,9 @@ class OCP(object):
 
         Returns:
             str: output of login command
+
         """
-        kubeconfig = os.getenv('KUBECONFIG')
-        command = "oc login -u system:admin "
-        if kubeconfig:
-            command += f"--kubeconfig {kubeconfig}"
-        status = run_cmd(command)
-        return status
+        return self.login('system:admin')
 
     def get_user_token(self):
         """
@@ -436,6 +441,7 @@ class OCP(object):
 
         Returns:
             str: access token
+
         """
         command = 'whoami --show-token'
         token = self.exec_oc_cmd(command, out_yaml_format=False).rstrip()

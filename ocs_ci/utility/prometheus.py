@@ -177,6 +177,7 @@ def check_query_range_result(
 class PrometheusAPI(object):
     """
     This is wrapper class for Prometheus API.
+
     """
 
     _token = None
@@ -190,16 +191,12 @@ class PrometheusAPI(object):
         Constructor for PrometheusAPI class.
 
         Args:
-            user (str): OpenShift username used to connect to API
+            user (str): OpenShift username used to connect to API.
+            password (str): Password to log into OCP. If not specified then
+                kubeconfig is used for authentication.
+
         """
         self._user = user or config.RUN['username']
-        if not password:
-            filename = os.path.join(
-                config.ENV_DATA['cluster_path'],
-                config.RUN['password_location']
-            )
-            with open(filename) as f:
-                password = f.read()
         self._password = password
         self.refresh_connection()
         self.generate_cert()
