@@ -30,7 +30,7 @@ class TestCephDefaultValuesCheck(ManageTest):
         for full_ratio in osd_full_ratios:
             ratio_value = osd_dump_dict.get(full_ratio)
             assert float(
-                round(ratio_value,2)
+                round(ratio_value, 2)
             ) == osd_full_ratios[full_ratio], (
                 f" {full_ratio} value is {ratio_value} NOT matching the "
                 f"default value {osd_full_ratios[full_ratio]}"
