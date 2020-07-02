@@ -5,6 +5,9 @@ from ocs_ci.framework.testlib import (
     E2ETest, workloads
 )
 from ocs_ci.ocs.jenkins import Jenkins
+from ocs_ci.ocs.node import (
+    get_typed_nodes, drain_nodes, schedule_nodes
+)
 from ocs_ci.ocs.constants import STATUS_COMPLETED
 
 log = logging.getLogger(__name__)
@@ -23,9 +26,9 @@ def jenkins(request):
 
 @workloads
 @pytest.mark.polarion_id("OCS-2175")
-class TestJenkinsWorkload(E2ETest):
+class TestJenkinsNodeDrain(E2ETest):
     """
-    Test running Jenkins
+    Test running Jenkins and Node Reboot
     """
     @pytest.fixture()
     def jenkins_setup(self, jenkins):
@@ -35,10 +38,21 @@ class TestJenkinsWorkload(E2ETest):
         # Deployment of jenkins
         jenkins.create_ocs_jenkins_template()
 
+    @pytest.mark.parametrize(
+        argnames=['node_type', 'num_projects', 'num_of_builds'],
+        argvalues=[
+            pytest.param(
+                *['master', 4, 8], marks=pytest.mark.polarion_id("OCS-2176")
+            ),
+        ]
+    )
     @pytest.mark.usefixtures(jenkins_setup.__name__)
-    def test_jenkins_workload_simple(self, jenkins, num_projects=1, num_of_builds=5):
+    def test_run_jenkins_drain_node(
+        self, jenkins, node_type, num_projects, num_of_builds
+    ):
         """
-        Test jenkins workload
+
+          Test jenkins workload
         """
         # Init number of projects
         jenkins.number_projects = num_projects
@@ -60,6 +74,15 @@ class TestJenkinsWorkload(E2ETest):
 
         # Start Builds
         jenkins.start_build()
+
+        # Get relevant node
+        node1 = get_typed_nodes(node_type=node_type, num_of_nodes=1)
+
+        # Node maintenance - to gracefully terminate all pods on the node
+        drain_nodes([node1[0].name])
+
+        # Make the node schedulable again
+        schedule_nodes([node1[0].name])
 
         # Wait build reach 'Complete' state
         jenkins.wait_for_build_status(status='Complete')

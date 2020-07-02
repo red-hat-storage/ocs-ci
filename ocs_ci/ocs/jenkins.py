@@ -5,6 +5,7 @@ import logging
 import re
 import time
 
+from collections import OrderedDict
 from prettytable import PrettyTable
 from ocs_ci.ocs.exceptions import (
     CommandFailed, ResourceWrongStatusException, UnexpectedBehaviour
@@ -41,9 +42,8 @@ class Jenkins(object):
 
         self.num_of_builds = num_of_builds
         self.num_of_projects = num_of_projects
-        self.build_completed = []
+        self.build_completed = OrderedDict()
         self.create_project_names()
-        self.default_sc = None
 
     @property
     def number_projects(self):
@@ -134,7 +134,9 @@ class Jenkins(object):
                         wait_for_resource_state(
                             resource=jenkins_build, state=status, timeout=timeout
                         )
-                        self.build_completed.append((jenkins_build.name, project))
+                        self.get_build_duration_time(
+                            namespace=project, build_name=jenkins_build.name
+                        )
                     except ResourceWrongStatusException:
                         ocp_obj = OCP(namespace=project, kind='build')
                         output = ocp_obj.describe(resource_name=jenkins_build.name)
@@ -144,7 +146,7 @@ class Jenkins(object):
                             f'oc describe output of {jenkins_build.name} \n:{output}'
                         )
                         log.error(error_msg)
-                        self.get_builds_logs()
+                        self.print_completed_builds_results()
                         raise UnexpectedBehaviour(error_msg)
 
     def get_jenkins_deploy_pods(self, namespace):
@@ -288,7 +290,21 @@ class Jenkins(object):
         ocs_jenkins_template_obj = OCS(**tmp_dict)
         ocs_jenkins_template_obj.create()
 
-    def get_builds_logs(self):
+    def get_build_duration_time(self, namespace, build_name):
+        """
+        get build duration time
+
+        Args:
+            namespace (str): get build in namespace
+            build_name (str): the name of the jenkins build
+        """
+        ocp_obj = OCP(namespace=namespace, kind='build')
+        output_build = ocp_obj.describe(resource_name=build_name)
+        list_build = output_build.split()
+        index = list_build.index('Duration:')
+        self.build_completed[(build_name, namespace)] = list_build[index + 1]
+
+    def print_completed_builds_results(self):
         """
 
         Get builds logs and print them on table
@@ -296,12 +312,8 @@ class Jenkins(object):
         log.info('Print builds results')
         build_table = PrettyTable()
         build_table.field_names = ["Project", "Build", "Duration"]
-        for build in self.build_completed:
-            ocp_obj = OCP(namespace=build[1], kind='build')
-            output_build = ocp_obj.describe(resource_name=build[0])
-            list_build = output_build.split()
-            index = list_build.index('Duration:')
-            build_table.add_row([build[1], build[0], list_build[index + 1]])
+        for build, time_build in self.build_completed.items():
+            build_table.add_row([build[1], build[0], time_build])
         log.info(f'\n{build_table}\n')
 
     def cleanup(self):

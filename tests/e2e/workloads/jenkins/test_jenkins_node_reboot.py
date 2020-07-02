@@ -2,10 +2,12 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import (
-    E2ETest, workloads
+    E2ETest, workloads, ignore_leftovers
 )
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.constants import STATUS_COMPLETED
+from ocs_ci.ocs.node import get_typed_nodes
+
 
 log = logging.getLogger(__name__)
 
@@ -21,11 +23,11 @@ def jenkins(request):
     return jenkins
 
 
+@ignore_leftovers
 @workloads
-@pytest.mark.polarion_id("OCS-2175")
-class TestJenkinsWorkload(E2ETest):
+class TestJenkinsNodeReboot(E2ETest):
     """
-    Test running Jenkins
+    Test running Jenkins and Node Reboot
     """
     @pytest.fixture()
     def jenkins_setup(self, jenkins):
@@ -35,8 +37,18 @@ class TestJenkinsWorkload(E2ETest):
         # Deployment of jenkins
         jenkins.create_ocs_jenkins_template()
 
+    @pytest.mark.parametrize(
+        argnames=['node_type', 'num_projects', 'num_of_builds'],
+        argvalues=[
+            pytest.param(
+                *['master', 4, 6], marks=pytest.mark.polarion_id("OCS-2202")
+            ),
+        ]
+    )
     @pytest.mark.usefixtures(jenkins_setup.__name__)
-    def test_jenkins_workload_simple(self, jenkins, num_projects=1, num_of_builds=5):
+    def test_run_jenkins_reboot_node(
+        self, jenkins, nodes, node_type, num_projects, num_of_builds
+    ):
         """
         Test jenkins workload
         """
@@ -60,6 +72,12 @@ class TestJenkinsWorkload(E2ETest):
 
         # Start Builds
         jenkins.start_build()
+
+        # Get relevant node
+        node1 = get_typed_nodes(node_type=node_type, num_of_nodes=1)
+
+        # Reboot relevant node
+        nodes.restart_nodes(node1)
 
         # Wait build reach 'Complete' state
         jenkins.wait_for_build_status(status='Complete')
