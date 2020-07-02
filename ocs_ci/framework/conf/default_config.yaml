@@ -110,7 +110,7 @@ ENV_DATA:
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
   # Default RHCOS image to be used for VmWare deployment
-  vm_template: 'rhcos-4.5.0-0.nightly-2020-03-18-115438-x86_64-vmware.x86_64'
+  vm_template: 'rhcos-45.81.202005200134-0-vmware.x86_64'
   # minimal write speed of fio as used in workload_fio_storageutilization
   # fixtures, which is used to compute timeout of the write job (so that
   # when actual write speed of the operation is smaller than this value, the
