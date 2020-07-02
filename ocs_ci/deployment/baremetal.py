@@ -355,6 +355,7 @@ class BAREMETALUPI(Deployment):
                 f"cluster --type merge --patch {patch}"
             )
 
+
 def clean_disk():
     """
     Perform disk cleanup
