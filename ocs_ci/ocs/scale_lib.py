@@ -565,9 +565,10 @@ def check_and_add_enough_worker(worker_count):
         if not scale_worker:
             for node_item in ocs_worker_list:
                 worker_list.remove(node_item)
-            helpers.label_worker_node(
-                node_list=worker_list, label_key='scale-label', label_value='app-scale'
-            )
+            if worker_list:
+                helpers.label_worker_node(
+                    node_list=worker_list, label_key='scale-label', label_value='app-scale'
+                )
     scale_worker_list = machine.get_labeled_nodes(constants.SCALE_LABEL)
     logging.info(f"Print existing scale worker {scale_worker_list}")
 
