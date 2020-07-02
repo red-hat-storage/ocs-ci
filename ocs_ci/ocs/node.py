@@ -465,6 +465,39 @@ def get_node_resource_utilization_from_oc_describe(
     return utilization_dict
 
 
+def get_running_pod_count_from_node(
+    nodename=None, node_type=constants.WORKER_MACHINE
+):
+    """
+    Gets the node running pod count using oc describe node
+
+    Args:
+        nodename (str) : The node name
+        node_type (str) : The node type (e.g. master, worker)
+
+    Returns:
+        dict : Node name and its pod_count
+
+    """
+
+    node_names = [nodename] if nodename else [
+        node.name for node in get_typed_nodes(node_type=node_type)
+    ]
+    obj = ocp.OCP()
+    pod_count_dict = {}
+    for node in node_names:
+        output = obj.exec_oc_cmd(
+            command=f"describe node {node}", out_yaml_format=False
+        ).split("\n")
+        for line in output:
+            if 'Non-terminated Pods:  ' in line:
+                count_line = line.split(' ')
+                pod_count = re.findall(r'\d+', [i for i in count_line if i][2])
+        pod_count_dict[node] = int(pod_count[0])
+
+    return pod_count_dict
+
+
 def print_table_node_resource_utilization(utilization_dict, field_names):
     """
     Print table of node utilization

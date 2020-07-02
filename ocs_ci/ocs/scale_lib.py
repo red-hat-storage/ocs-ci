@@ -316,7 +316,7 @@ def check_enough_resource_available_in_workers(ms_name=None, pod_dict_path=None)
             # TODO: Revisit the expected_count value once there is support for
             # TODO: more pod creation in one worker node
             if add_worker_based_on_pods_count_per_node(
-                machineset_name=ms_name, node_count=1, expected_count=200,
+                machineset_name=ms_name, node_count=1, expected_count=140,
                 role_type='app,worker'
             ):
                 logging.info("Nodes added for app pod creation")
@@ -553,18 +553,18 @@ def check_and_add_enough_worker(worker_count):
     """
     # Check either to use OCS workers for scaling app pods
     # Further continue to label the worker with scale label else not
+    worker_list = helpers.get_worker_nodes()
+    ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+    scale_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
     if config.RUN.get('use_ocs_worker_for_scale'):
-        worker_list = helpers.get_worker_nodes()
-        if not machine.get_labeled_nodes(constants.SCALE_LABEL):
+        if not scale_worker:
             helpers.label_worker_node(
                 node_list=worker_list, label_key='scale-label', label_value='app-scale'
             )
     else:
-        worker_list = helpers.get_worker_nodes()
-        if not machine.get_labeled_nodes(constants.SCALE_LABEL):
-            for worker in worker_list:
-                if worker in machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL):
-                    worker_list.remove(worker)
+        if not scale_worker:
+            for node_item in ocs_worker_list:
+                worker_list.remove(node_item)
             helpers.label_worker_node(
                 node_list=worker_list, label_key='scale-label', label_value='app-scale'
             )
@@ -612,14 +612,17 @@ def check_and_add_enough_worker(worker_count):
             for ms in ms_name:
                 machine.wait_for_new_node_to_be_ready(ms)
             worker_list = helpers.get_worker_nodes()
-            for worker in worker_list:
-                if worker in machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL):
-                    worker_list.remove(worker)
-                elif worker in machine.get_labeled_nodes(constants.SCALE_LABEL):
-                    worker_list.remove(worker)
-            helpers.label_worker_node(
-                node_list=worker_list, label_key='scale-label', label_value='app-scale'
-            )
+            ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+            scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
+            ocs_worker_list.extend(scale_label_worker)
+            final_list = list(dict.fromkeys(ocs_worker_list))
+            for node_item in final_list:
+                if node_item in worker_list:
+                    worker_list.remove(node_item)
+            if worker_list:
+                helpers.label_worker_node(
+                    node_list=worker_list, label_key='scale-label', label_value='app-scale'
+                )
             return True
         elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'vsphere':
             raise UnsupportedPlatformError("Unsupported Platform to add worker")
