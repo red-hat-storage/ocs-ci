@@ -987,9 +987,11 @@ def create_build_from_docker_image(
     base_image = source_image + ':' + source_image_label
     cmd = f'yum install -y {install_package}'
     if 'http_proxy' in config.ENV_DATA:
-        PROXY_URL = config.ENV_DATA['http_proxy']
+        proxy_url = config.ENV_DATA.get(
+            'https_proxy', config.ENV_DATA['http_proxy']
+        )
         cmd = (
-            f"http_proxy={PROXY_URL} https_proxy={PROXY_URL} "
+            f"http_proxy={proxy_url} https_proxy={proxy_url} "
             f"yum install -y {install_package}"
         )
 
