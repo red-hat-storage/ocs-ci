@@ -22,6 +22,7 @@ import requests
 import yaml
 from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
+from paramiko.auth_handler import AuthenticationException, SSHException
 from semantic_version import Version
 from tempfile import NamedTemporaryFile
 
@@ -1610,7 +1611,7 @@ def check_if_executable_in_path(exec_name):
     return which(exec_name) is not None
 
 
-def upload_file(server, localpath, remotepath, user=None, password=None):
+def upload_file(server, localpath, remotepath, user=None, password=None, key_file=None):
     """
     Upload a file to remote server
 
@@ -1623,16 +1624,25 @@ def upload_file(server, localpath, remotepath, user=None, password=None):
     """
     if not user:
         user = 'root'
-
-    ssh = SSHClient()
-    ssh.set_missing_host_key_policy(
-        AutoAddPolicy())
-    ssh.connect(hostname=server, username=user, password=password)
-    sftp = ssh.open_sftp()
-    log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
-    sftp.put(localpath, remotepath)
-    sftp.close()
-    ssh.close()
+    try:
+        ssh = SSHClient()
+        ssh.set_missing_host_key_policy(AutoAddPolicy())
+        if password:
+            ssh.connect(hostname=server, username=user, password=password)
+        else:
+            log.info(key_file)
+            ssh.connect(hostname=server, username=user, key_filename=key_file)
+        sftp = ssh.open_sftp()
+        log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
+        sftp.put(localpath, remotepath)
+        sftp.close()
+        ssh.close()
+    except AuthenticationException as authException:
+        log.error(f"Authentication failed: {authException}")
+        raise authException
+    except SSHException as sshException:
+        log.error(f"SSH connection failed: {sshException}")
+        raise sshException
 
 
 def read_file_as_str(filepath):
