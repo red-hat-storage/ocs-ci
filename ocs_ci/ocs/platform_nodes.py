@@ -1668,42 +1668,89 @@ class AZURENodes(NodesBase):
             "Start nodes functionality is not implemented"
         )
 
-    def restart_nodes(self, nodes, wait=True):
-        raise NotImplementedError(
-            "Restart nodes functionality is not implemented"
-        )
+    def restart_nodes(self, nodes, timeout=540, wait=True):
+        """
+        Restart Azure vm instances
+
+        Args:
+            nodes (list): The OCS objects of the nodes / Azure Vm instance
+            wait (bool): True if need to wait till the restarted node reaches
+                READY state. False otherwise
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+
+        """
+        if not nodes:
+            logger.error("No nodes found for restarting")
+            raise ValueError
+        node_names = [n.name for n in nodes]
+        for node_name in node_names:
+            self.azure.restart_az_vm_instance(node_name)
+
+        if wait:
+            """
+            When reboot is initiated on an instance from the Azure, the
+            instance stays at "Running" state throughout the reboot operation.
+
+            Once the OCP node detects that the node is not reachable then the
+            node reaches status NotReady.
+            When the reboot operation is completed and the instance is
+            reachable the OCP node reaches status Ready.
+            """
+            logger.info(
+                f"Waiting for nodes: {node_names} to reach not ready state"
+            )
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_NOT_READY,
+                timeout=timeout
+            )
+            logger.info(
+                f"Waiting for nodes: {node_names} to reach ready state"
+            )
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY,
+                timeout=timeout
+            )
 
     def get_data_volumes(self):
         """
-        Get the data Azure volume name
+        Get the data Azure disk objects
 
         Returns:
-            list: azure volume names
+            list: azure disk objects
 
         """
         pvs = get_deviceset_pvs()
-        return azure_utils.get_data_volumes(pvs)
+        return self.azure.get_data_volumes(pvs)
 
     def get_node_by_attached_volume(self, volume):
         """
-        Get the Azure Vm instance that has the volume attached to
+        Get node OCS object of the Azure vm instance that has the volume attached to
 
         Args:
-            volume (str): The volume to get the Azure Vm according to
+            volume (Disk): The disk object to get the Azure Vm according to
 
         Returns:
-            Vm: An Azure Vm instance
+            OCS: The OCS object of the Azure Vm instance
 
         """
-        return self.azure.get_node_by_attached_volume(volume)
+        vm = self.azure.get_node_by_attached_volume(volume)
+        all_nodes = get_node_objs()
+        nodes = [
+            n for n in all_nodes if n.name == vm.name
+        ]
+        assert nodes, (
+            f"Failed to find the OCS object for Azure Vm instance {vm.name}"
+        )
+        return nodes[0]
 
     def detach_volume(self, volume, node=None, delete_from_backend=True):
         """
         Detach a volume from an Azure Vm instance
 
         Args:
-            volume (str): The volume to delete
-            node (Vm): An Azure Vm instance
+            volume (Disk): The disk object required to delete a volume
+            node (OCS): The OCS object representing the node
             delete_from_backend (bool): True for deleting the disk from the
                 storage backend, False otherwise
 
@@ -1716,9 +1763,33 @@ class AZURENodes(NodesBase):
         )
 
     def wait_for_volume_attach(self, volume):
-        raise NotImplementedError(
-            "Wait for volume attach functionality is not implemented"
-        )
+        """
+        Wait for a Disk to be attached to an Azure Vm instance.
+        This is used as when detaching the Disk from the Azure Vm instance,
+        re-attach should take place automatically
+
+        Args:
+            volume (Disk): The Disk to wait for to be attached
+
+        Returns:
+            bool: True if the volume has been attached to the
+                instance, False otherwise
+
+        """
+        try:
+            for sample in TimeoutSampler(
+                300, 3, self.azure.get_disk_state, volume.name
+            ):
+                logger.info(
+                    f"Volume id: {volume.name} has status: {sample}"
+                )
+                if sample == "Attached":
+                    return True
+        except TimeoutExpiredError:
+            logger.error(
+                f"Volume {volume.name} failed to be attached to an Azure Vm instance"
+            )
+            return False
 
     def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
         raise NotImplementedError(
