@@ -614,7 +614,7 @@ class CephCluster(object):
 
         ceph_pod = pod.get_ceph_tools_pod()
         ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph status")
-        ceph_health = ceph_status['health']['status']
+        ceph_health = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph health")
         total_pg_count = ceph_status['pgmap']['num_pgs']
         pg_states = ceph_status['pgmap']['pgs_by_state']
         logger.info(ceph_health)
