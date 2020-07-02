@@ -54,7 +54,7 @@ class TestScaleOSDsRebootNodes(E2ETest):
         current_osd_count = count_cluster_osd()
         proj_obj = project_factory()
         if current_osd_count == 3:
-            while not validate_osd_utilization(osd_used=50):
+            while not validate_osd_utilization(osd_used=10):
                 # Create pvc
                 pvc_objs = multi_pvc_factory(
                     project=proj_obj,
@@ -88,7 +88,7 @@ class TestScaleOSDsRebootNodes(E2ETest):
             selector='app=rook-ceph-osd',
             resource_count=count * 3
         )
-        assert ceph_health_check(), "New OSDs failed to reach running state"
+        assert ceph_health_check(delay=120, tries=50), "New OSDs failed to reach running state"
 
         cluster = CephCluster()
 
