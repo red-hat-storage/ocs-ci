@@ -615,7 +615,7 @@ def check_and_add_enough_worker(worker_count):
             for worker in worker_list:
                 if worker in machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL):
                     worker_list.remove(worker)
-                if worker in machine.get_labeled_nodes(constants.SCALE_LABEL):
+                elif worker in machine.get_labeled_nodes(constants.SCALE_LABEL):
                     worker_list.remove(worker)
             helpers.label_worker_node(
                 node_list=worker_list, label_key='scale-label', label_value='app-scale'
