@@ -99,7 +99,7 @@ class TestAMQPodRespin(E2ETest):
 
         # Validate and collect the results
         log.info("Wait till amq benchmark run complete")
-        self.thread.join()
+        self.thread.join(timeout=3600)
         result = self.queue.get()
         log.info("Validate amq benchmark is run completely")
         assert self.amq.validate_amq_benchmark(
