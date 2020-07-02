@@ -646,7 +646,7 @@ def get_node_name(node_obj):
     Get oc node's name
 
     Args:
-        node_obj: (node_obj) oc node object
+        node_obj (node_obj): oc node object
 
     Returns:
         str: node's name
