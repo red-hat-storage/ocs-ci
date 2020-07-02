@@ -983,10 +983,22 @@ def create_build_from_docker_image(
         fails
 
     """
+
     base_image = source_image + ':' + source_image_label
-    docker_file = (f"FROM {base_image}\n "
-                   f"RUN yum install -y {install_package}\n "
-                   f"CMD tail -f /dev/null")
+    cmd = f'yum install -y {install_package}'
+    if 'http_proxy' in config.ENV_DATA:
+        PROXY_URL = config.ENV_DATA['http_proxy']
+        cmd = (
+            f"http_proxy={PROXY_URL} https_proxy={PROXY_URL} "
+            f"yum install -y {install_package}"
+        )
+
+    docker_file = (
+        f"FROM {base_image}\n "
+        f" RUN {cmd}\n"
+        f"CMD tail -f /dev/null"
+    )
+
     command = f"new-build -D $\'{docker_file}\' --name={image_name}"
     kubeconfig = os.getenv('KUBECONFIG')
 
