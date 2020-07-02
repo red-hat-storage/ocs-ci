@@ -639,3 +639,18 @@ def get_ocs_nodes(num_of_nodes=None):
     num_of_nodes = num_of_nodes or len(ocs_nodes)
 
     return ocs_nodes[:num_of_nodes]
+
+
+def get_node_name(node_obj):
+    """
+    Get oc node's name
+
+    Args:
+        node_obj (node_obj): oc node object
+
+    Returns:
+        str: node's name
+
+    """
+    node_items = node_obj.get('items')
+    return node_items['metadata']['name']
