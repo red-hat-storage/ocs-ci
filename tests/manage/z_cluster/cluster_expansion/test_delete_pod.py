@@ -69,14 +69,14 @@ class TestAddCapacityWithResourceDelete:
     @pytest.mark.parametrize(
         argnames="workload_storageutilization_rbd, resource_name, resource_id, is_kill_resource_repeatedly",
         argvalues=[
-            # pytest.param(
-            #     *[(0.11, True, 120), constants.OSD, 0, False],
-            #     marks=pytest.mark.polarion_id("OCS-1203")
-            # ),
-            # pytest.param(
-            #     *[(0.11, True, 120), constants.ROOK_OPERATOR, 0, False],
-            #     marks=pytest.mark.polarion_id("OCS-1206")
-            # ),
+            pytest.param(
+                *[(0.11, True, 120), constants.OSD, 0, False],
+                marks=pytest.mark.polarion_id("OCS-1203")
+            ),
+            pytest.param(
+                *[(0.11, True, 120), constants.ROOK_OPERATOR, 0, False],
+                marks=pytest.mark.polarion_id("OCS-1206")
+            ),
             pytest.param(
                 *[(0.11, True, 120), constants.MON_DAEMON, 0, True],
                 marks=pytest.mark.polarion_id("OCS-1207")
