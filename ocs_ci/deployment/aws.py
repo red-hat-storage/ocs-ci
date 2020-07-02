@@ -17,7 +17,8 @@ from ocs_ci.ocs.parallel import parallel
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import (
-    AWS as AWSUtil, terminate_rhel_workers, destroy_volumes, get_rhel_worker_instances
+    AWS as AWSUtil, delete_cluster_buckets, destroy_volumes,
+    get_rhel_worker_instances, terminate_rhel_workers
 )
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.retry import retry
@@ -278,6 +279,7 @@ class AWSIPI(AWSBase):
             log_level (str): log level openshift-installer (default: DEBUG)
         """
         destroy_volumes(self.cluster_name)
+        delete_cluster_buckets(self.cluster_name)
         super(AWSIPI, self).destroy_cluster(log_level)
 
 
@@ -828,6 +830,9 @@ class AWSUPI(AWSBase):
 
         # Destroy extra volumes
         destroy_volumes(cluster_name)
+
+        # Destroy buckets
+        delete_cluster_buckets(self.cluster_name)
 
         # Delete master, bootstrap, security group, and worker stacks
         suffixes = ['ma', 'bs', 'sg']
