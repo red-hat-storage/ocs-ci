@@ -18,14 +18,18 @@ def create_pvcs_and_pods(
     """
     def factory(
         pvc_size=3,
+        dc_for_rwx=1,
         access_modes_rbd=None,
         access_modes_cephfs=None,
         num_of_rbd_pvc=None,
-        num_of_cephfs_pvc=None
+        num_of_cephfs_pvc=None,
+        replica_count=1
     ):
         """
         Args:
             pvc_size (int): The requested size for the PVC in GB
+            dc_for_rwx (int): Number of deploymentconfig to be created if PVC
+                access mode is RWX
             access_modes_rbd (list): List of access modes. One of the
                 access modes will be chosen for creating each PVC. To specify
                 volume mode, append volume mode in the access mode name
@@ -40,6 +44,7 @@ def create_pvcs_and_pods(
             num_of_cephfs_pvc (int): Number of cephfs PVCs to be created.
                 Value should be greater than or equal to the number of
                 elements in the list 'access_modes_cephfs'
+            replica_count (int): The replica count for deployment config
         Returns:
             list: OCS instance of pods
         """
@@ -80,31 +85,36 @@ def create_pvcs_and_pods(
 
         sa_obj = service_account_factory(project=project)
 
+        # Create pods
         pods_dc = []
         for pvc_obj in pvcs:
             if constants.CEPHFS_INTERFACE in pvc_obj.storageclass.name:
                 interface = constants.CEPHFILESYSTEM
             else:
                 interface = constants.CEPHBLOCKPOOL
-            # Create pods. Create 2 pods if PVC access mode is RWX
-            pod_dc_objs = [
-                pod_factory(
+
+            num_dc = dc_for_rwx if pvc_obj.access_mode == constants.ACCESS_MODE_RWX else 1
+            for _ in range(num_dc):
+                pod_dc = pod_factory(
                     interface=interface, pvc=pvc_obj,
                     pod_dict_path=constants.FEDORA_DC_YAML,
                     raw_block_pv=pvc_obj.volume_mode == 'Block',
                     deployment_config=True, service_account=sa_obj,
-                ) for _ in range(
-                    int(pvc_obj.access_mode != constants.ACCESS_MODE_RWX), 2
+                    replica_count=replica_count
                 )
-            ]
-            pods_dc.extend(pod_dc_objs)
+                pod_dc.pvc = pvc_obj
+                pods_dc.append(pod_dc)
 
+        # Get pod objects
         pods = []
         for pod_dc in pods_dc:
-            pods.extend(pod.get_all_pods(
+            pod_objs = pod.get_all_pods(
                 namespace=project.namespace, selector=[pod_dc.name],
                 selector_label='name'
-            ))
+            )
+            for pod_obj in pod_objs:
+                pod_obj.pvc = pod_dc.pvc
+            pods.extend(pod_objs)
 
         log.info(
             f"Created {len(pvcs_cephfs)} cephfs PVCs and {len(pvcs_rbd)} rbd "

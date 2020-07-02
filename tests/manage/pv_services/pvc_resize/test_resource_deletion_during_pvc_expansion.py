@@ -51,7 +51,7 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
         Create PVCs and pods
 
         """
-        self.pvcs, self.pods = create_pvcs_and_pods(pvc_size=10)
+        self.pvcs, self.pods = create_pvcs_and_pods(pvc_size=10, dc_for_rwx=2)
 
     def test_resource_deletion_during_pvc_expansion(self, resource_to_delete):
         """
