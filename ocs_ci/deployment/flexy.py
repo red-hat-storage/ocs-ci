@@ -8,14 +8,14 @@ import yaml
 import io
 import configparser
 import subprocess
-from subprocess import list2cmdline, CalledProcessError
+from subprocess import CalledProcessError
 import shlex
 import shutil
 
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
-    get_ocp_version, clone_repo
+    get_ocp_version, clone_repo, run_cmd
 )
 from ocs_ci.ocs import exceptions
 
@@ -30,6 +30,11 @@ def flexy_post_processing(func):
     Args:
         func : run_container function
     """
+    secret_cmd = (
+        f"oc set data secret/pull-secret "
+        f"-n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
+        f"--from-file=.dockerconfigjson={constants.DATA_DIR}/pull-secret"
+    )
     # Check whether its a jenkins run
     if is_jenkins_mount():
         def wrapper(*args, **kwargs):
@@ -43,9 +48,23 @@ def flexy_post_processing(func):
                     constants.FLEXY_HOST_DIR_PATH,
                     flexy_nfs_path
                 )
+                chmod = (
+                    f"sudo chmod -R 777 {flexy_nfs_path}"
+                )
+                run_cmd(chmod)
+                # Apply pull secrets on ocp cluster
+                run_cmd(secret_cmd)
         return wrapper
     else:
-        return func
+        def wrapper(*args, **kwargs):
+            func(*args, **kwargs)
+            if 'destroy' not in args[1]:
+                # recursively change permissions
+                # for all the subdirs
+                chmod = f"sudo chmod -R 777 {constants.FLEXY_HOST_DIR_PATH}"
+                run_cmd(chmod)
+                run_cmd(secret_cmd)
+        return wrapper
 
 
 def is_jenkins_mount():
@@ -80,12 +99,13 @@ class FlexyBase(object):
             'flexy_mnt_container_dir', constants.FLEXY_MNT_CONTAINER_DIR
         )
         self.flexy_img_url = config.ENV_DATA.get('flexy_img_url')
+        self.template_file = None
 
         # If user has provided an absolute path for env file
         # then we don't clone private-conf repo else
         # we will look for 'flexy_private_conf_url' , if not specified
         # we will go ahead with default 'flexy-ocs-private' repo
-        if not config.ENV_DATA.get('flexy-env-file'):
+        if not config.ENV_DATA.get('flexy_env_file'):
             self.flexy_private_conf_url = config.ENV_DATA.get(
                 'flexy_private_conf_url',
                 constants.FLEXY_DEFAULT_PRIVATE_CONF_URL
@@ -103,7 +123,7 @@ class FlexyBase(object):
                 self.flexy_host_private_conf_dir_path, constants.FLEXY_DEFAULT_ENV_FILE
             )
         else:
-            self.flexy_env_file = config.ENV_DATA['flexy-env-file']
+            self.flexy_env_file = config.ENV_DATA['flexy_env_file']
 
     def deploy_prereq(self):
         """
@@ -120,7 +140,7 @@ class FlexyBase(object):
         # then no need of clone else continue with default
         # private-conf repo and branch
 
-        if not config.ENV_DATA.get('flexy-env-file'):
+        if not config.ENV_DATA.get('flexy_env_file'):
             self.clone_and_unlock_ocs_private_conf()
             config.FLEXY['VARIABLES_LOCATION'] = os.path.join(
                 constants.OPENSHIFT_MISC_BASE, self.template_file
@@ -149,7 +169,8 @@ class FlexyBase(object):
             universal_newlines=True
         ) as p:
             for line in p.stdout:
-                logger.info(line)
+                logger.info(line.strip())
+            p.communicate()
             if p.returncode:
                 logger.error("Flexy command failed")
                 raise CalledProcessError(p.returncode, p.args)
@@ -162,8 +183,7 @@ class FlexyBase(object):
         """
         cmd = shlex.split("sudo podman run --rm=true")
         flexy_container_args = self.build_container_args()
-        cmd_string = list2cmdline(cmd + flexy_container_args)
-        return cmd_string
+        return cmd + flexy_container_args
 
     def build_destroy_cmd(self):
         """
@@ -172,8 +192,7 @@ class FlexyBase(object):
         """
         cmd = shlex.split("sudo podman run --rm=true")
         flexy_container_args = self.build_container_args('destroy')
-        cmd_string = list2cmdline(cmd + flexy_container_args + ['destroy'])
-        return cmd_string
+        return cmd + flexy_container_args + ['destroy']
 
     def build_container_args(self, purpose=''):
         """
@@ -210,7 +229,8 @@ class FlexyBase(object):
                 flexy_dir = self.flexy_host_dir
             args.append(
                 f"--mount=type=bind,source={flexy_dir},"
-                f"destination={self.flexy_mnt_container_dir}"
+                f"destination={self.flexy_mnt_container_dir},"
+                f'{["relabel=shared", ""][is_jenkins_mount()]}'
             )
         else:
             args.append(
@@ -232,14 +252,8 @@ class FlexyBase(object):
             self.flexy_private_conf_branch
         )
         # git-crypt unlock /path/to/keyfile
-        cp = subprocess.run(
-            f'git-crypt unlock {constants.FLEXY_GIT_CRYPT_KEYFILE}',
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd=self.flexy_host_private_conf_dir_path
-        )
-        if cp.returncode:
-            raise exceptions.CommandFailed(cp.stderr)
+        cmd = f'git-crypt unlock {constants.FLEXY_GIT_CRYPT_KEYFILE}'
+        run_cmd(cmd, cwd=self.flexy_host_private_conf_dir_path)
         logger.info("Unlocked the git repo")
 
     def merge_flexy_env(self):
@@ -308,7 +322,7 @@ class FlexyBaremetalPSI(FlexyBase):
     """
     def __init__(self):
         super().__init__()
-        if not config.ENV_DATA.get('flexy-env-file'):
+        if not config.ENV_DATA.get('flexy_env_file'):
             if not config.ENV_DATA.get('template_file_path'):
                 self.template_file = os.path.join(
                     constants.OPENSHIFT_MISC_BASE,
@@ -321,7 +335,7 @@ class FlexyBaremetalPSI(FlexyBase):
     def deploy_prereq(self):
         super().deploy_prereq()
 
-    def deploy(self, log_level='debug'):
+    def deploy(self, log_level=''):
         """
         build and invoke flexy deployer here
 
@@ -329,9 +343,12 @@ class FlexyBaremetalPSI(FlexyBase):
             log_level (str): log level for flexy container
 
         """
+        # Ignoring log_level for now as flexy
+        # only works with 'debug' option
+        if log_level:
+            pass
         cmd = self.build_install_cmd()
-        run_cmd = " ".join([cmd, log_level])
-        self.run_container(run_cmd)
+        self.run_container(cmd)
 
     def destroy(self):
         """

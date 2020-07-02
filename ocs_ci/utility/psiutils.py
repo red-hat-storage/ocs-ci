@@ -22,10 +22,10 @@ class PSIUtils(object):
     """
     def __init__(self, psi_conf):
         self.auth_url = psi_conf['auth_url']
-        self.username = psi_conf.get['username']
-        self.password = psi_conf.get['password']
-        self.project_id = psi_conf.get['project_id']
-        self.user_domain_name = psi_conf.get['user_domain_name']
+        self.username = psi_conf['username']
+        self.password = psi_conf['password']
+        self.project_id = psi_conf['project_id']
+        self.user_domain_name = psi_conf['user_domain_name']
 
         self.loader = loading.get_plugin_loader('password')
         self.auth = self.loader.load_from_options(
@@ -75,18 +75,17 @@ class PSIUtils(object):
 
         return vol
 
-    def attach_volume(self, vol, instance_id, mnt_pnt):
+    def attach_volume(self, vol, instance_id):
         """
         Attach the given volume to the specific PSI openstack instance
 
         Args:
             vol (Volume): cinder volume object
             instance_id (str): uuid of the instance
-            mnt_pnt (str): path where volume will be mounted
 
         """
-        self.cinder_clnt.volumes.attach(
-            vol, instance_id, mnt_pnt
+        self.nova_clnt.volumes.create_server_volume(
+            instance_id, vol.id
         )
 
     def get_instances_with_pattern(self, pattern):
@@ -138,8 +137,8 @@ class PSIUtils(object):
                 v.detach()
                 v.get()
                 sample = TimeoutSampler(
-                    60,
-                    1,
+                    100,
+                    5,
                     self.check_expected_vol_status,
                     vol=v,
                     expected_state='available'
@@ -150,8 +149,8 @@ class PSIUtils(object):
 
             v.delete()
             sample = TimeoutSampler(
-                60,
-                2,
+                100,
+                5,
                 self.check_vol_deleted,
                 vol=v
             )

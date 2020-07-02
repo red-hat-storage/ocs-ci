@@ -69,6 +69,7 @@ def init_ocsci_conf(arguments=None):
     parser.add_argument('--ocs-registry-image')
     parser.add_argument(
         '--flexy-env-file',
+        default='',
         help="Path to flexy env file"
     )
     args, unknown = parser.parse_known_args(args=arguments)
@@ -97,7 +98,7 @@ def init_ocsci_conf(arguments=None):
         )
         load_config([ocp_version_config])
     if args.flexy_env_file:
-        framework.config.ENV_DATA['flexy-env-file'] = args.flexy_env_file
+        framework.config.ENV_DATA['flexy_env_file'] = args.flexy_env_file
 
     framework.config.RUN['run_id'] = int(time.time())
     bin_dir = framework.config.RUN.get('bin_dir')

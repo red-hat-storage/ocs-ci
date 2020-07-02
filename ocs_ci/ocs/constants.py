@@ -909,6 +909,7 @@ FLEXY_DEFAULT_PRIVATE_CONF_URL = 'git@gitlab.cee.redhat.com:ocs/flexy-ocs-privat
 FLEXY_JENKINS_USER = "jenkins"
 JENKINS_NFS_CURRENT_CLUSTER_DIR = "/home/jenkins/current-cluster-dir"
 FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
+OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"

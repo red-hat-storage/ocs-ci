@@ -2,11 +2,13 @@ import logging
 import os
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, exceptions
 from .deployment import Deployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from .flexy import FlexyBaremetalPSI
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler, load_auth_config
+from ocs_ci.utility.utils import (
+    run_cmd, TimeoutSampler, load_auth_config, get_infra_id
+)
 from ocs_ci.utility import psiutils
 
 from ocs_ci.deployment.deployment import Deployment
@@ -39,6 +41,7 @@ class BaremetalPSIUPI(Deployment):
             super().__init__()
             self.flexy_instance = FlexyBaremetalPSI()
             self.psi_conf = load_auth_config()['psi']
+            logger.info(self.psi_conf)
             self.utils = psiutils.PSIUtils(self.psi_conf)
 
         def deploy_prereq(self):
@@ -49,18 +52,20 @@ class BaremetalPSIUPI(Deployment):
             super().deploy_prereq()
             self.flexy_instance.deploy_prereq()
 
-        def deploy(self):
-            self.flexy_instance.deploy()
+        def deploy(self, log_level=''):
+            self.flexy_instance.deploy(log_level)
             # Point cluster_path to cluster-dir created by flexy
             abs_cluster_path = os.path.abspath(self.cluster_path)
             flexy_cluster_path = os.path.join(
-                self.flexy_instance.flexy_mnt_host_dir,
+                self.flexy_instance.flexy_host_dir,
                 'flexy/workdir/install-dir'
             )
             logger.info(
                 "Symlinking %s to %s", abs_cluster_path, flexy_cluster_path
             )
-            os.symlink(abs_cluster_path, flexy_cluster_path)
+            if os.path.exists(abs_cluster_path):
+                os.rmdir(abs_cluster_path)
+            os.symlink(flexy_cluster_path, abs_cluster_path)
             self.test_cluster()
             # We need NTP for OCS cluster to become clean
             logger.info("creating ntp chrony")
@@ -68,21 +73,28 @@ class BaremetalPSIUPI(Deployment):
             # add disks to instances
             # Get all instances and for each instance add
             # one disk
-            pattern = config.ENV_DATA['cluster_name']
+            pattern = "-".join(
+                [get_infra_id(config.ENV_DATA['cluster_path']), "compute"]
+            )
             for instance in self.utils.get_instances_with_pattern(pattern):
                 vol = self.utils.create_volume(
-                    name='disk0',
-                    size=config.ENV_DATA['volume_size'],
+                    name=f'{pattern}-disk0-{instance.name[-1]}',
+                    size=config.FLEXY['volume_size'],
                 )
                 # wait till volume is available
-                for res in TimeoutSampler(300, 10, vol.status == "available"):
-                    if not res:
-                        logger("waiting for volume to be avaialble")
-
+                sample = TimeoutSampler(
+                    300, 10,
+                    self.utils.check_expected_vol_status,
+                    vol,
+                    'available'
+                )
+                if not sample.wait_for_func_status(True):
+                    logger.info("Volume failed to reach 'available'")
+                    raise exceptions.PSIVolumeNotInExpectedState
                 # attach the volume
-                self.utils.attach_volume(vol, instance.id, "/dev/vdb")
+                self.utils.attach_volume(vol, instance.id)
 
-        def destroy(self):
+        def destroy(self, log_level=''):
             """
             Destroy volumes attached if any and then the cluster
             """
@@ -90,5 +102,5 @@ class BaremetalPSIUPI(Deployment):
             volumes = self.utils.get_volumes_with_tag(
                 {'cluster_name': config.ENV_DATA['cluster_name']}
             )
-            self.utils.detach_and_delete_vols(volumes)
             self.flexy_instance.destroy()
+            self.utils.detach_and_delete_vols(volumes)

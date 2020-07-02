@@ -9,7 +9,7 @@ FLEXY:
   flexy_private_conf_url: ''
   # Volume which will be attached to instance,
   # which will be consumed for osd. (size in GB)
-  volume_size: 500
+  volume_size: 600
   # Use this variable in case a local flexy env file
   # needs to be used (through '--flexy-env-file' cli option)
   flexy_env_file: ''

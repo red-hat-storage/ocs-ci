@@ -54,7 +54,10 @@ setup(
         'azure-mgmt-compute==12.0.0',
         'azure-mgmt-network==10.2.0',
         'azure-mgmt-resource==10.0.0',
-        'msrestazure==0.6.3'
+        'msrestazure==0.6.3',
+        'python-novaclient==17.1.0',
+        'python-cinderclient==7.1.0',
+        'keystoneauth1==4.2.0',
     ],
     entry_points={
         'console_scripts': [
