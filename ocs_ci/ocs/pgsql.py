@@ -13,7 +13,9 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed, ResourceWr
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from subprocess import CalledProcessError
-from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, get_operator_pods
+from ocs_ci.ocs.resources.pod import (
+    get_all_pods, get_pod_obj, get_operator_pods, get_pod_node
+)
 from tests.helpers import wait_for_resource_state
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
@@ -334,7 +336,7 @@ class Postgresql(RipSaw):
         Get nodes that contain a pgsql app pod
 
         Returns:
-            list: Cluster node OCP objects
+            list: List of pgsql pod running node names
 
         """
         pgsql_pod_objs = self.pod_obj.get(
@@ -349,6 +351,23 @@ class Postgresql(RipSaw):
             )
             nodes_set.add(pod['spec']['nodeName'])
         return list(nodes_set)
+
+    def get_pgbench_nodes(self):
+        """
+        Get nodes that contain a pgbench pod
+
+        Returns:
+            list: List of pgbench pod running node names
+
+        """
+        pgbench_pod_objs = self.get_pgbench_pods()
+        log.info("Create a list of nodes that contain a pgbench app pod")
+        nodes_set = set()
+        return [
+            nodes_set.add(
+                get_pod_node(pgbench_pod_obj).name
+            ) for pgbench_pod_obj in pgbench_pod_objs
+        ]
 
     def respin_pgsql_app_pod(self):
         """

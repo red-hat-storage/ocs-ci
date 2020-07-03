@@ -5,7 +5,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs import node
 from tests.sanity_helpers import Sanity
 from ocs_ci.framework.testlib import (
-    E2ETest, workloads
+    E2ETest, workloads, ignore_leftover_label
 )
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.node import get_node_resource_utilization_from_adm_top
@@ -25,6 +25,7 @@ def pgsql(request):
 
 
 @workloads
+@ignore_leftover_label(constants.drain_canary_pod_label)
 @pytest.mark.polarion_id("OCS-820")
 class TestPgSQLNodeReboot(E2ETest):
     """
@@ -42,15 +43,13 @@ class TestPgSQLNodeReboot(E2ETest):
         self.sanity_helpers = Sanity()
 
     @pytest.mark.usefixtures(pgsql_setup.__name__)
-    def test_run_pgsql_node_drain(
-        self, pgsql, transactions=900, node_type='master'
-    ):
+    def test_run_pgsql_node_drain(self, pgsql):
         """
         Test pgsql workload
         """
         # Create pgbench benchmark
         pgsql.create_pgbench_benchmark(
-            replicas=3, transactions=transactions, clients=3
+            replicas=3, clients=3, transactions=1600
         )
 
         # Start measuring time
@@ -64,17 +63,17 @@ class TestPgSQLNodeReboot(E2ETest):
             node_type='worker', print_table=True
         )
 
-        # Node drain with specific node type
-        typed_nodes = node.get_typed_nodes(
-            node_type=node_type, num_of_nodes=1
-        )
-        typed_node_name = typed_nodes[0].name
+        # Node drain on a Pgsql pod running node (ignore pgbench pod
+        # running node)
+        pgsql_nodes = pgsql.get_pgsql_nodes()
+        pgbench_nodes = pgsql.get_pgbench_nodes()
+        node_list = list(set(pgsql_nodes) - set(pgbench_nodes))
 
         # Node maintenance - to gracefully terminate all pods on the node
-        node.drain_nodes([typed_node_name])
+        node.drain_nodes([node_list[0]])
 
         # Make the node schedulable again
-        node.schedule_nodes([typed_node_name])
+        node.schedule_nodes([node_list[0]])
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
@@ -85,7 +84,9 @@ class TestPgSQLNodeReboot(E2ETest):
         # Calculate the time from running state to completed state
         end_time = datetime.now()
         diff_time = end_time - start_time
-        log.info(f"\npgbench pod reached to completed state after {diff_time.seconds} seconds\n")
+        log.info(
+            f"pgbench pod reached to completed state after"
+            f" {diff_time.seconds} seconds")
 
         # Get pgbench pods
         pgbench_pods = pgsql.get_pgbench_pods()
