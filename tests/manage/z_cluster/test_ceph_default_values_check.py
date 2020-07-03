@@ -27,33 +27,35 @@ class TestCephDefaultValuesCheck(ManageTest):
         ct_pod = pod.get_ceph_tools_pod()
         log.info("Checking the values of ceph osd full ratios in osd map")
         osd_dump_dict = ct_pod.exec_ceph_cmd('ceph osd dump')
-        for full_ratio in osd_full_ratios:
-            ratio_value = osd_dump_dict.get(full_ratio)
-            assert float(
-                round(ratio_value, 2)
-            ) == osd_full_ratios[full_ratio], (
-                f" {full_ratio} value is {ratio_value} NOT matching the "
-                f"default value {osd_full_ratios[full_ratio]}"
+        for ratio_parm, value in osd_full_ratios.items():
+            ratio_value = osd_dump_dict.get(ratio_parm)
+            assert float(round(ratio_value, 2)) == value, (
+                f"Cluster {ratio_parm} value is {ratio_value:.2f} NOT "
+                f"matching the default value {value}"
             )
         log.info("Ceph osd full ratio in osd map matches the default values")
 
         # Check if the osd full ratios satisfies condition
         #  "nearfull < backfillfull < full"
         assert (
-            osd_full_ratios[
+            osd_dump_dict[
                 'nearfull_ratio'
-            ] < osd_full_ratios[
+            ] < osd_dump_dict[
                 'backfillfull_ratio'
-            ] < osd_full_ratios[
+            ] < osd_dump_dict[
                 'full_ratio'
             ]
         ), (
             "osd full ratio values does not satisfy condition "
-            "nearfull < backfillfull < full"
+            f"{osd_dump_dict['nearfull_ratio']:.2f} < "
+            f"{osd_dump_dict['backfillfull_ratio']:.2f} < "
+            f"{osd_dump_dict['full_ratio']:.2f}"
         )
         log.info(
             "osd full ratio values satisfies condition "
-            "nearfull < backfillfull < full"
+            f"{osd_dump_dict['nearfull_ratio']:.2f} < "
+            f"{osd_dump_dict['backfillfull_ratio']:.2f} < "
+            f"{osd_dump_dict['full_ratio']:.2f}"
         )
 
         # Check if PG balancer is active
