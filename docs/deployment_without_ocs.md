@@ -51,5 +51,6 @@ $ oc create -f ocs_ci/templates/ocs-deployment/catalog-source.yaml
 ```
 
 Note that this assumes you have your environment configured as if you were
-running ocs-ci tests (`oc` can connect to your cluster, you have pull
-secret for `quay.io/rhceph-dev`, ...). See also [Usage](/docs/usage.md) guide.
+running ocs-ci tests (`oc` can connect to your cluster, pull secret provided to
+`openshift-installer` by ocs-ci during OCP deployment included one for
+`quay.io/rhceph-dev`). See also [Usage](/docs/usage.md) guide.
