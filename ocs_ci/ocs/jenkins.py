@@ -19,8 +19,6 @@ from tests.helpers import create_pvc
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from tests.helpers import wait_for_resource_state
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-from ocs_ci.utility import utils
 
 log = logging.getLogger(__name__)
 
@@ -317,37 +315,6 @@ class Jenkins(object):
         for build, time_build in self.build_completed.items():
             build_table.add_row([build[1], build[0], time_build])
         log.info(f'\n{build_table}\n')
-
-    def export_builds_results_to_googlesheet(
-        self, sheet_name='E2E Workloads', sheet_index=3
-    ):
-        """
-        Collect builds results, output to google spreadsheet
-
-        Args:
-            sheet_name (str): Name of the sheet
-            sheet_index (int): Index of sheet
-
-        """
-        # Collect data and export to Google doc spreadsheet
-        log.info("Exporting Jenkins data to google spreadsheet")
-        g_sheet = GoogleSpreadSheetAPI(
-            sheet_name=sheet_name, sheet_index=sheet_index
-        )
-        for build, time_build in reversed(self.build_completed.items()):
-            g_sheet.insert_row(
-                [build[1], build[0], time_build], 2
-            )
-        g_sheet.insert_row(
-            ["Project", "Build", "Duration"], 2
-        )
-        # Capturing versions(OCP, OCS and Ceph) and test run name
-        g_sheet.insert_row(
-            [f"ocp_version:{utils.get_cluster_version()}",
-             f"ocs_build_number:{utils.get_ocs_build_number()}",
-             f"ceph_version:{utils.get_ceph_version()}",
-             f"test_run_name:{utils.get_testrun_name()}"], 2
-        )
 
     def cleanup(self):
         """
