@@ -36,7 +36,7 @@ If you need to use dev. builds of OCS, you need to create a catalog source for
 these images first using
 ``ocs_ci/templates/ocs-deployment/catalog-source.yaml`` template.
 
-In the template, you you have to edit image specification of ocs-catalogsource
+In the template, you have to edit image specification of ocs-catalogsource
 and replace tag `latest` with either a version of your choice, eg.
 `4.4.0-420.ci` if you need to use particular CI build of OCS, or use one of
 release specific tags such as `latest-4.4` or `latest-stable-4.4`.
