@@ -1,13 +1,12 @@
 import logging
-import os
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, exceptions
+from ocs_ci.ocs import exceptions
 from .deployment import Deployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from .flexy import FlexyBaremetalPSI
 from ocs_ci.utility.utils import (
-    run_cmd, TimeoutSampler, load_auth_config, get_infra_id
+    TimeoutSampler, load_auth_config, get_infra_id
 )
 from ocs_ci.utility import psiutils
 
@@ -41,7 +40,6 @@ class BaremetalPSIUPI(Deployment):
             super().__init__()
             self.flexy_instance = FlexyBaremetalPSI()
             self.psi_conf = load_auth_config()['psi']
-            logger.info(self.psi_conf)
             self.utils = psiutils.PSIUtils(self.psi_conf)
 
         def deploy_prereq(self):
@@ -54,22 +52,7 @@ class BaremetalPSIUPI(Deployment):
 
         def deploy(self, log_level=''):
             self.flexy_instance.deploy(log_level)
-            # Point cluster_path to cluster-dir created by flexy
-            abs_cluster_path = os.path.abspath(self.cluster_path)
-            flexy_cluster_path = os.path.join(
-                self.flexy_instance.flexy_host_dir,
-                'flexy/workdir/install-dir'
-            )
-            logger.info(
-                "Symlinking %s to %s", abs_cluster_path, flexy_cluster_path
-            )
-            if os.path.exists(abs_cluster_path):
-                os.rmdir(abs_cluster_path)
-            os.symlink(flexy_cluster_path, abs_cluster_path)
             self.test_cluster()
-            # We need NTP for OCS cluster to become clean
-            logger.info("creating ntp chrony")
-            run_cmd(f"oc create -f {constants.NTP_CHRONY_CONF}")
             # add disks to instances
             # Get all instances and for each instance add
             # one disk

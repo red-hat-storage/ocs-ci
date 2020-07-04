@@ -22,72 +22,13 @@ from ocs_ci.ocs import exceptions
 logger = logging.getLogger(__name__)
 
 
-def flexy_post_processing(func):
-    """
-    Perform copying of flexy-dir to nfs mount
-    and do this only if its jenkins run
-
-    Args:
-        func : run_container function
-    """
-    secret_cmd = (
-        f"oc set data secret/pull-secret "
-        f"-n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
-        f"--from-file=.dockerconfigjson={constants.DATA_DIR}/pull-secret"
-    )
-    # Check whether its a jenkins run
-    if is_jenkins_mount():
-        def wrapper(*args, **kwargs):
-            flexy_nfs_path = os.path.join(
-                constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
-                constants.FLEXY_HOST_DIR
-            )
-            func(*args, **kwargs)
-            if not os.path.exists(flexy_nfs_path):
-                shutil.copytree(
-                    constants.FLEXY_HOST_DIR_PATH,
-                    flexy_nfs_path
-                )
-                chmod = (
-                    f"sudo chmod -R 777 {flexy_nfs_path}"
-                )
-                run_cmd(chmod)
-                # Apply pull secrets on ocp cluster
-                run_cmd(secret_cmd)
-        return wrapper
-    else:
-        def wrapper(*args, **kwargs):
-            func(*args, **kwargs)
-            if 'destroy' not in args[1]:
-                # recursively change permissions
-                # for all the subdirs
-                chmod = f"sudo chmod -R 777 {constants.FLEXY_HOST_DIR_PATH}"
-                run_cmd(chmod)
-                run_cmd(secret_cmd)
-        return wrapper
-
-
-def is_jenkins_mount():
-    """
-    Find if this is jenkins run based on current-cluster-dir and
-    NFS mount
-
-    Returns:
-        bool: True if this is jenkins run else False
-
-    """
-    return (
-        os.path.exists(constants.JENKINS_NFS_CURRENT_CLUSTER_DIR)
-        and os.path.ismount(constants.JENKINS_NFS_CURRENT_CLUSTER_DIR)
-    )
-
-
 class FlexyBase(object):
     """
     A base class for all types of flexy installs
     """
     def __init__(self):
         self.cluster_name = config.ENV_DATA['cluster_name']
+        self.cluster_path = config.ENV_DATA['cluster_path']
         # Host dir path which will be mounted inside flexy container
         # This will be root for all flexy housekeeping
         self.flexy_host_dir = os.path.expanduser(
@@ -148,7 +89,6 @@ class FlexyBase(object):
             config.FLEXY['INSTANCE_NAME_PREFIX'] = self.cluster_name
             self.merge_flexy_env()
 
-    @flexy_post_processing
     def run_container(self, cmd_string):
         """
         Actual container run happens here, a thread will be
@@ -216,7 +156,7 @@ class FlexyBase(object):
         # Also during destroy we assume that copying of flexy
         # would be done during deployment and we can rely on
         if purpose == 'destroy':
-            if is_jenkins_mount():
+            if self.is_jenkins_mount():
                 flexy_dir = os.path.join(
                     constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
                     constants.FLEXY_HOST_DIR
@@ -230,7 +170,7 @@ class FlexyBase(object):
             args.append(
                 f"--mount=type=bind,source={flexy_dir},"
                 f"destination={self.flexy_mnt_container_dir},"
-                f'{["relabel=shared", ""][is_jenkins_mount()]}'
+                f'{["relabel=shared", ""][self.is_jenkins_mount()]}'
             )
         else:
             args.append(
@@ -315,6 +255,77 @@ class FlexyBase(object):
             tmp_file, self.flexy_env_file
         )
 
+    def flexy_post_processing(self):
+        """
+        Perform copying of flexy-dir to nfs mount
+        and do this only if its jenkins run
+
+        """
+        auth_file = 'flexy/workdir/install-dir/auth/kubeconfig'
+        secret_cmd = (
+            f"oc set data secret/pull-secret "
+            f"--kubeconfig {self.flexy_host_dir}/{auth_file} "
+            f"-n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
+            f"--from-file=.dockerconfigjson={constants.DATA_DIR}/pull-secret"
+        )
+        ntp_cmd = (
+            f"oc --kubeconfig {self.flexy_host_dir}/{auth_file} "
+            f"create -f {constants.NTP_CHRONY_CONF}"
+        )
+        abs_cluster_path = os.path.abspath(self.cluster_path)
+        flexy_cluster_path = os.path.join(
+            self.flexy_host_dir, 'flexy/workdir/install-dir'
+        )
+        if os.path.exists(abs_cluster_path):
+            os.rmdir(abs_cluster_path)
+        # Check whether its a jenkins run
+        if self.is_jenkins_mount():
+            flexy_nfs_path = os.path.join(
+                constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
+                constants.FLEXY_HOST_DIR
+            )
+            if not os.path.exists(flexy_nfs_path):
+                shutil.copytree(
+                    self.flexy_host_dir,
+                    flexy_nfs_path
+                )
+                chmod = (
+                    f"sudo chmod -R 777 {flexy_nfs_path}"
+                )
+                run_cmd(chmod)
+                logger.info(
+                    f"Symlinking {abs_cluster_path} to {flexy_nfs_path}"
+                )
+                os.symlink(flexy_nfs_path, abs_cluster_path)
+                # Apply pull secrets on ocp cluster
+                run_cmd(secret_cmd)
+        else:
+            # recursively change permissions
+            # for all the subdirs
+            chmod = f"sudo chmod -R 777 {constants.FLEXY_HOST_DIR_PATH}"
+            run_cmd(chmod)
+            logger.info(
+                f"Symlinking {flexy_cluster_path, abs_cluster_path}"
+            )
+            os.symlink(flexy_cluster_path, abs_cluster_path)
+            run_cmd(secret_cmd)
+        logger.info("Creating NTP chrony")
+        run_cmd(ntp_cmd)
+
+    def is_jenkins_mount(self):
+        """
+        Find if this is jenkins run based on current-cluster-dir and
+        NFS mount
+
+        Returns:
+            bool: True if this is jenkins run else False
+
+        """
+        return (
+            os.path.exists(constants.JENKINS_NFS_CURRENT_CLUSTER_DIR)
+            and os.path.ismount(constants.JENKINS_NFS_CURRENT_CLUSTER_DIR)
+        )
+
 
 class FlexyBaremetalPSI(FlexyBase):
     """
@@ -349,6 +360,7 @@ class FlexyBaremetalPSI(FlexyBase):
             pass
         cmd = self.build_install_cmd()
         self.run_container(cmd)
+        super().flexy_post_processing()
 
     def destroy(self):
         """
