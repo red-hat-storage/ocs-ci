@@ -936,3 +936,6 @@ HAPROXY_LOCATION = "/etc/haproxy/haproxy.conf"
 OSD = 'osd'
 ROOK_OPERATOR = 'operator'
 MON_DAEMON = 'mon'
+
+# cluster expansion
+MAX_OSDS = 15

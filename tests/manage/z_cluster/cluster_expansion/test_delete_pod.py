@@ -1,4 +1,5 @@
 import pytest
+
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
@@ -27,16 +28,17 @@ class TestAddCapacityWithResourceDelete:
         """
         The function get the resource name, and id and kill the resource repeatedly
         until the new osd pods reached status running.
+
         Args:
             resource_name (str): the name of the resource to kill
             resource_id (int): the id of the resource to kill
             max_iterations (int): Maximum times of iterations to delete the given resource
+
         """
         d = Disruptions()
-        logging.info("starting function 'kill_resource_repeatedly'")
 
         for i in range(max_iterations):
-            logging.info(f"Delete resource {resource_name} with id {resource_id}")
+            logging.info(f"iteration {i}: Delete resource {resource_name} with id {resource_id}")
             d.set_resource(resource_name)
             d.delete_resource(resource_id)
             if self.new_pods_in_status_running:
@@ -50,8 +52,10 @@ class TestAddCapacityWithResourceDelete:
         """
         The function gets the number of storage device set in the cluster, and wait
         for the osd pods to be in status running.
+
         Args:
             storagedeviceset_count (int): the number of storage device set in the cluster
+
         """
         logging.info("starting function 'wait_for_osd_pods'")
         pod = OCP(
@@ -90,19 +94,20 @@ class TestAddCapacityWithResourceDelete:
         The function get the resource name, and id.
         The function adds capacity to the cluster, and then delete the resource while
         storage capacity is getting increased.
+
         Args:
             resource_name (str): the name of the resource to delete
             resource_id (int): the id of the resource to delete
             is_kill_resource_repeatedly (bool): If True then kill the resource repeatedly. Else, if False
                 delete the resource only once.
+
         """
         used_percentage = get_percent_used_capacity()
         logging.info(f"storageutilization is completed. used capacity = {used_percentage}")
 
-        max_osds = 15
         osd_pods_before = pod_helpers.get_osd_pods()
         number_of_osd_pods_before = len(osd_pods_before)
-        if number_of_osd_pods_before >= max_osds:
+        if number_of_osd_pods_before >= constants.MAX_OSDS:
             pytest.skip("We have maximum of OSDs in the cluster")
 
         d = Disruptions()
