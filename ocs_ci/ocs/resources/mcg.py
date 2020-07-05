@@ -804,7 +804,9 @@ class MCG(object):
         # Get noobaa status
         status = self.exec_mcg_cmd('status').stderr
         for line in status.split('\n'):
-            if 'Not Found' in line and 'Optional' not in line:
+            if any(
+                i in line for i in ['Not Found', 'Waiting for phase ready ...']
+            ) and 'Optional' not in line:
                 logger.error(f"Error in noobaa status output- {line}")
                 return False
         logger.info("Verified: noobaa status does not contain any error.")
