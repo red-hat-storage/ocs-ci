@@ -57,7 +57,7 @@ class TestAddCapacityWithResourceDelete:
             storagedeviceset_count (int): the number of storage device set in the cluster
 
         """
-        logging.info("starting function 'wait_for_osd_pods'")
+        logging.info("starting function 'wait_for_osd_pods_to_be_running'")
         pod = OCP(
             kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
         )
