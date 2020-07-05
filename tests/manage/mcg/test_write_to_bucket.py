@@ -82,7 +82,7 @@ class TestBucketIO(ManageTest):
         for i in range(2, 4):
             awscli_pod.exec_cmd_on_pod(
                 command=helpers.craft_s3_command(
-                    f'cp s3://{constants.TEST_FILES_BUCKET}/danny{i}.webm {download_dir}', mcg_obj
+                    f'cp s3://{constants.TEST_FILES_BUCKET}/danny.webm {download_dir}danny{i}.webm'
                 ),
                 out_yaml_format=False
             )
@@ -109,10 +109,10 @@ class TestBucketIO(ManageTest):
             bucket_factory: Calling this fixture creates a new bucket(s)
 
         """
-        download_dir = '/aws/reduction'
+        download_dir = '/aws/reduction/'
         awscli_pod.exec_cmd_on_pod(
             command=helpers.craft_s3_command(
-                f'cp s3://{constants.TEST_FILES_BUCKET}/enwik8 {download_dir}', mcg_obj
+                f'cp s3://{constants.TEST_FILES_BUCKET}/enwik8 {download_dir}'
             ),
             out_yaml_format=False
         )
