@@ -23,7 +23,7 @@ spec:
         image: fedora
         resources:
           limits:
-            memory: "800Mi"
+            memory: "2048Mi"
             cpu: "150m"
         command: ["/bin/bash", "-ce", "tail -f /dev/null" ]
         imagePullPolicy: IfNotPresent
@@ -37,7 +37,7 @@ spec:
             - '-ec'
             - 'df /mnt'
           initialDelaySeconds: 3
-          periodSeconds: 3
+          timeoutSeconds: 3
 
   replicas: 1
   triggers:
