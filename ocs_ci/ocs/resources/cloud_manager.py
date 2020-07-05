@@ -86,7 +86,9 @@ class S3Client(CloudClient):
     """
 
     def __init__(self, key_id=None, access_key=None, endpoint="https://s3.amazonaws.com",
-                 verify=retrieve_verification_mode(), *args, **kwargs):
+                 verify=None, *args, **kwargs):
+        if verify is None:
+            verify = retrieve_verification_mode()
         super().__init__(*args, **kwargs)
         if key_id and access_key:
             self.client = boto3.resource(
