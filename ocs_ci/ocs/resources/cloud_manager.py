@@ -15,6 +15,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
 from tests.helpers import create_resource
+from tests.manage.mcg.helpers import retrieve_verification_mode
 
 logger = logging.getLogger(name=__file__)
 
@@ -85,7 +86,7 @@ class S3Client(CloudClient):
     """
 
     def __init__(self, key_id=None, access_key=None, endpoint="https://s3.amazonaws.com",
-                 verify=True, *args, **kwargs):
+                 verify=retrieve_verification_mode(), *args, **kwargs):
         super().__init__(*args, **kwargs)
         if key_id and access_key:
             self.client = boto3.resource(

@@ -7,6 +7,7 @@ import base64
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
+from tests.manage.mcg.helpers import retrieve_verification_mode
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +50,13 @@ class OBC(object):
         self.s3_endpoint = mcg.s3_endpoint
 
         self.s3_resource = boto3.resource(
-            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
+            's3', verify=retrieve_verification_mode(), endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
         )
 
         self.s3_client = boto3.client(
-            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
+            's3', verify=retrieve_verification_mode(), endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
         )
@@ -137,13 +138,13 @@ class NoobaaAccount(object):
         self.token = response['reply']['token']
 
         self.s3_resource = boto3.resource(
-            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
+            's3', verify=retrieve_verification_mode(), endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
         )
 
         self.s3_client = boto3.client(
-            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
+            's3', verify=retrieve_verification_mode(), endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
         )
