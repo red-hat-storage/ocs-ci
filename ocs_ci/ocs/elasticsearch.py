@@ -12,6 +12,8 @@ import signal
 import subprocess
 import time
 
+from elasticsearch import (Elasticsearch, exceptions as esexp)
+
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -76,6 +78,9 @@ class ElasticSearch(object):
 
         # Starting LocalServer process - port forwarding
         self.local_server()
+
+        # Connect to the server
+        self.con = self._es_connect()
 
     def _get_eck_file(self):
         """
@@ -214,3 +219,56 @@ class ElasticSearch(object):
         proc = subprocess.Popen(cmd, shell=True)
         log.info(f'Starting LocalServer with PID of {proc.pid}')
         self.lspid = proc.pid
+
+    def _es_connect(self):
+        """
+        Create a connection to the ES via the localhost port-fwd
+
+        Returns:
+            obj: elasticsearch connection object
+        """
+        try:
+            es = Elasticsearch([{'host': 'localhost', 'port': self.get_port()}])
+        except esexp.ConnectionError:
+            log.error(f'Can not connect to ES server in the LocalServer')
+            raise
+        return es
+
+    def get_indices(self):
+        """
+        Getting list of all indexes in the ES server - all created by the test,
+        the installation of the ES was without any indexes pre-installed.
+
+        Returns:
+            list : list of all indexes defined in the ES server
+
+        """
+        results = []
+        log.info("Getting all indexes")
+        for ind in self.con.indices.get_alias("*"):
+            results.append(ind)
+        return results
+
+    def _copy(self, es):
+        """
+        Copy All data from the internal ES server to the main ES
+
+        Args:
+            es (obj): elasticsearch object which connected to the main ES
+
+        """
+
+        query = {'size': 1000, 'query': {'match_all': {}}}
+        for ind in self.get_indices():
+            log.info(f'Reading {ind} from internal ES server')
+            try:
+                result = self.con.search(index=ind, body=query)
+            except esexp.NotFoundError:
+                log.warning(f'{ind} Not found in the Internal ES.')
+                continue
+
+            log.debug(f'The results from internal ES for {ind} are :{result}')
+            log.info(f'Writing {ind} into main ES server')
+            for doc in result['hits']['hits']:
+                log.debug(f'Going to write : {doc}')
+                es.index(index=ind, doc_type='_doc', body=doc['_source'])
