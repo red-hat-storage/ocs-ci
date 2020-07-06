@@ -318,7 +318,7 @@ class MCG(object):
         Checks whether the data reduction on the MCG server works properly
         Args:
             amount_reduced: amount of data that is supposed to be reduced after data reduction
-                            and deduplication.
+            and deduplication.
             bucketname: An example bucket name that contains compressed/deduped data
 
         Returns:

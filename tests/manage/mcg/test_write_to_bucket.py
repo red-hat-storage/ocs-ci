@@ -71,7 +71,7 @@ class TestBucketIO(ManageTest):
     @acceptance
     def test_data_deduplication(self, mcg_obj, awscli_pod, bucket_factory):
         """
-        Test data reduction mechanics
+        Test data deduplication mechanics
         Args:
             mcg_obj (obj): An object representing the current state of the MCG in the cluster
             awscli_pod (pod): A pod running the AWSCLI tools
@@ -79,14 +79,14 @@ class TestBucketIO(ManageTest):
 
         """
         download_dir = '/aws/deduplication/'
-        for i in range(2, 4):
+        for i in range(1, 3):
             awscli_pod.exec_cmd_on_pod(
                 command=helpers.craft_s3_command(
                     f'cp s3://{constants.TEST_FILES_BUCKET}/danny.webm {download_dir}danny{i}.webm'
                 ),
                 out_yaml_format=False
             )
-        bucket = bucket_factory(1)[0]
+        bucket = bucket_factory(amount=1)[0]
         bucketname = bucket.name
         full_object_path = f"s3://{bucketname}"
         helpers.sync_object_directory(
@@ -116,7 +116,7 @@ class TestBucketIO(ManageTest):
             ),
             out_yaml_format=False
         )
-        bucket = bucket_factory(1)[0]
+        bucket = bucket_factory(amount=1)[0]
         bucketname = bucket.name
         full_object_path = f"s3://{bucketname}"
         helpers.sync_object_directory(
@@ -137,7 +137,7 @@ class TestBucketIO(ManageTest):
         # TODO: Privatize test bucket
         download_dir = '/aws/downloaded'
         helpers.retrieve_test_objects_to_pod(awscli_pod, download_dir)
-        bucket = bucket_factory(1)[0]
+        bucket = bucket_factory(amount=1)[0]
         bucketname = bucket.name
         full_object_path = f"s3://{bucketname}"
         helpers.sync_object_directory(
