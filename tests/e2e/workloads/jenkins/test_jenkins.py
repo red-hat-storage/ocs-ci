@@ -65,7 +65,7 @@ class TestJenkinsWorkload(E2ETest):
         jenkins.wait_for_build_status(status='Complete')
 
         # Print table of builds
-        jenkins.get_builds_logs()
+        jenkins.print_completed_builds_results()
 
         # Export builds data to google spreadsheet
         jenkins.export_builds_results_to_googlesheet()
