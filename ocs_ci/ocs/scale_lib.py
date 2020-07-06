@@ -180,11 +180,11 @@ class FioPodScale(object):
             start_io (bool): If True start IO else don't
             pods_per_iter (int): Number of PVC-POD to be created per PVC type
             Example, If 5 then 20 PVC+POD will be created with 5 each of 4 PVC types
-            Test value in-between 5-15
+            Test value in-between 5-10
 
         """
         self.ms_name, all_pod_obj = ([] for i in range(2))
-        if not 5 <= pods_per_iter <= 15:
+        if not 5 <= pods_per_iter <= 10:
             raise UnexpectedBehaviour("Pods_per_iter value should be in-between 5-15")
 
         # Check for expected worker count
