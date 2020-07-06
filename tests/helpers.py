@@ -983,18 +983,16 @@ def create_build_from_docker_image(
         fails
 
     """
-
     base_image = source_image + ':' + source_image_label
     cmd = f'yum install -y {install_package}'
     if 'http_proxy' in config.ENV_DATA:
-        proxy_url = config.ENV_DATA.get(
+        http_proxy = config.ENV_DATA['http_proxy']
+        https_proxy = config.ENV_DATA.get(
             'https_proxy', config.ENV_DATA['http_proxy']
         )
         cmd = (
-            f"http_proxy={proxy_url} https_proxy={proxy_url} "
-            f"yum install -y {install_package}"
+            f"http_proxy={http_proxy} https_proxy={https_proxy} {cmd}"
         )
-
     docker_file = (
         f"FROM {base_image}\n "
         f" RUN {cmd}\n"
@@ -1024,7 +1022,7 @@ def create_build_from_docker_image(
     out = result.stdout.decode()
     logger.info(out)
     if 'Success' in out:
-        # Build becomes ready once build pod goes into Comleted state
+        # Build becomes ready once build pod goes into Completed state
         pod_obj = OCP(kind='Pod', resource_name=image_name)
         if pod_obj.wait_for_resource(
             condition='Completed',
