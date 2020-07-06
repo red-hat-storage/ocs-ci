@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import (
-    E2ETest, workloads
+    E2ETest, workloads, ignore_leftovers
 )
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
@@ -22,11 +22,11 @@ def jenkins(request):
     return jenkins
 
 
+@ignore_leftovers
 @workloads
-@pytest.mark.polarion_id("OCS-2175")
 class TestJenkinsNodeDrain(E2ETest):
     """
-    Test running Jenkins and Node Reboot
+    Test running Jenkins and Node Drain
     """
     @pytest.fixture()
     def jenkins_setup(self, jenkins):
@@ -40,10 +40,10 @@ class TestJenkinsNodeDrain(E2ETest):
         argnames=['node_type', 'num_projects', 'num_of_builds'],
         argvalues=[
             pytest.param(
-                *['worker', 2, 2], marks=pytest.mark.polarion_id("OCS-2177")
+                *['worker', 4, 5], marks=pytest.mark.polarion_id("OCS-2177")
             ),
             pytest.param(
-                *['master', 2, 2], marks=pytest.mark.polarion_id("OCS-2176")
+                *['master', 4, 7], marks=pytest.mark.polarion_id("OCS-2176")
             ),
         ]
     )

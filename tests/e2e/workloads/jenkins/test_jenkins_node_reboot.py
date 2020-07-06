@@ -41,10 +41,10 @@ class TestJenkinsNodeReboot(E2ETest):
         argnames=['node_type', 'num_projects', 'num_of_builds'],
         argvalues=[
             pytest.param(
-                *['worker', 2, 2], marks=pytest.mark.polarion_id("OCS-2178")
+                *['worker', 4, 5], marks=pytest.mark.polarion_id("OCS-2178")
             ),
             pytest.param(
-                *['master', 2, 2], marks=pytest.mark.polarion_id("OCS-2202")
+                *['master', 3, 6], marks=pytest.mark.polarion_id("OCS-2202")
             ),
         ]
     )
