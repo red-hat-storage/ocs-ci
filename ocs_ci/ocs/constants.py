@@ -937,3 +937,11 @@ LOAD_BALANCER_MODULE = "module.ipam_lb"
 
 # proxy location
 HAPROXY_LOCATION = "/etc/haproxy/haproxy.conf"
+
+# Disruptions pod names
+OSD = 'osd'
+ROOK_OPERATOR = 'operator'
+MON_DAEMON = 'mon'
+
+# cluster expansion
+MAX_OSDS = 15
