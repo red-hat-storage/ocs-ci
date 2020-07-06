@@ -230,7 +230,7 @@ class ElasticSearch(object):
         try:
             es = Elasticsearch([{'host': 'localhost', 'port': self.get_port()}])
         except esexp.ConnectionError:
-            log.error(f'Can not connect to ES server in the LocalServer')
+            log.error('Can not connect to ES server in the LocalServer')
             raise
         return es
 
