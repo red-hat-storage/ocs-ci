@@ -6,7 +6,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.constants import STATUS_COMPLETED
-from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.node import get_node_objs
 
 
 log = logging.getLogger(__name__)
@@ -41,7 +41,10 @@ class TestJenkinsNodeReboot(E2ETest):
         argnames=['node_type', 'num_projects', 'num_of_builds'],
         argvalues=[
             pytest.param(
-                *['master', 4, 6], marks=pytest.mark.polarion_id("OCS-2202")
+                *['worker', 2, 2], marks=pytest.mark.polarion_id("OCS-2178")
+            ),
+            pytest.param(
+                *['master', 2, 2], marks=pytest.mark.polarion_id("OCS-2202")
             ),
         ]
     )
@@ -74,10 +77,11 @@ class TestJenkinsNodeReboot(E2ETest):
         jenkins.start_build()
 
         # Get relevant node
-        node1 = get_typed_nodes(node_type=node_type, num_of_nodes=1)
+        node1 = jenkins.get_nodes(node_type=node_type, num_of_nodes=1)
 
         # Reboot relevant node
-        nodes.restart_nodes(node1)
+        if len(node1) > 0:
+            nodes.restart_nodes(get_node_objs(node1))
 
         # Wait build reach 'Complete' state
         jenkins.wait_for_build_status(status='Complete')

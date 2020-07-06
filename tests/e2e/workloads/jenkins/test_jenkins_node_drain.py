@@ -5,9 +5,7 @@ from ocs_ci.framework.testlib import (
     E2ETest, workloads
 )
 from ocs_ci.ocs.jenkins import Jenkins
-from ocs_ci.ocs.node import (
-    get_typed_nodes, drain_nodes, schedule_nodes
-)
+from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.ocs.constants import STATUS_COMPLETED
 
 log = logging.getLogger(__name__)
@@ -42,7 +40,10 @@ class TestJenkinsNodeDrain(E2ETest):
         argnames=['node_type', 'num_projects', 'num_of_builds'],
         argvalues=[
             pytest.param(
-                *['master', 4, 8], marks=pytest.mark.polarion_id("OCS-2176")
+                *['worker', 2, 2], marks=pytest.mark.polarion_id("OCS-2177")
+            ),
+            pytest.param(
+                *['master', 2, 2], marks=pytest.mark.polarion_id("OCS-2176")
             ),
         ]
     )
@@ -69,20 +70,20 @@ class TestJenkinsNodeDrain(E2ETest):
         # Wait jenkins deploy pod reach to completed state
         jenkins.wait_for_jenkins_deploy_status(status=STATUS_COMPLETED)
 
+        # Get relevant node
+        node1 = jenkins.get_nodes(node_type=node_type, num_of_nodes=1)
+
         # Init number of builds per project
         jenkins.number_builds_per_project = num_of_builds
 
         # Start Builds
         jenkins.start_build()
 
-        # Get relevant node
-        node1 = get_typed_nodes(node_type=node_type, num_of_nodes=1)
-
-        # Node maintenance - to gracefully terminate all pods on the node
-        drain_nodes([node1[0].name])
-
-        # Make the node schedulable again
-        schedule_nodes([node1[0].name])
+        if len(node1) > 0:
+            # Node maintenance - to gracefully terminate all pods on the node
+            drain_nodes(node1)
+            # Make the node schedulable again
+            schedule_nodes(node1)
 
         # Wait build reach 'Complete' state
         jenkins.wait_for_build_status(status='Complete')
