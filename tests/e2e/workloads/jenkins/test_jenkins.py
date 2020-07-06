@@ -66,3 +66,6 @@ class TestJenkinsWorkload(E2ETest):
 
         # Print table of builds
         jenkins.get_builds_logs()
+
+        # Export builds data to google spreadsheet
+        jenkins.export_builds_results_to_googlesheet()
