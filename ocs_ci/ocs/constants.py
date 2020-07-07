@@ -426,6 +426,10 @@ AMQ_WORKLOAD_YAML = os.path.join(
     TEMPLATE_AMQ_DIR, "amq_workload.yaml"
 )
 
+AMQ_SIMPLE_WORKLOAD_YAML = os.path.join(
+    TEMPLATE_AMQ_DIR, "amq_simple_workload.yaml"
+)
+
 NGINX_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "nginx.yaml"
 )

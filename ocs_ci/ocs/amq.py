@@ -9,7 +9,7 @@ import json
 from subprocess import run, CalledProcessError
 from prettytable import PrettyTable
 from threading import Thread
-from queue import Queue
+from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs.exceptions import (ResourceWrongStatusException, CommandFailed)
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
@@ -453,7 +453,7 @@ class AMQ(object):
     def run_amq_benchmark(
         self, benchmark_pod_name="benchmark", kafka_namespace=constants.AMQ_NAMESPACE,
         tiller_namespace=AMQ_BENCHMARK_NAMESPACE,
-        num_of_clients=8, worker=None, timeout=3600,
+        num_of_clients=8, worker=None, timeout=1800,
         amq_workload_yaml=None, run_in_bg=False
     ):
         """
@@ -573,14 +573,12 @@ class AMQ(object):
         log.info(f"Run benchmark and running command {cmd} inside the benchmark pod ")
 
         if run_in_bg:
-            queue = Queue()
-            thread = Thread(
-                target=self.run_amq_workload_in_bg, args=(
-                    cmd, benchmark_pod_name, tiller_namespace, timeout, queue
-                ))
-            thread.start()
-            time.sleep(60)
-            return thread, queue
+            executor = ThreadPoolExecutor(1)
+            result = executor.submit(
+                self.run_amq_workload_in_bg,
+                cmd, benchmark_pod_name, tiller_namespace, timeout
+            )
+            return result
 
         pod_obj = get_pod_obj(name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace)
         result = pod_obj.exec_cmd_on_pod(command=cmd, out_yaml_format=False, timeout=timeout)
@@ -588,7 +586,7 @@ class AMQ(object):
         return result
 
     def run_amq_workload_in_bg(
-        self, command, benchmark_pod_name, tiller_namespace, timeout, queue
+        self, command, benchmark_pod_name, tiller_namespace, timeout
     ):
         """
         Runs amq workload in bg
@@ -598,15 +596,13 @@ class AMQ(object):
              benchmark_pod_name (str): Pod name
              tiller_namespace (str): Namespace of pod
              timeout (int): Time to complete the run
-             queue (obj): Queue obj
 
         Returns:
             Thread: A thread of the amq workload execution
 
         """
         pod_obj = get_pod_obj(name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace)
-        result = pod_obj.exec_cmd_on_pod(command=command, out_yaml_format=False, timeout=timeout)
-        return queue.put(result)
+        return pod_obj.exec_cmd_on_pod(command=command, out_yaml_format=False, timeout=timeout)
 
     def validate_amq_benchmark(self, result, amq_workload_yaml, benchmark_pod_name="benchmark"):
         """
