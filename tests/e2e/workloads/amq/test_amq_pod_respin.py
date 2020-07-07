@@ -48,9 +48,9 @@ class TestAMQPodRespin(E2ETest):
         """
         sc_name = default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
         self.amq_workload_dict = templating.load_yaml(constants.AMQ_SIMPLE_WORKLOAD_YAML)
-        self.amq, self.thread = amq_factory_fixture(
+        self.amq, self.result = amq_factory_fixture(
             sc_name=sc_name.name, tiller_namespace="tiller",
-            amq_workload_yaml=self.amq_workload_dict, run_in_bg=True
+            amq_workload_yaml=self.amq_workload_dict, run_in_bg=False
         )
 
     @pytest.mark.parametrize(
@@ -98,11 +98,9 @@ class TestAMQPodRespin(E2ETest):
             disruption.delete_resource()
 
         # Validate and collect the results
-        log.info("Wait till amq benchmark run complete")
-        result = self.thread.result(timeout=1800)
         log.info("Validate amq benchmark is run completely")
         assert self.amq.validate_amq_benchmark(
-            result=result, amq_workload_yaml=self.amq_workload_dict
+            result=self.result, amq_workload_yaml=self.amq_workload_dict
         ) is not None, (
             "Benchmark did not completely run or might failed in between"
         )
