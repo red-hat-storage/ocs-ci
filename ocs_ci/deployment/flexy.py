@@ -83,9 +83,7 @@ class FlexyBase(object):
 
         if not config.ENV_DATA.get('flexy_env_file'):
             self.clone_and_unlock_ocs_private_conf()
-            config.FLEXY['VARIABLES_LOCATION'] = os.path.join(
-                constants.OPENSHIFT_MISC_BASE, self.template_file
-            )
+            config.FLEXY['VARIABLES_LOCATION'] = self.template_file
             config.FLEXY['INSTANCE_NAME_PREFIX'] = self.cluster_name
             self.merge_flexy_env()
 
@@ -192,7 +190,10 @@ class FlexyBase(object):
             self.flexy_private_conf_branch
         )
         # git-crypt unlock /path/to/keyfile
-        cmd = f'git-crypt unlock {constants.FLEXY_GIT_CRYPT_KEYFILE}'
+        cmd = (
+            f'git-crypt unlock '
+            f'{os.path.expanduser(constants.FLEXY_GIT_CRYPT_KEYFILE)}'
+        )
         run_cmd(cmd, cwd=self.flexy_host_private_conf_dir_path)
         logger.info("Unlocked the git repo")
 
@@ -242,13 +243,19 @@ class FlexyBase(object):
             self.flexy_host_private_conf_dir_path, f"{constants.FLEXY_DEFAULT_ENV_FILE}.tmp"
         )
         with open(tmp_file, "w") as fp:
-            f = io.StringIO()
-            config_parser.write(f)
-            f.seek(0)
+            src = io.StringIO()
+            dst = io.StringIO()
+            config_parser.write(src)
+            src.seek(0)
+            # config_parser introduces spaces around '='
+            # sign, we need to remove that else flexy podman fails
+            for line in src.readlines():
+                dst.write(line.replace(' = ', '=', 1))
+            dst.seek(0)
             # eliminate first line which has section [root]
             # last line ll have a '\n' so that needs to be
             # removed
-            fp.write("".join(f.readlines()[1:-1]))
+            fp.write("".join(dst.readlines()[1:-1]))
 
         # Move this tempfile to original file
         os.rename(
