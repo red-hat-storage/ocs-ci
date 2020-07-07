@@ -1003,7 +1003,6 @@ CHRONY_CONF = "/etc/chrony.conf"
 # NTP server
 RH_NTP_CLOCK = "clock.redhat.com"
 
-<<<<<<< HEAD
 # Disruptions pod names
 OSD = 'osd'
 ROOK_OPERATOR = 'operator'
@@ -1016,13 +1015,15 @@ MAX_OSDS = 15
 MIN_NODE_CPU = 16
 MIN_NODE_MEMORY = 64 * 10 ** 9
 
+<<<<<<< HEAD
 # aws tags
 AWS_CLOUDFORMATION_TAG = 'aws:cloudformation:stack-name'
 
 #Bare Metal constants
 =======
+=======
+>>>>>>> e725cf64... rebase
 # Bare Metal constants
->>>>>>> 990b06ec... Fix travis failure
 bm_httpd_server = "10.8.128.12"
 bm_path_to_upload = "/var/www/html/pratik/ocs4qe/"
 bm_httpd_server_user = "root"
