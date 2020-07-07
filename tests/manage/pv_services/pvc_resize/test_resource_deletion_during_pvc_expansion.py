@@ -73,7 +73,7 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
             )
             pod_obj.run_io(
                 storage_type=storage_type, size='4G', io_direction='write',
-                runtime=30, fio_filename=f'{pod_obj.name}_f1'
+                runtime=30, rate='100M', fio_filename=f'{pod_obj.name}_f1'
             )
 
         log.info("Wait for IO to complete on pods")
@@ -109,7 +109,7 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
             )
         log.info("PVC expansion was successful on all PVCs")
 
-        # Run IO to fill some data
+        # Run IO to fill more data
         log.info("Write more data after PVC expansion.")
         for pod_obj in self.pods:
             storage_type = (
@@ -117,7 +117,7 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
             )
             pod_obj.run_io(
                 storage_type=storage_type, size='10G', io_direction='write',
-                runtime=30, fio_filename=f'{pod_obj.name}_f2'
+                runtime=30, rate='100M', fio_filename=f'{pod_obj.name}_f2'
             )
 
         log.info("Wait for IO to complete on all pods")
