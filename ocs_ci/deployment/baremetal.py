@@ -398,7 +398,7 @@ def clean_disk():
         for devices in device_to_clean_list:
             cmd = (
                 f"debug nodes/{devices['hostname']} "
-                f"-- chroot /host vgremove {devices['vg_name']} -y -f"
+                f"-- chroot /host timeout 120 vgremove {devices['vg_name']} -y -f"
             )
             logger.info("Removing vg")
             out = ocp_obj.exec_oc_cmd(
