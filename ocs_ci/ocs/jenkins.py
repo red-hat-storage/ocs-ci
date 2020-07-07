@@ -11,6 +11,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed, ResourceWrongStatusException, UnexpectedBehaviour
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.constants import JENKINS_BUILD_COMPLETE
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
@@ -113,28 +114,27 @@ class Jenkins(object):
                         f'{jenkins_deploy_pod.name} did not reach to '
                         f'{status} state after {timeout} sec'
                         f'\n output log {jenkins_deploy_pod.name}:\n{output_log}'
-                        f'\n output describe {jenkins_deploy_pod.name}:\n{output_describe}'
+                        f'\n output  describe {jenkins_deploy_pod.name}:\n{output_describe}'
                     )
                     log.error(error_msg)
                     raise UnexpectedBehaviour(error_msg)
 
-    def wait_for_build_status(self, status, timeout=900):
+    def wait_for_build_to_complete(self, timeout=900):
         """
-        Wait for build status to reach running/completed
+        Wait for build status to reach complete state
 
         Args:
-            status (str): status to reach Running or Completed
-            timeout (int): Time in seconds to wait
+            timeout (int): Time  in seconds to wait
 
         """
-        log.info(f"Waiting for the build to reach {status} state")
+        log.info(f"Waiting for the build to reach {JENKINS_BUILD_COMPLETE} state")
         for project in self.projects:
             jenkins_builds = self.get_builds_obj(namespace=project)
             for jenkins_build in jenkins_builds:
                 if (jenkins_build.name, project) not in self.build_completed:
                     try:
                         wait_for_resource_state(
-                            resource=jenkins_build, state=status, timeout=timeout
+                            resource=jenkins_build, state=JENKINS_BUILD_COMPLETE, timeout=timeout
                         )
                         self.get_build_duration_time(
                             namespace=project, build_name=jenkins_build.name
@@ -144,7 +144,7 @@ class Jenkins(object):
                         output = ocp_obj.describe(resource_name=jenkins_build.name)
                         error_msg = (
                             f'{jenkins_build.name} did not reach to '
-                            f'{status} state after {timeout} sec\n'
+                            f'{JENKINS_BUILD_COMPLETE} state after {timeout} sec\n'
                             f'oc describe output of {jenkins_build.name} \n:{output}'
                         )
                         log.error(error_msg)
