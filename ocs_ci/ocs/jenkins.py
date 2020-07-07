@@ -5,11 +5,13 @@ import logging
 import re
 import time
 
+from collections import OrderedDict
 from prettytable import PrettyTable
 from ocs_ci.ocs.exceptions import (
     CommandFailed, ResourceWrongStatusException, UnexpectedBehaviour
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.constants import JENKINS_BUILD_COMPLETE
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
@@ -18,6 +20,8 @@ from tests.helpers import create_pvc
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from tests.helpers import wait_for_resource_state
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.utility import utils
+from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
 log = logging.getLogger(__name__)
 
@@ -41,9 +45,8 @@ class Jenkins(object):
 
         self.num_of_builds = num_of_builds
         self.num_of_projects = num_of_projects
-        self.build_completed = []
+        self.build_completed = OrderedDict()
         self.create_project_names()
-        self.default_sc = None
 
     @property
     def number_projects(self):
@@ -111,40 +114,41 @@ class Jenkins(object):
                         f'{jenkins_deploy_pod.name} did not reach to '
                         f'{status} state after {timeout} sec'
                         f'\n output log {jenkins_deploy_pod.name}:\n{output_log}'
-                        f'\n output describe {jenkins_deploy_pod.name}:\n{output_describe}'
+                        f'\n output  describe {jenkins_deploy_pod.name}:\n{output_describe}'
                     )
                     log.error(error_msg)
                     raise UnexpectedBehaviour(error_msg)
 
-    def wait_for_build_status(self, status, timeout=900):
+    def wait_for_build_to_complete(self, timeout=900):
         """
-        Wait for build status to reach running/completed
+        Wait for build status to reach complete state
 
         Args:
-            status (str): status to reach Running or Completed
-            timeout (int): Time in seconds to wait
+            timeout (int): Time  in seconds to wait
 
         """
-        log.info(f"Waiting for the build to reach {status} state")
+        log.info(f"Waiting for the build to reach {JENKINS_BUILD_COMPLETE} state")
         for project in self.projects:
             jenkins_builds = self.get_builds_obj(namespace=project)
             for jenkins_build in jenkins_builds:
                 if (jenkins_build.name, project) not in self.build_completed:
                     try:
                         wait_for_resource_state(
-                            resource=jenkins_build, state=status, timeout=timeout
+                            resource=jenkins_build, state=JENKINS_BUILD_COMPLETE, timeout=timeout
                         )
-                        self.build_completed.append((jenkins_build.name, project))
+                        self.get_build_duration_time(
+                            namespace=project, build_name=jenkins_build.name
+                        )
                     except ResourceWrongStatusException:
                         ocp_obj = OCP(namespace=project, kind='build')
                         output = ocp_obj.describe(resource_name=jenkins_build.name)
                         error_msg = (
                             f'{jenkins_build.name} did not reach to '
-                            f'{status} state after {timeout} sec\n'
+                            f'{JENKINS_BUILD_COMPLETE} state after {timeout} sec\n'
                             f'oc describe output of {jenkins_build.name} \n:{output}'
                         )
                         log.error(error_msg)
-                        self.get_builds_logs()
+                        self.print_completed_builds_results()
                         raise UnexpectedBehaviour(error_msg)
 
     def get_jenkins_deploy_pods(self, namespace):
@@ -288,7 +292,21 @@ class Jenkins(object):
         ocs_jenkins_template_obj = OCS(**tmp_dict)
         ocs_jenkins_template_obj.create()
 
-    def get_builds_logs(self):
+    def get_build_duration_time(self, namespace, build_name):
+        """
+        get build duration time
+
+        Args:
+            namespace (str): get build in namespace
+            build_name (str): the name of the jenkins build
+        """
+        ocp_obj = OCP(namespace=namespace, kind='build')
+        output_build = ocp_obj.describe(resource_name=build_name)
+        list_build = output_build.split()
+        index = list_build.index('Duration:')
+        self.build_completed[(build_name, namespace)] = list_build[index + 1]
+
+    def print_completed_builds_results(self):
         """
 
         Get builds logs and print them on table
@@ -296,13 +314,40 @@ class Jenkins(object):
         log.info('Print builds results')
         build_table = PrettyTable()
         build_table.field_names = ["Project", "Build", "Duration"]
-        for build in self.build_completed:
-            ocp_obj = OCP(namespace=build[1], kind='build')
-            output_build = ocp_obj.describe(resource_name=build[0])
-            list_build = output_build.split()
-            index = list_build.index('Duration:')
-            build_table.add_row([build[1], build[0], list_build[index + 1]])
+        for build, time_build in self.build_completed.items():
+            build_table.add_row([build[1], build[0], time_build])
         log.info(f'\n{build_table}\n')
+
+    def export_builds_results_to_googlesheet(
+        self, sheet_name='E2E Workloads', sheet_index=3
+    ):
+        """
+        Collect builds results, output to google spreadsheet
+
+        Args:
+            sheet_name (str): Name of the sheet
+            sheet_index (int): Index of sheet
+
+        """
+        # Collect data and export to Google doc spreadsheet
+        log.info("Exporting Jenkins data to google spreadsheet")
+        g_sheet = GoogleSpreadSheetAPI(
+            sheet_name=sheet_name, sheet_index=sheet_index
+        )
+        for build, time_build in reversed(self.build_completed.items()):
+            g_sheet.insert_row(
+                [build[1], build[0], time_build], 2
+            )
+        g_sheet.insert_row(
+            ["Project", "Build", "Duration"], 2
+        )
+        # Capturing versions(OCP, OCS and Ceph) and test run name
+        g_sheet.insert_row(
+            [f"ocp_version:{utils.get_cluster_version()}",
+             f"ocs_build_number:{utils.get_ocs_build_number()}",
+             f"ceph_version:{utils.get_ceph_version()}",
+             f"test_run_name:{utils.get_testrun_name()}"], 2
+        )
 
     def cleanup(self):
         """
