@@ -3,7 +3,7 @@
 RUN:
   client_version: '4.5.0-0.nightly'
 DEPLOYMENT:
-  installer_version: "4.5.0-0.nightly-2020-06-19-043844"
+  installer_version: "4.5.0-rc.2-x86_64"
   terraform_version: "0.12.26"
 ENV_DATA:
   vm_template: 'rhcos-45.81.202005200134-0-vmware.x86_64'
