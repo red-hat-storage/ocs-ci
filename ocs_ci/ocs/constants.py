@@ -901,7 +901,7 @@ FLEXY_HOST_DIR_PATH = os.path.join(DATA_DIR, FLEXY_HOST_DIR)
 FLEXY_DEFAULT_ENV_FILE = "ocs-osp.env"
 OPENSHIFT_MISC_BASE = "private-openshift-misc/v3-launch-templates/functionality-testing"
 FLEXY_BAREMETAL_UPI_TEMPLATE = "upi-on-baremetal/versioned-installer-openstack"
-FLEXY_GIT_CRYPT_KEYFILE = "~/git_crypt_keyfile"
+FLEXY_GIT_CRYPT_KEYFILE = os.path.join(DATA_DIR, "git-crypt-keyfile")
 NTP_CHRONY_CONF = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "ntp_chrony.yaml"
 )
