@@ -1,4 +1,5 @@
 import logging
+
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
@@ -39,7 +40,9 @@ def test_monitoring_before_ocp_upgrade():
 @pytest.mark.polarion_id("OCS-712")
 def test_monitoring_after_ocp_upgrade(pre_upgrade_monitoring_pvc):
     """
-    Test monitoring after ocp upgrade.
+    After ocp upgrade validate all monitoring pods are up and running,
+    its health is OK and also confirm no new monitoring
+    pvc created instead using previous one.
 
     """
     pod_obj_list = pod.get_all_pods(
@@ -52,16 +55,26 @@ def test_monitoring_after_ocp_upgrade(pre_upgrade_monitoring_pvc):
     )
     post_upgrade_monitoring_pvc = get_list_pvc_objs_created_on_monitoring_pods()
 
-    assert len(pre_upgrade_monitoring_pvc) == len(post_upgrade_monitoring_pvc)
+    assert len(pre_upgrade_monitoring_pvc) == len(post_upgrade_monitoring_pvc), (
+        "Before and after ocp upgrade pvc are not matching"
+        f"pre_upgrade_monitoring_pvc are {[pvc_obj.name for pvc_obj in pre_upgrade_monitoring_pvc]}."
+        f"post_upgrade_monitoring_pvc are {[pvc_obj.name for pvc_obj in post_upgrade_monitoring_pvc]}"
+    )
 
-    bu_pv = []
-    au_pv = []
-    for bu_pvc_obj in pre_upgrade_monitoring_pvc:
-        bu_pv.append(bu_pvc_obj.get().get('spec').get('volumeName'))
+    before_upgrade_pv_list = []
+    after_upgrade_pv_list = []
+    for before_upgrade_pvc_obj in pre_upgrade_monitoring_pvc:
+        before_upgrade_pv_list.append(
+            before_upgrade_pvc_obj.get().get('spec').get('volumeName')
+        )
 
-    for au_pvc_obj in post_upgrade_monitoring_pvc:
-        au_pv.append(au_pvc_obj.get().get('spec').get('volumeName'))
-        assert au_pvc_obj.get().get('status').get('phase') == "Bound"
+    for after_upgrade_pvc_obj in post_upgrade_monitoring_pvc:
+        after_upgrade_pv_list.append(
+            after_upgrade_pvc_obj.get().get('spec').get('volumeName')
+        )
+        assert after_upgrade_pvc_obj.get().get('status').get('phase') == "Bound"
 
-    assert set(bu_pv) == set(au_pv)
+    assert set(before_upgrade_pv_list) == set(after_upgrade_pv_list), (
+        "Before and after ocp upgrade pv list are not matching"
+    )
     assert prometheus_health_check(), "Prometheus health is degraded"
