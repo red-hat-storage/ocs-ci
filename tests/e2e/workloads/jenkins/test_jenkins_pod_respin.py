@@ -5,7 +5,6 @@ from ocs_ci.framework.testlib import (
     E2ETest, workloads
 )
 from ocs_ci.ocs.jenkins import Jenkins
-from ocs_ci.framework.testlib import ignore_leftovers
 from ocs_ci.ocs.constants import STATUS_COMPLETED
 from tests import disruption_helpers
 
@@ -23,7 +22,6 @@ def jenkins(request):
     return jenkins
 
 
-@ignore_leftovers
 @workloads
 class TestJenkinsPodRespin(E2ETest):
     """
@@ -40,13 +38,13 @@ class TestJenkinsPodRespin(E2ETest):
         argnames=['pod_name', 'num_projects', 'num_of_builds'],
         argvalues=[
             pytest.param(
-                *['mon', 5, 4], marks=pytest.mark.polarion_id("OCS-2204")
+                *['mon', 3, 4], marks=pytest.mark.polarion_id("OCS-2204")
             ),
             pytest.param(
-                *['osd', 5, 6], marks=pytest.mark.polarion_id("OCS-2179")
+                *['osd', 4, 3], marks=pytest.mark.polarion_id("OCS-2179")
             ),
             pytest.param(
-                *['mgr', 4, 5], marks=pytest.mark.polarion_id("OCS-2205")
+                *['mgr', 3, 5], marks=pytest.mark.polarion_id("OCS-2205")
             ),
         ]
     )
