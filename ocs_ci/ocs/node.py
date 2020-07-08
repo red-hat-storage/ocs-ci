@@ -255,13 +255,21 @@ def get_node_ips(node_type='worker'):
         raise NotImplementedError
 
 
-def add_new_node_and_label_it(machineset_name):
+def add_new_node_and_label_it(
+    machineset_name, num_nodes=1, mark_for_ocs_label=True
+):
     """
-    Add a new node and label it
+    Add a new node for ipi and label it
 
     Args:
         machineset_name (str): Name of the machine set
+        num_nodes (int): number of nodes to add
+        mark_for_ocs_label (bool): True if label the new node
     eg: add_new_node_and_label_it("new-tdesala-zlqzn-worker-us-east-2a")
+
+    Returns:
+        list: new spun nodes
+
     """
     # Get the initial nodes list
     initial_nodes = tests.helpers.get_worker_nodes()
@@ -274,11 +282,11 @@ def add_new_node_and_label_it(machineset_name):
     )
 
     # Increase its replica count
-    log.info("Increasing the replica count by 1")
-    machine.add_node(machineset_name, count=machineset_replica_count + 1)
+    log.info(f"Increasing the replica count by {num_nodes}")
+    machine.add_node(machineset_name, count=machineset_replica_count + num_nodes)
     log.info(
         f"{machineset_name} now has replica "
-        f"count: {machineset_replica_count + 1}"
+        f"count: {machineset_replica_count + num_nodes}"
     )
 
     # wait for the new node to come to ready state
@@ -287,21 +295,24 @@ def add_new_node_and_label_it(machineset_name):
 
     # Get the node name of new spun node
     nodes_after_new_spun_node = tests.helpers.get_worker_nodes()
-    new_spun_node = list(
+    new_spun_nodes = list(
         set(nodes_after_new_spun_node) - set(initial_nodes)
     )
-    log.info(f"New spun node is {new_spun_node}")
+    log.info(f"New spun nodes: {new_spun_nodes}")
 
     # Label it
-    node_obj = ocp.OCP(kind='node')
-    node_obj.add_label(
-        resource_name=new_spun_node[0],
-        label=constants.OPERATOR_NODE_LABEL
-    )
-    log.info(
-        f"Successfully labeled {new_spun_node} with OCS storage label"
-    )
-    return new_spun_node[0]
+    if mark_for_ocs_label:
+        node_obj = ocp.OCP(kind='node')
+        for new_spun_node in new_spun_nodes:
+            node_obj.add_label(
+                resource_name=new_spun_node,
+                label=constants.OPERATOR_NODE_LABEL
+            )
+            logging.info(
+                f"Successfully labeled {new_spun_node} with OCS storage label"
+            )
+
+    return new_spun_nodes
 
 
 def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True):
