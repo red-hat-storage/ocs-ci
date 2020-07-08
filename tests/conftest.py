@@ -31,7 +31,7 @@ from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import get_rgw_pod, delete_deploymentconfig_pods
+from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad
@@ -55,7 +55,7 @@ from ocs_ci.utility.utils import (
 )
 from tests import helpers
 from tests.helpers import create_unique_resource_name
-from tests.manage.mcg.helpers import get_rgw_restart_count
+from tests.manage.mcg.helpers import get_rgw_restart_counts
 from tests.manage.mcg.helpers import (
     oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
     oc_create_s3comp_backingstore, oc_create_pv_backingstore, cli_create_aws_backingstore,
@@ -1757,15 +1757,17 @@ def verify_rgw_restart_count_fixture(request):
     """
     Verifies the RGW restart count at start and end of a test
     """
-    if config.ENV_DATA['platform'].lower() == 'vsphere':
+    if config.ENV_DATA['platform'].lower() in constants.ON_PREM_PLATFORMS:
         log.info("Getting RGW pod restart count before executing the test")
-        initial_count = get_rgw_restart_count()
+        initial_counts = get_rgw_restart_counts()
 
         def finalizer():
-            rgw_pod = get_rgw_pod()
-            rgw_pod.reload()
-            log.info("Verifying whether RGW pod changed after executing the test")
-            assert rgw_pod.restart_count == initial_count, 'RGW pod restarted'
+            rgw_pods = get_rgw_pods()
+            for rgw_pod in rgw_pods:
+                rgw_pod.reload()
+            log.info("Verifying whether RGW pods changed after executing the test")
+            for rgw_pod in rgw_pods:
+                assert rgw_pod.restart_count in initial_counts, 'RGW pod restarted'
 
         request.addfinalizer(finalizer)
 
