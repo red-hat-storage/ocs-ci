@@ -1,3 +1,5 @@
+DEPLOYMENT:
+  local_storage: true
 ENV_DATA:
   platform: 'baremetalpsi'
   deployment_type: 'upi'
