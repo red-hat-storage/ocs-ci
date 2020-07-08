@@ -22,6 +22,9 @@ from tests.helpers import wait_for_resource_state
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import utils
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
+from ocs_ci.ocs.node import (
+    get_typed_nodes, get_app_pod_running_nodes, get_compute_node_names
+)
 
 log = logging.getLogger(__name__)
 
@@ -348,6 +351,39 @@ class Jenkins(object):
              f"ceph_version:{utils.get_ceph_version()}",
              f"test_run_name:{utils.get_testrun_name()}"], 2
         )
+
+    def get_nodes(self, node_type='worker', num_of_nodes=1):
+        """
+        get nodes
+
+        Args:
+            node_type (str): The node type (e.g. worker, master)
+            num_of_nodes (int): The number of nodes to be returned
+
+        Returns:
+            list: List of compute node names
+        """
+        if node_type == 'master':
+            nodes1 = []
+            nodes = get_typed_nodes(node_type=node_type, num_of_nodes=num_of_nodes)
+            for node in nodes:
+                nodes1.append(node.name)
+        elif node_type == 'worker':
+            pod_objs = []
+            for project in self.projects:
+                pod_names = get_pod_name_by_pattern(
+                    pattern='jenkins', namespace=project
+                )
+                for pod_name in pod_names:
+                    pod_objs.append(
+                        get_pod_obj(name=pod_name, namespace=project)
+                    )
+            nodes_app = set(get_app_pod_running_nodes(pod_objs))
+            nodes_worker_obj = set(get_compute_node_names())
+            nodes1 = nodes_worker_obj - nodes_app
+        else:
+            raise ValueError('The node type is worker or master')
+        return list(nodes1)[:num_of_nodes]
 
     def cleanup(self):
         """
