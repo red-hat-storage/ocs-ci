@@ -102,10 +102,10 @@ def rm_object_recursive(podobj, target, mcg_obj, option=''):
 
 def get_rgw_restart_counts():
     """
-    Gets the restart count of RGW pod
+    Gets the restart count of the RGW pods
 
     Returns:
-        restart_count (int): RGW pod Restart count
+        list: restart counts of RGW pods
 
     """
     rgw_pods = get_rgw_pods()
