@@ -48,6 +48,8 @@ DEPLOYMENT:
   force_download_installer: True
   force_download_client: True
   default_latest_tag: 'latest-4.5'
+  # define if ceph is setup as independent mode, default is false
+  independent_mode: False
   # You can overwrite csv channel version by following parameter
   ocs_csv_channel: "stable-4.5"
   # you can overwrite the image for ocs operator catalog source by following parameter:
@@ -147,3 +149,8 @@ AUTH:
 # flexy_default_config.yaml
 FLEXY:
   flexy_deploy: false
+
+# Defines the configuration of Independent Ceph Cluster
+INDEPENDENT_MODE:
+  admin_keyring:
+     key: PLACE_HOLDER
