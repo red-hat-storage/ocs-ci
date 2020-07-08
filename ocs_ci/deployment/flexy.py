@@ -4,6 +4,7 @@ All the flexy related classes and functionality lives here
 import logging
 import os
 import yaml
+import time
 
 import io
 import configparser
@@ -190,6 +191,9 @@ class FlexyBase(object):
             self.flexy_private_conf_branch
         )
         # git-crypt unlock /path/to/keyfile
+        # TODO: temporary sleep for jenkins workaround
+        # remove this later
+        time.sleep(200)
         cmd = (
             f'git-crypt unlock '
             f'{os.path.expanduser(constants.FLEXY_GIT_CRYPT_KEYFILE)}'
