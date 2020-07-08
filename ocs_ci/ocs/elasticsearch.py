@@ -225,7 +225,7 @@ class ElasticSearch(object):
         Create a connection to the ES via the localhost port-fwd
 
         Returns:
-            obj: elasticsearch connection object
+            Elasticsearch: elasticsearch connection object
         """
         try:
             es = Elasticsearch([{'host': 'localhost', 'port': self.get_port()}])
