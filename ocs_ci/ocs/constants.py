@@ -905,7 +905,7 @@ FLEXY_GIT_CRYPT_KEYFILE = os.path.join(DATA_DIR, "git-crypt-keyfile")
 NTP_CHRONY_CONF = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "ntp_chrony.yaml"
 )
-FLEXY_DEFAULT_PRIVATE_CONF_URL = 'git@gitlab.cee.redhat.com:ocs/flexy-ocs-private.git'
+FLEXY_DEFAULT_PRIVATE_CONF_URL = 'https://gitlab.cee.redhat.com/ocs/flexy-ocs-private.git'
 FLEXY_JENKINS_USER = "jenkins"
 JENKINS_NFS_CURRENT_CLUSTER_DIR = "/home/jenkins/current-cluster-dir"
 FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
