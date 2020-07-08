@@ -988,7 +988,7 @@ def create_build_from_docker_image(
     if 'http_proxy' in config.ENV_DATA:
         http_proxy = config.ENV_DATA['http_proxy']
         https_proxy = config.ENV_DATA.get(
-            'https_proxy', config.ENV_DATA['http_proxy']
+            'https_proxy', http_proxy
         )
         cmd = (
             f"http_proxy={http_proxy} https_proxy={https_proxy} {cmd}"
