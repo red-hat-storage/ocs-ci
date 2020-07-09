@@ -63,6 +63,7 @@ from tests.manage.mcg.helpers import (
     cli_create_pv_backingstore
 )
 from ocs_ci.ocs.pgsql import Postgresql
+from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.couchbase import CouchBase
 
 log = logging.getLogger(__name__)
@@ -2480,6 +2481,57 @@ def pgsql_factory_fixture(request):
         Clean up
         """
         pgsql.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope='function')
+def jenkins_factory_fixture(request):
+    """
+    Jenkins factory fixture
+    """
+    jenkins = Jenkins()
+
+    def factory(num_projects=1, num_of_builds=1):
+        """
+        Factory to start jenkins workload
+
+        Args:
+            num_projects (int): Number of Jenkins projects
+            num_of_builds (int): Number of builds per project
+
+        """
+        # Jenkins template
+        jenkins.create_ocs_jenkins_template()
+        # Init number of projects
+        jenkins.number_projects = num_projects
+        # Create app jenkins
+        jenkins.create_app_jenkins()
+        # Create jenkins pvc
+        jenkins.create_jenkins_pvc()
+        # Create jenkins build config
+        jenkins.create_jenkins_build_config()
+        # Wait jenkins deploy pod reach to completed state
+        jenkins.wait_for_jenkins_deploy_status(
+            status=constants.STATUS_COMPLETED
+        )
+        # Init number of builds per project
+        jenkins.number_builds_per_project = num_of_builds
+        # Start Builds
+        jenkins.start_build()
+        # Wait build reach 'Complete' state
+        jenkins.wait_for_build_to_complete()
+        # Print table of builds
+        jenkins.print_completed_builds_results()
+
+        return jenkins
+
+    def finalizer():
+        """
+        Clean up
+        """
+        jenkins.cleanup()
 
     request.addfinalizer(finalizer)
     return factory
