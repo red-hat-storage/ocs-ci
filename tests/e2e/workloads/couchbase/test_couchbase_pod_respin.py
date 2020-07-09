@@ -1,27 +1,59 @@
 import logging
 import pytest
+import time
 
-from ocs_ci.framework.testlib import E2ETest, workloads
-from ocs_ci.ocs.couchbase import CouchBase
+from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
+from tests.disruption_helpers import Disruptions
+from ocs_ci.utility import utils
 
 log = logging.getLogger(__name__)
 
+
 @workloads
-class TestCouchBaseWorkload(E2ETest):
+@ignore_leftovers
+class TestCouchBasePodRespin(E2ETest):
     """
     Deploy an CouchBase workload using operator
     """
     @pytest.fixture()
-    def cb_setup(self, amq_factory_fixture):
+    def cb_setup(self, couchbase_factory_fixture):
         """
-        Creates amq cluster and run benchmarks
+        Creates couchbase workload
         """
-        sc_name = default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
-        self.amq_workload_dict = templating.load_yaml(constants.AMQ_SIMPLE_WORKLOAD_YAML)
-        self.amq, self.result = amq_factory_fixture(
-            sc_name=sc_name.name, tiller_namespace="tiller",
-            amq_workload_yaml=self.amq_workload_dict, run_in_bg=False
+        self.cb = couchbase_factory_fixture(
+            replicas=3, run_in_bg=True, skip_analyze=True
         )
-    def test(self):
 
-        pass
+    @pytest.mark.parametrize(
+        argnames=["pod_name"],
+        argvalues=[
+            pytest.param(
+                *['osd'],
+                marks=pytest.mark.polarion_id("OCS-780")),
+            pytest.param(
+                *['mon'],
+                marks=pytest.mark.polarion_id("OCS-779")),
+            pytest.param(
+                *['mgr'],
+                marks=pytest.mark.polarion_id("OCS-781")),
+            pytest.param(
+                *['couchbase'],
+                marks=pytest.mark.polarion_id("OCS-786")),
+        ])
+    @pytest.mark.usefixtures(cb_setup.__name__)
+    def test_run_couchbase_respin_pod(self, pod_name):
+        log.info(f"Respin Ceph pod {pod_name}")
+
+        if pod_name == 'couchbase':
+            self.cb.respin_couchbase_app_pod()
+        else:
+            disruption = Disruptions()
+            disruption.set_resource(resource=f'{pod_name}')
+            disruption.delete_resource()
+
+        while not (self.cb.result.done()):
+            time.sleep(10)
+            logging.info(
+                "#### ....Waiting for couchbase threads to complete..."
+            )
+        utils.ceph_health_check()
