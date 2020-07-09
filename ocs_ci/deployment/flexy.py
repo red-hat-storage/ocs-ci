@@ -302,7 +302,7 @@ class FlexyBase(object):
                     ignore_dangling_symlinks=True
                 )
                 chmod = (
-                    f"sudo chmod -R 777 {flexy_nfs_path}"
+                    f"chmod -R 777 {flexy_nfs_path}"
                 )
                 run_cmd(chmod)
                 logger.info(
