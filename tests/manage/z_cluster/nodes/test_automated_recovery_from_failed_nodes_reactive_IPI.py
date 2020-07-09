@@ -204,7 +204,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 else:
                     raise
                 log.info("All the dc pods reached running state")
-                wait_for_storage_pods(timeout)
+            wait_for_storage_pods(wait=True)
         except ResourceWrongStatusException:
             if failure == "shutdown":
                 nodes.terminate_nodes(failure_node_obj, wait=True)

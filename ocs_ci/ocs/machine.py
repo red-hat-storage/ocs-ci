@@ -176,12 +176,14 @@ def delete_machine_and_wait_for_it_to_reach_running_state(
     delete_machine(machine_name)
     machine_names_after_delete = [m.name for m in get_machine_objs()]
     machines = get_machines(machine_type=get_machine_type(machine_name))
-    counter = 0
-    for machine in machines:
-        if re.match(machine.name[:-6], machine_name):
-            counter += 1
-    if counter != machineset_replica_count:
-        raise Exception("Unable to find new machine")
+    new_machine_list = [
+        machine for machine in machines if re.match(
+            machine.name[:-6], machine_name
+        )
+    ]
+    assert len(
+        new_machine_list
+    ) == machineset_replica_count, "Unable to find new machine"
     new_machine_name = list(
         set(machine_names_after_delete) - set(machine_names_before_delete)
     )
@@ -191,7 +193,7 @@ def delete_machine_and_wait_for_it_to_reach_running_state(
         for timer in TimeoutSampler(
             300, 5, get_machine_status, machine_obj=new_machine_obj[0]
         ):
-            if timer == 'Running':
+            if timer == constants.STATUS_RUNNING:
                 log.info(
                     f"New spun machine {new_machine_name[0]} reached "
                     f"running state"

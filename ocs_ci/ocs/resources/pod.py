@@ -1246,7 +1246,7 @@ def download_file_from_pod(pod_name, remotepath, localpath, namespace=None):
     run_cmd(cmd)
 
 
-def wait_for_storage_pods(timeout=200):
+def wait_for_storage_pods(timeout=200, wait=False):
     """
     Check all OCS pods status, they should be in Running or Completed state
 
@@ -1256,7 +1256,7 @@ def wait_for_storage_pods(timeout=200):
 
     """
     all_pod_obj = get_all_pods(
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE, wait=wait
     )
     for pod_obj in all_pod_obj:
         state = constants.STATUS_RUNNING
@@ -1270,23 +1270,21 @@ def wait_for_storage_pods(timeout=200):
                 timeout=timeout
             )
         except ResourceWrongStatusException as e:
-            # WA for BZ 1847417
-            if "Terminating" in e.describe_out:
-                pod_obj.delete(force=True)
             # 'rook-ceph-crashcollector' on the failed node stucks at
             # pending state. BZ 1810014 tracks it.
             # Ignoring 'rook-ceph-crashcollector' pod health check as
             # WA and deleting its deployment so that the pod
             # disappears. Will revert this WA once the BZ is fixed
-            elif 'rook-ceph-crashcollector' in pod_obj.name:
-                ocp_obj = ocp.OCP(
-                    namespace=defaults.ROOK_CLUSTER_NAMESPACE
-                )
-                pod_name = pod_obj.name
-                deployment_name = '-'.join(pod_name.split("-")[:-2])
-                command = f"delete deployment {deployment_name}"
-                ocp_obj.exec_oc_cmd(command=command)
-                logger.info(f"Deleted deployment for pod {pod_obj.name}")
+            if 'rook-ceph-crashcollector' in pod_obj.name:
+                if constants.STATUS_TERMINATING in e.describe_out:
+                    # BZ 1847417
+                    pod_obj.delete(force=True)
+                else:
+                    delete_deploymentconfig_pods(pod_obj)
+                    logger.info(f"Deleted deployment for pod {pod_obj.name}")
+            elif constants.STATUS_TERMINATING in e.describe_out:
+                # BZ 1847417
+                pod_obj.delete(force=True)
             else:
                 raise
 
