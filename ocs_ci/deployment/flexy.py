@@ -147,7 +147,7 @@ class FlexyBase(object):
 
         """
         args = list()
-        if self.is_jenkins_mount() and purpose=='destroy':
+        if self.is_jenkins_mount() and purpose == 'destroy':
             flexy_private = os.path.join(
                 constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
                 "flexy-ocs-private"
@@ -318,7 +318,13 @@ class FlexyBase(object):
                 logger.info(
                     f"Symlinking {abs_cluster_path} to {flexy_nfs_path}"
                 )
-                os.symlink(flexy_nfs_path, abs_cluster_path)
+                os.symlink(
+                    os.path.join(
+                        flexy_nfs_path,
+                        constants.FLEXY_RELATIVE_CLUSTER_DIR
+                    ),
+                    abs_cluster_path
+                )
                 # Apply pull secrets on ocp cluster
                 run_cmd(secret_cmd)
         else:

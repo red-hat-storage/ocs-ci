@@ -910,6 +910,7 @@ FLEXY_JENKINS_USER = "jenkins"
 JENKINS_NFS_CURRENT_CLUSTER_DIR = "/home/jenkins/current-cluster-dir"
 FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
+FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
