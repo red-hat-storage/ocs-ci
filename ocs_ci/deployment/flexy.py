@@ -4,7 +4,6 @@ All the flexy related classes and functionality lives here
 import logging
 import os
 import yaml
-import time
 
 import io
 import configparser
@@ -201,8 +200,6 @@ class FlexyBase(object):
             self.flexy_host_private_conf_dir_path,
             self.flexy_private_conf_branch
         )
-        # Temp sleep for Jenkins git-crypt package problem
-        time.sleep(300)
         # git-crypt unlock /path/to/keyfile
         cmd = (
             f'git-crypt unlock '
