@@ -72,7 +72,7 @@ class ElasticSearch(object):
                 break
             else:
                 log.warning('The ElasticSearch server is not ready yet')
-                log.info('going to sleep gor 30 sec. before next check')
+                log.info('going to sleep for 30 sec. before next check')
                 time.sleep(30)
                 timeout -= 30
 
