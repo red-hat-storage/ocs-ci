@@ -297,7 +297,8 @@ class FlexyBase(object):
             if not os.path.exists(flexy_nfs_path):
                 shutil.copytree(
                     self.flexy_host_dir,
-                    flexy_nfs_path
+                    flexy_nfs_path,
+                    ignore_dangling_symlinks=True
                 )
                 chmod = (
                     f"sudo chmod -R 777 {flexy_nfs_path}"
