@@ -133,13 +133,14 @@ class MCG(object):
             pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
             assert len(pods) == 0, 'RGW pod should not exist on AWS platform'
 
-        elif config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
-            logger.info('Checking for RGW pod on VSPHERE platform')
+        elif config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+            rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
+            logger.info(f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform')
             rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
             assert rgw_pod.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 selector=constants.RGW_APP_LABEL,
-                resource_count=1,
+                resource_count=rgw_count,
                 timeout=60
             )
 
