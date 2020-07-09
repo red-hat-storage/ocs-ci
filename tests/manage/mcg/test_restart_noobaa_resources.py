@@ -11,6 +11,11 @@ from ocs_ci.ocs import constants, defaults, cluster
 log = logging.getLogger(__name__)
 
 
+@pytest.fixture(scope='class')
+def setup(request):
+    request.cls.cl_obj = cluster.CephCluster()
+
+
 @tier4
 @tier4a
 @ignore_leftovers()
@@ -25,6 +30,7 @@ log = logging.getLogger(__name__)
         )
     ]
 )
+@pytest.mark.usefixtures(setup.__name__)
 class TestRestartNoobaaResources(ManageTest):
     """
     Test Noobaa resources restart and check Noobaa health
@@ -35,7 +41,6 @@ class TestRestartNoobaaResources(ManageTest):
         Test Noobaa resources restart and check Noobaa health
 
         """
-        cl_obj = cluster.CephCluster()
         labels_map = {
             'noobaa_core': constants.NOOBAA_CORE_POD_LABEL,
             'noobaa_db': constants.NOOBAA_DB_LABEL
@@ -53,4 +58,4 @@ class TestRestartNoobaaResources(ManageTest):
             selector=labels_map[resource_to_delete],
             resource_count=1, timeout=300
         )
-        cl_obj.wait_for_noobaa_health_ok()
+        self.cl_obj.wait_for_noobaa_health_ok()
