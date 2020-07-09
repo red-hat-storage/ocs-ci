@@ -204,12 +204,13 @@ def ocs_install_verification(
         timeout=timeout
     )
 
-    # rgw check only for VmWare
-    if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
+    # rgw check only for VmWare and BM
+    if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+        rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
         assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=constants.RGW_APP_LABEL,
-            resource_count=1,
+            resource_count=rgw_count,
             timeout=timeout
         )
 
