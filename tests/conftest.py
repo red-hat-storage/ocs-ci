@@ -2546,7 +2546,7 @@ def couchbase_factory_fixture(request):
     """
     couchbase = CouchBase()
 
-    def factory(replicas=3):
+    def factory(replicas=3, run_in_bg=False, skip_analyze=False):
         """
         Factory to start couchbase workload
 
@@ -2558,9 +2558,9 @@ def couchbase_factory_fixture(request):
         # Create couchbase workers
         couchbase.create_couchbase_worker(replicas=replicas)
         # Run couchbase workload
-        couchbase.run_workload(replicas=replicas)
+        couchbase.run_workload(replicas=replicas, run_in_bg=run_in_bg)
         # Run sanity check on data logs
-        couchbase.analyze_run()
+        couchbase.analyze_run(skip_analyze=skip_analyze)
         return couchbase
 
     def finalizer():
