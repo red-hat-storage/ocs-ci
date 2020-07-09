@@ -115,9 +115,10 @@ def verify_image_versions(old_images, upgrade_version):
         timeout=750 * osd_count,
     )
     verify_pods_upgraded(old_images, selector=constants.MDS_APP_LABEL, count=2)
-    if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
+    if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+        rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
         verify_pods_upgraded(
-            old_images, selector=constants.RGW_APP_LABEL, count=1
+            old_images, selector=constants.RGW_APP_LABEL, count=rgw_count
         )
 
 
