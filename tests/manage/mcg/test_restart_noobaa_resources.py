@@ -35,6 +35,7 @@ class TestRestartNoobaaResources(ManageTest):
         Test Noobaa resources restart and check Noobaa health
 
         """
+        cl_obj = cluster.CephCluster()
         labels_map = {
             'noobaa_core': constants.NOOBAA_CORE_POD_LABEL,
             'noobaa_db': constants.NOOBAA_DB_LABEL
@@ -52,6 +53,4 @@ class TestRestartNoobaaResources(ManageTest):
             selector=labels_map[resource_to_delete],
             resource_count=1, timeout=300
         )
-
-        cl_obj = cluster.CephCluster()
         cl_obj.wait_for_noobaa_health_ok()
