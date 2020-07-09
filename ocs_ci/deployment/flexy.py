@@ -147,7 +147,17 @@ class FlexyBase(object):
 
         """
         args = list()
-        args.append(f"--env-file={self.flexy_env_file}")
+        if self.is_jenkins_mount() and purpose=='destroy':
+            flexy_private = os.path.join(
+                constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
+                "flexy-ocs-private"
+            )
+            flexy_env = os.path.join(
+                flexy_private, constants.FLEXY_DEFAULT_ENV_FILE
+            )
+            args.append(f"--env-file={flexy_env}")
+        else:
+            args.append(f"--env-file={self.flexy_env_file}")
         args.append(f"-w={self.flexy_mnt_container_dir}")
         # For destroy on NFS mount, relabel=shared will not work
         # with podman hence we will keep 'relable=shared' only for
