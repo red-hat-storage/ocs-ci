@@ -150,6 +150,7 @@ class FlexyBase(object):
         if self.is_jenkins_mount() and purpose == 'destroy':
             flexy_private = os.path.join(
                 constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
+                constants.FLEXY_HOST_DIR,
                 "flexy-ocs-private"
             )
             flexy_env = os.path.join(
