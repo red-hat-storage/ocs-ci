@@ -179,7 +179,7 @@ class FlexyBase(object):
             args.append(
                 f"--mount=type=bind,source={flexy_dir},"
                 f"destination={self.flexy_mnt_container_dir}"
-                f'{["relabel=shared", ""][self.is_jenkins_mount()]}'
+                f'{[",relabel=shared", ""][self.is_jenkins_mount()]}'
             )
         else:
             args.append(
