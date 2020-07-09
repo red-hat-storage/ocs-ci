@@ -168,7 +168,7 @@ class FlexyBase(object):
                 flexy_dir = self.flexy_host_dir
             args.append(
                 f"--mount=type=bind,source={flexy_dir},"
-                f"destination={self.flexy_mnt_container_dir},"
+                f"destination={self.flexy_mnt_container_dir}"
                 f'{["relabel=shared", ""][self.is_jenkins_mount()]}'
             )
         else:
@@ -298,6 +298,7 @@ class FlexyBase(object):
                 shutil.copytree(
                     self.flexy_host_dir,
                     flexy_nfs_path,
+                    symlinks=True,
                     ignore_dangling_symlinks=True
                 )
                 chmod = (
