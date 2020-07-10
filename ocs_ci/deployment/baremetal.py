@@ -2,7 +2,6 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import exceptions
-from .deployment import Deployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from .flexy import FlexyBaremetalPSI
 from ocs_ci.utility.utils import (
