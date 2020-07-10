@@ -401,15 +401,20 @@ class Deployment(object):
             if self.platform.lower() == constants.AWS_PLATFORM:
                 deviceset_data['count'] = 2
 
+        ocs_version = float(config.ENV_DATA['ocs_version'])
         # Allow lower instance requests and limits for OCS deployment
+        # The resources we need to change can be found here:
+        # https://github.com/openshift/ocs-operator/blob/release-4.5/pkg/deploy-manager/storagecluster.go#L88-L116
         if config.DEPLOYMENT.get('allow_lower_instance_requirements'):
             none_resources = {'Requests': None, 'Limits': None}
             deviceset_data["resources"] = deepcopy(none_resources)
+            resources = [
+                'mon', 'mds', 'rgw', 'mgr', 'noobaa-core', 'noobaa-db',
+            ]
+            if ocs_version >= 4.5:
+                resources.append('noobaa-endpoint')
             cluster_data['spec']['resources'] = {
-                resource: deepcopy(none_resources) for resource
-                in [
-                    'mon', 'mds', 'rgw', 'mgr', 'noobaa-core', 'noobaa-db',
-                ]
+                resource: deepcopy(none_resources) for resource in resources
             }
         else:
             local_storage = config.DEPLOYMENT.get('local_storage')
@@ -428,8 +433,12 @@ class Deployment(object):
                         'limits': {'cpu': 2, 'memory': '8Gi'},
                         'requests': {'cpu': 1, 'memory': '8Gi'}
                     }
-
                 }
+                if ocs_version >= 4.5:
+                    resources['noobaa-endpoint'] = {
+                        'limits': {'cpu': 2, 'memory': '8Gi'},
+                        'requests': {'cpu': 1, 'memory': '8Gi'}
+                    }
                 cluster_data['spec']['resources'] = resources
 
         # Enable host network if enabled in config (this require all the
