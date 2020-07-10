@@ -17,10 +17,10 @@ compute_ignition_path: {{ compute_ignition_path }}
 ipam: {{ ipam | default('139.178.89.254') }}
 ipam_token: {{ ipam_token }}
 vm_network: {{ vm_network | default('VLAN_172') }}
-control_plane_memory: {{ control_plane_memory | default('16384') }}
+control_plane_memory: {{ master_memory | default('16384') }}
 compute_memory: {{ compute_memory | default('16384') }}
-control_plane_num_cpus: {{ control_plane_num_cpus | default('4') }}
-compute_num_cpus: {{ compute_num_cpus | default('12') }}
+control_plane_num_cpus: {{ master_num_cpus | default('4') }}
+compute_num_cpus: {{ worker_num_cpus | default('12') }}
 vm_dns_addresses: {{ vm_dns_addresses }}
 ssh_public_key_path: {{ ssh_public_key_path | default('~/.ssh/openshift-dev.pub')}}
 folder: {{ folder }}
