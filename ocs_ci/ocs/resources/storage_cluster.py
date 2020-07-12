@@ -131,6 +131,12 @@ def ocs_install_verification(
         * int(storage_cluster.data['spec']['storageDeviceSets'][0]['replica'])
     )
     rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
+
+    # check noobaa CR for min number of noobaa endpoint pods
+    nb_obj = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    min_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('minCount')
+    max_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('maxCount')
+
     resources_dict = {
         constants.OCS_OPERATOR_LABEL: 1,
         constants.OPERATOR_LABEL: 1,
@@ -145,7 +151,8 @@ def ocs_install_verification(
         constants.OSD_APP_LABEL: osd_count,
         constants.MGR_APP_LABEL: 1,
         constants.MDS_APP_LABEL: 2,
-        constants.RGW_APP_LABEL: rgw_count
+        constants.RGW_APP_LABEL: rgw_count,
+        constants.STATUS_RUNNING: min_eps
     }
     for label, count in resources_dict.items():
         if label == constants.RGW_APP_LABEL:
@@ -157,16 +164,7 @@ def ocs_install_verification(
             resource_count=count,
             timeout=timeout
         )
-    # check noobaa CR for min number of noobaa endpoint pods
-    nb_obj = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    min_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('minCount')
-    max_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('maxCount')
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.NOOBAA_ENDPOINT_POD_LABEL,
-        resource_count=min_eps,
-        timeout=timeout
-    )
+
     nb_ep_pods = get_pods_having_label(
         label=constants.NOOBAA_ENDPOINT_POD_LABEL, namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
