@@ -830,12 +830,14 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
             '/usr/bin/gather_service_logs worker'
         )
     if mcg:
+        counter = 0
         mcg_db_collected = False
-        while not mcg_db_collected:
+        while not mcg_db_collected and counter < 5:
             try:
                 collect_noobaa_db_dump(log_dir_path)
                 mcg_db_collected = True
             except CommandFailed:
+                counter += 1
                 sleep(30)
 
 
