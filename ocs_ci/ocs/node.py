@@ -710,12 +710,12 @@ def check_nodes_specs(min_memory, min_cpu):
     for node in nodes:
         real_cpu = int(node.get()['status']['capacity']['cpu'])
         real_memory = convert_device_size(node.get()['status']['capacity']['memory'], 'B')
-        if real_cpu <= min_cpu or real_memory <= min_memory:
+        if real_cpu < min_cpu or real_memory < min_memory:
             log.warning(
-                f"Node {node.get().get('metadata').get('name')} doesn't have "
-                f"minimum of required reasources for running the test:\n"
-                f"{min_cpu} CPUs and {min_memory} Memory\nIt has:\n{real_cpu} "
-                f"CPU and {real_memory} Memory"
+                f"Node {node.get().get('metadata').get('name')} specs don't meet "
+                f" the minimum required specs.\n The requirements are: "
+                f"{min_cpu} CPUs and {min_memory} Memory\nThe node has: {real_cpu} "
+                f"CPUs and {real_memory} Memory"
             )
             return False
     log.info(

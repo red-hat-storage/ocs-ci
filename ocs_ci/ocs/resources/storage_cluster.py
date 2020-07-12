@@ -147,7 +147,6 @@ def ocs_install_verification(
         constants.MDS_APP_LABEL: 2,
         constants.RGW_APP_LABEL: rgw_count
     }
-
     for label, count in resources_dict.items():
         if label == constants.RGW_APP_LABEL:
             if not config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
@@ -158,7 +157,6 @@ def ocs_install_verification(
             resource_count=count,
             timeout=timeout
         )
-
     # check noobaa CR for min number of noobaa endpoint pods
     nb_obj = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     min_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('minCount')
