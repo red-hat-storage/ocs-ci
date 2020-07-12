@@ -152,7 +152,7 @@ def ocs_install_verification(
         constants.MGR_APP_LABEL: 1,
         constants.MDS_APP_LABEL: 2,
         constants.RGW_APP_LABEL: rgw_count,
-        constants.STATUS_RUNNING: min_eps
+        constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps
     }
     for label, count in resources_dict.items():
         if label == constants.RGW_APP_LABEL:
