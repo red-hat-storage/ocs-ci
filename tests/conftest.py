@@ -2625,7 +2625,6 @@ def amq_factory_fixture(request):
         Clean up
 
         """
-
         # Clean up
         amq.cleanup()
 

@@ -483,7 +483,8 @@ class AMQ(object):
             run_in_bg (bool): On true the workload will run in background
 
         Return:
-            result (str): Returns benchmark run information
+            result (str/Thread obj): Returns benchmark run information if run_in_bg is False.
+                Otherwise a thread of the amq workload execution
 
         """
 
@@ -575,7 +576,7 @@ class AMQ(object):
         if run_in_bg:
             executor = ThreadPoolExecutor(1)
             result = executor.submit(
-                self.run_amq_workload_in_bg,
+                self.run_amq_workload,
                 cmd, benchmark_pod_name, tiller_namespace, timeout
             )
             return result
@@ -585,7 +586,7 @@ class AMQ(object):
 
         return result
 
-    def run_amq_workload_in_bg(
+    def run_amq_workload(
         self, command, benchmark_pod_name, tiller_namespace, timeout
     ):
         """
@@ -598,7 +599,7 @@ class AMQ(object):
              timeout (int): Time to complete the run
 
         Returns:
-            Thread: A thread of the amq workload execution
+            result (str): Returns benchmark run information
 
         """
         pod_obj = get_pod_obj(name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace)
