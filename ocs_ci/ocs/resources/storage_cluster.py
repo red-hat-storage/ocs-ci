@@ -126,44 +126,39 @@ def ocs_install_verification(
     pod = OCP(
         kind=constants.POD, namespace=namespace
     )
-    # resources_dict = {
-    #     constants.OCS_OPERATOR_LABEL: 1,
-    #     constants.OPERATOR_LABEL: 1,
-    #     constants.NOOBAA_DB_LABEL: 1,
-    #     constants.NOOBAA_OPERATOR_POD_LABEL: 1,
-    #     constants.NOOBAA_CORE_POD_LABEL: 1,
-    # }
-    # ocs-operator
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.OCS_OPERATOR_LABEL,
-        timeout=timeout
+    osd_count = (
+        int(storage_cluster.data['spec']['storageDeviceSets'][0]['count'])
+        * int(storage_cluster.data['spec']['storageDeviceSets'][0]['replica'])
     )
-    # rook-ceph-operator
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.OPERATOR_LABEL,
-        timeout=timeout
-    )
-    # noobaa
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.NOOBAA_DB_LABEL,
-        resource_count=1,
-        timeout=timeout
-    )
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.NOOBAA_OPERATOR_POD_LABEL,
-        resource_count=1,
-        timeout=timeout
-    )
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.NOOBAA_CORE_POD_LABEL,
-        resource_count=1,
-        timeout=timeout
-    )
+    rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
+    resources_dict = {
+        constants.OCS_OPERATOR_LABEL: 1,
+        constants.OPERATOR_LABEL: 1,
+        constants.NOOBAA_DB_LABEL: 1,
+        constants.NOOBAA_OPERATOR_POD_LABEL: 1,
+        constants.NOOBAA_CORE_POD_LABEL: 1,
+        constants.MON_APP_LABEL: 3,
+        constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
+        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL: 2,
+        constants.CSI_RBDPLUGIN_LABEL: number_of_worker_nodes,
+        constants.CSI_RBDPLUGIN_PROVISIONER_LABEL: 2,
+        constants.OSD_APP_LABEL: osd_count,
+        constants.MGR_APP_LABEL: 1,
+        constants.MDS_APP_LABEL: 2,
+        constants.RGW_APP_LABEL: rgw_count
+    }
+
+    for label, count in resources_dict.items():
+        if label == constants.RGW_APP_LABEL:
+            if not config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+                continue
+        assert pod.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=label,
+            resource_count=count,
+            timeout=timeout
+        )
+
     # check noobaa CR for min number of noobaa endpoint pods
     nb_obj = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     min_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('minCount')
@@ -181,76 +176,6 @@ def ocs_install_verification(
         f"The number of running NooBaa endpoint pods ({len(nb_ep_pods)}) "
         f"is greater than the maximum defined in the NooBaa CR ({max_eps})"
     )
-
-    # mons
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.MON_APP_LABEL,
-        resource_count=3,
-        timeout=timeout
-    )
-    # csi-cephfsplugin
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_CEPHFSPLUGIN_LABEL,
-        resource_count=number_of_worker_nodes,
-        timeout=timeout
-    )
-    # csi-cephfsplugin-provisioner
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-        resource_count=2,
-        timeout=timeout
-    )
-    # csi-rbdplugin
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_RBDPLUGIN_LABEL,
-        resource_count=number_of_worker_nodes,
-        timeout=timeout
-    )
-    # csi-rbdplugin-provisioner
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
-        resource_count=2,
-        timeout=timeout
-    )
-    # osds
-    osd_count = (
-        int(storage_cluster.data['spec']['storageDeviceSets'][0]['count'])
-        * int(storage_cluster.data['spec']['storageDeviceSets'][0]['replica'])
-    )
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.OSD_APP_LABEL,
-        resource_count=osd_count,
-        timeout=timeout
-    )
-    # mgr
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.MGR_APP_LABEL,
-        timeout=timeout
-    )
-    # mds
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.MDS_APP_LABEL,
-        resource_count=2,
-        timeout=timeout
-    )
-
-    # rgw check only for VmWare and BM
-    if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
-        rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
-        assert pod.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            selector=constants.RGW_APP_LABEL,
-            resource_count=rgw_count,
-            timeout=timeout
-        )
 
     # Verify StorageClasses (1 ceph-fs, 1 ceph-rbd)
     log.info("Verifying storage classes")
