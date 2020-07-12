@@ -246,17 +246,32 @@ class CephCluster(object):
             logger.error(e)
             raise exceptions.CephHealthException("Cluster health is NOT OK")
 
-        # check noobaa health
-        if not self.mcg_obj.status:
-            raise exceptions.NoobaaHealthException("Cluster health is NOT OK")
-
         # TODO: OSD and MGR health check
         logger.info("Cluster HEALTH_OK")
         # This scan is for reconcilation on *.count
         # because during first scan in this function some of the
         # pods may not be up and would have set count to lesser number
         self.scan_cluster()
-        return True
+
+        # Check Noobaa health
+        self.noobaa_health_check()
+
+    def noobaa_health_check(self):
+        """
+        Check Noobaa health
+
+        """
+        if not self.mcg_obj.status:
+            raise exceptions.NoobaaHealthException("Cluster health is NOT OK")
+
+    def wait_for_noobaa_health_ok(self, tries=60, delay=5):
+        """
+        Wait for Noobaa health to be OK
+        """
+        return retry(
+            exceptions.NoobaaHealthException,
+            tries=tries, delay=delay, backoff=1
+        )(self.noobaa_health_check)()
 
     def mon_change_count(self, new_count):
         """
