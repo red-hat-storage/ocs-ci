@@ -171,7 +171,7 @@ class BAREMETALUPI(Deployment):
             logger.info(rhcos_images_file)
             image_data = rhcos_images_file[ocp_version]
             # Download installer_initramfs
-            initramfs_image_path = constants.coreos_url_prefix+image_data['installer_initramfs_url']
+            initramfs_image_path = constants.coreos_url_prefix + image_data['installer_initramfs_url']
             if check_for_rhcos_images(initramfs_image_path):
                 cmd = f"wget -O {self.helper_node_details['bm_tftp_dir']}" \
                       f"/rhcos-installer-initramfs.x86_64.img " \
@@ -180,7 +180,7 @@ class BAREMETALUPI(Deployment):
             else:
                 raise RhcosImageNotFound
             # Download installer_kernel
-            kernel_image_path = constants.coreos_url_prefix+image_data['installer_kernel_url']
+            kernel_image_path = constants.coreos_url_prefix + image_data['installer_kernel_url']
             if check_for_rhcos_images(kernel_image_path):
                 cmd = f"wget -O {self.helper_node_details['bm_tftp_dir']}" \
                       f"/rhcos-installer-kernel-x86_64 " \
@@ -189,7 +189,7 @@ class BAREMETALUPI(Deployment):
             else:
                 raise RhcosImageNotFound
             # Download metal_bios
-            metal_image_path = constants.coreos_url_prefix+image_data['metal_bios_url']
+            metal_image_path = constants.coreos_url_prefix + image_data['metal_bios_url']
             if check_for_rhcos_images(metal_image_path):
                 cmd = f"wget -O {self.helper_node_details['bm_path_to_upload']}" \
                       f"/rhcos-metal.x86_64.raw.gz " \
@@ -451,7 +451,7 @@ def clean_disk():
 
     for worker in workers:
         out = ocp_obj.exec_oc_debug_cmd(
-            node=worker.name, cmd_list=[f"lsblk -nd -e252,7 --output NAME --json"]
+            node=worker.name, cmd_list=["lsblk -nd -e252,7 --output NAME --json"]
         )
         lsblk_output = json.loads(str(out))
         lsblk_devices = lsblk_output['blockdevices']
