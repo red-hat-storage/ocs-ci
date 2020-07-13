@@ -830,7 +830,15 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
             '/usr/bin/gather_service_logs worker'
         )
     if mcg:
-        collect_noobaa_db_dump(log_dir_path)
+        counter = 0
+        mcg_db_collected = False
+        while not mcg_db_collected or counter < 5:
+            try:
+                collect_noobaa_db_dump(log_dir_path)
+                mcg_db_collected = True
+            except CommandFailed:
+                counter += 1
+                sleep(30)
 
 
 def collect_prometheus_metrics(
