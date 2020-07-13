@@ -762,14 +762,17 @@ def setup_local_storage():
         # Types of LSO Deployment
         # Importing here to avoid circular dependancy
         from ocs_ci.deployment.vmware import VSPHEREBASE
+        vsphere_base = VSPHEREBASE()
+
         if lso_type == constants.RDM:
             logger.info(f"LSO Deployment type: {constants.RDM}")
-            vsphere_base = VSPHEREBASE()
             vsphere_base.add_rdm_disks()
 
         if lso_type == constants.VMDK:
-            raise NotImplementedError(
-                "LSO Deployment for VMDk is not implemented"
+            logger.info(f"LSO Deployment type: {constants.VMDK}")
+            vsphere_base.attach_disk(
+                config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE),
+                config.DEPLOYMENT.get('provision_type', constants.VM_DISK_TYPE)
             )
 
         if lso_type == constants.DIRECTPATH:
