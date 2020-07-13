@@ -1,6 +1,8 @@
 import json
 import os
 import logging
+from time import sleep
+
 import yaml
 
 from ocs_ci.framework import config
@@ -16,14 +18,15 @@ from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, RhcosImageNotFound
 from ocs_ci.ocs.node import get_typed_nodes
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pending_csr
 from ocs_ci.utility.templating import Templating
-from ocs_ci.utility.utils import run_cmd, upload_file, get_ocp_version, load_auth_config, wait_for_co
+from ocs_ci.utility.utils import run_cmd, upload_file, get_ocp_version, load_auth_config, wait_for_co, \
+    wait_for_machineconfigpool_status, check_for_rhcos_images
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +43,8 @@ class BAREMETALUPI(Deployment):
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
             super().__init__()
+            self.helper_node_details = load_auth_config()['baremetal']
+            self.mgmt_details = load_auth_config()['ipmi']
 
         def deploy_prereq(self):
             """
@@ -55,16 +60,16 @@ class BAREMETALUPI(Deployment):
             master_path = os.path.join(config.ENV_DATA.get('cluster_path'), constants.MASTER_IGN)
             worker_path = os.path.join(config.ENV_DATA.get('cluster_path'), constants.WORKER_IGN)
 
-            self.host = constants.bm_httpd_server
-            self.user = constants.bm_httpd_server_user
+            self.host = self.helper_node_details['bm_httpd_server']
+            self.user = self.helper_node_details['bm_httpd_server_user']
             self.private_key = os.path.expanduser(
                 config.DEPLOYMENT['ssh_key_private']
             )
 
             self.helper_node_handler = Connection(self.host, self.user, self.private_key)
-            cmd = f"rm -rf {constants.bm_path_to_upload}"
+            cmd = f"rm -rf {self.helper_node_details['bm_path_to_upload']}"
             logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
-            cmd = f"mkdir -m 755 {constants.bm_path_to_upload}"
+            cmd = f"mkdir -m 755 {self.helper_node_details['bm_path_to_upload']}"
             assert self.helper_node_handler.exec_cmd(cmd=cmd), ("Failed to create required folder")
 
             # Upload bootstrap ignition to public access server
@@ -72,7 +77,7 @@ class BAREMETALUPI(Deployment):
                 self.host,
                 bootstrap_path,
                 os.path.join(
-                    constants.bm_path_to_upload,
+                    self.helper_node_details['bm_path_to_upload'],
                     f"{constants.BOOTSTRAP_IGN}"
                 ),
                 self.user,
@@ -83,7 +88,7 @@ class BAREMETALUPI(Deployment):
                 self.host,
                 master_path,
                 os.path.join(
-                    constants.bm_path_to_upload,
+                    self.helper_node_details['bm_path_to_upload'],
                     f"{constants.MASTER_IGN}"
                 ),
                 self.user,
@@ -94,7 +99,7 @@ class BAREMETALUPI(Deployment):
                 self.host,
                 worker_path,
                 os.path.join(
-                    constants.bm_path_to_upload,
+                    self.helper_node_details['bm_path_to_upload'],
                     f"{constants.WORKER_IGN}"
                 ),
                 self.user,
@@ -102,7 +107,7 @@ class BAREMETALUPI(Deployment):
             )
 
             # Perform Cleanup for stale entry's
-            cmd = f"rm -rf {constants.bm_tftp_base_dir}"
+            cmd = f"rm -rf {self.helper_node_details['bm_tftp_base_dir']}"
             assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Delete folder"
 
             # Installing Required packages
@@ -117,31 +122,31 @@ class BAREMETALUPI(Deployment):
             cmd = "systemctl start dnsmasq"
             assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Start dnsmasq service"
 
-            cmd = f"mkdir -m 755 -p {constants.bm_tftp_base_dir}"
-            assert self.helper_node_handler.exec_cmd(cmd=cmd), ("Failed to create required folder")
+            cmd = f"mkdir -m 755 -p {self.helper_node_details['bm_tftp_base_dir']}"
+            assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to create required folder"
 
-            cmd = f"mkdir -m 755 -p {constants.bm_tftp_base_dir}ocs4qe"
-            assert self.helper_node_handler.exec_cmd(cmd=cmd), ("Failed to create required folder")
+            cmd = f"mkdir -m 755 -p {self.helper_node_details['bm_tftp_base_dir']}ocs4qe"
+            assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to create required folder"
 
-            cmd = f"mkdir -m 755 -p {constants.bm_tftp_base_dir}ocs4qe/baremetal"
-            assert self.helper_node_handler.exec_cmd(cmd=cmd), ("Failed to create required folder")
+            cmd = f"mkdir -m 755 -p {self.helper_node_details['bm_tftp_base_dir']}ocs4qe/baremetal"
+            assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to create required folder"
 
-            cmd = f"rm -rf {constants.bm_dnsmasq_dir}*"
-            assert self.helper_node_handler.exec_cmd(cmd=cmd), ("Failed to Delete dir")
+            cmd = f"rm -rf {self.helper_node_details['bm_dnsmasq_dir']}*"
+            assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Delete dir"
 
             # Install syslinux
             cmd = "yum install syslinux -y"
             assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to install required package"
 
             # Copy syslinux files to the tftp path
-            cmd = f"cp -ar /usr/share/syslinux/* {constants.bm_tftp_dir}"
-            assert self.helper_node_handler.exec_cmd(cmd=cmd), ("Failed to Copy required files")
+            cmd = f"cp -ar /usr/share/syslinux/* {self.helper_node_details['bm_tftp_dir']}"
+            assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Copy required files"
 
             upload_file(
                 self.host,
                 constants.PXE_CONF_FILE,
                 os.path.join(
-                    constants.bm_dnsmasq_dir,
+                    self.helper_node_details['bm_dnsmasq_dir'],
                     "dnsmasq.pxe.conf"
                 ),
                 self.user,
@@ -151,7 +156,7 @@ class BAREMETALUPI(Deployment):
                 self.host,
                 constants.COMMON_CONF_FILE,
                 os.path.join(
-                    constants.bm_dnsmasq_dir,
+                    self.helper_node_details['bm_dnsmasq_dir'],
                     "dnsmasq.common.conf"
                 ),
                 self.user,
@@ -166,22 +171,34 @@ class BAREMETALUPI(Deployment):
             logger.info(rhcos_images_file)
             image_data = rhcos_images_file[ocp_version]
             # Download installer_initramfs
-            cmd = f"wget -O {constants.bm_tftp_dir}/rhcos-installer-initramfs.x86_64.img " \
-                  f"{constants.coreos_url_prefix}" \
-                  f"{image_data['installer_initramfs_url']}"
-            assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
+            initramfs_image_path = constants.coreos_url_prefix+image_data['installer_initramfs_url']
+            if check_for_rhcos_images(initramfs_image_path):
+                cmd = f"wget -O {self.helper_node_details['bm_tftp_dir']}" \
+                      f"/rhcos-installer-initramfs.x86_64.img " \
+                      f"{initramfs_image_path}"
+                assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
+            else:
+                raise RhcosImageNotFound
             # Download installer_kernel
-            cmd = f"wget -O {constants.bm_tftp_dir}/rhcos-installer-kernel-x86_64 " \
-                  f"{constants.coreos_url_prefix}" \
-                  f"{image_data['installer_kernel_url']}"
-            assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
+            kernel_image_path = constants.coreos_url_prefix+image_data['installer_kernel_url']
+            if check_for_rhcos_images(kernel_image_path):
+                cmd = f"wget -O {self.helper_node_details['bm_tftp_dir']}" \
+                      f"/rhcos-installer-kernel-x86_64 " \
+                      f"{kernel_image_path}"
+                assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
+            else:
+                raise RhcosImageNotFound
             # Download metal_bios
-            cmd = f"wget -O {constants.bm_path_to_upload}/rhcos-metal.x86_64.raw.gz " \
-                  f"{constants.coreos_url_prefix}" \
-                  f"{image_data['metal_bios_url']}"
-            assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
+            metal_image_path = constants.coreos_url_prefix+image_data['metal_bios_url']
+            if check_for_rhcos_images(metal_image_path):
+                cmd = f"wget -O {self.helper_node_details['bm_path_to_upload']}" \
+                      f"/rhcos-metal.x86_64.raw.gz " \
+                      f"{metal_image_path}"
+                assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
+            else:
+                raise RhcosImageNotFound
             # Create pxelinux.cfg directory
-            cmd = f"mkdir -m 755 {constants.bm_tftp_dir}/pxelinux.cfg"
+            cmd = f"mkdir -m 755 {self.helper_node_details['bm_tftp_dir']}/pxelinux.cfg"
             assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to create required folder"
 
         def deploy(self, log_cli_level='DEBUG'):
@@ -197,37 +214,54 @@ class BAREMETALUPI(Deployment):
                 self.host,
                 constants.COMMON_CONF_FILE,
                 os.path.join(
-                    constants.bm_dnsmasq_dir,
+                    self.helper_node_details['bm_dnsmasq_dir'],
                     "dnsmasq.common.conf"
                 ),
                 self.user,
                 key_file=self.private_key
             )
-            file_list = os.listdir(constants.PXE_FILE)
-            for files in file_list:
-                upload_file(
-                    self.host,
-                    f"{constants.PXE_FILE}/{files}",
-                    os.path.join(
-                        f"{constants.bm_tftp_dir}/pxelinux.cfg",
-                        f"{files}"
-                    ),
-                    self.user,
-                    key_file=self.private_key
-                )
+            logger.info("Uploading PXE files")
+            for machine in self.mgmt_details:
+                if self.mgmt_details[machine].get('role') == "bootstrap":
+                    upload_file(
+                        server=self.host,
+                        localpath=constants.BOOTSTRAP_PXE_FILE,
+                        remotepath=f"{self.helper_node_details['bm_tftp_dir']}"
+                                   f"/pxelinux.cfg/01-{self.mgmt_details[machine]['mac'].replace(':', '-')}",
+                        user=self.user,
+                        key_file=self.private_key
+                    )
+                elif self.mgmt_details[machine].get('role') == "master":
+                    upload_file(
+                        server=self.host,
+                        localpath=constants.MASTER_PXE_FILE,
+                        remotepath=f"{self.helper_node_details['bm_tftp_dir']}"
+                                   f"/pxelinux.cfg/01-{self.mgmt_details[machine]['mac'].replace(':', '-')}",
+                        user=self.user,
+                        key_file=self.private_key
+                    )
+                elif self.mgmt_details[machine].get('role') == "worker":
+                    upload_file(
+                        server=self.host,
+                        localpath=constants.WORKER_PXE_FILE,
+                        remotepath=f"{self.helper_node_details['bm_tftp_dir']}"
+                                   f"/pxelinux.cfg/01-{self.mgmt_details[machine]['mac'].replace(':', '-')}",
+                        user=self.user,
+                        key_file=self.private_key
+                    )
             # Applying Permission
-            cmd = f"chmod 755 -R {constants.bm_tftp_dir}"
+            cmd = f"chmod 755 -R {self.helper_node_details['bm_tftp_dir']}"
             self.helper_node_handler.exec_cmd(cmd=cmd)
 
             # Applying Permission
-            cmd = f"chmod 755 -R {constants.bm_path_to_upload}"
+            cmd = f"chmod 755 -R {self.helper_node_details['bm_path_to_upload']}"
             self.helper_node_handler.exec_cmd(cmd=cmd)
 
             # Restarting dnsmasq service
             cmd = "systemctl restart dnsmasq"
             assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to restart dnsmasq service"
             # Rebooting Machine with pxe boot
-            self.mgmt_details = load_auth_config()['ipmi']
+
             for machine_id in range(1, 8):
                 machine_name = f"argo00{machine_id}.ceph.redhat.com"
                 if self.mgmt_details[machine_name]:
@@ -289,11 +323,20 @@ class BAREMETALUPI(Deployment):
             approve_pending_csr()
 
             self.test_cluster()
-            # We need NTP for OCS cluster to become clean
-            logger.info("creating ntp chrony")
-            # run_cmd(f"oc create -f {constants.NTP_CHRONY_CONF}")
             logger.info("Performing Disk cleanup")
             clean_disk()
+            # We need NTP for OCS cluster to become clean
+            logger.info("creating ntp chrony for master nodes")
+            run_cmd(cmd=f"oc --kubeconfig {self.kubeconfig} create -f {constants.MASTER_NTP_CHRONY_CONF}")
+            logger.info("Waiting for 20 sec")
+            sleep(20)
+            wait_for_machineconfigpool_status(resource_name='master')
+
+            logger.info("creating ntp chrony for worker nodes")
+            run_cmd(cmd=f"oc --kubeconfig {self.kubeconfig} create -f {constants.WORKER_NTP_CHRONY_CONF}")
+            logger.info("Waiting for 20 sec")
+            sleep(20)
+            wait_for_machineconfigpool_status(resource_name='worker')
 
         def create_config(self):
             """
@@ -360,22 +403,20 @@ def clean_disk():
     """
     Perform disk cleanup
     """
-    device_to_clean_list = []
+    lvm_to_clean = []
     workers = get_typed_nodes(node_type='worker')
     ocp_obj = ocp.OCP()
     for worker in workers:
-        cmd = (
-            f"debug nodes/{worker.name} "
-            f"-- chroot /host lsblk -nd -e252,7 --output NAME --json"
+        out = ocp_obj.exec_oc_debug_cmd(
+            node=worker.name, cmd_list=["lsblk -nd -e252,7 --output NAME --json"]
         )
-        out = ocp_obj.exec_oc_cmd(
-            command=cmd, out_yaml_format=False,
-        )
+        logger.info(out)
         lsblk_output = json.loads(str(out))
         lsblk_devices = lsblk_output['blockdevices']
         for lsblk_device in lsblk_devices:
             base_cmd = """pvs --config "devices{filter = [ 'a|/dev/%s.*|', 'r|.*|' ] }" --reportformat json""" \
                        % lsblk_device['name']
+
             cmd = (
                 f"debug nodes/{worker.name} "
                 f"-- chroot /host {base_cmd}"
@@ -383,6 +424,7 @@ def clean_disk():
             out = ocp_obj.exec_oc_cmd(
                 command=cmd, out_yaml_format=False,
             )
+            logger.info(out)
             pvs_output = json.loads(str(out))
             pvs_list = pvs_output['report']
             for pvs in pvs_list:
@@ -393,40 +435,39 @@ def clean_disk():
                         'hostname': f"{worker.name}", 'pv_name': f"{pv['pv_name']}",
                         'vg_name': f"{pv['vg_name']}"
                     }
-                    device_to_clean_list.append(device_dict)
-    if device_to_clean_list:
-        for devices in device_to_clean_list:
-            cmd = (
-                f"debug nodes/{devices['hostname']} "
-                f"-- chroot /host timeout 120 vgremove {devices['vg_name']} -y -f"
-            )
-            logger.info("Removing vg")
-            out = ocp_obj.exec_oc_cmd(
-                command=cmd, out_yaml_format=False,
+                    lvm_to_clean.append(device_dict)
+    if lvm_to_clean:
+        for devices in lvm_to_clean:
+            out = ocp_obj.exec_oc_debug_cmd(
+                node=devices['hostname'], cmd_list=[f"timeout 120 vgremove {devices['vg_name']} -y -f"]
             )
             logger.info(out)
 
-        for devices in device_to_clean_list:
-            cmd = (
-                f"debug nodes/{devices['hostname']} "
-                f"-- chroot /host pvremove {devices['pv_name']} -y"
-            )
-            logger.info("Removing pv")
-            out = ocp_obj.exec_oc_cmd(
-                command=cmd, out_yaml_format=False,
+        for devices in lvm_to_clean:
+            out = ocp_obj.exec_oc_debug_cmd(
+                node=devices['hostname'], cmd_list=[f"pvremove {devices['pv_name']} -y"]
             )
             logger.info(out)
 
-        for devices in device_to_clean_list:
-            cmd = (
-                f"debug nodes/{devices['hostname']} "
-                f"-- chroot /host wipefs -a -f {devices['pv_name']}"
+    for worker in workers:
+        out = ocp_obj.exec_oc_debug_cmd(
+            node=worker.name, cmd_list=[f"lsblk -nd -e252,7 --output NAME --json"]
+        )
+        lsblk_output = json.loads(str(out))
+        lsblk_devices = lsblk_output['blockdevices']
+        for lsblk_device in lsblk_devices:
+            out = ocp_obj.exec_oc_debug_cmd(
+                node=worker.name, cmd_list=[f"lsblk -b /dev/{lsblk_device['name']} --output NAME --json"]
             )
-            logger.info("Removing pv")
-            out = ocp_obj.exec_oc_cmd(
-                command=cmd, out_yaml_format=False,
-            )
-            logger.info(out)
+            lsblk_output = json.loads(str(out))
+            lsblk_devices_to_clean = lsblk_output['blockdevices']
+            for device_to_clean in lsblk_devices_to_clean:
+                if not device_to_clean.get('children'):
+                    logger.info("Cleaning Disk")
+                    out = ocp_obj.exec_oc_debug_cmd(
+                        node=worker.name, cmd_list=[f"wipefs -a -f /dev/{device_to_clean['name']}"]
+                    )
+                    logger.info(out)
 
 
 class BaremetalPSIUPI(Deployment):

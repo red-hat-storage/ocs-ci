@@ -2484,3 +2484,34 @@ def modify_csv(csv, replace_from, replace_to):
 
     run_cmd(f"chmod 777 {temp_file.name}")
     run_cmd(f"sh {temp_file.name}")
+
+
+def wait_for_machineconfigpool_status(resource_name, timeout=800):
+    """
+    Check for Machineconfigpool status
+
+    Args:
+        resource_name (str): The name of the resource to wait (master,worker)
+        timeout (int): Time in seconds to wait:
+
+
+    """
+    from ocs_ci.ocs import ocp
+    ocp_obj = ocp.OCP(kind=constants.MACHINECONFIGPOOL, resource_name=resource_name)
+    machine_count = ocp_obj.get()['status']['machineCount']
+
+    ocp_obj.wait_for_resource(condition=str(machine_count), column="READYMACHINECOUNT", timeout=timeout)
+
+
+def check_for_rhcos_images(path):
+    """
+    Check for rhcos images are present in given location
+
+    Args:
+        path (str): rhcos_images path
+    Returns:
+        (bool): True if images present if not false
+
+    """
+    r = requests.head(path)
+    return r.status_code == requests.codes.ok

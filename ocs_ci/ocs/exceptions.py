@@ -196,3 +196,7 @@ class RDMDiskNotFound(Exception):
 
 class CredReqSecretNotFound(Exception):
     pass
+
+
+class RhcosImageNotFound(Exception):
+    pass

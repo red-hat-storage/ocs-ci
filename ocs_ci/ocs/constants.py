@@ -1024,12 +1024,15 @@ AWS_CLOUDFORMATION_TAG = 'aws:cloudformation:stack-name'
 =======
 >>>>>>> e725cf64... rebase
 # Bare Metal constants
-bm_httpd_server = "10.8.128.12"
-bm_path_to_upload = "/var/www/html/pratik/ocs4qe/"
-bm_httpd_server_user = "root"
-bm_tftp_base_dir = "/var/lib/tftpboot/"
-bm_tftp_dir = bm_tftp_base_dir + "ocs4qe/baremetal"
-bm_dnsmasq_dir = "/etc/dnsmasq.d/"
+BOOTSTRAP_PXE_FILE = os.path.join(
+    TEMPLATE_DIR, "baremetal-pxefile", "bootstrap"
+)
+MASTER_PXE_FILE = os.path.join(
+    TEMPLATE_DIR, "baremetal-pxefile", "master"
+)
+WORKER_PXE_FILE = os.path.join(
+    TEMPLATE_DIR, "baremetal-pxefile", "worker"
+)
 PXE_CONF_FILE = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "dnsmasq.pxe.conf"
 )
@@ -1044,3 +1047,9 @@ PXE_FILE = os.path.join(
 )
 coreos_url_prefix = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos"
 BM_DEFAULT_CLUSTER_NAME = "ocp-baremetal-auto"
+WORKER_NTP_CHRONY_CONF = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "ntp_chrony_worker.yaml"
+)
+MASTER_NTP_CHRONY_CONF = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "ntp_chrony_master.yaml"
+)
