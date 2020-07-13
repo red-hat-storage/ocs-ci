@@ -39,7 +39,10 @@ class FlexyBase(object):
         self.flexy_mnt_container_dir = config.ENV_DATA.get(
             'flexy_mnt_container_dir', constants.FLEXY_MNT_CONTAINER_DIR
         )
-        self.flexy_img_url = config.ENV_DATA.get('flexy_img_url')
+        self.flexy_img_url = config.ENV_DATA.get(
+            'flexy_img_url',
+            constants.FLEXY_IMAGE_URL
+        )
         self.template_file = None
 
         # If user has provided an absolute path for env file
@@ -48,8 +51,8 @@ class FlexyBase(object):
         # we will go ahead with default 'flexy-ocs-private' repo
         if not config.ENV_DATA.get('flexy_env_file'):
             self.flexy_private_conf_url = config.ENV_DATA.get(
-                'flexy_private_conf_url',
-                constants.FLEXY_DEFAULT_PRIVATE_CONF_URL
+                'flexy_private_conf_repo',
+                constants.FLEXY_DEFAULT_PRIVATE_CONF_REPO
             )
             self.flexy_private_conf_branch = config.ENV_DATA.get(
                 'flexy_private_conf_branch',
@@ -160,7 +163,7 @@ class FlexyBase(object):
             args.append(f"--env-file={self.flexy_env_file}")
         args.append(f"-w={self.flexy_mnt_container_dir}")
         # For destroy on NFS mount, relabel=shared will not work
-        # with podman hence we will keep 'relable=shared' only for
+        # with podman hence we will keep 'relabel=shared' only for
         # deploy which happens on Jenkins slave's local fs.
         # Also during destroy we assume that copying of flexy
         # would be done during deployment and we can rely on
