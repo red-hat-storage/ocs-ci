@@ -58,7 +58,7 @@ class TestJenkinsWorkload(E2ETest):
         # Init number of builds per project
         jenkins.number_builds_per_project = num_of_builds
 
-        # Start Builds
+        # Start  Builds
         jenkins.start_build()
 
         # Wait build reach 'Complete' state
