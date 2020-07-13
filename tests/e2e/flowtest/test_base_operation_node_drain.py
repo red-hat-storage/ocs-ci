@@ -41,16 +41,16 @@ class TestFlowBasedTests(E2ETest):
         logger.info("Starting IO operations in Background")
         project = project_factory()
 
-        bg_wrap = flowtest_helpers.BackgroundOps()
+        bg_handler = flowtest_helpers.BackgroundOps()
         executor_run_bg_ios_ops = ThreadPoolExecutor(max_workers=3)
 
         logging.info("Started object IOs in background")
         obc_ios = executor_run_bg_ios_ops.submit(
-            bg_wrap.wrap, obc_put_obj_create_delete, mcg_obj, bucket_factory, iterations=50
+            bg_handler.handler, obc_put_obj_create_delete, mcg_obj, bucket_factory, iterations=50
         )
         logging.info("Started pvc create and delete in background")
         pvc_create_delete = executor_run_bg_ios_ops.submit(
-            bg_wrap.wrap,
+            bg_handler.handler,
             create_pvc_delete,
             multi_pvc_factory,
             project,
@@ -58,7 +58,7 @@ class TestFlowBasedTests(E2ETest):
         )
         logging.info("Started pgsql workload in background")
         pgsql_workload = executor_run_bg_ios_ops.submit(
-            bg_wrap.wrap,
+            bg_handler.handler,
             pgsql_factory_fixture,
             replicas=1, clients=1, transactions=100,
             timeout=100, iterations=1
@@ -120,4 +120,4 @@ class TestFlowBasedTests(E2ETest):
         logger.info("Waiting for final iteration of background operations to be completed")
         flowtest_helpers.BackgroundOps.OPERATION_COMPLETED = True
         bg_ops = [pvc_create_delete, obc_ios, pgsql_workload]
-        bg_wrap.wait_for_bg_operations(bg_ops, timeout=600)
+        bg_handler.wait_for_bg_operations(bg_ops, timeout=600)

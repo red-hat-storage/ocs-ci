@@ -35,7 +35,6 @@ class FlowOperations:
             tuple: containing the params used in Node operations
 
         """
-
         logger.info("Node operations entry: Verifying cluster health")
         self.sanity_helpers.health_check(cluster_check=False)
         logger.info("Node operations entry: Verifying StorageCluster pods are in running/completed state")
@@ -182,7 +181,7 @@ def obc_put_obj_create_delete(mcg_obj, bucket_factory):
 class BackgroundOps:
     OPERATION_COMPLETED = False
 
-    def wrap(self, func, *args, **kwargs):
+    def handler(self, func, *args, **kwargs):
         """
         Wraps the function to run specific iterations
         Returns:
@@ -217,7 +216,7 @@ class BackgroundOps:
             try:
                 logger.info(f"Thread completed: {thread.result()}")
             except exceptions.CommandFailed:
-                logger.exception(f"Thread failed")
+                logger.exception("Thread failed to complete")
                 raise
             except Exception:
                 logger.exception("Found an exception")
