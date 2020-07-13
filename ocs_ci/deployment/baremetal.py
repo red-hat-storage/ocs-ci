@@ -438,8 +438,13 @@ def clean_disk():
                     lvm_to_clean.append(device_dict)
     if lvm_to_clean:
         for devices in lvm_to_clean:
-            out = ocp_obj.exec_oc_debug_cmd(
-                node=devices['hostname'], cmd_list=[f"timeout 120 vgremove {devices['vg_name']} -y -f"]
+            cmd = (
+                f"debug nodes/{devices['hostname']} "
+                f"-- chroot /host timeout 120 vgremove {devices['vg_name']} -y -f"
+            )
+            logger.info("Removing vg")
+            out = ocp_obj.exec_oc_cmd(
+                command=cmd, out_yaml_format=False,
             )
             logger.info(out)
 
