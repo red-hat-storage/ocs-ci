@@ -211,7 +211,13 @@ class ClusterLoad:
             cluster_used_space = get_percent_used_capacity()
 
             if len(latency_vals) > 1 and latency > 200:
-                # Checking for an exponential growth
+                # Checking for an exponential growth. In case the latest latency sample
+                # value is more than 128 times the first latency value sample, we can conclude
+                # that the cluster limit in terms of IOPS, has been reached.
+                # See https://blog.docbert.org/vdbench-curve/ for more details.
+                # In other cases, when the first latency sample value is greater than 3 ms,
+                # the multiplication factor we check according to, is lower, in order to
+                # determine the cluster load faster.
                 if latency > latency_vals[0] * 2 ** 7 or (
                     3 < latency_vals[0] > 50 and latency > 300 and len(latency_vals) > 5
                 ):

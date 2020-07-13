@@ -2433,3 +2433,33 @@ def configure_chrony_and_wait_for_machineconfig_status(
         # sleep here to start update machineconfigpool status
         time.sleep(60)
         wait_for_machineconfigpool_status(role)
+
+
+def modify_csv(csv, replace_from, replace_to):
+    """
+    Modify the CSV
+
+    Args:
+        csv (str): The CSV name
+        replace_from (str): The pattern to replace from in the CSV
+        replace_to (str): The pattern to replace to in the CSV
+
+    """
+    data = (
+        f"oc -n openshift-storage get csv {csv} -o yaml | sed"
+        f" 's,{replace_from},{replace_to},g' | oc replace -f -"
+    )
+    log.info(
+        f"CSV {csv} will be modified: {replace_from} will be replaced "
+        f"with {replace_to}.\nThe command that will be used for that is:\n{data}"
+    )
+
+    temp_file = NamedTemporaryFile(
+        mode='w+', prefix='csv_modification', suffix='.sh'
+    )
+
+    with open(temp_file.name, 'w') as t_file:
+        t_file.writelines(data)
+
+    run_cmd(f"chmod 777 {temp_file.name}")
+    run_cmd(f"sh {temp_file.name}")
