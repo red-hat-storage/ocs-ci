@@ -15,16 +15,16 @@ spec:
               ) {
           node("maven-s") {
             stage('Source Checkout') {
-              git url: "https://github.com/sagyvolkov/sagy-openshift-tasks.git"
+              git url: "https://github.com/red-hat-storage/ocs-workloads.git"
               script {
-                def pom = readMavenPom file: 'pom.xml'
+                def pom = readMavenPom file: 'jenkins/maven01/pom.xml'
                 def version = pom.version
               }
             }
             // Using Maven build the war file
             stage('Build JAX-RS') {
               echo "Building war file"
-              sh "mvn clean package -DskipTests=true"
+              sh "mvn -f jenkins/maven01/pom.xml clean package -DskipTests=true"
             }
           }
         }
