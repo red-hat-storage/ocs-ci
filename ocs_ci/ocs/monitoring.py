@@ -9,7 +9,11 @@ from ocs_ci.ocs.resources.pvc import get_all_pvcs, PVC
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from tests import helpers
 import ocs_ci.utility.prometheus
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour, ServiceUnavailable
+from ocs_ci.ocs.exceptions import (
+    UnexpectedBehaviour,
+    ServiceUnavailable,
+    CommandFailed,
+)
 from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
@@ -55,15 +59,24 @@ def create_configmap_cluster_monitoring_pod(sc_name=None, telemeter_server_url=N
     logger.info("Successfully created configmap cluster-monitoring-config")
 
 
+@retry((AssertionError, CommandFailed), tries=30, delay=10, backoff=1)
 def validate_pvc_created_and_bound_on_monitoring_pods():
     """
     Validate pvc's created and bound in state
     on monitoring pods
 
+    Raises:
+        AssertionError: If no PVC are created or if any PVC are not
+            in the Bound state
+
     """
     logger.info("Verify pvc are created")
     pvc_list = get_all_pvcs(namespace=defaults.OCS_MONITORING_NAMESPACE)
     logger.info(f"PVC list {pvc_list}")
+
+    assert pvc_list['items'], (
+        f"No PVC created in {defaults.OCS_MONITORING_NAMESPACE} namespace"
+    )
 
     # Check all pvc's are in bound state
     for pvc in pvc_list['items']:
