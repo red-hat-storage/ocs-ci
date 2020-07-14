@@ -23,7 +23,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
 from ocs_ci.ocs.bucket_utils import craft_s3_command
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException, ResourceWrongStatusException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.backingstore import BackingStore
@@ -2666,3 +2666,31 @@ def ceph_toolbox(request):
     if not (deploy or teardown or skip_ocs):
         # Creating toolbox pod
         setup_ceph_toolbox()
+
+
+@pytest.fixture(scope='function')
+def node_restart_teardown(request, nodes):
+    """
+    Make sure all nodes are up again
+    Make sure that all cluster's nodes are in 'Ready' state and if not,
+    change them back to 'Ready' state by restarting the nodes
+    """
+    def finalizer():
+        # Start the powered off nodes
+        nodes.restart_nodes_by_stop_and_start_teardown()
+        try:
+            node.wait_for_nodes_status(status=constants.NODE_READY)
+        except ResourceWrongStatusException:
+            # Restart the nodes if in NotReady state
+            not_ready_nodes = [
+                n for n in node.get_node_objs() if n
+                .ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
+            ]
+            if not_ready_nodes:
+                log.info(
+                    f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
+                )
+                nodes.restart_nodes(not_ready_nodes)
+                node.wait_for_nodes_status(status=constants.NODE_READY)
+
+    request.addfinalizer(finalizer)
