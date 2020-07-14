@@ -1304,7 +1304,7 @@ def get_az_count():
 
 def ceph_health_check(
     namespace=None, tries=20, delay=30, intelligent_wait=False,
-    max_timeout_for_pg=600,
+    max_timeout_for_pg=1500,
 ):
     """
     Args:
