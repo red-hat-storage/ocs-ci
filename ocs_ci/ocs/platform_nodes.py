@@ -32,7 +32,7 @@ from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
     replace_content_in_file,
     get_ocp_version, TimeoutSampler,
-    download_file, delete_file, AZInfo
+    download_file, delete_file, AZInfo, set_aws_region,
 )
 from ocs_ci.ocs.node import wait_for_nodes_status
 from semantic_version import Version
@@ -1448,6 +1448,7 @@ class VSPHEREUPINode(VMWareNodes):
         ocp_version = get_ocp_version()
         self.folder_structure = False
         if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+            set_aws_region()
             self.folder_structure = True
 
         # Initialize Terraform
