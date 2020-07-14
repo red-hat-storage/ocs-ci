@@ -35,6 +35,7 @@ from ocs_ci.utility.utils import (
     download_file, delete_file, AZInfo
 )
 from ocs_ci.ocs.node import wait_for_nodes_status
+from semantic_version import Version
 
 logger = logging.getLogger(__name__)
 
@@ -1434,12 +1435,6 @@ class VSPHEREUPINode(VMWareNodes):
         self.target_compute_count = (
             self.current_compute_count + self.compute_count
         )
-        self.previous_dir = os.getcwd()
-        self.terraform_data_dir = os.path.join(
-            self.cluster_path,
-            constants.TERRAFORM_DATA_DIR
-        )
-        self.terraform_work_dir = constants.VSPHERE_DIR
 
         # update the terraform installer path in ENV_DATA
         # DON'T download terraform again since we need to use the same
@@ -1449,6 +1444,19 @@ class VSPHEREUPINode(VMWareNodes):
         terraform_binary_path = os.path.join(bin_dir, terraform_filename)
         config.ENV_DATA['terraform_installer'] = terraform_binary_path
 
+        # get OCP version
+        ocp_version = get_ocp_version()
+        self.folder_structure = False
+        if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+            self.folder_structure = True
+
+        # Initialize Terraform
+        self.previous_dir = os.getcwd()
+        self.terraform_data_dir = os.path.join(
+            self.cluster_path,
+            constants.TERRAFORM_DATA_DIR
+        )
+        self.terraform_work_dir = constants.VSPHERE_DIR
         self.terraform = Terraform(self.terraform_work_dir)
         self.upi_repo_path = os.path.join(
             constants.EXTERNAL_DIR, 'installer',
@@ -1486,18 +1494,23 @@ class VSPHEREUPINode(VMWareNodes):
         """
         to_change = "clone {"
         add_file_block = f"{constants.LIFECYCLE}\n  {to_change}"
+        vm_machine_conf = (
+            constants.VM_MAIN if self.folder_structure
+            else constants.INSTALLER_MACHINE_CONF
+        )
+
         logging.debug(
             f"Adding {constants.LIFECYCLE} to"
-            f" {constants.INSTALLER_MACHINE_CONF}"
+            f" {vm_machine_conf}"
         )
         replace_content_in_file(
-            constants.INSTALLER_MACHINE_CONF,
+            vm_machine_conf,
             to_change,
             add_file_block
         )
 
         # update the machine configurations
-        update_machine_conf()
+        update_machine_conf(self.folder_structure)
 
     def add_node(self):
         """
@@ -1517,7 +1530,6 @@ class VSPHEREUPINode(VMWareNodes):
             existing_csr_data = get_nodes_csr()
             pre_count_csr = len(existing_csr_data)
             logger.debug(f"Existing CSR count before adding nodes: {pre_count_csr}")
-
             os.chdir(self.terraform_data_dir)
             self.terraform.initialize()
             self.terraform.apply(self.terraform_var)
