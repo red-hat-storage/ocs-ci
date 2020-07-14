@@ -212,7 +212,8 @@ class CouchBase(PillowFight):
         """
         Running workload with pillow fight operator
         Args:
-         replicas (int): Number of pods
+            replicas (int): Number of pods
+            run_in_bg (bool) : Optional run IOs in background
 
         """
         self.result = None
@@ -226,6 +227,9 @@ class CouchBase(PillowFight):
     def analyze_run(self, skip_analyze=False):
         """
         Analyzing the workload run logs
+
+        Args:
+            skip_analyze (bool): Option to skip logs analysis
 
         """
         if not skip_analyze:
@@ -243,10 +247,10 @@ class CouchBase(PillowFight):
         app_pod_list = get_pod_name_by_pattern('cb-example', constants.COUCHBASE_OPERATOR)
         app_pod = app_pod_list[random.randint(0, len(app_pod_list) - 1)]
         logging.info(f"respin pod {app_pod}")
-        app_pod = get_pod_obj(app_pod, namespace=constants.COUCHBASE_OPERATOR)
-        app_pod.delete(wait=True, force=False)
+        app_pod_obj = get_pod_obj(app_pod, namespace=constants.COUCHBASE_OPERATOR)
+        app_pod_obj.delete(wait=True, force=False)
         wait_for_resource_state(
-            resource=app_pod, state=constants.STATUS_RUNNING, timeout=300
+            resource=app_pod_obj, state=constants.STATUS_RUNNING, timeout=300
         )
 
     def teardown(self):
