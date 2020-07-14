@@ -358,7 +358,8 @@ def ocs_install_verification(
         # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
         health_check_tries = 180
     assert utils.ceph_health_check(
-        namespace, health_check_tries, health_check_delay
+        namespace, health_check_tries, health_check_delay,
+        intelligent_wait=post_upgrade_verification,
     )
 
 

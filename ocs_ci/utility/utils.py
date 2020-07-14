@@ -1302,25 +1302,104 @@ def get_az_count():
         return 1
 
 
-def ceph_health_check(namespace=None, tries=20, delay=30):
+def ceph_health_check(
+    namespace=None, tries=20, delay=30, intelligent_wait=False,
+    max_timeout_for_pg=600,
+):
     """
     Args:
         namespace (str): Namespace of OCS
             (default: config.ENV_DATA['cluster_namespace'])
         tries (int): Number of retries
         delay (int): Delay in seconds between retries
+        intelligent_wait (bool): If true, the ceph_health is waiting for
+            HEALTH_OK if we have degraded or undersized PGs. In case the time
+            between decrease of degraded/undersized PGs is less than
+            max_timeout_for_pg than we continue to wait.
+        max_timeout_for_pg (int): Max timout in seconds to wait for decrease in
+            degraded/undersized PGs change for intelligent wait mode.
 
     Returns:
         bool: ceph_health_check_base return value with default retries of 20,
             delay of 30 seconds if default values are not changed via args.
 
     """
-    return retry(
-        (CephHealthException, CommandFailed),
-        tries=tries,
-        delay=delay,
-        backoff=1
-    )(ceph_health_check_base)(namespace)
+    if not intelligent_wait:
+        return retry(
+            (CephHealthException, CommandFailed),
+            tries=tries,
+            delay=delay,
+            backoff=1
+        )(ceph_health_check_base)(namespace)
+
+    degraded_pgs = 0
+    undersized_pgs = 0
+    last_decrease = time.time()
+    while tries:
+        decrease_time = None
+        degraded_pgs_diffs = []
+        degraded_pgs_diff_times = []
+        try:
+            return retry(
+                (CommandFailed),
+                tries=tries,
+                delay=delay,
+                backoff=1
+            )(ceph_health_check_base)(namespace)
+        except CephHealthException as ex:
+            str_ex = str(ex)
+            degraded_pgs_regexp = r"(\d+)(?=\s*pgs degraded)"
+            degraded_pgs_found = re.findall(degraded_pgs_regexp, str_ex)
+            if degraded_pgs_found:
+                degraded_pgs_new = int(degraded_pgs_found[0])
+                if degraded_pgs == 0 or degraded_pgs_new < degraded_pgs:
+                    decrease_time = time.time()
+                    degraded_pgs_diff_times.append(decrease_time - last_decrease)
+                    degraded_pgs_diffs.append(degraded_pgs - degraded_pgs_new)
+                    degraded_pgs = degraded_pgs_new
+                    degraded_pgs_diff_len = len(degraded_pgs_diffs)
+                    average_pgs_diff = (
+                        sum(degraded_pgs_diff_times) / degraded_pgs_diff_len
+                    )
+                    average_pgs_time_diff = (
+                        sum(degraded_pgs_diff_times) / degraded_pgs_diff_len
+                    )
+                    log.info(
+                        f"Average decrease of degraded PGs is {average_pgs_diff}, "
+                        f"average decrease time is {average_pgs_time_diff}sec."
+                    )
+            undersized_pgs_regexp = r"(\d+)(?=\s*pgs undersized)"
+            undersized_pgs_found = re.findall(undersized_pgs_regexp, str_ex)
+            if undersized_pgs_found:
+                undersized_pgs_new = int(undersized_pgs_found[0])
+                if undersized_pgs == 0 or undersized_pgs_new < undersized_pgs:
+                    decrease_time = time.time()
+                    undersized_pgs = undersized_pgs_new
+            if decrease_time:
+                last_decrease = decrease_time
+            last_time_change_diff = time.time() - last_decrease
+            if last_time_change_diff < max_timeout_for_pg:
+                if degraded_pgs or undersized_pgs:
+                    log.warn(
+                        f"Waiting for clean PGs. Degraded: {degraded_pgs} "
+                        f"Undersized: {undersized_pgs}."
+                    )
+                    log.warn(ex)
+                    log.info(
+                        f"Waiting for {delay}sec for next attempt. Timeout "
+                        f"remaining: {max_timeout_for_pg - last_time_change_diff}"
+                    )
+                    time.sleep(delay)
+                else:
+                    tries -= 1
+                    log.warn(f"Ceph health error: {ex}")
+                    log.info(f"Waiting for {delay}sec for next attempt.")
+                    time.sleep(delay)
+            else:
+                raise CephHealthException(
+                    "Ceph health didn't get fixed in timeout: "
+                    f"{max_timeout_for_pg}sec. Error: {ex}"
+                )
 
 
 def ceph_health_check_base(namespace=None):
