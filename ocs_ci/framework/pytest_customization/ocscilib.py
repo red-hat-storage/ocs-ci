@@ -153,6 +153,11 @@ def pytest_addoption(parser):
         type=int,
         help="OSD size in GB - for 2TB pass 2048, for 0.5TB pass 512 and so on."
     )
+    parser.addoption(
+        '--flexy-env-file',
+        dest='flexy_env_file',
+        help="Path to flexy environment file"
+    )
 
 
 def pytest_configure(config):

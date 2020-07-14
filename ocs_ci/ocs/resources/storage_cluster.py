@@ -269,7 +269,10 @@ def ocs_install_verification(
         "in the output."
     )
 
-    if config.DEPLOYMENT.get('local_storage'):
+    if (
+        config.DEPLOYMENT.get('local_storage')
+        and config.ENV_DATA['platform'] != constants.BAREMETALPSI_PLATFORM
+    ):
         deviceset_pvcs = get_compute_node_names()
     else:
         deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]

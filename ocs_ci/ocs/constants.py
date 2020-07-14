@@ -615,6 +615,7 @@ VSPHERE_PLATFORM = 'vsphere'
 BAREMETAL_PLATFORM = 'baremetal'
 ON_PREM_PLATFORMS = [VSPHERE_PLATFORM, BAREMETAL_PLATFORM]
 CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM]
+BAREMETALPSI_PLATFORM = 'baremetalpsi'
 
 # Default SC based on platforms
 DEFAULT_SC_AWS = "gp2"
@@ -893,6 +894,28 @@ bucket_website_action_list = ['PutBucketWebsite', 'GetBucketWebsite', 'PutObject
 bucket_version_action_list = ['PutBucketVersioning', 'GetBucketVersioning']
 object_version_action_list = ['PutObject', 'GetObjectVersion', 'DeleteObjectVersion']
 
+# Flexy config constants
+FLEXY_MNT_CONTAINER_DIR = '/mnt'
+FLEXY_HOST_DIR = 'flexy-dir'
+FLEXY_HOST_DIR_PATH = os.path.join(DATA_DIR, FLEXY_HOST_DIR)
+FLEXY_DEFAULT_ENV_FILE = "ocs-osp.env"
+OPENSHIFT_MISC_BASE = "private-openshift-misc/v3-launch-templates/functionality-testing"
+FLEXY_BAREMETAL_UPI_TEMPLATE = "upi-on-baremetal/versioned-installer-openstack"
+FLEXY_GIT_CRYPT_KEYFILE = os.path.join(DATA_DIR, "git-crypt-keyfile")
+NTP_CHRONY_CONF = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "ntp_chrony.yaml"
+)
+FLEXY_DEFAULT_PRIVATE_CONF_REPO = 'https://gitlab.cee.redhat.com/ocs/flexy-ocs-private.git'
+FLEXY_JENKINS_USER = "jenkins"
+JENKINS_NFS_CURRENT_CLUSTER_DIR = "/home/jenkins/current-cluster-dir"
+FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
+OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
+FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
+FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/aosqe/flexy:poc"
+
+# PSI-openstack constants
+NOVA_CLNT_VERSION = "2.0"
+CINDER_CLNT_VERSION = "3.0"
 
 # URLs
 AUTH_CONFIG_DOCS = (

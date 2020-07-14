@@ -814,7 +814,7 @@ def setup_local_storage():
     verify_pvs_created(len(worker_names) * storage_class_device_count)
 
 
-@retry(AssertionError, 12, 10, 1)
+@retry(AssertionError, 120, 10, 1)
 def verify_pvs_created(expected_pvs):
     """
     Verify that PVs were created and are in the Available state
@@ -870,6 +870,9 @@ def get_device_paths(worker_names):
         pattern = 'wwn'
     elif platform == 'baremetal':
         pattern = config.ENV_DATA.get('disk_pattern')
+    elif platform == 'baremetalpsi':
+        pattern = 'virtio'
+    # TODO: add patterns bare metal
     else:
         raise UnsupportedPlatformError(
             'LSO deployment is not supported for platform: %s', platform
