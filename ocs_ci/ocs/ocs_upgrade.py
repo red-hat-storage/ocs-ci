@@ -105,7 +105,10 @@ def verify_image_versions(old_images, upgrade_version):
         old_images, selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
         count=2
     )
-    verify_pods_upgraded(old_images, selector=constants.MON_APP_LABEL, count=3)
+    # Increased timeout for BZ https://bugzilla.redhat.com/show_bug.cgi?id=1856254
+    verify_pods_upgraded(
+        old_images, selector=constants.MON_APP_LABEL, count=3, timeout=1200
+    )
     verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
     # OSD upgrade have timeout 10mins for new attempt if cluster is not health.
     # https://bugzilla.redhat.com/show_bug.cgi?id=1840729 setting timeout for
