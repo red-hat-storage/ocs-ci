@@ -432,12 +432,32 @@ def clean_disk():
                 for pv in pv_list:
                     logger.debug(pv)
                     device_dict = {
-                        'hostname': f"{worker.name}", 'pv_name': f"{pv['pv_name']}",
-                        'vg_name': f"{pv['vg_name']}"
+                        'hostname': f"{worker.name}", 'pv_name': f"{pv['pv_name']}"
                     }
                     lvm_to_clean.append(device_dict)
-    if lvm_to_clean:
-        for devices in lvm_to_clean:
+            base_cmd = """vgs --config "devices{filter = [ 'a|/dev/%s.*|', 'r|.*|' ] }" --reportformat json""" \
+                       % lsblk_device['name']
+
+            cmd = (
+                f"debug nodes/{worker.name} "
+                f"-- chroot /host {base_cmd}"
+            )
+            out = ocp_obj.exec_oc_cmd(
+                command=cmd, out_yaml_format=False,
+            )
+            logger.info(out)
+            vgs_output = json.loads(str(out))
+            vgs_list = vgs_output['report']
+            for vgs in vgs_list:
+                vg_list = vgs['vg']
+                for vg in vg_list:
+                    logger.debug(vg)
+                    device_dict = {
+                        'hostname': f"{worker.name}", 'vg_name': f"{vg['vg_name']}"
+                    }
+                    lvm_to_clean.append(device_dict)
+    for devices in lvm_to_clean:
+        if devices.get('vg_name'):
             cmd = (
                 f"debug nodes/{devices['hostname']} "
                 f"-- chroot /host timeout 120 vgremove {devices['vg_name']} -y -f"
@@ -447,8 +467,8 @@ def clean_disk():
                 command=cmd, out_yaml_format=False,
             )
             logger.info(out)
-
-        for devices in lvm_to_clean:
+    for devices in lvm_to_clean:
+        if devices.get('pv_name'):
             out = ocp_obj.exec_oc_debug_cmd(
                 node=devices['hostname'], cmd_list=[f"pvremove {devices['pv_name']} -y"]
             )
