@@ -5,7 +5,7 @@ from ocs_ci.ocs import exceptions
 from .aws import AWSIPI, AWSUPI
 from .azure import AZUREIPI
 from .vmware import VSPHEREUPI
-from .baremetal import BAREMETALUPI
+from .baremetal import BAREMETALUPI, BaremetalPSIUPI
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,7 @@ class DeploymentFactory(object):
             'aws_upi': AWSUPI,
             'azure_ipi': AZUREIPI,
             'vsphere_upi': VSPHEREUPI,
+            'baremetalpsi_upi': BaremetalPSIUPI,
             'baremetal_upi': BAREMETALUPI,
         }
 

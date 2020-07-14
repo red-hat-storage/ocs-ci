@@ -138,3 +138,9 @@ UPGRADE:
 # or ping in ocs infra chat room.
 AUTH:
     test_quay_auth: test_secret
+
+# This section is for FLEXY, this is just dummy variable to have
+# FLEXY section here, all the defaults for FLEXY will be in
+# flexy_default_config.yaml
+FLEXY:
+  flexy_deploy: false
