@@ -2552,6 +2552,8 @@ def couchbase_factory_fixture(request):
 
         Args:
             replicas (int): Number of couchbase workers to be deployed
+            run_in_bg (bool): Run IOs in background as option
+            skip_analyze (bool): Skip logs analysis as option
         """
         # Setup couchbase
         couchbase.setup_cb()
