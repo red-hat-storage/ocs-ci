@@ -8,6 +8,7 @@ import logging
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.cloud import CloudIPIOCPDeployment
+from ocs_ci.utility.azure_utils import AZURE as AzureUtil
 
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ class AZUREBase(CloudDeploymentBase):
 
     def __init__(self):
         super(AZUREBase, self).__init__()
-        # TODO: initialize azure client object
+        self.azure_util = AzureUtil()
 
     def _create_cloud_volumes(self, worker_pattern, size):
         """
@@ -63,6 +64,4 @@ class AZUREIPI(AZUREBase):
         super(AZUREIPI, self).__init__()
 
     # For Azure IPI there is no need to implement custom:
-    # - OCPDeployment class
     # - deploy_ocp() method (as long as we don't tweak host network)
-    # - destroy_cluster() method
