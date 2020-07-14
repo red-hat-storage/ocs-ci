@@ -1440,6 +1440,15 @@ class VSPHEREUPINode(VMWareNodes):
             constants.TERRAFORM_DATA_DIR
         )
         self.terraform_work_dir = constants.VSPHERE_DIR
+
+        # update the terraform installer path in ENV_DATA
+        # DON'T download terraform again since we need to use the same
+        # version as deployment
+        bin_dir = os.path.expanduser(config.RUN['bin_dir'])
+        terraform_filename = "terraform"
+        terraform_binary_path = os.path.join(bin_dir, terraform_filename)
+        config.ENV_DATA['terraform_installer'] = terraform_binary_path
+
         self.terraform = Terraform(self.terraform_work_dir)
         self.upi_repo_path = os.path.join(
             constants.EXTERNAL_DIR, 'installer',
