@@ -168,6 +168,11 @@ def pytest_configure(config):
         config (pytest.config): Pytest config object
 
     """
+    # Somewhat hacky but this lets us differentiate between run-ci executions
+    # and plain pytest unit test executions
+    ocscilib_module = 'ocs_ci.framework.pytest_customization.ocscilib'
+    if ocscilib_module not in config.getoption('-p'):
+        return
     if not (config.getoption("--help") or config.getoption("collectonly")):
         process_cluster_cli_params(config)
         config_file = os.path.expanduser(
