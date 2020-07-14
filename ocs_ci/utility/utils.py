@@ -2056,29 +2056,15 @@ def convert_device_size(unformatted_size, units_to_covert_to):
 
     """
     units = unformatted_size[-2:]
-    absolute_size = int(unformatted_size[:-2])
-
-    if units_to_covert_to == 'TB':
-        if units == 'Ti':
-            return absolute_size
-        elif units == 'Gi':
-            return absolute_size * 1024
-        elif units == 'Mi':
-            return absolute_size * 1024 * 1024
-    elif units_to_covert_to == 'GB':
-        if units == 'Ti':
-            return absolute_size / 1024
-        elif units == 'Gi':
-            return absolute_size
-        elif units == 'Mi':
-            return absolute_size * 1024
-    elif units_to_covert_to == 'MB':
-        if units == 'Ti':
-            return absolute_size / 1024 / 1024
-        elif units == 'Gi':
-            return absolute_size / 1024
-        elif units == 'Mi':
-            return absolute_size
+    abso = int(unformatted_size[:-2])
+    conversion = {
+        'TB': {'Ti': abso, 'Gi': abso / 1000, 'Mi': abso / 1e+6, 'Ki': abso / 1e+9},
+        'GB': {'Ti': abso * 1000, 'Gi': abso, 'Mi': abso / 1000, 'Ki': abso / 1e+6},
+        'MB': {'Ti': abso * 1e+6, 'Gi': abso * 1000, 'Mi': abso, 'Ki': abso / 1000},
+        'KB': {'Ti': abso * 1e+9, 'Gi': abso * 1e+6, 'Mi': abso * 1000, 'Ki': abso},
+        'B': {'Ti': abso * 1e+12, 'Gi': abso * 1e+9, 'Mi': abso * 1e+6, 'Ki': abso * 1000}
+    }
+    return conversion[units_to_covert_to][units]
 
 
 def mirror_image(image):
