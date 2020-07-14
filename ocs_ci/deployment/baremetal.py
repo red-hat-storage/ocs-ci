@@ -5,19 +5,13 @@ from time import sleep
 
 import yaml
 
-from ocs_ci.framework import config
-from ocs_ci.ocs import exceptions
-from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from .flexy import FlexyBaremetalPSI
-from ocs_ci.utility.utils import (
-    TimeoutSampler, load_auth_config, get_infra_id
-)
 from ocs_ci.utility import psiutils
 
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.ocs.exceptions import CommandFailed, RhcosImageNotFound
 from ocs_ci.ocs.node import get_typed_nodes
 from ocs_ci.ocs.openshift_ops import OCP
@@ -26,7 +20,7 @@ from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pending_csr
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.utils import run_cmd, upload_file, get_ocp_version, load_auth_config, wait_for_co, \
-    wait_for_machineconfigpool_status, check_for_rhcos_images
+    wait_for_machineconfigpool_status, check_for_rhcos_images, get_infra_id, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
