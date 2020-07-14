@@ -209,6 +209,7 @@ NOOBAA_APP_LABEL = "app=noobaa"
 NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
 NOOBAA_OPERATOR_POD_LABEL = "noobaa-operator=deployment"
 NOOBAA_DB_LABEL = "noobaa-db=noobaa"
+NOOBAA_ENDPOINT_POD_LABEL = "noobaa-s3=noobaa"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
@@ -990,3 +991,7 @@ MON_DAEMON = 'mon'
 
 # cluster expansion
 MAX_OSDS = 15
+
+# Minimum cluster requirements in term of node specs
+MIN_NODE_CPU = 16
+MIN_NODE_MEMORY = 64 * 10 ** 9
