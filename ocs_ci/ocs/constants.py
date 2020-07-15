@@ -501,6 +501,14 @@ STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
 )
 
+INDEPENDENT_STORAGE_CLUSTER_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "independent-storage-cluster.yaml"
+)
+
+INDEPENDENT_CLUSTER_SECRET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "independent-cluster-secret.yaml"
+)
+
 OPERATOR_SOURCE_SECRET_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "operator-source-secret.yaml"
 )

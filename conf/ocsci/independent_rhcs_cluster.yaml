@@ -1,0 +1,12 @@
+DEPLOYMENT:
+  independent_mode: True
+  force_download_client: True
+
+ENV_DATA:
+  storage_cluster_name: 'ocs-external-storagecluster'
+
+INDEPENDENT_MODE:
+  # base64 encoded data of json output
+  # from exporter script
+  # https://github.com/rook/rook/blob/master/cluster/examples/kubernetes/ceph/create-external-cluster-resources.py&sa=D&ust=1594358560646000&usg=AFQjCNHNqJas0w2FqtjZM5d0-9N38-MJCw
+  external_cluster_details: PLACE_HOLDER
