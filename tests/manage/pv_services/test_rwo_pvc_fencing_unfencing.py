@@ -770,7 +770,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         nodes.stop_nodes(node.get_node_objs(app_pod_nodes))
 
         # Force delete the app pods and/or mon,osd pods on the unresponsive node
-        if ceph_cluster.mon_count == 5:
+        if ceph_cluster.mon_count == 5 and float(config.ENV_DATA['ocs_version']) < 4.4:
             for pod_obj in ceph_cluster.mons:
                 if pod.get_pod_node(pod_obj).name in app_pod_nodes:
                     ceph_pods.append(pod_obj)
