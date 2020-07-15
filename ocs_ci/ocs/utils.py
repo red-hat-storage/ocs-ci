@@ -831,12 +831,11 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
         )
     if mcg:
         counter = 0
-        mcg_db_collected = False
-        while not mcg_db_collected or counter < 5:
+        while counter < 5:
             counter += 1
             try:
                 collect_noobaa_db_dump(log_dir_path)
-                mcg_db_collected = True
+                break
             except CommandFailed as ex:
                 log.error(f"Failed to dump noobaa DB! Error: {ex}")
                 sleep(30)
