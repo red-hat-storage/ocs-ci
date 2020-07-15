@@ -94,7 +94,6 @@ class RipSaw(object):
            when ripsaw used for running a benchmark tests, each run get its own
            UUID, so the results in the elastic-search server can be sorted.
 
-
         Args:
             benchmark (str): the name of the main pod in the test
 
