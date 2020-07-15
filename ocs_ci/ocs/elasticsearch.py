@@ -12,7 +12,7 @@ import signal
 import subprocess
 import time
 
-from elasticsearch import (Elasticsearch, exceptions as esexp)
+from elasticsearch import Elasticsearch, exceptions as esexp
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -226,6 +226,10 @@ class ElasticSearch(object):
 
         Returns:
             Elasticsearch: elasticsearch connection object
+
+        Raise:
+            ConnectionError: if can not connect to the server
+
         """
         try:
             es = Elasticsearch([{'host': 'localhost', 'port': self.get_port()}])
@@ -236,15 +240,15 @@ class ElasticSearch(object):
 
     def get_indices(self):
         """
-        Getting list of all indexes in the ES server - all created by the test,
+        Getting list of all indices in the ES server - all created by the test,
         the installation of the ES was without any indexes pre-installed.
 
         Returns:
-            list : list of all indexes defined in the ES server
+            list : list of all indices defined in the ES server
 
         """
         results = []
-        log.info("Getting all indexes")
+        log.info("Getting all indices")
         for ind in self.con.indices.get_alias("*"):
             results.append(ind)
         return results
