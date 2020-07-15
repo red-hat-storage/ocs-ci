@@ -16,15 +16,15 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
 from subprocess import CalledProcessError
-from tests.helpers import create_pvc
 from ocs_ci.ocs.resources.pod import get_pod_obj
-from tests.helpers import wait_for_resource_state
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import utils
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-from ocs_ci.ocs.node import (
-    get_typed_nodes, get_app_pod_running_nodes, get_compute_node_names
+from ocs_ci.ocs.node import get_typed_nodes, get_app_pod_running_nodes
+from tests.helpers import (
+    wait_for_resource_state, create_pvc, get_worker_nodes
 )
+
 
 log = logging.getLogger(__name__)
 
@@ -378,9 +378,9 @@ class Jenkins(object):
                     pod_objs.append(
                         get_pod_obj(name=pod_name, namespace=project)
                     )
-            nodes_app = set(get_app_pod_running_nodes(pod_objs))
-            nodes_worker_obj = set(get_compute_node_names())
-            nodes1 = nodes_worker_obj - nodes_app
+            nodes_app_name = set(get_app_pod_running_nodes(pod_objs))
+            nodes_worker_name = set(get_worker_nodes())
+            nodes1 = nodes_worker_name - nodes_app_name
         else:
             raise ValueError('The node type is worker or master')
         return list(nodes1)[:num_of_nodes]

@@ -2,11 +2,11 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import (
-    E2ETest, workloads, ignore_leftover_label
+    E2ETest, workloads, ignore_leftovers
 )
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
-from ocs_ci.ocs.constants import STATUS_COMPLETED, drain_canary_pod_label
+from ocs_ci.ocs.constants import STATUS_COMPLETED
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ def jenkins(request):
 
 
 @workloads
-@ignore_leftover_label(drain_canary_pod_label)
+@ignore_leftovers
 class TestJenkinsNodeDrain(E2ETest):
     """
     Test running Jenkins and Node Drain
