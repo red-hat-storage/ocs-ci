@@ -2,19 +2,19 @@
 General OCS object
 """
 import logging
-import yaml
 import tempfile
 
+import yaml
+
 from ocs_ci.framework import config
-from ocs_ci.ocs.ocp import OCP, get_images
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
 )
-from ocs_ci.utility import utils
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, utils
 
 log = logging.getLogger(__name__)
 
@@ -210,3 +210,26 @@ def get_job_obj(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     ocp_obj = OCP(kind=constants.JOB, namespace=namespace)
     ocp_dict = ocp_obj.get(resource_name=name)
     return OCS(**ocp_dict)
+
+
+def get_ocs_csv():
+    """
+    Get the OCS CSV object
+
+    Returns:
+        CSV: OCS CSV object
+
+    """
+    namespace = config.ENV_DATA['cluster_namespace']
+    operator_selector = get_selector_for_ocs_operator()
+    ocs_package_manifest = PackageManifest(
+        resource_name=defaults.OCS_OPERATOR_NAME, selector=operator_selector,
+    )
+    channel = config.DEPLOYMENT.get('ocs_csv_channel')
+    ocs_csv_name = ocs_package_manifest.get_current_csv(channel=channel)
+    ocs_csv = CSV(
+        resource_name=ocs_csv_name, namespace=namespace
+    )
+    log.info(f"Check if OCS operator: {ocs_csv_name} is in Succeeded phase.")
+    ocs_csv.wait_for_phase(phase="Succeeded", timeout=600)
+    return ocs_csv

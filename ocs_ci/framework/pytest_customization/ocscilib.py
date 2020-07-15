@@ -12,23 +12,23 @@ import os
 import pytest
 
 from ocs_ci.framework import config as ocsci_config
-from ocs_ci.framework.exceptions import ClusterPathNotProvidedError, ClusterNameNotProvidedError, ClusterNameLengthError
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
-from ocs_ci.utility.utils import (
-    dump_config_to_file,
-    get_cluster_version,
-    get_ceph_version,
-    get_csi_versions,
-    get_testrun_name,
-    get_ocs_build_number,
-    load_config_file,
+from ocs_ci.framework.exceptions import (
+    ClusterNameLengthError,
+    ClusterNameNotProvidedError,
+    ClusterPathNotProvidedError
 )
-from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
-from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
     OCP_VERSION_CONF_DIR,
+)
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
+from ocs_ci.ocs.resources.ocs import get_ocs_csv, get_version_info
+from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
+from ocs_ci.utility.utils import (
+    dump_config_to_file, get_ceph_version, get_cluster_version,
+    get_csi_versions, get_ocp_version, get_ocs_build_number,
+    get_testrun_name, load_config_file
 )
 
 __all__ = [
@@ -168,6 +168,11 @@ def pytest_configure(config):
         config (pytest.config): Pytest config object
 
     """
+    # Somewhat hacky but this lets us differentiate between run-ci executions
+    # and plain pytest unit test executions
+    ocscilib_module = 'ocs_ci.framework.pytest_customization.ocscilib'
+    if ocscilib_module not in config.getoption('-p'):
+        return
     if not (config.getoption("--help") or config.getoption("collectonly")):
         process_cluster_cli_params(config)
         config_file = os.path.expanduser(
@@ -181,6 +186,7 @@ def pytest_configure(config):
             f"Dump of the consolidated config file is located here: "
             f"{config_file}"
         )
+        set_report_portal_tags(config)
         # Add OCS related versions to the html report and remove
         # extraneous metadata
         markers_arg = config.getoption('-m')
@@ -208,6 +214,12 @@ def pytest_configure(config):
 
         config._metadata['Test Run Name'] = get_testrun_name()
         gather_version_info_for_report(config)
+
+        ocs_csv = get_ocs_csv()
+        ocs_csv_version = ocs_csv.data['spec']['version']
+        config.addinivalue_line(
+            "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
+        )
 
 
 def gather_version_info_for_report(config):
@@ -248,7 +260,7 @@ def gather_version_info_for_report(config):
         gather_version_completed = True
     except ResourceNotFoundError as ex:
         log.error(
-            "Problem ocurred when looking for some resource! Error: %s",
+            "Problem occurred when looking for some resource! Error: %s",
             ex
         )
     except FileNotFoundError as ex:
@@ -426,3 +438,37 @@ def pytest_runtest_makereport(item, call):
             collect_performance_stats(test_case_name)
         except Exception as ex:
             log.error(f"Failed to collect performance stats. Error: {ex}")
+
+
+def set_report_portal_tags(config):
+    rp_tags = list()
+    rp_tags.append(ocsci_config.ENV_DATA.get('platform'))
+    rp_tags.append(ocsci_config.ENV_DATA.get('deployment_type'))
+    if ocsci_config.REPORTING.get('us_ds') == 'us':
+        rp_tags.append('upstream')
+    else:
+        rp_tags.append('downstream')
+    worker_instance_type = ocsci_config.ENV_DATA.get('worker_instance_type')
+    rp_tags.append(f"worker_instance_type:{worker_instance_type}")
+    rp_tags.append(f"ocp_version:{get_ocp_version()}")
+    rp_tags.append(
+        f"ocs_version:{ocsci_config.ENV_DATA.get('ocs_version')}"
+    )
+    if ocsci_config.DEPLOYMENT.get('ocs_registry_image'):
+        ocs_registry_image = ocsci_config.DEPLOYMENT.get('ocs_registry_image')
+        rp_tags.append(f"ocs_registry_image:{ocs_registry_image}")
+        rp_tags.append(f"ocs_registry_tag:{ocs_registry_image.split(':')[1]}")
+    if ocsci_config.DEPLOYMENT.get('ui_deployment'):
+        rp_tags.append('ui_deployment')
+    if ocsci_config.DEPLOYMENT.get('live_deployment'):
+        rp_tags.append('live_deployment')
+    if ocsci_config.DEPLOYMENT.get('stage'):
+        rp_tags.append('stage_deployment')
+    if not ocsci_config.DEPLOYMENT.get('allow_lower_instance_requirements'):
+        rp_tags.append("production")
+    if ocsci_config.ENV_DATA.get('fips'):
+        rp_tags.append("fips")
+
+    for tag in rp_tags:
+        if tag:
+            config.addinivalue_line("rp_launch_tags", tag.lower())
