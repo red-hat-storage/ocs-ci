@@ -82,7 +82,7 @@ class TestJenkinsNodeDrain(E2ETest):
         if len(node1) > 0:
             # Node maintenance - to gracefully terminate all pods on the node
             drain_nodes(node1)
-            # Make the node schedulable again
+            # Make the node  schedulable again
             schedule_nodes(node1)
 
         # Wait build reach 'Complete' state

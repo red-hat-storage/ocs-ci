@@ -357,7 +357,7 @@ class Jenkins(object):
         get nodes
 
         Args:
-            node_type (str): The node type (e.g. worker, master)
+            node_type (str): The node type  (e.g. worker, master)
             num_of_nodes (int): The number of nodes to be returned
 
         Returns:
