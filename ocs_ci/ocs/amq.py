@@ -794,3 +794,36 @@ class AMQ(object):
         # Reset namespace to default
         switch_to_default_rook_cluster_project()
         self.ns_obj.wait_for_delete(resource_name=kafka_namespace)
+
+
+def get_node_objs_where_benchmark_pod_not_hosted(
+    benchmark_pod_name="benchmark", namespace="tiller"
+):
+    """
+    Return node list obj where benchmark pod not hosted
+
+    Args:
+        benchmark_pod_name (str): Name of the benchmark pod
+        namespace (str): Namespace of benchmark pod hosted
+
+    Returns:
+        list: Cluster node OCP objects
+
+    """
+    # Get the worker node list
+    worker_nodes = get_typed_nodes(node_type='worker')
+
+    # Get the node name
+    worker_node = [node.get().get('metadata').get('name') for node in worker_nodes]
+
+    # Get the node where benchmark-driver pod is running
+    benchmark_pod_obj = OCP(
+        kind=constants.POD, namespace=namespace, resource_name=f"{benchmark_pod_name}-driver"
+    )
+    benchmark_pod_node = [benchmark_pod_obj.get().get('spec').get('nodeName')]
+
+    # Remove the node where benchmark pod hosted from list
+    nodes = list(set(worker_node) - set(benchmark_pod_node))
+
+    # Return node objs
+    return get_node_objs(nodes)
