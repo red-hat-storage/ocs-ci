@@ -2315,7 +2315,7 @@ def get_terraform(version=None, bin_dir=None):
 
 def get_module_ip(terraform_state_file, module):
     """
-    Gets the bootstrap node IP from terraform.tfstate file
+    Gets the node IP from terraform.tfstate file
 
     Args:
         terraform_state_file (str): Path to terraform state file
@@ -2323,9 +2323,10 @@ def get_module_ip(terraform_state_file, module):
             e.g: constants.LOAD_BALANCER_MODULE
 
     Returns:
-        str: IP of bootstrap node
+        list: IP of the node
 
     """
+    ips = []
     with open(terraform_state_file) as fd:
         obj = hcl.load(fd)
 
@@ -2333,9 +2334,15 @@ def get_module_ip(terraform_state_file, module):
         log.debug(f"Extracting module information for {module}")
         log.debug(f"Resource in {terraform_state_file}: {resources}")
         for resource in resources:
-            if resource['module'] == module:
-                resource_body = resource['instances'][0]['attributes']['body']
-                return resource_body.split("\"")[3]
+            if (
+                resource.get('module') == module
+                and resource.get('mode') == "data"
+            ):
+                print(resource)
+                for each_resource in resource['instances']:
+                    resource_body = each_resource['attributes']['body']
+                    ips.append(resource_body.split("\"")[3])
+        return ips
 
 
 def set_aws_region(region=None):
