@@ -80,7 +80,7 @@ class VMNode(object):
         retcode, _, _ = self.restart_service("chronyd")
         if retcode:
             logger.info(
-                f"Successfully restarted chronyd service"
+                "Successfully restarted chronyd service"
             )
             _rc = True
         return _rc
