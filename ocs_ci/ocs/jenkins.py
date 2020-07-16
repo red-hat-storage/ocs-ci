@@ -364,10 +364,7 @@ class Jenkins(object):
             list: List of compute node names
         """
         if node_type == 'master':
-            nodes1 = []
-            nodes = get_typed_nodes(node_type=node_type, num_of_nodes=num_of_nodes)
-            for node in nodes:
-                nodes1.append(node.name)
+            nodes_drain = [node.name for node in get_typed_nodes(node_type=node_type, num_of_nodes=num_of_nodes)]
         elif node_type == 'worker':
             pod_objs = []
             for project in self.projects:
@@ -380,10 +377,10 @@ class Jenkins(object):
                     )
             nodes_app_name = set(get_app_pod_running_nodes(pod_objs))
             nodes_worker_name = set(get_worker_nodes())
-            nodes1 = nodes_worker_name - nodes_app_name
+            nodes_drain = nodes_worker_name - nodes_app_name
         else:
             raise ValueError('The node type is worker or master')
-        return list(nodes1)[:num_of_nodes]
+        return list(nodes_drain)[:num_of_nodes]
 
     def cleanup(self):
         """

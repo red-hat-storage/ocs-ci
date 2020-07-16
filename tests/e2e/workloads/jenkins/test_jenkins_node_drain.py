@@ -53,7 +53,7 @@ class TestJenkinsNodeDrain(E2ETest):
     ):
         """
 
-          Test jenkins workload
+          Test Node Drain jenkins
         """
         # Init number of projects
         jenkins.number_projects = num_projects
@@ -71,7 +71,7 @@ class TestJenkinsNodeDrain(E2ETest):
         jenkins.wait_for_jenkins_deploy_status(status=STATUS_COMPLETED)
 
         # Get relevant node
-        node1 = jenkins.get_nodes(node_type=node_type, num_of_nodes=1)
+        nodes_drain = jenkins.get_nodes(node_type=node_type, num_of_nodes=1)
 
         # Init number of builds per project
         jenkins.number_builds_per_project = num_of_builds
@@ -79,11 +79,11 @@ class TestJenkinsNodeDrain(E2ETest):
         # Start Builds
         jenkins.start_build()
 
-        if len(node1) > 0:
+        if len(nodes_drain) > 0:
             # Node maintenance - to gracefully terminate all pods on the node
-            drain_nodes(node1)
+            drain_nodes(nodes_drain)
             # Make the node  schedulable again
-            schedule_nodes(node1)
+            schedule_nodes(nodes_drain)
 
         # Wait build reach 'Complete' state
         jenkins.wait_for_build_to_complete()
