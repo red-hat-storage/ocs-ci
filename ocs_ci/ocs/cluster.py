@@ -254,7 +254,7 @@ class CephCluster(object):
         self.scan_cluster()
 
         # Check Noobaa health
-        self.noobaa_health_check()
+        self.wait_for_noobaa_health_ok()
 
     def noobaa_health_check(self):
         """
