@@ -186,7 +186,11 @@ def create_pod(
             ]
             if pod_dict_path == constants.FEDORA_DC_YAML:
                 del pod_data['spec']['template']['spec']['containers'][0]['volumeMounts']
+                security_context = {'capabilities': {'add': ["SYS_ADMIN"]}}
+                pod_data['spec']['template']['spec']['containers'][0]['securityContext'] = security_context
+
             pod_data['spec']['template']['spec']['containers'][0]['volumeDevices'] = temp_dict
+
         elif pod_dict_path == constants.NGINX_POD_YAML:
             temp_dict = [
                 {'devicePath': raw_block_device, 'name': pod_data.get('spec').get(
@@ -259,7 +263,7 @@ def create_pod(
         assert (ocp.OCP(kind='pod', namespace=namespace)).wait_for_resource(
             condition=deploy_pod_status,
             resource_name=pod_name + '-1-deploy',
-            resource_count=0, timeout=180, sleep=3
+            resource_count=0, timeout=360, sleep=3
         )
         dpod_list = pod.get_all_pods(namespace=namespace)
         for dpod in dpod_list:
@@ -980,9 +984,21 @@ def create_build_from_docker_image(
 
     """
     base_image = source_image + ':' + source_image_label
-    docker_file = (f"FROM {base_image}\n "
-                   f"RUN yum install -y {install_package}\n "
-                   f"CMD tail -f /dev/null")
+    cmd = f'yum install -y {install_package}'
+    if 'http_proxy' in config.ENV_DATA:
+        http_proxy = config.ENV_DATA['http_proxy']
+        https_proxy = config.ENV_DATA.get(
+            'https_proxy', http_proxy
+        )
+        cmd = (
+            f"http_proxy={http_proxy} https_proxy={https_proxy} {cmd}"
+        )
+    docker_file = (
+        f"FROM {base_image}\n "
+        f" RUN {cmd}\n"
+        f"CMD tail -f /dev/null"
+    )
+
     command = f"new-build -D $\'{docker_file}\' --name={image_name}"
     kubeconfig = os.getenv('KUBECONFIG')
 
@@ -1006,7 +1022,7 @@ def create_build_from_docker_image(
     out = result.stdout.decode()
     logger.info(out)
     if 'Success' in out:
-        # Build becomes ready once build pod goes into Comleted state
+        # Build becomes ready once build pod goes into Completed state
         pod_obj = OCP(kind='Pod', resource_name=image_name)
         if pod_obj.wait_for_resource(
             condition='Completed',
@@ -1414,10 +1430,13 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
     """
     ct_pod = pod.get_ceph_tools_pod()
     if interface == constants.CEPHBLOCKPOOL:
-        valid_error = f"error opening image csi-vol-{image_uuid}"
+        valid_error = [f"error opening image csi-vol-{image_uuid}"]
         cmd = f"rbd info -p {pool_name} csi-vol-{image_uuid}"
     if interface == constants.CEPHFILESYSTEM:
-        valid_error = f"Subvolume 'csi-vol-{image_uuid}' not found"
+        valid_error = [
+            f"Subvolume 'csi-vol-{image_uuid}' not found",
+            f"subvolume 'csi-vol-{image_uuid}' does not exist"
+        ]
         cmd = (
             f"ceph fs subvolume getpath {defaults.CEPHFILESYSTEM_NAME}"
             f" csi-vol-{image_uuid} csi"
@@ -1431,7 +1450,7 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
         )
         return True
     except CommandFailed as ecf:
-        assert valid_error in str(ecf), (
+        assert any([error in str(ecf) for error in valid_error]), (
             f"Error occurred while verifying volume is present in backend: "
             f"{str(ecf)} ImageUUID: {image_uuid}. Interface type: {interface}"
         )
@@ -1483,7 +1502,7 @@ def verify_volume_deleted_in_backend(
         )
         # Log 'ceph progress' and 'ceph rbd task list' for debugging purpose
         ct_pod = pod.get_ceph_tools_pod()
-        ct_pod.exec_ceph_cmd('ceph progress')
+        ct_pod.exec_ceph_cmd('ceph progress json', format=None)
         ct_pod.exec_ceph_cmd('ceph rbd task list')
         return False
 
@@ -1586,6 +1605,39 @@ def remove_scc_policy(sa_name, namespace):
     )
 
     logger.info(out)
+
+
+def craft_s3_command(cmd, mcg_obj=None, api=False):
+    """
+    Crafts the AWS CLI S3 command including the
+    login credentials and command to be ran
+
+    Args:
+        mcg_obj: An MCG object containing the MCG S3 connection credentials
+        cmd: The AWSCLI command to run
+        api: True if the call is for s3api, false if s3
+
+    Returns:
+        str: The crafted command, ready to be executed on the pod
+
+    """
+    api = 'api' if api else ''
+    if mcg_obj:
+        base_command = (
+            f'sh -c "AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
+            f'AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} '
+            f'AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} '
+            f'AWS_DEFAULT_REGION={mcg_obj.region} '
+            f'aws s3{api} '
+            f'--endpoint={mcg_obj.s3_internal_endpoint} '
+        )
+        string_wrapper = '"'
+    else:
+        base_command = (
+            f"aws s3{api} --no-sign-request "
+        )
+        string_wrapper = ''
+    return f"{base_command}{cmd}{string_wrapper}"
 
 
 def wait_for_resource_count_change(
@@ -1697,7 +1749,7 @@ def create_multiple_pvc_parallel(
     with ThreadPoolExecutor() as executor:
         for objs in pvc_objs_list:
             obj_status_list.append(
-                executor.submit(wait_for_resource_state, objs, 'Bound')
+                executor.submit(wait_for_resource_state, objs, 'Bound', 90)
             )
     if False in [obj.result() for obj in obj_status_list]:
         raise TimeoutExpiredError
@@ -2309,3 +2361,24 @@ def storagecluster_independent_check():
     ).get().get('items')[0].get('spec').get(
         'externalStorage'
     ).get('enable')
+
+
+def get_pv_size(storageclass=None):
+    """
+    Get Pv size from requested storageclass
+
+    Args:
+        storageclass (str): Name of storageclass
+
+    Returns:
+        list: list of pv's size
+
+    """
+    return_list = []
+
+    ocp_obj = ocp.OCP(kind=constants.PV)
+    pv_objs = ocp_obj.get()['items']
+    for pv_obj in pv_objs:
+        if pv_obj['spec']['storageClassName'] == storageclass:
+            return_list.append(pv_obj['spec']['capacity']['storage'])
+    return return_list

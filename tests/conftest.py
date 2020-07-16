@@ -5,17 +5,16 @@ import time
 import tempfile
 import textwrap
 import threading
+from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from itertools import chain
 from math import floor
 from random import randrange
 from time import sleep
 from shutil import copyfile
-import subprocess
 from functools import partial
 
 import pytest
-import pathlib
 import yaml
 from botocore.exceptions import ClientError
 
@@ -28,11 +27,13 @@ from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
+from ocs_ci.ocs.node import check_nodes_specs
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import get_rgw_pod, delete_deploymentconfig_pods
+from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad
@@ -44,7 +45,10 @@ from ocs_ci.utility.environment_check import (
 )
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
-    TimeoutSampler, get_rook_repo, get_ocp_version, ceph_health_check,
+    ceph_health_check,
+    get_rook_repo,
+    get_ocp_version,
+    TimeoutSampler,
     update_container_with_mirrored_image,
 )
 from ocs_ci.utility.utils import (
@@ -57,10 +61,13 @@ from ocs_ci.ocs.bucket_utils import (
     oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
     oc_create_s3comp_backingstore, oc_create_pv_backingstore, cli_create_aws_backingstore,
     cli_create_google_backingstore, cli_create_azure_backingstore, cli_create_s3comp_backingstore,
-    cli_create_pv_backingstore, get_rgw_restart_count
+    cli_create_pv_backingstore, get_rgw_restart_counts
 )
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW
+from ocs_ci.ocs.jenkins import Jenkins
+from ocs_ci.ocs.couchbase import CouchBase
+from ocs_ci.ocs.amq import AMQ
 
 log = logging.getLogger(__name__)
 
@@ -119,40 +126,16 @@ def supported_configuration():
         64 GB memory
     Last documentation check: 2020-02-21
     """
-    min_cpu = 16
-    min_memory = 64 * 10 ** 9
+    min_cpu = constants.MIN_NODE_CPU
+    min_memory = constants.MIN_NODE_MEMORY
 
-    node_obj = ocp.OCP(kind=constants.NODE)
     log.info('Checking if system meets minimal requirements')
-    nodes = node_obj.get(selector=constants.WORKER_LABEL).get('items')
-    log.info(
-        f"Checking following nodes with worker selector (assuming that "
-        f"this is ran in CI and there are no worker nodes without OCS):\n"
-        f"{[item.get('metadata').get('name') for item in nodes]}"
-    )
-    for node_info in nodes:
-        real_cpu = int(node_info['status']['capacity']['cpu'])
-        real_memory = node_info['status']['capacity']['memory']
-        if real_memory.endswith('Ki'):
-            real_memory = int(real_memory[0:-2]) * 2 ** 10
-        elif real_memory.endswith('Mi'):
-            real_memory = int(real_memory[0:-2]) * 2 ** 20
-        elif real_memory.endswith('Gi'):
-            real_memory = int(real_memory[0:-2]) * 2 ** 30
-        elif real_memory.endswith('Ti'):
-            real_memory = int(real_memory[0:-2]) * 2 ** 40
-        else:
-            real_memory = int(real_memory)
-
-        if (real_cpu < min_cpu or real_memory < min_memory):
-            error_msg = (
-                f"Node {node_info.get('metadata').get('name')} doesn't have "
-                f"minimum of required reasources for running the test:\n"
-                f"{min_cpu} CPU and {min_memory} Memory\nIt has:\n{real_cpu} "
-                f"CPU and {real_memory} Memory"
-            )
-            log.error(error_msg)
-            pytest.xfail(error_msg)
+    if not check_nodes_specs(min_memory=min_memory, min_cpu=min_cpu):
+        err_msg = (
+            f"At least one of the worker nodes doesn't meet the "
+            f"required minimum specs of {min_cpu} vCPUs and {min_memory} RAM"
+        )
+        pytest.xfail(err_msg)
 
 
 @pytest.fixture(scope='class')
@@ -669,6 +652,7 @@ def pod_factory_fixture(request, pvc_factory):
         pvc=None,
         custom_data=None,
         status=constants.STATUS_RUNNING,
+        node_name=None,
         pod_dict_path=None,
         raw_block_pv=False,
         deployment_config=False,
@@ -688,6 +672,7 @@ def pod_factory_fixture(request, pvc_factory):
                 is set if provided.
             status (str): If provided then factory waits for object to reach
                 desired state.
+            node_name (str): The name of specific node to schedule the pod
             pod_dict_path (str): YAML path for the pod.
             raw_block_pv (bool): True for creating raw block pv based pod,
                 False otherwise.
@@ -713,6 +698,7 @@ def pod_factory_fixture(request, pvc_factory):
                 pvc_name=pvc.name,
                 namespace=pvc.namespace,
                 interface_type=interface,
+                node_name=node_name,
                 pod_dict_path=pod_dict_path,
                 raw_block_pv=raw_block_pv,
                 dc_deployment=deployment_config,
@@ -906,6 +892,9 @@ def dc_pod_factory(
         node_name=None,
         node_selector=None,
         replica_count=1,
+        raw_block_pv=False,
+        sa_obj=None,
+        wait=True
     ):
         """
         Args:
@@ -922,24 +911,27 @@ def dc_pod_factory(
             node_selector (dict): dict of key-value pair to be used for nodeSelector field
                 eg: {'nodetype': 'app-pod'}
             replica_count (int): Replica count for deployment config
+            raw_block_pv (str): True if pod with raw block pvc
+            sa_obj (object) : If specific service account is needed
+
         """
         if custom_data:
             dc_pod_obj = helpers.create_resource(**custom_data)
         else:
-
             pvc = pvc or pvc_factory(interface=interface, size=size)
-            sa_obj = service_account_factory(project=pvc.project, service_account=service_account)
+            sa_obj = sa_obj or service_account_factory(project=pvc.project, service_account=service_account)
             dc_pod_obj = helpers.create_pod(
                 interface_type=interface, pvc_name=pvc.name, do_reload=False,
                 namespace=pvc.namespace, sa_name=sa_obj.name, dc_deployment=True,
-                replica_count=replica_count, node_name=node_name,
-                node_selector=node_selector
+                replica_count=replica_count, node_name=node_name, node_selector=node_selector,
+                raw_block_pv=raw_block_pv, pod_dict_path=constants.FEDORA_DC_YAML
             )
         instances.append(dc_pod_obj)
         log.info(dc_pod_obj.name)
-        helpers.wait_for_resource_state(
-            dc_pod_obj, constants.STATUS_RUNNING, timeout=180
-        )
+        if wait:
+            helpers.wait_for_resource_state(
+                dc_pod_obj, constants.STATUS_RUNNING, timeout=180
+            )
         dc_pod_obj.pvc = pvc
         return dc_pod_obj
 
@@ -1042,8 +1034,9 @@ def cluster(request, log_cli_level):
 
     teardown = config.RUN['cli_params']['teardown']
     deploy = config.RUN['cli_params']['deploy']
-    factory = dep_factory.DeploymentFactory()
-    deployer = factory.get_deployment()
+    if teardown or deploy:
+        factory = dep_factory.DeploymentFactory()
+        deployer = factory.get_deployment()
 
     # Add a finalizer to teardown the cluster after test execution is finished
     if teardown:
@@ -1105,8 +1098,14 @@ def cluster_load(
     Run IO during the test execution
     """
     cl_load_obj = None
-    if config.RUN.get('io_in_bg'):
-        io_load = int(config.RUN.get('io_load')) * 0.01
+    io_in_bg = config.RUN.get('io_in_bg')
+    log_utilization = config.RUN.get('log_utilization')
+    io_load = config.RUN.get('io_load')
+
+    # IO load should not happen during deployment
+    deployment_test = True if 'deployment' in request.node.items[0].location[0] else False
+    if io_in_bg and not deployment_test:
+        io_load = int(io_load) * 0.01
         log.info(
             "\n===================================================\n"
             "Tests will be running while IO is in the background\n"
@@ -1128,7 +1127,7 @@ def cluster_load(
         )
         cl_load_obj.reach_cluster_load_percentage()
 
-    if config.RUN.get('log_utilization') or config.RUN.get('io_in_bg'):
+    if (log_utilization or io_in_bg) and not deployment_test:
         if not cl_load_obj:
             cl_load_obj = ClusterLoad()
 
@@ -1148,7 +1147,7 @@ def cluster_load(
 
         def finalizer():
             """
-            Stop the thread that executed keep_io_running()
+            Stop the thread that executed watch_load()
             """
             set_test_status('finished')
             if thread:
@@ -1168,7 +1167,7 @@ def cluster_load(
             while get_test_status() == 'running':
                 try:
                     cl_load_obj.print_metrics()
-                    if config.RUN.get('io_in_bg'):
+                    if io_in_bg:
                         latency = cl_load_obj.calc_trim_metric_mean(
                             constants.LATENCY_QUERY
                         )
@@ -1620,78 +1619,48 @@ def mcg_obj_fixture(request):
 
 
 @pytest.fixture()
-def created_pods(request):
-    return created_pods_fixture(request)
+def awscli_pod(request, mcg_obj):
+    return awscli_pod_fixture(request, mcg_obj)
 
 
 @pytest.fixture(scope='session')
-def created_pods_session(request):
-    return created_pods_fixture(request)
+def awscli_pod_session(request, mcg_obj_session):
+    return awscli_pod_fixture(request, mcg_obj_session)
 
 
-def created_pods_fixture(request):
-    """
-    Deletes all pods that were created as part of the test
-
-    Returns:
-        list: An empty list of pods
-    """
-    created_pods_objects = []
-
-    def pod_cleanup():
-        for pod in created_pods_objects:
-            log.info(f'Deleting pod {pod.name}')
-            pod.delete()
-
-    request.addfinalizer(pod_cleanup)
-    return created_pods_objects
-
-
-@pytest.fixture()
-def awscli_pod(created_pods):
-    return awscli_pod_fixture(created_pods)
-
-
-@pytest.fixture(scope='session')
-def awscli_pod_session(created_pods_session):
-    return awscli_pod_fixture(created_pods_session)
-
-
-def awscli_pod_fixture(created_pods):
+def awscli_pod_fixture(request, mcg_obj):
     """
     Creates a new AWSCLI pod for relaying commands
 
     Args:
-        created_pods (Fixture/list): A fixture used to keep track of created
-             pods and clean them up in the teardown
+        mcg_obj: An object representing the current
+        state of the MCG in the cluster
 
     Returns:
         pod: A pod running the AWS CLI
 
     """
+    # Create the service-ca configmap to be mounted upon pod creation
+    service_ca_configmap = helpers.create_resource(
+        **templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
+    )
     awscli_pod_obj = helpers.create_pod(
-        namespace=config.ENV_DATA['cluster_namespace'],
+        namespace=constants.DEFAULT_NAMESPACE,
         pod_dict_path=constants.AWSCLI_POD_YAML,
         pod_name=constants.AWSCLI_RELAY_POD_NAME
     )
-    helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
-    created_pods.append(awscli_pod_obj)
-
-    # FIXME: Use service-ca.crt instead of copying the Ingress crt into the pod
-    # https://github.com/red-hat-storage/ocs-ci/issues/2260
-
-    # Verify that the target dir for the self-signed MCG cert exists
-    cert_dir = pathlib.PurePath(constants.DEFAULT_INGRESS_CRT_REMOTE_PATH).parent
-    awscli_pod_obj.exec_cmd_on_pod(f'mkdir --parents {cert_dir}')
-
-    # Copy the self-signed certificate to use with AWSCLI
-    # Use cat and sed since the pod does not have tar or rsync
-    cmd = (
-        f"cat {constants.DEFAULT_INGRESS_CRT_LOCAL_PATH} | "
-        f"oc exec -i -n {config.ENV_DATA['cluster_namespace']} {constants.AWSCLI_RELAY_POD_NAME} "
-        f"-- sed -n 'w {constants.DEFAULT_INGRESS_CRT_REMOTE_PATH}'"
+    OCP(namespace=constants.DEFAULT_NAMESPACE, kind='ConfigMap').wait_for_resource(
+        resource_name=service_ca_configmap.name,
+        column='DATA',
+        condition='1'
     )
-    subprocess.run(cmd, shell=True)
+    helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
+
+    def _awscli_pod_cleanup():
+        awscli_pod_obj.delete()
+        service_ca_configmap.delete()
+
+    request.addfinalizer(_awscli_pod_cleanup)
 
     return awscli_pod_obj
 
@@ -1788,15 +1757,17 @@ def verify_rgw_restart_count_fixture(request):
     """
     Verifies the RGW restart count at start and end of a test
     """
-    if config.ENV_DATA['platform'].lower() == 'vsphere':
+    if config.ENV_DATA['platform'].lower() in constants.ON_PREM_PLATFORMS:
         log.info("Getting RGW pod restart count before executing the test")
-        initial_count = get_rgw_restart_count()
+        initial_counts = get_rgw_restart_counts()
 
         def finalizer():
-            rgw_pod = get_rgw_pod()
-            rgw_pod.reload()
-            log.info("Verifying whether RGW pod changed after executing the test")
-            assert rgw_pod.restart_count == initial_count, 'RGW pod restarted'
+            rgw_pods = get_rgw_pods()
+            for rgw_pod in rgw_pods:
+                rgw_pod.reload()
+            log.info("Verifying whether RGW pods changed after executing the test")
+            for rgw_pod in rgw_pods:
+                assert rgw_pod.restart_count in initial_counts, 'RGW pod restarted'
 
         request.addfinalizer(finalizer)
 
@@ -2409,8 +2380,22 @@ def fio_job_dict_fixture():
     """
     Job template for fio workloads.
     """
+    node_obj = ocp.OCP(kind=constants.NODE)
+
+    log.info('Checking architecture of system')
+    node = node_obj.get(
+        selector=constants.WORKER_LABEL
+    ).get('items')[0]['metadata']['name']
+    arch = node_obj.exec_oc_debug_cmd(node, ['uname -m'])
+    if arch.startswith('x86'):
+        image = 'quay.io/fbalak/fio-fedora:latest'
+    else:
+        image = 'quay.io/multiarch-origin-e2e/fio-fedora:latest'
+    log.info(f'Discovered architecture: {arch.strip()}')
+    log.info(f'Using image: {image}')
+
     # TODO(fbalak): load dictionary fixtures from one place
-    template = textwrap.dedent("""
+    template = textwrap.dedent(f"""
         apiVersion: batch/v1
         kind: Job
         metadata:
@@ -2423,7 +2408,7 @@ def fio_job_dict_fixture():
             spec:
               containers:
                 - name: fio
-                  image: quay.io/fbalak/fio-fedora:latest
+                  image: {image}
                   command:
                     - "/usr/bin/fio"
                     - "--output-format=json"
@@ -2504,6 +2489,149 @@ def pgsql_factory_fixture(request):
     return factory
 
 
+@pytest.fixture(scope='function')
+def jenkins_factory_fixture(request):
+    """
+    Jenkins factory fixture
+    """
+    jenkins = Jenkins()
+
+    def factory(num_projects=1, num_of_builds=1):
+        """
+        Factory to start jenkins workload
+
+        Args:
+            num_projects (int): Number of Jenkins projects
+            num_of_builds (int): Number of builds per project
+
+        """
+        # Jenkins template
+        jenkins.create_ocs_jenkins_template()
+        # Init number of projects
+        jenkins.number_projects = num_projects
+        # Create app jenkins
+        jenkins.create_app_jenkins()
+        # Create jenkins pvc
+        jenkins.create_jenkins_pvc()
+        # Create jenkins build config
+        jenkins.create_jenkins_build_config()
+        # Wait jenkins deploy pod reach to completed state
+        jenkins.wait_for_jenkins_deploy_status(
+            status=constants.STATUS_COMPLETED
+        )
+        # Init number of builds per project
+        jenkins.number_builds_per_project = num_of_builds
+        # Start Builds
+        jenkins.start_build()
+        # Wait build reach 'Complete' state
+        jenkins.wait_for_build_to_complete()
+        # Print table of builds
+        jenkins.print_completed_builds_results()
+
+        return jenkins
+
+    def finalizer():
+        """
+        Clean up
+        """
+        jenkins.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope='function')
+def couchbase_factory_fixture(request):
+    """
+    Couchbase factory fixture
+    """
+    couchbase = CouchBase()
+
+    def factory(replicas=3):
+        """
+        Factory to start couchbase workload
+
+        Args:
+            replicas (int): Number of couchbase workers to be deployed
+        """
+        # Setup couchbase
+        couchbase.setup_cb()
+        # Create couchbase workers
+        couchbase.create_couchbase_worker(replicas=replicas)
+        # Run couchbase workload
+        couchbase.run_workload(replicas=replicas)
+        # Run sanity check on data logs
+        couchbase.analyze_run()
+        return couchbase
+
+    def finalizer():
+        """
+        Clean up
+        """
+        couchbase.teardown()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope='function')
+def amq_factory_fixture(request):
+    """
+    AMQ factory fixture
+    """
+    amq = AMQ()
+
+    def factory(
+        sc_name, tiller_namespace, kafka_namespace=constants.AMQ_NAMESPACE,
+        size=100, replicas=3, benchmark_pod_name="benchmark",
+        num_of_clients=8, worker=None, timeout=3600,
+        amq_workload_yaml=None, run_in_bg=False
+    ):
+        """
+        Factory to start amq workload
+
+        Args:
+            sc_name (str): Name of storage clase
+            tiller_namespace (str): Namespace where benchmark pods to be created
+            kafka_namespace (str): Namespace where kafka cluster to be created
+            size (int): Size of the storage
+            replicas (int): Number of kafka and zookeeper pods to be created
+            benchmark_pod_name (str): Name of the benchmark pod
+            num_of_clients (int): Number of clients to be created
+            worker (str) : Loads to create on workloads separated with commas
+                e.g http://benchmark-worker-0.benchmark-worker:8080,
+                http://benchmark-worker-1.benchmark-worker:8080
+            timeout (int): Time to complete the run
+            amq_workload_yaml (dict): Contains amq workloads information keys and values
+            run_in_bg (bool): On true the workload will run in background
+
+        """
+        # Setup kafka cluster
+        amq.setup_amq_cluster(
+            sc_name=sc_name, namespace=kafka_namespace, size=size, replicas=replicas
+        )
+
+        # Run amq benchmark
+        result = amq.run_amq_benchmark(
+            benchmark_pod_name=benchmark_pod_name, kafka_namespace=kafka_namespace,
+            tiller_namespace=tiller_namespace, num_of_clients=num_of_clients, worker=worker,
+            timeout=timeout, amq_workload_yaml=amq_workload_yaml, run_in_bg=run_in_bg
+        )
+
+        return amq, result
+
+    def finalizer():
+        """
+        Clean up
+
+        """
+        # Clean up
+        amq.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
 @pytest.fixture
 def measurement_dir(tmp_path):
     """
@@ -2530,3 +2658,87 @@ def measurement_dir(tmp_path):
         )
         os.mkdir(measurement_dir)
     return measurement_dir
+
+
+@pytest.fixture()
+def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
+    """
+    Prepare multiple dc pods for the test
+    Returns:
+        list: Pod instances
+    """
+
+    def factory(num_of_pvcs=1, pvc_size=100, project=None, access_mode="RWO", pool_type="rbd", timeout=60):
+
+        dict_modes = {"RWO": "ReadWriteOnce", "RWX": "ReadWriteMany", "RWX-BLK": "ReadWriteMany-Block"}
+        dict_types = {"rbd": "CephBlockPool", "cephfs": "CephFileSystem"}
+
+        if access_mode in "RWX-BLK" and pool_type in "rbd":
+            modes = dict_modes["RWX-BLK"]
+            create_rbd_block_rwx_pod = True
+        else:
+            modes = dict_modes[access_mode]
+            create_rbd_block_rwx_pod = False
+
+        pvc_objs = multi_pvc_factory(
+            interface=dict_types[pool_type],
+            access_modes=[modes],
+            size=pvc_size,
+            num_of_pvc=num_of_pvcs,
+            project=project,
+            timeout=timeout
+        )
+        dc_pods = []
+        dc_pods_res = []
+        sa_obj = service_account_factory(project=project)
+        with ThreadPoolExecutor() as p:
+            for pvc in pvc_objs:
+                if create_rbd_block_rwx_pod:
+                    dc_pods_res.append(
+                        p.submit(
+                            dc_pod_factory, interface=constants.CEPHBLOCKPOOL,
+                            pvc=pvc, raw_block_pv=True, sa_obj=sa_obj
+                        ))
+                else:
+                    dc_pods_res.append(
+                        p.submit(
+                            dc_pod_factory, interface=dict_types[pool_type],
+                            pvc=pvc, sa_obj=sa_obj
+                        ))
+
+        for dc in dc_pods_res:
+            pod_obj = dc.result()
+            if create_rbd_block_rwx_pod:
+                logging.info(f"#### setting attribute pod_type since"
+                             f" create_rbd_block_rwx_pod = {create_rbd_block_rwx_pod}"
+                             )
+                setattr(pod_obj, 'pod_type', 'rbd_block_rwx')
+            else:
+                setattr(pod_obj, 'pod_type', '')
+            dc_pods.append(pod_obj)
+
+        with ThreadPoolExecutor() as p:
+            for dc in dc_pods:
+                p.submit(
+                    helpers.wait_for_resource_state,
+                    resource=dc,
+                    state=constants.STATUS_RUNNING,
+                    timeout=120)
+
+        return dc_pods
+
+    return factory
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ceph_toolbox(request):
+    """
+    This fixture initiates ceph toolbox pod for manually created deployment
+    and if it does not already exist.
+    """
+    deploy = config.RUN['cli_params']['deploy']
+    teardown = config.RUN['cli_params'].get('teardown')
+    skip_ocs = config.ENV_DATA['skip_ocs_deployment']
+    if not (deploy or teardown or skip_ocs):
+        # Creating toolbox pod
+        setup_ceph_toolbox()

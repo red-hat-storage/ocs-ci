@@ -1,20 +1,20 @@
 """
 This module contains local-storage related methods
 """
+import json
 import logging
 import os
 import shutil
 import yaml
-import json
 
-from ocs_ci.utility.utils import clone_repo, run_cmd
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import get_typed_nodes
-from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import csv
-from ocs_ci.utility import utils
-from ocs_ci.ocs import constants, defaults
-from ocs_ci.framework import config
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import clone_repo, get_ocp_version, run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
         list : List containing added device paths
 
     """
-    ocp_obj = OCP(kind='localvolume')
+    ocp_obj = OCP(kind='localvolume', namespace=constants.LOCAL_STORAGE_NAMESPACE)
     workers = get_typed_nodes(node_type="worker")
     worker_names = [worker.name for worker in workers]
     config.ENV_DATA['worker_replicas'] = len(worker_names)
@@ -62,9 +62,9 @@ def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
     cur_device_list = output["spec"]["storageClassDevices"][0]["devicePaths"]
     # Clone repo and run playbook to fetch all device paths from each node
     path = os.path.join(constants.EXTERNAL_DIR, "device-by-id-ocp")
-    utils.clone_repo(constants.OCP_QE_DEVICEPATH_REPO, path)
+    clone_repo(constants.OCP_QE_DEVICEPATH_REPO, path)
     os.chdir(path)
-    utils.run_cmd("ansible-playbook devices_by_id.yml")
+    run_cmd("ansible-playbook devices_by_id.yml")
     # Filter unused/unallocated device paths
     with open("local-storage-block.yaml", "r") as cloned_file:
         with open("local-block.yaml", "w") as our_file:
@@ -88,13 +88,14 @@ def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
     lvcr = yaml.load(local_block_yaml, Loader=yaml.FullLoader)
     new_dev_paths = lvcr["spec"]["storageClassDevices"][0]["devicePaths"]
     logger.info(f"Newly added devices are: {new_dev_paths}")
-    assert len(new_dev_paths) == (len(worker_names) * device_sets_required), (
-        f"Current devices available = {len(new_dev_paths)}"
-    )
-    os.chdir(constants.TOP_DIR)
-    shutil.rmtree(path)
-    # Return list of old device paths and newly added device paths
-    cur_device_list.extend(new_dev_paths)
+    if new_dev_paths:
+        assert len(new_dev_paths) == (len(worker_names) * device_sets_required), (
+            f"Current devices available = {len(new_dev_paths)}"
+        )
+        os.chdir(constants.TOP_DIR)
+        shutil.rmtree(path)
+        # Return list of old device paths and newly added device paths
+        cur_device_list.extend(new_dev_paths)
     return cur_device_list
 
 
@@ -113,7 +114,11 @@ def check_local_volume():
     ):
         ocp_obj = OCP()
         command = "get localvolume local-block -n local-storage "
-        status = ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
+        try:
+            status = ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
+        except CommandFailed as ex:
+            logger.debug(f"Local volume does not exists! Exception: {ex}")
+            return False
         return "No resources found" not in status
 
 
@@ -130,7 +135,7 @@ def check_pvs_created(num_pvs_required):
 
     """
     logger.info("Verifying PVs are created")
-    out = utils.run_cmd("oc get pv -o json")
+    out = run_cmd("oc get pv -o json")
     pv_json = json.loads(out)
     current_count = 0
     for pv in pv_json['items']:
@@ -154,3 +159,18 @@ def get_local_volume_cr():
     """
     ocp_obj = OCP(kind=constants.LOCAL_VOLUME, namespace=constants.LOCAL_STORAGE_NAMESPACE)
     return ocp_obj
+
+
+def get_lso_channel():
+    """
+    Get the channel to use for installing the local storage operator
+
+    Returns:
+        str: local storage operator channel
+
+    """
+    channel = get_ocp_version()
+    # Workaround for https://github.com/red-hat-storage/ocs-ci/issues/2324
+    if channel == '4.5' or '4.6':
+        channel = '4.4'
+    return channel

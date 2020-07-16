@@ -16,7 +16,7 @@ from ocs_ci.deployment.vmware import (
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
-from ocs_ci.utility import aws, vsphere, templating, baremetal
+from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.ocs import constants, ocp, exceptions
@@ -49,7 +49,8 @@ class PlatformNodesFactory:
             'AWS': AWSNodes,
             'vsphere': VMWareNodes,
             'aws': AWSNodes,
-            'baremetal': BaremetalNodes
+            'baremetal': BaremetalNodes,
+            'azure': AZURENodes
         }
 
     def get_nodes_platform(self):
@@ -1641,3 +1642,166 @@ class BaremetalNodes(NodesBase):
             default_config_dict = yaml.safe_load(f)
 
         return default_config_dict
+
+
+class AZURENodes(NodesBase):
+    """
+    Azure Nodes class
+    """
+    def __init__(self):
+        super(AZURENodes, self).__init__()
+        self.subscription_id = config.ENV_DATA.get("azure_subscription_id")
+        self.client_id = config.ENV_DATA['azure_client_id']
+        self.client_secret = config.ENV_DATA['azure_client_secret']
+        self.tenant_id = config.ENV_DATA['azure_tenant_id']
+        self.resourcegroup = config.ENV_DATA['azure_resourcegroup']
+        self.azure = azure_utils.AZURE(self.subscription_id, self.client_id,
+                                       self.client_secret, self.tenant_id, self.resourcegroup)
+
+    def stop_nodes(self, nodes):
+        raise NotImplementedError(
+            "Stop nodes functionality is not implemented"
+        )
+
+    def start_nodes(self, nodes):
+        raise NotImplementedError(
+            "Start nodes functionality is not implemented"
+        )
+
+    def restart_nodes(self, nodes, timeout=540, wait=True):
+        """
+        Restart Azure vm instances
+
+        Args:
+            nodes (list): The OCS objects of the nodes / Azure Vm instance
+            wait (bool): True if need to wait till the restarted node reaches
+                READY state. False otherwise
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+
+        """
+        if not nodes:
+            logger.error("No nodes found for restarting")
+            raise ValueError
+        node_names = [n.name for n in nodes]
+        for node_name in node_names:
+            self.azure.restart_az_vm_instance(node_name)
+
+        if wait:
+            """
+            When reboot is initiated on an instance from the Azure, the
+            instance stays at "Running" state throughout the reboot operation.
+
+            Once the OCP node detects that the node is not reachable then the
+            node reaches status NotReady.
+            When the reboot operation is completed and the instance is
+            reachable the OCP node reaches status Ready.
+            """
+            logger.info(
+                f"Waiting for nodes: {node_names} to reach not ready state"
+            )
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_NOT_READY,
+                timeout=timeout
+            )
+            logger.info(
+                f"Waiting for nodes: {node_names} to reach ready state"
+            )
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY,
+                timeout=timeout
+            )
+
+    def get_data_volumes(self):
+        """
+        Get the data Azure disk objects
+
+        Returns:
+            list: azure disk objects
+
+        """
+        pvs = get_deviceset_pvs()
+        return self.azure.get_data_volumes(pvs)
+
+    def get_node_by_attached_volume(self, volume):
+        """
+        Get node OCS object of the Azure vm instance that has the volume attached to
+
+        Args:
+            volume (Disk): The disk object to get the Azure Vm according to
+
+        Returns:
+            OCS: The OCS object of the Azure Vm instance
+
+        """
+        vm = self.azure.get_node_by_attached_volume(volume)
+        all_nodes = get_node_objs()
+        nodes = [
+            n for n in all_nodes if n.name == vm.name
+        ]
+        assert nodes, (
+            f"Failed to find the OCS object for Azure Vm instance {vm.name}"
+        )
+        return nodes[0]
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        """
+        Detach a volume from an Azure Vm instance
+
+        Args:
+            volume (Disk): The disk object required to delete a volume
+            node (OCS): The OCS object representing the node
+            delete_from_backend (bool): True for deleting the disk from the
+                storage backend, False otherwise
+
+        """
+        self.azure.detach_volume(volume, node)
+
+    def attach_volume(self, volume, node):
+        raise NotImplementedError(
+            "Attach volume functionality is not implemented"
+        )
+
+    def wait_for_volume_attach(self, volume):
+        """
+        Wait for a Disk to be attached to an Azure Vm instance.
+        This is used as when detaching the Disk from the Azure Vm instance,
+        re-attach should take place automatically
+
+        Args:
+            volume (Disk): The Disk to wait for to be attached
+
+        Returns:
+            bool: True if the volume has been attached to the
+                instance, False otherwise
+
+        """
+        try:
+            for sample in TimeoutSampler(
+                300, 3, self.azure.get_disk_state, volume.name
+            ):
+                logger.info(
+                    f"Volume id: {volume.name} has status: {sample}"
+                )
+                if sample == "Attached":
+                    return True
+        except TimeoutExpiredError:
+            logger.error(
+                f"Volume {volume.name} failed to be attached to an Azure Vm instance"
+            )
+            return False
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def attach_nodes_to_cluster(self, node_list):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )

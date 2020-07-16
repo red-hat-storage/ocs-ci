@@ -101,7 +101,7 @@ def teardown(self):
     """
     Make sure at the end cluster is in HEALTH_OK state
     """
-    assert self.cluster_obj.cluster_health_check(timeout=1200)
+    self.cluster_obj.cluster_health_check(timeout=1200)
 
 
 @libtest

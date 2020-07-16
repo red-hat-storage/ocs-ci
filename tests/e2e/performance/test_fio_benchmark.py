@@ -3,7 +3,8 @@ Module to perform FIO workload
 """
 import logging
 import pytest
-from elasticsearch import Elasticsearch
+from elasticsearch import Elasticsearch, exceptions as ESExp
+
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.ocp import OCP, get_ocs_version, get_build
@@ -12,12 +13,21 @@ from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import (
-    E2ETest, performance, rh_internal_lab_required
-)
+from ocs_ci.framework.testlib import E2ETest, performance
 from ocs_ci.utility.performance_dashboard import push_perf_dashboard
+from ocs_ci.ocs.elasticsearch import ElasticSearch
+from ocs_ci.ocs.cluster import CephCluster
 
 log = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope='function')
+def es(request):
+    def teardown():
+        es.cleanup()
+    request.addfinalizer(teardown)
+    es = ElasticSearch()
+    return es
 
 
 @pytest.fixture(scope='function')
@@ -42,7 +52,41 @@ def analyze_regression(io_pattern, storage_class, es_username):
         es_username (str): ocs_build used in the CR object
 
     """
+    def _copy(es):
+        """
+        Copy All data from the internal ES server to the main ES
+
+        Args:
+            es (obj): elasticsearch object which connected to the main ES
+
+        """
+
+        # connecting to the internal ES via the local_server
+        try:
+            int_es = Elasticsearch([{'host': 'localhost',
+                                     'port': '9200'}])
+        except ESExp.ConnectionError:
+            log.error('Can not connect to the internal elastic-search server')
+            return
+
+        query = {'size': 10000, 'query': {'match_all': {}}}
+        for ind in ['ripsaw-fio-logs', 'ripsaw-fio-results',
+                    'ripsaw-fio-analyzed-result']:
+            log.info(f'Reading {ind} from internal ES server')
+            try:
+                result = int_es.search(index=ind, body=query)
+            except ESExp.NotFoundError:
+                log.warning(f'{ind} Not found in the Internal ES.')
+                continue
+
+            log.debug(f'The results from internal ES for {ind} are :{result}')
+            log.info(f'Writing {ind} into main ES server')
+            for doc in result['hits']['hits']:
+                log.debug(f'Going to write : {doc}')
+                es.index(index=ind, doc_type='_doc', body=doc['_source'])
+
     es = Elasticsearch([{'host': constants.ES_SERVER_IP, 'port': constants.ES_SERVER_PORT}])
+    _copy(es)
     # Todo: Fetch benchmark values for FIO, which
     #  Will be implemented after finalizing on h/w
     # fetch results for the current run with unique es_username
@@ -71,7 +115,7 @@ def analyze_regression(io_pattern, storage_class, es_username):
         if io_pattern == 'sequential':
             std_dev = 'std-dev-' + object_size
             variance = test_data[std_dev]
-            log.warning(f'variance - {variance} is greater than 5%')
+            log.info(f'variance - {variance}')
         # Todo: Fail test if 5% deviation from benchmark value
 
         # Extracting results for code speed
@@ -89,7 +133,6 @@ def analyze_regression(io_pattern, storage_class, es_username):
     push_perf_dashboard(storage_class, reads, writes, r_bw, w_bw)
 
 
-@rh_internal_lab_required
 @performance
 @pytest.mark.parametrize(
     argnames=["interface", "io_pattern"],
@@ -112,7 +155,7 @@ class TestFIOBenchmark(E2ETest):
     """
     Run FIO perf test using ripsaw benchmark
     """
-    def test_fio_workload_simple(self, ripsaw, interface, io_pattern):
+    def test_fio_workload_simple(self, ripsaw, es, interface, io_pattern):
         """
         This is a basic fio perf test
         """
@@ -127,18 +170,50 @@ class TestFIOBenchmark(E2ETest):
         # Create fio benchmark
         log.info("Create resource file for fio workload")
         fio_cr = templating.load_yaml(constants.FIO_CR_YAML)
-        # Todo: have pvc_size set to 'get_osd_pods_memory_sum * 5'
-        #  once pr-2037 is merged
+
+        # Saving the Original elastic-search IP and PORT - if defined in yaml
+        es_server = ""
+        es_port = ""
+        if 'elasticsearch' in fio_cr['spec']:
+            if 'server' in fio_cr['spec']['elasticsearch']:
+                es_server = fio_cr['spec']['elasticsearch']['server']
+            if 'port' in fio_cr['spec']['elasticsearch']:
+                es_port = fio_cr['spec']['elasticsearch']['port']
+        else:
+            fio_cr['spec']['elasticsearch'] = {}
+
+        # Use the internal define elastic-search server in the test
+        fio_cr['spec']['elasticsearch'] = {'server': es.get_ip(),
+                                           'port': es.get_port()}
+
+        # Setting the data set to 40% of the total storage capacity but
+        # not more then 600GiB
+        ceph_cluster = CephCluster()
+        total_data_set = int(ceph_cluster.get_ceph_capacity() * 0.4)
+        filesize = int(fio_cr['spec']['workload']['args']['filesize'].replace('GiB', ''))
+        # To make sure the number of App pods will not be more then 50, in case
+        # of large data set, changing the size of the file each pod will work on
+        if total_data_set > 500:
+            filesize = int(ceph_cluster.get_ceph_capacity() * 0.008)
+            fio_cr['spec']['workload']['args']['filesize'] = f'{filesize}GiB'
+            # make sure that the storage size is larger then the file size
+            fio_cr['spec']['workload']['args']['storagesize'] = f'{int(filesize * 1.2)}Gi'
+        fio_cr['spec']['workload']['args']['servers'] = int(total_data_set / filesize)
+        log.info(f'Total Data set to work on is : {total_data_set} GiB')
+
         fio_cr['spec']['clustername'] = config.ENV_DATA['platform'] + get_build() + get_ocs_version()
-        fio_cr['spec']['test_user'] = interface + io_pattern
+        fio_cr['spec']['test_user'] = get_ocs_version() + interface + io_pattern
         fio_cr['spec']['workload']['args']['storageclass'] = sc
+        if io_pattern == 'sequential':
+            fio_cr['spec']['workload']['args']['jobs'] = ['write', 'read']
         log.info(f'fio_cr: {fio_cr}')
         fio_cr_obj = OCS(**fio_cr)
         fio_cr_obj.create()
 
         # Wait for fio client pod to be created
         for fio_pod in TimeoutSampler(
-            300, 20, get_pod_name_by_pattern, 'fio-client', 'my-ripsaw'
+            300, 20, get_pod_name_by_pattern, 'fio-client',
+            constants.RIPSAW_NAMESPACE
         ):
             try:
                 if fio_pod[0] is not None:
@@ -153,7 +228,7 @@ class TestFIOBenchmark(E2ETest):
         pod_obj.wait_for_resource(
             condition='Completed',
             resource_name=fio_client_pod,
-            timeout=36000,
+            timeout=18000,
             sleep=300,
         )
 
@@ -168,6 +243,10 @@ class TestFIOBenchmark(E2ETest):
         # Clean up fio benchmark
         log.info("Deleting FIO benchmark")
         fio_cr_obj.delete()
+
+        # Setting back the original elastic-search information
+        fio_cr['spec']['elasticsearch'] = {'server': es_server,
+                                           'port': es_port}
         analyze_regression(io_pattern, sc, es_username=fio_cr['spec']['test_user'])
 
         # todo: push results to codespeed

@@ -4,6 +4,7 @@ Helper functions file for working with object buckets
 import logging
 import os
 import shlex
+from uuid import uuid4
 
 import boto3
 from botocore.handlers import disable_signing
@@ -161,18 +162,18 @@ def rm_object_recursive(podobj, target, mcg_obj, option=''):
     )
 
 
-def get_rgw_restart_count():
+def get_rgw_restart_counts():
     """
-    Gets the restart count of RGW pod
+    Gets the restart count of the RGW pods
 
     Returns:
-        restart_count (int): RGW pod Restart count
+        list: restart counts of RGW pods
 
     """
     # Internal import in order to avoid circular import
     from ocs_ci.ocs.resources.pod import get_rgw_pod
-    rgw_pod = get_rgw_pod()
-    return rgw_pod.restart_count
+    rgw_pods = get_rgw_pods()
+    return [rgw_pod.restart_count for rgw_pod in rgw_pods]
 
 
 def write_individual_s3_objects(mcg_obj, awscli_pod, bucket_factory, downloaded_files, target_dir, bucket_name=None):
@@ -680,3 +681,76 @@ def s3_list_object_versions(s3_obj, bucketname, prefix=''):
         dict : List object version response
     """
     return s3_obj.s3_client.list_object_versions(Bucket=bucketname, Prefix=prefix)
+
+
+def s3_io_create_delete(mcg_obj, awscli_pod, bucket_factory):
+    """
+    Running IOs on s3 bucket
+    Args:
+        mcg_obj (obj): An MCG object containing the MCG S3 connection credentials
+        awscli_pod (pod): A pod running the AWSCLI tools
+        bucket_factory: Calling this fixture creates a new bucket(s)
+    """
+    target_dir = '/aws/' + uuid4().hex + '_original/'
+    downloaded_files = retrieve_test_objects_to_pod(awscli_pod, target_dir)
+    bucketname = bucket_factory(1)[0].name
+    uploaded_objects_paths = get_full_path_object(downloaded_files, bucketname)
+    write_individual_s3_objects(mcg_obj, awscli_pod, bucket_factory, downloaded_files, target_dir,
+                                bucket_name=bucketname)
+    del_objects(uploaded_objects_paths, awscli_pod, mcg_obj)
+    awscli_pod.exec_cmd_on_pod(command=f'rm -rf {target_dir}')
+
+
+def del_objects(uploaded_objects_paths, awscli_pod, mcg_obj):
+    """
+    Deleting objects from bucket
+
+    Args:
+        uploaded_objects_paths (list): List of object paths
+        awscli_pod (pod): A pod running the AWSCLI tools
+        mcg_obj (obj): An MCG object containing the MCG S3 connection credentials
+
+    """
+    for uploaded_filename in uploaded_objects_paths:
+        logger.info(f'Deleting object {uploaded_filename}')
+        awscli_pod.exec_cmd_on_pod(
+            command=craft_s3_command(mcg_obj, "rm " + uploaded_filename),
+            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+        )
+
+
+def get_full_path_object(downloaded_files, bucket_name):
+    """
+    Getting full of object in the bucket
+
+    Args:
+        downloaded_files (list): List of downloaded files
+        bucket_name (str): Name of the bucket
+
+    Returns:
+         uploaded_objects_paths (list) : List of full paths of objects
+    """
+    uploaded_objects_paths = []
+    for uploaded_filename in downloaded_files:
+        uploaded_objects_paths.append(f"s3://{bucket_name}/{uploaded_filename}")
+
+    return uploaded_objects_paths
+
+
+def obc_io_create_delete(mcg_obj, awscli_pod, bucket_factory):
+    """
+    Running IOs on OBC interface
+    Args:
+        mcg_obj (obj): An MCG object containing the MCG S3 connection credentials
+        awscli_pod (pod): A pod running the AWSCLI tools
+        bucket_factory: Calling this fixture creates a new bucket(s)
+
+    """
+    dir = '/aws/' + uuid4().hex + '_original/'
+    downloaded_files = retrieve_test_objects_to_pod(awscli_pod, dir)
+    bucket_name = bucket_factory(amount=1, interface='OC')[0].name
+    mcg_bucket_path = f's3://{bucket_name}/'
+    uploaded_objects_paths = get_full_path_object(downloaded_files, bucket_name)
+    sync_object_directory(awscli_pod, dir, mcg_bucket_path, mcg_obj)
+    del_objects(uploaded_objects_paths, awscli_pod, mcg_obj)
+    awscli_pod.exec_cmd_on_pod(command=f'rm -rf {dir}')

@@ -12,7 +12,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.ocs import machine
 import tests.helpers
 from ocs_ci.ocs.resources import pod
@@ -304,7 +304,7 @@ def add_new_node_and_label_it(machineset_name):
 
 def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True):
     """
-    Add a new node for aws upi platform and label it
+    Add a new node for aws/vmware upi platform and label it
 
     Args:
         node_type (str): Type of node, RHEL or RHCOS
@@ -465,6 +465,39 @@ def get_node_resource_utilization_from_oc_describe(
     return utilization_dict
 
 
+def get_running_pod_count_from_node(
+    nodename=None, node_type=constants.WORKER_MACHINE
+):
+    """
+    Gets the node running pod count using oc describe node
+
+    Args:
+        nodename (str) : The node name
+        node_type (str) : The node type (e.g. master, worker)
+
+    Returns:
+        dict : Node name and its pod_count
+
+    """
+
+    node_names = [nodename] if nodename else [
+        node.name for node in get_typed_nodes(node_type=node_type)
+    ]
+    obj = ocp.OCP()
+    pod_count_dict = {}
+    for node in node_names:
+        output = obj.exec_oc_cmd(
+            command=f"describe node {node}", out_yaml_format=False
+        ).split("\n")
+        for line in output:
+            if 'Non-terminated Pods:  ' in line:
+                count_line = line.split(' ')
+                pod_count = re.findall(r'\d+', [i for i in count_line if i][2])
+        pod_count_dict[node] = int(pod_count[0])
+
+    return pod_count_dict
+
+
 def print_table_node_resource_utilization(utilization_dict, field_names):
     """
     Print table of node utilization
@@ -587,7 +620,11 @@ def get_provider():
     """
 
     ocp_cluster = OCP(kind='', resource_name='nodes')
-    return ocp_cluster.get('nodes')['items'][0]['spec']['providerID'].split(':')[0]
+    results = ocp_cluster.get('nodes')['items'][0]['spec']
+    if 'providerID' in results:
+        return results['providerID'].split(':')[0]
+    else:
+        return "BareMetal"
 
 
 def get_compute_node_names():
@@ -606,6 +643,12 @@ def get_compute_node_names():
         compute_node_objs = get_typed_nodes()
         return [
             compute_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL]
+            for compute_obj in compute_node_objs
+        ]
+    elif platform == constants.BAREMETAL_PLATFORM:
+        compute_node_objs = get_typed_nodes()
+        return [
+            compute_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL].replace('.', '-')
             for compute_obj in compute_node_objs
         ]
     else:
@@ -629,3 +672,54 @@ def get_ocs_nodes(num_of_nodes=None):
     num_of_nodes = num_of_nodes or len(ocs_nodes)
 
     return ocs_nodes[:num_of_nodes]
+
+
+def get_node_name(node_obj):
+    """
+    Get oc node's name
+
+    Args:
+        node_obj (node_obj): oc node object
+
+    Returns:
+        str: node's name
+
+    """
+    node_items = node_obj.get('items')
+    return node_items['metadata']['name']
+
+
+def check_nodes_specs(min_memory, min_cpu):
+    """
+    Check that the cluster worker nodes meet the required minimum CPU and memory
+
+    Args:
+        min_memory (int): The required minimum memory in bytes
+        min_cpu (int): The required minimum number of vCPUs
+
+    Returns:
+        bool: True if all nodes meet the required minimum specs, False otherwise
+
+    """
+    nodes = get_typed_nodes()
+    log.info(
+        f"Checking following nodes with worker selector (assuming that "
+        f"this is ran in CI and there are no worker nodes without OCS):\n"
+        f"{[node.get().get('metadata').get('name') for node in nodes]}"
+    )
+    for node in nodes:
+        real_cpu = int(node.get()['status']['capacity']['cpu'])
+        real_memory = convert_device_size(node.get()['status']['capacity']['memory'], 'B')
+        if real_cpu < min_cpu or real_memory < min_memory:
+            log.warning(
+                f"Node {node.get().get('metadata').get('name')} specs don't meet "
+                f" the minimum required specs.\n The requirements are: "
+                f"{min_cpu} CPUs and {min_memory} Memory\nThe node has: {real_cpu} "
+                f"CPUs and {real_memory} Memory"
+            )
+            return False
+    log.info(
+        f"Cluster worker nodes meet the minimum requirements of "
+        f"{min_cpu} CPUs and {min_memory} Memory"
+    )
+    return True

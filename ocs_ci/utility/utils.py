@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import os
@@ -1349,7 +1350,7 @@ def ceph_health_check_base(namespace=None):
         f"oc -n {namespace} get pod -l 'app=rook-ceph-tools' "
         f"-o jsonpath='{{.items[0].metadata.name}}'"
     )
-    health = run_cmd(f"oc -n {namespace} exec {tools_pod} ceph health")
+    health = run_cmd(f"oc -n {namespace} exec {tools_pod} -- ceph health")
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
@@ -1452,7 +1453,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
         upgrade = False
     for tag in tags:
         if tag['name'] == latest_tag:
-            latest_image = tag['image_id']
+            latest_image = tag['manifest_digest']
             break
     if not latest_image:
         raise TagNotFoundException("Couldn't find latest tag!")
@@ -1461,7 +1462,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
         if not upgrade:
             if (
                 tag['name'] not in constants.LATEST_TAGS
-                and tag['image_id'] == latest_image
+                and tag['manifest_digest'] == latest_image
             ):
                 return tag['name']
         if upgrade:
@@ -1472,7 +1473,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
                 continue
             if (
                 tag['name'] not in constants.LATEST_TAGS
-                and tag['image_id'] != latest_image
+                and tag['manifest_digest'] != latest_image
                 and ocs_version in tag['name']
             ):
                 if (
@@ -1777,6 +1778,7 @@ def convert_yaml2tfvars(yaml):
     from ocs_ci.utility.templating import load_yaml
     data = load_yaml(yaml)
     tfvars_file = os.path.splitext(yaml)[0]
+    log.debug(f"Converting {yaml} to {tfvars_file}")
     with open(tfvars_file, "w+") as fd:
         for key, val in data.items():
             if key == "control_plane_ignition":
@@ -1789,6 +1791,10 @@ def convert_yaml2tfvars(yaml):
                 fd.write("compute_ignition = <<END_OF_WORKER_IGNITION\n")
                 fd.write(f"{val}\n")
                 fd.write("END_OF_WORKER_IGNITION\n")
+                continue
+
+            if key == "vm_dns_addresses":
+                fd.write(f'vm_dns_addresses = ["{val}"]\n')
                 continue
 
             fd.write(key)
@@ -2000,6 +2006,22 @@ def destroy_cluster(installer, cluster_path, log_level="DEBUG"):
         log.error(traceback.format_exc())
 
 
+def config_to_string(config):
+    """
+    Convert ConfigParser object to string in INI format.
+
+    Args:
+        config (obj): ConfigParser object
+
+    Returns:
+        str: Config in one string
+
+    """
+    strio = io.StringIO()
+    config.write(strio, space_around_delimiters=False)
+    return strio.getvalue()
+
+
 class AZInfo(object):
     """
     A class for getting different az numbers across calls
@@ -2034,29 +2056,15 @@ def convert_device_size(unformatted_size, units_to_covert_to):
 
     """
     units = unformatted_size[-2:]
-    absolute_size = int(unformatted_size[:-2])
-
-    if units_to_covert_to == 'TB':
-        if units == 'Ti':
-            return absolute_size
-        elif units == 'Gi':
-            return absolute_size * 1024
-        elif units == 'Mi':
-            return absolute_size * 1024 * 1024
-    elif units_to_covert_to == 'GB':
-        if units == 'Ti':
-            return absolute_size / 1024
-        elif units == 'Gi':
-            return absolute_size
-        elif units == 'Mi':
-            return absolute_size * 1024
-    elif units_to_covert_to == 'MB':
-        if units == 'Ti':
-            return absolute_size / 1024 / 1024
-        elif units == 'Gi':
-            return absolute_size / 1024
-        elif units == 'Mi':
-            return absolute_size
+    abso = int(unformatted_size[:-2])
+    conversion = {
+        'TB': {'Ti': abso, 'Gi': abso / 1000, 'Mi': abso / 1e+6, 'Ki': abso / 1e+9},
+        'GB': {'Ti': abso * 1000, 'Gi': abso, 'Mi': abso / 1000, 'Ki': abso / 1e+6},
+        'MB': {'Ti': abso * 1e+6, 'Gi': abso * 1000, 'Mi': abso, 'Ki': abso / 1000},
+        'KB': {'Ti': abso * 1e+9, 'Gi': abso * 1e+6, 'Mi': abso * 1000, 'Ki': abso},
+        'B': {'Ti': abso * 1e+12, 'Gi': abso * 1e+9, 'Mi': abso * 1e+6, 'Ki': abso * 1000}
+    }
+    return conversion[units_to_covert_to][units]
 
 
 def mirror_image(image):
@@ -2263,3 +2271,81 @@ def add_stage_cert():
         f"oc patch image.config.openshift.io cluster --type=merge"
         f" -p '{additional_trusted_ca_patch}'"
     )
+
+
+def get_terraform(version=None, bin_dir=None):
+    """
+    Downloads the terraform binary
+
+    Args:
+        version (str): Version of the terraform to download
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+
+    Returns:
+        str: Path to the terraform binary
+
+    """
+    if platform.system() == "Darwin":
+        os_type = "darwin"
+    elif platform.system() == "Linux":
+        os_type = "linux"
+    else:
+        raise UnsupportedOSType
+
+    version = version or config.DEPLOYMENT['terraform_version']
+    bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
+    terraform_zip_file = f"terraform_{version}_{os_type}_amd64.zip"
+    terraform_filename = "terraform"
+    terraform_binary_path = os.path.join(bin_dir, terraform_filename)
+    log.info(f"Downloading terraform version {version}")
+    previous_dir = os.getcwd()
+    os.chdir(bin_dir)
+    url = (
+        f"https://releases.hashicorp.com/terraform/{version}/"
+        f"{terraform_zip_file}"
+    )
+    download_file(url, terraform_zip_file)
+    run_cmd(f"unzip -o {terraform_zip_file}")
+    delete_file(terraform_zip_file)
+    # return to the previous working directory
+    os.chdir(previous_dir)
+
+    return terraform_binary_path
+
+
+def get_module_ip(terraform_state_file, module):
+    """
+    Gets the bootstrap node IP from terraform.tfstate file
+
+    Args:
+        terraform_state_file (str): Path to terraform state file
+        module (str): Module name in terraform.tfstate file
+            e.g: constants.LOAD_BALANCER_MODULE
+
+    Returns:
+        str: IP of bootstrap node
+
+    """
+    with open(terraform_state_file) as fd:
+        obj = hcl.load(fd)
+
+        resources = obj['resources']
+        log.debug(f"Extracting module information for {module}")
+        log.debug(f"Resource in {terraform_state_file}: {resources}")
+        for resource in resources:
+            if resource['module'] == module:
+                resource_body = resource['instances'][0]['attributes']['body']
+                return resource_body.split("\"")[3]
+
+
+def set_aws_region(region=None):
+    """
+    Exports environment variable AWS_REGION
+
+    Args:
+        region (str): AWS region to export
+
+    """
+    log.debug("Exporting environment variable AWS_REGION")
+    region = region or config.ENV_DATA['region']
+    os.environ['AWS_REGION'] = region

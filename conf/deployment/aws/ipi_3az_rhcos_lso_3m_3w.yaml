@@ -17,7 +17,7 @@ ENV_DATA:
   worker_replicas: 3
   master_replicas: 3
   worker_instance_type: 'i3en.2xlarge'
-  device_size: 2300  # Value pulled from here: https://bugzilla.redhat.com/show_bug.cgi?id=1812557#c27
+  device_size: 2328
 REPORTING:
   polarion:
     deployment_id: 'OCS-2195'

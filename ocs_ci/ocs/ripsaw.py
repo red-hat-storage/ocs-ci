@@ -46,7 +46,7 @@ class RipSaw(object):
         self.pgsql_is_setup = False
         self.ocp = OCP()
         self.ns_obj = OCP(kind='namespace')
-        self.pod_obj = OCP(kind='pod')
+        self.pod_obj = OCP(namespace=RIPSAW_NAMESPACE, kind='pod')
         self._create_namespace()
         self._clone_ripsaw()
 

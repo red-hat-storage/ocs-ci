@@ -10,7 +10,7 @@ from botocore.client import ClientError
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed, CredReqSecretNotFound, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import cal_md5sum
@@ -33,10 +33,10 @@ class MCG(object):
     """
 
     (
-        s3_resource, s3_endpoint, ocp_resource,
+        s3_resource, s3_endpoint, s3_internal_endpoint, ocp_resource,
         mgmt_endpoint, region, access_key_id, access_key,
         namespace, noobaa_user, noobaa_password, noobaa_token
-    ) = (None,) * 11
+    ) = (None,) * 12
 
     def __init__(self):
         """
@@ -66,6 +66,10 @@ class MCG(object):
         self.s3_endpoint = (
             get_noobaa.get('items')[0].get('status').get('services')
             .get('serviceS3').get('externalDNS')[0]
+        )
+        self.s3_internal_endpoint = (
+            get_noobaa.get('items')[0].get('status').get('services')
+            .get('serviceS3').get('internalDNS')[0]
         )
         self.mgmt_endpoint = (
             get_noobaa.get('items')[0].get('status').get('services')
@@ -128,13 +132,14 @@ class MCG(object):
             pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
             assert len(pods) == 0, 'RGW pod should not exist on AWS platform'
 
-        elif config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
-            logger.info('Checking for RGW pod on VSPHERE platform')
+        elif config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+            rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
+            logger.info(f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform')
             rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
             assert rgw_pod.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 selector=constants.RGW_APP_LABEL,
-                resource_count=1,
+                resource_count=rgw_count,
                 timeout=60
             )
 
@@ -358,7 +363,16 @@ class MCG(object):
         sleep(5)
 
         secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
-        cred_req_secret_dict = secret_ocp_obj.get(resource_name=creds_request.name, retry=5)
+        try:
+            cred_req_secret_dict = secret_ocp_obj.get(resource_name=creds_request.name, retry=5)
+        except CommandFailed:
+            logger.error(
+                'Failed to retrieve credentials request secret'
+            )
+            raise CredReqSecretNotFound(
+                'Please make sure that the cluster used is an AWS cluster, '
+                'or that the `platform` var in your config is correct.'
+            )
 
         aws_access_key_id = base64.b64decode(
             cred_req_secret_dict.get('data').get('aws_access_key_id')
@@ -757,7 +771,9 @@ class MCG(object):
         # Get noobaa status
         status = self.exec_mcg_cmd('status').stderr
         for line in status.split('\n'):
-            if 'Not Found' in line and 'Optional' not in line:
+            if any(
+                i in line for i in ['Not Found', 'Waiting for phase ready ...']
+            ) and 'Optional' not in line:
                 logger.error(f"Error in noobaa status output- {line}")
                 return False
         logger.info("Verified: noobaa status does not contain any error.")

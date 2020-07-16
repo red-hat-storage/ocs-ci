@@ -17,11 +17,14 @@ from ocs_ci.ocs.ocp import OCP, verify_images_upgraded
 from tests import helpers
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed, NonUpgradedImagesFoundError, UnavailableResourceException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed, NonUpgradedImagesFoundError, ResourceWrongStatusException,
+    TimeoutExpiredError, UnavailableResourceException
+)
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_cmd, check_timeout_reached
+from ocs_ci.utility.utils import run_cmd, check_timeout_reached, TimeoutSampler
 from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
 
@@ -495,7 +498,7 @@ def get_csi_provisioner_pod(interface):
     return provisioner_pod
 
 
-def get_rgw_pod(rgw_label=constants.RGW_APP_LABEL, namespace=None):
+def get_rgw_pods(rgw_label=constants.RGW_APP_LABEL, namespace=None):
     """
     Fetches info about rgw pods in the cluster
 
@@ -506,12 +509,12 @@ def get_rgw_pod(rgw_label=constants.RGW_APP_LABEL, namespace=None):
             (default: none)
 
     Returns:
-        Pod object: rgw pod object
+        list: Pod objects of rgw pods
+
     """
     namespace = namespace or config.ENV_DATA['cluster_namespace']
     rgws = get_pods_having_label(rgw_label, namespace)
-    rgw_pod = Pod(**rgws[0])
-    return rgw_pod
+    return [Pod(**rgw) for rgw in rgws]
 
 
 def list_ceph_images(pool_name='rbd'):
@@ -688,10 +691,27 @@ def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=False):
     else:
         FILE = TEST_FILE
     test_file = FILE + "1"
-    assert check_file_existence(pod_obj, test_file), (
-        f"I/O failed to start inside {pod_obj.name}"
-    )
 
+    # Check I/O started
+    try:
+        for sample in TimeoutSampler(
+            timeout=20, sleep=1, func=check_file_existence,
+            pod_obj=pod_obj, file_path=test_file
+        ):
+            if sample:
+                break
+            logger.info(f"Waiting for I/O to start inside {pod_obj.name}")
+    except TimeoutExpiredError:
+        logger.error(
+            f"Wait timeout: I/O failed to start inside {pod_obj.name}. "
+            "Collect file list."
+        )
+        parent_dir = os.path.join(TEST_FILE, os.pardir)
+        pod_obj.exec_cmd_on_pod(
+            command=f'ls -l {os.path.abspath(parent_dir)}',
+            out_yaml_format=False
+        )
+        raise TimeoutExpiredError(f"I/O failed to start inside {pod_obj.name}")
     return thread
 
 
@@ -1226,6 +1246,48 @@ def download_file_from_pod(pod_name, remotepath, localpath, namespace=None):
     run_cmd(cmd)
 
 
+def wait_for_storage_pods(timeout=200):
+    """
+    Check all OCS pods status, they should be in Running or Completed state
+
+    Args:
+        timeout (int): Number of seconds to wait for pods to get into correct
+            state
+
+    """
+    all_pod_obj = get_all_pods(
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    for pod_obj in all_pod_obj:
+        state = constants.STATUS_RUNNING
+        if any(i in pod_obj.name for i in ['-1-deploy', 'ocs-deviceset']):
+            state = constants.STATUS_COMPLETED
+
+        try:
+            helpers.wait_for_resource_state(
+                resource=pod_obj,
+                state=state,
+                timeout=timeout
+            )
+        except ResourceWrongStatusException:
+            # 'rook-ceph-crashcollector' on the failed node stucks at
+            # pending state. BZ 1810014 tracks it.
+            # Ignoring 'rook-ceph-crashcollector' pod health check as
+            # WA and deleting its deployment so that the pod
+            # disappears. Will revert this WA once the BZ is fixed
+            if 'rook-ceph-crashcollector' in pod_obj.name:
+                ocp_obj = ocp.OCP(
+                    namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                )
+                pod_name = pod_obj.name
+                deployment_name = '-'.join(pod_name.split("-")[:-2])
+                command = f"delete deployment {deployment_name}"
+                ocp_obj.exec_oc_cmd(command=command)
+                logger.info(f"Deleted deployment for pod {pod_obj.name}")
+            else:
+                raise
+
+
 def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
     """
     Verify that all pods do not have old image.
@@ -1340,3 +1402,61 @@ def delete_deploymentconfig_pods(pod_obj):
                 dc_ocp_obj.wait_for_delete(
                     resource_name=pod_obj.get_labels().get('name')
                 )
+
+
+def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
+    status_options = ['Init:1/4', 'Init:2/4', 'Init:3/4', 'PodInitializing', 'Running']
+    try:
+        for osd_pods in TimeoutSampler(
+            timeout=180, sleep=3, func=get_osd_pods
+        ):
+            # Check if the new osd pods has started to come up
+            new_osd_pods = osd_pods[number_of_osd_pods_before:]
+            new_osd_pods_come_up = [pod.status() in status_options for pod in new_osd_pods]
+            if any(new_osd_pods_come_up):
+                logging.info("One or more of the new osd pods has started to come up")
+                break
+    except TimeoutExpiredError:
+        logging.warning(
+            "None of the new osd pods reached the desired status"
+        )
+
+
+def get_pod_restarts_count(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Gets the dictionary of pod and its restart count for all the pods in a given namespace
+
+    Returns:
+        dict: dictionary of pod name and its corresponding restart count
+
+    """
+    list_of_pods = get_all_pods(namespace)
+    restart_dict = {}
+    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    for p in list_of_pods:
+        # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
+        if "rook-ceph-osd-prepare" not in p.name and "rook-ceph-drain-canary" not in p.name:
+            restart_dict[p.name] = int(ocp_pod_obj.get_resource(p.name, 'RESTARTS'))
+    logging.info(f"get_pod_restarts_count: restarts dict = {restart_dict}")
+    return restart_dict
+
+
+def check_pods_in_running_state(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    checks whether all the pods in a given namespace are in Running state or not
+
+    Returns:
+        Boolean: True, if all pods in Running state. False, otherwise
+
+    """
+    ret_val = True
+    list_of_pods = get_all_pods(namespace)
+    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    for p in list_of_pods:
+        # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
+        if "rook-ceph-osd-prepare" not in p.name and "rook-ceph-drain-canary" not in p.name:
+            status = ocp_pod_obj.get_resource(p.name, 'STATUS')
+            if status not in "Running":
+                logging.error(f"The pod {p.name} is in {status} state. Expected = Running")
+                ret_val = False
+    return ret_val

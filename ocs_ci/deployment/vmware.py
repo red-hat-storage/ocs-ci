@@ -24,11 +24,16 @@ from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.csr import (
     approve_pending_csr, wait_for_all_nodes_csr_and_approve
 )
-from ocs_ci.utility.templating import dump_data_to_json, Templating
+from ocs_ci.utility.load_balancer import LoadBalancer
+from ocs_ci.utility.templating import (
+    dump_data_to_json,
+    Templating,
+    json_to_dict,
+)
 from ocs_ci.utility.utils import (
     clone_repo, convert_yaml2tfvars, create_directory_path, read_file_as_str,
     remove_keys_from_tf_variable_file, replace_content_in_file, run_cmd,
-    upload_file, wait_for_co, get_ocp_version
+    upload_file, wait_for_co, get_ocp_version, get_terraform, set_aws_region,
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from semantic_version import Version
@@ -71,7 +76,7 @@ class VSPHEREBASE(Deployment):
 
         self.wait_time = 90
 
-    def attach_disk(self, size=100):
+    def attach_disk(self, size=100, disk_type=constants.VM_DISK_TYPE):
         """
         Add a new disk to all the workers nodes
 
@@ -91,7 +96,7 @@ class VSPHEREBASE(Deployment):
                     config.ENV_DATA.get("extra_disks", 1),
                     vm,
                     size,
-                    constants.VM_DISK_TYPE
+                    disk_type
                 )
 
     def add_nodes(self):
@@ -371,10 +376,23 @@ class VSPHEREUPI(VSPHEREBASE):
                 'installer'
             )
             self.previous_dir = os.getcwd()
+
+            # Download terraform binary based on ocp version and
+            # update the installer path in ENV_DATA
+            # use "0.11.14" for releases below OCP 4.5
+            terraform_version = config.DEPLOYMENT['terraform_version']
+            terraform_installer = get_terraform(version=terraform_version)
+            config.ENV_DATA['terraform_installer'] = terraform_installer
+
+            # Initialize Terraform
             self.terraform_data_dir = os.path.join(self.cluster_path, constants.TERRAFORM_DATA_DIR)
             create_directory_path(self.terraform_data_dir)
             self.terraform_work_dir = constants.VSPHERE_DIR
             self.terraform = Terraform(self.terraform_work_dir)
+            ocp_version = get_ocp_version()
+            self.folder_structure = False
+            if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+                self.folder_structure = True
 
         def deploy_prereq(self):
             """
@@ -383,81 +401,29 @@ class VSPHEREUPI(VSPHEREBASE):
             super(VSPHEREUPI.OCPDeployment, self).deploy_prereq()
             # create ignitions
             self.create_ignitions()
-            self.kubeconfig = os.path.join(self.cluster_path, config.RUN.get('kubeconfig_location'))
+            self.kubeconfig = os.path.join(
+                self.cluster_path,
+                config.RUN.get('kubeconfig_location')
+            )
+            self.terraform_var = os.path.join(
+                config.ENV_DATA['cluster_path'],
+                constants.TERRAFORM_DATA_DIR,
+                "terraform.tfvars"
+            )
 
             # git clone repo from openshift installer
             clone_openshift_installer()
 
-            # upload bootstrap ignition to public access server
-            bootstrap_path = os.path.join(config.ENV_DATA.get('cluster_path'), constants.BOOTSTRAP_IGN)
-            remote_path = os.path.join(
-                config.ENV_DATA.get('path_to_upload'),
-                f"{config.RUN.get('run_id')}_{constants.BOOTSTRAP_IGN}"
-            )
-            upload_file(
-                config.ENV_DATA.get('httpd_server'),
-                bootstrap_path,
-                remote_path,
-                config.ENV_DATA.get('httpd_server_user'),
-                config.ENV_DATA.get('httpd_server_password')
-            )
-
-            # generate bootstrap ignition url
-            path_to_bootstrap_on_remote = remote_path.replace("/var/www/html/", "")
-            bootstrap_ignition_url = (
-                f"http://{config.ENV_DATA.get('httpd_server')}/"
-                f"{path_to_bootstrap_on_remote}"
-            )
-            logger.info(f"bootstrap_ignition_url: {bootstrap_ignition_url}")
-            config.ENV_DATA['bootstrap_ignition_url'] = bootstrap_ignition_url
-
-            # load master and worker ignitions to variables
-            master_ignition_path = os.path.join(
-                config.ENV_DATA.get('cluster_path'),
-                constants.MASTER_IGN
-            )
-            master_ignition = read_file_as_str(f"{master_ignition_path}")
-            config.ENV_DATA['control_plane_ignition'] = master_ignition
-
-            worker_ignition_path = os.path.join(
-                config.ENV_DATA.get('cluster_path'),
-                constants.WORKER_IGN
-            )
-            worker_ignition = read_file_as_str(f"{worker_ignition_path}")
-            config.ENV_DATA['compute_ignition'] = worker_ignition
-
-            cluster_domain = (
-                f"{config.ENV_DATA.get('cluster_name')}."
-                f"{config.ENV_DATA.get('base_domain')}"
-            )
-            config.ENV_DATA['cluster_domain'] = cluster_domain
-
-            # generate terraform variables from template
-            logger.info("Generating terraform variables")
-            _templating = Templating()
-            terraform_var_template = "terraform.tfvars.j2"
-            terraform_var_template_path = os.path.join(
-                "ocp-deployment", terraform_var_template
-            )
-            terraform_config_str = _templating.render_template(
-                terraform_var_template_path, config.ENV_DATA
-            )
-
-            terraform_var_yaml = os.path.join(
-                self.cluster_path,
-                constants.TERRAFORM_DATA_DIR,
-                "terraform.tfvars.yaml"
-            )
-            with open(terraform_var_yaml, "w") as f:
-                f.write(terraform_config_str)
-            self.terraform_var = convert_yaml2tfvars(terraform_var_yaml)
-
-            # update the machine configurations
-            update_machine_conf()
+            # generate terraform variable file
+            generate_terraform_vars_and_update_machine_conf()
 
             # sync guest time with host
+            vm_file = (
+                constants.VM_MAIN if self.folder_structure
+                else constants.INSTALLER_MACHINE_CONF
+            )
             if config.ENV_DATA.get('sync_time_with_host'):
-                sync_time_with_host(constants.INSTALLER_MACHINE_CONF, True)
+                sync_time_with_host(vm_file, True)
 
         def create_config(self):
             """
@@ -540,12 +506,29 @@ class VSPHEREUPI(VSPHEREBASE):
                         logger.error(ex)
                 raise e
 
+            if self.folder_structure:
+                # comment bootstrap module
+                comment_bootstrap_in_lb_module()
+
+                # remove bootstrap IP in load balancer and
+                # restart haproxy
+                lb = LoadBalancer()
+                lb.remove_boostrap_in_proxy()
+                lb.restart_haproxy()
+
+            # remove bootstrap node
             if not config.DEPLOYMENT['preserve_bootstrap_node']:
                 logger.info("removing bootstrap node")
                 os.chdir(self.terraform_data_dir)
-                self.terraform.apply(
-                    self.terraform_var, bootstrap_complete=True
-                )
+                if self.folder_structure:
+                    self.terraform.destroy_module(
+                        self.terraform_var,
+                        constants.BOOTSTRAP_MODULE
+                    )
+                else:
+                    self.terraform.apply(
+                        self.terraform_var, bootstrap_complete=True
+                    )
                 os.chdir(self.previous_dir)
 
             OCP.set_kubeconfig(self.kubeconfig)
@@ -555,7 +538,7 @@ class VSPHEREUPI(VSPHEREBASE):
             # for all the nodes
             ocp_version = get_ocp_version()
             if Version.coerce(ocp_version) >= Version.coerce('4.4'):
-                wait_for_all_nodes_csr_and_approve()
+                wait_for_all_nodes_csr_and_approve(timeout=1200, sleep=30)
 
             # wait for image registry to show-up
             co = "image-registry"
@@ -615,6 +598,29 @@ class VSPHEREUPI(VSPHEREBASE):
         """
         previous_dir = os.getcwd()
 
+        # Download terraform binary based on terraform version
+        # in terraform.log
+        terraform_log_path = os.path.join(
+            config.ENV_DATA.get('cluster_path'),
+            config.ENV_DATA.get('TF_LOG_FILE')
+        )
+
+        # check for terraform.log, this check is for partially
+        # deployed clusters
+        try:
+            with open(terraform_log_path, 'r') as fd:
+                logger.debug(
+                    f"Reading terraform version from {terraform_log_path}"
+                )
+                version_line = fd.readline()
+                terraform_version = version_line.split()[-1]
+        except FileNotFoundError:
+            logger.debug(f"{terraform_log_path} file not found")
+            terraform_version = config.DEPLOYMENT['terraform_version']
+
+        terraform_installer = get_terraform(version=terraform_version)
+        config.ENV_DATA['terraform_installer'] = terraform_installer
+
         # delete the extra disks
         self.delete_disks()
 
@@ -653,10 +659,19 @@ class VSPHEREUPI(VSPHEREBASE):
         ):
             os.rename(f"{constants.VSPHERE_MAIN}.json", f"{constants.VSPHERE_MAIN}.json.backup")
 
+        # getting OCP version here since we run destroy job as
+        # separate job in jenkins
+        ocp_version = get_ocp_version()
+        self.folder_structure = False
+        if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+            set_aws_region()
+            self.folder_structure = True
+
+        # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
         terraform.initialize(upgrade=True)
-        terraform.destroy(tfvars)
+        terraform.destroy(tfvars, refresh=(not self.folder_structure))
         os.chdir(previous_dir)
 
         # post destroy checks
@@ -715,9 +730,12 @@ def sync_time_with_host(machine_file, enable=False):
     Args:
          machine_file (str): machine file to sync the guest time with host
          enable (bool): True to sync guest time with host
+
     """
+    # terraform will support only lowercase bool
+    enable = str(enable).lower()
     to_change = 'enable_disk_uuid = "true"'
-    sync_time = f"{to_change} sync_time_with_host = \"{enable}\""
+    sync_time = f"{to_change}\n sync_time_with_host = \"{enable}\""
 
     replace_content_in_file(
         machine_file,
@@ -742,7 +760,13 @@ def clone_openshift_installer():
         'installer'
     )
     ocp_version = get_ocp_version()
-    if Version.coerce(ocp_version) >= Version.coerce('4.4'):
+    # supporting folder structure from ocp4.5
+    if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+        clone_repo(
+            constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
+            f'release-{ocp_version}'
+        )
+    elif Version.coerce(ocp_version) == Version.coerce('4.4'):
         clone_repo(
             constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
             constants.VSPHERE_INSTALLER_BRANCH
@@ -784,18 +808,28 @@ def change_mem_and_cpu():
         os.rename(constants.VSPHERE_MAIN, f"{constants.VSPHERE_MAIN}.backup")
 
 
-def update_gw_and_dns():
+def update_gw(str_to_replace, config_file):
     """
-    Updates the gateway and DNS
+    Updates the gateway
+
+    Args:
+        str_to_replace (str): string to replace in config file
+        config_file (str): file to replace the string
+
     """
     # update gateway
     if config.ENV_DATA.get('gateway'):
         replace_content_in_file(
-            constants.INSTALLER_IGNITION,
-            '${cidrhost(var.machine_cidr,1)}',
+            config_file,
+            str_to_replace,
             f"{config.ENV_DATA.get('gateway')}"
         )
 
+
+def update_dns():
+    """
+    Updates the DNS
+    """
     # update DNS
     if config.ENV_DATA.get('dns'):
         replace_content_in_file(
@@ -815,18 +849,248 @@ def update_zone():
         replace_content_in_file(constants.INSTALLER_ROUTE53, "xyz", def_zone)
 
 
-def update_machine_conf():
+def update_path():
+    """
+    Updates Path to var.folder in resource vsphere_folder
+    """
+    logger.debug(f"Updating path to var.folder in {constants.VSPHERE_MAIN}")
+    replace_str = "path          = var.cluster_id"
+    replace_content_in_file(
+        constants.VSPHERE_MAIN,
+        replace_str,
+        "path          = var.folder"
+    )
+
+
+def add_var_folder():
+    """
+    Add folder variable to vsphere variables.tf
+    """
+    # read the variables.tf data to var_data
+    with open(constants.VSPHERE_VAR, "r") as fd:
+        var_data = fd.read()
+
+    # backup the variables.tf
+    os.rename(constants.VSPHERE_VAR, f"{constants.VSPHERE_VAR}.backup")
+
+    # write var_data along with folder variable at the end of file
+    with open(constants.VSPHERE_VAR, "w+") as fd:
+        fd.write(var_data)
+        fd.write('\nvariable "folder" {\n')
+        fd.write('  type    = string\n')
+        fd.write('}\n')
+
+
+def update_machine_conf(folder_structure=True):
     """
     Updates the machine configurations
+
+    Args:
+        folder_structure (bool): True if folder structure installations.
+            Currently True for OCP release greater than 4.4 versions
+
     """
-    # update gateway and DNS
-    update_gw_and_dns()
+    if not folder_structure:
+        gw_string = "${cidrhost(var.machine_cidr,1)}"
+        gw_conf_file = constants.INSTALLER_IGNITION
+        disk_size_conf_file = constants.INSTALLER_MACHINE_CONF
+        # update dns
+        update_dns()
 
-    # update the zone in route
-    update_zone()
+        # update the zone in route
+        update_zone()
 
-    # increase CPUs and memory
-    change_mem_and_cpu()
+        # increase CPUs and memory
+        change_mem_and_cpu()
+
+    else:
+        gw_string = "${cidrhost(machine_cidr, 1)}"
+        gw_conf_file = constants.VM_IFCFG
+        disk_size_conf_file = constants.VM_MAIN
+
+        # change cluster ID to folder
+        update_path()
+
+        # Add variable folder to variables.tf
+        add_var_folder()
+
+    # update gateway
+    update_gw(gw_string, gw_conf_file)
 
     # change root disk size
-    change_vm_root_disk_size(constants.INSTALLER_MACHINE_CONF)
+    change_vm_root_disk_size(disk_size_conf_file)
+
+
+def generate_terraform_vars_and_update_machine_conf():
+    """
+    Generates the terraform.tfvars file
+    """
+    ocp_version = get_ocp_version()
+    folder_structure = False
+    if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+
+        folder_structure = True
+        # export AWS_REGION
+        set_aws_region()
+
+        # generate terraform variable file
+        generate_terraform_vars_with_folder()
+
+        # update the machine configurations
+        update_machine_conf(folder_structure)
+    else:
+        # generate terraform variable file
+        generate_terraform_vars_with_out_folder()
+
+        # update the machine configurations
+        update_machine_conf(folder_structure)
+
+
+def generate_terraform_vars_with_folder():
+    """
+    Generates the terraform.tfvars file which includes folder structure
+    """
+    # generate terraform variables from template
+    logger.info("Generating terraform variables with folder structure")
+    cluster_domain = (
+        f"{config.ENV_DATA.get('cluster_name')}."
+        f"{config.ENV_DATA.get('base_domain')}"
+    )
+    config.ENV_DATA['cluster_domain'] = cluster_domain
+
+    # Form the ignition paths
+    bootstrap_ignition_path = os.path.join(
+        config.ENV_DATA['cluster_path'],
+        constants.BOOTSTRAP_IGN
+    )
+    control_plane_ignition_path = os.path.join(
+        config.ENV_DATA['cluster_path'],
+        constants.MASTER_IGN
+    )
+    compute_ignition_path = os.path.join(
+        config.ENV_DATA['cluster_path'],
+        constants.WORKER_IGN
+    )
+
+    # Update ignition paths to ENV_DATA
+    config.ENV_DATA['bootstrap_ignition_path'] = bootstrap_ignition_path
+    config.ENV_DATA['control_plane_ignition_path'] = (
+        control_plane_ignition_path
+    )
+    config.ENV_DATA['compute_ignition_path'] = compute_ignition_path
+
+    # Copy DNS address to vm_dns_addresses
+    config.ENV_DATA['vm_dns_addresses'] = config.ENV_DATA['dns']
+
+    # Get the infra ID from metadata.json and update in ENV_DATA
+    metadata_path = os.path.join(
+        config.ENV_DATA['cluster_path'],
+        "metadata.json"
+    )
+    metadata_dct = json_to_dict(metadata_path)
+    config.ENV_DATA['folder'] = metadata_dct['infraID']
+
+    # expand ssh_public_key_path and update in ENV_DATA
+    ssh_public_key_path = os.path.expanduser(
+        config.DEPLOYMENT['ssh_key']
+    )
+    config.ENV_DATA['ssh_public_key_path'] = ssh_public_key_path
+
+    create_terraform_var_file("terraform_4_5.tfvars.j2")
+
+
+def create_terraform_var_file(terraform_var_template):
+    """
+    Creates the terraform variable file from jinja template
+
+    Args:
+        terraform_var_template (str): terraform template in jinja format
+
+    """
+    _templating = Templating()
+    terraform_var_template_path = os.path.join(
+        "ocp-deployment", terraform_var_template
+    )
+    terraform_config_str = _templating.render_template(
+        terraform_var_template_path, config.ENV_DATA
+    )
+
+    terraform_var_yaml = os.path.join(
+        config.ENV_DATA['cluster_path'],
+        constants.TERRAFORM_DATA_DIR,
+        "terraform.tfvars.yaml"
+    )
+    with open(terraform_var_yaml, "w") as f:
+        f.write(terraform_config_str)
+
+    convert_yaml2tfvars(terraform_var_yaml)
+
+
+def generate_terraform_vars_with_out_folder():
+    """
+    Generates the normal ( old structure ) terraform.tfvars file
+    """
+    logger.info("Generating terraform variables without folder structure")
+
+    # upload bootstrap ignition to public access server
+    bootstrap_path = os.path.join(
+        config.ENV_DATA.get('cluster_path'),
+        constants.BOOTSTRAP_IGN
+    )
+    remote_path = os.path.join(
+        config.ENV_DATA.get('path_to_upload'),
+        f"{config.RUN.get('run_id')}_{constants.BOOTSTRAP_IGN}"
+    )
+    upload_file(
+        config.ENV_DATA.get('httpd_server'),
+        bootstrap_path,
+        remote_path,
+        config.ENV_DATA.get('httpd_server_user'),
+        config.ENV_DATA.get('httpd_server_password')
+    )
+
+    # generate bootstrap ignition url
+    path_to_bootstrap_on_remote = remote_path.replace("/var/www/html/", "")
+    bootstrap_ignition_url = (
+        f"http://{config.ENV_DATA.get('httpd_server')}/"
+        f"{path_to_bootstrap_on_remote}"
+    )
+    logger.info(f"bootstrap_ignition_url: {bootstrap_ignition_url}")
+    config.ENV_DATA['bootstrap_ignition_url'] = bootstrap_ignition_url
+
+    # load master and worker ignitions to variables
+    master_ignition_path = os.path.join(
+        config.ENV_DATA.get('cluster_path'),
+        constants.MASTER_IGN
+    )
+    master_ignition = read_file_as_str(f"{master_ignition_path}")
+    config.ENV_DATA['control_plane_ignition'] = master_ignition
+
+    worker_ignition_path = os.path.join(
+        config.ENV_DATA.get('cluster_path'),
+        constants.WORKER_IGN
+    )
+    worker_ignition = read_file_as_str(f"{worker_ignition_path}")
+    config.ENV_DATA['compute_ignition'] = worker_ignition
+
+    cluster_domain = (
+        f"{config.ENV_DATA.get('cluster_name')}."
+        f"{config.ENV_DATA.get('base_domain')}"
+    )
+    config.ENV_DATA['cluster_domain'] = cluster_domain
+
+    # generate terraform variables from template
+    create_terraform_var_file("terraform.tfvars.j2")
+
+
+def comment_bootstrap_in_lb_module():
+    """
+    Commenting the bootstrap module in vsphere main.tf
+    """
+    logger.debug(f"Commenting bootstrap module in {constants.VSPHERE_MAIN}")
+    replace_str = "module.ipam_bootstrap.ip_addresses[0]"
+    replace_content_in_file(
+        constants.VSPHERE_MAIN,
+        replace_str,
+        f"//{replace_str}"
+    )

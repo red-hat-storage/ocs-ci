@@ -689,6 +689,13 @@ class OCP(object):
                 not i.isupper() or i in ('RWO', 'RWX', 'ROX')
             )
         ]
+        # WA, Failed to parse "oc get build" command
+        # https://github.com/red-hat-storage/ocs-ci/issues/2312
+        try:
+            if self.data['items'][0]['kind'].lower() == 'build':
+                return resource_info[column_index - 1]
+        except Exception:
+            pass
 
         return resource_info[column_index]
 
