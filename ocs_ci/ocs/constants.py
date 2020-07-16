@@ -182,7 +182,6 @@ INDEPENDENT_DEFAULT_CLUSTER_NAME = 'ocs-independent-storagecluster'
 INDEPENDENT_DEFAULT_STORAGECLASS_RGW = f'{INDEPENDENT_DEFAULT_CLUSTER_NAME}-ceph-rgw'
 
 
-
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
 GB = 1024 ** 3
