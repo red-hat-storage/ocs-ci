@@ -1,6 +1,5 @@
 import logging
 import pytest
-import time
 
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.utility.utils import TimeoutSampler
@@ -41,8 +40,7 @@ class TestCouchBasePodRespin(E2ETest):
                 *['couchbase'],
                 marks=pytest.mark.polarion_id("OCS-786")),
         ])
-    @pytest.mark.usefixtures(cb_setup.__name__)
-    def test_run_couchbase_respin_pod(self, pod_name):
+    def test_run_couchbase_respin_pod(self, cb_setup, pod_name):
         log.info(f"Respin Ceph pod {pod_name}")
 
         if pod_name == 'couchbase':
