@@ -3,6 +3,7 @@ import pytest
 import time
 
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
+from ocs_ci.utility.utils import TimeoutSampler
 from tests.disruption_helpers import Disruptions
 from ocs_ci.utility import utils
 
@@ -51,9 +52,11 @@ class TestCouchBasePodRespin(E2ETest):
             disruption.set_resource(resource=f'{pod_name}')
             disruption.delete_resource()
 
-        while not (self.cb.result.done()):
-            time.sleep(10)
-            logging.info(
-                "#### ....Waiting for couchbase threads to complete..."
-            )
+        for sample in TimeoutSampler(300, 5, self.cb.result.done):
+            if sample:
+                break
+            else:
+                logging.info(
+                    "#### ....Waiting for couchbase threads to complete..."
+                )
         utils.ceph_health_check()
