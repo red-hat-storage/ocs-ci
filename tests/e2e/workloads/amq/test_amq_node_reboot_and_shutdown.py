@@ -195,7 +195,7 @@ class TestAMQNodeReboot(E2ETest):
 
         # Reboot one after one master nodes
         node = random.choice(node_list)
-        nodes.stop_nodes([node], wait=False)
+        nodes.stop_nodes(nodes=[node])
 
         waiting_time = 20
         log.info(f"Waiting for {waiting_time} seconds")
