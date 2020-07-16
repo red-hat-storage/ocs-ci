@@ -2338,7 +2338,6 @@ def get_module_ip(terraform_state_file, module):
                 resource.get('module') == module
                 and resource.get('mode') == "data"
             ):
-                print(resource)
                 for each_resource in resource['instances']:
                     resource_body = each_resource['attributes']['body']
                     ips.append(resource_body.split("\"")[3])
