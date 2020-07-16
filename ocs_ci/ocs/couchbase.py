@@ -253,6 +253,29 @@ class CouchBase(PillowFight):
             resource=app_pod_obj, state=constants.STATUS_RUNNING, timeout=300
         )
 
+    def get_couchbase_nodes(self):
+        """
+        Get nodes that contain a couchbase app pod
+
+        Returns:
+            list: List of nodes
+
+        """
+        app_pods_list = get_pod_name_by_pattern('cb-example', constants.COUCHBASE_OPERATOR)
+        app_pod_objs = list()
+        for pod in app_pods_list:
+            app_pod_objs.append(get_pod_obj(pod, namespace=constants.COUCHBASE_OPERATOR))
+
+        log.info("Create a list of nodes that contain a couchbase app pod")
+        nodes_set = set()
+        for pod in app_pod_objs:
+            logging.info(
+                f"pod {pod.name} located on "
+                f"node {pod.get().get('spec').get('nodeName')}"
+            )
+            nodes_set.add(pod.get().get('spec').get('nodeName'))
+        return list(nodes_set)
+
     def teardown(self):
         """
         Delete objects created in roughly reverse order of how they were created.
