@@ -10,11 +10,9 @@ from ocs_ci.ocs.constants import BS_OPTIMAL
 from ocs_ci.ocs.bucket_utils import (
     retrieve_test_objects_to_pod, sync_object_directory,
     verify_s3_object_integrity
+)
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources import pod
-from tests.manage.mcg.helpers import (
-    retrieve_test_objects_to_pod, sync_object_directory
-)
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)

@@ -171,7 +171,7 @@ def get_rgw_restart_counts():
 
     """
     # Internal import in order to avoid circular import
-    from ocs_ci.ocs.resources.pod import get_rgw_pod
+    from ocs_ci.ocs.resources.pod import get_rgw_pods
     rgw_pods = get_rgw_pods()
     return [rgw_pod.restart_count for rgw_pod in rgw_pods]
 
