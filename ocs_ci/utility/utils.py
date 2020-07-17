@@ -1304,7 +1304,7 @@ def get_az_count():
 
 def ceph_health_check(
     namespace=None, tries=20, delay=30, intelligent_wait=False,
-    max_timeout_for_pg=1500,
+    pg_recovery_progress_timeout=1500,
 ):
     """
     Args:
@@ -1315,9 +1315,9 @@ def ceph_health_check(
         intelligent_wait (bool): If true, the ceph_health is waiting for
             HEALTH_OK if we have degraded or undersized PGs. In case the time
             between decrease of degraded/undersized PGs is less than
-            max_timeout_for_pg than we continue to wait.
-        max_timeout_for_pg (int): Max timout in seconds to wait for decrease in
-            degraded/undersized PGs change for intelligent wait mode.
+            pg_recovery_progress_timeout then we continue to wait.
+        pg_recovery_progress_timeout (int): Max timout in seconds to wait for
+            decrease in degraded/undersized PGs change for intelligent wait mode.
 
     Returns:
         bool: ceph_health_check_base return value with default retries of 20,
@@ -1357,17 +1357,19 @@ def ceph_health_check(
                     degraded_pgs_diff_times.append(decrease_time - last_decrease)
                     degraded_pgs_diffs.append(degraded_pgs - degraded_pgs_new)
                     degraded_pgs = degraded_pgs_new
-                    degraded_pgs_diff_len = len(degraded_pgs_diffs)
-                    average_pgs_diff = (
-                        sum(degraded_pgs_diff_times) / degraded_pgs_diff_len
-                    )
-                    average_pgs_time_diff = (
-                        sum(degraded_pgs_diff_times) / degraded_pgs_diff_len
-                    )
-                    log.info(
-                        f"Average decrease of degraded PGs is {average_pgs_diff}, "
-                        f"average decrease time is {average_pgs_time_diff}sec."
-                    )
+                    degraded_pgs_diff_len = len(degraded_pgs_diffs) - 1
+                    if degraded_pgs_diff_len > 0:
+                        average_pgs_diff = (
+                            sum(degraded_pgs_diffs[1:]) / degraded_pgs_diff_len
+                        )
+                        average_pgs_time_diff = (
+                            sum(degraded_pgs_diff_times[1:]) / degraded_pgs_diff_len
+                        )
+                        log.info(
+                            "Average decrease of degraded PGs is "
+                            f"{average_pgs_diff}, average decrease time is "
+                            f"{average_pgs_time_diff}sec."
+                        )
             undersized_pgs_regexp = r"(\d+)(?=\s*pgs undersized)"
             undersized_pgs_found = re.findall(undersized_pgs_regexp, str_ex)
             if undersized_pgs_found:
@@ -1378,7 +1380,7 @@ def ceph_health_check(
             if decrease_time:
                 last_decrease = decrease_time
             last_time_change_diff = time.time() - last_decrease
-            if last_time_change_diff < max_timeout_for_pg:
+            if last_time_change_diff < pg_recovery_progress_timeout:
                 if degraded_pgs or undersized_pgs:
                     log.warn(
                         f"Waiting for clean PGs. Degraded: {degraded_pgs} "
@@ -1387,7 +1389,7 @@ def ceph_health_check(
                     log.warn(ex)
                     log.info(
                         f"Waiting for {delay}sec for next attempt. Timeout "
-                        f"remaining: {max_timeout_for_pg - last_time_change_diff}"
+                        f"remaining: {pg_recovery_progress_timeout - last_time_change_diff}"
                     )
                     time.sleep(delay)
                 else:
@@ -1396,10 +1398,15 @@ def ceph_health_check(
                     log.info(f"Waiting for {delay}sec for next attempt.")
                     time.sleep(delay)
             else:
-                raise CephHealthException(
-                    "Ceph health didn't get fixed in timeout: "
-                    f"{max_timeout_for_pg}sec. Error: {ex}"
+                log.error(
+                    f"Timeout pg_recovery_progress_timeout for pg recovery "
+                    f"reached! Error: {ex}"
                 )
+                break
+    raise CephHealthException(
+        "Ceph health didn't get fixed in timeout: "
+        f"{pg_recovery_progress_timeout}sec."
+    )
 
 
 def ceph_health_check_base(namespace=None):
