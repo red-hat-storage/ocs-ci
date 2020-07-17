@@ -5,6 +5,8 @@ import json
 import logging
 import os
 import shutil
+from distutils.version import LooseVersion
+
 import yaml
 
 from ocs_ci.framework import config
@@ -169,8 +171,29 @@ def get_lso_channel():
         str: local storage operator channel
 
     """
-    channel = get_ocp_version()
-    # Workaround for https://github.com/red-hat-storage/ocs-ci/issues/2324
-    if channel == '4.5' or '4.6':
-        channel = '4.4'
-    return channel
+    ocp_version = get_ocp_version()
+    # Retrieve available channels for LSO
+    cmd = (
+        "./bin/oc get packagemanifests "
+        f"-n {constants.MARKETPLACE_NAMESPACE} "
+        "-o json"
+    )
+    out = run_cmd(cmd)
+    pm_json = json.loads(out)
+    operators = pm_json['items']
+    for operator in operators:
+        if operator['metadata']['name'] == 'local-storage-operator':
+            channels = operator['status']['channels']
+            channel_names = [channel['name'] for channel in channels]
+
+            # Ensure channel_names is sorted
+            versions = [LooseVersion(name) for name in channel_names]
+            versions.sort()
+            sorted_versions = [v.vstring for v in versions]
+
+            if ocp_version in channel_names:
+                # Use channel corresponding to OCP version
+                return ocp_version
+            else:
+                # Use latest channel
+                return sorted_versions[-1]
