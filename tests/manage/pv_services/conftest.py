@@ -18,17 +18,18 @@ def create_pvcs_and_pods(
     """
     def factory(
         pvc_size=3,
-        dc_for_rwx=1,
+        pods_for_rwx=1,
         access_modes_rbd=None,
         access_modes_cephfs=None,
         num_of_rbd_pvc=None,
         num_of_cephfs_pvc=None,
-        replica_count=1
+        replica_count=1,
+        deployment_config=False
     ):
         """
         Args:
             pvc_size (int): The requested size for the PVC in GB
-            dc_for_rwx (int): Number of deploymentconfig to be created if PVC
+            pods_for_rwx (int): Number of pods to be created if PVC
                 access mode is RWX
             access_modes_rbd (list): List of access modes. One of the
                 access modes will be chosen for creating each PVC. To specify
@@ -45,6 +46,8 @@ def create_pvcs_and_pods(
                 Value should be greater than or equal to the number of
                 elements in the list 'access_modes_cephfs'
             replica_count (int): The replica count for deployment config
+            deployment_config (bool): True for DeploymentConfig creation,
+                False otherwise
         Returns:
             list: OCS instance of pods
         """
@@ -83,30 +86,43 @@ def create_pvcs_and_pods(
             pvc_info = pvc_obj.get()
             setattr(pvc_obj, 'volume_mode', pvc_info['spec']['volumeMode'])
 
-        sa_obj = service_account_factory(project=project)
+        sa_obj = service_account_factory(project=project) if deployment_config else None
+
+        pods_dc = []
+        pods = []
 
         # Create pods
-        pods_dc = []
         for pvc_obj in pvcs:
             if constants.CEPHFS_INTERFACE in pvc_obj.storageclass.name:
                 interface = constants.CEPHFILESYSTEM
             else:
                 interface = constants.CEPHBLOCKPOOL
 
-            num_dc = dc_for_rwx if pvc_obj.access_mode == constants.ACCESS_MODE_RWX else 1
-            for _ in range(num_dc):
-                pod_dc = pod_factory(
+            # TODO: Remove pod_dict_path variable if issue 2524 is fixed
+            if deployment_config:
+                pod_dict_path = constants.FEDORA_DC_YAML
+            elif pvc_obj.volume_mode == 'Block':
+                pod_dict_path = constants.CSI_RBD_RAW_BLOCK_POD_YAML
+            else:
+                pod_dict_path = ''
+
+            num_pods = pods_for_rwx if pvc_obj.access_mode == constants.ACCESS_MODE_RWX else 1
+            for _ in range(num_pods):
+                # pod_obj will be a Pod instance if deployment_config=False,
+                # otherwise an OCP instance of kind DC
+                pod_obj = pod_factory(
                     interface=interface, pvc=pvc_obj,
-                    pod_dict_path=constants.FEDORA_DC_YAML,
+                    pod_dict_path=pod_dict_path,
                     raw_block_pv=pvc_obj.volume_mode == 'Block',
-                    deployment_config=True, service_account=sa_obj,
+                    deployment_config=deployment_config,
+                    service_account=sa_obj,
                     replica_count=replica_count
                 )
-                pod_dc.pvc = pvc_obj
-                pods_dc.append(pod_dc)
+                pod_obj.pvc = pvc_obj
+                pods_dc.append(pod_obj) if deployment_config else pods.append(pod_obj)
 
-        # Get pod objects
-        pods = []
+        # Get pod objects if deployment_config is True
+        # pods_dc will be an empty list if deployment_config is False
         for pod_dc in pods_dc:
             pod_objs = pod.get_all_pods(
                 namespace=project.namespace, selector=[pod_dc.name],
