@@ -6,7 +6,9 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
-from ocs_ci.ocs.constants import STATUS_COMPLETED
+from ocs_ci.ocs.constants import (
+    STATUS_COMPLETED, MASTER_MACHINE, WORKER_MACHINE
+)
 
 log = logging.getLogger(__name__)
 
@@ -40,10 +42,10 @@ class TestJenkinsNodeDrain(E2ETest):
         argnames=['node_type', 'num_projects', 'num_of_builds'],
         argvalues=[
             pytest.param(
-                *['worker', 4, 3], marks=pytest.mark.polarion_id("OCS-2177")
+                *[WORKER_MACHINE, 4, 3], marks=pytest.mark.polarion_id("OCS-2177")
             ),
             pytest.param(
-                *['master', 3, 6], marks=pytest.mark.polarion_id("OCS-2176")
+                *[MASTER_MACHINE, 3, 6], marks=pytest.mark.polarion_id("OCS-2176")
             ),
         ]
     )
@@ -53,7 +55,7 @@ class TestJenkinsNodeDrain(E2ETest):
     ):
         """
 
-          Test Node Drain jenkins
+        Test Node Drain jenkins
         """
         # Init number of projects
         jenkins.number_projects = num_projects
