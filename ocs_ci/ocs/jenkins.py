@@ -363,18 +363,18 @@ class Jenkins(object):
         Returns:
             list: List of compute node names
         """
-        if node_type == 'master':
-            nodes_drain = [node.name for node in get_typed_nodes(node_type=node_type, num_of_nodes=num_of_nodes)]
-        elif node_type == 'worker':
+        if node_type == constants.MASTER_MACHINE:
+            nodes_drain = [node.name for node in get_typed_nodes(
+                node_type=node_type, num_of_nodes=num_of_nodes
+            )]
+        elif node_type == constants.WORKER_MACHINE:
             pod_objs = []
             for project in self.projects:
                 pod_names = get_pod_name_by_pattern(
                     pattern='jenkins', namespace=project
                 )
-                for pod_name in pod_names:
-                    pod_objs.append(
-                        get_pod_obj(name=pod_name, namespace=project)
-                    )
+                pod_obj = [get_pod_obj(name=pod_name, namespace=project) for pod_name in pod_names]
+                pod_objs += pod_obj
             nodes_app_name = set(get_app_pod_running_nodes(pod_objs))
             nodes_worker_name = set(get_worker_nodes())
             nodes_drain = nodes_worker_name - nodes_app_name
