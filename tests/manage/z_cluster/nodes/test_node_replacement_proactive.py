@@ -3,6 +3,8 @@ import re
 
 import pytest
 import random
+
+from ocs_ci.framework import config
 from tests.helpers import get_worker_nodes
 from ocs_ci.framework.pytest_customization.marks import tier4a
 from ocs_ci.ocs.resources import pod
@@ -98,3 +100,21 @@ class TestNodeReplacement(ManageTest):
         # Verify everything running fine
         log.info("Verifying All resources are Running and matches expected result")
         self.sanity_helpers.health_check()
+
+        if config.ENV_DATA['deployment_type'] == 'upi':
+            worker_node_list = get_worker_nodes()
+            log.info(f"Current available worker nodes are {worker_node_list}")
+
+            osd_pods_obj = pod.get_osd_pods()
+            osd_node_name = pod.get_pod_node(random.choice(osd_pods_obj)).name
+            log.info(f"Selected OSD is {osd_node_name}")
+            osd_nodes = node.get_node_objs(node_names=[osd_node_name])
+            node.remove_nodes(osd_nodes)
+
+            node_type = constants.RHCOS
+            node.add_new_node_and_label_upi(node_type=node_type, num_nodes=1)
+            log.info("Verifying All resources are Running and matches expected result")
+            self.sanity_helpers.health_check()
+        else:
+            log.warning(f"deployment_type = {config.ENV_DATA['deployment_type']}")
+            log.info("Don't run the test...")
