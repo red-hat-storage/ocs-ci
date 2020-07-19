@@ -723,3 +723,63 @@ def check_nodes_specs(min_memory, min_cpu):
         f"{min_cpu} CPUs and {min_memory} Memory"
     )
     return True
+
+
+def delete_and_create_osd_node_aws_ipi(osd_node_name):
+    """
+    Unschedule, drain and delete osd node, and creating a new osd node.
+    At the end of the function there should be the same number of osd nodes as
+    it was in the beginning, and also ceph health should be OK.
+    This function is for AWS IPI.
+
+    Args:
+        osd_node_name (str): the name of the osd node
+
+    """
+    # Unscheduling node
+    unschedule_nodes([osd_node_name])
+    # Draining Node
+    drain_nodes([osd_node_name])
+    log.info("Getting machine name from specified node name")
+    machine_name = machine.get_machine_from_node_name(osd_node_name)
+    log.info(f"Node {osd_node_name} associated machine is {machine_name}")
+    log.info(f"Deleting machine {machine_name} and waiting for new machine to come up")
+    machine.delete_machine_and_check_state_of_new_spinned_machine(machine_name)
+    new_machine_list = machine.get_machines()
+    for machines in new_machine_list:
+        # Trimming is done to get just machine name
+        # eg:- machine_name:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b-nlgkr
+        # After trimming:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b
+        if re.match(machines.name[:-6], machine_name):
+            new_machine_name = machines.name
+    machineset_name = machine.get_machineset_from_machine_name(new_machine_name)
+    log.info("Waiting for new worker node to be in ready state")
+    machine.wait_for_new_node_to_be_ready(machineset_name)
+    new_node_name = get_node_from_machine_name(new_machine_name)
+    log.info("Adding ocs label to newly created worker node")
+    node_obj = ocp.OCP(kind='node')
+    node_obj.add_label(
+        resource_name=new_node_name,
+        label=constants.OPERATOR_NODE_LABEL
+    )
+    log.info(
+        f"Successfully labeled {new_node_name} with OCS storage label"
+    )
+
+
+def delete_and_create_osd_node_aws_upi(osd_node_name):
+    """
+    Unschedule, drain and delete osd node, and creating a new osd node.
+    At the end of the function there should be the same number of osd nodes as
+    it was in the beginning, and also ceph health should be OK.
+    This function is for AWS UPI.
+
+    Args:
+        osd_node_name (str): the name of the osd node
+
+    """
+    osd_nodes = get_node_objs(node_names=[osd_node_name])
+    remove_nodes(osd_nodes)
+
+    node_type = constants.RHCOS
+    add_new_node_and_label_upi(node_type=node_type, num_nodes=3)
