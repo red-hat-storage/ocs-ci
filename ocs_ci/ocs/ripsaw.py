@@ -106,6 +106,7 @@ class RipSaw(object):
         for line in output.split():
             if 'uuid=' in line:
                 uuid = line.split('=')[1]
+                break
         log.info(f'The UUID of the test is : {uuid}')
         return uuid
 
