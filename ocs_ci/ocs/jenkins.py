@@ -352,7 +352,7 @@ class Jenkins(object):
              f"test_run_name:{utils.get_testrun_name()}"], 2
         )
 
-    def get_nodes(self, node_type='worker', num_of_nodes=1):
+    def get_nodes(self, node_type=constants.WORKER_MACHINE, num_of_nodes=1):
         """
         get nodes
 
