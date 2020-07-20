@@ -355,9 +355,10 @@ class MCGOCBucket(OCBucket):
         obc_data['spec']['bucketName'] = self.name
         obc_data['spec']['storageClassName'] = self.namespace + '.noobaa.io'
         obc_data['metadata']['namespace'] = self.namespace
-        obc_data.setdefault('spec', {}).setdefault('additionalConfig', {}).setdefault(
-            'bucketclass', 'aws2'
-        )
+        if 'bucketclass' in kwargs:
+            obc_data.setdefault('spec', {}).setdefault('additionalConfig', {}).setdefault(
+                'bucketclass', kwargs['bucketclass']
+            )
         create_resource(**obc_data)
 
 
