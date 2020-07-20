@@ -1619,22 +1619,18 @@ def mcg_obj_fixture(request):
 
 
 @pytest.fixture()
-def awscli_pod(request, mcg_obj):
-    return awscli_pod_fixture(request, mcg_obj)
+def awscli_pod(request):
+    return awscli_pod_fixture(request)
 
 
 @pytest.fixture(scope='session')
-def awscli_pod_session(request, mcg_obj_session):
-    return awscli_pod_fixture(request, mcg_obj_session)
+def awscli_pod_session(request):
+    return awscli_pod_fixture(request)
 
 
-def awscli_pod_fixture(request, mcg_obj):
+def awscli_pod_fixture(request):
     """
     Creates a new AWSCLI pod for relaying commands
-
-    Args:
-        mcg_obj: An object representing the current
-        state of the MCG in the cluster
 
     Returns:
         pod: A pod running the AWS CLI
