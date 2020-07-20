@@ -7,7 +7,7 @@ RUN:
 DEPLOYMENT:
   ocp_url_template: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{version}/{file_name}-{os_type}-{version}.tar.gz"
   installer_version: "4.5-ga"
-  terraform_version: "0.11.14"
+  terraform_version: "0.12.26"
   ocp_channel: "fast"
   # No promoted content to stable-4.5 channel yet
   # Once the build promoted to stable, we can revert back
