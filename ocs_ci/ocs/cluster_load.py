@@ -31,7 +31,7 @@ def wrap_msg(msg):
         str: The wrapped log message
 
     """
-    marks = "=" * len(msg)
+    marks = "=" * len(msg) if len(msg) < 150 else 150
     return f"\n{marks}\n{msg}\n{marks}"
 
 
@@ -176,7 +176,7 @@ class ClusterLoad:
         if not 0.1 < self.target_percentage < 0.95:
             logger.warning(
                 f"The target percentage is {self.target_percentage * 100}% which is "
-                f"not within the accepted range. Therefore, IO will not be started"
+                "not within the accepted range. Therefore, IO will not be started"
             )
             return
         low_diff_counter = 0
@@ -213,7 +213,7 @@ class ClusterLoad:
             # most chances the limit has been reached
             if latency > 3000:
                 logger.info(
-                    f"Limit was determined by latency, which is "
+                    "Limit was determined by latency, which is "
                     f"higher than 3 seconds - {latency} ms"
                 )
                 limit_reached = True
@@ -227,14 +227,14 @@ class ClusterLoad:
             low_diff_counter += 1 if -15 < iops_diff < 10 else 0
             if low_diff_counter > 3:
                 logger.warning(
-                    f"Limit was determined by low IOPS diff between "
+                    "Limit was determined by low IOPS diff between "
                     f"iterations - {iops_diff:.2f}%"
                 )
                 limit_reached = True
 
             if time.time() > time_before + time_to_wait:
                 logger.warning(
-                    f"Could not determine the cluster IOPS limit within"
+                    "Could not determine the cluster IOPS limit within"
                     f"\nthe given {time_to_wait} seconds timeout. Breaking"
                 )
                 limit_reached = True
@@ -243,8 +243,8 @@ class ClusterLoad:
             if cluster_used_space > 60:
                 logger.warning(
                     f"Cluster used space is {cluster_used_space}%. Could "
-                    f"not reach the cluster IOPS limit before the "
-                    f"used spaced reached 60%. Breaking"
+                    "not reach the cluster IOPS limit before the "
+                    "used spaced reached 60%. Breaking"
                 )
                 limit_reached = True
 
@@ -262,7 +262,7 @@ class ClusterLoad:
         rate = '15M'
         logger.info(
             f"Creating FIO pods with a rate parameter of {rate}, one by "
-            f"one, until the target percentage is reached"
+            "one, until the target percentage is reached"
         )
         self.increase_load(rate=rate)
         target_iops = self.cluster_limit * self.target_percentage
@@ -380,16 +380,16 @@ class ClusterLoad:
         if latency > 0.4 and len(self.dc_objs) > 0:
             msg = (
                 f"Latency is higher than 400 ms ({latency * 1000:.2f} ms)."
-                f" Lowering IO load by deleting an FIO pod that is running"
-                f" in the test background. Once the latency drops back to "
-                f"less than 200 ms, FIO pod will be re-spawned"
+                " Lowering IO load by deleting an FIO pod that is running"
+                " in the test background. Once the latency drops back to "
+                "less than 200 ms, FIO pod will be re-spawned"
             )
             logger.warning(wrap_msg(msg))
             self.decrease_load(wait=False)
         if latency < 0.2 and self.target_pods_number > len(self.dc_objs):
             msg = (
                 f"Latency is lower than 200 ms ({latency * 1000:.2f} "
-                f"ms). Re-spinning FIO pod"
+                "ms). Re-spinning FIO pod"
             )
             logger.info(wrap_msg(msg))
             self.increase_load(rate='15M', wait=False)
