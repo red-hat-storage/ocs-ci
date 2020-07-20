@@ -31,7 +31,7 @@ def wrap_msg(msg):
         str: The wrapped log message
 
     """
-    marks = "=" * len(msg) if len(msg) < 150 else 150
+    marks = "=" * len(msg) if len(msg) < 150 else "=" * 150
     return f"\n{marks}\n{msg}\n{marks}"
 
 
