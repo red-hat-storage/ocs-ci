@@ -15,6 +15,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import get_typed_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import csv
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import clone_repo, get_ocp_version, run_cmd
 
@@ -173,27 +174,20 @@ def get_lso_channel():
     """
     ocp_version = get_ocp_version()
     # Retrieve available channels for LSO
-    cmd = (
-        "./bin/oc get packagemanifests "
-        f"-n {constants.MARKETPLACE_NAMESPACE} "
-        "-o json"
+    package_manifest = PackageManifest(
+        resource_name=constants.LOCAL_STORAGE_CSV_PREFIX
     )
-    out = run_cmd(cmd)
-    pm_json = json.loads(out)
-    operators = pm_json['items']
-    for operator in operators:
-        if operator['metadata']['name'] == 'local-storage-operator':
-            channels = operator['status']['channels']
-            channel_names = [channel['name'] for channel in channels]
+    channels = package_manifest.get_channels()
+    channel_names = [channel['name'] for channel in channels]
 
-            # Ensure channel_names is sorted
-            versions = [LooseVersion(name) for name in channel_names]
-            versions.sort()
-            sorted_versions = [v.vstring for v in versions]
+    # Ensure channel_names is sorted
+    versions = [LooseVersion(name) for name in channel_names]
+    versions.sort()
+    sorted_versions = [v.vstring for v in versions]
 
-            if ocp_version in channel_names:
-                # Use channel corresponding to OCP version
-                return ocp_version
-            else:
-                # Use latest channel
-                return sorted_versions[-1]
+    if ocp_version in channel_names:
+        # Use channel corresponding to OCP version
+        return ocp_version
+    else:
+        # Use latest channel
+        return sorted_versions[-1]
