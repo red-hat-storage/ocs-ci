@@ -14,7 +14,7 @@ from ocs_ci.utility.utils import get_module_ip
 logger = logging.getLogger(__name__)
 
 
-class VMNode(object):
+class VSPHERENode(object):
     """
     A class that handles operations related to VM node
     """
@@ -127,7 +127,7 @@ def update_ntp_and_restart_chrony(node, server=None):
 
     """
     server = server or constants.RH_NTP_CLOCK
-    vmnode = VMNode(node)
+    vmnode = VSPHERENode(node)
     vmnode.replace_ntp_server_in_chrony(server)
     vmnode.restart_chrony()
 
