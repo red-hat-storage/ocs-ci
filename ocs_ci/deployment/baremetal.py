@@ -366,7 +366,7 @@ class BAREMETALUPI(Deployment):
             """
             logger.info("creating manifest files for the cluster")
             run_cmd(
-                f"{self.installer} create ignition-configs "
+                f"{self.installer} create manifests "
                 f"--dir {self.cluster_path} "
             )
 
