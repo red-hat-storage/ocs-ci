@@ -120,7 +120,6 @@ def ocs_install_verification(
         int(storage_cluster.data['spec']['storageDeviceSets'][0]['count'])
         * int(storage_cluster.data['spec']['storageDeviceSets'][0]['replica'])
     )
-    rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
 
     # check noobaa CR for min number of noobaa endpoint pods
     nb_obj = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
@@ -141,13 +140,17 @@ def ocs_install_verification(
         constants.OSD_APP_LABEL: osd_count,
         constants.MGR_APP_LABEL: 1,
         constants.MDS_APP_LABEL: 2,
-        constants.RGW_APP_LABEL: rgw_count,
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps
     }
+    if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1857802 - RGW count is 1
+        # post upgrade to OCS 4.5. Tracked with
+        # https://github.com/red-hat-storage/ocs-ci/issues/2532
+        rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 and not (
+            post_upgrade_verification
+        ) else 1
+        resources_dict.update({constants.RGW_APP_LABEL: rgw_count})
     for label, count in resources_dict.items():
-        if label == constants.RGW_APP_LABEL:
-            if not config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
-                continue
         assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=label,
