@@ -781,5 +781,9 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
     osd_nodes = get_node_objs(node_names=[osd_node_name])
     remove_nodes(osd_nodes)
 
-    node_type = constants.RHCOS
+    if config.ENV_DATA.get('rhel_workers'):
+        node_type = constants.RHEL_OS
+    else:
+        node_type = constants.RHCOS
+
     add_new_node_and_label_upi(node_type=node_type, num_nodes=3)

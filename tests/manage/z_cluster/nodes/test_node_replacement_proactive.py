@@ -8,7 +8,7 @@ from tests.helpers import get_worker_nodes
 from ocs_ci.framework.pytest_customization.marks import tier4a
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
-    tier4, ManageTest, aws_platform_required, ignore_leftovers
+    tier4, ManageTest, ignore_leftovers
 )
 from ocs_ci.ocs import constants, node
 
@@ -20,7 +20,6 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4a
 @ignore_leftovers
-@aws_platform_required
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement - AWS-IPI-Proactive
@@ -60,13 +59,19 @@ class TestNodeReplacement(ManageTest):
                 cephfs_dc_pod = dc_pod_factory(interface=constants.CEPHFILESYSTEM, node_name=worker_node, size=20)
                 pod.run_io_in_bg(cephfs_dc_pod, expect_to_fail=False, fedora_dc=True)
 
-        if config.ENV_DATA['deployment_type'] == 'ipi':
-            node.delete_and_create_osd_node_aws_ipi(osd_node_name)
+        if config.ENV_DATA['platform'].lower() == constants.AWS_PLATFORM:
+            if config.ENV_DATA['deployment_type'] == 'ipi':
+                node.delete_and_create_osd_node_aws_ipi(osd_node_name)
 
-        elif config.ENV_DATA['deployment_type'] == 'upi':
-            node.delete_and_create_osd_node_aws_upi(osd_node_name)
-        else:
-            log.warning("'deployment_type' value is not valid")
+            elif config.ENV_DATA['deployment_type'] == 'upi':
+                node.delete_and_create_osd_node_aws_upi(osd_node_name)
+            else:
+                log.warning("'deployment_type' value is not valid")
+
+        elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
+            pytest.skip("Skipping add node in Vmware platform due to "
+                        "https://bugzilla.redhat.com/show_bug.cgi?id=1844521"
+                        )
 
         # Creating Resources
         log.info("Creating Resources using sanity helpers")
