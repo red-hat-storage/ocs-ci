@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 class FlowOperations:
+    """
+    Flow based operations class
+
+    """
     def __init__(self):
         """
         Initialize Sanity instance
@@ -24,25 +28,44 @@ class FlowOperations:
         """
         self.sanity_helpers = Sanity()
 
-    def node_operations_entry_criteria(self, node_type, number_of_nodes, network_fail_time=None):
+    def validate_cluster(self, node_status=False, pod_status=False, operation_name=""):
+        """
+        Validates various ceph and ocs cluster checks
+
+        Args:
+            node_status (bool): Verifies node is Ready
+            pod_status (bool): Verifies StorageCluster pods in expected state
+            operation_name (str): Name of the operation, to Tag
+
+        """
+        logger.info(f"{operation_name}: Verifying cluster health")
+        self.sanity_helpers.health_check(cluster_check=False, tries=100)
+        if node_status:
+            logger.info(f"{operation_name}: Verifying whether node is ready")
+            wait_for_nodes_status(status=constants.NODE_READY, timeout=300)
+        if pod_status:
+            logger.info(f"{operation_name}: Verifying StorageCluster pods are in running/completed state")
+            wait_for_storage_pods(timeout=300), 'Some pods were not in expected state'
+
+    def node_operations_entry_criteria(
+        self, node_type, number_of_nodes, operation_name="Node Operation", network_fail_time=None
+    ):
         """
         Entry criteria function for node related operations
+
         Args:
-            node_type (str): Tyoe of node
+            node_type (str): Type of node
             number_of_nodes (int): Number of nodes
+            operation_name (str): Name of the node operation
             network_fail_time (int): Total time to fail the network in a node
+
         Returns:
             tuple: containing the params used in Node operations
 
         """
-        logger.info("Node operations entry: Verifying cluster health")
-        self.sanity_helpers.health_check(cluster_check=False)
-        logger.info("Node operations entry: Verifying StorageCluster pods are in running/completed state")
-        wait_for_storage_pods(timeout=300), 'Some pods were not in expected state'
-        logger.info("Node operations entry: Verifying whether node is ready")
-        wait_for_nodes_status(status=constants.NODE_READY, timeout=300)
+        self.validate_cluster(node_status=True, operation_name=operation_name)
 
-        logger.info("Getting parameters related to Node operation")
+        logger.info(f"Getting parameters related to: {operation_name}")
         typed_nodes = node.get_typed_nodes(
             node_type=node_type, num_of_nodes=number_of_nodes
         )
@@ -54,33 +77,17 @@ class FlowOperations:
         else:
             return typed_nodes, nodes
 
-    def node_operations_exit_criteria(self):
-        """
-        Exit criteria verification function for node related operations
-
-        """
-        logger.info("Node operations exit: Verifying whether node is ready")
-        wait_for_nodes_status(status=constants.NODE_READY, timeout=300)
-        logger.info("Node operations exit: Verifying cluster health")
-        self.sanity_helpers.health_check(cluster_check=False, tries=80)
-        logger.info("Node operations exit: Verifying StorageCluster pods are in running/completed state")
-        wait_for_storage_pods(timeout=300), 'Some pods were not in expected state'
-
-        logging.info("Node operation: Exit criteria verification: Success")
-
     def add_capacity_entry_criteria(self):
         """
         Entry criteria verification function for add capacity operation
+
         Returns:
-            tuple: containing the params used in add capacity operation
+            tuple: containing the params used in add capacity exit operation
 
         """
-        logger.info("Add capacity entry: Verifying cluster health")
-        self.sanity_helpers.health_check(cluster_check=False)
-        logger.info("Add capacity entry: Verifying StorageCluster pods are in running/completed state")
-        wait_for_storage_pods(timeout=300), 'Some pods were not in expected state'
+        self.validate_cluster(operation_name="Add Capacity")
 
-        logger.info("Add capacity entry: Getting restart count of pods before adding capacity")
+        logger.info("Add capacity: Getting restart count of pods before adding capacity")
         restart_count_before = pod_helpers.get_pod_restarts_count(
             defaults.ROOK_CLUSTER_NAMESPACE)
 
@@ -92,37 +99,36 @@ class FlowOperations:
     def add_capacity_exit_criteria(self, restart_count_before, osd_pods_before):
         """
         Exit criteria function for Add capacity operation
+
         Args:
             restart_count_before (dict): Restart counts of pods
             osd_pods_before (list): List of OSD pods before
 
         """
-        logger.info("Add capacity exit: Verifying cluster health")
-        self.sanity_helpers.health_check(cluster_check=False, tries=80)
-        logger.info("Add capacity exit: Verifying StorageCluster pods are in running/completed state")
-        wait_for_storage_pods(timeout=300), 'Some pods were not in expected state'
+        self.validate_cluster(operation_name="Add Capacity")
 
-        logger.info("Add capacity exit: Getting restart count of pods after adding capacity")
+        logger.info("Add capacity: Getting restart count of pods after adding capacity")
         restart_count_after = pod_helpers.get_pod_restarts_count(
             defaults.ROOK_CLUSTER_NAMESPACE)
-        logging.info(f"sum(restart_count_before.values()) = {sum(restart_count_before.values())}")
-        logging.info(f"sum(restart_count_after.values()) = {sum(restart_count_after.values())}")
+        logger.info(f"Sum of restart count before = {sum(restart_count_before.values())}")
+        logger.info(f"Sum of restart count after = {sum(restart_count_after.values())}")
         assert sum(restart_count_before.values()) == sum(restart_count_after.values(
         )), "Exit criteria verification FAILED: One or more pods got restarted"
 
         osd_pods_after = pod_helpers.get_osd_pods()
         number_of_osds_added = len(osd_pods_after) - len(osd_pods_before)
-        logger.info(f"Number of osds added = {number_of_osds_added}, "
+        logger.info(f"Number of OSDs added = {number_of_osds_added}, "
                     f"before = {len(osd_pods_before)}, after = {len(osd_pods_after)}")
         assert number_of_osds_added == 3, "Exit criteria verification FAILED: osd count mismatch"
 
-        logging.info("Add capacity: Exit criteria verification: Success")
+        logger.info("Add capacity: Exit criteria verification: Success")
 
 
 @ignore_leftovers
 def create_pvc_delete(multi_pvc_factory, project=None):
     """
     Creates and deletes all types of PVCs
+
     Returns:
         bool : True if function runs successfully
 
@@ -155,12 +161,12 @@ def create_pvc_delete(multi_pvc_factory, project=None):
         pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
 
     logger.info("All PVCs are deleted as expected")
-    return True
 
 
 def obc_put_obj_create_delete(mcg_obj, bucket_factory):
     """
     Creates bucket then writes, reads and deletes objects
+
     Returns:
         bool : True if function runs successfully
 
@@ -175,15 +181,16 @@ def obc_put_obj_create_delete(mcg_obj, bucket_factory):
         assert s3_get_object(mcg_obj, bucket_name, key), f"Failed: Get object, {key}"
         assert s3_delete_object(mcg_obj, bucket_name, key), f"Failed: Delete object, {key}"
 
-    return True
-
 
 class BackgroundOps:
-    OPERATION_COMPLETED = False
+
+    def __init__(self):
+        self.OPERATION_COMPLETED = False
 
     def handler(self, func, *args, **kwargs):
         """
         Wraps the function to run specific iterations
+
         Returns:
             bool : True if function runs successfully
 
@@ -192,21 +199,23 @@ class BackgroundOps:
         func_name = func.__name__
         del kwargs['iterations']
         for i in range(iterations):
-            if BackgroundOps.OPERATION_COMPLETED:
+            if self.OPERATION_COMPLETED:
                 logger.info(f"{func_name}: Done with execution. Stopping the thread. In iteration {i}")
                 return True
             else:
-                assert func(*args, **kwargs), f'{func_name} failed!'
+                func(*args, **kwargs)
                 logger.info(f"{func_name}: iteration {i}")
 
     def wait_for_bg_operations(self, bg_ops, timeout=1200):
         """
         Waits for threads to be completed
+
         Args:
             bg_ops (list): Futures
             timeout (int): Time in seconds to wait
 
         """
+        self.OPERATION_COMPLETED = True
         for thread in bg_ops:
             sample = TimeoutSampler(
                 timeout=timeout, sleep=10, func=thread.done
