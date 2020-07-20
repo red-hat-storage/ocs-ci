@@ -35,7 +35,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
-from ocs_ci.ocs.cluster_load import ClusterLoad
+from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import aws
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility import templating
@@ -1105,18 +1105,12 @@ def cluster_load(
     deployment_test = True if 'deployment' in request.node.items[0].location[0] else False
     if io_in_bg and not deployment_test:
         io_load = int(io_load) * 0.01
-        log.info(
-            "\n===================================================\n"
-            "Tests will be running while IO is in the background\n"
-            "==================================================="
-        )
-
+        log.info(wrap_msg("Tests will be running while IO is in the background"))
         log.info(
             "Start running IO in the background. The amount of IO that "
             "will be written is going to be determined by the cluster "
             "capabilities according to its limit"
         )
-
         cl_load_obj = ClusterLoad(
             project_factory=project_factory_session,
             sa_factory=service_account_factory_session,
@@ -1157,49 +1151,23 @@ def cluster_load(
         def watch_load():
             """
             Watch the cluster load by monitoring the cluster latency.
-            In case the latency goes beyond 1 second, start deleting FIO pods.
-            Once latency drops back below 0.5 seconds, re-create the FIO pods
-            to make sure that cluster load is around the target percentage
+            Print the cluster utilization metrics every 15 seconds.
+
+            If IOs are running in the test background, dynamically adjust
+            the IO load based on the cluster latency.
 
             """
-            initial_num_of_pods = len(cl_load_obj.dc_objs)
             while get_test_status() == 'running':
+                time.sleep(20)
                 try:
-                    cl_load_obj.print_metrics()
+                    cl_load_obj.print_metrics(mute_logs=True)
                     if io_in_bg:
-                        latency = cl_load_obj.calc_trim_metric_mean(
-                            constants.LATENCY_QUERY
-                        )
-
-                        if latency > 1 and len(cl_load_obj.dc_objs) > 0:
-                            log.warning(
-                                f"Latency is higher than 1 second ({latency * 1000} ms). "
-                                f"Lowering IO load by deleting an FIO pod that is running "
-                                f"in the test background. Once the latency drops back to "
-                                f"less than 0.5 seconds, FIO pod will be re-spawned"
-                            )
-                            cl_load_obj.decrease_load()
-
-                        diff = initial_num_of_pods - len(cl_load_obj.dc_objs)
-                        while latency < 0.5 and diff > 0 and (
-                            get_test_status() == 'running'
-                        ):
-                            log.info(
-                                f"Latency is lower than 0.5 seconds ({latency * 1000} ms). "
-                                f"Re-spinning FIO pod"
-                            )
-                            cl_load_obj.increase_load(rate='15M')
-                            latency = cl_load_obj.calc_trim_metric_mean(
-                                constants.LATENCY_QUERY
-                            )
-                            diff -= 1
+                        cl_load_obj.adjust_load_if_needed()
 
                 # Any type of exception should be caught and we should continue.
                 # We don't want any test to fail
                 except Exception:
                     continue
-                if get_test_status() == 'running':
-                    time.sleep(10)
 
         thread = threading.Thread(target=watch_load)
         thread.start()
