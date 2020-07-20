@@ -41,7 +41,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
             f'AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} '
             f'AWS_DEFAULT_REGION={mcg_obj.region} '
             f'aws s3{api} '
-            f'--endpoint={mcg_obj.s3_endpoint} '
+            f'--endpoint={mcg_obj.s3_internal_endpoint} '
         )
         string_wrapper = '"'
     else:
@@ -130,7 +130,7 @@ def sync_object_directory(podobj, src, target, s3_obj=None):
     logger.info(f'Syncing all objects and directories from {src} to {target}')
     retrieve_cmd = f'sync {src} {target}'
     if s3_obj:
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_endpoint]
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
     else:
         secrets = None
     podobj.exec_cmd_on_pod(
@@ -158,7 +158,7 @@ def rm_object_recursive(podobj, target, mcg_obj, option=''):
         command=craft_s3_command(rm_command, mcg_obj),
         out_yaml_format=False,
         secrets=[mcg_obj.access_key_id, mcg_obj.access_key,
-                 mcg_obj.s3_endpoint]
+                 mcg_obj.s3_internal_endpoint]
     )
 
 
@@ -197,7 +197,7 @@ def write_individual_s3_objects(mcg_obj, awscli_pod, bucket_factory, downloaded_
         copycommand = f"cp {target_dir}{obj_name} {full_object_path}"
         assert 'Completed' in awscli_pod.exec_cmd_on_pod(
             command=craft_s3_command(copycommand, mcg_obj), out_yaml_format=False,
-            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_internal_endpoint]
         )
 
 
@@ -219,7 +219,7 @@ def upload_parts(mcg_obj, awscli_pod, bucketname, object_key, body_path, upload_
 
     """
     parts = []
-    secrets = [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+    secrets = [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_internal_endpoint]
     for count, part in enumerate(uploaded_parts, 1):
         upload_cmd = (
             f'upload-part --bucket {bucketname} --key {object_key}'
@@ -715,7 +715,7 @@ def del_objects(uploaded_objects_paths, awscli_pod, mcg_obj):
         logger.info(f'Deleting object {uploaded_filename}')
         awscli_pod.exec_cmd_on_pod(
             command=craft_s3_command(mcg_obj, "rm " + uploaded_filename),
-            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_internal_endpoint]
         )
 
 

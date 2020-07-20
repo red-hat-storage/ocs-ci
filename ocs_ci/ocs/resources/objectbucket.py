@@ -48,20 +48,6 @@ class OBC(object):
 
         obc_provisioner = obc_resource.get('metadata').get('labels').get('bucket-provisioner')
 
-        if 'noobaa' in obc_provisioner:
-            get_noobaa = OCP(kind='noobaa', namespace=self.namespace).get()
-            self.s3_endpoint = (
-                get_noobaa.get('items')[0].get('status').get('services')
-                .get('serviceS3').get('externalDNS')[0]
-            )
-
-        elif 'rook' in obc_provisioner:
-            # TODO: implement network forwarding to access the internal address
-            self.s3_endpoint = (
-                'http://' + obc_configmap_data.get('BUCKET_HOST') + ':'
-                + obc_configmap_data.get('BUCKET_PORT')
-            )
-
         self.region = obc_configmap_data.get('BUCKET_REGION')
 
         self.access_key_id = base64.b64decode(
@@ -71,14 +57,30 @@ class OBC(object):
             secret_obc_obj.get('data').get('AWS_SECRET_ACCESS_KEY')
         ).decode('utf-8')
 
-        self.s3_resource = boto3.resource(
-            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH,
-            endpoint_url=self.s3_endpoint,
-            aws_access_key_id=self.access_key_id,
-            aws_secret_access_key=self.access_key
-        )
+        if 'noobaa' in obc_provisioner:
+            get_noobaa = OCP(kind='noobaa', namespace=self.namespace).get()
+            self.s3_internal_endpoint = (
+                get_noobaa.get('items')[0].get('status').get('services')
+                .get('serviceS3').get('internalDNS')[0]
+            )
+            self.s3_external_endpoint = (
+                get_noobaa.get('items')[0].get('status').get('services')
+                .get('serviceS3').get('externalDNS')[0]
+            )
+            self.s3_resource = boto3.resource(
+                's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH,
+                endpoint_url=self.s3_external_endpoint,
+                aws_access_key_id=self.access_key_id,
+                aws_secret_access_key=self.access_key
+            )
+            self.s3_client = self.s3_resource.meta.client
 
-        self.s3_client = self.s3_resource.meta.client
+        elif 'rook' in obc_provisioner:
+            # TODO: implement network forwarding to access the internal address
+            self.s3_internal_endpoint = (
+                'http://' + obc_configmap_data.get('BUCKET_HOST') + ':'
+                + obc_configmap_data.get('BUCKET_PORT')
+            )
 
 
 class ObjectBucket(ABC):

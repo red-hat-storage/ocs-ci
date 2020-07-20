@@ -1731,7 +1731,7 @@ def uploaded_objects_fixture(
                 secrets=[
                     mcg_obj.access_key_id,
                     mcg_obj.access_key,
-                    mcg_obj.s3_endpoint
+                    mcg_obj.s3_internal_endpoint
                 ]
             )
 

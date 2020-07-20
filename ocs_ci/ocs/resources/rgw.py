@@ -21,7 +21,7 @@ class RGW(object):
             kind='storageclass', namespace=namespace,
             resource_name=sc_name
         )
-        self.s3_endpoint = self.storageclass.get().get('parameters').get('endpoint')
+        self.s3_internal_endpoint = self.storageclass.get().get('parameters').get('endpoint')
         self.region = self.storageclass.get().get('parameters').get('region')
         # Todo: Implement retrieval in cases where CephObjectStoreUser is available
         self.key_id = None
