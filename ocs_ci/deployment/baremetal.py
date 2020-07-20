@@ -268,16 +268,19 @@ class BAREMETALUPI(Deployment):
                         self.mgmt_details[machine_name]['mgmt_password']
                     ]
                     run_cmd(cmd=cmd, secrets=secrets)
+                    sleep(2)
                     # Changes boot prioriy to pxe
                     cmd = f"ipmitool -I lanplus -U {self.mgmt_details[machine_name]['mgmt_username']} " \
                           f"-P {self.mgmt_details[machine_name]['mgmt_password']} " \
                           f"-H {self.mgmt_details[machine_name]['mgmt_console']} chassis bootdev pxe"
                     run_cmd(cmd=cmd, secrets=secrets)
+                    sleep(2)
                     # Power On Machine
                     cmd = f"ipmitool -I lanplus -U {self.mgmt_details[machine_name]['mgmt_username']} " \
                           f"-P {self.mgmt_details[machine_name]['mgmt_password']} " \
                           f"-H {self.mgmt_details[machine_name]['mgmt_console']} chassis power on"
                     run_cmd(cmd=cmd, secrets=secrets)
+                    sleep(2)
 
             logger.info("waiting for bootstrap to complete")
             try:
