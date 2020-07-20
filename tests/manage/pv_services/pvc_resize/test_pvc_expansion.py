@@ -197,7 +197,7 @@ class TestPvcExpand(ManageTest):
                 f"Waiting for IO setup to complete on pod {pod_obj.name}"
             )
             for sample in TimeoutSampler(
-                180, 2, getattr, pod_obj, 'wl_setup_done'
+                360, 2, getattr, pod_obj, 'wl_setup_done'
             ):
                 if sample:
                     log.info(
