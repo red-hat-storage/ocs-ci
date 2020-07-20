@@ -59,7 +59,7 @@ class LoadBalancer(object):
             self.terraform_state_file,
             constants.LOAD_BALANCER_MODULE
         )
-        return ip_address
+        return ip_address[0]
 
     def restart_service(self, service_name):
         """
@@ -93,7 +93,7 @@ class LoadBalancer(object):
         bootstrap_ip = get_module_ip(
             self.terraform_state_file,
             constants.BOOTSTRAP_MODULE
-        )
+        )[0]
         # backup the conf file
         cmd = (
             f"sudo cp {constants.HAPROXY_LOCATION}"
