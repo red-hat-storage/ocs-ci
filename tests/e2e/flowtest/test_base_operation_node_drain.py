@@ -23,8 +23,8 @@ class TestBaseOperationNodeDrain(E2ETest):
     Tests Story/Flow based test scenarios
 
     """
-    # @vsphere_platform_required
-    # @aws_platform_required
+    @vsphere_platform_required
+    @aws_platform_required
     @pytest.mark.polarion_id("OCS-2188")
     def test_base_operation_node_drain(
         self, node_drain_teardown, node_restart_teardown, pgsql_factory_fixture,
