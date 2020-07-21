@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-from tests.sanity_helpers import Sanity
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.framework.testlib import (
@@ -38,9 +37,6 @@ class TestJenkinsNodeDrain(E2ETest):
         """
         # Deployment of jenkins
         jenkins.create_ocs_jenkins_template()
-
-        # Initialize Sanity instance
-        self.sanity_helpers = Sanity()
 
     @pytest.mark.parametrize(
         argnames=['node_type', 'num_projects', 'num_of_builds'],
@@ -98,6 +94,3 @@ class TestJenkinsNodeDrain(E2ETest):
 
         # Print table of builds
         jenkins.print_completed_builds_results()
-
-        # Perform cluster and Ceph health checks
-        self.sanity_helpers.health_check()
