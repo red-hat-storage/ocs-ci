@@ -19,21 +19,31 @@ class TestCephDefaultValuesCheck(ManageTest):
 
         """
         # The default ceph osd full ratio values
-        osd_full_ratios = {
+        expected_full_ratios = {
             'full_ratio': 0.85,
             'backfillfull_ratio': 0.8,
             'nearfull_ratio': 0.75
         }
+        actual_full_ratios = {}
         ct_pod = pod.get_ceph_tools_pod()
         log.info("Checking the values of ceph osd full ratios in osd map")
         osd_dump_dict = ct_pod.exec_ceph_cmd('ceph osd dump')
-        for ratio_parm, value in osd_full_ratios.items():
+        for ratio_parm, value in expected_full_ratios.items():
             ratio_value = osd_dump_dict.get(ratio_parm)
-            assert float(round(ratio_value, 2)) == value, (
-                f"Cluster {ratio_parm} value is {ratio_value:.2f} NOT "
-                f"matching the default value {value}"
-            )
-        log.info("Ceph osd full ratio in osd map matches the default values")
+            actual_full_ratios.update({ratio_parm:ratio_value})
+            if not float(round(ratio_value, 2)) == value:
+                log.error(
+                    f"Actual {ratio_parm} value is {ratio_value:.2f} NOT "
+                    f"matching the expected value {value}"
+                )
+        assert expected_full_ratios == actual_full_ratios, (
+            f"Actual {actual_full_ratios} values does not match "
+            f"expected full ratio values {expected_full_ratios}"
+        )
+        log.info(
+            f"Actual full ratio {actual_full_ratios} values MATCHES expected "
+            f"full ratio values {expected_full_ratios}"
+        )
 
         # Check if the osd full ratios satisfies condition
         #  "nearfull < backfillfull < full"
