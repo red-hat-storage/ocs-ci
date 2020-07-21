@@ -37,8 +37,8 @@ class TestCephDefaultValuesCheck(ManageTest):
                     f"matching the expected value {value}"
                 )
         assert expected_full_ratios == actual_full_ratios, (
-            f"Actual {actual_full_ratios} values does not match "
-            f"expected full ratio values {expected_full_ratios}"
+            "Actual full ratio values does not match expected full "
+            "ratio values"
         )
         log.info(
             f"Actual full ratio {actual_full_ratios} values MATCHES expected "
