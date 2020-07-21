@@ -13,7 +13,6 @@ from ocs_ci.cleanup.aws.defaults import CLUSTER_PREFIXES_SPECIAL_RULES
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp
-from ocs_ci.ocs.parallel import parallel
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import (
@@ -44,33 +43,6 @@ class AWSBase(CloudDeploymentBase):
         """
         super(AWSBase, self).__init__()
         self.aws = AWSUtil(self.region)
-
-    def _create_cloud_volumes(self, worker_pattern, size=100):
-        """
-        Add new ebs volumes to the workers. This private method is called from
-        ``CloudDeploymentBase.add_volume()`` only.
-
-        Args:
-            worker_pattern (str):  Worker name pattern e.g.:
-                cluster-55jx2-worker*
-            size (int): Size in GB (default: 100)
-        """
-        worker_instances = self.aws.get_instances_by_name_pattern(
-            worker_pattern
-        )
-        with parallel() as p:
-            for worker in worker_instances:
-                logger.info(
-                    f"Creating and attaching {size} GB "
-                    f"volume to {worker['name']}"
-                )
-                p.spawn(
-                    self.aws.create_volume_and_attach,
-                    availability_zone=worker['avz'],
-                    instance_id=worker['id'],
-                    name=f"{worker['name']}_extra_volume",
-                    size=size,
-                )
 
     def host_network_update(self):
         """

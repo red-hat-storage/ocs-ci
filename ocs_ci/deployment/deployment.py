@@ -77,15 +77,6 @@ class Deployment(object):
         """
         pass
 
-    def add_volume(self):
-        """
-        Add a new volume to all workers.
-
-        Implement add_volume in child class which is specific to
-        platform
-        """
-        raise NotImplementedError("add_volume functionality not implemented")
-
     def deploy_cluster(self, log_cli_level='DEBUG'):
         """
         We are handling both OCP and OCS deployment here based on flags
