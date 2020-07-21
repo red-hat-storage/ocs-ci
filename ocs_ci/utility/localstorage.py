@@ -171,6 +171,6 @@ def get_lso_channel():
     """
     channel = get_ocp_version()
     # Workaround for https://github.com/red-hat-storage/ocs-ci/issues/2324
-    if channel == '4.5':
+    if channel == '4.5' or '4.6':
         channel = '4.4'
     return channel

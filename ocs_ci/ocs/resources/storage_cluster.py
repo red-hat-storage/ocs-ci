@@ -1,17 +1,18 @@
 """
 StorageCluster related functionalities
 """
-from ocs_ci.ocs.exceptions import ResourceNotFoundError
-from ocs_ci.ocs.ocp import OCP, get_images
-from jsonschema import validate
-from ocs_ci.framework import config
 import logging
-from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.resources.csv import CSV
-from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator, PackageManifest
-from ocs_ci.ocs.node import get_compute_node_names
-from ocs_ci.utility import utils, localstorage
 
+from jsonschema import validate
+
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs.exceptions import ResourceNotFoundError
+from ocs_ci.ocs.node import get_compute_node_names
+from ocs_ci.ocs.ocp import get_images, OCP
+from ocs_ci.ocs.resources.ocs import get_ocs_csv
+from ocs_ci.ocs.resources.pod import get_pods_having_label
+from ocs_ci.utility import localstorage, utils
 
 log = logging.getLogger(__name__)
 
@@ -65,17 +66,7 @@ def ocs_install_verification(
 
     # Verify OCS CSV is in Succeeded phase
     log.info("verifying ocs csv")
-    operator_selector = get_selector_for_ocs_operator()
-    ocs_package_manifest = PackageManifest(
-        resource_name=defaults.OCS_OPERATOR_NAME, selector=operator_selector,
-    )
-    channel = config.DEPLOYMENT.get('ocs_csv_channel')
-    ocs_csv_name = ocs_package_manifest.get_current_csv(channel=channel)
-    ocs_csv = CSV(
-        resource_name=ocs_csv_name, namespace=namespace
-    )
-    log.info(f"Check if OCS operator: {ocs_csv_name} is in Succeeded phase.")
-    ocs_csv.wait_for_phase(phase="Succeeded", timeout=timeout)
+    ocs_csv = get_ocs_csv()
     # Verify if OCS CSV has proper version.
     csv_version = ocs_csv.data['spec']['version']
     ocs_version = config.ENV_DATA['ocs_version']
@@ -125,93 +116,55 @@ def ocs_install_verification(
     pod = OCP(
         kind=constants.POD, namespace=namespace
     )
-    # ocs-operator
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.OCS_OPERATOR_LABEL,
-        timeout=timeout
-    )
-    # rook-ceph-operator
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.OPERATOR_LABEL,
-        timeout=timeout
-    )
-    # noobaa
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.NOOBAA_APP_LABEL,
-        resource_count=2,
-        timeout=timeout
-    )
-    # mons
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.MON_APP_LABEL,
-        resource_count=3,
-        timeout=timeout
-    )
-    # csi-cephfsplugin
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_CEPHFSPLUGIN_LABEL,
-        resource_count=number_of_worker_nodes,
-        timeout=timeout
-    )
-    # csi-cephfsplugin-provisioner
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-        resource_count=2,
-        timeout=timeout
-    )
-    # csi-rbdplugin
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_RBDPLUGIN_LABEL,
-        resource_count=number_of_worker_nodes,
-        timeout=timeout
-    )
-    # csi-rbdplugin-provisioner
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
-        resource_count=2,
-        timeout=timeout
-    )
-    # osds
     osd_count = (
         int(storage_cluster.data['spec']['storageDeviceSets'][0]['count'])
         * int(storage_cluster.data['spec']['storageDeviceSets'][0]['replica'])
     )
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.OSD_APP_LABEL,
-        resource_count=osd_count,
-        timeout=timeout
-    )
-    # mgr
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.MGR_APP_LABEL,
-        timeout=timeout
-    )
-    # mds
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.MDS_APP_LABEL,
-        resource_count=2,
-        timeout=timeout
-    )
 
-    # rgw check only for VmWare
-    if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
+    # check noobaa CR for min number of noobaa endpoint pods
+    nb_obj = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    min_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('minCount')
+    max_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('maxCount')
+
+    resources_dict = {
+        constants.OCS_OPERATOR_LABEL: 1,
+        constants.OPERATOR_LABEL: 1,
+        constants.NOOBAA_DB_LABEL: 1,
+        constants.NOOBAA_OPERATOR_POD_LABEL: 1,
+        constants.NOOBAA_CORE_POD_LABEL: 1,
+        constants.MON_APP_LABEL: 3,
+        constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
+        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL: 2,
+        constants.CSI_RBDPLUGIN_LABEL: number_of_worker_nodes,
+        constants.CSI_RBDPLUGIN_PROVISIONER_LABEL: 2,
+        constants.OSD_APP_LABEL: osd_count,
+        constants.MGR_APP_LABEL: 1,
+        constants.MDS_APP_LABEL: 2,
+        constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps
+    }
+    if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1857802 - RGW count is 1
+        # post upgrade to OCS 4.5. Tracked with
+        # https://github.com/red-hat-storage/ocs-ci/issues/2532
+        rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 and not (
+            post_upgrade_verification
+        ) else 1
+        resources_dict.update({constants.RGW_APP_LABEL: rgw_count})
+    for label, count in resources_dict.items():
         assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            selector=constants.RGW_APP_LABEL,
-            resource_count=1,
+            selector=label,
+            resource_count=count,
             timeout=timeout
         )
+
+    nb_ep_pods = get_pods_having_label(
+        label=constants.NOOBAA_ENDPOINT_POD_LABEL, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    assert len(nb_ep_pods) <= max_eps, (
+        f"The number of running NooBaa endpoint pods ({len(nb_ep_pods)}) "
+        f"is greater than the maximum defined in the NooBaa CR ({max_eps})"
+    )
 
     # Verify StorageClasses (1 ceph-fs, 1 ceph-rbd)
     log.info("Verifying storage classes")
@@ -268,7 +221,10 @@ def ocs_install_verification(
         "in the output."
     )
 
-    if config.DEPLOYMENT.get('local_storage'):
+    if (
+        config.DEPLOYMENT.get('local_storage')
+        and config.ENV_DATA['platform'] != constants.BAREMETALPSI_PLATFORM
+    ):
         deviceset_pvcs = get_compute_node_names()
     else:
         deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
@@ -508,15 +464,21 @@ def get_all_storageclass():
     return storageclass
 
 
-def change_noobaa_endpoints_count(nb_eps):
+def change_noobaa_endpoints_count(min_nb_eps=None, max_nb_eps=None):
     """
     Scale up or down the number of maximum NooBaa emdpoints
 
     Args:
-        nb_eps (int): The number of required Noobaa endpoints
+        min_nb_eps (int): The number of required minimum Noobaa endpoints
+        max_nb_eps (int): The number of required maximum Noobaa endpoints
 
     """
-    log.info(f"Scaling up Noobaa endpoints to a maximum of {nb_eps}")
-    params = f'{{"spec":{{"endpoints":{{"maxCount":{nb_eps},"minCount":1}}}}}}'
     noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+    if min_nb_eps:
+        log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
+        params = f'{{"spec":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}'
+        noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+    if max_nb_eps:
+        log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
+        params = f'{{"spec":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}'
+        noobaa.patch(resource_name='noobaa', params=params, format_type='merge')

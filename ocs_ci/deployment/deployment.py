@@ -17,14 +17,14 @@ from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
 from ocs_ci.ocs.exceptions import (
     CommandFailed, UnavailableResourceException, UnsupportedPlatformError,
-    ResourceWrongStatusException,
+    ResourceWrongStatusException, CephHealthException
 )
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods
 )
-from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.node import get_typed_nodes, check_nodes_specs
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -32,6 +32,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
 )
+from ocs_ci.ocs.resources.storage_cluster import change_noobaa_endpoints_count
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state
@@ -52,6 +53,7 @@ from ocs_ci.utility.utils import (
     set_registry_to_managed_state,
     add_stage_cert
 )
+from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from tests import helpers
 
 logger = logging.getLogger(__name__)
@@ -401,15 +403,20 @@ class Deployment(object):
             if self.platform.lower() == constants.AWS_PLATFORM:
                 deviceset_data['count'] = 2
 
+        ocs_version = float(config.ENV_DATA['ocs_version'])
         # Allow lower instance requests and limits for OCS deployment
+        # The resources we need to change can be found here:
+        # https://github.com/openshift/ocs-operator/blob/release-4.5/pkg/deploy-manager/storagecluster.go#L88-L116
         if config.DEPLOYMENT.get('allow_lower_instance_requirements'):
             none_resources = {'Requests': None, 'Limits': None}
             deviceset_data["resources"] = deepcopy(none_resources)
+            resources = [
+                'mon', 'mds', 'rgw', 'mgr', 'noobaa-core', 'noobaa-db',
+            ]
+            if ocs_version >= 4.5:
+                resources.append('noobaa-endpoint')
             cluster_data['spec']['resources'] = {
-                resource: deepcopy(none_resources) for resource
-                in [
-                    'mon', 'mds', 'rgw', 'mgr', 'noobaa-core', 'noobaa-db',
-                ]
+                resource: deepcopy(none_resources) for resource in resources
             }
         else:
             local_storage = config.DEPLOYMENT.get('local_storage')
@@ -428,8 +435,12 @@ class Deployment(object):
                         'limits': {'cpu': 2, 'memory': '8Gi'},
                         'requests': {'cpu': 1, 'memory': '8Gi'}
                     }
-
                 }
+                if ocs_version >= 4.5:
+                    resources['noobaa-endpoint'] = {
+                        'limits': {'cpu': 2, 'memory': '8Gi'},
+                        'requests': {'cpu': 1, 'memory': '8Gi'}
+                    }
                 cluster_data['spec']['resources'] = resources
 
         # Enable host network if enabled in config (this require all the
@@ -595,11 +606,37 @@ class Deployment(object):
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
-        assert ceph_health_check(
-            namespace=self.namespace
-        )
+        try:
+            ceph_health_check(namespace=self.namespace, tries=30, delay=10)
+        except CephHealthException as ex:
+            err = str(ex)
+            logger.warning(f"Ceph health check failed with {err}")
+            if "clock skew detected" in err:
+                logger.info(
+                    f"Changing NTP on compute nodes to"
+                    f" {constants.RH_NTP_CLOCK}"
+                )
+                update_ntp_compute_nodes()
+                assert ceph_health_check(
+                    namespace=self.namespace, tries=60, delay=10
+                )
+
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
+        if check_nodes_specs(min_cpu=constants.MIN_NODE_CPU, min_memory=constants.MIN_NODE_MEMORY):
+            logger.info(
+                "The cluster specs meet the minimum requirements and "
+                "therefore, NooBaa auto scale will be enabled"
+            )
+            min_nb_eps = config.DEPLOYMENT.get('min_noobaa_endpoints')
+            max_nb_eps = config.DEPLOYMENT.get('max_noobaa_endpoints')
+            change_noobaa_endpoints_count(min_nb_eps=min_nb_eps, max_nb_eps=max_nb_eps)
+        else:
+            logger.warning(
+                "The cluster specs do not meet the minimum requirements"
+                " and therefore, NooBaa auto scale will remain disabled"
+            )
+            change_noobaa_endpoints_count(min_nb_eps=1, max_nb_eps=1)
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -753,14 +790,17 @@ def setup_local_storage():
         # Types of LSO Deployment
         # Importing here to avoid circular dependancy
         from ocs_ci.deployment.vmware import VSPHEREBASE
+        vsphere_base = VSPHEREBASE()
+
         if lso_type == constants.RDM:
             logger.info(f"LSO Deployment type: {constants.RDM}")
-            vsphere_base = VSPHEREBASE()
             vsphere_base.add_rdm_disks()
 
         if lso_type == constants.VMDK:
-            raise NotImplementedError(
-                "LSO Deployment for VMDk is not implemented"
+            logger.info(f"LSO Deployment type: {constants.VMDK}")
+            vsphere_base.attach_disk(
+                config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE),
+                config.DEPLOYMENT.get('provision_type', constants.VM_DISK_TYPE)
             )
 
         if lso_type == constants.DIRECTPATH:
@@ -802,7 +842,7 @@ def setup_local_storage():
     verify_pvs_created(len(worker_names) * storage_class_device_count)
 
 
-@retry(AssertionError, 12, 10, 1)
+@retry(AssertionError, 120, 10, 1)
 def verify_pvs_created(expected_pvs):
     """
     Verify that PVs were created and are in the Available state
@@ -858,6 +898,9 @@ def get_device_paths(worker_names):
         pattern = 'wwn'
     elif platform == 'baremetal':
         pattern = config.ENV_DATA.get('disk_pattern')
+    elif platform == 'baremetalpsi':
+        pattern = 'virtio'
+    # TODO: add patterns bare metal
     else:
         raise UnsupportedPlatformError(
             'LSO deployment is not supported for platform: %s', platform

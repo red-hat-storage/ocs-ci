@@ -76,7 +76,7 @@ class VSPHEREBASE(Deployment):
 
         self.wait_time = 90
 
-    def attach_disk(self, size=100):
+    def attach_disk(self, size=100, disk_type=constants.VM_DISK_TYPE):
         """
         Add a new disk to all the workers nodes
 
@@ -96,7 +96,7 @@ class VSPHEREBASE(Deployment):
                     config.ENV_DATA.get("extra_disks", 1),
                     vm,
                     size,
-                    constants.VM_DISK_TYPE
+                    disk_type
                 )
 
     def add_nodes(self):
@@ -393,6 +393,7 @@ class VSPHEREUPI(VSPHEREBASE):
             self.folder_structure = False
             if Version.coerce(ocp_version) >= Version.coerce('4.5'):
                 self.folder_structure = True
+                config.ENV_DATA['folder_structure'] = self.folder_structure
 
         def deploy_prereq(self):
             """
@@ -598,12 +599,26 @@ class VSPHEREUPI(VSPHEREBASE):
         """
         previous_dir = os.getcwd()
 
-        # Download terraform binary based on ocp version and
-        # update the installer path in ENV_DATA
-        # use "0.11.14" for releases below OCP 4.5
-        # TODO: For cluster installed by old version of terraform we need to
-        # still run old version for destroy ( upgrade scenario )
-        terraform_version = config.DEPLOYMENT['terraform_version']
+        # Download terraform binary based on terraform version
+        # in terraform.log
+        terraform_log_path = os.path.join(
+            config.ENV_DATA.get('cluster_path'),
+            config.ENV_DATA.get('TF_LOG_FILE')
+        )
+
+        # check for terraform.log, this check is for partially
+        # deployed clusters
+        try:
+            with open(terraform_log_path, 'r') as fd:
+                logger.debug(
+                    f"Reading terraform version from {terraform_log_path}"
+                )
+                version_line = fd.readline()
+                terraform_version = version_line.split()[-1]
+        except FileNotFoundError:
+            logger.debug(f"{terraform_log_path} file not found")
+            terraform_version = config.DEPLOYMENT['terraform_version']
+
         terraform_installer = get_terraform(version=terraform_version)
         config.ENV_DATA['terraform_installer'] = terraform_installer
 

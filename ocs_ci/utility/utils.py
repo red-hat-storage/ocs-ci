@@ -1350,7 +1350,7 @@ def ceph_health_check_base(namespace=None):
         f"oc -n {namespace} get pod -l 'app=rook-ceph-tools' "
         f"-o jsonpath='{{.items[0].metadata.name}}'"
     )
-    health = run_cmd(f"oc -n {namespace} exec {tools_pod} ceph health")
+    health = run_cmd(f"oc -n {namespace} exec {tools_pod} -- ceph health")
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
@@ -2056,29 +2056,15 @@ def convert_device_size(unformatted_size, units_to_covert_to):
 
     """
     units = unformatted_size[-2:]
-    absolute_size = int(unformatted_size[:-2])
-
-    if units_to_covert_to == 'TB':
-        if units == 'Ti':
-            return absolute_size
-        elif units == 'Gi':
-            return absolute_size * 1024
-        elif units == 'Mi':
-            return absolute_size * 1024 * 1024
-    elif units_to_covert_to == 'GB':
-        if units == 'Ti':
-            return absolute_size / 1024
-        elif units == 'Gi':
-            return absolute_size
-        elif units == 'Mi':
-            return absolute_size * 1024
-    elif units_to_covert_to == 'MB':
-        if units == 'Ti':
-            return absolute_size / 1024 / 1024
-        elif units == 'Gi':
-            return absolute_size / 1024
-        elif units == 'Mi':
-            return absolute_size
+    abso = int(unformatted_size[:-2])
+    conversion = {
+        'TB': {'Ti': abso, 'Gi': abso / 1000, 'Mi': abso / 1e+6, 'Ki': abso / 1e+9},
+        'GB': {'Ti': abso * 1000, 'Gi': abso, 'Mi': abso / 1000, 'Ki': abso / 1e+6},
+        'MB': {'Ti': abso * 1e+6, 'Gi': abso * 1000, 'Mi': abso, 'Ki': abso / 1000},
+        'KB': {'Ti': abso * 1e+9, 'Gi': abso * 1e+6, 'Mi': abso * 1000, 'Ki': abso},
+        'B': {'Ti': abso * 1e+12, 'Gi': abso * 1e+9, 'Mi': abso * 1e+6, 'Ki': abso * 1000}
+    }
+    return conversion[units_to_covert_to][units]
 
 
 def mirror_image(image):
@@ -2329,7 +2315,7 @@ def get_terraform(version=None, bin_dir=None):
 
 def get_module_ip(terraform_state_file, module):
     """
-    Gets the bootstrap node IP from terraform.tfstate file
+    Gets the node IP from terraform.tfstate file
 
     Args:
         terraform_state_file (str): Path to terraform state file
@@ -2337,19 +2323,35 @@ def get_module_ip(terraform_state_file, module):
             e.g: constants.LOAD_BALANCER_MODULE
 
     Returns:
-        str: IP of bootstrap node
+        list: IP of the node
 
     """
+    ips = []
     with open(terraform_state_file) as fd:
         obj = hcl.load(fd)
 
-        resources = obj['resources']
-        log.debug(f"Extracting module information for {module}")
-        log.debug(f"Resource in {terraform_state_file}: {resources}")
-        for resource in resources:
-            if resource['module'] == module:
-                resource_body = resource['instances'][0]['attributes']['body']
-                return resource_body.split("\"")[3]
+        if config.ENV_DATA.get('folder_structure'):
+            resources = obj['resources']
+            log.debug(f"Extracting module information for {module}")
+            log.debug(f"Resource in {terraform_state_file}: {resources}")
+            for resource in resources:
+                if (
+                    resource.get('module') == module
+                    and resource.get('mode') == "data"
+                ):
+                    for each_resource in resource['instances']:
+                        resource_body = each_resource['attributes']['body']
+                        ips.append(resource_body.split("\"")[3])
+        else:
+            modules = obj['modules']
+            target_module = module.split("_")[1]
+            log.debug(f"Extracting module information for {module}")
+            log.debug(f"Modules in {terraform_state_file}: {modules}")
+            for each_module in modules:
+                if target_module in each_module['path']:
+                    return each_module['outputs']['ip_addresses']['value']
+
+        return ips
 
 
 def set_aws_region(region=None):
