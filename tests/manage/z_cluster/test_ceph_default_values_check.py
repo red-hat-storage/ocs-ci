@@ -30,7 +30,7 @@ class TestCephDefaultValuesCheck(ManageTest):
         osd_dump_dict = ct_pod.exec_ceph_cmd('ceph osd dump')
         for ratio_parm, value in expected_full_ratios.items():
             ratio_value = osd_dump_dict.get(ratio_parm)
-            actual_full_ratios.update({ratio_parm:ratio_value})
+            actual_full_ratios.update({ratio_parm: ratio_value})
             if not float(round(ratio_value, 2)) == value:
                 log.error(
                     f"Actual {ratio_parm} value is {ratio_value:.2f} NOT "
