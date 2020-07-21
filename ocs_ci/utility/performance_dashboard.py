@@ -79,7 +79,7 @@ def push_results(json_data):
 
     """
 
-    log.info(f'Going to push {json_data} to codespeed')
+    log.info(f'Trying to push {json_data} to codespeed')
     try:
         requests.post(constants.CODESPEED_URL + 'result/add/json/', data=json_data)
     except Exception:
