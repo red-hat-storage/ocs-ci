@@ -427,7 +427,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         upgrade_ocs.update_subscription(channel)
         if operation:
             log.info(f"Calling test function: {operation}")
-            _ = _ = operation(*operation_args, **operation_kwargs)
+            _ = operation(*operation_args, **operation_kwargs)
             # Workaround for issue #2531
             time.sleep(30)
             # End of workaround

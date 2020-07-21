@@ -29,7 +29,10 @@ def worker_node_shutdown(abrupt):
     Shutdown worker node that running ocs-operator pod
 
     Args:
-        abrupt: bool: True if abrupt shutdown, False for permanent shutdown
+        abrupt: (bool): True if abrupt shutdown, False for permanent shutdown
+
+    Raises:
+        AssertionError: in case the ceph-tools pod was not recovered
 
     """
 
