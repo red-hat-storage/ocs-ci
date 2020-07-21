@@ -1576,7 +1576,6 @@ def mcg_obj_fixture(request, *args, **kwargs):
     return mcg_obj
 
 
-
 @pytest.fixture()
 def awscli_pod(request, mcg_obj):
     return awscli_pod_fixture(request, mcg_obj)
