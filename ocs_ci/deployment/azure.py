@@ -30,19 +30,6 @@ class AZUREBase(CloudDeploymentBase):
         super(AZUREBase, self).__init__()
         self.azure_util = AzureUtil()
 
-    def _create_cloud_volumes(self, worker_pattern, size):
-        """
-        Add new azure disk volumes to the workers. This private method is
-        called from ``CloudDeploymentBase.add_volume()`` only.
-
-        Args:
-            worker_pattern (str):  Worker name pattern e.g.:
-                cluster-55jx2-worker*
-            size (int): Size in GB
-        """
-        # TODO: implement now
-        pass
-
     def add_node(self):
         # TODO: implement later
         super(AZUREBase, self).add_node()

@@ -13,7 +13,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.utils import get_cluster_name
-from ocs_ci.utility.utils import get_infra_id
 from ocs_ci.utility.utils import run_cmd
 
 
@@ -35,38 +34,6 @@ class CloudDeploymentBase(Deployment):
             self.cluster_name = config.ENV_DATA['cluster_name']
         else:
             self.cluster_name = get_cluster_name(self.cluster_path)
-
-    def add_volume(self, size=100):
-        """
-        Add a new cloud volume to all the workers.
-
-        Args:
-            size (int): Size of volume in GB (default: 100)
-        """
-        cluster_id = get_infra_id(self.cluster_path)
-        # TODO: check if different cloud platforms requires unique patterns
-        worker_pattern = f'{cluster_id}-worker*'
-        logger.info(
-            'Adding cloud volumes to all workers using worker pattern: %s',
-            worker_pattern
-        )
-        self._create_cloud_volumes(worker_pattern, size)
-
-    def _create_cloud_volumes(self, worker_pattern, size):
-        """
-        Add new cloud volumes to the workers. Each cloud platform has a
-        different storage type which fits this use case: On AWS this should add
-        EBS volumes, on Aure it should use Azure disks ...
-
-        This private method is called from ``CloudDeploymentBase.add_volume()``
-        only.
-
-        Args:
-            worker_pattern (str):  Worker name pattern e.g.:
-                cluster-55jx2-worker*
-            size (int): Size in GB
-        """
-        raise NotImplementedError("Must be Implemented in a subclass.")
 
 
 class CloudIPIOCPDeployment(BaseOCPDeployment):
