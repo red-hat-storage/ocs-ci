@@ -1,11 +1,12 @@
 import logging
 import pytest
 
+from tests.sanity_helpers import Sanity
+from ocs_ci.ocs.jenkins import Jenkins
+from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.framework.testlib import (
     E2ETest, workloads, ignore_leftovers
 )
-from ocs_ci.ocs.jenkins import Jenkins
-from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.ocs.constants import (
     STATUS_COMPLETED, MASTER_MACHINE, WORKER_MACHINE
 )
@@ -37,6 +38,9 @@ class TestJenkinsNodeDrain(E2ETest):
         """
         # Deployment of jenkins
         jenkins.create_ocs_jenkins_template()
+
+        # Initialize Sanity instance
+        self.sanity_helpers = Sanity()
 
     @pytest.mark.parametrize(
         argnames=['node_type', 'num_projects', 'num_of_builds'],
@@ -73,7 +77,9 @@ class TestJenkinsNodeDrain(E2ETest):
         jenkins.wait_for_jenkins_deploy_status(status=STATUS_COMPLETED)
 
         # Get relevant node
-        nodes_drain = jenkins.get_nodes(node_type=node_type, num_of_nodes=1)
+        nodes_drain = jenkins.get_node_name_where_jenkins_pod_not_hosted(
+            node_type=node_type, num_of_nodes=1
+        )
 
         # Init number of builds per project
         jenkins.number_builds_per_project = num_of_builds
@@ -92,3 +98,6 @@ class TestJenkinsNodeDrain(E2ETest):
 
         # Print table of builds
         jenkins.print_completed_builds_results()
+
+        # Perform cluster and Ceph health checks
+        self.sanity_helpers.health_check()
