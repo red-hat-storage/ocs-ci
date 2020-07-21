@@ -70,6 +70,23 @@ def initialize_data():
     return data_template
 
 
+def push_results(json_data):
+    """
+    Pushing the JSON data to the codespeed
+
+    Args:
+         json_data (dict): The json file to push
+
+    """
+
+    log.info(f'Going to push {json_data} to codespeed')
+    try:
+        requests.post(constants.CODESPEED_URL + 'result/add/json/', data=json_data)
+    except Exception:
+        # Catching any exception just to prevent the test from failed
+        log.error('Failed to push data to codespeed, make sure the server is up')
+
+
 def push_perf_dashboard(
     interface, read_iops, write_iops, bw_read, bw_write
 ):
@@ -108,8 +125,7 @@ def push_perf_dashboard(
     sample_data.append(data.copy())
 
     json_data = {'json': json.dumps(sample_data)}
-    log.info(f'Going to push {json_data} to codespeed')
-    requests.post(constants.CODESPEED_URL + 'result/add/json/', data=json_data)
+    push_results(json_data)
 
 
 def push_to_pvc_time_dashboard(
@@ -135,4 +151,4 @@ def push_to_pvc_time_dashboard(
     sample_data.append(data.copy())
 
     json_data = {'json': json.dumps(sample_data)}
-    requests.post(constants.CODESPEED_URL + 'result/add/json/', data=json_data)
+    push_results(json_data)
