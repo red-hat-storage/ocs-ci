@@ -234,7 +234,8 @@ def create_pod(
 
     # configure http[s]_proxy env variable, if required
     try:
-        if 'http_proxy' in config.ENV_DATA:
+        http_proxy, https_proxy = get_cluster_proxies()
+        if http_proxy:
             if 'containers' in pod_data['spec']:
                 container = pod_data['spec']['containers'][0]
             else:
@@ -243,13 +244,11 @@ def create_pod(
                 container['env'] = []
             container['env'].append({
                 'name': 'http_proxy',
-                'value': config.ENV_DATA['http_proxy'],
+                'value': http_proxy,
             })
             container['env'].append({
                 'name': 'https_proxy',
-                'value': config.ENV_DATA.get(
-                    'https_proxy', config.ENV_DATA['http_proxy']
-                ),
+                'value': https_proxy,
             })
     except KeyError as err:
         logging.warning(
@@ -985,11 +984,8 @@ def create_build_from_docker_image(
     """
     base_image = source_image + ':' + source_image_label
     cmd = f'yum install -y {install_package}'
-    if 'http_proxy' in config.ENV_DATA:
-        http_proxy = config.ENV_DATA['http_proxy']
-        https_proxy = config.ENV_DATA.get(
-            'https_proxy', http_proxy
-        )
+    http_proxy, https_proxy = get_cluster_proxies()
+    if http_proxy:
         cmd = (
             f"http_proxy={http_proxy} https_proxy={https_proxy} {cmd}"
         )
@@ -2370,3 +2366,33 @@ def get_pv_size(storageclass=None):
         if pv_obj['spec']['storageClassName'] == storageclass:
             return_list.append(pv_obj['spec']['capacity']['storage'])
     return return_list
+
+
+def get_cluster_proxies():
+    """
+    Get http and https proxy configuration.
+    * If configuration ENV_DATA['http_proxy'] (and prospectively
+        ENV_DATA['https_proxy']) exists, return the respective values.
+        (If https_proxy not defined, use value from http_proxy.)
+    * If configuration ENV_DATA['http_proxy'] doesn't exist, try to gather
+        cluster wide proxy configuration.
+    * If no proxy configuration found, return empty string for both http_proxy
+        and https_proxy.
+
+    Returns:
+        tuple: (http_proxy, https_proxy)
+
+    """
+    if 'http_proxy' in config.ENV_DATA:
+        http_proxy = config.ENV_DATA['http_proxy']
+        https_proxy = config.ENV_DATA.get(
+            'https_proxy', config.ENV_DATA['http_proxy']
+        )
+    else:
+        ocp_obj = ocp.OCP(kind=constants.PROXY, resource_name='cluster')
+        proxy_obj = ocp_obj.get()
+        http_proxy = proxy_obj['spec'].get('httpProxy', '')
+        https_proxy = proxy_obj['spec'].get('httpsProxy', '')
+    logger.info("Using http_proxy: '%s'", http_proxy)
+    logger.info("Using https_proxy: '%s'", https_proxy)
+    return http_proxy, https_proxy
