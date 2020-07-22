@@ -9,6 +9,8 @@ import os
 
 from azure.common.credentials import ServicePrincipalCredentials
 from azure.mgmt.compute import ComputeManagementClient
+from azure.mgmt.resource import ResourceManagementClient
+
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -75,6 +77,7 @@ class AZURE:
     """
 
     _compute_client = None
+    _resource_client = None
     _credentials = None
     _cluster_resource_group = None
 
@@ -179,6 +182,17 @@ class AZURE:
                 credentials=self.credentials,
                 subscription_id=self._subscription_id)
         return self._compute_client
+
+    @property
+    def resource_client(self):
+        """
+        Azure ResourceManagementClient instance
+        """
+        if not self._resource_client:
+            self._resource_client = ResourceManagementClient(
+                credentials=self.credentials,
+                subscription_id=self._subscription_id)
+        return self._resource_client
 
     def get_vm_instance(self, vm_name):
         """
