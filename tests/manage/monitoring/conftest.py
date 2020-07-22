@@ -11,6 +11,7 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket
+from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility.workloadfixture import measure_operation
 from tests import helpers
 from tests.helpers import create_unique_resource_name
@@ -62,6 +63,11 @@ def measure_stop_ceph_mgr(measurement_dir):
     measured_op = measure_operation(stop_mgr, test_file)
     logger.info(f"Upscaling deployment {mgr} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
+
+    # wait for ceph to return into HEALTH_OK state after mgr deployment
+    # is returned back to normal
+    ceph_health_check(tries=20, delay=15)
+
     return measured_op
 
 
@@ -140,6 +146,10 @@ def measure_stop_ceph_mon(measurement_dir):
         msg = f"Downscaled monitors {mons_to_stop} were not replaced"
         assert check_old_mons_deleted, msg
 
+    # wait for ceph to return into HEALTH_OK state after mon deployment
+    # is returned back to normal
+    ceph_health_check(tries=20, delay=15)
+
     return measured_op
 
 
@@ -196,6 +206,10 @@ def measure_stop_ceph_osd(measurement_dir):
     measured_op = measure_operation(stop_osd, test_file)
     logger.info(f"Upscaling deployment {osd_to_stop} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_to_stop}")
+
+    # wait for ceph to return into HEALTH_OK state after osd deployment
+    # is returned back to normal
+    ceph_health_check(tries=20, delay=15)
 
     return measured_op
 
@@ -284,6 +298,10 @@ def measure_corrupt_pg(measurement_dir):
     logger.info(f"Deleting deployment {dummy_deployment}")
     oc.delete(resource_name=dummy_deployment)
 
+    # wait for ceph to return into HEALTH_OK state after osd deployment
+    # is returned back to normal
+    ceph_health_check(tries=20, delay=15)
+
     return measured_op
 
 #
@@ -357,7 +375,7 @@ def workload_storageutilization_checksum_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.10,
+        target_size=10,
         with_checksum=True)
     return measured_op
 

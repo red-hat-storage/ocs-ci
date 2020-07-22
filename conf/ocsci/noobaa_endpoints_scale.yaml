@@ -1,0 +1,5 @@
+---
+#This config file specifies that the max noobaa endpoints will be scaled up to 5 instead of 1
+DEPLOYMENT:
+  min_noobaa_endpoints: 2
+  max_noobaa_endpoints: 5

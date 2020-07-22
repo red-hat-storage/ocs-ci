@@ -463,20 +463,37 @@ class AWS(object):
                 instance = self.get_ec2_instance(instance_id)
                 instance.wait_until_running()
 
-    def restart_ec2_instances(self, instances, wait=False, force=True):
+    def restart_ec2_instances_by_stop_and_start(
+        self, instances, wait=False, force=True
+    ):
         """
-        Stop and start ec2 instances
+        Restart EC2 instances by stop and start
 
         Args:
-            instances (dict): A dictionary of instance IDs and names to restart
+            instances (dict): A dictionary of instance IDs and names to stop
+                & start
             wait (bool): True in case wait for status is needed,
                 False otherwise
             force (bool): True for force instance stop, False otherwise
 
         """
-        logger.info(f"Restarting instances {list(instances.values())}")
+        logger.info(
+            f"Restarting instances {list(instances.values())} by stop & start"
+        )
         self.stop_ec2_instances(instances=instances, wait=wait, force=force)
         self.start_ec2_instances(instances=instances, wait=wait)
+
+    def restart_ec2_instances(self, instances):
+        """
+        Restart ec2 instances
+
+        Args:
+            instances (dict): A dictionary of instance IDs and names to restart
+
+        """
+        instance_ids, instance_names = zip(*instances.items())
+        logger.info(f"Rebooting instances {instance_names}")
+        self.ec2_client.reboot_instances(InstanceIds=instance_ids)
 
     def terminate_ec2_instances(self, instances, wait=True):
         """
@@ -1117,3 +1134,38 @@ def update_config_from_s3(bucket_name=constants.OCSCI_DATA_BUCKET, filename=cons
     # set in config and store it for that scope
     config.update(config_yaml)
     return config_yaml
+
+
+def delete_cluster_buckets(cluster_name):
+    """
+    Delete s3 buckets corresponding to a particular OCS cluster
+
+    Args:
+        cluster_name (str): name of the cluster the buckets belong to
+
+    """
+    region = config.ENV_DATA['region']
+    base_domain = config.ENV_DATA['base_domain']
+    s3_client = boto3.client('s3', region_name=region)
+    buckets = s3_client.list_buckets()['Buckets']
+    bucket_names = [bucket['Name'] for bucket in buckets]
+    logger.debug("Found buckets: %s", bucket_names)
+
+    # patterns for mcg target bucket and image-registry buckets
+    patterns = [
+        f"nb.(\\d+).apps.{cluster_name}.{base_domain}",
+        f"{cluster_name}-(\\w+)-image-registry-{region}-(\\w+)"
+    ]
+    for pattern in patterns:
+        r = re.compile(pattern)
+        filtered_buckets = list(filter(r.search, bucket_names))
+        if len(filtered_buckets) == 1:
+            s3_resource = boto3.resource('s3', region_name=region)
+            bucket_name = filtered_buckets[0]
+            logger.warning("Deleting all files in bucket %s", bucket_name)
+            bucket = s3_resource.Bucket(bucket_name)
+            bucket.objects.delete()
+            logger.warning("Deleting bucket %s", bucket_name)
+            bucket.delete()
+        else:
+            logger.warning("No matches found for pattern %s", pattern)

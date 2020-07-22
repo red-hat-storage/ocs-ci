@@ -32,14 +32,6 @@ class OBC(object):
         """
         self.obc_name = obc
         self.namespace = config.ENV_DATA['cluster_namespace']
-        obc_obj = OCP(namespace=self.namespace, kind='ObjectBucketClaim')
-        assert obc_obj.wait_for_resource(
-            condition=constants.STATUS_BOUND,
-            resource_name=self.obc_name,
-            column='PHASE',
-            resource_count=1,
-            timeout=60
-        ), "OBC did not reach BOUND Phase, cannot initialize OBC credentials"
         obc_resource = OCP(namespace=self.namespace, kind='ObjectBucketClaim', resource_name=self.obc_name)
         obc_results = obc_resource.get()
         self.ob_name = obc_results.get('spec').get('ObjectBucketName')
@@ -57,13 +49,13 @@ class OBC(object):
         self.s3_endpoint = mcg.s3_endpoint
 
         self.s3_resource = boto3.resource(
-            's3', verify=constants.MCG_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
+            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
         )
 
         self.s3_client = boto3.client(
-            's3', verify=constants.MCG_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
+            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
         )
@@ -145,13 +137,13 @@ class NoobaaAccount(object):
         self.token = response['reply']['token']
 
         self.s3_resource = boto3.resource(
-            's3', verify=constants.MCG_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
+            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
         )
 
         self.s3_client = boto3.client(
-            's3', verify=constants.MCG_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
+            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
         )

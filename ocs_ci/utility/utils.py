@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import os
@@ -13,6 +14,7 @@ import traceback
 from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from scipy.stats import tmean, scoreatpercentile
 from shutil import which
 
 import hcl
@@ -21,6 +23,7 @@ import yaml
 from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
 from semantic_version import Version
+from tempfile import NamedTemporaryFile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
@@ -34,6 +37,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedOSType,
 )
 from ocs_ci.utility.retry import retry
+
 
 log = logging.getLogger(__name__)
 
@@ -1346,7 +1350,7 @@ def ceph_health_check_base(namespace=None):
         f"oc -n {namespace} get pod -l 'app=rook-ceph-tools' "
         f"-o jsonpath='{{.items[0].metadata.name}}'"
     )
-    health = run_cmd(f"oc -n {namespace} exec {tools_pod} ceph health")
+    health = run_cmd(f"oc -n {namespace} exec {tools_pod} -- ceph health")
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
@@ -1449,7 +1453,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
         upgrade = False
     for tag in tags:
         if tag['name'] == latest_tag:
-            latest_image = tag['image_id']
+            latest_image = tag['manifest_digest']
             break
     if not latest_image:
         raise TagNotFoundException("Couldn't find latest tag!")
@@ -1458,7 +1462,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
         if not upgrade:
             if (
                 tag['name'] not in constants.LATEST_TAGS
-                and tag['image_id'] == latest_image
+                and tag['manifest_digest'] == latest_image
             ):
                 return tag['name']
         if upgrade:
@@ -1469,7 +1473,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
                 continue
             if (
                 tag['name'] not in constants.LATEST_TAGS
-                and tag['image_id'] != latest_image
+                and tag['manifest_digest'] != latest_image
                 and ocs_version in tag['name']
             ):
                 if (
@@ -1774,6 +1778,7 @@ def convert_yaml2tfvars(yaml):
     from ocs_ci.utility.templating import load_yaml
     data = load_yaml(yaml)
     tfvars_file = os.path.splitext(yaml)[0]
+    log.debug(f"Converting {yaml} to {tfvars_file}")
     with open(tfvars_file, "w+") as fd:
         for key, val in data.items():
             if key == "control_plane_ignition":
@@ -1786,6 +1791,10 @@ def convert_yaml2tfvars(yaml):
                 fd.write("compute_ignition = <<END_OF_WORKER_IGNITION\n")
                 fd.write(f"{val}\n")
                 fd.write("END_OF_WORKER_IGNITION\n")
+                continue
+
+            if key == "vm_dns_addresses":
+                fd.write(f'vm_dns_addresses = ["{val}"]\n')
                 continue
 
             fd.write(key)
@@ -1997,6 +2006,22 @@ def destroy_cluster(installer, cluster_path, log_level="DEBUG"):
         log.error(traceback.format_exc())
 
 
+def config_to_string(config):
+    """
+    Convert ConfigParser object to string in INI format.
+
+    Args:
+        config (obj): ConfigParser object
+
+    Returns:
+        str: Config in one string
+
+    """
+    strio = io.StringIO()
+    config.write(strio, space_around_delimiters=False)
+    return strio.getvalue()
+
+
 class AZInfo(object):
     """
     A class for getting different az numbers across calls
@@ -2031,26 +2056,312 @@ def convert_device_size(unformatted_size, units_to_covert_to):
 
     """
     units = unformatted_size[-2:]
-    absolute_size = int(unformatted_size[:-2])
+    abso = int(unformatted_size[:-2])
+    conversion = {
+        'TB': {'Ti': abso, 'Gi': abso / 1000, 'Mi': abso / 1e+6, 'Ki': abso / 1e+9},
+        'GB': {'Ti': abso * 1000, 'Gi': abso, 'Mi': abso / 1000, 'Ki': abso / 1e+6},
+        'MB': {'Ti': abso * 1e+6, 'Gi': abso * 1000, 'Mi': abso, 'Ki': abso / 1000},
+        'KB': {'Ti': abso * 1e+9, 'Gi': abso * 1e+6, 'Mi': abso * 1000, 'Ki': abso},
+        'B': {'Ti': abso * 1e+12, 'Gi': abso * 1e+9, 'Mi': abso * 1e+6, 'Ki': abso * 1000}
+    }
+    return conversion[units_to_covert_to][units]
 
-    if units_to_covert_to == 'TB':
-        if units == 'Ti':
-            return absolute_size
-        elif units == 'Gi':
-            return absolute_size * 1024
-        elif units == 'Mi':
-            return absolute_size * 1024 * 1024
-    elif units_to_covert_to == 'GB':
-        if units == 'Ti':
-            return absolute_size / 1024
-        elif units == 'Gi':
-            return absolute_size
-        elif units == 'Mi':
-            return absolute_size * 1024
-    elif units_to_covert_to == 'MB':
-        if units == 'Ti':
-            return absolute_size / 1024 / 1024
-        elif units == 'Gi':
-            return absolute_size / 1024
-        elif units == 'Mi':
-            return absolute_size
+
+def mirror_image(image):
+    """
+    Mirror image to mirror image registry.
+
+    Args:
+        image (str): image to be mirrored, can be defined just with name or
+            with full url, with or without tag or digest
+
+    Returns:
+        str: the mirrored image link
+
+    """
+    # load pull-secret file to pull_secret dict
+    pull_secret_path = os.path.join(
+        constants.TOP_DIR,
+        "data",
+        "pull-secret"
+    )
+    with open(pull_secret_path) as pull_secret_fo:
+        pull_secret = json.load(pull_secret_fo)
+
+    # find all auths which might be related to the specified image
+    tmp_auths = []
+    for auth in pull_secret['auths']:
+        if auth in image:
+            tmp_auths.append(auth)
+    # get the most specific auth for particular image
+    tmp_auths = sorted(tmp_auths, key=len, reverse=True)
+    if tmp_auths:
+        # if there is match to particular auth, prepare authfile just with the
+        # matching auth
+        auth = tmp_auths[0]
+        # as key use only server name, without namespace
+        authfile_content = {
+            'auths': {
+                auth.split('/', 1)[0]: pull_secret['auths'][auth]
+            }
+        }
+    else:
+        # else use whole pull-secret
+        authfile_content = pull_secret
+
+    # create temporary auth file
+    with NamedTemporaryFile(mode='w', prefix='authfile_') as authfile_fo:
+        json.dump(authfile_content, authfile_fo)
+        # ensure the content will be saved into the file
+        authfile_fo.flush()
+        # pull original image (to be able to inspect it)
+        exec_cmd(f'podman image pull {image} --authfile {authfile_fo.name}')
+        # inspect the image and get full image url with tag
+        cmd_result = exec_cmd(f'podman image inspect {image}')
+        image_inspect = json.loads(cmd_result.stdout)
+        # if there is any tag specified, use it in the full image url,
+        # otherwise use url with digest
+        if image_inspect[0].get('RepoTags'):
+            orig_image_full = image_inspect[0]['RepoTags'][0]
+        else:
+            orig_image_full = image_inspect[0]['RepoDigests'][0]
+        # prepare mirrored image url
+        mirror_registry = config.DEPLOYMENT['mirror_registry']
+        mirrored_image = mirror_registry + re.sub(r'^[^/]*', '', orig_image_full)
+        # login to mirror registry
+        mirror_registry_user = config.DEPLOYMENT['mirror_registry_user']
+        mirror_registry_password = config.DEPLOYMENT['mirror_registry_password']
+        login_cmd = (
+            f"podman login --authfile {authfile_fo.name} "
+            f"{mirror_registry} -u {mirror_registry_user} "
+            f"-p {mirror_registry_password} --tls-verify=false"
+        )
+        exec_cmd(login_cmd, (mirror_registry_user, mirror_registry_password))
+        # mirror the image
+        logging.info(
+            f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"
+        )
+        exec_cmd(
+            f"oc image mirror --insecure --registry-config"
+            f" {authfile_fo.name} {orig_image_full} {mirrored_image}"
+        )
+    return mirrored_image
+
+
+def update_container_with_mirrored_image(job_pod_dict):
+    """
+    Update Job or Pod configuration dict with mirrored image (required for
+    disconnected installation).
+
+    Args:
+        job_pod_dict (dict): dictionary with Job or Pod configuration
+
+    Returns:
+        dict: for disconnected installation, returns updated Job or Pod dict,
+            for normal installation return unchanged job_pod_dict
+
+    """
+    if config.DEPLOYMENT.get('disconnected'):
+        if 'containers' in job_pod_dict['spec']:
+            container = job_pod_dict['spec']['containers'][0]
+        else:
+            container = job_pod_dict['spec']['template']['spec']['containers'][0]
+        container['image'] = mirror_image(container['image'])
+    return job_pod_dict
+
+
+def get_trim_mean(values, percentage=20):
+    """
+    Get the trimmed mean of a list of values.
+    Explanation: This function finds the arithmetic mean of given values,
+    ignoring values outside the given limits.
+
+    Args:
+        values (list): The list of values
+        percentage (int): The percentage to be trimmed
+
+    Returns:
+        float: Trimmed mean. In case trimmed mean calculation fails,
+            the regular mean average is returned
+
+    """
+    lower_limit = scoreatpercentile(values, percentage)
+    upper_limit = scoreatpercentile(values, 100 - percentage)
+    try:
+        return tmean(values, limits=(lower_limit, upper_limit))
+    except ValueError:
+        log.warning(
+            f"Failed to calculate the trimmed mean of {values}. The "
+            f"Regular mean average will be calculated instead"
+        )
+    return sum(values) / len(values)
+
+
+def set_selinux_permissions(workers=None):
+    """
+    Workaround for #1777384 - enable container_use_cephfs on RHEL workers
+    Ticket: RHSTOR-787, see more details in the issue: #1151
+
+    Args:
+        workers (list): List of worker nodes to set selinux permissions
+
+    """
+    log.info("Running WA for ticket: RHSTOR-787")
+    from ocs_ci.ocs import ocp
+    ocp_obj = ocp.OCP()
+    cmd = ['/usr/sbin/setsebool -P container_use_cephfs on']
+    cmd_list = cmd.copy()
+    if not workers:
+        from ocs_ci.ocs.node import get_typed_worker_nodes
+        worker_nodes = get_typed_worker_nodes(os_id="rhel")
+    else:
+        worker_nodes = workers
+
+    for worker in worker_nodes:
+        node = worker.get().get('metadata').get('name') if not workers else worker
+        log.info(
+            f"{node} is a RHEL based worker - applying '{cmd_list}'"
+        )
+        retry(CommandFailed)(ocp_obj.exec_oc_debug_cmd)(
+            node=node, cmd_list=cmd_list
+        )
+
+
+def set_registry_to_managed_state():
+    """
+    In order to be able to deploy from stage we need to change
+    image registry config to Managed state.
+    More described in BZs:
+    https://bugzilla.redhat.com/show_bug.cgi?id=1806593
+    https://bugzilla.redhat.com/show_bug.cgi?id=1807471#c3
+    We need to change to managed state as described here:
+    https://github.com/red-hat-storage/ocs-ci/issues/1436
+    So this is not suppose to be deleted as WA case we really need to do
+    this operation for OCS deployment as was originally done here:
+    https://github.com/red-hat-storage/ocs-ci/pull/1437
+    Currently it has to be moved here to enable CA certificate to be
+    properly propagated for the stage deployment as mentioned in BZ.
+    """
+    if(config.ENV_DATA['platform'] not in constants.CLOUD_PLATFORMS):
+        run_cmd(
+            f'oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p '
+            f'\'{{"spec":{{"storage": {{"emptyDir":{{}}}}}}}}\''
+        )
+        run_cmd(
+            f'oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p '
+            f'\'{{"spec":{{"managementState": "Managed"}}}}\''
+        )
+
+
+def add_stage_cert():
+    """
+    Deploy stage certificate to the cluster.
+    """
+    log.info("Create configmap stage-registry-config with stage CA.")
+    run_cmd(
+        f"oc -n openshift-config create configmap stage-registry-config"
+        f" --from-file=registry.stage.redhat.io={constants.STAGE_CA_FILE}"
+    )
+
+    log.info("Add stage-registry-config to additionalTrustedCA.")
+    additional_trusted_ca_patch = (
+        '{"spec":{"additionalTrustedCA":{"name":"stage-registry-config"}}}'
+    )
+    run_cmd(
+        f"oc patch image.config.openshift.io cluster --type=merge"
+        f" -p '{additional_trusted_ca_patch}'"
+    )
+
+
+def get_terraform(version=None, bin_dir=None):
+    """
+    Downloads the terraform binary
+
+    Args:
+        version (str): Version of the terraform to download
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+
+    Returns:
+        str: Path to the terraform binary
+
+    """
+    if platform.system() == "Darwin":
+        os_type = "darwin"
+    elif platform.system() == "Linux":
+        os_type = "linux"
+    else:
+        raise UnsupportedOSType
+
+    version = version or config.DEPLOYMENT['terraform_version']
+    bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
+    terraform_zip_file = f"terraform_{version}_{os_type}_amd64.zip"
+    terraform_filename = "terraform"
+    terraform_binary_path = os.path.join(bin_dir, terraform_filename)
+    log.info(f"Downloading terraform version {version}")
+    previous_dir = os.getcwd()
+    os.chdir(bin_dir)
+    url = (
+        f"https://releases.hashicorp.com/terraform/{version}/"
+        f"{terraform_zip_file}"
+    )
+    download_file(url, terraform_zip_file)
+    run_cmd(f"unzip -o {terraform_zip_file}")
+    delete_file(terraform_zip_file)
+    # return to the previous working directory
+    os.chdir(previous_dir)
+
+    return terraform_binary_path
+
+
+def get_module_ip(terraform_state_file, module):
+    """
+    Gets the node IP from terraform.tfstate file
+
+    Args:
+        terraform_state_file (str): Path to terraform state file
+        module (str): Module name in terraform.tfstate file
+            e.g: constants.LOAD_BALANCER_MODULE
+
+    Returns:
+        list: IP of the node
+
+    """
+    ips = []
+    with open(terraform_state_file) as fd:
+        obj = hcl.load(fd)
+
+        if config.ENV_DATA.get('folder_structure'):
+            resources = obj['resources']
+            log.debug(f"Extracting module information for {module}")
+            log.debug(f"Resource in {terraform_state_file}: {resources}")
+            for resource in resources:
+                if (
+                    resource.get('module') == module
+                    and resource.get('mode') == "data"
+                ):
+                    for each_resource in resource['instances']:
+                        resource_body = each_resource['attributes']['body']
+                        ips.append(resource_body.split("\"")[3])
+        else:
+            modules = obj['modules']
+            target_module = module.split("_")[1]
+            log.debug(f"Extracting module information for {module}")
+            log.debug(f"Modules in {terraform_state_file}: {modules}")
+            for each_module in modules:
+                if target_module in each_module['path']:
+                    return each_module['outputs']['ip_addresses']['value']
+
+        return ips
+
+
+def set_aws_region(region=None):
+    """
+    Exports environment variable AWS_REGION
+
+    Args:
+        region (str): AWS region to export
+
+    """
+    log.debug("Exporting environment variable AWS_REGION")
+    region = region or config.ENV_DATA['region']
+    os.environ['AWS_REGION'] = region

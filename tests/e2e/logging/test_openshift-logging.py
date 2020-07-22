@@ -8,17 +8,19 @@ import pytest
 
 import random
 
-
 from tests import helpers, disruption_helpers
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
+from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, delete_deploymentconfig_pods
 from ocs_ci.utility.retry import retry
+from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3
 from ocs_ci.framework.testlib import E2ETest, workloads, tier1, ignore_leftovers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
+from ocs_ci.utility.utils import get_ocp_version
 
 logger = logging.getLogger(__name__)
 
 
+@skipif_aws_i3
 @pytest.fixture()
 def setup_fixture(install_logging):
     """
@@ -27,6 +29,13 @@ def setup_fixture(install_logging):
     logger.info("Testcases execution post deployment of openshift-logging")
 
 
+@pytest.mark.skipif(
+    get_ocp_version() == "4.5",
+    reason=(
+        "Skipping logging tests on OCP 4.5 cause of W/A issue: "
+        "https://github.com/red-hat-storage/ocs-ci/issues/2278"
+    )
+)
 @pytest.mark.usefixtures(
     setup_fixture.__name__
 )
@@ -41,7 +50,7 @@ class Testopenshiftloggingonocs(E2ETest):
         """
         """
         def finalizer():
-            helpers.delete_deploymentconfig_pods(pod_obj)
+            delete_deploymentconfig_pods(pod_obj)
 
         request.addfinalizer(finalizer)
 
@@ -63,7 +72,7 @@ class Testopenshiftloggingonocs(E2ETest):
         helpers.wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
         return pod_obj, pvc_obj
 
-    @retry(ModuleNotFoundError, tries=10, delay=200, backoff=3)
+    @retry(ModuleNotFoundError, tries=5, delay=200, backoff=1)
     def validate_project_exists(self, pvc_obj):
         """
         This function checks whether the new project exists in the

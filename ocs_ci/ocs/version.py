@@ -110,15 +110,20 @@ def report_ocs_version(cluster_version, image_dict, file_obj):
         file_obj (object):  file object to log information
 
     """
+    # For some reason in IBM cloud the channel is not defined.
+    channel = cluster_version["spec"].get("channel", "unknown")
+    version = cluster_version["status"]["desired"].get("version", "unknown")
+    image = cluster_version["status"]["desired"].get("image", "unknown")
+
     # log the version
-    logger.info("ClusterVersion .spec.channel: %s", cluster_version["spec"]["channel"])
-    logger.info("ClusterVersion .status.desired.version: %s", cluster_version["status"]["desired"]["version"])
-    logger.info("ClusterVersion .status.desired.image: %s", cluster_version["status"]["desired"]["image"])
+    logger.info("ClusterVersion .spec.channel: %s", channel)
+    logger.info("ClusterVersion .status.desired.version: %s", version)
+    logger.info("ClusterVersion .status.desired.image: %s", image)
 
     # write human readable version of the above
-    print(f'cluster channel: {cluster_version["spec"]["channel"]}', file=file_obj)
-    print(f'cluster version: {cluster_version["status"]["desired"]["version"]}', file=file_obj)
-    print(f'cluster image: {cluster_version["status"]["desired"]["image"]}', file=file_obj)
+    print(f'cluster channel: {channel}', file=file_obj)
+    print(f'cluster version: {version}', file=file_obj)
+    print(f'cluster image: {image}', file=file_obj)
 
     for ns, ns_dict in image_dict.items():
         logger.info("storage namespace %s", ns)

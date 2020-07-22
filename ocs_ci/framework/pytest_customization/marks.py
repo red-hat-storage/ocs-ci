@@ -17,6 +17,7 @@ from ocs_ci.ocs.constants import (
     ORDER_AFTER_OCP_UPGRADE,
     ORDER_AFTER_OCS_UPGRADE,
     ORDER_AFTER_UPGRADE,
+    CLOUD_PLATFORMS,
 )
 
 # tier marks
@@ -82,6 +83,10 @@ post_ocs_upgrade = compose(pytest.mark.post_ocs_upgrade, order_post_ocs_upgrade)
 # mark the test class with marker below to ignore leftover check
 ignore_leftovers = pytest.mark.ignore_leftovers
 
+# Mark the test class with marker below to ignore leftover of resources having
+# the app labels specified
+ignore_leftover_label = pytest.mark.ignore_leftover_label
+
 # testing marker this is just for testing purpose if you want to run some test
 # under development, you can mark it with @run_this and run pytest -m run_this
 run_this = pytest.mark.run_this
@@ -98,6 +103,11 @@ aws_platform_required = pytest.mark.skipif(
     reason="Test runs ONLY on AWS deployed cluster"
 )
 
+cloud_platform_required = pytest.mark.skipif(
+    config.ENV_DATA['platform'].lower() not in CLOUD_PLATFORMS,
+    reason="Test runs ONLY on cloud based deployed cluster"
+)
+
 rh_internal_lab_required = pytest.mark.skipif(
     (config.ENV_DATA['platform'].lower() == 'aws'
         or config.ENV_DATA['platform'].lower() == 'azure'),
@@ -112,6 +122,12 @@ vsphere_platform_required = pytest.mark.skipif(
 ipi_deployment_required = pytest.mark.skipif(
     config.ENV_DATA['deployment_type'].lower() != 'ipi',
     reason="Test runs ONLY on IPI deployed cluster"
+)
+
+skipif_aws_i3 = pytest.mark.skipif(
+    config.ENV_DATA['platform'].lower() == 'aws'
+    and config.DEPLOYMENT.get('local_storage') is True,
+    reason="Test will not run on AWS i3"
 )
 
 # Filter warnings

@@ -8,7 +8,8 @@ from ocs_ci.ocs import constants, defaults
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError, UnsupportedPlatformError,
-    ResourceNotFoundError, UnexpectedBehaviour
+    ResourceNotFoundError, UnexpectedBehaviour,
+    ResourceWrongStatusException
 )
 
 log = logging.getLogger(__name__)
@@ -35,6 +36,34 @@ def get_machine_objs(machine_names=None):
         return [
             OCS(**obj) for obj in machine_dicts if (
                 obj.get('metadata').get('name') in machine_names
+            )
+        ]
+
+
+def get_machineset_objs(machineset_names=None):
+    """
+    Get machineset objects by machineset names
+
+    Args:
+        machineset_names (list): The machineset names to get their objects
+        If None, will return all cluster machines
+
+    Returns:
+        list: Cluster machineset OCS objects
+
+    """
+    machinesets_obj = OCP(
+        kind=constants.MACHINESETS,
+        namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+    )
+
+    machineset_dicts = machinesets_obj.get()['items']
+    if not machineset_names:
+        return [OCS(**obj) for obj in machineset_dicts]
+    else:
+        return [
+            OCS(**obj) for obj in machineset_dicts if (
+                obj.get('metadata').get('name') in machineset_names
             )
         ]
 
@@ -408,7 +437,7 @@ def add_node(machine_set, count):
     return True
 
 
-def wait_for_new_node_to_be_ready(machine_set):
+def wait_for_new_node_to_be_ready(machine_set, timeout=300):
     """
     Wait for the new node to reach ready state
 
@@ -416,12 +445,14 @@ def wait_for_new_node_to_be_ready(machine_set):
         machine_set (str): Name of the machine set
 
     Raises:
-        TimeoutExpiredError: In case the new spun machine fails to come
+        ResourceWrongStatusException: In case the new spun machine fails
+            to reach Ready state or replica count didn't match
+
     """
     replica_count = get_replica_count(machine_set)
     try:
         for timer in TimeoutSampler(
-            300, 15, get_ready_replica_count, machine_set=machine_set
+            timeout, 15, get_ready_replica_count, machine_set=machine_set
         ):
             if replica_count == timer:
                 log.info("New spun node reached Ready state")
@@ -430,6 +461,11 @@ def wait_for_new_node_to_be_ready(machine_set):
         log.error(
             "New spun node failed to reach ready state OR "
             "Replica count didn't match ready replica count"
+        )
+        raise ResourceWrongStatusException(
+            machine_set, [
+                m.describe() for m in get_machineset_objs(machine_set)
+            ]
         )
 
 

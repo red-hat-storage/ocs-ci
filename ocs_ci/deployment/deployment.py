@@ -16,14 +16,15 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, UnavailableResourceException, UnsupportedPlatformError
+    CommandFailed, UnavailableResourceException, UnsupportedPlatformError,
+    ResourceWrongStatusException, CephHealthException
 )
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods
 )
-from ocs_ci.ocs.node import get_typed_nodes, get_typed_worker_nodes
+from ocs_ci.ocs.node import get_typed_nodes, check_nodes_specs
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -31,6 +32,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
 )
+from ocs_ci.ocs.resources.storage_cluster import change_noobaa_endpoints_count
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state
@@ -39,15 +41,19 @@ from ocs_ci.ocs.utils import (
     setup_ceph_toolbox, collect_ocs_logs
 )
 from ocs_ci.utility import templating
+from ocs_ci.utility.localstorage import get_lso_channel
 from ocs_ci.utility.openshift_console import OpenshiftConsole
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_latest_ds_olm_tag,
-    get_ocp_version,
     is_cluster_running,
     run_cmd,
+    set_selinux_permissions,
+    set_registry_to_managed_state,
+    add_stage_cert
 )
+from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from tests import helpers
 
 logger = logging.getLogger(__name__)
@@ -113,25 +119,6 @@ class Deployment(object):
         else:
             logger.warning("OCS deployment will be skipped")
 
-    def add_stage_cert(self):
-        """
-        Deploy stage certificate to the cluster.
-        """
-        logger.info("Create configmap stage-registry-config with stage CA.")
-        run_cmd(
-            f"oc -n openshift-config create configmap stage-registry-config"
-            f" --from-file=registry.stage.redhat.io={constants.STAGE_CA_FILE}"
-        )
-
-        logger.info("Add stage-registry-config to additionalTrustedCA.")
-        additional_trusted_ca_patch = (
-            '{"spec":{"additionalTrustedCA":{"name":"stage-registry-config"}}}'
-        )
-        run_cmd(
-            f"oc patch image.config.openshift.io cluster --type=merge"
-            f" -p '{additional_trusted_ca_patch}'"
-        )
-
     def deploy_ocp(self, log_cli_level='DEBUG'):
         """
         Base deployment steps, the rest should be implemented in the child
@@ -151,51 +138,9 @@ class Deployment(object):
         """
         Function does post OCP deployment stuff we need to do.
         """
-        # Workaround for #1777384 - enable container_use_cephfs on RHEL workers
-        # Ticket: RHSTOR-787, see more details in the issue: #1151
-        logger.info("Running WA for ticket: RHSTOR-787")
-        ocp_obj = ocp.OCP()
-        cmd = ['/usr/sbin/setsebool -P container_use_cephfs on']
-        workers = get_typed_worker_nodes(os_id="rhel")
-        for worker in workers:
-            cmd_list = cmd.copy()
-            node = worker.get().get('metadata').get('name')
-            logger.info(
-                f"{node} is a RHEL based worker - applying '{cmd_list}'"
-            )
-            # We saw few times there was an issue to spawn debug RHEL pod.
-            # Let's use retry decorator to make sure our CI is more stable.
-            retry(CommandFailed)(ocp_obj.exec_oc_debug_cmd)(
-                node=node, cmd_list=cmd_list
-            )
-        # end of workaround
-        self.set_registry_to_managed_state()
-        self.add_stage_cert()
-
-    def set_registry_to_managed_state(self):
-        """
-        In order to be able to deploy from stage we need to change
-        image registry config to Managed state.
-        More described in BZs:
-        https://bugzilla.redhat.com/show_bug.cgi?id=1806593
-        https://bugzilla.redhat.com/show_bug.cgi?id=1807471#c3
-        We need to change to managed state as described here:
-        https://github.com/red-hat-storage/ocs-ci/issues/1436
-        So this is not suppose to be deleted as WA case we really need to do
-        this operation for OCS deployment as was originally done here:
-        https://github.com/red-hat-storage/ocs-ci/pull/1437
-        Currently it has to be moved here to enable CA certificate to be
-        properly propagated for the stage deployment as mentioned in BZ.
-        """
-        if(config.ENV_DATA['platform'] not in constants.CLOUD_PLATFORMS):
-            run_cmd(
-                f'oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p '
-                f'\'{{"spec":{{"storage": {{"emptyDir":{{}}}}}}}}\''
-            )
-            run_cmd(
-                f'oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p '
-                f'\'{{"spec":{{"managementState": "Managed"}}}}\''
-            )
+        set_selinux_permissions()
+        set_registry_to_managed_state()
+        add_stage_cert()
 
     def label_and_taint_nodes(self):
         """
@@ -432,9 +377,16 @@ class Deployment(object):
         device_size = int(
             config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
         )
-        deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
-            'storage'
-        ] = f"{device_size}Gi"
+        if self.platform.lower() == constants.BAREMETAL_PLATFORM:
+            pv_size_list = helpers.get_pv_size(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
+            pv_size_list.sort()
+            deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
+                'storage'
+            ] = f"{pv_size_list[0]}"
+        else:
+            deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
+                'storage'
+            ] = f"{device_size}Gi"
 
         if self.platform.lower() == constants.VSPHERE_PLATFORM:
             deviceset_data['dataPVCTemplate']['spec'][
@@ -447,18 +399,49 @@ class Deployment(object):
             deviceset_data['portable'] = False
             deviceset_data['dataPVCTemplate']['spec'][
                 'storageClassName'
-            ] = 'local-block'
+            ] = 'localblock'
+            if self.platform.lower() == constants.AWS_PLATFORM:
+                deviceset_data['count'] = 2
 
+        ocs_version = float(config.ENV_DATA['ocs_version'])
         # Allow lower instance requests and limits for OCS deployment
+        # The resources we need to change can be found here:
+        # https://github.com/openshift/ocs-operator/blob/release-4.5/pkg/deploy-manager/storagecluster.go#L88-L116
         if config.DEPLOYMENT.get('allow_lower_instance_requirements'):
             none_resources = {'Requests': None, 'Limits': None}
             deviceset_data["resources"] = deepcopy(none_resources)
+            resources = [
+                'mon', 'mds', 'rgw', 'mgr', 'noobaa-core', 'noobaa-db',
+            ]
+            if ocs_version >= 4.5:
+                resources.append('noobaa-endpoint')
             cluster_data['spec']['resources'] = {
-                resource: deepcopy(none_resources) for resource
-                in [
-                    'mon', 'mds', 'rgw', 'mgr', 'noobaa-core', 'noobaa-db',
-                ]
+                resource: deepcopy(none_resources) for resource in resources
             }
+        else:
+            local_storage = config.DEPLOYMENT.get('local_storage')
+            platform = config.ENV_DATA.get('platform', '').lower()
+            if local_storage and platform == 'aws':
+                resources = {
+                    'mds': {
+                        'limits': {'cpu': 3},
+                        'requests': {'cpu': 1}
+                    },
+                    'noobaa-core': {
+                        'limits': {'cpu': 2, 'memory': '8Gi'},
+                        'requests': {'cpu': 1, 'memory': '8Gi'}
+                    },
+                    'noobaa-db': {
+                        'limits': {'cpu': 2, 'memory': '8Gi'},
+                        'requests': {'cpu': 1, 'memory': '8Gi'}
+                    }
+                }
+                if ocs_version >= 4.5:
+                    resources['noobaa-endpoint'] = {
+                        'limits': {'cpu': 2, 'memory': '8Gi'},
+                        'requests': {'cpu': 1, 'memory': '8Gi'}
+                    }
+                cluster_data['spec']['resources'] = resources
 
         # Enable host network if enabled in config (this require all the
         # rules to be enabled on underlaying platform).
@@ -543,6 +526,22 @@ class Deployment(object):
             selector='app=rook-ceph-tools', resource_count=1, timeout=600
         )
 
+        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1847098
+        if config.DEPLOYMENT.get('local_storage'):
+            tools_pod = run_cmd(
+                f"oc -n {self.namespace} get pod -l 'app=rook-ceph-tools' "
+                f"-o jsonpath='{{.items[0].metadata.name}}'"
+            )
+            pgs_to_autoscale = [
+                'ocs-storagecluster-cephblockpool',
+                'ocs-storagecluster-cephfilesystem-data0'
+            ]
+            for pg in pgs_to_autoscale:
+                run_cmd(
+                    f"oc -n {self.namespace} exec {tools_pod} -- "
+                    f"ceph osd pool set {pg} pg_autoscale_mode on"
+                )
+
         # Check for CephFilesystem creation in ocp
         cfs_data = cfs.get()
         cfs_name = cfs_data['items'][0]['metadata']['name']
@@ -579,7 +578,10 @@ class Deployment(object):
             time.sleep(waiting_time)
 
             # Validate the pods are respinned and in running state
-            retry(CommandFailed, tries=3, delay=15)(
+            retry(
+                (CommandFailed, ResourceWrongStatusException),
+                tries=3,
+                delay=15)(
                 validate_pods_are_respinned_and_running_state
             )(
                 pods_list
@@ -604,11 +606,37 @@ class Deployment(object):
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
-        assert ceph_health_check(
-            namespace=self.namespace
-        )
+        try:
+            ceph_health_check(namespace=self.namespace, tries=30, delay=10)
+        except CephHealthException as ex:
+            err = str(ex)
+            logger.warning(f"Ceph health check failed with {err}")
+            if "clock skew detected" in err:
+                logger.info(
+                    f"Changing NTP on compute nodes to"
+                    f" {constants.RH_NTP_CLOCK}"
+                )
+                update_ntp_compute_nodes()
+                assert ceph_health_check(
+                    namespace=self.namespace, tries=60, delay=10
+                )
+
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
+        if check_nodes_specs(min_cpu=constants.MIN_NODE_CPU, min_memory=constants.MIN_NODE_MEMORY):
+            logger.info(
+                "The cluster specs meet the minimum requirements and "
+                "therefore, NooBaa auto scale will be enabled"
+            )
+            min_nb_eps = config.DEPLOYMENT.get('min_noobaa_endpoints')
+            max_nb_eps = config.DEPLOYMENT.get('max_noobaa_endpoints')
+            change_noobaa_endpoints_count(min_nb_eps=min_nb_eps, max_nb_eps=max_nb_eps)
+        else:
+            logger.warning(
+                "The cluster specs do not meet the minimum requirements"
+                " and therefore, NooBaa auto scale will remain disabled"
+            )
+            change_noobaa_endpoints_count(min_nb_eps=1, max_nb_eps=1)
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -728,7 +756,7 @@ def setup_local_storage():
     # Update local-storage-operator subscription data with channel
     for data in lso_data:
         if data['kind'] == 'Subscription':
-            data['spec']['channel'] = get_ocp_version()
+            data['spec']['channel'] = get_lso_channel()
 
     # Create temp yaml file and create local storage operator
     logger.info(
@@ -741,6 +769,8 @@ def setup_local_storage():
     templating.dump_data_to_temp_yaml(
         lso_data, lso_data_yaml.name
     )
+    with open(lso_data_yaml.name, 'r') as f:
+        logger.info(f.read())
     logger.info("Creating local-storage-operator")
     run_cmd(f"oc create -f {lso_data_yaml.name}")
 
@@ -760,14 +790,17 @@ def setup_local_storage():
         # Types of LSO Deployment
         # Importing here to avoid circular dependancy
         from ocs_ci.deployment.vmware import VSPHEREBASE
+        vsphere_base = VSPHEREBASE()
+
         if lso_type == constants.RDM:
             logger.info(f"LSO Deployment type: {constants.RDM}")
-            vsphere_base = VSPHEREBASE()
             vsphere_base.add_rdm_disks()
 
         if lso_type == constants.VMDK:
-            raise NotImplementedError(
-                "LSO Deployment for VMDk is not implemented"
+            logger.info(f"LSO Deployment type: {constants.VMDK}")
+            vsphere_base.attach_disk(
+                config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE),
+                config.DEPLOYMENT.get('provision_type', constants.VM_DISK_TYPE)
             )
 
         if lso_type == constants.DIRECTPATH:
@@ -803,28 +836,39 @@ def setup_local_storage():
     logger.info("Creating LocalVolume CR")
     run_cmd(f"oc create -f {lv_data_yaml.name}")
     logger.info("Waiting 30 seconds for PVs to create")
-    verify_pvs_created(len(worker_names))
+    storage_class_device_count = 1
+    if platform == constants.AWS_PLATFORM:
+        storage_class_device_count = 2
+    verify_pvs_created(len(worker_names) * storage_class_device_count)
 
 
-@retry(AssertionError, 12, 10, 1)
-def verify_pvs_created(num_workers):
+@retry(AssertionError, 120, 10, 1)
+def verify_pvs_created(expected_pvs):
     """
     Verify that PVs were created and are in the Available state
 
     Args:
-        num_workers (int): number of worker nodes in the cluster
+        expected_pvs (int): number of PVs to verify
 
     Raises:
         AssertionError: if any PVs are not in the Available state or if the
-            number of PVs does not match the number of workers in the cluster.
+            number of PVs does not match the given parameter.
 
     """
     logger.info("Verifying PVs are created")
     out = run_cmd("oc get pv -o json")
     pv_json = json.loads(out)
     assert pv_json['items'], (
-        f"No PVs created but we are expecting {num_workers}"
+        f"No PVs created but we are expecting {expected_pvs}"
     )
+
+    # check number of PVs created
+    num_pvs = len(pv_json['items'])
+    assert num_pvs == expected_pvs, (
+        f"{num_pvs} PVs created but we are expecting {expected_pvs}"
+    )
+
+    # checks the state of PV
     for pv in pv_json['items']:
         pv_state = pv['status']['phase']
         pv_name = pv['metadata']['name']
@@ -832,8 +876,8 @@ def verify_pvs_created(num_workers):
         assert pv_state == 'Available', (
             f"{pv_name} not in 'Available' state. Current state is {pv_state}"
         )
-    num_pvs = len(pv_json['items'])
-    logger.debug("PVs, Workers: %s, %s", num_pvs, num_workers)
+
+    logger.debug("PVs, Workers: %s, %s", num_pvs, expected_pvs)
 
 
 def get_device_paths(worker_names):
@@ -852,6 +896,10 @@ def get_device_paths(worker_names):
         pattern = 'nvme-Amazon_EC2_NVMe_Instance_Storage'
     elif platform == 'vsphere':
         pattern = 'wwn'
+    elif platform == 'baremetal':
+        pattern = config.ENV_DATA.get('disk_pattern')
+    elif platform == 'baremetalpsi':
+        pattern = 'virtio'
     # TODO: add patterns bare metal
     else:
         raise UnsupportedPlatformError(
@@ -859,11 +907,7 @@ def get_device_paths(worker_names):
         )
     for worker in worker_names:
         logger.info("Retrieving device path for node: %s", worker)
-        cmd = (
-            f"oc debug nodes/{worker} "
-            f"-- chroot /host ls -la /dev/disk/by-id/"
-        )
-        out = run_cmd(cmd)
+        out = _get_disk_by_id(worker)
         out_lines = out.split('\n')
         nvme_lines = [
             line for line in out_lines if (
@@ -878,3 +922,22 @@ def get_device_paths(worker_names):
             device_paths.append(f'/dev/disk/by-id/{device_path}')
 
     return device_paths
+
+
+@retry(CommandFailed)
+def _get_disk_by_id(worker):
+    """
+    Retrieve disk by-id on a worker node using the debug pod
+
+    Args:
+        worker: worker node to get disks by-id for
+
+    Returns:
+        str: stdout of disk by-id command
+
+    """
+    cmd = (
+        f"oc debug nodes/{worker} "
+        f"-- chroot /host ls -la /dev/disk/by-id/"
+    )
+    return run_cmd(cmd)

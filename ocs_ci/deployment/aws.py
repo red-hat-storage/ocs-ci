@@ -17,7 +17,8 @@ from ocs_ci.ocs.parallel import parallel
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import (
-    AWS as AWSUtil, terminate_rhel_workers, destroy_volumes, get_rhel_worker_instances
+    AWS as AWSUtil, delete_cluster_buckets, destroy_volumes,
+    get_rhel_worker_instances, terminate_rhel_workers
 )
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.retry import retry
@@ -25,6 +26,7 @@ from ocs_ci.utility.utils import (
     clone_repo, create_rhelpod, get_cluster_name, get_infra_id, run_cmd,
     TimeoutSampler, get_ocp_version
 )
+from semantic_version import Version
 from .deployment import Deployment
 
 logger = logging.getLogger(__name__)
@@ -277,6 +279,7 @@ class AWSIPI(AWSBase):
             log_level (str): log level openshift-installer (default: DEBUG)
         """
         destroy_volumes(self.cluster_name)
+        delete_cluster_buckets(self.cluster_name)
         super(AWSIPI, self).destroy_cluster(log_level)
 
 
@@ -407,7 +410,13 @@ class AWSUPI(AWSBase):
 
             with open(f"./{constants.UPI_INSTALL_SCRIPT}", "r") as fd:
                 buf = fd.read()
-            data = buf.replace("openshift-qe-upi-1", "ocs-qe-upi")
+
+            ocp_version = get_ocp_version()
+            if Version.coerce(ocp_version) >= Version.coerce('4.3'):
+                data = buf.replace("openshift-qe-upi", "ocs-qe-upi")
+            else:
+                data = buf.replace("openshift-qe-upi-1", "ocs-qe-upi")
+
             with open(f"./{constants.UPI_INSTALL_SCRIPT}", "w") as fd:
                 fd.write(data)
 
@@ -545,6 +554,7 @@ class AWSUPI(AWSBase):
                     self.worker_security_group[0]['GroupId'],
                 ],
                 KeyName='openshift-dev'
+
             )
             inst_id = response['Instances'][0]['InstanceId']
             worker_ec2 = boto3.resource('ec2', region_name=self.region)
@@ -820,6 +830,9 @@ class AWSUPI(AWSBase):
 
         # Destroy extra volumes
         destroy_volumes(cluster_name)
+
+        # Destroy buckets
+        delete_cluster_buckets(self.cluster_name)
 
         # Delete master, bootstrap, security group, and worker stacks
         suffixes = ['ma', 'bs', 'sg']

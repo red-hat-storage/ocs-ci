@@ -10,6 +10,10 @@ class CephHealthException(Exception):
     pass
 
 
+class NoobaaHealthException(Exception):
+    pass
+
+
 class UnexpectedBehaviour(Exception):
     pass
 
@@ -166,9 +170,29 @@ class NoBucketPolicyResponse(Exception):
     pass
 
 
+class PSIVolumeCreationFailed(Exception):
+    pass
+
+
+class PSIVolumeNotInExpectedState(Exception):
+    pass
+
+
+class PSIVolumeDeletionFailed(Exception):
+    pass
+
+
+class FlexyDataNotFound(Exception):
+    pass
+
+
 class PendingCSRException(Exception):
     pass
 
 
 class RDMDiskNotFound(Exception):
+    pass
+
+
+class CredReqSecretNotFound(Exception):
     pass

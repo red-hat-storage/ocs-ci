@@ -172,7 +172,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         """
         def finalizer():
             # Start the powered off nodes
-            nodes.restart_nodes_teardown()
+            nodes.restart_nodes_by_stop_and_start_teardown()
             try:
                 node.wait_for_nodes_status(status=constants.NODE_READY)
             except ResourceWrongStatusException:

@@ -75,8 +75,7 @@ def compare_dicts(before, after):
 
 
 def assign_get_values(
-    env_status_dict, key, kind=None,
-    exclude_labels=(constants.must_gather_pod_label,)
+    env_status_dict, key, kind=None, exclude_labels=None
 ):
     """
     Assigning kind status into env_status_dict
@@ -86,16 +85,17 @@ def assign_get_values(
             copy.deepcopy(ENV_STATUS_DICT)
         key (str): Name of the resource
         kind (OCP obj): OCP object for a resource
-        exclude_labels (list or tuple): List/tuple of app labels to ignore
+        exclude_labels (list): App labels to ignore leftovers
     """
     items = kind.get(all_namespaces=True)['items']
     items_filtered = []
-
     for item in items:
         ns = item.get('metadata', {}).get('namespace')
+        if item.get('kind') == constants.PV:
+            ns = item.get('spec').get('claimRef').get('namespace')
         app_label = item.get('metadata', {}).get('labels', {}).get('app')
         if (ns is not None
-                and ns.startswith("openshift-")
+                and ns.startswith(("openshift-", defaults.BG_LOAD_NAMESPACE))
                 and ns != defaults.ROOK_CLUSTER_NAMESPACE):
             log.debug("ignoring item in %s namespace: %s", ns, item)
             continue
@@ -105,40 +105,50 @@ def assign_get_values(
         items_filtered.append(item)
 
     ignored = len(items) - len(items_filtered)
-    log.debug("total %d items are ignored during invironment check", ignored)
+    log.debug("total %d items are ignored during environment check", ignored)
 
     env_status_dict[key] = items_filtered
 
 
-def get_environment_status(env_dict):
+def get_environment_status(env_dict, exclude_labels=None):
     """
     Get the environment status per kind in KINDS and save it in a dictionary
 
     Args:
         env_dict (dict): Dictionary that is a copy.deepcopy(ENV_STATUS_DICT)
+        exclude_labels (list): App labels to ignore leftovers
     """
     with ThreadPoolExecutor(max_workers=len(KINDS)) as executor:
         for key, kind in zip(env_dict.keys(), KINDS):
-            executor.submit(assign_get_values, env_dict, key, kind)
+            executor.submit(
+                assign_get_values, env_dict, key, kind,
+                exclude_labels=exclude_labels
+            )
 
 
-def get_status_before_execution():
+def get_status_before_execution(exclude_labels=None):
     """
     Set the environment status and assign it into ENV_STATUS_PRE dictionary
+
+    Args:
+        exclude_labels (list): App labels to ignore leftovers
     """
-    get_environment_status(ENV_STATUS_PRE)
+    get_environment_status(ENV_STATUS_PRE, exclude_labels=exclude_labels)
 
 
-def get_status_after_execution():
+def get_status_after_execution(exclude_labels=None):
     """
     Set the environment status and assign it into ENV_STATUS_PRE dictionary.
     In addition compare the dict before the execution and after using DeepDiff
+
+    Args:
+        exclude_labels (list): App labels to ignore leftovers
 
     Raises:
          ResourceLeftoversException: In case there are leftovers in the
             environment after the execution
     """
-    get_environment_status(ENV_STATUS_POST)
+    get_environment_status(ENV_STATUS_POST, exclude_labels=exclude_labels)
 
     pod_diff = compare_dicts(
         ENV_STATUS_PRE['pod'], ENV_STATUS_POST['pod']

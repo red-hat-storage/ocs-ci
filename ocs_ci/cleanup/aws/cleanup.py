@@ -15,8 +15,8 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import get_openshift_installer, destroy_cluster
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import (
-    AWS, StackStatusError, terminate_rhel_workers, destroy_volumes,
-    get_rhel_worker_instances
+    AWS, delete_cluster_buckets, destroy_volumes, get_rhel_worker_instances,
+    StackStatusError, terminate_rhel_workers
 )
 from ocs_ci.cleanup.aws import defaults
 
@@ -117,6 +117,8 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
             if failed_deletions:
                 failed_deletions.append(cluster_name)
             raise
+
+    delete_cluster_buckets(cluster_name)
 
 
 def get_clusters(time_to_delete, region_name, prefixes_hours_to_spare):

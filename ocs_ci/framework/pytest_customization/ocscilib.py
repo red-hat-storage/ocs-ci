@@ -12,23 +12,23 @@ import os
 import pytest
 
 from ocs_ci.framework import config as ocsci_config
-from ocs_ci.framework.exceptions import ClusterPathNotProvidedError, ClusterNameNotProvidedError, ClusterNameLengthError
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
-from ocs_ci.utility.utils import (
-    dump_config_to_file,
-    get_cluster_version,
-    get_ceph_version,
-    get_csi_versions,
-    get_testrun_name,
-    get_ocs_build_number,
-    load_config_file,
+from ocs_ci.framework.exceptions import (
+    ClusterNameLengthError,
+    ClusterNameNotProvidedError,
+    ClusterPathNotProvidedError
 )
-from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
-from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
     OCP_VERSION_CONF_DIR,
+)
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
+from ocs_ci.ocs.resources.ocs import get_ocs_csv, get_version_info
+from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
+from ocs_ci.utility.utils import (
+    dump_config_to_file, get_ceph_version, get_cluster_version,
+    get_csi_versions, get_ocp_version, get_ocs_build_number,
+    get_testrun_name, load_config_file
 )
 
 __all__ = [
@@ -104,10 +104,10 @@ def pytest_addoption(parser):
         help="IOs throughput target percentage. Value should be between 0 to 100",
     )
     parser.addoption(
-        '--enable-bg-io-logs',
-        dest='enable_bg_io_logs',
+        '--log-cluster-utilization',
+        dest='log_cluster_utilization',
         action="store_true",
-        help="Enable background IO logs, if --io-in-bg is passed",
+        help="Enable logging of cluster utilization metrics every 10 seconds"
     )
     parser.addoption(
         '--ocs-version',
@@ -153,6 +153,11 @@ def pytest_addoption(parser):
         type=int,
         help="OSD size in GB - for 2TB pass 2048, for 0.5TB pass 512 and so on."
     )
+    parser.addoption(
+        '--flexy-env-file',
+        dest='flexy_env_file',
+        help="Path to flexy environment file"
+    )
 
 
 def pytest_configure(config):
@@ -163,6 +168,11 @@ def pytest_configure(config):
         config (pytest.config): Pytest config object
 
     """
+    # Somewhat hacky but this lets us differentiate between run-ci executions
+    # and plain pytest unit test executions
+    ocscilib_module = 'ocs_ci.framework.pytest_customization.ocscilib'
+    if ocscilib_module not in config.getoption('-p'):
+        return
     if not (config.getoption("--help") or config.getoption("collectonly")):
         process_cluster_cli_params(config)
         config_file = os.path.expanduser(
@@ -176,6 +186,7 @@ def pytest_configure(config):
             f"Dump of the consolidated config file is located here: "
             f"{config_file}"
         )
+        set_report_portal_tags(config)
         # Add OCS related versions to the html report and remove
         # extraneous metadata
         markers_arg = config.getoption('-m')
@@ -203,6 +214,12 @@ def pytest_configure(config):
 
         config._metadata['Test Run Name'] = get_testrun_name()
         gather_version_info_for_report(config)
+
+        ocs_csv = get_ocs_csv()
+        ocs_csv_version = ocs_csv.data['spec']['version']
+        config.addinivalue_line(
+            "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
+        )
 
 
 def gather_version_info_for_report(config):
@@ -243,7 +260,7 @@ def gather_version_info_for_report(config):
         gather_version_completed = True
     except ResourceNotFoundError as ex:
         log.error(
-            "Problem ocurred when looking for some resource! Error: %s",
+            "Problem occurred when looking for some resource! Error: %s",
             ex
         )
     except FileNotFoundError as ex:
@@ -316,9 +333,9 @@ def process_cluster_cli_params(config):
         io_load = get_cli_param(config, 'io_load')
         if io_load:
             ocsci_config.RUN['io_load'] = io_load
-        io_bg_logs = get_cli_param(config, 'enable_bg_io_logs')
-        if io_bg_logs:
-            ocsci_config.RUN['io_bg_logs'] = True
+    log_utilization = get_cli_param(config, 'log_cluster_utilization')
+    if log_utilization:
+        ocsci_config.RUN['log_utilization'] = True
     upgrade_ocs_version = get_cli_param(config, "upgrade_ocs_version")
     if upgrade_ocs_version:
         ocsci_config.UPGRADE['upgrade_ocs_version'] = upgrade_ocs_version
@@ -386,7 +403,11 @@ def pytest_runtest_makereport(item, call):
         and ocsci_config.RUN.get('cli_params').get('collect-logs')
     ):
         test_case_name = item.name
-        collect_ocs_logs(test_case_name)
+        mcg = True if any(x in item.location[0] for x in ['mcg', 'ecosystem']) else False
+        try:
+            collect_ocs_logs(dir_name=test_case_name, mcg=mcg)
+        except Exception as ex:
+            log.error(f"Failed to collect OCS logs. Error: {ex}")
 
     # Collect Prometheus metrics if specified in gather_metrics_on_fail marker
     if (
@@ -395,12 +416,15 @@ def pytest_runtest_makereport(item, call):
         and item.get_closest_marker('gather_metrics_on_fail')
     ):
         metrics = item.get_closest_marker('gather_metrics_on_fail').args
-        collect_prometheus_metrics(
-            metrics,
-            f'{item.name}-{call.when}',
-            call.start,
-            call.stop
-        )
+        try:
+            collect_prometheus_metrics(
+                metrics,
+                f'{item.name}-{call.when}',
+                call.start,
+                call.stop
+            )
+        except Exception as ex:
+            log.error(f"Failed to collect prometheus metrics. Error: {ex}")
 
     # Get the performance metrics when tests fails for scale or performance tag
     from tests.helpers import collect_performance_stats
@@ -410,4 +434,41 @@ def pytest_runtest_makereport(item, call):
         and (item.get_closest_marker('scale') or item.get_closest_marker('performance'))
     ):
         test_case_name = item.name
-        collect_performance_stats(test_case_name)
+        try:
+            collect_performance_stats(test_case_name)
+        except Exception as ex:
+            log.error(f"Failed to collect performance stats. Error: {ex}")
+
+
+def set_report_portal_tags(config):
+    rp_tags = list()
+    rp_tags.append(ocsci_config.ENV_DATA.get('platform'))
+    rp_tags.append(ocsci_config.ENV_DATA.get('deployment_type'))
+    if ocsci_config.REPORTING.get('us_ds') == 'us':
+        rp_tags.append('upstream')
+    else:
+        rp_tags.append('downstream')
+    worker_instance_type = ocsci_config.ENV_DATA.get('worker_instance_type')
+    rp_tags.append(f"worker_instance_type:{worker_instance_type}")
+    rp_tags.append(f"ocp_version:{get_ocp_version()}")
+    rp_tags.append(
+        f"ocs_version:{ocsci_config.ENV_DATA.get('ocs_version')}"
+    )
+    if ocsci_config.DEPLOYMENT.get('ocs_registry_image'):
+        ocs_registry_image = ocsci_config.DEPLOYMENT.get('ocs_registry_image')
+        rp_tags.append(f"ocs_registry_image:{ocs_registry_image}")
+        rp_tags.append(f"ocs_registry_tag:{ocs_registry_image.split(':')[1]}")
+    if ocsci_config.DEPLOYMENT.get('ui_deployment'):
+        rp_tags.append('ui_deployment')
+    if ocsci_config.DEPLOYMENT.get('live_deployment'):
+        rp_tags.append('live_deployment')
+    if ocsci_config.DEPLOYMENT.get('stage'):
+        rp_tags.append('stage_deployment')
+    if not ocsci_config.DEPLOYMENT.get('allow_lower_instance_requirements'):
+        rp_tags.append("production")
+    if ocsci_config.ENV_DATA.get('fips'):
+        rp_tags.append("fips")
+
+    for tag in rp_tags:
+        if tag:
+            config.addinivalue_line("rp_launch_tags", tag.lower())
