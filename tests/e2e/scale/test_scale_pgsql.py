@@ -41,7 +41,7 @@ class TestPgsqlPodScale(E2ETest):
         timeout = replicas * 500  # Time in seconds to wait for pgbench pods to be created
 
         # Add workers node to cluster
-        pgsql.add_workers_node()
+        pgsql.add_worker_node()
 
         # Check ceph health status
         utils.ceph_health_check()
@@ -75,4 +75,3 @@ class TestPgsqlPodScale(E2ETest):
 
         # Check ceph health status
         utils.ceph_health_check()
-
