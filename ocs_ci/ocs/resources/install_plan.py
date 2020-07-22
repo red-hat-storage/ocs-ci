@@ -94,3 +94,19 @@ def wait_for_install_plan_and_approve(namespace, timeout=960):
             for install_plan in install_plans:
                 install_plan.approve()
             return
+
+
+def get_install_plans_count(namespace=None):
+    """
+    Returns number of installPlans.
+
+    Returns:
+        int: Number of install plans found.
+
+    """
+    install_plans = InstallPlan(namespace=namespace).get()
+    install_plans_count = len(
+        install_plans.get('items', [])
+    )
+    logger.info(f"Number of installPlans: {install_plans_count}")
+    return install_plans_count

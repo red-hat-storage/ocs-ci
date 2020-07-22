@@ -1,0 +1,3 @@
+---
+ENV_DATA:
+  apply_wa_for_lbp_install_plans: true

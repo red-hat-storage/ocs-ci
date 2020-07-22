@@ -294,6 +294,7 @@ class OCP(object):
         Raises:
             CommandFailed: In case yaml_file and resource_name wasn't provided
         """
+        resource_name = resource_name if resource_name else self.resource_name
         if not (yaml_file or resource_name):
             raise CommandFailed(
                 "At least one of resource_name or yaml_file have to "

@@ -504,6 +504,10 @@ SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml"
 )
 
+LBP_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "lbp-subscription.yaml"
+)
+
 STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
 )
@@ -726,6 +730,7 @@ LATEST_TAGS = (
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
 OCS_SUBSCRIPTION = "ocs-subscription"
+LBP_SUBSCRIPTION = "lib-bucket-provisioner"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"

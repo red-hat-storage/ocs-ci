@@ -27,7 +27,9 @@ from ocs_ci.ocs.monitoring import (
 from ocs_ci.ocs.node import get_typed_nodes, check_nodes_specs
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
-from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
+from ocs_ci.ocs.resources.install_plan import (
+    get_install_plans_count, InstallPlan, wait_for_install_plan_and_approve,
+)
 from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
@@ -643,6 +645,70 @@ class Deployment(object):
         get_csv_cmd = f"oc get csv -n {config.ENV_DATA['cluster_namespace']}"
         csvs_out = run_cmd(get_csv_cmd)
         logger.info(f"Available CSVs: {csvs_out}")
+
+        # Applying WA for LBP install plans
+        ip_after_deploy = get_install_plans_count(self.namespace)
+        ip_change = 0
+        if config.ENV_DATA.get("wait_for_ip_increase"):
+            increase_count = config.ENV_DATA.get(
+                "wait_for_ip_increase_count", 10
+            )
+            wait_timeout = config.ENV_DATA.get(
+                "wait_for_ip_increase_timeout", 1800
+            )
+            wait_time = 30
+            reached_ip_change = False
+            while wait_timeout > 0:
+                wait_timeout -= wait_time
+                ip_count = get_install_plans_count(self.namespace)
+                ip_change = ip_count - ip_after_deploy
+                if ip_change >= increase_count:
+                    reached_ip_change = True
+                    break
+                logger.info(
+                    f"Waiting for {wait_time} for next attempt to reach change"
+                    f": {increase_count} in install plans. Current change: "
+                    f" {ip_change}"
+                )
+                time.sleep(wait_time)
+            assert reached_ip_change, "Did not reached change in IP plans!"
+        if config.ENV_DATA.get('apply_wa_for_lbp_install_plans'):
+            lbp_subscription = ocp.OCP(
+                kind="subscription", namespace=self.namespace,
+                resource_name=constants.LBP_SUBSCRIPTION
+            )
+            lbp_subscription.delete()
+            all_csvs = CSV(namespace=self.namespace)
+            lbp_csvs = [
+                csv for csv in all_csvs.get('items', []) if
+                "lib-bucket-provisioner" in csv['name']
+            ]
+            for lbp_csv in lbp_csvs:
+                csv_to_delete = CSV(
+                    resource_name=lbp_csv['name'], namespace=self.namespace
+                )
+                csv_to_delete.delete()
+            install_plans = InstallPlan(namespace=self.namespace).get()
+            lbp_install_plans = [
+                ip for ip in install_plans.get('items', []) if list(filter(
+                    lambda x: "lib-bucket-provisioner" in x,
+                    ip.get('spec', {}).get('clusterServiceVersionNames', [])
+                ))
+            ]
+            for ip_item in lbp_install_plans:
+                ip = InstallPlan(resource_name=ip_item['name'])
+                ip.delete()
+            logger.info("Subscribe to LBP")
+            # add subscription to lbp ocs_ci/templates/ocs-deployment/lbp-subscription.yaml
+            # test that we don't see new IPs
+            run_cmd(f"oc create -f {constants.LBP_SUBSCRIPTION_YAML}")
+            logger.info("Waiting 30 seconds after new subscription to LBP")
+            time.sleep(30)
+            ip_after_second_deploy = get_install_plans_count(self.namespace)
+            logger.info(
+                "Number of install plans after applying W/A is: "
+                f"{ip_after_second_deploy}"
+            )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
