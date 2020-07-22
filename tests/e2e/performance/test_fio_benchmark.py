@@ -212,7 +212,7 @@ class TestFIOBenchmark(E2ETest):
 
         # Wait for fio client pod to be created
         for fio_pod in TimeoutSampler(
-            100, 20, get_pod_name_by_pattern, 'fio-client',
+            300, 20, get_pod_name_by_pattern, 'fio-client',
             constants.RIPSAW_NAMESPACE
         ):
             try:
@@ -271,7 +271,7 @@ class TestFIOBenchmark(E2ETest):
             condition='Completed',
             resource_name=fio_client_pod,
             timeout=18000,
-            sleep=100,
+            sleep=300,
         )
 
         # Getting the end time of the test
