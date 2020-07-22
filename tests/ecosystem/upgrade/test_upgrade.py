@@ -13,10 +13,10 @@ log = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-1579")
 def test_worker_node_abrupt_shutdown():
     """
-        Test OCS upgrade with disruption of shutting down worker node,
-        for 5.5 minutes
+    Test OCS upgrade with disruption of shutting down worker node,
+    for 5.5 minutes
 
-        """
+    """
     log.info(
         "Starting disruptive function: test_worker_node_abrupt_shutdown"
     )
