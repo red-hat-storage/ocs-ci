@@ -280,7 +280,7 @@ class TestFIOBenchmark(E2ETest):
                                            'end': end_time})
 
         output = run_cmd(f'oc logs {fio_client_pod}')
-        log.debug(f'The Test log is : {output}')
+        log.info(f'The Test log is : {output}')
 
         try:
             if 'Fio failed to execute' not in output:
