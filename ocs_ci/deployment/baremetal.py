@@ -19,8 +19,11 @@ from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pending_csr
 from ocs_ci.utility.templating import Templating
-from ocs_ci.utility.utils import run_cmd, upload_file, get_ocp_version, load_auth_config, wait_for_co, \
-    wait_for_machineconfigpool_status, check_for_rhcos_images, get_infra_id, TimeoutSampler
+from ocs_ci.utility.utils import (
+    run_cmd, upload_file, get_ocp_version, load_auth_config,
+    wait_for_co, wait_for_machineconfigpool_status, check_for_rhcos_images,
+    get_infra_id, TimeoutSampler
+)
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +170,8 @@ class BAREMETALUPI(Deployment):
             # Download installer_initramfs
             initramfs_image_path = constants.coreos_url_prefix + image_data['installer_initramfs_url']
             if check_for_rhcos_images(initramfs_image_path):
-                cmd = f"wget -O {self.helper_node_details['bm_tftp_dir']}" \
+                cmd = f"wget -O " \
+                      f"{self.helper_node_details['bm_tftp_dir']}" \
                       f"/rhcos-installer-initramfs.x86_64.img " \
                       f"{initramfs_image_path}"
                 assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
@@ -176,7 +180,8 @@ class BAREMETALUPI(Deployment):
             # Download installer_kernel
             kernel_image_path = constants.coreos_url_prefix + image_data['installer_kernel_url']
             if check_for_rhcos_images(kernel_image_path):
-                cmd = f"wget -O {self.helper_node_details['bm_tftp_dir']}" \
+                cmd = f"wget -O " \
+                      f"{self.helper_node_details['bm_tftp_dir']}" \
                       f"/rhcos-installer-kernel-x86_64 " \
                       f"{kernel_image_path}"
                 assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
@@ -185,7 +190,8 @@ class BAREMETALUPI(Deployment):
             # Download metal_bios
             metal_image_path = constants.coreos_url_prefix + image_data['metal_bios_url']
             if check_for_rhcos_images(metal_image_path):
-                cmd = f"wget -O {self.helper_node_details['bm_path_to_upload']}" \
+                cmd = f"wget -O " \
+                      f"{self.helper_node_details['bm_path_to_upload']}" \
                       f"/rhcos-metal.x86_64.raw.gz " \
                       f"{metal_image_path}"
                 assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
@@ -259,16 +265,10 @@ class BAREMETALUPI(Deployment):
             for machine_id in range(1, 8):
                 machine_name = f"argo00{machine_id}.ceph.redhat.com"
                 if self.mgmt_details[machine_name]:
-                    # Power off machine
-                    cmd = f"ipmitool -I lanplus -U {self.mgmt_details[machine_name]['mgmt_username']} " \
-                          f"-P {self.mgmt_details[machine_name]['mgmt_password']} " \
-                          f"-H {self.mgmt_details[machine_name]['mgmt_console']} chassis power off"
                     secrets = [
                         self.mgmt_details[machine_name]['mgmt_username'],
                         self.mgmt_details[machine_name]['mgmt_password']
                     ]
-                    run_cmd(cmd=cmd, secrets=secrets)
-                    sleep(2)
                     # Changes boot prioriy to pxe
                     cmd = f"ipmitool -I lanplus -U {self.mgmt_details[machine_name]['mgmt_username']} " \
                           f"-P {self.mgmt_details[machine_name]['mgmt_password']} " \
@@ -278,10 +278,11 @@ class BAREMETALUPI(Deployment):
                     # Power On Machine
                     cmd = f"ipmitool -I lanplus -U {self.mgmt_details[machine_name]['mgmt_username']} " \
                           f"-P {self.mgmt_details[machine_name]['mgmt_password']} " \
+                          f"-H {self.mgmt_details[machine_name]['mgmt_console']} chassis power cycle || " \
+                          f"ipmitool -I lanplus -U {self.mgmt_details[machine_name]['mgmt_username']} " \
+                          f"-P {self.mgmt_details[machine_name]['mgmt_password']} " \
                           f"-H {self.mgmt_details[machine_name]['mgmt_console']} chassis power on"
                     run_cmd(cmd=cmd, secrets=secrets)
-                    sleep(2)
-
             logger.info("waiting for bootstrap to complete")
             try:
                 run_cmd(
