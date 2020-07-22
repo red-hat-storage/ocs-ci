@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
 from tests import helpers
 from ocs_ci.ocs import defaults, constants
 
+from ocs_ci.utility.performance_dashboard import push_to_pvc_time_dashboard
 
 log = logging.getLogger(__name__)
 
@@ -80,6 +81,7 @@ class TestPVCCreationPerformance(E2ETest):
             raise ex.PerformanceException(
                 f"PVC creation time is {create_time} and greater than 3 second"
             )
+        push_to_pvc_time_dashboard(self.interface,"creation",create_time)
 
     @pytest.mark.usefixtures(base_setup.__name__)
     @polarion_id('OCS-1620')
