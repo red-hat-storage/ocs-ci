@@ -25,7 +25,6 @@ class TestPVCCreationPerformance(E2ETest):
     """
     pvc_size = '1Gi'
 
-
     @pytest.fixture()
     def base_setup(
         self, request, interface_iterate, storageclass_factory
@@ -64,15 +63,20 @@ class TestPVCCreationPerformance(E2ETest):
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_pvc_creation_measurement_performance(self, teardown_factory, pvc_size):
         """
-        The test measures PVC creation times for sample volumes ( currently samples_num is 3)
-        makes sure create time is not greated than 3 seconds
-        calculates average creation time
-        and that the difference between creation time of each one of the PVCs and the average
-        is not more than 5%
-        """
+        The test measures PVC creation times for sample_num volumes
+        (limit for the creation time for pvc is defined in accepted_create_time)
+        and compares the creation time of each to the accepted_create_time ( if greater - fails the test)
+        If all the measures are up to the accepted value
+        The test calculates .... difference between creation time of each one of the PVCs and the average
+        is not more than Accepted diff ( currently 5%)
+                Args:
+            teardown factory : A fixture used when we want a new resource that was created during the tests
+                               to be removed in the teardown phase:
+            pvc_size: Size of the created PVC
+         """
         samples_num = 3
         accepted_diff = 5
-        acceoted_create_time = 3
+        accepted_create_time = 3
         create_time_measures = []
 
         for i in range(samples_num):
@@ -88,9 +92,9 @@ class TestPVCCreationPerformance(E2ETest):
                 self.interface, pvc_obj.name
             )
             logging.info(f"PVC created in {create_time} seconds")
-            if create_time > acceoted_create_time:
+            if create_time > accepted_create_time:
                 raise ex.PerformanceException(
-                    f"PVC creation time is {create_time} and greater than {acceoted_create_time} second"
+                    f"PVC creation time is {create_time} and greater than {accepted_create_time} seconds"
                 )
             create_time_measures.append(create_time)
             log.info(f"Current measures are {create_time_measures}")
