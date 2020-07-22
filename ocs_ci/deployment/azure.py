@@ -35,8 +35,31 @@ class AZUREBase(CloudDeploymentBase):
         super(AZUREBase, self).add_node()
 
     def check_cluster_existence(self, cluster_name_prefix):
-        # TODO: implement now
-        pass
+        """
+        Check cluster existence based on a cluster name prefix.
+
+        Returns:
+            bool: True if a cluster with the same name prefix already exists,
+                False otherwise
+        """
+        logger.info(
+            "checking existence of cluster with prefix %s", cluster_name_prefix)
+        # ask about all azure resource groups, and filter it by cluster name
+        # prefix (there is azure resource group for each cluster, which
+        # contains all other azure resources of the cluster)
+        resource_groups = self.azure.resource_client.resource_groups.list()
+        for rg in resource_groups:
+            if rg.name.startswith(cluster_name_prefix):
+                logger.info(
+                    "For given cluster name prefix %s, there is a resource group %s already.",
+                    cluster_name_prefix,
+                    rg.name)
+                return True
+        logger.info(
+            "For given cluster name prefix %s, there is no resource group.",
+            cluster_name_prefix
+        )
+        return False
 
 
 class AZUREIPI(AZUREBase):
