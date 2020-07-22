@@ -13,7 +13,8 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
 from ocs_ci.utility.performance_dashboard import push_perf_dashboard
-from ocs_ci.framework.testlib import E2ETest, performance, PerfResult
+from ocs_ci.framework.testlib import E2ETest, performance
+from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.cluster import CephCluster
 from tests.helpers import get_environment_info
