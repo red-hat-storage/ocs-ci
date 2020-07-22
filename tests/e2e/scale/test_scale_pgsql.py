@@ -24,7 +24,7 @@ def pgsql(request):
 
 @scale
 @ignore_leftovers
-@pytest.mark.polarion_id("OCS-000")
+@pytest.mark.polarion_id("OCS-2239")
 class TestPgsqlPodScale(E2ETest):
     """
     Scale test case using PGSQL Pods

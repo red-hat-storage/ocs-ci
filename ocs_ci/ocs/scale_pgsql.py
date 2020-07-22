@@ -1,15 +1,12 @@
 """
-Postgresql workload class
+ScalePodPGSQL workload class for scale
 """
 import logging
 
 from tests import helpers
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.utility import templating
-from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, machine
-from subprocess import CalledProcessError
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import UnavailableResourceException
 
@@ -31,48 +28,17 @@ class ScalePodPGSQL(Postgresql):
         self.ms_name = list()
 
     def apply_crd(self, crd):
-        """
-        Apply the CRD
-
-        Args:
-            crd (str): yaml to apply
-
-        """
         Postgresql.apply_crd(self, crd=crd)
 
     def setup_postgresql(self, replicas, node_selector=None):
-        log.info("Deploying postgres database")
-        try:
-            pgsql_service = templating.load_yaml(
-                constants.PGSQL_SERVICE_YAML
-            )
-            pgsql_cmap = templating.load_yaml(
-                constants.PGSQL_CONFIGMAP_YAML
-            )
-            pgsql_sset = templating.load_yaml(
-                constants.PGSQL_STATEFULSET_YAML
-            )
-            pgsql_sset['spec']['replicas'] = replicas
-            if node_selector is not None:
-                pgsql_sset['spec']['template']['spec'][
-                    'nodeSelector'] = node_selector
-            self.pgsql_service = OCS(**pgsql_service)
-            self.pgsql_service.create()
-            self.pgsql_cmap = OCS(**pgsql_cmap)
-            self.pgsql_cmap.create()
-            self.pgsql_sset = OCS(**pgsql_sset)
-            self.pgsql_sset.create()
-            self.pod_obj.wait_for_resource(
-                condition='Running',
-                selector='app=postgres',
-                resource_count=replicas,
-                timeout=3600
-            )
-        except (CommandFailed, CalledProcessError) as cf:
-            log.error('Failed during setup of PostgreSQL server')
-            raise cf
-        self.pgsql_is_setup = True
-        log.info("Successfully deployed postgres database")
+        # Node selector for postgresql
+        pgsql_sset = templating.load_yaml(
+            constants.PGSQL_STATEFULSET_YAML
+        )
+        if node_selector is not None:
+            pgsql_sset['spec']['template']['spec'][
+                'nodeSelector'] = node_selector
+        Postgresql.setup_postgresql(self, replicas=replicas)
 
     def _create_pgbench_benchmark(
         self, replicas, clients=None, threads=None,
