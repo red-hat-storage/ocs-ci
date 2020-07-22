@@ -28,7 +28,7 @@ import stat
 logger = logging.getLogger(name=__file__)
 
 
-class MCG(object):
+class MCG:
     """
     Wrapper class for the Multi Cloud Gateway's S3 service
     """
@@ -39,7 +39,7 @@ class MCG(object):
         namespace, noobaa_user, noobaa_password, noobaa_token
     ) = (None,) * 12
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         """
         Constructor for the MCG class
         """
@@ -117,7 +117,10 @@ class MCG(object):
 
         self.s3_client = self.s3_resource.meta.client
 
-        if config.ENV_DATA['platform'].lower() == 'aws':
+        if (
+            config.ENV_DATA['platform'].lower() == 'aws'
+            and kwargs.get('create_aws_creds')
+        ):
             (
                 self.cred_req_obj,
                 self.aws_access_key_id,
@@ -418,15 +421,13 @@ class MCG(object):
 
         def _check_aws_credentials():
             try:
-                s3_res = boto3.resource(
-                    's3', endpoint_url="https://s3.amazonaws.com",
+                sts = boto3.client(
+                    'sts',
                     aws_access_key_id=aws_access_key_id,
                     aws_secret_access_key=aws_access_key
                 )
-                test_bucket = s3_res.create_bucket(
-                    Bucket=create_unique_resource_name('cred-verify', 's3-bucket')
-                )
-                test_bucket.delete()
+                sts.get_caller_identity()
+
                 return True
 
             except ClientError:
@@ -434,7 +435,7 @@ class MCG(object):
                 return False
 
         try:
-            for api_test_result in TimeoutSampler(40, 5, _check_aws_credentials):
+            for api_test_result in TimeoutSampler(120, 5, _check_aws_credentials):
                 if api_test_result:
                     logger.info('AWS credentials created successfully.')
                     break

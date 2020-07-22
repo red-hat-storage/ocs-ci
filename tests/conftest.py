@@ -1546,7 +1546,17 @@ def mcg_obj_session(request):
     return mcg_obj_fixture(request)
 
 
-def mcg_obj_fixture(request):
+@pytest.fixture()
+def mcg_obj_with_aws(request):
+    return mcg_obj_fixture(request, create_aws_creds=True)
+
+
+@pytest.fixture(scope='session')
+def mcg_obj_with_aws_session(request):
+    return mcg_obj_fixture(request, create_aws_creds=True)
+
+
+def mcg_obj_fixture(request, *args, **kwargs):
     """
     Returns an MCG resource that's connected to the S3 endpoint
 
@@ -1554,13 +1564,14 @@ def mcg_obj_fixture(request):
         MCG: An MCG resource
     """
 
-    mcg_obj = MCG()
+    mcg_obj = MCG(*args, **kwargs)
 
     def finalizer():
         if config.ENV_DATA['platform'].lower() == 'aws':
             mcg_obj.cred_req_obj.delete()
 
-    request.addfinalizer(finalizer)
+    if kwargs.get("create_aws_creds"):
+        request.addfinalizer(finalizer)
 
     return mcg_obj
 
@@ -2004,16 +2015,16 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
 
 
 @pytest.fixture()
-def multiregion_resources(request, mcg_obj):
-    return multiregion_resources_fixture(request, mcg_obj)
+def multiregion_resources(request, mcg_obj_with_aws):
+    return multiregion_resources_fixture(request, mcg_obj_with_aws)
 
 
 @pytest.fixture(scope='session')
-def multiregion_resources_session(request, mcg_obj_session):
-    return multiregion_resources_fixture(request, mcg_obj_session)
+def multiregion_resources_session(request, mcg_obj_with_aws_session):
+    return multiregion_resources_fixture(request, mcg_obj_with_aws_session)
 
 
-def multiregion_resources_fixture(request, mcg_obj):
+def multiregion_resources_fixture(request, mcg_obj_with_aws):
     bs_objs, bs_secrets, bucketclasses, aws_buckets = (
         [] for _ in range(4)
     )
@@ -2025,20 +2036,20 @@ def multiregion_resources_fixture(request, mcg_obj):
 
         for backingstore in bs_objs:
             backingstore.delete()
-            mcg_obj.send_rpc_query(
+            mcg_obj_with_aws.send_rpc_query(
                 'pool_api',
                 'delete_pool',
                 {'name': backingstore.name}
             )
 
         for aws_bucket_name in aws_buckets:
-            mcg_obj.toggle_aws_bucket_readwrite(aws_bucket_name, block=False)
+            mcg_obj_with_aws.toggle_aws_bucket_readwrite(aws_bucket_name, block=False)
             for _ in range(10):
                 try:
-                    mcg_obj.aws_s3_resource.Bucket(
+                    mcg_obj_with_aws.aws_s3_resource.Bucket(
                         aws_bucket_name
                     ).objects.all().delete()
-                    mcg_obj.aws_s3_resource.Bucket(aws_bucket_name).delete()
+                    mcg_obj_with_aws.aws_s3_resource.Bucket(aws_bucket_name).delete()
                     break
                 except ClientError:
                     log.info(
@@ -2052,9 +2063,9 @@ def multiregion_resources_fixture(request, mcg_obj):
 
 
 @pytest.fixture()
-def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
+def multiregion_mirror_setup(mcg_obj_with_aws, multiregion_resources, bucket_factory):
     return multiregion_mirror_setup_fixture(
-        mcg_obj,
+        mcg_obj_with_aws,
         multiregion_resources,
         bucket_factory
     )
@@ -2062,19 +2073,19 @@ def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
 
 @pytest.fixture(scope='session')
 def multiregion_mirror_setup_session(
-    mcg_obj_session,
+    mcg_obj_with_aws_session,
     multiregion_resources_session,
     bucket_factory_session
 ):
     return multiregion_mirror_setup_fixture(
-        mcg_obj_session,
+        mcg_obj_with_aws_session,
         multiregion_resources_session,
         bucket_factory_session
     )
 
 
 def multiregion_mirror_setup_fixture(
-    mcg_obj,
+    mcg_obj_with_aws,
     multiregion_resources,
     bucket_factory
 ):
@@ -2106,22 +2117,22 @@ def multiregion_mirror_setup_fixture(
         'region': 'us-east-2'
     }
     # Create target buckets for them
-    mcg_obj.create_new_backingstore_aws_bucket(backingstore1)
-    mcg_obj.create_new_backingstore_aws_bucket(backingstore2)
+    mcg_obj_with_aws.create_new_backingstore_aws_bucket(backingstore1)
+    mcg_obj_with_aws.create_new_backingstore_aws_bucket(backingstore2)
     aws_buckets.extend((backingstore1['name'], backingstore2['name']))
     # Create a backing store secret
-    backingstore_secret = mcg_obj.create_aws_backingstore_secret(
+    backingstore_secret = mcg_obj_with_aws.create_aws_backingstore_secret(
         backingstore1['name'] + 'secret'
     )
     backingstore_secrets.append(backingstore_secret)
     # Create AWS-backed backing stores on NooBaa
-    backingstore_obj_1 = mcg_obj.oc_create_aws_backingstore(
+    backingstore_obj_1 = mcg_obj_with_aws.oc_create_aws_backingstore(
         backingstore1['name'],
         backingstore1['name'],
         backingstore_secret.name,
         backingstore1['region']
     )
-    backingstore_obj_2 = mcg_obj.oc_create_aws_backingstore(
+    backingstore_obj_2 = mcg_obj_with_aws.oc_create_aws_backingstore(
         backingstore2['name'],
         backingstore2['name'],
         backingstore_secret.name,
@@ -2130,7 +2141,7 @@ def multiregion_mirror_setup_fixture(
     backingstore_objects.extend((backingstore_obj_1, backingstore_obj_2))
     # Create a new mirror bucketclass that'll use all the backing stores we
     # created
-    bucketclass = mcg_obj.oc_create_bucketclass(
+    bucketclass = mcg_obj_with_aws.oc_create_bucketclass(
         helpers.create_unique_resource_name(
             resource_description='testbc',
             resource_type='bucketclass'
