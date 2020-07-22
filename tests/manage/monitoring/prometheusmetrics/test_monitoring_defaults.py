@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 @tier1
+@pytest.mark.post_ocp_upgrade
 @pytest.mark.first
 @pytest.mark.polarion_id("OCS-1261")
 def test_monitoring_enabled():
@@ -378,7 +379,6 @@ def test_ceph_metrics_available():
         "ceph_pool_recovering_keys_per_sec",
         "ceph_pool_recovering_objects_per_sec"]
 
-    platforms_without_rgw = [constants.AWS_PLATFORM]
     current_platform = config.ENV_DATA['platform'].lower()
 
     prometheus = PrometheusAPI()
@@ -394,7 +394,7 @@ def test_ceph_metrics_available():
             is_rgw_metric = (
                 metric.startswith("ceph_rgw")
                 or metric.startswith("ceph_objecter"))
-            if current_platform in platforms_without_rgw and is_rgw_metric:
+            if current_platform in constants.CLOUD_PLATFORMS and is_rgw_metric:
                 msg = (
                     f"failed to get results for {metric}, "
                     f"but it is expected on {current_platform}")
@@ -409,6 +409,7 @@ def test_ceph_metrics_available():
 
 
 @tier1
+@pytest.mark.post_ocp_upgrade
 @pytest.mark.polarion_id("OCS-1302")
 def test_monitoring_reporting_ok_when_idle(workload_idle):
     """

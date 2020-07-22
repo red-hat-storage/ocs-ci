@@ -3,6 +3,7 @@ Postgresql workload class
 """
 import logging
 import random
+from prettytable import PrettyTable
 
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
@@ -15,6 +16,8 @@ from subprocess import CalledProcessError
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, get_operator_pods
 from tests.helpers import wait_for_resource_state
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD
+from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
+
 
 log = logging.getLogger(__name__)
 
@@ -127,9 +130,8 @@ class Postgresql(RipSaw):
             pg_obj = OCS(**pg_data)
             pg_obj_list.append(pg_obj)
             pg_obj.create()
-
         # Confirm that expected pgbench pods are spinned
-        log.info("Checking if Getting pgbench pods name")
+        log.info("Searching the pgbench pods by its name pattern")
         timeout = timeout if timeout else 300
         for pgbench_pods in TimeoutSampler(
             timeout, replicas, get_pod_name_by_pattern,
@@ -169,7 +171,7 @@ class Postgresql(RipSaw):
         """
         return [
             get_pod_obj(
-                pod
+                pod, RIPSAW_NAMESPACE
             ) for pod in get_pod_name_by_pattern('pgbench', RIPSAW_NAMESPACE)
         ]
 
@@ -273,7 +275,7 @@ class Postgresql(RipSaw):
                 log.error(error_msg)
                 raise UnexpectedBehaviour(error_msg)
 
-    def validate_pgbench_run(self, pgbench_pods):
+    def validate_pgbench_run(self, pgbench_pods, print_table=True):
         """
         Validate pgbench run
 
@@ -287,7 +289,7 @@ class Postgresql(RipSaw):
         all_pgbench_pods_output = []
         for pgbench_pod in pgbench_pods:
             log.info(f"pgbench_client_pod===={pgbench_pod.name}====")
-            output = run_cmd(f'oc logs {pgbench_pod.name}')
+            output = run_cmd(f'oc logs {pgbench_pod.name} -n {RIPSAW_NAMESPACE}')
             pg_output = utils.parse_pgsql_logs(output)
             log.info(
                 "*******PGBench output log*********\n"
@@ -303,7 +305,28 @@ class Postgresql(RipSaw):
                         "no data found on latency_avg"
                     )
             log.info(f"PGBench on {pgbench_pod.name} completed successfully")
-            all_pgbench_pods_output.append(pg_output)
+            all_pgbench_pods_output.append((pg_output, pgbench_pod.name))
+
+        if print_table:
+            pgbench_pod_table = PrettyTable()
+            pgbench_pod_table.field_names = [
+                'pod_name', 'scaling_factor', 'num_clients', 'num_threads',
+                'trans_client', 'actually_trans', 'latency_avg', 'lat_stddev',
+                'tps_incl', 'tps_excl'
+            ]
+            for pgbench_pod_out in all_pgbench_pods_output:
+                for pod_output in pgbench_pod_out[0]:
+                    for pod in pod_output.values():
+                        pgbench_pod_table.add_row(
+                            [pgbench_pod_out[1], pod['scaling_factor'],
+                             pod['num_clients'], pod['num_threads'],
+                             pod['number_of_transactions_per_client'],
+                             pod['number_of_transactions_actually_processed'],
+                             pod['latency_avg'], pod['lat_stddev'],
+                             pod['tps_incl'], pod['tps_excl']]
+                        )
+            log.info(f'\n{pgbench_pod_table}\n')
+
         return all_pgbench_pods_output
 
     def get_pgsql_nodes(self):
@@ -314,11 +337,16 @@ class Postgresql(RipSaw):
             list: Cluster node OCP objects
 
         """
-        pgsql_pod_objs = self.pod_obj.get(selector=constants.PGSQL_APP_LABEL, all_namespaces=True)
+        pgsql_pod_objs = self.pod_obj.get(
+            selector=constants.PGSQL_APP_LABEL, all_namespaces=True
+        )
         log.info("Create a list of nodes that contain a pgsql app pod")
         nodes_set = set()
         for pod in pgsql_pod_objs['items']:
-            log.info(f"pod {pod['metadata']['name']} located on node {pod['spec']['nodeName']}")
+            log.info(
+                f"pod {pod['metadata']['name']} located on "
+                f"node {pod['spec']['nodeName']}"
+            )
             nodes_set.add(pod['spec']['nodeName'])
         return list(nodes_set)
 
@@ -330,7 +358,9 @@ class Postgresql(RipSaw):
             pod status
 
         """
-        app_pod_list = get_operator_pods(constants.PGSQL_APP_LABEL, constants.RIPSAW_NAMESPACE)
+        app_pod_list = get_operator_pods(
+            constants.PGSQL_APP_LABEL, constants.RIPSAW_NAMESPACE
+        )
         app_pod = app_pod_list[random.randint(0, len(app_pod_list) - 1)]
         log.info(f"respin pod {app_pod.name}")
         app_pod.delete(wait=True, force=False)
@@ -338,10 +368,96 @@ class Postgresql(RipSaw):
             resource=app_pod, state=constants.STATUS_RUNNING, timeout=300
         )
 
-    def cleanup(self):
+    def get_pgbech_pod_status_table(self, pgbench_pods):
         """
-        Clean pgench pods
+        Get pgbench pod data and print results on a table
+
+        Args:
+            pgbench pods (list): List of pgbench pods
 
         """
-        log.info("Deleting configuration created for ripsaw")
+        pgbench_pod_table = PrettyTable()
+        pgbench_pod_table.field_names = [
+            'pod_name', 'scaling_factor', 'num_clients', 'num_threads',
+            'trans_client', 'actually_trans', 'latency_avg', 'lat_stddev',
+            'tps_incl', 'tps_excl'
+        ]
+        for pgbench_pod in pgbench_pods:
+            output = run_cmd(f'oc logs {pgbench_pod.name}')
+            pg_output = utils.parse_pgsql_logs(output)
+            for pod_output in pg_output:
+                for pod in pod_output.values():
+                    pgbench_pod_table.add_row(
+                        [pgbench_pod.name, pod['scaling_factor'],
+                         pod['num_clients'], pod['num_threads'],
+                         pod['number_of_transactions_per_client'],
+                         pod['number_of_transactions_actually_processed'],
+                         pod['latency_avg'], pod['lat_stddev'],
+                         pod['tps_incl'], pod['tps_excl']]
+                    )
+        log.info(f'\n{pgbench_pod_table}\n')
+
+    def export_pgoutput_to_googlesheet(self, pg_output, sheet_name, sheet_index):
+        """
+        Collect pgbench output to google spreadsheet
+
+        Args:
+            pg_output (list):  pgbench outputs in list
+            sheet_name (str): Name of the sheet
+            sheet_index (int): Index of sheet
+
+        """
+        # Collect data and export to Google doc spreadsheet
+        g_sheet = GoogleSpreadSheetAPI(
+            sheet_name=sheet_name, sheet_index=sheet_index
+        )
+        log.info("Exporting pgoutput data to google spreadsheet")
+        for pgbench_pod in range(len(pg_output)):
+            for run in range(len(pg_output[pgbench_pod][0])):
+                run_id = list(pg_output[pgbench_pod][0][run].keys())[0]
+                lat_avg = pg_output[
+                    pgbench_pod
+                ][0][run][run_id]['latency_avg']
+                lat_stddev = pg_output[
+                    pgbench_pod
+                ][0][run][run_id]['lat_stddev']
+                tps_incl = pg_output[
+                    pgbench_pod
+                ][0][run][run_id]['lat_stddev']
+                tps_excl = pg_output[pgbench_pod][0][run][run_id]['tps_excl']
+                g_sheet.insert_row(
+                    [f"Pgbench-pod{pg_output[pgbench_pod][1]}-run-{run_id}",
+                     int(lat_avg),
+                     int(lat_stddev),
+                     int(tps_incl),
+                     int(tps_excl)], 2
+                )
+        g_sheet.insert_row(
+            ["", "latency_avg", "lat_stddev", "lat_stddev", "tps_excl"], 2
+        )
+
+        # Capturing versions(OCP, OCS and Ceph) and test run name
+        g_sheet.insert_row(
+            [f"ocp_version:{utils.get_cluster_version()}",
+             f"ocs_build_number:{utils.get_ocs_build_number()}",
+             f"ceph_version:{utils.get_ceph_version()}",
+             f"test_run_name:{utils.get_testrun_name()}"], 2
+        )
+
+    def cleanup(self):
+        """
+        Clean up
+
+        """
+        log.info("Deleting postgres pods and configuration")
+        if self.pgsql_is_setup:
+            self.pgsql_sset.delete()
+            self.pgsql_cmap.delete()
+            self.pgsql_service.delete()
+        log.info("Deleting pgbench pods")
+        pods_obj = self.get_pgbench_pods()
+        for pod in pods_obj:
+            pod.delete()
+            pod.ocp.wait_for_delete(pod.name)
+        log.info("Deleting ripsaw configuration")
         RipSaw.cleanup(self)

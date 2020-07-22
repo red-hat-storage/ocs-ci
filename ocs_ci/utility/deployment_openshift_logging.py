@@ -9,6 +9,7 @@ import json
 
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.node import get_all_nodes
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
@@ -223,9 +224,8 @@ def create_instance_in_clusterlogging():
             values, storage class and size details etc.
 
     """
-    num_of_worker_nodes = len(helpers.get_worker_nodes())
-    num_of_master_nodes = len(helpers.get_master_nodes())
-    nodes_in_cluster = num_of_worker_nodes + num_of_master_nodes
+
+    nodes_in_cluster = len(get_all_nodes())
     inst_data = templating.load_yaml(constants.CL_INSTANCE_YAML)
     es_node_count = inst_data['spec']['logStore']['elasticsearch']['nodeCount']
     helpers.create_resource(wait=False, **inst_data)
@@ -242,7 +242,7 @@ def create_instance_in_clusterlogging():
     )
     pod_status = pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING, resource_count=2 + es_node_count + nodes_in_cluster,
-        timeout=300, sleep=5
+        timeout=500, sleep=2
     )
     assert pod_status, "Pods are not in Running state."
     logger.info("All pods are in Running state")
@@ -258,7 +258,7 @@ def create_instance_in_clusterlogging():
     return logging_instance
 
 
-@retry((CommandFailed, UnexpectedBehaviour), tries=10, delay=60, backoff=2)
+@retry((CommandFailed, UnexpectedBehaviour), tries=5, delay=60, backoff=2)
 def check_health_of_clusterlogging():
     """
     * Checks for ElasticSearch, curator, fluentd and kibana pods in
@@ -297,7 +297,7 @@ def check_health_of_clusterlogging():
     return pod_list
 
 
-@retry(CommandFailed, tries=10, delay=10, backoff=3)
+@retry(CommandFailed, tries=5, delay=10, backoff=2)
 def create_instance():
     """
     The function is used to create instance for

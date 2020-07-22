@@ -4,7 +4,7 @@
 import logging
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier1, pre_upgrade, post_upgrade
+from ocs_ci.framework.testlib import tier2, pre_upgrade, post_upgrade
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs import fiojob
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
@@ -46,7 +46,7 @@ when this fails for some reason or gets stuck, it's hard to debug.
 
 
 @pre_upgrade
-@tier1
+@tier2
 def test_workload_with_checksum(workload_storageutilization_checksum_rbd):
     """
     Purpose of this test is to have checksum workload fixture executed.
@@ -60,7 +60,7 @@ def test_workload_with_checksum(workload_storageutilization_checksum_rbd):
 
 
 @post_upgrade
-@tier1
+@tier2
 def test_workload_with_checksum_verify(
     tmp_path,
     project,

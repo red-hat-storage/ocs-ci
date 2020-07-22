@@ -41,6 +41,12 @@ spec:
         - search
         - eventing
         - analytics
+      
+      pod:
+        volumeMounts:
+          default: couchbase
+          data:  couchbase
+          index: couchbase
   volumeClaimTemplates:
     - metadata:
         name: couchbase

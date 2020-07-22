@@ -1,0 +1,11 @@
+---
+DEPLOYMENT:
+  disconnected: true
+  mirror_registry: 'bastion-host.example.com:5000'
+  mirror_registry_user: 'mirror-user'
+  mirror_registry_password: 'mirror-password'
+
+ENV_DATA:
+  http_proxy: 'http://user:password@bastion-host.example.com:3128'
+
+# vim: set syntax=yaml:

@@ -9,6 +9,7 @@ import tempfile
 import time
 import yaml
 import json
+import copy
 
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -153,9 +154,10 @@ class OCP(object):
             CommandFailed: When failure in command execution
         """
         # Appending one empty value in list for string manipulation
-        cmd_list.append(' ')
+        create_cmd_list = copy.deepcopy(cmd_list)
+        create_cmd_list.append(' ')
         err_msg = 'CMD FAILED'
-        cmd = f" || echo '{err_msg}';".join(cmd_list)
+        cmd = f" || echo '{err_msg}';".join(create_cmd_list)
         debug_cmd = f"debug nodes/{node} -- chroot /host /bin/bash -c \"{cmd}\""
         out = str(self.exec_oc_cmd(
             command=debug_cmd, out_yaml_format=False, timeout=timeout
@@ -687,6 +689,13 @@ class OCP(object):
                 not i.isupper() or i in ('RWO', 'RWX', 'ROX')
             )
         ]
+        # WA, Failed to parse "oc get build" command
+        # https://github.com/red-hat-storage/ocs-ci/issues/2312
+        try:
+            if self.data['items'][0]['kind'].lower() == 'build':
+                return resource_info[column_index - 1]
+        except Exception:
+            pass
 
         return resource_info[column_index]
 

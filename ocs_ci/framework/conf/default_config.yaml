@@ -19,7 +19,7 @@ RUN:
   cli_params: {}  # this will be filled with CLI parameters data
   # If the client version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version
-  client_version: '4.4.0-0.nightly'
+  client_version: '4.5.0-0.nightly'
   bin_dir: './bin'
   google_api_secret: '~/.ocs-ci/google_api_secret.json'
   rook_branch: "master"
@@ -30,8 +30,10 @@ RUN:
   force_chrome_branch_base: "665006"
   force_chrome_branch_sha256sum: "a1ae2e0950828f991119825f62c24464ab3765aa219d150a94fb782a4c66a744"
   io_in_bg: False
-  io_load: null
-  bg_io_logs: False
+  io_load: 50
+  log_utilization: False
+  # This config file disables scale app pods to use OCS workers
+  use_ocs_worker_for_scale: False
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
@@ -42,15 +44,15 @@ DEPLOYMENT:
   # if the installer version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version. You can also use the
   # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
-  installer_version: "4.4.0-0.nightly"
+  installer_version: "4.5.0-0.nightly"
   force_download_installer: True
   force_download_client: True
-  default_latest_tag: 'latest-4.4'
+  default_latest_tag: 'latest-4.5'
   # You can overwrite csv channel version by following parameter
-  ocs_csv_channel: "stable-4.4"
+  ocs_csv_channel: "stable-4.5"
   # you can overwrite the image for ocs operator catalog source by following parameter:
   # ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:4.2-32.9b6c93e.master"
-  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:latest-4.4"
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:latest-4.5"
   ocs_operator_nodes_to_label: 3
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator
@@ -68,6 +70,13 @@ DEPLOYMENT:
   # Following options are defaults for deployment from live content
   live_deployment: False
   preserve_bootstrap_node: False
+  # Following options are defaults for the max Noobaa endpoints
+  noobaa_endpoints: 2
+  # Terraform version
+  terraform_version: "0.12.26"
+  # Following options are defaults for the min and max Noobaa endpoints
+  min_noobaa_endpoints: 2
+  max_noobaa_endpoints: 3
 
 # Section for reporting configuration
 REPORTING:
@@ -80,7 +89,7 @@ REPORTING:
   us_ds: 'DS'
   ocp_must_gather_image: "quay.io/openshift/origin-must-gather"
   ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
-  default_ocs_must_gather_latest_tag: 'latest-4.4'
+  default_ocs_must_gather_latest_tag: 'latest-4.5'
   gather_on_deploy_failure: true
 
 # This is the default information about environment.
@@ -101,12 +110,12 @@ ENV_DATA:
   worker_replicas: 3
   skip_ocp_deployment: false
   skip_ocs_deployment: false
-  ocs_version: '4.4'
+  ocs_version: '4.5'
   # uncomment to use custom directory for storing measurement data related to
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
   # Default RHCOS image to be used for VmWare deployment
-  vm_template: 'rhcos-4.4.0-rc.1-x86_64-vmware.x86_64'
+  vm_template: 'rhcos-4.5.2-x86_64-vmware.x86_64'
   # minimal write speed of fio as used in workload_fio_storageutilization
   # fixtures, which is used to compute timeout of the write job (so that
   # when actual write speed of the operation is smaller than this value, the
@@ -120,12 +129,21 @@ ENV_DATA:
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
-  ocp_channel: "stable-4.4"
+  ocp_channel: "candidate-4.5"
   ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
   ocp_arch: "x86_64"
+  # upgrade_logging_channel param needs change from 4.4 to 4.5 once OCP 4.5 GAed
+  # Issue to track https://github.com/red-hat-storage/ocs-ci/issues/2390
+  upgrade_logging_channel: "4.4"
 
 # This section stores secret and uploaded from home dir or s3
 # for entry into this section, please email ecosystem team
 # or ping in ocs infra chat room.
 AUTH:
     test_quay_auth: test_secret
+
+# This section is for FLEXY, this is just dummy variable to have
+# FLEXY section here, all the defaults for FLEXY will be in
+# flexy_default_config.yaml
+FLEXY:
+  flexy_deploy: false

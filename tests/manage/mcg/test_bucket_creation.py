@@ -80,11 +80,10 @@ class TestBucketCreation:
     )
     def test_bucket_creation(self, bucket_factory, amount, interface):
         """
-        Test bucket creation using the S3 SDK, OC command or MCG CLI
+        Test bucket creation using the S3 SDK, OC command or MCG CLI.
+        The factory checks the bucket's health by default.
         """
-
-        for bucket in bucket_factory(amount, interface):
-            assert bucket.verify_health()
+        bucket_factory(amount, interface)
 
     @pytest.mark.parametrize(
         argnames="amount,interface",
@@ -109,14 +108,16 @@ class TestBucketCreation:
         Negative test with duplicate bucket creation using the S3 SDK, OC
         command or MCG CLI
         """
-        expected_err = "Already ?Exists"
+        expected_err = "BucketAlready|Already ?Exists"
         bucket_map = {
             's3': S3Bucket,
             'oc': OCBucket,
             'cli': CLIBucket
         }
         bucket_set = set(
-            bucket.name for bucket in bucket_factory(amount, interface)
+            bucket.name for bucket in bucket_factory(
+                amount, interface, verify_health=False
+            )
         )
         for bucket_name in bucket_set:
             try:

@@ -3,8 +3,9 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs import exceptions
 from .aws import AWSIPI, AWSUPI
+from .azure import AZUREIPI
 from .vmware import VSPHEREUPI
-from .baremetal import BAREMETALUPI
+from .baremetal import BAREMETALUPI, BaremetalPSIUPI
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,12 @@ class DeploymentFactory(object):
         # A map all existing deployments and respective classes
         # should be put here
         self.cls_map = {
-            'aws_ipi': AWSIPI, 'aws_upi': AWSUPI, 'vsphere_upi': VSPHEREUPI, 'baremetal_upi': BAREMETALUPI,
+            'aws_ipi': AWSIPI,
+            'aws_upi': AWSUPI,
+            'azure_ipi': AZUREIPI,
+            'vsphere_upi': VSPHEREUPI,
+            'baremetalpsi_upi': BaremetalPSIUPI,
+            'baremetal_upi': BAREMETALUPI,
         }
 
     def get_deployment(self):

@@ -11,14 +11,19 @@ from botocore.client import ClientError
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed, CredReqSecretNotFound, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
-from tests.helpers import create_unique_resource_name, create_resource
+from tests.helpers import (
+    create_unique_resource_name, create_resource,
+    calc_local_file_md5_sum, retrieve_default_ingress_crt
+)
 import subprocess
+import stat
 
 logger = logging.getLogger(name=__file__)
 
@@ -29,43 +34,52 @@ class MCG(object):
     """
 
     (
-        s3_resource, s3_endpoint, ocp_resource,
+        s3_resource, s3_endpoint, s3_internal_endpoint, ocp_resource,
         mgmt_endpoint, region, access_key_id, access_key,
         namespace, noobaa_user, noobaa_password, noobaa_token
-    ) = (None,) * 11
+    ) = (None,) * 12
 
     def __init__(self):
         """
         Constructor for the MCG class
         """
         self.namespace = config.ENV_DATA['cluster_namespace']
-        ocp_obj = OCP(kind='noobaa', namespace=self.namespace)
+        self.operator_pod = Pod(
+            **get_pods_having_label(
+                constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace
+            )[0]
+        )
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
 
-        # Copy the self-signed certificate to the local runner
-        # For usage with boto3 (in case the cert isn't found)
-        if not os.path.isfile(constants.MCG_CRT_LOCAL_PATH):
-            ocp_obj.exec_oc_cmd(
-                f'cp {self.core_pod.name}:'
-                f'{constants.MCG_CRT_REMOTE_PATH} '
-                f'{constants.MCG_CRT_LOCAL_PATH}'
-            )
+        self.retrieve_noobaa_cli_binary()
 
-        results = ocp_obj.get()
+        """
+        The certificate will be copied on each mcg_obj instantiation since
+        the process is so light and quick, that the time required for the redundant
+        copy is neglible in comparison to the time a hash comparison will take.
+        """
+        retrieve_default_ingress_crt()
+
+        get_noobaa = OCP(kind='noobaa', namespace=self.namespace).get()
+
         self.s3_endpoint = (
-            results.get('items')[0].get('status').get('services')
+            get_noobaa.get('items')[0].get('status').get('services')
             .get('serviceS3').get('externalDNS')[0]
         )
+        self.s3_internal_endpoint = (
+            get_noobaa.get('items')[0].get('status').get('services')
+            .get('serviceS3').get('internalDNS')[0]
+        )
         self.mgmt_endpoint = (
-            results.get('items')[0].get('status').get('services')
+            get_noobaa.get('items')[0].get('status').get('services')
             .get('serviceMgmt').get('externalDNS')[0]
         ) + '/rpc'
         self.region = config.ENV_DATA['region']
 
         creds_secret_name = (
-            results.get('items')[0].get('status').get('accounts')
+            get_noobaa.get('items')[0].get('status').get('accounts')
             .get('admin').get('secretRef').get('name')
         )
         secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
@@ -95,7 +109,7 @@ class MCG(object):
         ).json().get('reply').get('token')
 
         self.s3_resource = boto3.resource(
-            's3', verify=constants.MCG_CRT_LOCAL_PATH,
+            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH,
             endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
@@ -103,36 +117,12 @@ class MCG(object):
 
         self.s3_client = self.s3_resource.meta.client
 
-        self.operator_pod = Pod(
-            **get_pods_having_label(
-                constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace
-            )[0]
-        )
-
-        # TODO: Add version verification to see if an additional cp isn't needed
-        # If the MCG CLI binary isn't found, copy it from the operator pod
-        if not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH):
-            cmd = (
-                f"oc exec -n {self.namespace} {self.operator_pod.name}"
-                f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-                f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
-            )
-            subprocess.run(cmd, shell=True)
-            # Add an executable bit in order to allow usage of the binary
-            exec_cmd(f'chmod +x {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}')
-            # Make sure the binary was copied properly and has the correct permissions
-            assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-            assert 'ELF' in exec_cmd(f'file {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}').stdout.decode()
-            assert os.access(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK)
-
         if config.ENV_DATA['platform'].lower() == 'aws':
             (
                 self.cred_req_obj,
                 self.aws_access_key_id,
                 self.aws_access_key
             ) = self.request_aws_credentials()
-
-            self._ocp_resource = ocp_obj
 
             self.aws_s3_resource = boto3.resource(
                 's3', endpoint_url="https://s3.amazonaws.com",
@@ -143,13 +133,14 @@ class MCG(object):
             pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
             assert len(pods) == 0, 'RGW pod should not exist on AWS platform'
 
-        elif config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
-            logger.info('Checking for RGW pod on VSPHERE platform')
+        elif config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+            rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
+            logger.info(f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform')
             rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
             assert rgw_pod.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 selector=constants.RGW_APP_LABEL,
-                resource_count=1,
+                resource_count=rgw_count,
                 timeout=60
             )
 
@@ -320,7 +311,7 @@ class MCG(object):
         return requests.post(
             url=self.mgmt_endpoint,
             data=json.dumps(payload),
-            verify=constants.MCG_CRT_LOCAL_PATH
+            verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
         )
 
     def check_data_reduction(self, bucketname):
@@ -345,7 +336,7 @@ class MCG(object):
             resp = requests.post(
                 url=self.mgmt_endpoint,
                 data=request_str,
-                verify=constants.MCG_CRT_LOCAL_PATH
+                verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
             )
             bucket_data = resp.json().get('reply').get('data').get('size')
 
@@ -359,7 +350,7 @@ class MCG(object):
             resp = requests.post(
                 url=self.mgmt_endpoint,
                 data=request_str,
-                verify=constants.MCG_CRT_LOCAL_PATH
+                verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
             )
             bucket_data_reduced = resp.json().get('reply').get('data').get('size_reduced')
 
@@ -406,7 +397,16 @@ class MCG(object):
         sleep(5)
 
         secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
-        cred_req_secret_dict = secret_ocp_obj.get(resource_name=creds_request.name, retry=5)
+        try:
+            cred_req_secret_dict = secret_ocp_obj.get(resource_name=creds_request.name, retry=5)
+        except CommandFailed:
+            logger.error(
+                'Failed to retrieve credentials request secret'
+            )
+            raise CredReqSecretNotFound(
+                'Please make sure that the cluster used is an AWS cluster, '
+                'or that the `platform` var in your config is correct.'
+            )
 
         aws_access_key_id = base64.b64decode(
             cred_req_secret_dict.get('data').get('aws_access_key_id')
@@ -688,7 +688,7 @@ class MCG(object):
                 if pool.get('name') == backingstore_name:
                     current_state = pool.get('mode')
                     logger.info(
-                        f'Current state of backingstore ''{backingstore_name} '
+                        f'Current state of backingstore {backingstore_name} '
                         f'is {current_state}'
                     )
                     if current_state == desired_state:
@@ -740,3 +740,75 @@ class MCG(object):
         result.stdout = result.stdout.decode()
         result.stderr = result.stderr.decode()
         return result
+
+    def retrieve_noobaa_cli_binary(self):
+        """
+        Copy the NooBaa CLI binary from the operator pod
+        if it wasn't found locally, or if the hashes between
+        the two don't match.
+
+        """
+        def _compare_cli_hashes():
+            """
+            Verify that the remote and local CLI binaries are the same
+            in order to make sure the local bin is up to date
+
+            Returns:
+                bool: Whether the local and remote hashes are identical
+
+            """
+            remote_cli_bin_md5 = cal_md5sum(
+                self.operator_pod,
+                constants.NOOBAA_OPERATOR_POD_CLI_PATH
+            )
+            local_cli_bin_md5 = calc_local_file_md5_sum(
+                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+            )
+            return remote_cli_bin_md5 == local_cli_bin_md5
+
+        if (
+            not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+            or not _compare_cli_hashes()
+        ):
+            cmd = (
+                f"oc exec -n {self.namespace} {self.operator_pod.name}"
+                f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
+                f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+            )
+            subprocess.run(cmd, shell=True)
+            # Add an executable bit in order to allow usage of the binary
+            current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+            os.chmod(
+                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
+                current_file_permissions.st_mode | stat.S_IEXEC
+            )
+            # Make sure the binary was copied properly and has the correct permissions
+            assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH), (
+                f'MCG CLI file not found at {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}'
+            )
+            assert os.access(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK), (
+                "The MCG CLI binary does not have execution permissions"
+            )
+            assert _compare_cli_hashes(), (
+                "Binary hash doesn't match the one on the operator pod"
+            )
+
+    @property
+    def status(self):
+        """
+        Verify noobaa status output is clean without any errors
+
+        Returns:
+            bool: return False if any of the non optional components of noobaa is not available
+
+        """
+        # Get noobaa status
+        status = self.exec_mcg_cmd('status').stderr
+        for line in status.split('\n'):
+            if any(
+                i in line for i in ['Not Found', 'Waiting for phase ready ...']
+            ) and 'Optional' not in line:
+                logger.error(f"Error in noobaa status output- {line}")
+                return False
+        logger.info("Verified: noobaa status does not contain any error.")
+        return True

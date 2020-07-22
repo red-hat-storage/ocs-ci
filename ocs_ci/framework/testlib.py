@@ -4,7 +4,7 @@ from ocs_ci.framework.pytest_customization.marks import *  # noqa: F403
 
 
 @pytest.mark.usefixtures(  # noqa: F405
-    'run_io_in_background', 'environment_checker'
+    'environment_checker'
 )
 class BaseTest:
     """
