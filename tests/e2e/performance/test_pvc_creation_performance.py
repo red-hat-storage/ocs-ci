@@ -25,6 +25,33 @@ class TestPVCCreationPerformance(E2ETest):
     """
     pvc_size = '1Gi'
 
+    def samples_creation(self,samples_num,teardown_factory, pvc_size):
+        """
+
+        :param pvc_size:
+        :param teardown_factory:
+        :param action:
+        :param samples_num:
+        :return:
+        """
+        time_measures = []
+        for i in range(samples_num):
+            log.info(f'Start creation of PVC number {i + 1}.')
+
+            pvc_obj = helpers.create_pvc(
+                sc_name=self.sc_obj.name, size=pvc_size)
+            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+            pvc_obj.reload()
+            teardown_factory(pvc_obj)
+            create_time = helpers.measure_pvc_creation_time(
+                self.interface, pvc_obj.name
+            )
+            logging.info(f"PVC created in {create_time} seconds")
+
+            time_measures.append(create_time)
+        return time_measures
+
+
     @pytest.fixture()
     def base_setup(
         self, request, interface_iterate, storageclass_factory
@@ -60,6 +87,7 @@ class TestPVCCreationPerformance(E2ETest):
             ),
         ]
     )
+
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_pvc_creation_measurement_performance(self, teardown_factory, pvc_size):
         """
@@ -75,40 +103,27 @@ class TestPVCCreationPerformance(E2ETest):
             pvc_size: Size of the created PVC
          """
         samples_num = 3
-        accepted_diff = 5
+        accepted_deviation_percent = 5
         accepted_create_time = 3
-        create_time_measures = []
+
+        create_measures = self.samples_creation(samples_num, teardown_factory, pvc_size)
+        log.info(f"Current measures are {create_measures}")
 
         for i in range(samples_num):
-            log.info(f'Start creating new PVC number {i+1}')
-
-            pvc_obj = helpers.create_pvc(
-                sc_name=self.sc_obj.name, size=pvc_size
-            )
-            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
-            pvc_obj.reload()
-            teardown_factory(pvc_obj)
-            create_time = helpers.measure_pvc_creation_time(
-                self.interface, pvc_obj.name
-            )
-            logging.info(f"PVC created in {create_time} seconds")
-            if create_time > accepted_create_time:
+            if create_measures[i] > accepted_create_time:
                 raise ex.PerformanceException(
-                    f"PVC creation time is {create_time} and greater than {accepted_create_time} seconds"
+                    f"PVC creation time is {create_measures[i]} and greater than {accepted_create_time} seconds."
                 )
-            create_time_measures.append(create_time)
-            log.info(f"Current measures are {create_time_measures}")
 
-        average = statistics.mean(create_time_measures)
+        average = statistics.mean(create_measures)
+        st_deviation = statistics.stdev(create_measures)
         log.info(f"The average creation time for the sampled {samples_num} PVCs is {average}.")
 
-        for i in range(samples_num):
-            diff = (abs(create_time_measures[i] - average) / average) * 100.0
-            if diff > accepted_diff:
-                raise ex.PerformanceException(
-                    f"PVC create time deviation is {diff}% and is greater than the allowed {accepted_diff}%."
-                )
-
+        st_deviation_percent =abs(st_deviation - average) / average * 100.0
+        if st_deviation > accepted_deviation_percent:
+            raise ex.PerformanceException(
+            f"PVC create time deviation is {st_deviation_percent}% and is greater than the allowed {accepted_deviation_percent}%."
+            )
 
     @pytest.mark.usefixtures(base_setup.__name__)
     @polarion_id('OCS-1620')
