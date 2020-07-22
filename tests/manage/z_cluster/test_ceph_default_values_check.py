@@ -14,7 +14,7 @@ class TestCephDefaultValuesCheck(ManageTest):
 
     def test_ceph_default_values_check(self):
         """
-        This test checks ceph default values taken from OCS 4.5 with the
+        This test checks ceph default values taken from OCS 4.3 with the
         current values in the cluster
 
         """
