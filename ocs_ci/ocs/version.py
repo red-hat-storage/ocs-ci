@@ -38,10 +38,11 @@ def get_environment_info():
     """
     Getting the environment information
       Information that will be collected :
-      Versions: OCP - version / build / channel
-                OCS - version / build
-                Ceph - version
-                Rook - version
+      Versions:
+        OCP - version / build / channel
+        OCS - version / build
+        Ceph - version
+        Rook - version
       Platform: BM / VmWare / Cloud provider etc.
       Instance type / architecture
       Cluster name
@@ -51,7 +52,6 @@ def get_environment_info():
       dict: dictionary that contain the environment information
 
     """
-
     results = {}
     # getting the name and email  of the user that running the test.
     try:
