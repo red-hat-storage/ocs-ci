@@ -10,6 +10,19 @@ from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
 log = logging.getLogger(__name__)
 
 
+@pytest.fixture(autouse=True)
+def teardown(request, nodes):
+
+    def finalizer():
+        """
+        Make sure all nodes are up again
+
+        """
+        nodes.restart_nodes_by_stop_and_start_teardown()
+
+    request.addfinalizer(finalizer)
+
+
 @pytest.mark.polarion_id("OCS-1579")
 def test_worker_node_abrupt_shutdown():
     """
