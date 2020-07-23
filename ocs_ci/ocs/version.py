@@ -48,7 +48,7 @@ def get_environment_info():
       User name that run the test
 
     Return:
-         dict: dictionary that contain the environment information
+      dict: dictionary that contain the environment information
 
     """
 
