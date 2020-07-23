@@ -184,12 +184,13 @@ class TestFIOBenchmark(E2ETest):
 
         # Setting the data set to 40% of the total storage capacity
         ceph_cluster = CephCluster()
-        total_data_set = int(ceph_cluster.get_ceph_capacity() * 0.4)
+        ceph_capacity = ceph_cluster.get_ceph_capacity()
+        total_data_set = int(ceph_capacity * 0.4)
         filesize = int(fio_cr['spec']['workload']['args']['filesize'].replace('GiB', ''))
         # To make sure the number of App pods will not be more then 50, in case
         # of large data set, changing the size of the file each pod will work on
         if total_data_set > 500:
-            filesize = int(ceph_cluster.get_ceph_capacity() * 0.008)
+            filesize = int(ceph_capacity * 0.008)
             fio_cr['spec']['workload']['args']['filesize'] = f'{filesize}GiB'
             # make sure that the storage size is larger then the file size
             fio_cr['spec']['workload']['args']['storagesize'] = f'{int(filesize * 1.2)}Gi'
