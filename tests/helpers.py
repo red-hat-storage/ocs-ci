@@ -25,13 +25,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError, UnavailableBuildException,
     UnexpectedBehaviour
 )
-from ocs_ci.ocs.ocp import (
-    OCP,
-    get_ocs_version,
-    get_build,
-    get_clustername,
-    get_ocp_channel
-)
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -41,9 +35,6 @@ from ocs_ci.utility.utils import (
     ocsci_log_path,
     run_cmd,
     update_container_with_mirrored_image,
-    get_ocp_version,
-    get_ceph_version,
-    get_rook_version
 )
 
 logger = logging.getLogger(__name__)
@@ -2379,59 +2370,3 @@ def get_pv_size(storageclass=None):
         if pv_obj['spec']['storageClassName'] == storageclass:
             return_list.append(pv_obj['spec']['capacity']['storage'])
     return return_list
-
-
-def get_environment_info():
-    """
-    Getting the environment information
-      Information that will be collected :
-      Versions: OCP - version / build / channel
-                OCS - version / build
-                Ceph - version
-                Rook - version
-      Platform: BM / VmWare / Cloud provider etc.
-      Instance type / architecture
-      Cluster name
-      User name that run the test
-
-    Return:
-         dict: dictionary that contain the environment information
-
-    """
-
-    results = {}
-    # getting the name and email  of the user that running the test.
-    try:
-        user = run_cmd('git config --get user.name').strip()
-        email = run_cmd('git config --get user.email').strip()
-        results['user'] = f'{user} <{email}>'
-    except CommandFailed:
-        # if no git user define, the default user is none
-        results['user'] = ''
-
-    results['clustername'] = get_clustername()
-    results['platform'] = node.get_provider()
-    if results['platform'].lower() not in ['bearmetal', 'vsphere']:
-        results['platform'] = results['platform'].upper()
-
-    results['ocp_build'] = get_build()
-    results['ocp_channel'] = get_ocp_channel()
-    results['ocp_version'] = get_ocp_version()
-
-    results['ceph_version'] = get_ceph_version()
-    results['rook_version'] = get_rook_version()
-
-    results['ocs_build'] = get_ocs_version()
-    # Extracting the version number x.y.z from full build name
-    m = re.match(r"(\d.\d).(\d)", results['ocs_build'])
-    if m and m.group(1) is not None:
-        results['ocs_version'] = m.group(1)
-
-    # Getting the instance type for cloud or Arch type for None cloud
-    worker_lbl = node.get_typed_nodes(num_of_nodes=1)[0].data['metadata']['labels']
-    if 'beta.kubernetes.io/instance-type' in worker_lbl:
-        results['worker_type'] = worker_lbl['beta.kubernetes.io/instance-type']
-    else:
-        results['worker_type'] = worker_lbl['kubernetes.io/arch']
-
-    return results
