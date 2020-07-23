@@ -58,6 +58,7 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
             terminate_rhel_workers(rhel_workers)
         # Destroy extra volumes
         destroy_volumes(cluster_name)
+        aws.delete_apps_record_set()
 
         stack_names = list()
         # Get master, bootstrap and security group stacks

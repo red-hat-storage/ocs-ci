@@ -38,6 +38,7 @@ class AWS(object):
     _ec2_resource = None
     _region_name = None
     _s3_client = None
+    _route53_client = None
 
     def __init__(self, region_name=None):
         """
@@ -91,6 +92,22 @@ class AWS(object):
                 region_name=self._region_name,
             )
         return self._s3_client
+
+    @property
+    def route53_client(self):
+        """
+        Property for route53 client
+
+        Returns:
+            boto3.client: instance of route53 client
+
+        """
+        if not self._route53_client:
+            self._route53_client = boto3.client(
+                'route53',
+                region_name=self._region_name,
+            )
+        return self._route53_client
 
     def get_ec2_instance(self, instance_id):
         """
@@ -952,6 +969,47 @@ class AWS(object):
         stack_id = response['StackId']
         logger.info(f"Stackid = {stack_id}")
         return stack_name, stack_id
+
+    def delete_apps_record_set(self):
+        """
+        Delete apps record set that sometimes blocks sg stack deletion.
+            https://github.com/red-hat-storage/ocs-ci/issues/2549
+
+        """
+        cluster_name = config.ENV_DATA['cluster_name']
+        base_domain = config.ENV_DATA['base_domain']
+        hosted_zone_name = f"{cluster_name}.{base_domain}."
+        record_set_name = f"\\052.apps.{cluster_name}.{base_domain}."
+
+        hosted_zones = self.route53_client.list_hosted_zones_by_name()[
+            'HostedZones'
+        ]
+        hosted_zone_id = [
+            zone['Id'] for zone in hosted_zones
+            if zone['Name'] == hosted_zone_name
+        ][0]
+        record_sets = self.route53_client.list_resource_record_sets(
+            HostedZoneId=hosted_zone_id
+        )['ResourceRecordSets']
+        apps_record_set = [
+            record_set for record_set in record_sets
+            if record_set['Name'] == record_set_name
+        ][0]
+        self.route53_client.change_resource_record_sets(
+            HostedZoneId=hosted_zone_id,
+            ChangeBatch={
+                'Changes': [
+                    {
+                        'Action': 'DELETE',
+                        'ResourceRecordSet': {
+                            'Name': record_set_name,
+                            'Type': apps_record_set['Type'],
+                            'AliasTarget': apps_record_set['AliasTarget']
+                        },
+                    }
+                ]
+            }
+        )
 
 
 def get_instances_ids_and_names(instances):
