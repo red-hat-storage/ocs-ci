@@ -970,13 +970,16 @@ class AWS(object):
         logger.info(f"Stackid = {stack_id}")
         return stack_name, stack_id
 
-    def delete_apps_record_set(self):
+    def delete_apps_record_set(self, cluster_name=None):
         """
         Delete apps record set that sometimes blocks sg stack deletion.
             https://github.com/red-hat-storage/ocs-ci/issues/2549
 
+        Args:
+            cluster_name (str): Name of the cluster
+
         """
-        cluster_name = config.ENV_DATA['cluster_name']
+        cluster_name = cluster_name or config.ENV_DATA['cluster_name']
         base_domain = config.ENV_DATA['base_domain']
         hosted_zone_name = f"{cluster_name}.{base_domain}."
         record_set_name = f"\\052.apps.{cluster_name}.{base_domain}."
