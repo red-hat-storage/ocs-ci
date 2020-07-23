@@ -39,10 +39,10 @@ def get_environment_info():
     Getting the environment information
       Information that will be collected :
       Versions:
-        OCP - version / build / channel
-        OCS - version / build
-        Ceph - version
-        Rook - version
+          OCP - version / build / channel
+          OCS - version / build
+          Ceph - version
+          Rook - version
       Platform: BM / VmWare / Cloud provider etc.
       Instance type / architecture
       Cluster name
