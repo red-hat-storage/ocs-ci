@@ -66,7 +66,9 @@ class TestNodeReplacement(ManageTest):
             elif config.ENV_DATA['deployment_type'] == 'upi':
                 node.delete_and_create_osd_node_aws_upi(osd_node_name)
             else:
-                log.warning("'deployment_type' value is not valid")
+                pytest.fail(
+                    f"ocs-ci config 'deployment_type' value '{config.ENV_DATA['deployment_type']}' is not valid, "
+                    f"results of this test run are all invalid.")
 
         elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
             pytest.skip("Skipping add node in Vmware platform due to "
