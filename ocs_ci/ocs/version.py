@@ -36,17 +36,19 @@ logger = logging.getLogger(__name__)
 
 def get_environment_info():
     """
-    Getting the environment information
-      Information that will be collected :
-      Versions:
-          OCP - version / build / channel
-          OCS - version / build
-          Ceph - version
-          Rook - version
-      Platform: BM / VmWare / Cloud provider etc.
-      Instance type / architecture
-      Cluster name
-      User name that run the test
+    Getting the environment information, Information that will be collected
+
+    Versions:
+        OCP - version / build / channel
+        OCS - version / build
+        Ceph - version
+        Rook - version
+
+    Platform:
+        BM / VmWare / Cloud provider etc.
+        Instance type / architecture
+        Cluster name
+        User name that run the test
 
     Return:
       dict: dictionary that contain the environment information
