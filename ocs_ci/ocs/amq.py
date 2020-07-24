@@ -8,7 +8,6 @@ import time
 import json
 from subprocess import run, CalledProcessError
 from prettytable import PrettyTable
-from threading import Thread
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs.exceptions import (ResourceWrongStatusException, CommandFailed)
@@ -367,7 +366,8 @@ class AMQ(object):
         """
         cmd = f"oc logs -n {namespace} {pod} --since={since_time}s"
         msg = run_cmd(cmd)
-        if msg.find(f"Hello world - {int(value) - 1} ") is -1:
+        substring = f"Hello world - {int(value) - 1}"
+        if msg.find(substring) is -1:
             return False
         else:
             return True
@@ -395,8 +395,8 @@ class AMQ(object):
             ):
                 if msg:
                     break
-        log.error("Few messages are not sent")
-        raise Exception("All messages are not sent from the producer pod")
+        assert msg, f"Few messages are not sent by producer"
+        log.info("Producer sent all messages")
 
     def validate_messages_are_consumed(self, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
         """
@@ -420,10 +420,9 @@ class AMQ(object):
                 900, 30, self.validate_msg, pod.name, namespace, value, since_time
             ):
                 if msg:
-                    log.info("Consumer pod received all messages sent by producer")
                     break
-        log.error("Few messages are not received")
-        raise Exception("Consumer pod received all messages sent by producer")
+        assert msg, f"Consumer didn't receive all messages"
+        log.info("Consumer received all messages")
 
     def run_in_bg(self, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
         """
@@ -439,15 +438,17 @@ class AMQ(object):
         log.info("Running open messages on pod in bg")
         threads = []
 
-        thread1 = Thread(target=self.validate_messages_are_produced, args=(namespace, value, since_time))
-        thread1.start()
-        time.sleep(10)
-        threads.append(thread1)
-
-        thread2 = Thread(target=self.validate_messages_are_consumed, args=(namespace, value, since_time))
-        thread2.start()
-        time.sleep(10)
-        threads.append(thread2)
+        executor = ThreadPoolExecutor(2)
+        threads.append(
+            executor.submit(
+                self.validate_messages_are_produced, namespace, value, since_time
+            )
+        )
+        threads.append(
+            executor.submit(
+                self.validate_messages_are_consumed, namespace, value, since_time
+            )
+        )
 
         return threads
 
@@ -794,36 +795,3 @@ class AMQ(object):
         # Reset namespace to default
         switch_to_default_rook_cluster_project()
         self.ns_obj.wait_for_delete(resource_name=kafka_namespace)
-
-
-def get_node_objs_where_benchmark_pod_not_hosted(
-    benchmark_pod_name="benchmark", namespace="tiller"
-):
-    """
-    Return node list obj where benchmark pod not hosted
-
-    Args:
-        benchmark_pod_name (str): Name of the benchmark pod
-        namespace (str): Namespace of benchmark pod hosted
-
-    Returns:
-        list: Cluster node OCP objects
-
-    """
-    # Get the worker node list
-    worker_nodes = get_typed_nodes(node_type='worker')
-
-    # Get the node name
-    worker_node = [node.get().get('metadata').get('name') for node in worker_nodes]
-
-    # Get the node where benchmark-driver pod is running
-    benchmark_pod_obj = OCP(
-        kind=constants.POD, namespace=namespace, resource_name=f"{benchmark_pod_name}-driver"
-    )
-    benchmark_pod_node = [benchmark_pod_obj.get().get('spec').get('nodeName')]
-
-    # Remove the node where benchmark pod hosted from list
-    nodes = list(set(worker_node) - set(benchmark_pod_node))
-
-    # Return node objs
-    return get_node_objs(nodes)
