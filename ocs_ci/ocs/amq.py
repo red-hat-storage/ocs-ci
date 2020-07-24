@@ -5,8 +5,11 @@ import logging
 import os
 import tempfile
 import time
+import json
 from subprocess import run, CalledProcessError
+from prettytable import PrettyTable
 from threading import Thread
+from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs.exceptions import (ResourceWrongStatusException, CommandFailed)
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
@@ -14,10 +17,13 @@ from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler
+from ocs_ci.utility import templating, utils
+from ocs_ci.utility.utils import run_cmd, exec_cmd, TimeoutSampler
+from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
 log = logging.getLogger(__name__)
+URL = "https://get.helm.sh/helm-v2.16.1-linux-amd64.tar.gz"
+AMQ_BENCHMARK_NAMESPACE = "tiller"
 
 
 class AMQ(object):
@@ -49,13 +55,14 @@ class AMQ(object):
         self.kafka_user_obj = OCP(kind="KafkaUser")
         self.amq_is_setup = False
         self.messaging = False
+        self.benchmark = False
+        self.dir = tempfile.mkdtemp(prefix='amq_')
         self._clone_amq()
 
     def _clone_amq(self):
         """
         clone the amq repo
         """
-        self.dir = tempfile.mkdtemp(prefix='amq_')
         try:
             log.info(f'cloning amq in {self.dir}')
             git_clone_cmd = f'git clone -b {self.branch} {self.repo} '
@@ -67,8 +74,8 @@ class AMQ(object):
             )
             self.amq_dir = "strimzi-kafka-operator/install/cluster-operator/"
             self.amq_kafka_pers_yaml = "strimzi-kafka-operator/examples/kafka/kafka-persistent.yaml"
-            self.amq_kafka_connect_yaml = "strimzi-kafka-operator/examples/kafka-connect/kafka-connect.yaml"
-            self.amq_kafka_bridge_yaml = "strimzi-kafka-operator/examples/kafka-bridge/kafka-bridge.yaml"
+            self.amq_kafka_connect_yaml = "strimzi-kafka-operator/examples/connect/kafka-connect.yaml"
+            self.amq_kafka_bridge_yaml = "strimzi-kafka-operator/examples/bridge/kafka-bridge.yaml"
             self.kafka_topic_yaml = "strimzi-kafka-operator/examples/topic/kafka-topic.yaml"
             self.kafka_user_yaml = "strimzi-kafka-operator/examples/user/kafka-user.yaml"
             self.hello_world_producer_yaml = constants.HELLO_WORLD_PRODUCER_YAML
@@ -191,9 +198,7 @@ class AMQ(object):
             raise cf
         time.sleep(40)
 
-        if self.is_amq_pod_running(
-            pod_pattern="my-cluster-zookeeper", expected_pods=replicas
-        ) and self.is_amq_pod_running(pod_pattern="my-cluster-kafka", expected_pods=replicas):
+        if self.is_amq_pod_running(pod_pattern="my-cluster", expected_pods=(replicas * 2) + 1):
             return self.kafka_persistent
         else:
             raise ResourceWrongStatusException("my-cluster-kafka and my-cluster-zookeeper "
@@ -446,7 +451,259 @@ class AMQ(object):
 
         return threads
 
-    # ToDo: Install helm and get kafka metrics
+    def run_amq_benchmark(
+        self, benchmark_pod_name="benchmark", kafka_namespace=constants.AMQ_NAMESPACE,
+        tiller_namespace=AMQ_BENCHMARK_NAMESPACE,
+        num_of_clients=8, worker=None, timeout=1800,
+        amq_workload_yaml=None, run_in_bg=False
+    ):
+        """
+        Run benchmark pod and get the results
+
+        Args:
+            benchmark_pod_name (str): Name of the benchmark pod
+            kafka_namespace (str): Namespace where kafka cluster created
+            tiller_namespace (str): Namespace where tiller pod needs to be created
+            num_of_clients (int): Number of clients to be created
+            worker (str) : Loads to create on workloads separated with commas
+                e.g http://benchmark-worker-0.benchmark-worker:8080,
+                http://benchmark-worker-1.benchmark-worker:8080
+            timeout (int): Time to complete the run
+            amq_workload_yaml (dict): Contains amq workloads information keys and values
+                :name (str): Name of the workloads
+                :topics (int): Number of topics created
+                :partitions_per_topic (int): Number of partitions per topic
+                :message_size (int): Message size
+                :payload_file (str): Load to run on workload
+                :subscriptions_per_topic (int): Number of subscriptions per topic
+                :consumer_per_subscription (int): Number of consumers per subscription
+                :producers_per_topic (int): Number of producers per topic
+                :producer_rate (int): Producer rate
+                :consumer_backlog_sizegb (int): Size of block in gb
+                :test_duration_minutes (int): Time to run the workloads
+            run_in_bg (bool): On true the workload will run in background
+
+        Return:
+            result (str/Thread obj): Returns benchmark run information if run_in_bg is False.
+                Otherwise a thread of the amq workload execution
+
+        """
+
+        # Namespace for to helm/tiller
+        try:
+            self.create_namespace(tiller_namespace)
+        except CommandFailed as ef:
+            if f'project.project.openshift.io "{tiller_namespace}" already exists' not in str(ef):
+                raise ef
+
+        # Create rbac file
+        try:
+            sa_tiller = list(templating.load_yaml(constants.AMQ_RBAC_YAML, multi_document=True))
+            sa_tiller[0]["metadata"]["namespace"] = tiller_namespace
+            sa_tiller[1]["subjects"][0]["namespace"] = tiller_namespace
+            self.sa_tiller = OCS(**sa_tiller[0])
+            self.crb_tiller = OCS(**sa_tiller[1])
+            self.sa_tiller.create()
+            self.crb_tiller.create()
+        except(CommandFailed, CalledProcessError) as cf:
+            log.error('Failed during creation of service account tiller')
+            raise cf
+
+        # Install helm cli (version v2.16.0 as we need tiller component)
+        # And create tiller pods
+        wget_cmd = f"wget -c --read-timeout=5 --tries=0 {URL}"
+        untar_cmd = "tar -zxvf helm-v2.16.1-linux-amd64.tar.gz"
+        tiller_cmd = (
+            f"linux-amd64/helm init --tiller-namespace {tiller_namespace}"
+            f" --service-account {tiller_namespace}"
+        )
+        exec_cmd(cmd=wget_cmd, cwd=self.dir)
+        exec_cmd(cmd=untar_cmd, cwd=self.dir)
+        exec_cmd(cmd=tiller_cmd, cwd=self.dir)
+
+        # Validate tiller pod is running
+        log.info("Waiting for 30s for tiller pod to come up")
+        time.sleep(30)
+        if self.is_amq_pod_running(pod_pattern="tiller", expected_pods=1, namespace=tiller_namespace):
+            log.info("Tiller pod is running")
+        else:
+            raise ResourceWrongStatusException("Tiller pod is not in running state")
+
+        # Create benchmark pods
+        log.info("Create benchmark pods")
+        values = templating.load_yaml(constants.AMQ_BENCHMARK_VALUE_YAML)
+        values["numWorkers"] = num_of_clients
+        benchmark_cmd = (
+            f"linux-amd64/helm install {constants.AMQ_BENCHMARK_POD_YAML}"
+            f" --name {benchmark_pod_name} --tiller-namespace {tiller_namespace}"
+        )
+        exec_cmd(cmd=benchmark_cmd, cwd=self.dir)
+
+        # Making sure the benchmark pod and clients are running
+        if self.is_amq_pod_running(
+            pod_pattern="benchmark", expected_pods=(1 + num_of_clients), namespace=tiller_namespace
+        ):
+            log.info("All benchmark pod is up and running")
+        else:
+            raise ResourceWrongStatusException("Benchmark pod is not getting to running state")
+
+        # Update commonConfig with kafka-bootstrap server details
+        driver_kafka = templating.load_yaml(constants.AMQ_DRIVER_KAFKA_YAML)
+        driver_kafka['commonConfig'] = (
+            f'bootstrap.servers=my-cluster-kafka-bootstrap.{kafka_namespace}.svc.cluster.local:9092'
+        )
+        json_file = f'{self.dir}/driver_kafka'
+        templating.dump_data_to_json(driver_kafka, json_file)
+        cmd = f'cp {json_file} {benchmark_pod_name}-driver:/'
+        self.pod_obj.exec_oc_cmd(cmd)
+
+        # Update the workload yaml
+        if not amq_workload_yaml:
+            amq_workload_yaml = templating.load_yaml(constants.AMQ_WORKLOAD_YAML)
+        yaml_file = f'{self.dir}/amq_workload.yaml'
+        templating.dump_data_to_temp_yaml(amq_workload_yaml, yaml_file)
+        cmd = f'cp {yaml_file} {benchmark_pod_name}-driver:/'
+        self.pod_obj.exec_oc_cmd(cmd)
+
+        self.benchmark = True
+
+        # Run the benchmark
+        if worker:
+            cmd = f"bin/benchmark --drivers /driver_kafka --workers {worker} /amq_workload.yaml"
+        else:
+            cmd = "bin/benchmark --drivers /driver_kafka /amq_workload.yaml"
+        log.info(f"Run benchmark and running command {cmd} inside the benchmark pod ")
+
+        if run_in_bg:
+            executor = ThreadPoolExecutor(1)
+            result = executor.submit(
+                self.run_amq_workload,
+                cmd, benchmark_pod_name, tiller_namespace, timeout
+            )
+            return result
+
+        pod_obj = get_pod_obj(name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace)
+        result = pod_obj.exec_cmd_on_pod(command=cmd, out_yaml_format=False, timeout=timeout)
+
+        return result
+
+    def run_amq_workload(
+        self, command, benchmark_pod_name, tiller_namespace, timeout
+    ):
+        """
+        Runs amq workload in bg
+
+        Args:
+             command (str): Command to run on pod
+             benchmark_pod_name (str): Pod name
+             tiller_namespace (str): Namespace of pod
+             timeout (int): Time to complete the run
+
+        Returns:
+            result (str): Returns benchmark run information
+
+        """
+        pod_obj = get_pod_obj(name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace)
+        return pod_obj.exec_cmd_on_pod(command=command, out_yaml_format=False, timeout=timeout)
+
+    def validate_amq_benchmark(self, result, amq_workload_yaml, benchmark_pod_name="benchmark"):
+        """
+        Validates amq benchmark run
+
+        Args:
+            result (str): Benchmark run information
+            amq_workload_yaml (dict): AMQ workload information
+            benchmark_pod_name (str): Name of the benchmark pod
+
+        Returns:
+            res_dict (dict): Returns the dict output on success, Otherwise none
+
+        """
+        res_dict = {}
+        res_dict['topic'] = amq_workload_yaml['topics']
+        res_dict['partitionsPerTopic'] = amq_workload_yaml['partitionsPerTopic']
+        res_dict['messageSize'] = amq_workload_yaml['messageSize']
+        res_dict['payloadFile'] = amq_workload_yaml['payloadFile']
+        res_dict['subscriptionsPerTopic'] = amq_workload_yaml['subscriptionsPerTopic']
+        res_dict['producersPerTopic'] = amq_workload_yaml['producersPerTopic']
+        res_dict['consumerPerSubscription'] = amq_workload_yaml['consumerPerSubscription']
+        res_dict['producerRate'] = amq_workload_yaml['producerRate']
+
+        # Validate amq benchmark is completed
+        for part in result.split():
+            if '.json' in part:
+                workload_json_file = part
+
+        if workload_json_file:
+            cmd = f'rsync {benchmark_pod_name}-driver:{workload_json_file} {self.dir} -n {AMQ_BENCHMARK_NAMESPACE}'
+            self.pod_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
+            # Parse the json file
+            with open(f'{self.dir}/{workload_json_file}') as json_file:
+                data = json.load(json_file)
+            res_dict['AvgpublishRate'] = sum(data.get('publishRate')) / len(data.get('publishRate'))
+            res_dict['AvgConsumerRate'] = sum(data.get('consumeRate')) / len(data.get('consumeRate'))
+            res_dict['AvgMsgBacklog'] = sum(data.get('backlog')) / len(data.get('backlog'))
+            res_dict['publishLatencyAvg'] = sum(data.get('publishLatencyAvg')) / len(data.get('publishLatencyAvg'))
+            res_dict['aggregatedPublishLatencyAvg'] = data.get('aggregatedPublishLatencyAvg')
+            res_dict['aggregatedPublishLatency50pct'] = data.get('aggregatedPublishLatency50pct')
+            res_dict['aggregatedPublishLatency75pct'] = data.get('aggregatedPublishLatency75pct')
+            res_dict['aggregatedPublishLatency95pct'] = data.get('aggregatedPublishLatency95pct')
+            res_dict['aggregatedPublishLatency99pct'] = data.get('aggregatedPublishLatency99pct')
+            res_dict['aggregatedPublishLatency999pct'] = data.get('aggregatedPublishLatency999pct')
+            res_dict['aggregatedPublishLatency9999pct'] = data.get('aggregatedPublishLatency9999pct')
+            res_dict['aggregatedPublishLatencyMax'] = data.get('aggregatedPublishLatencyMax')
+            res_dict['aggregatedEndToEndLatencyAvg'] = data.get('aggregatedEndToEndLatencyAvg')
+            res_dict['aggregatedEndToEndLatency50pct'] = data.get('aggregatedEndToEndLatency50pct')
+            res_dict['aggregatedEndToEndLatency75pct'] = data.get('aggregatedEndToEndLatency75pct')
+            res_dict['aggregatedEndToEndLatency95pct'] = data.get('aggregatedEndToEndLatency95pct')
+            res_dict['aggregatedEndToEndLatency99pct'] = data.get('aggregatedEndToEndLatency99pct')
+            res_dict['aggregatedEndToEndLatency999pct'] = data.get('aggregatedEndToEndLatency999pct')
+            res_dict['aggregatedEndToEndLatency9999pct'] = data.get('aggregatedEndToEndLatency9999pct')
+            res_dict['aggregatedEndToEndLatencyMax'] = data.get('aggregatedEndToEndLatencyMax')
+        else:
+            log.error("Benchmark didn't run completely")
+            return None
+
+        amq_benchmark_pod_table = PrettyTable(['key', 'value'])
+        for key, val in res_dict.items():
+            amq_benchmark_pod_table.add_row([key, val])
+        log.info(f'\n{amq_benchmark_pod_table}\n')
+
+        return res_dict
+
+    def export_amq_output_to_gsheet(self, amq_output, sheet_name, sheet_index):
+        """
+        Collect amq data to google spreadsheet
+
+        Args:
+            amq_output (dict):  amq output in dict
+            sheet_name (str): Name of the sheet
+            sheet_index (int): Index of sheet
+
+        """
+        # Collect data and export to Google doc spreadsheet
+        g_sheet = GoogleSpreadSheetAPI(
+            sheet_name=sheet_name, sheet_index=sheet_index
+        )
+        log.info("Exporting amq data to google spreadsheet")
+
+        headers_to_key = []
+        values = []
+        for key, val in amq_output.items():
+            headers_to_key.append(key)
+            values.append(val)
+
+        # Update amq_result to gsheet
+        g_sheet.insert_row(values, 2)
+        g_sheet.insert_row(headers_to_key, 2)
+
+        # Capturing versions(OCP, OCS and Ceph) and test run name
+        g_sheet.insert_row(
+            [f"ocp_version:{utils.get_cluster_version()}",
+             f"ocs_build_number:{utils.get_ocs_build_number()}",
+             f"ceph_version:{utils.get_ceph_version()}",
+             f"test_run_name:{utils.get_testrun_name()}"], 2
+        )
 
     def create_messaging_on_amq(self, topic_name='my-topic', user_name="my-user", partitions=1,
                                 replicas=1, num_of_producer_pods=1, num_of_consumer_pods=1,
@@ -489,14 +746,19 @@ class AMQ(object):
         self.amq_is_setup = True
         return self
 
-    def cleanup(self, namespace=constants.AMQ_NAMESPACE):
+    def cleanup(
+        self, kafka_namespace=constants.AMQ_NAMESPACE,
+        tiller_namespace=AMQ_BENCHMARK_NAMESPACE
+    ):
         """
         Clean up function,
         will start to delete from amq cluster operator
         then amq-connector, persistent, bridge, at the end it will delete the created namespace
 
         Args:
-            namespace (str): Created namespace for amq
+            kafka_namespace (str): Created namespace for amq
+            tiller_namespace (str): Created namespace for benchmark
+
         """
         if self.amq_is_setup:
             if self.messaging:
@@ -504,12 +766,31 @@ class AMQ(object):
                 self.producer_pod.delete()
                 self.kafka_user.delete()
                 self.kafka_topic.delete()
+            if self.benchmark:
+                # Delete the helm app
+                try:
+                    purge_cmd = f"linux-amd64/helm delete benchmark --purge --tiller-namespace {tiller_namespace}"
+                    run(
+                        purge_cmd,
+                        shell=True,
+                        cwd=self.dir,
+                        check=True
+                    )
+                except (CommandFailed, CalledProcessError)as cf:
+                    log.error('Failed to delete help app')
+                    raise cf
+
+                # Delete the pods and namespace created
+                self.sa_tiller.delete()
+                self.crb_tiller.delete()
+                run_cmd(f'oc delete project {tiller_namespace}')
+                self.ns_obj.wait_for_delete(resource_name=tiller_namespace)
             self.kafka_persistent.delete()
             self.kafka_connect.delete()
             self.kafka_bridge.delete()
             run_cmd(f'oc delete -f {self.amq_dir}', shell=True, check=True, cwd=self.dir)
-        run_cmd(f'oc delete project {namespace}')
+        run_cmd(f'oc delete project {kafka_namespace}')
 
         # Reset namespace to default
         switch_to_default_rook_cluster_project()
-        self.ns_obj.wait_for_delete(resource_name=namespace)
+        self.ns_obj.wait_for_delete(resource_name=kafka_namespace)

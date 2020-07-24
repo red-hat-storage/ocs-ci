@@ -23,6 +23,7 @@ def test_deployment(pvc_factory, pod_factory):
                 'ocs_registry_image'
             )
             ocs_install_verification(ocs_registry_image=ocs_registry_image)
+
             # Check basic cluster functionality by creating resources
             # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
             # run IO and delete the resources

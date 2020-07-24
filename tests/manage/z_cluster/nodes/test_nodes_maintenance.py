@@ -16,7 +16,8 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.framework.testlib import (
     tier1, tier2, tier3, tier4, tier4b,
-    ManageTest, aws_platform_required, ignore_leftovers
+    ManageTest, aws_platform_required, ignore_leftovers,
+    ipi_deployment_required
 )
 
 from tests.sanity_helpers import Sanity
@@ -158,10 +159,16 @@ class TestNodesMaintenance(ManageTest):
         drain_nodes([typed_node_name])
 
         # Restarting the node
-        nodes.restart_nodes(nodes=typed_nodes, wait=True)
+        nodes.restart_nodes(nodes=typed_nodes, wait=False)
 
         wait_for_nodes_status(
-            node_names=[typed_node_name], status=constants.NODE_READY_SCHEDULING_DISABLED
+            node_names=[typed_node_name],
+            status=constants.NODE_NOT_READY_SCHEDULING_DISABLED
+        )
+
+        wait_for_nodes_status(
+            node_names=[typed_node_name],
+            status=constants.NODE_READY_SCHEDULING_DISABLED
         )
         # Mark the node back to schedulable
         schedule_nodes([typed_node_name])
@@ -246,6 +253,7 @@ class TestNodesMaintenance(ManageTest):
     @tier4
     @tier4b
     @aws_platform_required
+    @ipi_deployment_required
     @pytest.mark.parametrize(
         argnames=["interface"],
         argvalues=[

@@ -1,0 +1,43 @@
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+metadata:
+  name: fio_dc_raw_block
+  labels:
+    app: fio-benchmark
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: fio-benchmark
+    spec:
+      containers:
+        - name: fio
+          image: datawiseio/fio:latest
+          securityContext:
+             capabilities:
+               add: ["SYS_ADMIN"]
+          volumeDevices:
+            - devicePath: /dev/rbdblock
+              name: my-volume
+          command: ["/usr/bin/fio"]
+          args: ["--name=fio-rand-readwrite",
+                 "--filename=/dev/rbdblock",
+                 "--readwrite=randrw",
+                 "--bs=128K",
+                 "--direct=1",
+                 "--numjobs=1",
+                 "--iodepth=4",
+                 "--time_based=1",
+                 "--runtime=1000000",
+                 "--filesize=1G",
+                 "--invalidate=1",
+                 "--rwmixread=25",
+                 "--rate=15M",
+                 "--ioengine=libaio",
+                 "--output-format=json"]
+          imagePullPolicy: IfNotPresent
+      volumes:
+        - name: my-volume
+          persistentVolumeClaim:
+            claimName: test-raw-block-pv

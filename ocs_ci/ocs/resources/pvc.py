@@ -224,6 +224,7 @@ def get_all_pvcs(namespace=None, selector=None):
     ocp_pvc_obj = OCP(
         kind=constants.PVC, namespace=namespace
     )
+
     out = ocp_pvc_obj.get(selector=selector, all_namespaces=all_ns)
     return out
 
@@ -246,6 +247,28 @@ def get_all_pvc_objs(namespace=None, selector=None):
         err_msg = err_msg + f" and selector {selector}"
     assert all_pvcs, err_msg
     return [PVC(**pvc) for pvc in all_pvcs['items']]
+
+
+def get_all_pvcs_in_storageclass(storage_class):
+    """
+    This function returen all the PVCs in a given storage class
+
+    Args:
+        storage_class (str): name of the storage class
+
+    Returns:
+        out: list of PVC objects
+
+    """
+    ocp_pvc_obj = OCP(kind=constants.PVC)
+    pvc_list = ocp_pvc_obj.get(all_namespaces=True)['items']
+    out = []
+    for pvc in pvc_list:
+        pvc_obj = PVC(**pvc)
+        if pvc_obj.backed_sc == storage_class:
+            out.append(pvc_obj)
+
+    return out
 
 
 def get_deviceset_pvcs():

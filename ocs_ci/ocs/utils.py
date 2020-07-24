@@ -16,7 +16,7 @@ from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
 
 from ocs_ci.framework import config as ocsci_config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -27,7 +27,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import create_directory_path, run_cmd
+from ocs_ci.utility.utils import create_directory_path, mirror_image, run_cmd
 
 log = logging.getLogger(__name__)
 
@@ -746,7 +746,32 @@ def run_must_gather(log_dir_path, image, command=None):
         )
 
 
-def collect_ocs_logs(dir_name, ocp=True, ocs=True):
+def collect_noobaa_db_dump(log_dir_path):
+    """
+    Collect the Noobaa DB dump
+
+    Args:
+        log_dir_path (str): directory for dumped Noobaa DB
+
+    """
+    from ocs_ci.ocs.resources.pod import get_pods_having_label, download_file_from_pod, Pod
+    nb_db_pod = Pod(
+        **get_pods_having_label(
+            label=constants.NOOBAA_DB_LABEL,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        )[0]
+    )
+    ocs_log_dir_path = os.path.join(log_dir_path, 'noobaa_db_dump')
+    create_directory_path(ocs_log_dir_path)
+    ocs_log_dir_path = os.path.join(ocs_log_dir_path, 'nbcore.gz')
+    nb_db_pod.exec_cmd_on_pod("mongodump --archive=nbcore.gz --gzip --db=nbcore")
+    download_file_from_pod(
+        pod_name=nb_db_pod.name, remotepath="/opt/app-root/src/nbcore.gz",
+        localpath=ocs_log_dir_path, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+
+
+def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
     """
     Collects OCS logs
 
@@ -755,6 +780,7 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True):
             in dir_name suffix with _ocs_logs.
         ocp (bool): Whether to gather OCP logs
         ocs (bool): Whether to gather OCS logs
+        mcg (bool): True for collecting MCG logs (noobaa db dump)
 
     """
     if not (
@@ -775,22 +801,44 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True):
 
     if ocs:
         latest_tag = ocsci_config.REPORTING.get(
-            'default_ocs_must_gather_latest_tag',
-            ocsci_config.DEPLOYMENT['default_latest_tag']
+            'ocs_must_gather_latest_tag',
+            ocsci_config.REPORTING.get(
+                'default_ocs_must_gather_latest_tag', ocsci_config.DEPLOYMENT[
+                    'default_latest_tag'
+                ]
+            )
         )
         ocs_log_dir_path = os.path.join(log_dir_path, 'ocs_must_gather')
         ocs_must_gather_image = ocsci_config.REPORTING['ocs_must_gather_image']
         ocs_must_gather_image_and_tag = f"{ocs_must_gather_image}:{latest_tag}"
+        if ocsci_config.DEPLOYMENT.get('disconnected'):
+            ocs_must_gather_image_and_tag = (
+                mirror_image(ocs_must_gather_image_and_tag)
+            )
         run_must_gather(ocs_log_dir_path, ocs_must_gather_image_and_tag)
 
     if ocp:
         ocp_log_dir_path = os.path.join(log_dir_path, 'ocp_must_gather')
         ocp_must_gather_image = ocsci_config.REPORTING['ocp_must_gather_image']
+        if ocsci_config.DEPLOYMENT.get('disconnected'):
+            ocp_must_gather_image = (
+                mirror_image(ocp_must_gather_image)
+            )
         run_must_gather(ocp_log_dir_path, ocp_must_gather_image)
         run_must_gather(
             ocp_log_dir_path, ocp_must_gather_image,
             '/usr/bin/gather_service_logs worker'
         )
+    if mcg:
+        counter = 0
+        while counter < 5:
+            counter += 1
+            try:
+                collect_noobaa_db_dump(log_dir_path)
+                break
+            except CommandFailed as ex:
+                log.error(f"Failed to dump noobaa DB! Error: {ex}")
+                sleep(30)
 
 
 def collect_prometheus_metrics(

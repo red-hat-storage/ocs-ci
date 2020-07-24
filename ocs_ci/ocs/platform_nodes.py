@@ -16,7 +16,7 @@ from ocs_ci.deployment.vmware import (
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
-from ocs_ci.utility import aws, vsphere, templating
+from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.ocs import constants, ocp, exceptions
@@ -30,10 +30,11 @@ from ocs_ci.utility.csr import (
 )
 from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
-    get_ocp_version, TimeoutSampler, download_file,
-    delete_file, AZInfo, replace_content_in_file,
+    replace_content_in_file,
+    get_ocp_version, TimeoutSampler,
+    download_file, delete_file, AZInfo
 )
-
+from ocs_ci.ocs.node import wait_for_nodes_status
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,8 @@ class PlatformNodesFactory:
             'AWS': AWSNodes,
             'vsphere': VMWareNodes,
             'aws': AWSNodes,
-            'baremetal': NodesBase
+            'baremetal': BaremetalNodes,
+            'azure': AZURENodes
         }
 
     def get_nodes_platform(self):
@@ -91,9 +93,14 @@ class NodesBase(object):
             "Start nodes functionality is not implemented"
         )
 
-    def restart_nodes(self, nodes, force=True):
+    def restart_nodes(self, nodes, wait=True):
         raise NotImplementedError(
             "Restart nodes functionality is not implemented"
+        )
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        raise NotImplementedError(
+            "Restart nodes by stop and start functionality is not implemented"
         )
 
     def detach_volume(self, volume, node=None, delete_from_backend=True):
@@ -111,9 +118,10 @@ class NodesBase(object):
             "Wait for volume attach functionality is not implemented"
         )
 
-    def restart_nodes_teardown(self):
+    def restart_nodes_by_stop_and_start_teardown(self):
         raise NotImplementedError(
-            "Restart nodes teardown functionality is not implemented"
+            "Restart nodes by stop and start teardown functionality is "
+            "not implemented"
         )
 
     def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
@@ -250,7 +258,52 @@ class VMWareNodes(NodesBase):
         )
         self.vsphere.start_vms(vms)
 
-    def restart_nodes(self, nodes, force=True):
+    def restart_nodes(self, nodes, force=False, timeout=300, wait=True):
+        """
+        Restart vSphere VMs
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for Hard reboot, False for Soft reboot
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+            wait (bool): True if need to wait till the restarted OCP node
+                reaches READY state. False otherwise
+
+        """
+        vms = self.get_vms(nodes)
+        assert vms, (
+            f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
+        )
+        self.vsphere.restart_vms(vms, force=force)
+
+        if wait:
+            """
+            When reboot is initiated on a VM from the VMware, the VM
+            stays at "Running" state throughout the reboot operation.
+
+            Once the OCP node detects that the node is not reachable then the
+            node reaches status NotReady.
+            When the reboot operation is completed and the VM is reachable the
+            OCP node reaches status Ready.
+            """
+            nodes_names = [n.name for n in nodes]
+            logger.info(
+                f"Waiting for nodes: {nodes_names} to reach not ready state"
+            )
+            wait_for_nodes_status(
+                node_names=nodes_names, status=constants.NODE_NOT_READY,
+                timeout=timeout
+            )
+            logger.info(
+                f"Waiting for nodes: {nodes_names} to reach ready state"
+            )
+            wait_for_nodes_status(
+                node_names=nodes_names, status=constants.NODE_READY,
+                timeout=timeout
+            )
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
         """
         Restart vSphere VMs
 
@@ -263,7 +316,7 @@ class VMWareNodes(NodesBase):
         assert vms, (
             f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
         )
-        self.vsphere.restart_vms(vms, force=force)
+        self.vsphere.restart_vms_by_stop_and_start(vms, force=force)
 
     def detach_volume(self, volume, node=None, delete_from_backend=True):
         """
@@ -303,7 +356,7 @@ class VMWareNodes(NodesBase):
         logger.info("Not waiting for volume to get re-attached")
         pass
 
-    def restart_nodes_teardown(self):
+    def restart_nodes_by_stop_and_start_teardown(self):
         """
         Make sure all VMs are up by the end of the test
 
@@ -434,24 +487,68 @@ class AWSNodes(NodesBase):
         )
         self.aws.start_ec2_instances(instances=instances, wait=wait)
 
-    def restart_nodes(self, nodes, wait=True, force=True):
+    def restart_nodes(self, nodes, timeout=300, wait=True):
         """
         Restart EC2 instances
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True if need to wait till the restarted node reaches
+                READY state. False otherwise
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+
+        """
+        instances = self.get_ec2_instances(nodes)
+        assert instances, (
+            f"Failed to get the EC2 instances for "
+            f"nodes {[n.name for n in nodes]}"
+        )
+        self.aws.restart_ec2_instances(instances=instances)
+        if wait:
+            """
+            When reboot is initiated on an instance from the AWS, the
+            instance stays at "Running" state throughout the reboot operation.
+
+            Once the OCP node detects that the node is not reachable then the
+            node reaches status NotReady.
+            When the reboot operation is completed and the instance is
+            reachable the OCP node reaches status Ready.
+            """
+            nodes_names = [n.name for n in nodes]
+            logger.info(
+                f"Waiting for nodes: {nodes_names} to reach not ready state"
+            )
+            wait_for_nodes_status(
+                node_names=nodes_names, status=constants.NODE_NOT_READY,
+                timeout=timeout
+            )
+            logger.info(
+                f"Waiting for nodes: {nodes_names} to reach ready state"
+            )
+            wait_for_nodes_status(
+                node_names=nodes_names, status=constants.NODE_READY,
+                timeout=timeout
+            )
+
+    def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=True):
+        """
+        Restart nodes by stopping and starting EC2 instances
 
         Args:
             nodes (list): The OCS objects of the nodes
             wait (bool): True in case wait for status is needed,
                 False otherwise
             force (bool): True for force instance stop, False otherwise
-
         Returns:
-
         """
         instances = self.get_ec2_instances(nodes)
         assert instances, (
             f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
         )
-        self.aws.restart_ec2_instances(instances=instances, wait=wait, force=force)
+        self.aws.restart_ec2_instances_by_stop_and_start(
+            instances=instances, wait=wait, force=force
+        )
 
     def terminate_nodes(self, nodes, wait=True):
         """
@@ -540,7 +637,7 @@ class AWSNodes(NodesBase):
             )
             return False
 
-    def restart_nodes_teardown(self):
+    def restart_nodes_by_stop_and_start_teardown(self):
         """
         Make sure all EC2 instances are up. To be used in the test teardown
 
@@ -720,7 +817,7 @@ class AWSNodes(NodesBase):
         """
         temp = []
         for index in index_list:
-            temp.append(int(index.split('-')[1][2:]))
+            temp.append(int(re.findall(r'\d+', index.split('-')[-1])[-1]))
         temp.sort()
         return temp
 
@@ -1426,3 +1523,285 @@ class VSPHEREUPINode(VMWareNodes):
             wait_for_all_nodes_csr_and_approve(
                 expected_node_num=nodes_approve_csr_num
             )
+
+
+class BaremetalNodes(NodesBase):
+    """
+    Baremetal Nodes class
+    """
+    def __init__(self):
+        super(BaremetalNodes, self).__init__()
+        self.baremetal = baremetal.BAREMETAL()
+
+    def stop_nodes(self, nodes, force=True):
+        """
+        Stop Baremetal Machine
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force nodes stop, False otherwise
+
+        """
+        self.baremetal.stop_baremetal_machines(nodes, force=force)
+
+    def start_nodes(self, nodes, wait=True):
+        """
+        Start Baremetal Machine
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): Wait for node status
+
+        """
+        self.baremetal.start_baremetal_machines(nodes, wait=wait)
+
+    def restart_nodes(self, nodes, force=True):
+        """
+        Restart Baremetal Machine
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force BM stop, False otherwise
+
+        """
+        self.baremetal.restart_baremetal_machines(nodes, force=force)
+
+    def restart_nodes_teardown(self):
+        """
+        Make sure all BMs are up by the end of the test
+
+        """
+        self.cluster_nodes = get_node_objs()
+        bms = self.baremetal.get_nodes_ipmi_ctx(self.cluster_nodes)
+        stopped_bms = [
+            bm for bm in bms if self.baremetal.get_power_status(bm) == constants.VM_POWERED_OFF
+        ]
+
+        if stopped_bms:
+            logger.info(f"The following BMs are powered off: {stopped_bms}")
+            self.baremetal.start_baremetal_machines_with_ipmi_ctx(stopped_bms)
+        for bm in bms:
+            bm.session.close()
+
+    def get_data_volumes(self):
+        raise NotImplementedError(
+            "Get data volume functionality is not implemented"
+        )
+
+    def get_node_by_attached_volume(self, volume):
+        raise NotImplementedError(
+            "Get node by attached volume functionality is not implemented"
+        )
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        raise NotImplementedError(
+            "Detach volume functionality is not implemented"
+        )
+
+    def attach_volume(self, volume, node):
+        raise NotImplementedError(
+            "Attach volume functionality is not implemented"
+        )
+
+    def wait_for_volume_attach(self, volume):
+        raise NotImplementedError(
+            "Wait for volume attach functionality is not implemented"
+        )
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def attach_nodes_to_cluster(self, node_list):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def read_default_config(self, default_config_path):
+        """
+        Commonly used function to read default config
+
+        Args:
+            default_config_path (str): Path to default config file
+
+        Returns:
+            dict: of default config loaded
+
+        """
+        assert os.path.exists(default_config_path), (
+            'Config file doesnt exists'
+        )
+
+        with open(default_config_path) as f:
+            default_config_dict = yaml.safe_load(f)
+
+        return default_config_dict
+
+
+class AZURENodes(NodesBase):
+    """
+    Azure Nodes class
+    """
+    def __init__(self):
+        super(AZURENodes, self).__init__()
+        self.subscription_id = config.ENV_DATA.get("azure_subscription_id")
+        self.client_id = config.ENV_DATA['azure_client_id']
+        self.client_secret = config.ENV_DATA['azure_client_secret']
+        self.tenant_id = config.ENV_DATA['azure_tenant_id']
+        self.resourcegroup = config.ENV_DATA['azure_resourcegroup']
+        self.azure = azure_utils.AZURE(self.subscription_id, self.client_id,
+                                       self.client_secret, self.tenant_id, self.resourcegroup)
+
+    def stop_nodes(self, nodes):
+        raise NotImplementedError(
+            "Stop nodes functionality is not implemented"
+        )
+
+    def start_nodes(self, nodes):
+        raise NotImplementedError(
+            "Start nodes functionality is not implemented"
+        )
+
+    def restart_nodes(self, nodes, timeout=540, wait=True):
+        """
+        Restart Azure vm instances
+
+        Args:
+            nodes (list): The OCS objects of the nodes / Azure Vm instance
+            wait (bool): True if need to wait till the restarted node reaches
+                READY state. False otherwise
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+
+        """
+        if not nodes:
+            logger.error("No nodes found for restarting")
+            raise ValueError
+        node_names = [n.name for n in nodes]
+        for node_name in node_names:
+            self.azure.restart_az_vm_instance(node_name)
+
+        if wait:
+            """
+            When reboot is initiated on an instance from the Azure, the
+            instance stays at "Running" state throughout the reboot operation.
+
+            Once the OCP node detects that the node is not reachable then the
+            node reaches status NotReady.
+            When the reboot operation is completed and the instance is
+            reachable the OCP node reaches status Ready.
+            """
+            logger.info(
+                f"Waiting for nodes: {node_names} to reach not ready state"
+            )
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_NOT_READY,
+                timeout=timeout
+            )
+            logger.info(
+                f"Waiting for nodes: {node_names} to reach ready state"
+            )
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY,
+                timeout=timeout
+            )
+
+    def get_data_volumes(self):
+        """
+        Get the data Azure disk objects
+
+        Returns:
+            list: azure disk objects
+
+        """
+        pvs = get_deviceset_pvs()
+        return self.azure.get_data_volumes(pvs)
+
+    def get_node_by_attached_volume(self, volume):
+        """
+        Get node OCS object of the Azure vm instance that has the volume attached to
+
+        Args:
+            volume (Disk): The disk object to get the Azure Vm according to
+
+        Returns:
+            OCS: The OCS object of the Azure Vm instance
+
+        """
+        vm = self.azure.get_node_by_attached_volume(volume)
+        all_nodes = get_node_objs()
+        nodes = [
+            n for n in all_nodes if n.name == vm.name
+        ]
+        assert nodes, (
+            f"Failed to find the OCS object for Azure Vm instance {vm.name}"
+        )
+        return nodes[0]
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        """
+        Detach a volume from an Azure Vm instance
+
+        Args:
+            volume (Disk): The disk object required to delete a volume
+            node (OCS): The OCS object representing the node
+            delete_from_backend (bool): True for deleting the disk from the
+                storage backend, False otherwise
+
+        """
+        self.azure.detach_volume(volume, node)
+
+    def attach_volume(self, volume, node):
+        raise NotImplementedError(
+            "Attach volume functionality is not implemented"
+        )
+
+    def wait_for_volume_attach(self, volume):
+        """
+        Wait for a Disk to be attached to an Azure Vm instance.
+        This is used as when detaching the Disk from the Azure Vm instance,
+        re-attach should take place automatically
+
+        Args:
+            volume (Disk): The Disk to wait for to be attached
+
+        Returns:
+            bool: True if the volume has been attached to the
+                instance, False otherwise
+
+        """
+        try:
+            for sample in TimeoutSampler(
+                300, 3, self.azure.get_disk_state, volume.name
+            ):
+                logger.info(
+                    f"Volume id: {volume.name} has status: {sample}"
+                )
+                if sample == "Attached":
+                    return True
+        except TimeoutExpiredError:
+            logger.error(
+                f"Volume {volume.name} failed to be attached to an Azure Vm instance"
+            )
+            return False
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def attach_nodes_to_cluster(self, node_list):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )

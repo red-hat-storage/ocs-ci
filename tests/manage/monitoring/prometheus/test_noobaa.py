@@ -1,5 +1,6 @@
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import polarion_id, bugzilla, tier4, tier4a
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
@@ -19,26 +20,52 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
     api = prometheus.PrometheusAPI()
 
     alerts = measure_noobaa_exceed_bucket_quota.get('prometheus_alerts')
-    for target_label, target_msg, target_states, target_severity in [
-        (
-            constants.ALERT_BUCKETREACHINGQUOTASTATE,
-            'A NooBaa Bucket Is In Reaching Quota State',
-            ['firing'],
-            'warning'
-        ),
-        (
-            constants.ALERT_BUCKETERRORSTATE,
-            'A NooBaa Bucket Is In Error State',
-            ['pending', 'firing'],
-            'warning'
-        ),
-        (
-            constants.ALERT_BUCKETEXCEEDINGQUOTASTATE,
-            'A NooBaa Bucket Is In Exceeding Quota State',
-            ['firing'],
-            'warning'
-        )
-    ]:
+
+    # since version 4.5 all NooBaa alerts have defined Pending state
+    if float(config.ENV_DATA['ocs_version']) < 4.5:
+        expected_alerts = [
+            (
+                constants.ALERT_BUCKETREACHINGQUOTASTATE,
+                'A NooBaa Bucket Is In Reaching Quota State',
+                ['firing'],
+                'warning'
+            ),
+            (
+                constants.ALERT_BUCKETERRORSTATE,
+                'A NooBaa Bucket Is In Error State',
+                ['pending', 'firing'],
+                'warning'
+            ),
+            (
+                constants.ALERT_BUCKETEXCEEDINGQUOTASTATE,
+                'A NooBaa Bucket Is In Exceeding Quota State',
+                ['firing'],
+                'warning'
+            )
+        ]
+    else:
+        expected_alerts = [
+            (
+                constants.ALERT_BUCKETREACHINGQUOTASTATE,
+                'A NooBaa Bucket Is In Reaching Quota State',
+                ['pending', 'firing'],
+                'warning'
+            ),
+            (
+                constants.ALERT_BUCKETERRORSTATE,
+                'A NooBaa Bucket Is In Error State',
+                ['pending', 'firing'],
+                'warning'
+            ),
+            (
+                constants.ALERT_BUCKETEXCEEDINGQUOTASTATE,
+                'A NooBaa Bucket Is In Exceeding Quota State',
+                ['pending', 'firing'],
+                'warning'
+            )
+        ]
+
+    for target_label, target_msg, target_states, target_severity in expected_alerts:
         prometheus.check_alert_list(
             label=target_label,
             msg=target_msg,
