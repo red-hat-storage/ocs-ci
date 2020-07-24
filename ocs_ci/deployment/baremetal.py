@@ -491,6 +491,10 @@ def clean_disk():
                         node=worker.name, cmd_list=[f"wipefs -a -f /dev/{device_to_clean['name']}"]
                     )
                     logger.info(out)
+                    out = ocp_obj.exec_oc_debug_cmd(
+                        node=worker.name, cmd_list=[f"sgdisk --zap-all /dev/{device_to_clean['name']}"]
+                    )
+                    logger.info(out)
 
 
 class BaremetalPSIUPI(Deployment):
