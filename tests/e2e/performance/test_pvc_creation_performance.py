@@ -14,7 +14,6 @@ from ocs_ci.framework.testlib import (
 from tests import helpers
 from ocs_ci.ocs import defaults, constants
 
-
 log = logging.getLogger(__name__)
 
 
@@ -25,14 +24,14 @@ class TestPVCCreationPerformance(E2ETest):
     """
     pvc_size = '1Gi'
 
-    def samples_creation(self,samples_num,teardown_factory, pvc_size):
+    def samples_creation(self, samples_num, teardown_factory, pvc_size):
         """
-
-        :param pvc_size:
-        :param teardown_factory:
-        :param action:
-        :param samples_num:
-        :return:
+        samples_creation creates number (samples_num) of PVCs, measures creation time for each PVC and returns list
+        with all the creation times
+        :param pvc_size: Size of the created PVC
+        :param teardown_factory: A fixture used when we want a new resource that was created during the tests
+        :param samples_num: Number of the sampled created PVCs
+        :return: list of the creation times of all the created PVCs
         """
         time_measures = []
         for i in range(samples_num):
@@ -50,7 +49,6 @@ class TestPVCCreationPerformance(E2ETest):
 
             time_measures.append(create_time)
         return time_measures
-
 
     @pytest.fixture()
     def base_setup(
@@ -87,7 +85,6 @@ class TestPVCCreationPerformance(E2ETest):
             ),
         ]
     )
-
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_pvc_creation_measurement_performance(self, teardown_factory, pvc_size):
         """
@@ -119,10 +116,11 @@ class TestPVCCreationPerformance(E2ETest):
         st_deviation = statistics.stdev(create_measures)
         log.info(f"The average creation time for the sampled {samples_num} PVCs is {average}.")
 
-        st_deviation_percent =abs(st_deviation - average) / average * 100.0
+        st_deviation_percent = abs(st_deviation - average) / average * 100.0
         if st_deviation > accepted_deviation_percent:
             raise ex.PerformanceException(
-            f"PVC create time deviation is {st_deviation_percent}% and is greater than the allowed {accepted_deviation_percent}%."
+                f"PVC create time deviation is {st_deviation_percent}%"
+                f"and is greater than the allowed {accepted_deviation_percent}%."
             )
 
     @pytest.mark.usefixtures(base_setup.__name__)
