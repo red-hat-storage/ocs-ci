@@ -196,3 +196,16 @@ class RDMDiskNotFound(Exception):
 
 class CredReqSecretNotFound(Exception):
     pass
+
+
+class BugInOCSCI(Exception):
+    """
+    This is not a product but, but rather ocs-ci issue.
+    """
+
+
+class InvalidDeploymentPlatfrom(BugInOCSCI):
+    """
+    Deployment of Platform code is incorrect or missing important detail. This
+    is ocs-ci bug.
+    """

@@ -16,8 +16,12 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, UnavailableResourceException, UnsupportedPlatformError,
-    ResourceWrongStatusException, CephHealthException
+    CephHealthException,
+    CommandFailed,
+    InvalidDeploymentPlatfrom,
+    ResourceWrongStatusException,
+    UnavailableResourceException,
+    UnsupportedPlatformError
 )
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
@@ -64,6 +68,12 @@ class Deployment(object):
     """
     Base for all deployment platforms
     """
+
+    # Default storage class for StorageCluster CRD,
+    # every platform specific class which extending this base class should
+    # define it
+    DEFAULT_STORAGECLASS = None
+
     def __init__(self):
         self.platform = config.ENV_DATA['platform']
         self.ocp_deployment_type = config.ENV_DATA['deployment_type']
@@ -371,6 +381,8 @@ class Deployment(object):
                 replace_from=config.DEPLOYMENT['csv_change_from'],
                 replace_to=config.DEPLOYMENT['csv_change_to']
             )
+
+        # creating StorageCluster
         cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
@@ -390,10 +402,8 @@ class Deployment(object):
                 'storage'
             ] = f"{device_size}Gi"
 
-        if self.platform.lower() == constants.VSPHERE_PLATFORM:
-            deviceset_data['dataPVCTemplate']['spec'][
-                'storageClassName'
-            ] = constants.DEFAULT_SC_VSPHERE
+        # set storage class to OCS default on current platform
+        deviceset_data['dataPVCTemplate']['spec']['storageClassName'] = self.DEFAULT_STORAGECLASS
 
         if config.DEPLOYMENT.get('local_storage'):
             cluster_data['spec']['manageNodes'] = False
@@ -645,21 +655,20 @@ class Deployment(object):
         """
         Patch storage class which comes as default with installation to non-default
         """
-        sc_to_patch = None
-        if self.platform.lower() == constants.AWS_PLATFORM:
-            sc_to_patch = constants.DEFAULT_SC_AWS
-        elif self.platform.lower() == constants.VSPHERE_PLATFORM:
-            sc_to_patch = constants.DEFAULT_SC_VSPHERE
-        else:
-            logger.info(f"Unsupported platform {self.platform} to patch")
-        if sc_to_patch:
-            logger.info(f"Patch {sc_to_patch} storageclass as non-default")
-            patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
-            run_cmd(
-                f"oc patch storageclass {sc_to_patch} "
-                f"-p {patch} "
-                f"--request-timeout=120s"
+        if self.DEFAULT_STORAGECLASS is None:
+            error_msg = (
+                f"DEFAULT_STORAGECLASS not defined on {self.platform} platform"
             )
+            logger.error(error_msg)
+            raise InvalidDeploymentPlatfrom(error_msg)
+
+        logger.info(f"Patch {self.DEFAULT_STORAGECLASS} storageclass as non-default")
+        patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
+        run_cmd(
+            f"oc patch storageclass {self.DEFAULT_STORAGECLASS} "
+            f"-p {patch} "
+            f"--request-timeout=120s"
+        )
 
 
 def create_catalog_source(image=None, ignore_upgrade=False):
