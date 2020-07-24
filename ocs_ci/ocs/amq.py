@@ -395,7 +395,7 @@ class AMQ(object):
             ):
                 if msg:
                     break
-        assert msg, f"Few messages are not sent by producer"
+        assert msg, "Few messages are not sent by producer"
         log.info("Producer sent all messages")
 
     def validate_messages_are_consumed(self, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
@@ -421,7 +421,7 @@ class AMQ(object):
             ):
                 if msg:
                     break
-        assert msg, f"Consumer didn't receive all messages"
+        assert msg, "Consumer didn't receive all messages"
         log.info("Consumer received all messages")
 
     def run_in_bg(self, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
