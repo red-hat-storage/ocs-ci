@@ -1,7 +1,7 @@
 import logging
 import pytest
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.scale_pgsql import ScalePodPGSQL
+from ocs_ci.ocs import scale_pgsql
 from ocs_ci.utility import utils
 from ocs_ci.framework.testlib import (
     E2ETest, scale, ignore_leftovers
@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 @pytest.fixture(scope='function')
 def pgsql(request):
 
-    pgsql = ScalePodPGSQL()
+    pgsql = scale_pgsql.ScalePodPGSQL()
 
     def teardown():
         pgsql.cleanup()
@@ -37,11 +37,11 @@ class TestPgsqlPodScale(E2ETest):
           * Label new worker node
           * Create pgsql to run on 200 pods on new added worker node
         """
-        replicas = 100  # Number of postgres and pgbench pods to be deployed
-        timeout = replicas * 500  # Time in seconds to wait for pgbench pods to be created
+        replicas = 200  # Number of postgres and pgbench pods to be deployed
+        timeout = replicas * 100  # Time in seconds to wait for pgbench pods to be created
 
         # Add workers node to cluster
-        pgsql.add_worker_node()
+        scale_pgsql.add_worker_node()
 
         # Check ceph health status
         utils.ceph_health_check()
