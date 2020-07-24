@@ -1,0 +1,23 @@
+apiVersion: {{ api_version | default('v1') }}
+baseDomain: {{ base_domain | default('qe.rh-ocs.com') }}
+metadata:
+  name: '{{ cluster_name }}'
+networking:
+  machineCIDR: '{{ machine_cidr }}'
+{% if fips %}
+fips: {{ fips }}
+{% endif %}
+platform:
+  vsphere:
+    datacenter: {{ vsphere_datacenter }}
+    defaultDatastore: {{ vsphere_datastore }}
+    password: {{ vsphere_password }}
+    username: {{ vsphere_user }}
+    vCenter: {{ vsphere_server }}
+    apiVIP: {{ api_vip }}
+    ingressVIP: {{ ingress_vip }}
+    cluster: {{ cluster }}
+    network: {{ network }}
+pullSecret: ''
+sshKey: |
+  ''

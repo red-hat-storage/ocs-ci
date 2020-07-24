@@ -17,7 +17,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, RDMDiskNotFound
 from ocs_ci.ocs.node import (
-    get_node_ips, get_typed_worker_nodes, remove_nodes, wait_for_nodes_status
+    get_node_ips, get_typed_worker_nodes, remove_nodes, wait_for_nodes_status,
 )
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.bootstrap import gather_bootstrap
@@ -42,8 +42,7 @@ from .deployment import Deployment
 logger = logging.getLogger(__name__)
 
 
-# As of now only UPI
-__all__ = ['VSPHEREUPI']
+__all__ = ['VSPHEREUPI', 'VSPHEREIPI']
 
 
 class VSPHEREBASE(Deployment):
@@ -354,6 +353,75 @@ class VSPHEREBASE(Deployment):
 
         # destroy the folder in templates
         self.vsphere.destroy_folder(pool, self.cluster, self.datacenter)
+
+
+class VSPHEREIPI(VSPHEREBASE):
+    """
+
+    """
+    def __init__(self):
+        super(VSPHEREIPI, self).__init__()
+        self.ipam = config.ENV_DATA.get('ipam')
+        self.token = config.ENV_DATA.get('ipam_token')
+        self.cidr = config.ENV_DATA.get('machine_cidr')
+        self.vm_network = config.ENV_DATA.get('vm_network')
+
+    class OCPDeployment(BaseOCPDeployment):
+        def __init__(self):
+            super(VSPHEREIPI.OCPDeployment, self).__init__()
+
+        def deploy_prereq(self):
+            """
+            Overriding deploy_prereq from parent. Perform all necessary
+            prerequisites for VSPHEREIPI here.
+            """
+            config.ENV_DATA['cluster'] = config.ENV_DATA.get('vsphere_cluster')
+            config.ENV_DATA['network'] = config.ENV_DATA.get('vm_network')
+
+            super(VSPHEREIPI.OCPDeployment, self).deploy_prereq()
+            if config.DEPLOYMENT['preserve_bootstrap_node']:
+                logger.info("Setting ENV VAR to preserve bootstrap node")
+                os.environ['OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP'] = 'True'
+                assert os.getenv(
+                    'OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP') == 'True'
+
+        def deploy(self, log_cli_level='DEBUG'):
+            """
+            Deployment specific to OCP cluster on this platform
+
+            Args:
+                log_cli_level (str): openshift installer's log level
+                    (default: "DEBUG")
+            """
+            logger.info("Deploying OCP cluster")
+            logger.info(
+                f"Openshift-installer will be using loglevel:{log_cli_level}"
+            )
+            try:
+                run_cmd(
+                    f"{self.installer} create cluster "
+                    f"--dir {self.cluster_path} "
+                    f"--log-level {log_cli_level}",
+                    timeout=3600
+                )
+            except CommandFailed as e:
+                if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
+                    try:
+                        gather_bootstrap()
+                    except Exception as ex:
+                        logger.error(ex)
+                raise e
+            self.test_cluster()
+
+    def deploy_ocp(self, log_cli_level='DEBUG'):
+        """
+        Deployment specific to OCP cluster on this platform
+
+        Args:
+            log_cli_level (str): openshift installer's log level
+                (default: "DEBUG")
+        """
+        super(VSPHEREIPI, self).deploy_ocp(log_cli_level)
 
 
 class VSPHEREUPI(VSPHEREBASE):
