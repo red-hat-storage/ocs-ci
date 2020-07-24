@@ -8,7 +8,9 @@ In the event values here have to be changed it should be under careful review
 and with consideration of the entire project.
 
 """
+
 import os
+
 
 # Directories
 TOP_DIR = os.path.dirname(
@@ -634,10 +636,6 @@ BAREMETAL_PLATFORM = 'baremetal'
 ON_PREM_PLATFORMS = [VSPHERE_PLATFORM, BAREMETAL_PLATFORM]
 CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
 BAREMETALPSI_PLATFORM = 'baremetalpsi'
-
-# Default SC based on platforms
-DEFAULT_SC_AWS = "gp2"
-DEFAULT_SC_VSPHERE = "thin"
 
 # ignition files
 BOOTSTRAP_IGN = "bootstrap.ign"

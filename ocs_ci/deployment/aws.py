@@ -37,6 +37,9 @@ __all__ = ['AWSIPI', 'AWSUPI']
 
 class AWSBase(CloudDeploymentBase):
 
+    # default storage class for StorageCluster CRD on AWS platform
+    DEFAULT_STORAGECLASS = "gp2"
+
     def __init__(self):
         """
         This would be base for both IPI and UPI deployment

@@ -26,6 +26,9 @@ class AZUREBase(CloudDeploymentBase):
     comparable with other platforms.
     """
 
+    # default storage class for StorageCluster CRD on Azure platform
+    DEFAULT_STORAGECLASS = "managed-premium"
+
     def __init__(self):
         super(AZUREBase, self).__init__()
         self.azure_util = AzureUtil()

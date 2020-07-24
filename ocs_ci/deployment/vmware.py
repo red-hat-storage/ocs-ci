@@ -48,6 +48,10 @@ __all__ = ['VSPHEREUPI']
 
 
 class VSPHEREBASE(Deployment):
+
+    # default storage class for StorageCluster CRD on VmWare platform
+    DEFAULT_STORAGECLASS = "thin"
+
     def __init__(self):
         """
         This would be base for both IPI and UPI deployment
