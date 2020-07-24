@@ -834,6 +834,8 @@ class AWSUPI(AWSBase):
         # Destroy buckets
         delete_cluster_buckets(self.cluster_name)
 
+        self.aws.delete_apps_record_set()
+
         # Delete master, bootstrap, security group, and worker stacks
         suffixes = ['ma', 'bs', 'sg']
 
