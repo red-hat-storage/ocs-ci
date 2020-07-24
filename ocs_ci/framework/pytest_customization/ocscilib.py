@@ -26,9 +26,9 @@ from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
 from ocs_ci.ocs.resources.ocs import get_ocs_csv, get_version_info
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
 from ocs_ci.utility.utils import (
-    dump_config_to_file, get_ceph_version, get_cluster_version,
-    get_csi_versions, get_ocp_version, get_ocs_build_number,
-    get_testrun_name, load_config_file
+    dump_config_to_file, get_ceph_version, get_cluster_name,
+    get_cluster_version, get_csi_versions, get_ocp_version,
+    get_ocs_build_number, get_testrun_name, load_config_file
 )
 
 __all__ = [
@@ -356,6 +356,13 @@ def process_cluster_cli_params(config):
             or len(cluster_name) > CLUSTER_NAME_MAX_CHARACTERS
         ):
             raise ClusterNameLengthError(cluster_name)
+    elif not cluster_name:
+        try:
+            ocsci_config.ENV_DATA['cluster_name'] = get_cluster_name(
+                cluster_path
+            )
+        except FileNotFoundError:
+            raise ClusterNameNotProvidedError()
     if get_cli_param(config, 'email') and not get_cli_param(config, '--html'):
         pytest.exit("--html option must be provided to send email reports")
     get_cli_param(config, '-m')
