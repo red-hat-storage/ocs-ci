@@ -22,7 +22,7 @@ class TestAddNode(ManageTest):
         Test for adding worker nodes to the cluster while IOs
         """
         new_nodes = 3
-        if config.ENV_DATA['platform'].lower() == constants.AWS_PLATFORM:
+        if config.ENV_DATA['platform'].lower() in constants.CLOUD_PLATFORMS:
             dt = config.ENV_DATA['deployment_type']
             if dt == 'ipi':
                 machines = machine_utils.get_machinesets()

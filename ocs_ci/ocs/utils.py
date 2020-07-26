@@ -830,7 +830,15 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
             '/usr/bin/gather_service_logs worker'
         )
     if mcg:
-        collect_noobaa_db_dump(log_dir_path)
+        counter = 0
+        while counter < 5:
+            counter += 1
+            try:
+                collect_noobaa_db_dump(log_dir_path)
+                break
+            except CommandFailed as ex:
+                log.error(f"Failed to dump noobaa DB! Error: {ex}")
+                sleep(30)
 
 
 def collect_prometheus_metrics(
@@ -878,3 +886,17 @@ def collect_prometheus_metrics(
         log.info(f'Saving {metric} data into {file_name}')
         with open(file_name, 'w') as outfile:
             json.dump(datapoints.json(), outfile)
+
+
+def oc_get_all_obc_names():
+    """
+    Returns:
+        set: A set of all OBC names
+
+    """
+    all_obcs_in_namespace = OCP(
+        namespace=ocsci_config.ENV_DATA['cluster_namespace'], kind='obc'
+    ).get().get('items')
+    return {
+        obc.get('spec').get('bucketName') for obc in all_obcs_in_namespace
+    }

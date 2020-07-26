@@ -74,6 +74,9 @@ DEPLOYMENT:
   noobaa_endpoints: 2
   # Terraform version
   terraform_version: "0.12.26"
+  # Following options are defaults for the min and max Noobaa endpoints
+  min_noobaa_endpoints: 2
+  max_noobaa_endpoints: 3
 
 # Section for reporting configuration
 REPORTING:
@@ -112,7 +115,7 @@ ENV_DATA:
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
   # Default RHCOS image to be used for VmWare deployment
-  vm_template: 'rhcos-45.81.202005200134-0-vmware.x86_64'
+  vm_template: 'rhcos-4.5.2-x86_64-vmware.x86_64'
   # minimal write speed of fio as used in workload_fio_storageutilization
   # fixtures, which is used to compute timeout of the write job (so that
   # when actual write speed of the operation is smaller than this value, the
@@ -138,3 +141,9 @@ UPGRADE:
 # or ping in ocs infra chat room.
 AUTH:
     test_quay_auth: test_secret
+
+# This section is for FLEXY, this is just dummy variable to have
+# FLEXY section here, all the defaults for FLEXY will be in
+# flexy_default_config.yaml
+FLEXY:
+  flexy_deploy: false

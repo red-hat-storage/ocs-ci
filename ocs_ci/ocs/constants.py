@@ -174,7 +174,13 @@ LOCAL_STORAGE_NAMESPACE = 'local-storage'
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
 DEFAULT_STORAGECLASS_RBD = f'{DEFAULT_CLUSTERNAME}-ceph-rbd'
-DEFAULT_STORAGECLASS_LSO = 'local-block'
+DEFAULT_STORAGECLASS_RGW = f'{DEFAULT_CLUSTERNAME}-ceph-rgw'
+DEFAULT_STORAGECLASS_LSO = 'localblock'
+
+# Independent mode default StorageClasses
+INDEPENDENT_DEFAULT_CLUSTER_NAME = 'ocs-independent-storagecluster'
+INDEPENDENT_DEFAULT_STORAGECLASS_RGW = f'{INDEPENDENT_DEFAULT_CLUSTER_NAME}-ceph-rgw'
+
 
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
@@ -209,6 +215,7 @@ NOOBAA_APP_LABEL = "app=noobaa"
 NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
 NOOBAA_OPERATOR_POD_LABEL = "noobaa-operator=deployment"
 NOOBAA_DB_LABEL = "noobaa-db=noobaa"
+NOOBAA_ENDPOINT_POD_LABEL = "noobaa-s3=noobaa"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
@@ -426,6 +433,10 @@ AMQ_WORKLOAD_YAML = os.path.join(
     TEMPLATE_AMQ_DIR, "amq_workload.yaml"
 )
 
+AMQ_SIMPLE_WORKLOAD_YAML = os.path.join(
+    TEMPLATE_AMQ_DIR, "amq_simple_workload.yaml"
+)
+
 NGINX_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "nginx.yaml"
 )
@@ -613,7 +624,9 @@ AWS_PLATFORM = 'aws'
 AZURE_PLATFORM = 'azure'
 VSPHERE_PLATFORM = 'vsphere'
 BAREMETAL_PLATFORM = 'baremetal'
+ON_PREM_PLATFORMS = [VSPHERE_PLATFORM, BAREMETAL_PLATFORM]
 CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM]
+BAREMETALPSI_PLATFORM = 'baremetalpsi'
 
 # Default SC based on platforms
 DEFAULT_SC_AWS = "gp2"
@@ -892,6 +905,28 @@ bucket_website_action_list = ['PutBucketWebsite', 'GetBucketWebsite', 'PutObject
 bucket_version_action_list = ['PutBucketVersioning', 'GetBucketVersioning']
 object_version_action_list = ['PutObject', 'GetObjectVersion', 'DeleteObjectVersion']
 
+# Flexy config constants
+FLEXY_MNT_CONTAINER_DIR = '/mnt'
+FLEXY_HOST_DIR = 'flexy-dir'
+FLEXY_HOST_DIR_PATH = os.path.join(DATA_DIR, FLEXY_HOST_DIR)
+FLEXY_DEFAULT_ENV_FILE = "ocs-osp.env"
+OPENSHIFT_MISC_BASE = "private-openshift-misc/v3-launch-templates/functionality-testing"
+FLEXY_BAREMETAL_UPI_TEMPLATE = "upi-on-baremetal/versioned-installer-openstack"
+FLEXY_GIT_CRYPT_KEYFILE = os.path.join(DATA_DIR, "git-crypt-keyfile")
+NTP_CHRONY_CONF = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "ntp_chrony.yaml"
+)
+FLEXY_DEFAULT_PRIVATE_CONF_REPO = 'https://gitlab.cee.redhat.com/ocs/flexy-ocs-private.git'
+FLEXY_JENKINS_USER = "jenkins"
+JENKINS_NFS_CURRENT_CLUSTER_DIR = "/home/jenkins/current-cluster-dir"
+FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
+OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
+FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
+FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/aosqe/flexy:poc"
+
+# PSI-openstack constants
+NOVA_CLNT_VERSION = "2.0"
+CINDER_CLNT_VERSION = "3.0"
 
 # URLs
 AUTH_CONFIG_DOCS = (
@@ -951,9 +986,16 @@ FILE_PATH = '/tmp/ceph.tar.gz'
 # terraform tfstate modules
 BOOTSTRAP_MODULE = "module.ipam_bootstrap"
 LOAD_BALANCER_MODULE = "module.ipam_lb"
+COMPUTE_MODULE = "module.ipam_compute"
 
 # proxy location
 HAPROXY_LOCATION = "/etc/haproxy/haproxy.conf"
+
+# chrony conf
+CHRONY_CONF = "/etc/chrony.conf"
+
+# NTP server
+RH_NTP_CLOCK = "clock.redhat.com"
 
 # Disruptions pod names
 OSD = 'osd'
@@ -962,3 +1004,7 @@ MON_DAEMON = 'mon'
 
 # cluster expansion
 MAX_OSDS = 15
+
+# Minimum cluster requirements in term of node specs
+MIN_NODE_CPU = 16
+MIN_NODE_MEMORY = 64 * 10 ** 9

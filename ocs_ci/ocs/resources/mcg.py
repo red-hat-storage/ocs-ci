@@ -2,7 +2,6 @@ import base64
 import json
 import logging
 import os
-import shlex
 from time import sleep
 
 import boto3
@@ -28,7 +27,7 @@ import stat
 logger = logging.getLogger(name=__file__)
 
 
-class MCG(object):
+class MCG:
     """
     Wrapper class for the Multi Cloud Gateway's S3 service
     """
@@ -39,7 +38,7 @@ class MCG(object):
         namespace, noobaa_user, noobaa_password, noobaa_token
     ) = (None,) * 12
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         """
         Constructor for the MCG class
         """
@@ -117,7 +116,10 @@ class MCG(object):
 
         self.s3_client = self.s3_resource.meta.client
 
-        if config.ENV_DATA['platform'].lower() == 'aws':
+        if (
+            config.ENV_DATA['platform'].lower() == 'aws'
+            and kwargs.get('create_aws_creds')
+        ):
             (
                 self.cred_req_obj,
                 self.aws_access_key_id,
@@ -133,13 +135,14 @@ class MCG(object):
             pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
             assert len(pods) == 0, 'RGW pod should not exist on AWS platform'
 
-        elif config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
-            logger.info('Checking for RGW pod on VSPHERE platform')
+        elif config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+            rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
+            logger.info(f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform')
             rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
             assert rgw_pod.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 selector=constants.RGW_APP_LABEL,
-                resource_count=1,
+                resource_count=rgw_count,
                 timeout=60
             )
 
@@ -179,17 +182,6 @@ class MCG(object):
                 return bucket
         logger.warning(f'Bucket {bucket_name} was not found')
         return None
-
-    def oc_get_all_bucket_names(self):
-        """
-        Returns:
-            set: A set of all bucket names
-
-        """
-        all_obcs_in_namespace = OCP(namespace=self.namespace, kind='obc').get().get('items')
-        return {bucket.get('spec').get('bucketName')
-                for bucket
-                in all_obcs_in_namespace}
 
     def cli_get_all_bucket_names(self):
         """
@@ -232,28 +224,6 @@ class MCG(object):
             return True
         except ClientError:
             logger.info(f"{bucketname} does not exist")
-            return False
-
-    def verify_s3_object_integrity(self, original_object_path, result_object_path, awscli_pod):
-        """
-        Verifies checksum between orignial object and result object on an awscli pod
-
-        Args:
-            original_object_path (str): The Object that is uploaded to the s3 bucket
-            result_object_path (str):  The Object that is downloaded from the s3 bucket
-            awscli_pod (pod): A pod running the AWSCLI tools
-
-        Returns:
-              bool: True if checksum matches, False otherwise
-
-        """
-        md5sum = shlex.split(awscli_pod.exec_cmd_on_pod(command=f'md5sum {original_object_path} {result_object_path}'))
-        if md5sum[0] == md5sum[2]:
-            logger.info(f'Passed: MD5 comparison for {original_object_path} and {result_object_path}')
-            return True
-        else:
-            logger.error(f'Failed: MD5 comparison of {original_object_path} and {result_object_path} - '
-                         f'{md5sum[0]} ≠ {md5sum[2]}')
             return False
 
     def oc_verify_bucket_exists(self, bucketname):
@@ -417,15 +387,13 @@ class MCG(object):
 
         def _check_aws_credentials():
             try:
-                s3_res = boto3.resource(
-                    's3', endpoint_url="https://s3.amazonaws.com",
+                sts = boto3.client(
+                    'sts',
                     aws_access_key_id=aws_access_key_id,
                     aws_secret_access_key=aws_access_key
                 )
-                test_bucket = s3_res.create_bucket(
-                    Bucket=create_unique_resource_name('cred-verify', 's3-bucket')
-                )
-                test_bucket.delete()
+                sts.get_caller_identity()
+
                 return True
 
             except ClientError:
@@ -433,7 +401,7 @@ class MCG(object):
                 return False
 
         try:
-            for api_test_result in TimeoutSampler(40, 5, _check_aws_credentials):
+            for api_test_result in TimeoutSampler(120, 5, _check_aws_credentials):
                 if api_test_result:
                     logger.info('AWS credentials created successfully.')
                     break
@@ -700,7 +668,9 @@ class MCG(object):
         # Get noobaa status
         status = self.exec_mcg_cmd('status').stderr
         for line in status.split('\n'):
-            if 'Not Found' in line and 'Optional' not in line:
+            if any(
+                i in line for i in ['Not Found', 'Waiting for phase ready ...']
+            ) and 'Optional' not in line:
                 logger.error(f"Error in noobaa status output- {line}")
                 return False
         logger.info("Verified: noobaa status does not contain any error.")

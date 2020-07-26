@@ -2,6 +2,8 @@
 Couchbase workload class
 """
 import logging
+import random
+from concurrent.futures.thread import ThreadPoolExecutor
 
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.ocp import OCP, switch_to_project
@@ -11,6 +13,9 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.pillowfight import PillowFight
 from ocs_ci.ocs.ocp import switch_to_default_rook_cluster_project
+from ocs_ci.ocs.resources.pod import get_pod_obj
+from tests.helpers import wait_for_resource_state
+
 log = logging.getLogger(__name__)
 
 
@@ -18,7 +23,7 @@ class CouchBase(PillowFight):
     """
     CouchBase workload operation
     """
-    WAIT_FOR_TIME = 600
+    WAIT_FOR_TIME = 900
     admission_parts = [
         constants.COUCHBASE_ADMISSION_SERVICE_ACCOUNT_YAML,
         constants.COUCHBASE_ADMISSION_CLUSTER_ROLE_YAML,
@@ -203,23 +208,73 @@ class CouchBase(PillowFight):
                     f'but only found {len(cb_wrk_pods)}'
                 )
 
-    def run_workload(self, replicas):
+    def run_workload(self, replicas, run_in_bg=False):
         """
         Running workload with pillow fight operator
         Args:
-         replicas (int): Number of pods
+            replicas (int): Number of pods
+            run_in_bg (bool) : Optional run IOs in background
 
         """
-        logging.info('Running IOs...')
+        self.result = None
+        if run_in_bg:
+            logging.info('Running IOs...')
+            executor = ThreadPoolExecutor(1)
+            self.result = executor.submit(PillowFight.run_pillowfights, self, replicas=replicas)
+            return self.result
         PillowFight.run_pillowfights(self, replicas=replicas)
 
-    def analyze_run(self):
+    def analyze_run(self, skip_analyze=False):
         """
         Analyzing the workload run logs
 
+        Args:
+            skip_analyze (bool): Option to skip logs analysis
+
         """
-        logging.info('Analyzing  workload run logs..')
-        PillowFight.analyze_all(self)
+        if not skip_analyze:
+            logging.info('Analyzing  workload run logs..')
+            PillowFight.analyze_all(self)
+
+    def respin_couchbase_app_pod(self):
+        """
+        Respin the couchbase app pod
+
+        Returns:
+            pod status
+
+        """
+        app_pod_list = get_pod_name_by_pattern('cb-example', constants.COUCHBASE_OPERATOR)
+        app_pod = app_pod_list[random.randint(0, len(app_pod_list) - 1)]
+        logging.info(f"respin pod {app_pod}")
+        app_pod_obj = get_pod_obj(app_pod, namespace=constants.COUCHBASE_OPERATOR)
+        app_pod_obj.delete(wait=True, force=False)
+        wait_for_resource_state(
+            resource=app_pod_obj, state=constants.STATUS_RUNNING, timeout=300
+        )
+
+    def get_couchbase_nodes(self):
+        """
+        Get nodes that contain a couchbase app pod
+
+        Returns:
+            list: List of nodes
+
+        """
+        app_pods_list = get_pod_name_by_pattern('cb-example', constants.COUCHBASE_OPERATOR)
+        app_pod_objs = list()
+        for pod in app_pods_list:
+            app_pod_objs.append(get_pod_obj(pod, namespace=constants.COUCHBASE_OPERATOR))
+
+        log.info("Create a list of nodes that contain a couchbase app pod")
+        nodes_set = set()
+        for pod in app_pod_objs:
+            logging.info(
+                f"pod {pod.name} located on "
+                f"node {pod.get().get('spec').get('nodeName')}"
+            )
+            nodes_set.add(pod.get().get('spec').get('nodeName'))
+        return list(nodes_set)
 
     def teardown(self):
         """

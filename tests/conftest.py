@@ -12,6 +12,7 @@ from math import floor
 from shutil import copyfile
 from functools import partial
 
+from botocore.exceptions import ClientError
 import pytest
 import yaml
 
@@ -21,18 +22,20 @@ from ocs_ci.framework.pytest_customization.marks import (
     deployment, ignore_leftovers, tier_marks, ignore_leftover_label
 )
 from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
+from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.backingstore import BackingStore
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
+from ocs_ci.ocs.node import check_nodes_specs
 from ocs_ci.ocs.resources.mcg import MCG
-from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
+from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import get_rgw_pod, delete_deploymentconfig_pods
+from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
-from ocs_ci.ocs.cluster_load import ClusterLoad
+from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import aws
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility import templating
@@ -53,15 +56,17 @@ from ocs_ci.utility.utils import (
 )
 from tests import helpers
 from tests.helpers import create_unique_resource_name
-from tests.manage.mcg.helpers import get_rgw_restart_count
-from tests.manage.mcg.helpers import (
+from ocs_ci.ocs.bucket_utils import (
     oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
     oc_create_s3comp_backingstore, oc_create_pv_backingstore, cli_create_aws_backingstore,
     cli_create_google_backingstore, cli_create_azure_backingstore, cli_create_s3comp_backingstore,
-    cli_create_pv_backingstore
+    cli_create_pv_backingstore, get_rgw_restart_counts
 )
 from ocs_ci.ocs.pgsql import Postgresql
+from ocs_ci.ocs.resources.rgw import RGW
+from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.couchbase import CouchBase
+from ocs_ci.ocs.amq import AMQ
 
 log = logging.getLogger(__name__)
 
@@ -120,40 +125,16 @@ def supported_configuration():
         64 GB memory
     Last documentation check: 2020-02-21
     """
-    min_cpu = 16
-    min_memory = 64 * 10 ** 9
+    min_cpu = constants.MIN_NODE_CPU
+    min_memory = constants.MIN_NODE_MEMORY
 
-    node_obj = ocp.OCP(kind=constants.NODE)
     log.info('Checking if system meets minimal requirements')
-    nodes = node_obj.get(selector=constants.WORKER_LABEL).get('items')
-    log.info(
-        f"Checking following nodes with worker selector (assuming that "
-        f"this is ran in CI and there are no worker nodes without OCS):\n"
-        f"{[item.get('metadata').get('name') for item in nodes]}"
-    )
-    for node_info in nodes:
-        real_cpu = int(node_info['status']['capacity']['cpu'])
-        real_memory = node_info['status']['capacity']['memory']
-        if real_memory.endswith('Ki'):
-            real_memory = int(real_memory[0:-2]) * 2 ** 10
-        elif real_memory.endswith('Mi'):
-            real_memory = int(real_memory[0:-2]) * 2 ** 20
-        elif real_memory.endswith('Gi'):
-            real_memory = int(real_memory[0:-2]) * 2 ** 30
-        elif real_memory.endswith('Ti'):
-            real_memory = int(real_memory[0:-2]) * 2 ** 40
-        else:
-            real_memory = int(real_memory)
-
-        if (real_cpu < min_cpu or real_memory < min_memory):
-            error_msg = (
-                f"Node {node_info.get('metadata').get('name')} doesn't have "
-                f"minimum of required reasources for running the test:\n"
-                f"{min_cpu} CPU and {min_memory} Memory\nIt has:\n{real_cpu} "
-                f"CPU and {real_memory} Memory"
-            )
-            log.error(error_msg)
-            pytest.xfail(error_msg)
+    if not check_nodes_specs(min_memory=min_memory, min_cpu=min_cpu):
+        err_msg = (
+            f"At least one of the worker nodes doesn't meet the "
+            f"required minimum specs of {min_cpu} vCPUs and {min_memory} RAM"
+        )
+        pytest.xfail(err_msg)
 
 
 @pytest.fixture(scope='class')
@@ -1124,18 +1105,12 @@ def cluster_load(
     deployment_test = True if 'deployment' in request.node.items[0].location[0] else False
     if io_in_bg and not deployment_test:
         io_load = int(io_load) * 0.01
-        log.info(
-            "\n===================================================\n"
-            "Tests will be running while IO is in the background\n"
-            "==================================================="
-        )
-
+        log.info(wrap_msg("Tests will be running while IO is in the background"))
         log.info(
             "Start running IO in the background. The amount of IO that "
             "will be written is going to be determined by the cluster "
             "capabilities according to its limit"
         )
-
         cl_load_obj = ClusterLoad(
             project_factory=project_factory_session,
             sa_factory=service_account_factory_session,
@@ -1176,49 +1151,23 @@ def cluster_load(
         def watch_load():
             """
             Watch the cluster load by monitoring the cluster latency.
-            In case the latency goes beyond 1 second, start deleting FIO pods.
-            Once latency drops back below 0.5 seconds, re-create the FIO pods
-            to make sure that cluster load is around the target percentage
+            Print the cluster utilization metrics every 15 seconds.
+
+            If IOs are running in the test background, dynamically adjust
+            the IO load based on the cluster latency.
 
             """
-            initial_num_of_pods = len(cl_load_obj.dc_objs)
             while get_test_status() == 'running':
+                time.sleep(20)
                 try:
-                    cl_load_obj.print_metrics()
+                    cl_load_obj.print_metrics(mute_logs=True)
                     if io_in_bg:
-                        latency = cl_load_obj.calc_trim_metric_mean(
-                            constants.LATENCY_QUERY
-                        )
-
-                        if latency > 1 and len(cl_load_obj.dc_objs) > 0:
-                            log.warning(
-                                f"Latency is higher than 1 second ({latency * 1000} ms). "
-                                f"Lowering IO load by deleting an FIO pod that is running "
-                                f"in the test background. Once the latency drops back to "
-                                f"less than 0.5 seconds, FIO pod will be re-spawned"
-                            )
-                            cl_load_obj.decrease_load()
-
-                        diff = initial_num_of_pods - len(cl_load_obj.dc_objs)
-                        while latency < 0.5 and diff > 0 and (
-                            get_test_status() == 'running'
-                        ):
-                            log.info(
-                                f"Latency is lower than 0.5 seconds ({latency * 1000} ms). "
-                                f"Re-spinning FIO pod"
-                            )
-                            cl_load_obj.increase_load(rate='15M')
-                            latency = cl_load_obj.calc_trim_metric_mean(
-                                constants.LATENCY_QUERY
-                            )
-                            diff -= 1
+                        cl_load_obj.adjust_load_if_needed()
 
                 # Any type of exception should be caught and we should continue.
                 # We don't want any test to fail
                 except Exception:
                     continue
-                if get_test_status() == 'running':
-                    time.sleep(10)
 
         thread = threading.Thread(target=watch_load)
         thread.start()
@@ -1586,6 +1535,26 @@ def cld_mgr(request):
 
 
 @pytest.fixture()
+def rgw_obj(request):
+    return rgw_obj_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def rgw_obj_session(request):
+    return rgw_obj_fixture(request)
+
+
+def rgw_obj_fixture(request):
+    """
+    Returns an RGW resource that represents RGW in the cluster
+
+    Returns:
+        RGW: An RGW resource
+    """
+    return RGW()
+
+
+@pytest.fixture()
 def mcg_obj(request):
     return mcg_obj_fixture(request)
 
@@ -1595,7 +1564,17 @@ def mcg_obj_session(request):
     return mcg_obj_fixture(request)
 
 
-def mcg_obj_fixture(request):
+@pytest.fixture()
+def mcg_obj_with_aws(request):
+    return mcg_obj_fixture(request, create_aws_creds=True)
+
+
+@pytest.fixture(scope='session')
+def mcg_obj_with_aws_session(request):
+    return mcg_obj_fixture(request, create_aws_creds=True)
+
+
+def mcg_obj_fixture(request, *args, **kwargs):
     """
     Returns an MCG resource that's connected to the S3 endpoint
 
@@ -1603,34 +1582,31 @@ def mcg_obj_fixture(request):
         MCG: An MCG resource
     """
 
-    mcg_obj = MCG()
+    mcg_obj = MCG(*args, **kwargs)
 
     def finalizer():
         if config.ENV_DATA['platform'].lower() == 'aws':
             mcg_obj.cred_req_obj.delete()
 
-    request.addfinalizer(finalizer)
+    if kwargs.get("create_aws_creds"):
+        request.addfinalizer(finalizer)
 
     return mcg_obj
 
 
 @pytest.fixture()
-def awscli_pod(request, mcg_obj):
-    return awscli_pod_fixture(request, mcg_obj)
+def awscli_pod(request):
+    return awscli_pod_fixture(request)
 
 
 @pytest.fixture(scope='session')
-def awscli_pod_session(request, mcg_obj_session):
-    return awscli_pod_fixture(request, mcg_obj_session)
+def awscli_pod_session(request):
+    return awscli_pod_fixture(request)
 
 
-def awscli_pod_fixture(request, mcg_obj):
+def awscli_pod_fixture(request):
     """
     Creates a new AWSCLI pod for relaying commands
-
-    Args:
-        mcg_obj: An object representing the current
-        state of the MCG in the cluster
 
     Returns:
         pod: A pod running the AWS CLI
@@ -1725,13 +1701,13 @@ def uploaded_objects_fixture(
         for uploaded_filename in uploaded_objects_paths:
             log.info(f'Deleting object {uploaded_filename}')
             awscli_pod.exec_cmd_on_pod(
-                command=helpers.craft_s3_command(
+                command=craft_s3_command(
                     "rm " + uploaded_filename, mcg_obj
                 ),
                 secrets=[
                     mcg_obj.access_key_id,
                     mcg_obj.access_key,
-                    mcg_obj.s3_endpoint
+                    mcg_obj.s3_internal_endpoint
                 ]
             )
 
@@ -1753,30 +1729,42 @@ def verify_rgw_restart_count_fixture(request):
     """
     Verifies the RGW restart count at start and end of a test
     """
-    if config.ENV_DATA['platform'].lower() == 'vsphere':
+    if config.ENV_DATA['platform'].lower() in constants.ON_PREM_PLATFORMS:
         log.info("Getting RGW pod restart count before executing the test")
-        initial_count = get_rgw_restart_count()
+        initial_counts = get_rgw_restart_counts()
 
         def finalizer():
-            rgw_pod = get_rgw_pod()
-            rgw_pod.reload()
-            log.info("Verifying whether RGW pod changed after executing the test")
-            assert rgw_pod.restart_count == initial_count, 'RGW pod restarted'
+            rgw_pods = get_rgw_pods()
+            for rgw_pod in rgw_pods:
+                rgw_pod.reload()
+            log.info("Verifying whether RGW pods changed after executing the test")
+            for rgw_pod in rgw_pods:
+                assert rgw_pod.restart_count in initial_counts, 'RGW pod restarted'
 
         request.addfinalizer(finalizer)
 
 
 @pytest.fixture()
+def rgw_bucket_factory(request, rgw_obj):
+    return bucket_factory_fixture(request, mcg_obj=None, rgw_obj=rgw_obj)
+
+
+@pytest.fixture(scope='session')
+def rgw_bucket_factory_session(request, rgw_obj_session):
+    return bucket_factory_fixture(request, mcg_obj=None, rgw_obj=rgw_obj_session)
+
+
+@pytest.fixture()
 def bucket_factory(request, mcg_obj):
-    return bucket_factory_fixture(request, mcg_obj)
+    return bucket_factory_fixture(request, mcg_obj, rgw_obj=None)
 
 
 @pytest.fixture(scope='session')
 def bucket_factory_session(request, mcg_obj_session):
-    return bucket_factory_fixture(request, mcg_obj_session)
+    return bucket_factory_fixture(request, mcg_obj_session, rgw_obj_session=None)
 
 
-def bucket_factory_fixture(request, mcg_obj):
+def bucket_factory_fixture(request, mcg_obj, rgw_obj):
     """
     Create a bucket factory. Calling this fixture creates a new bucket(s).
     For a custom amount, provide the 'amount' parameter.
@@ -1787,12 +1775,6 @@ def bucket_factory_fixture(request, mcg_obj):
 
     """
     created_buckets = []
-
-    bucketMap = {
-        's3': S3Bucket,
-        'oc': OCBucket,
-        'cli': CLIBucket
-    }
 
     def _create_buckets(
         amount=1, interface='S3',
@@ -1811,18 +1793,19 @@ def bucket_factory_fixture(request, mcg_obj):
                 buckets
 
         """
-        if interface.lower() not in bucketMap:
+        if interface.lower() not in BUCKET_MAP:
             raise RuntimeError(
                 f'Invalid interface type received: {interface}. '
-                f'available types: {", ".join(bucketMap.keys())}'
+                f'available types: {", ".join(BUCKET_MAP.keys())}'
             )
         for i in range(amount):
             bucket_name = helpers.create_unique_resource_name(
                 resource_description='bucket', resource_type=interface.lower()
             )
-            created_bucket = bucketMap[interface.lower()](
-                mcg_obj,
+            created_bucket = BUCKET_MAP[interface.lower()](
                 bucket_name,
+                mcg=mcg_obj,
+                rgw=rgw_obj,
                 *args,
                 **kwargs
             )
@@ -1834,18 +1817,15 @@ def bucket_factory_fixture(request, mcg_obj):
         return created_buckets
 
     def bucket_cleanup():
-        all_existing_buckets = mcg_obj.s3_get_all_bucket_names()
         for bucket in created_buckets:
-            if bucket.name in all_existing_buckets:
-                log.info(f'Cleaning up bucket {bucket.name}')
+            log.info(f'Cleaning up bucket {bucket.name}')
+            try:
                 bucket.delete()
-                log.info(
-                    f"Verifying whether bucket: {bucket.name} exists after"
-                    f" deletion"
-                )
-                assert not mcg_obj.s3_verify_bucket_exists(bucket.name)
-            else:
-                log.info(f'Bucket {bucket.name} not found.')
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'NoSuchBucket':
+                    log.warn(f'{bucket.name} could not be found in cleanup')
+                else:
+                    raise
 
     request.addfinalizer(bucket_cleanup)
 
@@ -2069,7 +2049,7 @@ def multiregion_resources_fixture(request, cld_mgr, mcg_obj):
 @pytest.fixture()
 def multiregion_mirror_setup(mcg_obj, multiregion_resources, backingstore_factory, bucket_factory):
     return multiregion_mirror_setup_fixture(
-        mcg_obj,
+        mcg_obj_with_aws,
         multiregion_resources,
         backingstore_factory,
         bucket_factory
@@ -2078,13 +2058,13 @@ def multiregion_mirror_setup(mcg_obj, multiregion_resources, backingstore_factor
 
 @pytest.fixture(scope='session')
 def multiregion_mirror_setup_session(
-    mcg_obj_session,
+    mcg_obj_with_aws_session,
     multiregion_resources_session,
     backingstore_factory,
     bucket_factory_session
 ):
     return multiregion_mirror_setup_fixture(
-        mcg_obj_session,
+        mcg_obj_with_aws_session,
         multiregion_resources_session,
         backingstore_factory,
         bucket_factory_session
@@ -2092,7 +2072,7 @@ def multiregion_mirror_setup_session(
 
 
 def multiregion_mirror_setup_fixture(
-    mcg_obj,
+    mcg_obj_with_aws,
     multiregion_resources,
     backingstore_factory,
     bucket_factory
@@ -2119,7 +2099,7 @@ def multiregion_mirror_setup_fixture(
 
     # Create a new mirror bucketclass that'll use all the backing stores we
     # created
-    bucketclass = mcg_obj.oc_create_bucketclass(
+    bucketclass = mcg_obj_with_aws.oc_create_bucketclass(
         helpers.create_unique_resource_name(
             resource_description='testbc',
             resource_type='bucketclass'
@@ -2424,27 +2404,80 @@ def pgsql_factory_fixture(request):
 
 
 @pytest.fixture(scope='function')
+def jenkins_factory_fixture(request):
+    """
+    Jenkins factory fixture
+    """
+    jenkins = Jenkins()
+
+    def factory(num_projects=1, num_of_builds=1):
+        """
+        Factory to start jenkins workload
+
+        Args:
+            num_projects (int): Number of Jenkins projects
+            num_of_builds (int): Number of builds per project
+
+        """
+        # Jenkins template
+        jenkins.create_ocs_jenkins_template()
+        # Init number of projects
+        jenkins.number_projects = num_projects
+        # Create app jenkins
+        jenkins.create_app_jenkins()
+        # Create jenkins pvc
+        jenkins.create_jenkins_pvc()
+        # Create jenkins build config
+        jenkins.create_jenkins_build_config()
+        # Wait jenkins deploy pod reach to completed state
+        jenkins.wait_for_jenkins_deploy_status(
+            status=constants.STATUS_COMPLETED
+        )
+        # Init number of builds per project
+        jenkins.number_builds_per_project = num_of_builds
+        # Start Builds
+        jenkins.start_build()
+        # Wait build reach 'Complete' state
+        jenkins.wait_for_build_to_complete()
+        # Print table of builds
+        jenkins.print_completed_builds_results()
+
+        return jenkins
+
+    def finalizer():
+        """
+        Clean up
+        """
+        jenkins.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope='function')
 def couchbase_factory_fixture(request):
     """
     Couchbase factory fixture
     """
     couchbase = CouchBase()
 
-    def factory(replicas=3):
+    def factory(replicas=3, run_in_bg=False, skip_analyze=False):
         """
         Factory to start couchbase workload
 
         Args:
             replicas (int): Number of couchbase workers to be deployed
+            run_in_bg (bool): Run IOs in background as option
+            skip_analyze (bool): Skip logs analysis as option
         """
         # Setup couchbase
         couchbase.setup_cb()
         # Create couchbase workers
         couchbase.create_couchbase_worker(replicas=replicas)
         # Run couchbase workload
-        couchbase.run_workload(replicas=replicas)
+        couchbase.run_workload(replicas=replicas, run_in_bg=run_in_bg)
         # Run sanity check on data logs
-        couchbase.analyze_run()
+        couchbase.analyze_run(skip_analyze=skip_analyze)
         return couchbase
 
     def finalizer():
@@ -2452,6 +2485,64 @@ def couchbase_factory_fixture(request):
         Clean up
         """
         couchbase.teardown()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope='function')
+def amq_factory_fixture(request):
+    """
+    AMQ factory fixture
+    """
+    amq = AMQ()
+
+    def factory(
+        sc_name, tiller_namespace, kafka_namespace=constants.AMQ_NAMESPACE,
+        size=100, replicas=3, benchmark_pod_name="benchmark",
+        num_of_clients=8, worker=None, timeout=3600,
+        amq_workload_yaml=None, run_in_bg=False
+    ):
+        """
+        Factory to start amq workload
+
+        Args:
+            sc_name (str): Name of storage clase
+            tiller_namespace (str): Namespace where benchmark pods to be created
+            kafka_namespace (str): Namespace where kafka cluster to be created
+            size (int): Size of the storage
+            replicas (int): Number of kafka and zookeeper pods to be created
+            benchmark_pod_name (str): Name of the benchmark pod
+            num_of_clients (int): Number of clients to be created
+            worker (str) : Loads to create on workloads separated with commas
+                e.g http://benchmark-worker-0.benchmark-worker:8080,
+                http://benchmark-worker-1.benchmark-worker:8080
+            timeout (int): Time to complete the run
+            amq_workload_yaml (dict): Contains amq workloads information keys and values
+            run_in_bg (bool): On true the workload will run in background
+
+        """
+        # Setup kafka cluster
+        amq.setup_amq_cluster(
+            sc_name=sc_name, namespace=kafka_namespace, size=size, replicas=replicas
+        )
+
+        # Run amq benchmark
+        result = amq.run_amq_benchmark(
+            benchmark_pod_name=benchmark_pod_name, kafka_namespace=kafka_namespace,
+            tiller_namespace=tiller_namespace, num_of_clients=num_of_clients, worker=worker,
+            timeout=timeout, amq_workload_yaml=amq_workload_yaml, run_in_bg=run_in_bg
+        )
+
+        return amq, result
+
+    def finalizer():
+        """
+        Clean up
+
+        """
+        # Clean up
+        amq.cleanup()
 
     request.addfinalizer(finalizer)
     return factory
