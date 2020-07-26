@@ -24,17 +24,22 @@ class TestPVCCreationPerformance(E2ETest):
     """
     pvc_size = '1Gi'
 
-    def samples_creation(self, samples_num, teardown_factory, pvc_size):
+    def create_mutiple_pvcs_statistics(self, num_of_samples, teardown_factory, pvc_size):
         """
-        samples_creation creates number (samples_num) of PVCs, measures creation time for each PVC and returns list
-        with all the creation times
-        :param pvc_size: Size of the created PVC
-        :param teardown_factory: A fixture used when we want a new resource that was created during the tests
-        :param samples_num: Number of the sampled created PVCs
-        :return: list of the creation times of all the created PVCs
+
+        Creates number (samples_num) of PVCs, measures creation time for each PVC and returns list of creation times.
+
+         Args:
+             num_of_samples: Number of the sampled created PVCs.
+             teardown_factory: A fixture used when we want a new resource that was created during the tests.
+             pvc_size: Size of the created PVCs.
+
+         Returns:
+             List of the creation times of all the created PVCs.
+
         """
         time_measures = []
-        for i in range(samples_num):
+        for i in range(num_of_samples):
             log.info(f'Start creation of PVC number {i + 1}.')
 
             pvc_obj = helpers.create_pvc(
@@ -94,32 +99,33 @@ class TestPVCCreationPerformance(E2ETest):
         If all the measures are up to the accepted value
         The test calculates .... difference between creation time of each one of the PVCs and the average
         is not more than Accepted diff ( currently 5%)
-                Args:
-            teardown factory : A fixture used when we want a new resource that was created during the tests
-                               to be removed in the teardown phase:
+
+        Args:
+            teardown factory: A fixture used when we want a new resource that was created during the tests
+                               to be removed in the teardown phase.
             pvc_size: Size of the created PVC
          """
-        samples_num = 3
+        num_of_samples = 3
         accepted_deviation_percent = 5
         accepted_create_time = 3
 
-        create_measures = self.samples_creation(samples_num, teardown_factory, pvc_size)
+        create_measures = self.create_mutiple_pvcs_statistics(num_of_samples, teardown_factory, pvc_size)
         log.info(f"Current measures are {create_measures}")
 
-        for i in range(samples_num):
+        for i in range(num_of_samples):
             if create_measures[i] > accepted_create_time:
                 raise ex.PerformanceException(
-                    f"PVC creation time is {create_measures[i]} and greater than {accepted_create_time} seconds."
+                    f"PVC creation time is {create_measures[i]} and is greater than {accepted_create_time} seconds."
                 )
 
         average = statistics.mean(create_measures)
         st_deviation = statistics.stdev(create_measures)
-        log.info(f"The average creation time for the sampled {samples_num} PVCs is {average}.")
+        log.info(f"The average creation time for the sampled {num_of_samples} PVCs is {average}.")
 
         st_deviation_percent = abs(st_deviation - average) / average * 100.0
         if st_deviation > accepted_deviation_percent:
             raise ex.PerformanceException(
-                f"PVC create time deviation is {st_deviation_percent}%"
+                f"PVC creation time deviation is {st_deviation_percent}%"
                 f"and is greater than the allowed {accepted_deviation_percent}%."
             )
 
@@ -130,6 +136,12 @@ class TestPVCCreationPerformance(E2ETest):
     ):
         """
         Measuring PVC creation time of 120 PVCs in 180 seconds
+
+        Args:
+            teardown_factory: A fixture used when we want a new resource that was created during the tests
+                               to be removed in the teardown phase.
+        Returns:
+
         """
         number_of_pvcs = 120
         log.info('Start creating new 120 PVCs')
@@ -176,7 +188,13 @@ class TestPVCCreationPerformance(E2ETest):
     ):
         """
         Measuring PVC creation time of 75% of initial PVCs (120) in the same
-        rate after deleting 75% of the initial PVCs
+        rate after deleting 75% of the initial PVCs.
+
+        Args:
+            teardown_factory: A fixture used when we want a new resource that was created during the tests
+                               to be removed in the teardown phase.
+        Returns:
+
         """
         initial_number_of_pvcs = 120
         number_of_pvcs = math.ceil(initial_number_of_pvcs * 0.75)
