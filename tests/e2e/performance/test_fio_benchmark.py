@@ -208,6 +208,7 @@ class TestFIOBenchmark(E2ETest):
         fio_cr['spec']['workload']['args']['storageclass'] = sc
         if io_pattern == 'sequential':
             fio_cr['spec']['workload']['args']['jobs'] = ['write', 'read']
+            fio_cr['spec']['workload']['args']['iodepth'] = 1
         log.info(f'The FIO CR file is {fio_cr}')
         fio_cr_obj = OCS(**fio_cr)
         fio_cr_obj.create()
