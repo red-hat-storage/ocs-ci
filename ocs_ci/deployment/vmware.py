@@ -393,6 +393,7 @@ class VSPHEREUPI(VSPHEREBASE):
             self.folder_structure = False
             if Version.coerce(ocp_version) >= Version.coerce('4.5'):
                 self.folder_structure = True
+                config.ENV_DATA['folder_structure'] = self.folder_structure
 
         def deploy_prereq(self):
             """

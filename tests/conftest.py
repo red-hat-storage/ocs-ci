@@ -36,7 +36,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
-from ocs_ci.ocs.cluster_load import ClusterLoad
+from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import aws
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility import templating
@@ -1106,18 +1106,12 @@ def cluster_load(
     deployment_test = True if 'deployment' in request.node.items[0].location[0] else False
     if io_in_bg and not deployment_test:
         io_load = int(io_load) * 0.01
-        log.info(
-            "\n===================================================\n"
-            "Tests will be running while IO is in the background\n"
-            "==================================================="
-        )
-
+        log.info(wrap_msg("Tests will be running while IO is in the background"))
         log.info(
             "Start running IO in the background. The amount of IO that "
             "will be written is going to be determined by the cluster "
             "capabilities according to its limit"
         )
-
         cl_load_obj = ClusterLoad(
             project_factory=project_factory_session,
             sa_factory=service_account_factory_session,
@@ -1158,49 +1152,23 @@ def cluster_load(
         def watch_load():
             """
             Watch the cluster load by monitoring the cluster latency.
-            In case the latency goes beyond 1 second, start deleting FIO pods.
-            Once latency drops back below 0.5 seconds, re-create the FIO pods
-            to make sure that cluster load is around the target percentage
+            Print the cluster utilization metrics every 15 seconds.
+
+            If IOs are running in the test background, dynamically adjust
+            the IO load based on the cluster latency.
 
             """
-            initial_num_of_pods = len(cl_load_obj.dc_objs)
             while get_test_status() == 'running':
+                time.sleep(20)
                 try:
-                    cl_load_obj.print_metrics()
+                    cl_load_obj.print_metrics(mute_logs=True)
                     if io_in_bg:
-                        latency = cl_load_obj.calc_trim_metric_mean(
-                            constants.LATENCY_QUERY
-                        )
-
-                        if latency > 1 and len(cl_load_obj.dc_objs) > 0:
-                            log.warning(
-                                f"Latency is higher than 1 second ({latency * 1000} ms). "
-                                f"Lowering IO load by deleting an FIO pod that is running "
-                                f"in the test background. Once the latency drops back to "
-                                f"less than 0.5 seconds, FIO pod will be re-spawned"
-                            )
-                            cl_load_obj.decrease_load()
-
-                        diff = initial_num_of_pods - len(cl_load_obj.dc_objs)
-                        while latency < 0.5 and diff > 0 and (
-                            get_test_status() == 'running'
-                        ):
-                            log.info(
-                                f"Latency is lower than 0.5 seconds ({latency * 1000} ms). "
-                                f"Re-spinning FIO pod"
-                            )
-                            cl_load_obj.increase_load(rate='15M')
-                            latency = cl_load_obj.calc_trim_metric_mean(
-                                constants.LATENCY_QUERY
-                            )
-                            diff -= 1
+                        cl_load_obj.adjust_load_if_needed()
 
                 # Any type of exception should be caught and we should continue.
                 # We don't want any test to fail
                 except Exception:
                     continue
-                if get_test_status() == 'running':
-                    time.sleep(10)
 
         thread = threading.Thread(target=watch_load)
         thread.start()
@@ -1599,7 +1567,17 @@ def mcg_obj_session(request):
     return mcg_obj_fixture(request)
 
 
-def mcg_obj_fixture(request):
+@pytest.fixture()
+def mcg_obj_with_aws(request):
+    return mcg_obj_fixture(request, create_aws_creds=True)
+
+
+@pytest.fixture(scope='session')
+def mcg_obj_with_aws_session(request):
+    return mcg_obj_fixture(request, create_aws_creds=True)
+
+
+def mcg_obj_fixture(request, *args, **kwargs):
     """
     Returns an MCG resource that's connected to the S3 endpoint
 
@@ -1607,13 +1585,14 @@ def mcg_obj_fixture(request):
         MCG: An MCG resource
     """
 
-    mcg_obj = MCG()
+    mcg_obj = MCG(*args, **kwargs)
 
     def finalizer():
         if config.ENV_DATA['platform'].lower() == 'aws':
             mcg_obj.cred_req_obj.delete()
 
-    request.addfinalizer(finalizer)
+    if kwargs.get("create_aws_creds"):
+        request.addfinalizer(finalizer)
 
     return mcg_obj
 
@@ -2055,16 +2034,16 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
 
 
 @pytest.fixture()
-def multiregion_resources(request, mcg_obj):
-    return multiregion_resources_fixture(request, mcg_obj)
+def multiregion_resources(request, mcg_obj_with_aws):
+    return multiregion_resources_fixture(request, mcg_obj_with_aws)
 
 
 @pytest.fixture(scope='session')
-def multiregion_resources_session(request, mcg_obj_session):
-    return multiregion_resources_fixture(request, mcg_obj_session)
+def multiregion_resources_session(request, mcg_obj_with_aws_session):
+    return multiregion_resources_fixture(request, mcg_obj_with_aws_session)
 
 
-def multiregion_resources_fixture(request, mcg_obj):
+def multiregion_resources_fixture(request, mcg_obj_with_aws):
     bs_objs, bs_secrets, bucketclasses, aws_buckets = (
         [] for _ in range(4)
     )
@@ -2076,20 +2055,20 @@ def multiregion_resources_fixture(request, mcg_obj):
 
         for backingstore in bs_objs:
             backingstore.delete()
-            mcg_obj.send_rpc_query(
+            mcg_obj_with_aws.send_rpc_query(
                 'pool_api',
                 'delete_pool',
                 {'name': backingstore.name}
             )
 
         for aws_bucket_name in aws_buckets:
-            mcg_obj.toggle_aws_bucket_readwrite(aws_bucket_name, block=False)
+            mcg_obj_with_aws.toggle_aws_bucket_readwrite(aws_bucket_name, block=False)
             for _ in range(10):
                 try:
-                    mcg_obj.aws_s3_resource.Bucket(
+                    mcg_obj_with_aws.aws_s3_resource.Bucket(
                         aws_bucket_name
                     ).objects.all().delete()
-                    mcg_obj.aws_s3_resource.Bucket(aws_bucket_name).delete()
+                    mcg_obj_with_aws.aws_s3_resource.Bucket(aws_bucket_name).delete()
                     break
                 except ClientError:
                     log.info(
@@ -2103,9 +2082,9 @@ def multiregion_resources_fixture(request, mcg_obj):
 
 
 @pytest.fixture()
-def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
+def multiregion_mirror_setup(mcg_obj_with_aws, multiregion_resources, bucket_factory):
     return multiregion_mirror_setup_fixture(
-        mcg_obj,
+        mcg_obj_with_aws,
         multiregion_resources,
         bucket_factory
     )
@@ -2113,19 +2092,19 @@ def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
 
 @pytest.fixture(scope='session')
 def multiregion_mirror_setup_session(
-    mcg_obj_session,
+    mcg_obj_with_aws_session,
     multiregion_resources_session,
     bucket_factory_session
 ):
     return multiregion_mirror_setup_fixture(
-        mcg_obj_session,
+        mcg_obj_with_aws_session,
         multiregion_resources_session,
         bucket_factory_session
     )
 
 
 def multiregion_mirror_setup_fixture(
-    mcg_obj,
+    mcg_obj_with_aws,
     multiregion_resources,
     bucket_factory
 ):
@@ -2157,22 +2136,22 @@ def multiregion_mirror_setup_fixture(
         'region': 'us-east-2'
     }
     # Create target buckets for them
-    mcg_obj.create_new_backingstore_aws_bucket(backingstore1)
-    mcg_obj.create_new_backingstore_aws_bucket(backingstore2)
+    mcg_obj_with_aws.create_new_backingstore_aws_bucket(backingstore1)
+    mcg_obj_with_aws.create_new_backingstore_aws_bucket(backingstore2)
     aws_buckets.extend((backingstore1['name'], backingstore2['name']))
     # Create a backing store secret
-    backingstore_secret = mcg_obj.create_aws_backingstore_secret(
+    backingstore_secret = mcg_obj_with_aws.create_aws_backingstore_secret(
         backingstore1['name'] + 'secret'
     )
     backingstore_secrets.append(backingstore_secret)
     # Create AWS-backed backing stores on NooBaa
-    backingstore_obj_1 = mcg_obj.oc_create_aws_backingstore(
+    backingstore_obj_1 = mcg_obj_with_aws.oc_create_aws_backingstore(
         backingstore1['name'],
         backingstore1['name'],
         backingstore_secret.name,
         backingstore1['region']
     )
-    backingstore_obj_2 = mcg_obj.oc_create_aws_backingstore(
+    backingstore_obj_2 = mcg_obj_with_aws.oc_create_aws_backingstore(
         backingstore2['name'],
         backingstore2['name'],
         backingstore_secret.name,
@@ -2181,7 +2160,7 @@ def multiregion_mirror_setup_fixture(
     backingstore_objects.extend((backingstore_obj_1, backingstore_obj_2))
     # Create a new mirror bucketclass that'll use all the backing stores we
     # created
-    bucketclass = mcg_obj.oc_create_bucketclass(
+    bucketclass = mcg_obj_with_aws.oc_create_bucketclass(
         helpers.create_unique_resource_name(
             resource_description='testbc',
             resource_type='bucketclass'
@@ -2543,21 +2522,23 @@ def couchbase_factory_fixture(request):
     """
     couchbase = CouchBase()
 
-    def factory(replicas=3):
+    def factory(replicas=3, run_in_bg=False, skip_analyze=False):
         """
         Factory to start couchbase workload
 
         Args:
             replicas (int): Number of couchbase workers to be deployed
+            run_in_bg (bool): Run IOs in background as option
+            skip_analyze (bool): Skip logs analysis as option
         """
         # Setup couchbase
         couchbase.setup_cb()
         # Create couchbase workers
         couchbase.create_couchbase_worker(replicas=replicas)
         # Run couchbase workload
-        couchbase.run_workload(replicas=replicas)
+        couchbase.run_workload(replicas=replicas, run_in_bg=run_in_bg)
         # Run sanity check on data logs
-        couchbase.analyze_run()
+        couchbase.analyze_run(skip_analyze=skip_analyze)
         return couchbase
 
     def finalizer():

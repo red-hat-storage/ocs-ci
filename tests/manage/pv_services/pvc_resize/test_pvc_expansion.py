@@ -47,10 +47,12 @@ class TestPvcExpand(ManageTest):
         )
 
         pods_cephfs = helpers.create_pods(
-            self.pvcs_cephfs, pod_factory, constants.CEPHFILESYSTEM, 2
+            self.pvcs_cephfs, pod_factory, constants.CEPHFILESYSTEM, 2,
+            constants.STATUS_RUNNING
         )
         pods_rbd = helpers.create_pods(
-            self.pvcs_rbd, pod_factory, constants.CEPHBLOCKPOOL, 2
+            self.pvcs_rbd, pod_factory, constants.CEPHBLOCKPOOL, 2,
+            constants.STATUS_RUNNING
         )
 
         self.pods = pods_cephfs + pods_rbd
@@ -195,7 +197,7 @@ class TestPvcExpand(ManageTest):
                 f"Waiting for IO setup to complete on pod {pod_obj.name}"
             )
             for sample in TimeoutSampler(
-                180, 2, getattr, pod_obj, 'wl_setup_done'
+                360, 2, getattr, pod_obj, 'wl_setup_done'
             ):
                 if sample:
                     log.info(

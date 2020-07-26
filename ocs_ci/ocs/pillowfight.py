@@ -225,3 +225,4 @@ class PillowFight(object):
             self.pod_obj.exec_oc_cmd(
                 command=f"delete namespace {constants.COUCHBASE_OPERATOR}"
             )
+            self.ns_obj.wait_for_delete(resource_name=constants.COUCHBASE_OPERATOR)

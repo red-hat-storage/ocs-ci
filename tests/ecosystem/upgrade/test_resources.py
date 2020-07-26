@@ -2,6 +2,7 @@ import logging
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers, pre_upgrade, post_upgrade
 )
@@ -13,7 +14,6 @@ from tests import helpers
 log = logging.getLogger(__name__)
 
 
-@post_upgrade
 @pytest.mark.polarion_id("OCS-2220")
 def test_storage_pods_running(multiregion_mirror_setup_session):
     """
@@ -28,6 +28,9 @@ def test_storage_pods_running(multiregion_mirror_setup_session):
     wait_for_storage_pods(timeout=10), 'Some pods were not in expected state'
 
 
+@pytest.mark.skipif(
+    config.RUN.get('io_in_bg'), reason="IO is running by --io-in-bg param"
+)
 @pre_upgrade
 @ignore_leftovers
 def test_start_pre_upgrade_pod_io(pre_upgrade_pods_running_io):
@@ -43,6 +46,9 @@ def test_start_pre_upgrade_pod_io(pre_upgrade_pods_running_io):
         )
 
 
+@pytest.mark.skipif(
+    config.RUN.get('io_in_bg'), reason="IO is running by --io-in-bg param"
+)
 @post_upgrade
 @pytest.mark.polarion_id("OCS-1862")
 def test_pod_io(

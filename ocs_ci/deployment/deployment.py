@@ -17,7 +17,7 @@ from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
 from ocs_ci.ocs.exceptions import (
     CommandFailed, UnavailableResourceException, UnsupportedPlatformError,
-    ResourceWrongStatusException,
+    ResourceWrongStatusException, CephHealthException
 )
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
@@ -53,6 +53,7 @@ from ocs_ci.utility.utils import (
     set_registry_to_managed_state,
     add_stage_cert
 )
+from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from tests import helpers
 
 logger = logging.getLogger(__name__)
@@ -525,22 +526,6 @@ class Deployment(object):
             selector='app=rook-ceph-tools', resource_count=1, timeout=600
         )
 
-        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1847098
-        if config.DEPLOYMENT.get('local_storage'):
-            tools_pod = run_cmd(
-                f"oc -n {self.namespace} get pod -l 'app=rook-ceph-tools' "
-                f"-o jsonpath='{{.items[0].metadata.name}}'"
-            )
-            pgs_to_autoscale = [
-                'ocs-storagecluster-cephblockpool',
-                'ocs-storagecluster-cephfilesystem-data0'
-            ]
-            for pg in pgs_to_autoscale:
-                run_cmd(
-                    f"oc -n {self.namespace} exec {tools_pod} -- "
-                    f"ceph osd pool set {pg} pg_autoscale_mode on"
-                )
-
         # Check for CephFilesystem creation in ocp
         cfs_data = cfs.get()
         cfs_name = cfs_data['items'][0]['metadata']['name']
@@ -605,9 +590,21 @@ class Deployment(object):
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
-        assert ceph_health_check(
-            namespace=self.namespace
-        )
+        try:
+            ceph_health_check(namespace=self.namespace, tries=30, delay=10)
+        except CephHealthException as ex:
+            err = str(ex)
+            logger.warning(f"Ceph health check failed with {err}")
+            if "clock skew detected" in err:
+                logger.info(
+                    f"Changing NTP on compute nodes to"
+                    f" {constants.RH_NTP_CLOCK}"
+                )
+                update_ntp_compute_nodes()
+                assert ceph_health_check(
+                    namespace=self.namespace, tries=60, delay=10
+                )
+
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
         if check_nodes_specs(min_cpu=constants.MIN_NODE_CPU, min_memory=constants.MIN_NODE_MEMORY):
