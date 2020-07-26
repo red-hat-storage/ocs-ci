@@ -517,6 +517,25 @@ def get_rgw_pods(rgw_label=constants.RGW_APP_LABEL, namespace=None):
     return [Pod(**rgw) for rgw in rgws]
 
 
+def get_ocs_operator_pod(ocs_label=constants.OCS_OPERATOR_LABEL, namespace=None):
+    """
+    Fetches info about rgw pods in the cluster
+
+    Args:
+        ocs_label (str): label associated with ocs_operator pod
+            (default: defaults.OCS_OPERATOR_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: none)
+
+    Returns:
+        Pod object: ocs_operator pod object
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    ocs_operator = get_pods_having_label(ocs_label, namespace)
+    ocs_operator_pod = Pod(**ocs_operator[0])
+    return ocs_operator_pod
+
+
 def list_ceph_images(pool_name='rbd'):
     """
     Args:
