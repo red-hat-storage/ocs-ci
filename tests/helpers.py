@@ -2370,3 +2370,16 @@ def get_pv_size(storageclass=None):
         if pv_obj['spec']['storageClassName'] == storageclass:
             return_list.append(pv_obj['spec']['capacity']['storage'])
     return return_list
+
+
+def storagecluster_independent_check():
+    """
+    Check whether the storagecluster is running in independent mode
+    by checking the value of spec.externalStorage.enable
+    """
+    return OCP(
+        kind='StorageCluster',
+        namespace=config.ENV_DATA['cluster_namespace']
+    ).get().get('items')[0].get('spec').get(
+        'externalStorage'
+    ).get('enable')
