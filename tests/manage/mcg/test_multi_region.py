@@ -102,7 +102,7 @@ class TestMultiRegion:
 
         # Checksum is compared between original and result object
         for obj in downloaded_objs:
-            assert mcg_obj_with_aws.verify_s3_object_integrity(
+            assert verify_s3_object_integrity(
                 original_object_path=f'{local_testobjs_dir_path}/{obj}',
                 result_object_path=f'{local_temp_path}/{obj}', awscli_pod=awscli_pod
             ), 'Checksum comparision between original and result object failed'
@@ -124,7 +124,7 @@ class TestMultiRegion:
 
         # Checksum is compared between original and result object
         for obj in downloaded_objs:
-            assert mcg_obj_with_aws.verify_s3_object_integrity(
+            assert verify_s3_object_integrity(
                 original_object_path=f'{local_testobjs_dir_path}/{obj}',
                 result_object_path=f'{local_temp_path}/{obj}', awscli_pod=awscli_pod
             ), 'Checksum comparision between original and result object failed'
