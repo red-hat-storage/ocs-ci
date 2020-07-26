@@ -648,6 +648,7 @@ class Deployment(object):
 
         # Applying WA for LBP install plans
         ip_after_deploy = get_install_plans_count(self.namespace)
+        wait_time = 30
         ip_change = 0
         if config.ENV_DATA.get("wait_for_ip_increase"):
             increase_count = config.ENV_DATA.get(
@@ -656,7 +657,6 @@ class Deployment(object):
             wait_timeout = config.ENV_DATA.get(
                 "wait_for_ip_increase_timeout", 1800
             )
-            wait_time = 30
             reached_ip_change = False
             while wait_timeout > 0:
                 wait_timeout -= wait_time
@@ -673,19 +673,28 @@ class Deployment(object):
                 time.sleep(wait_time)
             assert reached_ip_change, "Did not reached change in IP plans!"
         if config.ENV_DATA.get('apply_wa_for_lbp_install_plans'):
+            lbp_subscription_name = constants.LBP_SUBSCRIPTION
+            all_subscriptions = ocp.OCP(
+                kind="subscription", namespace=self.namespace,
+            ).get()
+            for subscription in all_subscriptions['items']:
+                if lbp_subscription_name in subscription['metadata']['name']:
+                    lbp_subscription_name = subscription['metadata']['name']
+                    break
             lbp_subscription = ocp.OCP(
                 kind="subscription", namespace=self.namespace,
-                resource_name=constants.LBP_SUBSCRIPTION
+                resource_name=lbp_subscription_name
             )
             lbp_subscription.delete()
-            all_csvs = CSV(namespace=self.namespace)
+            all_csvs = CSV(namespace=self.namespace).get()
             lbp_csvs = [
                 csv for csv in all_csvs.get('items', []) if
-                "lib-bucket-provisioner" in csv['name']
+                "lib-bucket-provisioner" in csv['metadata']['name']
             ]
             for lbp_csv in lbp_csvs:
                 csv_to_delete = CSV(
-                    resource_name=lbp_csv['name'], namespace=self.namespace
+                    resource_name=lbp_csv['metadata']['name'],
+                    namespace=self.namespace
                 )
                 csv_to_delete.delete()
             install_plans = InstallPlan(namespace=self.namespace).get()
@@ -693,22 +702,42 @@ class Deployment(object):
                 ip for ip in install_plans.get('items', []) if list(filter(
                     lambda x: "lib-bucket-provisioner" in x,
                     ip.get('spec', {}).get('clusterServiceVersionNames', [])
+                )) and not list(filter(
+                    lambda x: "ocs-operator" in x,
+                    ip.get('spec', {}).get('clusterServiceVersionNames', [])
                 ))
             ]
             for ip_item in lbp_install_plans:
-                ip = InstallPlan(resource_name=ip_item['name'])
+                ip = InstallPlan(
+                    resource_name=ip_item['metadata']['name'],
+                    namespace=self.namespace,
+                )
                 ip.delete()
             logger.info("Subscribe to LBP")
-            # add subscription to lbp ocs_ci/templates/ocs-deployment/lbp-subscription.yaml
-            # test that we don't see new IPs
             run_cmd(f"oc create -f {constants.LBP_SUBSCRIPTION_YAML}")
-            logger.info("Waiting 30 seconds after new subscription to LBP")
-            time.sleep(30)
+            logger.info(
+                f"Waiting {wait_time} seconds after new subscription to LBP"
+            )
+            time.sleep(wait_time)
             ip_after_second_deploy = get_install_plans_count(self.namespace)
             logger.info(
                 "Number of install plans after applying W/A is: "
                 f"{ip_after_second_deploy}"
             )
+            timeout = 300
+            while timeout > 0:
+                timeout -= wait_time
+                logger.info(
+                    f"Waiting {wait_time} seconds for next check of LBP install"
+                    f" plans count. Remaining timeout is: {timeout}."
+                )
+                time.sleep(wait_time)
+                ip_count = get_install_plans_count(self.namespace)
+                logger.info(
+                    "Number of install plans after applying W/A is: "
+                    f"{ip_count}"
+                )
+                assert ip_count == ip_after_second_deploy, "Install plans increased!"
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
