@@ -10,7 +10,7 @@ from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()
 def teardown(request, nodes):
 
     def finalizer():
@@ -24,7 +24,7 @@ def teardown(request, nodes):
 
 
 @pytest.mark.polarion_id("OCS-1579")
-def test_worker_node_abrupt_shutdown():
+def test_worker_node_abrupt_shutdown(teardown):
     """
     Test OCS upgrade with disruption of shutting down worker node,
     for 5.5 minutes
@@ -37,7 +37,7 @@ def test_worker_node_abrupt_shutdown():
 
 
 @pytest.mark.polarion_id("OCS-1575")
-def test_worker_node_permanent_shutdown():
+def test_worker_node_permanent_shutdown(teardown):
     """
     Test OCS upgrade with disruption of shutting down worker node
 
