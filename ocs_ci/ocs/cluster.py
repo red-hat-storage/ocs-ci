@@ -644,6 +644,31 @@ class CephCluster(object):
                 and states['count'] == total_pg_count
             )
 
+    def wait_for_rebalance(self, timeout=600):
+        """
+        Wait for re-balance to complete
+
+        Args:
+            timeout (int): Time to wait for the completion of re-balance
+
+        Returns:
+            bool: True if rebalance complete, False otherwise
+
+        """
+        try:
+            for rebalance in TimeoutSampler(
+                timeout=timeout, sleep=10, func=self.get_rebalance_status
+            ):
+                if rebalance:
+                    logging.info("Re-balance is completed")
+                    return True
+        except exceptions.TimeoutExpiredError:
+            logger.error(
+                f"Data re-balance failed to complete within the given "
+                f"timeout of {timeout} seconds"
+            )
+            return False
+
     def time_taken_to_complete_rebalance(self, timeout=600):
         """
         This function calculates the time taken to complete
@@ -657,13 +682,12 @@ class CephCluster(object):
 
         """
         start_time = time.time()
-        for rebalance in TimeoutSampler(
-            timeout=timeout, sleep=10, func=self.get_rebalance_status
-        ):
-            if rebalance:
-                logging.info("Rebalance is completed")
-                time_taken = time.time() - start_time
-                return (time_taken / 60)
+        assert self.wait_for_rebalance(timeout=timeout), (
+            f"Data re-balance failed to complete within the given "
+            f"timeout of {timeout} seconds"
+        )
+        time_taken = time.time() - start_time
+        return time_taken / 60
 
 
 class CephHealthMonitor(threading.Thread):
