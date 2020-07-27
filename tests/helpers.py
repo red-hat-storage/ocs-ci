@@ -2391,8 +2391,8 @@ def get_cluster_proxies():
     else:
         ocp_obj = ocp.OCP(kind=constants.PROXY, resource_name='cluster')
         proxy_obj = ocp_obj.get()
-        http_proxy = proxy_obj['spec'].get('httpProxy', '')
-        https_proxy = proxy_obj['spec'].get('httpsProxy', '')
+        http_proxy = proxy_obj.get('spec', {}).get('httpProxy', '')
+        https_proxy = proxy_obj.get('spec', {}).get('httpsProxy', '')
     logger.info("Using http_proxy: '%s'", http_proxy)
     logger.info("Using https_proxy: '%s'", https_proxy)
     return http_proxy, https_proxy
