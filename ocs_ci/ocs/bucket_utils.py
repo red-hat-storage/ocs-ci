@@ -12,6 +12,7 @@ from botocore.handlers import disable_signing
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.resources.pod import get_rgw_pods
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from tests.helpers import create_resource
@@ -170,8 +171,6 @@ def get_rgw_restart_counts():
         list: restart counts of RGW pods
 
     """
-    # Internal import in order to avoid circular import
-    from ocs_ci.ocs.resources.pod import get_rgw_pods
     rgw_pods = get_rgw_pods()
     return [rgw_pod.restart_count for rgw_pod in rgw_pods]
 
