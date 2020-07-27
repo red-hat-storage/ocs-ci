@@ -53,6 +53,6 @@ class TestAddNode(ManageTest):
             # assert add_new_node_and_label_upi(node_type, new_nodes), "Add node failed"
             # logger.info(f'The worker nodes number after expansion {len(helpers.get_worker_nodes())}')
         ceph_cluster_obj = CephCluster()
-        assert ceph_cluster_obj.wait_for_rebalance(), (
+        assert ceph_cluster_obj.wait_for_rebalance(timeout=900), (
             "Data re-balance failed to complete"
         )
