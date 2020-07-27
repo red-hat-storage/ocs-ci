@@ -14,6 +14,7 @@ from tests import helpers
 log = logging.getLogger(__name__)
 
 
+@post_upgrade
 @pytest.mark.polarion_id("OCS-2220")
 def test_storage_pods_running(multiregion_mirror_setup_session):
     """
