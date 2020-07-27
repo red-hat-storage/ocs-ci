@@ -579,7 +579,7 @@ class Deployment(object):
         #       3. toolboxpod check
         #       4. OCS pods status
         cephcluster = CephClusterExternal()
-        cephcluster.cluster_health_check()
+        cephcluster.cluster_health_check(timeout=300)
 
     def deploy_ocs(self):
         """

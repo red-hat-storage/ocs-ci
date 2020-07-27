@@ -5,7 +5,7 @@ from ocs_ci.framework.testlib import deployment, polarion_id
 from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
 from ocs_ci.utility.reporting import get_deployment_polarion_id
 from ocs_ci.utility.utils import is_cluster_running
-from tests.sanity_helpers import Sanity
+from tests.sanity_helpers import Sanity, SanityExternalCluster
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +27,10 @@ def test_deployment(pvc_factory, pod_factory):
             # Check basic cluster functionality by creating resources
             # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
             # run IO and delete the resources
-            sanity_helpers = Sanity()
+            if config.DEPLOYMENT['independent_mode']:
+                sanity_helpers = SanityExternalCluster()
+            else:
+                sanity_helpers = Sanity()
             sanity_helpers.health_check()
             sanity_helpers.create_resources(pvc_factory, pod_factory)
             sanity_helpers.delete_resources()

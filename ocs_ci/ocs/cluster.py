@@ -1219,9 +1219,8 @@ class CephClusterExternal(CephCluster):
         self._namespace = (
             self.cluster_resource.get('metadata').get('namespace')
         )
-        self.mcg_obj = MCG()
-
         self.cluster = ocs.OCS(**self.cluster_resource)
+        self.wait_for_nooba_cr()
 
     @property
     def cluster_name(self):
@@ -1241,6 +1240,10 @@ class CephClusterExternal(CephCluster):
         cluster_cr = self.CEPHCLUSTER.get()
         self.cluster_resource = cluster_cr.get('items')[0]
 
+    @retry((IndexError, AttributeError, TypeError), 100, 3, 1)
+    def wait_for_nooba_cr(self):
+        self.mcg_obj = MCG()
+
     def cluster_health_check(self, timeout=300):
         """
         This would be a comprehensive cluster health check
@@ -1255,7 +1258,7 @@ class CephClusterExternal(CephCluster):
         if not sample.wait_for_func_status(result=True):
             raise exceptions.CephHealthException("Cluster health is NOT OK")
 
-        self.noobaa_health_check()
+        self.wait_for_noobaa_health_ok()
         self.validate_pvc()
 
     def validate_pvc(self):

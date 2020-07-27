@@ -3,7 +3,7 @@ DEPLOYMENT:
   force_download_client: True
 
 ENV_DATA:
-  storage_cluster_name: 'ocs-external-storagecluster'
+  storage_cluster_name: 'ocs-independent-storagecluster'
 
 INDEPENDENT_MODE:
   # base64 encoded data of json output
