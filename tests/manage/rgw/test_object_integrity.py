@@ -1,6 +1,5 @@
 import logging
 
-import pytest
 from ocs_ci.ocs.bucket_utils import (
     retrieve_test_objects_to_pod, sync_object_directory,
     verify_s3_object_integrity
