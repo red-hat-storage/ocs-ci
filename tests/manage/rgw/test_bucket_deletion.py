@@ -67,7 +67,7 @@ class TestBucketDeletion:
                 try:
                     s3_del = obc_obj.s3_resource.Bucket(bucketname).delete()
                     assert not s3_del, (
-                        "Unexpected s3 delete non-empty OBC succeed"
+                        "Unexpected issue: Successfully deleted a bucket containing objects via S3"
                     )
                 except botocore.exceptions.ClientError as err:
                     assert "BucketNotEmpty" in str(err), (

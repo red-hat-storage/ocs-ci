@@ -55,7 +55,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
 
 def verify_s3_object_integrity(original_object_path, result_object_path, awscli_pod):
     """
-    Verifies checksum between orignial object and result object on an awscli pod
+    Verifies checksum between original object and result object on an awscli pod
 
     Args:
         original_object_path (str): The Object that is uploaded to the s3 bucket

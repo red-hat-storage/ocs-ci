@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 def setup(pod_obj, rgw_bucket_factory):
     """
-    Setup function
+    Create the file to be used for the multipart upload test,
+    and the bucket to upload it to.
 
      Args:
         pod_obj (Pod): A pod running the AWS CLI tools

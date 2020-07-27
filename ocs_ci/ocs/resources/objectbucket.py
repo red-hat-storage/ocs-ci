@@ -189,6 +189,17 @@ class ObjectBucket(ABC):
             )
             assert False, f'{self.name} did not reach a healthy state within {timeout} seconds.'
 
+    """
+    The following methods are abstract, internal methods.
+    The reason for the "internal" naming scheme/design is in order to allow each inheriting class
+    to implement its appropriate methods using the necessary APIs and logics, while still
+    sharing a common entry point.
+    For example - the way to check MCGS3Bucket's status is by using RPC, while MCGCLIBucket's status
+    has to be checked via the MCG CLI tool. However, we would like both to output the status in a
+    consistent manner, without having to log/print the status each time.
+    Thus, the internal_status methods only return the status message, and the general status method
+    logs it and returns it further if needed.
+    """
     @abstractmethod
     def internal_delete(self):
         """
