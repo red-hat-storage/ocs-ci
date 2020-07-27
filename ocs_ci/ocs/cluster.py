@@ -652,7 +652,7 @@ class CephCluster(object):
             timeout (int): Time to wait for the completion of re-balance
 
         Returns:
-            bool: True if rebalance complete, False otherwise
+            bool: True if rebalance completed, False otherwise
 
         """
         try:

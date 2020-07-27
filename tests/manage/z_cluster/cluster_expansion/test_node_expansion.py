@@ -7,6 +7,7 @@ from ocs_ci.ocs import machine as machine_utils
 from ocs_ci.framework import config
 from ocs_ci.ocs.node import add_new_node_and_label_it, add_new_node_and_label_upi
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.cluster import CephCluster
 
 logger = logging.getLogger(__name__)
 
@@ -51,3 +52,7 @@ class TestAddNode(ManageTest):
             # node_type = constants.RHCOS
             # assert add_new_node_and_label_upi(node_type, new_nodes), "Add node failed"
             # logger.info(f'The worker nodes number after expansion {len(helpers.get_worker_nodes())}')
+        ceph_cluster_obj = CephCluster()
+        assert ceph_cluster_obj.wait_for_rebalance(), (
+            "Data re-balance failed to complete"
+        )
