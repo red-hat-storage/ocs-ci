@@ -43,7 +43,7 @@ def add_capacity_test():
         namespace=config.ENV_DATA['cluster_namespace'], tries=80
     )
     ceph_cluster_obj = CephCluster()
-    assert ceph_cluster_obj.wait_for_rebalance(timeout=900), (
+    assert ceph_cluster_obj.wait_for_rebalance(), (
         "Data re-balance failed to complete"
     )
 

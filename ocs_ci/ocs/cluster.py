@@ -644,17 +644,33 @@ class CephCluster(object):
                 and states['count'] == total_pg_count
             )
 
-    def wait_for_rebalance(self, timeout=600):
+    def wait_for_rebalance(self, timeout=None):
         """
         Wait for re-balance to complete
 
         Args:
-            timeout (int): Time to wait for the completion of re-balance
+            timeout (int): Time to wait for the completion of re-balance.
+                In case IO is running in the test background (according to --io-in-bg
+                run-ci param, the timeout will be determined by the amount of load
+                (io_load run-ci param)
 
         Returns:
             bool: True if rebalance completed, False otherwise
 
         """
+        if config.RUN.get('io_in_bg'):
+            io_load = config.RUN.get('io_load')
+            if 10 < io_load <= 30:
+                timeout = 900
+            if 30 < io_load <= 50:
+                timeout = 1800
+            if 50 < io_load <= 70:
+                timeout = 2700
+            if io_load > 70:
+                timeout = 3600
+        else:
+            timeout = timeout if timeout else 600
+
         try:
             for rebalance in TimeoutSampler(
                 timeout=timeout, sleep=10, func=self.get_rebalance_status
@@ -682,6 +698,7 @@ class CephCluster(object):
 
         """
         start_time = time.time()
+        timeout = None if config.RUN.get('io_in_bg') else timeout
         assert self.wait_for_rebalance(timeout=timeout), (
             f"Data re-balance failed to complete within the given "
             f"timeout of {timeout} seconds"
