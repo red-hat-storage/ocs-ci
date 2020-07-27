@@ -511,6 +511,10 @@ class OCP(object):
                         resource_name, column, retry=retry, wait=sleep,
                     )
                     if status == condition:
+                        log.info(
+                            f"status of {resource_name} at {column}"
+                            f" reached condition!"
+                        )
                         return True
                     log.info((
                         f"status of {resource_name} at column {column} was {status},"
