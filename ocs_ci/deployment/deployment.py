@@ -655,7 +655,7 @@ class Deployment(object):
                 "wait_for_ip_increase_count", 10
             )
             wait_timeout = config.ENV_DATA.get(
-                "wait_for_ip_increase_timeout", 1800
+                "wait_for_ip_increase_timeout", 3000
             )
             reached_ip_change = False
             while wait_timeout > 0:
@@ -686,6 +686,8 @@ class Deployment(object):
                 resource_name=lbp_subscription_name
             )
             lbp_subscription.delete()
+            logger.info("Sleep 30 seconds after deleting subscription")
+            time.sleep(30)
             all_csvs = CSV(namespace=self.namespace).get()
             lbp_csvs = [
                 csv for csv in all_csvs.get('items', []) if
@@ -716,15 +718,15 @@ class Deployment(object):
             logger.info("Subscribe to LBP")
             run_cmd(f"oc create -f {constants.LBP_SUBSCRIPTION_YAML}")
             logger.info(
-                f"Waiting {wait_time} seconds after new subscription to LBP"
+                "Waiting 300 seconds after new subscription to LBP"
             )
-            time.sleep(wait_time)
+            time.sleep(300)
             ip_after_second_deploy = get_install_plans_count(self.namespace)
             logger.info(
                 "Number of install plans after applying W/A is: "
                 f"{ip_after_second_deploy}"
             )
-            timeout = 300
+            timeout = 600
             while timeout > 0:
                 timeout -= wait_time
                 logger.info(
@@ -737,7 +739,7 @@ class Deployment(object):
                     "Number of install plans after applying W/A is: "
                     f"{ip_count}"
                 )
-                assert ip_count == ip_after_second_deploy, "Install plans increased!"
+                assert ip_count <= ip_after_second_deploy, "Install plans increased!"
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
