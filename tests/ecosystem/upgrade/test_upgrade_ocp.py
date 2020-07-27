@@ -36,7 +36,9 @@ class TestUpgradeOCP(ManageTest):
 
         ceph_cluster = CephCluster()
         with CephHealthMonitor(ceph_cluster):
-
+            ocp_channel = config.UPGRADE.get(
+                'ocp_channel', ocp.get_ocp_upgrade_channel()
+            )
             ocp_upgrade_version = config.UPGRADE.get('ocp_upgrade_version')
             if not ocp_upgrade_version:
                 ocp_channel = config.UPGRADE['ocp_channel']
