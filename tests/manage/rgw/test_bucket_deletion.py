@@ -26,7 +26,7 @@ class TestBucketDeletion:
         argvalues=[
             pytest.param(
                 *[3, 'RGW-OC'],
-                marks=[pytest.mark.polarion_id("OCS-1939"), tier1, acceptance]
+                marks=[tier1, acceptance]
             ),
         ]
     )
@@ -43,7 +43,7 @@ class TestBucketDeletion:
         argvalues=[
             pytest.param(
                 *['RGW-OC'],
-                marks=[tier1, pytest.mark.polarion_id("OCS-1868")]
+                marks=[tier1]
             ),
         ]
     )
@@ -84,7 +84,7 @@ class TestBucketDeletion:
         argvalues=[
             pytest.param(
                 *['RGW-OC'],
-                marks=[tier3, pytest.mark.polarion_id("OCS-1400")]
+                marks=[tier3]
             ),
         ]
     )

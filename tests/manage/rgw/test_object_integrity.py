@@ -49,7 +49,6 @@ class TestObjectIntegrity(ManageTest):
                 result_object_path=f'{result_dir}/{obj}', awscli_pod=awscli_pod
             ), 'Checksum comparision between original and result object failed'
 
-    @pytest.mark.polarion_id("OCS-1945")
     @tier2
     def test_empty_file_integrity(
         self, awscli_pod, rgw_bucket_factory

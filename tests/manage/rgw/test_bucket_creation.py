@@ -37,7 +37,7 @@ class TestRGWBucketCreation:
         argvalues=[
             pytest.param(
                 *[3, 'RGW-OC'],
-                marks=[tier3, pytest.mark.polarion_id("OCS-1863")]
+                marks=[tier3]
             ),
         ]
     )
