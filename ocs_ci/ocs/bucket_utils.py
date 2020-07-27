@@ -63,7 +63,7 @@ def verify_s3_object_integrity(original_object_path, result_object_path, awscli_
         awscli_pod (pod): A pod running the AWSCLI tools
 
     Returns:
-            bool: True if checksum matches, False otherwise
+        bool: True if checksum matches, False otherwise
 
     """
     md5sum = shlex.split(awscli_pod.exec_cmd_on_pod(command=f'md5sum {original_object_path} {result_object_path}'))

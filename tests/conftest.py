@@ -1759,11 +1759,17 @@ def rgw_bucket_factory_session(request, rgw_obj_session):
 
 @pytest.fixture()
 def bucket_factory(request, mcg_obj):
+    """
+    Returns an MCG bucket factory
+    """
     return bucket_factory_fixture(request, mcg_obj, rgw_obj=None)
 
 
 @pytest.fixture(scope='session')
 def bucket_factory_session(request, mcg_obj_session):
+    """
+    Returns a session-scoped MCG bucket factory
+    """
     return bucket_factory_fixture(request, mcg_obj_session, rgw_obj_session=None)
 
 
