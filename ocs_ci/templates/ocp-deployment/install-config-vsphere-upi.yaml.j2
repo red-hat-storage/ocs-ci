@@ -3,6 +3,9 @@ baseDomain: {{ base_domain | default('qe.rh-ocs.com') }}
 metadata:
   name: '{{ cluster_name }}'
 networking:
+  clusterNetwork:
+    - cidr: 10.128.0.0/14
+      hostPrefix: 23
   machineCIDR: '{{ machine_cidr }}'
 {% if fips %}
 fips: {{ fips }}
