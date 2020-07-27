@@ -298,6 +298,9 @@ class TestFIOBenchmark(E2ETest):
         log.debug(f'Full results is : {full_results.results}')
 
         es._copy(full_results.es)
+        # Adding this sleep between the copy and the analyzing of the results
+        # since sometimes the results of the read (just after write) are empty
+        time.sleep(30)
         full_results.analyze_results()  # Analyze the results
         # Writing the analyzed test results to the Elastic-Search server
         full_results.es_write()
