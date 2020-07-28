@@ -36,20 +36,20 @@ class CloudDeploymentBase(Deployment):
             self.cluster_name = get_cluster_name(self.cluster_path)
 
 
-class CloudIPIOCPDeployment(BaseOCPDeployment):
+class IPIOCPDeployment(BaseOCPDeployment):
     """
     Common implementation of IPI OCP deployments for cloud platforms.
     """
 
     def __init__(self):
-        super(CloudIPIOCPDeployment, self).__init__()
+        super(IPIOCPDeployment, self).__init__()
 
     def deploy_prereq(self):
         """
         Overriding deploy_prereq from parent. Perform all necessary
         prerequisites for cloud IPI here.
         """
-        super(CloudIPIOCPDeployment, self).deploy_prereq()
+        super(IPIOCPDeployment, self).deploy_prereq()
         if config.DEPLOYMENT['preserve_bootstrap_node']:
             logger.info("Setting ENV VAR to preserve bootstrap node")
             os.environ['OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP'] = 'True'

@@ -7,7 +7,7 @@ on Azure platform.
 import logging
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase
-from ocs_ci.deployment.cloud import CloudIPIOCPDeployment
+from ocs_ci.deployment.cloud import IPIOCPDeployment
 from ocs_ci.utility.azure_utils import AZURE as AzureUtil
 
 
@@ -70,7 +70,7 @@ class AZUREIPI(AZUREBase):
     A class to handle Azure IPI specific deployment.
     """
 
-    OCPDeployment = CloudIPIOCPDeployment
+    OCPDeployment = IPIOCPDeployment
 
     def __init__(self):
         self.name = self.__class__.__name__
