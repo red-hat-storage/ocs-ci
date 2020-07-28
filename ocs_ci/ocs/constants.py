@@ -105,6 +105,7 @@ CLUSTER_SERVICE_VERSION = 'csv'
 JOB = 'job'
 LOCAL_VOLUME = 'localvolume'
 PROXY = 'Proxy'
+MACHINECONFIGPOOL = "MachineConfigPool"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
