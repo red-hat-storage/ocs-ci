@@ -33,6 +33,12 @@ def load_cluster_resource_group(
     cluster dir to get azure ``resource group`` of an OCP cluster. All Azure
     resources of the cluster are placed in this group.
 
+    Args:
+        cluster_path (str): full file path of the openshift cluster directory
+        terraform_filename (str): name of azure terraform vars file, this is
+            optional and you need to specify this only if you want to override
+            the default
+
     Returns:
         string with resource group name
     """

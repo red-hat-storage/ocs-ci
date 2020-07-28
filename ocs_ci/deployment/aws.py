@@ -27,7 +27,7 @@ from ocs_ci.utility.utils import (
 )
 from semantic_version import Version
 from .cloud import CloudDeploymentBase
-from .cloud import CloudIPIOCPDeployment
+from .cloud import IPIOCPDeployment
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +157,7 @@ class AWSIPI(AWSBase):
     A class to handle AWS IPI specific deployment
     """
 
-    OCPDeployment = CloudIPIOCPDeployment
+    OCPDeployment = IPIOCPDeployment
 
     def __init__(self):
         self.name = self.__class__.__name__
