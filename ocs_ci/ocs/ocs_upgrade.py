@@ -3,30 +3,33 @@ import logging
 from copy import deepcopy
 from pkg_resources import parse_version
 from tempfile import NamedTemporaryFile
+import time
 
-from ocs_ci.deployment.deployment import create_catalog_source
 from ocs_ci.framework import config
+from ocs_ci.deployment.deployment import create_catalog_source
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
-from ocs_ci.ocs.node import get_typed_nodes
 from ocs_ci.ocs.ocp import get_images, OCP
+from ocs_ci.ocs.node import get_typed_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.pod import verify_pods_upgraded
 from ocs_ci.ocs.resources.packagemanifest import (
-    get_selector_for_ocs_operator,
-    PackageManifest,
+    get_selector_for_ocs_operator, PackageManifest,
 )
-from ocs_ci.ocs.resources.storage_cluster import get_osd_count
+from ocs_ci.ocs.resources.storage_cluster import (
+    get_osd_count, ocs_install_verification,
+)
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.utility.utils import (
-    get_latest_ds_olm_tag,
-    get_next_version_available_for_upgrade,
-    get_ocs_version_from_image,
-    load_config_file,
+    get_latest_ds_olm_tag, get_next_version_available_for_upgrade,
+    get_ocs_version_from_image, load_config_file, TimeoutSampler,
 )
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
+from ocs_ci.ocs.exceptions import TimeoutException
+
 
 log = logging.getLogger(__name__)
 
@@ -357,9 +360,6 @@ class OCSUpgrade(object):
         """
         Set images for upgrade
 
-        Args:
-            upgrade_version: (str): version to be upgraded
-
         """
         ocs_catalog = CatalogSource(
             resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
@@ -392,3 +392,65 @@ class OCSUpgrade(object):
             with NamedTemporaryFile() as cs_yaml:
                 dump_data_to_temp_yaml(cs_data, cs_yaml.name)
                 ocs_catalog.apply(cs_yaml.name)
+
+
+def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
+    """
+    Run upgrade procedure of OCS cluster
+
+    Args:
+        operation: (function): Function to run
+        operation_args: (iterable): Function's arguments
+        operation_kwargs: (map): Function's keyword arguments
+
+    """
+
+    ceph_cluster = CephCluster()
+    upgrade_ocs = OCSUpgrade(
+        namespace=config.ENV_DATA['cluster_namespace'],
+        version_before_upgrade=config.ENV_DATA.get("ocs_version"),
+        ocs_registry_image=config.UPGRADE.get('upgrade_ocs_registry_image'),
+        upgrade_in_current_source=config.UPGRADE.get('upgrade_in_current_source', False)
+    )
+    upgrade_version = upgrade_ocs.get_upgrade_version()
+    assert upgrade_ocs.get_parsed_versions()[1] >= upgrade_ocs.get_parsed_versions()[0], (
+        f"Version you would like to upgrade to: {upgrade_version} "
+        f"is not higher or equal to the version you currently running: "
+        f"{upgrade_ocs.version_before_upgrade}"
+    )
+    csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
+    pre_upgrade_images = upgrade_ocs.get_pre_upgrade_image(csv_name_pre_upgrade)
+    upgrade_ocs.load_version_config_file(upgrade_version)
+    with CephHealthMonitor(ceph_cluster):
+        channel = upgrade_ocs.set_upgrade_channel()
+        upgrade_ocs.set_upgrade_images()
+        upgrade_ocs.update_subscription(channel)
+        if operation:
+            log.info(f"Calling test function: {operation}")
+            _ = operation(*operation_args, **operation_kwargs)
+            # Workaround for issue #2531
+            time.sleep(30)
+            # End of workaround
+
+        for sample in TimeoutSampler(
+            timeout=725,
+            sleep=5,
+            func=upgrade_ocs.check_if_upgrade_completed,
+            channel=channel,
+            csv_name_pre_upgrade=csv_name_pre_upgrade,
+        ):
+            try:
+                if sample:
+                    log.info("Upgrade success!")
+                    break
+            except TimeoutException:
+                raise TimeoutException("No new CSV found after upgrade!")
+        old_image = upgrade_ocs.get_images_post_upgrade(
+            channel, pre_upgrade_images, upgrade_version
+        )
+    verify_image_versions(old_image, upgrade_ocs.get_parsed_versions()[1])
+    ocs_install_verification(
+        timeout=600, skip_osd_distribution_check=True,
+        ocs_registry_image=upgrade_ocs.ocs_registry_image,
+        post_upgrade_verification=True,
+    )

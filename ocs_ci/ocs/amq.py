@@ -17,8 +17,9 @@ from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, utils
 from ocs_ci.utility.utils import run_cmd, exec_cmd, TimeoutSampler
+from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
 log = logging.getLogger(__name__)
 URL = "https://get.helm.sh/helm-v2.16.1-linux-amd64.tar.gz"
@@ -669,6 +670,40 @@ class AMQ(object):
         log.info(f'\n{amq_benchmark_pod_table}\n')
 
         return res_dict
+
+    def export_amq_output_to_gsheet(self, amq_output, sheet_name, sheet_index):
+        """
+        Collect amq data to google spreadsheet
+
+        Args:
+            amq_output (dict):  amq output in dict
+            sheet_name (str): Name of the sheet
+            sheet_index (int): Index of sheet
+
+        """
+        # Collect data and export to Google doc spreadsheet
+        g_sheet = GoogleSpreadSheetAPI(
+            sheet_name=sheet_name, sheet_index=sheet_index
+        )
+        log.info("Exporting amq data to google spreadsheet")
+
+        headers_to_key = []
+        values = []
+        for key, val in amq_output.items():
+            headers_to_key.append(key)
+            values.append(val)
+
+        # Update amq_result to gsheet
+        g_sheet.insert_row(values, 2)
+        g_sheet.insert_row(headers_to_key, 2)
+
+        # Capturing versions(OCP, OCS and Ceph) and test run name
+        g_sheet.insert_row(
+            [f"ocp_version:{utils.get_cluster_version()}",
+             f"ocs_build_number:{utils.get_ocs_build_number()}",
+             f"ceph_version:{utils.get_ceph_version()}",
+             f"test_run_name:{utils.get_testrun_name()}"], 2
+        )
 
     def create_messaging_on_amq(self, topic_name='my-topic', user_name="my-user", partitions=1,
                                 replicas=1, num_of_producer_pods=1, num_of_consumer_pods=1,

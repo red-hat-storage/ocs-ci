@@ -16,12 +16,15 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
 from subprocess import CalledProcessError
-from tests.helpers import create_pvc
 from ocs_ci.ocs.resources.pod import get_pod_obj
-from tests.helpers import wait_for_resource_state
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import utils
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
+from ocs_ci.ocs.node import get_typed_nodes, get_app_pod_running_nodes
+from tests.helpers import (
+    wait_for_resource_state, create_pvc, get_worker_nodes
+)
+
 
 log = logging.getLogger(__name__)
 
@@ -348,6 +351,38 @@ class Jenkins(object):
              f"ceph_version:{utils.get_ceph_version()}",
              f"test_run_name:{utils.get_testrun_name()}"], 2
         )
+
+    def get_node_name_where_jenkins_pod_not_hosted(
+        self, node_type=constants.WORKER_MACHINE, num_of_nodes=1
+    ):
+        """
+        get nodes
+
+        Args:
+            node_type (str): The node type  (e.g. worker, master)
+            num_of_nodes (int): The number of nodes to be returned
+
+        Returns:
+            list: List of compute node names
+        """
+        if node_type == constants.MASTER_MACHINE:
+            nodes_drain = [node.name for node in get_typed_nodes(
+                node_type=node_type, num_of_nodes=num_of_nodes
+            )]
+        elif node_type == constants.WORKER_MACHINE:
+            pod_objs = []
+            for project in self.projects:
+                pod_names = get_pod_name_by_pattern(
+                    pattern='jenkins', namespace=project
+                )
+                pod_obj = [get_pod_obj(name=pod_name, namespace=project) for pod_name in pod_names]
+                pod_objs += pod_obj
+            nodes_app_name = set(get_app_pod_running_nodes(pod_objs))
+            nodes_worker_name = set(get_worker_nodes())
+            nodes_drain = nodes_worker_name - nodes_app_name
+        else:
+            raise ValueError('The node type is worker or master')
+        return list(nodes_drain)[:num_of_nodes]
 
     def cleanup(self):
         """
