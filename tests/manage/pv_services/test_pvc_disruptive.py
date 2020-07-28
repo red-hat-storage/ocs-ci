@@ -139,7 +139,8 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
             marks=[
                 pytest.mark.polarion_id("OCS-948"),
                 pytest.mark.bugzilla("1806419"),
-                pytest.mark.bugzilla("1793387")
+                pytest.mark.bugzilla("1793387"),
+                pytest.mark.bugzilla('1860891')
             ]
         ),
         pytest.param(
