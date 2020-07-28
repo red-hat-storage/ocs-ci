@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: awscli
+  namespace: openshift-storage
+spec:
+  containers:
+    - name: awscli
+      image: quay.io/multiarch-origin-e2e/aws-cli:latest
+      # Override the default `aws` entrypoint in order to 
+      # allow the pod to run continuously and act as a relay
+      command: ['/bin/sh']
+      stdin: true
+      tty: true
+      volumeMounts:
+      - name: service-ca
+        mountPath: /cert/service-ca.crt
+        subPath: service-ca.crt
+  volumes:
+  - name: service-ca
+    configMap:
+      name: awscli-service-ca

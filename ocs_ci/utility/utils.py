@@ -2365,3 +2365,21 @@ def set_aws_region(region=None):
     log.debug("Exporting environment variable AWS_REGION")
     region = region or config.ENV_DATA['region']
     os.environ['AWS_REGION'] = region
+
+
+def get_system_architecture():
+    """
+    Get output from ''uname -m' command run on first worker node.
+
+    Returns:
+        str: Architecture of system
+    """
+    from ocs_ci.ocs import ocp
+
+    node_obj = ocp.OCP(kind=constants.NODE)
+    log.info('Checking architecture of system')
+
+    node = node_obj.get(
+        selector=constants.WORKER_LABEL
+    ).get('items')[0]['metadata']['name']
+    return node_obj.exec_oc_debug_cmd(node, ['uname -m'])

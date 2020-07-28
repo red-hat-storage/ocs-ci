@@ -448,6 +448,10 @@ AWSCLI_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "awscli.yaml"
 )
 
+AWSCLI_MULTIARCH_POD_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "awscli_multiarch.yaml"
+)
+
 SERVICE_ACCOUNT_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "service_account.yaml"
 )

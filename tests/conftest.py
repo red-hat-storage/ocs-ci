@@ -45,14 +45,16 @@ from ocs_ci.utility.environment_check import (
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
+    ceph_health_check_base,
     get_rook_repo,
     get_ocp_version,
+    get_openshift_client,
+    get_system_architecture,
+    get_testrun_name,
+    ocsci_log_path,
+    skipif_ocs_version,
     TimeoutSampler,
     update_container_with_mirrored_image,
-)
-from ocs_ci.utility.utils import (
-    get_openshift_client, ocsci_log_path, get_testrun_name,
-    ceph_health_check_base, skipif_ocs_version
 )
 from tests import helpers
 from tests.helpers import create_unique_resource_name
@@ -1602,9 +1604,18 @@ def awscli_pod_fixture(request, mcg_obj):
     service_ca_configmap = helpers.create_resource(
         **templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
     )
+
+    pod_dict_path = constants.AWSCLI_POD_YAML
+
+    arch = get_system_architecture()
+    if arch.startswith('x86'):
+        pod_dict_path = constants.AWSCLI_POD_YAML
+    else:
+        pod_dict_path = constants.AWSCLI_MULTIARCH_POD_YAML
+
     awscli_pod_obj = helpers.create_pod(
         namespace=constants.DEFAULT_NAMESPACE,
-        pod_dict_path=constants.AWSCLI_POD_YAML,
+        pod_dict_path=pod_dict_path,
         pod_name=constants.AWSCLI_RELAY_POD_NAME
     )
     OCP(namespace=constants.DEFAULT_NAMESPACE, kind='ConfigMap').wait_for_resource(
@@ -2336,13 +2347,7 @@ def fio_job_dict_fixture():
     """
     Job template for fio workloads.
     """
-    node_obj = ocp.OCP(kind=constants.NODE)
-
-    log.info('Checking architecture of system')
-    node = node_obj.get(
-        selector=constants.WORKER_LABEL
-    ).get('items')[0]['metadata']['name']
-    arch = node_obj.exec_oc_debug_cmd(node, ['uname -m'])
+    arch = get_system_architecture()
     if arch.startswith('x86'):
         image = 'quay.io/fbalak/fio-fedora:latest'
     else:
