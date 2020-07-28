@@ -34,6 +34,7 @@ from ocs_ci.utility.utils import (
     clone_repo, convert_yaml2tfvars, create_directory_path, read_file_as_str,
     remove_keys_from_tf_variable_file, replace_content_in_file, run_cmd,
     upload_file, wait_for_co, get_ocp_version, get_terraform, set_aws_region,
+    configure_chrony_and_wait_for_machineconfig_status,
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from semantic_version import Version
@@ -588,6 +589,9 @@ class VSPHEREUPI(VSPHEREBASE):
             )
             logger.info("Removing RHCOS compute nodes from a cluster")
             remove_nodes(rhcos_nodes)
+
+        # configure chrony for all nodes
+        configure_chrony_and_wait_for_machineconfig_status(node_type="all")
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
