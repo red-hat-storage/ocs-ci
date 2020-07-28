@@ -134,15 +134,20 @@ pipeline {
         // quay.io/rhceph-dev/ocs-registry:4.2.2-255.ci -> 4.2.2-255.ci
         def registry_tag = registry_image.split(':')[-1]
         def ocs_version = registry_tag.split('-')[0]
-        // tag ocs-registry container as 'latest-stable-$ocs_version'
-        build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-registry:latest-stable-${ocs_version}")]
-        // tag ocs-olm-operator container as 'latest-stable'
-        build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-olm-operator:latest-stable-${ocs_version}")]
         // ocs version with only X.Y
         def short_ocs_version = ocs_version.tokenize(".").take(2).join(".")
-        build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-registry:latest-stable-${short_ocs_version}")]
-        // tag ocs-olm-operator container as 'latest-stable'
-        build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-olm-operator:latest-stable-${short_ocs_version}")]
+        if (short_ocs_version.toFloat() < 4.5 ) {
+          // tag ocs-olm-operator container because versions < 4.5 use olm registry containers
+          build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-olm-operator:latest-stable-${ocs_version}")]
+          build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-olm-operator:latest-stable-${short_ocs_version}")]
+        }
+        else {
+          // tag ocs-bundle-operator and ocs-registry container because versions > 4.5 use bundle index containers
+          build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-bundle-operator:latest-stable-${ocs_version}")]
+          build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-bundle-operator:latest-stable-${short_ocs_version}")]
+          build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-registry:latest-stable-${ocs_version}")]
+          build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-registry:latest-stable-${short_ocs_version}")]
+        }
         if( env.UMB_MESSAGE in [true, 'true'] ) {
           def registry_version = registry_tag.split('-')[0]
           def properties = """
