@@ -3,6 +3,7 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants, node
+from tests.helpers import wait_for_resource_state
 from ocs_ci.framework.testlib import (
     skipif_ocs_version, ManageTest, tier4, tier4b, ignore_leftovers,
     polarion_id
@@ -88,6 +89,7 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
         # Run IO
         log.info("Run IO after PVC expansion.")
         for pod_obj in self.pods:
+            wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
             storage_type = (
                 'block' if pod_obj.pvc.volume_mode == 'Block' else 'fs'
             )
