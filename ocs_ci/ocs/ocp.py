@@ -513,7 +513,7 @@ class OCP(object):
                     if status == condition:
                         log.info(
                             f"status of {resource_name} at {column}"
-                            f" reached condition!"
+                            " reached condition!"
                         )
                         return True
                     log.info((
