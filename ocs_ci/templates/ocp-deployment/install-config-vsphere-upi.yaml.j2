@@ -4,8 +4,8 @@ metadata:
   name: '{{ cluster_name }}'
 networking:
   clusterNetwork:
-    - cidr: 10.128.0.0/14
-      hostPrefix: 23
+    - cidr: {{ cluster_network_cidr | default('10.128.0.0/14') }}
+      hostPrefix: {{ cluster_host_prefix | default(23) }}
   machineCIDR: '{{ machine_cidr }}'
 {% if fips %}
 fips: {{ fips }}
