@@ -3,7 +3,7 @@
 
 ## Prerequisites
 
-* Python >= 3.7
+* Python >= 3.6
 * oc client binary available in the $PATH.
   (running the oc version on terminal should display version > 3.11).
   The latest client can be downloaded from [the oc-client public mirror](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/).
@@ -58,11 +58,11 @@ necessary dependencies
     [https://github.com/red-hat-storage/ocs-ci](https://github.com/red-hat-storage/ocs-ci)
     via cmd `git clone git@github.com:red-hat-storage/ocs-ci.git`.
 2. Go to ocs-ci folder `cd ocs-ci`.
-3. Setup a python 3.7 virtual environment. This is actually quite easy to do
+3. Setup a python virtual environment. This is actually quite easy to do
     now. Use hidden `.venv` or normal `venv` folder for virtual env as we are
     ignoring this in flake8 configuration in tox.
 
-    * `python3.7 -m venv <path/to/venv>`
+    * `python -m venv <path/to/venv>`
     * `source <path/to/.venv>/bin/activate`
 
 4. Upgrade pip and setuptools with `pip install --upgrade pip setuptools`
