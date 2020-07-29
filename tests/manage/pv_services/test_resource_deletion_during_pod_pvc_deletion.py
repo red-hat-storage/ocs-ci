@@ -131,7 +131,7 @@ class DisruptionBase(ManageTest):
         # Verify that the mount point is removed from nodes after deleting pod
         for node, pvs in node_pv_dict.items():
             cmd = "df"
-            df_on_node = exec_cmd_on_debug_node(node_name, cmd)
+            df_on_node = exec_cmd_on_debug_node(node, cmd)
             for pv in pvs:
                 assert pv not in df_on_node, (
                     f"{pv} is still present on node {node} after "

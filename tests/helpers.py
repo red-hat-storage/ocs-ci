@@ -33,7 +33,6 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     ocsci_log_path,
-    run_cmd,
     update_container_with_mirrored_image,
     exec_cmd_on_debug_node,
 )
