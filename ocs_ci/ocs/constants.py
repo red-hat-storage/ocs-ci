@@ -1047,9 +1047,3 @@ PXE_FILE = os.path.join(
 )
 coreos_url_prefix = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos"
 BM_DEFAULT_CLUSTER_NAME = "ocp-baremetal-auto"
-WORKER_NTP_CHRONY_CONF = os.path.join(
-    TEMPLATE_DIR, "ocp-deployment", "ntp_chrony_worker.yaml"
-)
-MASTER_NTP_CHRONY_CONF = os.path.join(
-    TEMPLATE_DIR, "ocp-deployment", "ntp_chrony_master.yaml"
-)

@@ -2456,6 +2456,7 @@ def configure_chrony_and_wait_for_machineconfig_status(
         wait_for_machineconfigpool_status(role)
 
 
+<<<<<<< HEAD
 def modify_csv(csv, replace_from, replace_to):
     """
     Modify the CSV
@@ -2503,6 +2504,8 @@ def wait_for_machineconfigpool_status(resource_name, timeout=800):
     ocp_obj.wait_for_resource(condition=str(machine_count), column="READYMACHINECOUNT", timeout=timeout)
 
 
+=======
+>>>>>>> a2a0fbbf... Resolved conflits
 def check_for_rhcos_images(path):
     """
     Check for rhcos images are present in given location

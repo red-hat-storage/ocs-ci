@@ -21,7 +21,7 @@ from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pendi
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.utils import (
     run_cmd, upload_file, get_ocp_version, load_auth_config,
-    wait_for_co, wait_for_machineconfigpool_status, check_for_rhcos_images,
+    wait_for_co, configure_chrony_and_wait_for_machineconfig_status, check_for_rhcos_images,
     get_infra_id, TimeoutSampler
 )
 
@@ -170,30 +170,36 @@ class BAREMETALUPI(Deployment):
             # Download installer_initramfs
             initramfs_image_path = constants.coreos_url_prefix + image_data['installer_initramfs_url']
             if check_for_rhcos_images(initramfs_image_path):
-                cmd = f"wget -O " \
-                      f"{self.helper_node_details['bm_tftp_dir']}" \
-                      f"/rhcos-installer-initramfs.x86_64.img " \
-                      f"{initramfs_image_path}"
+                cmd = (
+                    "wget -O "
+                    f"{self.helper_node_details['bm_tftp_dir']}"
+                    "/rhcos-installer-initramfs.x86_64.img "
+                    f"{initramfs_image_path}"
+                )
                 assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
             else:
                 raise RhcosImageNotFound
             # Download installer_kernel
             kernel_image_path = constants.coreos_url_prefix + image_data['installer_kernel_url']
             if check_for_rhcos_images(kernel_image_path):
-                cmd = f"wget -O " \
-                      f"{self.helper_node_details['bm_tftp_dir']}" \
-                      f"/rhcos-installer-kernel-x86_64 " \
-                      f"{kernel_image_path}"
+                cmd = (
+                    "wget -O "
+                    f"{self.helper_node_details['bm_tftp_dir']}"
+                    "/rhcos-installer-kernel-x86_64 "
+                    f"{kernel_image_path}"
+                )
                 assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
             else:
                 raise RhcosImageNotFound
             # Download metal_bios
             metal_image_path = constants.coreos_url_prefix + image_data['metal_bios_url']
             if check_for_rhcos_images(metal_image_path):
-                cmd = f"wget -O " \
-                      f"{self.helper_node_details['bm_path_to_upload']}" \
-                      f"/rhcos-metal.x86_64.raw.gz " \
-                      f"{metal_image_path}"
+                cmd = (
+                    "wget -O "
+                    f"{self.helper_node_details['bm_path_to_upload']}"
+                    "/rhcos-metal.x86_64.raw.gz "
+                    f"{metal_image_path}"
+                )
                 assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
             else:
                 raise RhcosImageNotFound
@@ -262,26 +268,29 @@ class BAREMETALUPI(Deployment):
             assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to restart dnsmasq service"
             # Rebooting Machine with pxe boot
 
-            for machine_id in range(1, 8):
-                machine_name = f"argo00{machine_id}.ceph.redhat.com"
-                if self.mgmt_details[machine_name]:
+            for machine in self.mgmt_details:
+                if self.mgmt_details[machine].get('cluster_name') == constants.BM_DEFAULT_CLUSTER_NAME:
                     secrets = [
-                        self.mgmt_details[machine_name]['mgmt_username'],
-                        self.mgmt_details[machine_name]['mgmt_password']
+                        self.mgmt_details[machine]['mgmt_username'],
+                        self.mgmt_details[machine]['mgmt_password']
                     ]
                     # Changes boot prioriy to pxe
-                    cmd = f"ipmitool -I lanplus -U {self.mgmt_details[machine_name]['mgmt_username']} " \
-                          f"-P {self.mgmt_details[machine_name]['mgmt_password']} " \
-                          f"-H {self.mgmt_details[machine_name]['mgmt_console']} chassis bootdev pxe"
+                    cmd = (
+                        f"ipmitool -I lanplus -U {self.mgmt_details[machine]['mgmt_username']} "
+                        f"-P {self.mgmt_details[machine]['mgmt_password']} "
+                        f"-H {self.mgmt_details[machine]['mgmt_console']} chassis bootdev pxe"
+                    )
                     run_cmd(cmd=cmd, secrets=secrets)
                     sleep(2)
                     # Power On Machine
-                    cmd = f"ipmitool -I lanplus -U {self.mgmt_details[machine_name]['mgmt_username']} " \
-                          f"-P {self.mgmt_details[machine_name]['mgmt_password']} " \
-                          f"-H {self.mgmt_details[machine_name]['mgmt_console']} chassis power cycle || " \
-                          f"ipmitool -I lanplus -U {self.mgmt_details[machine_name]['mgmt_username']} " \
-                          f"-P {self.mgmt_details[machine_name]['mgmt_password']} " \
-                          f"-H {self.mgmt_details[machine_name]['mgmt_console']} chassis power on"
+                    cmd = (
+                        f"ipmitool -I lanplus -U {self.mgmt_details[machine]['mgmt_username']} "
+                        f"-P {self.mgmt_details[machine]['mgmt_password']} "
+                        f"-H {self.mgmt_details[machine]['mgmt_console']} chassis power cycle || "
+                        f"ipmitool -I lanplus -U {self.mgmt_details[machine]['mgmt_username']} "
+                        f"-P {self.mgmt_details[machine]['mgmt_password']} "
+                        f"-H {self.mgmt_details[machine]['mgmt_console']} chassis power on"
+                    )
                     run_cmd(cmd=cmd, secrets=secrets)
             logger.info("waiting for bootstrap to complete")
             try:
@@ -324,17 +333,7 @@ class BAREMETALUPI(Deployment):
             logger.info("Performing Disk cleanup")
             clean_disk()
             # We need NTP for OCS cluster to become clean
-            logger.info("creating ntp chrony for master nodes")
-            run_cmd(cmd=f"oc --kubeconfig {self.kubeconfig} create -f {constants.MASTER_NTP_CHRONY_CONF}")
-            logger.info("Waiting for 20 sec")
-            sleep(20)
-            wait_for_machineconfigpool_status(resource_name='master')
-
-            logger.info("creating ntp chrony for worker nodes")
-            run_cmd(cmd=f"oc --kubeconfig {self.kubeconfig} create -f {constants.WORKER_NTP_CHRONY_CONF}")
-            logger.info("Waiting for 20 sec")
-            sleep(20)
-            wait_for_machineconfigpool_status(resource_name='worker')
+            configure_chrony_and_wait_for_machineconfig_status(node_type="all")
 
         def create_config(self):
             """
