@@ -1,5 +1,6 @@
-from ocs_ci.ocs.ocp import OCP
 import logging
+
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)

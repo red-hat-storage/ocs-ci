@@ -1,4 +1,5 @@
 import base64
+import json
 import logging
 import os
 from abc import ABC, abstractmethod
@@ -15,8 +16,6 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, load_auth_config
 from tests.helpers import create_resource
-import json
-
 logger = logging.getLogger(name=__file__)
 
 
