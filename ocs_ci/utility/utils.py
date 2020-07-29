@@ -2433,3 +2433,20 @@ def configure_chrony_and_wait_for_machineconfig_status(
         # sleep here to start update machineconfigpool status
         time.sleep(60)
         wait_for_machineconfigpool_status(role)
+
+
+@retry(CommandFailed)
+def exec_cmd_on_debug_node(node, cmd):
+    """
+    Execute command on a node using debug pod
+
+    Args:
+        node (str): Node to create debug pod
+        cmd (str): Command to run on debug pod
+
+    Returns:
+        str: stdout of command
+
+    """
+    command = f"oc debug nodes/{node} -- {cmd}"
+    return run_cmd(command)

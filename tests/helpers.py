@@ -35,6 +35,7 @@ from ocs_ci.utility.utils import (
     ocsci_log_path,
     run_cmd,
     update_container_with_mirrored_image,
+    exec_cmd_on_debug_node,
 )
 
 logger = logging.getLogger(__name__)
@@ -1692,8 +1693,8 @@ def verify_pv_mounted_on_node(node_pv_dict):
     """
     existing_pvs = {}
     for node_name, pvs in node_pv_dict.items():
-        cmd = f'oc debug nodes/{node_name} -- df'
-        df_on_node = run_cmd(cmd)
+        cmd = "df"
+        df_on_node = exec_cmd_on_debug_node(node_name, cmd)
         existing_pvs[node_name] = []
         for pv_name in pvs:
             if f"/pv/{pv_name}/" in df_on_node:

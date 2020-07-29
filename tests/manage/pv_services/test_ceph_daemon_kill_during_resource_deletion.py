@@ -8,7 +8,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
 from ocs_ci.ocs.resources.pod import get_all_pods
-from ocs_ci.utility.utils import ceph_health_check, run_cmd
+from ocs_ci.utility.utils import ceph_health_check, exec_cmd_on_debug_node
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_plugin_pods,
     get_rbdfsplugin_provisioner_pods, get_cephfsplugin_provisioner_pods,
@@ -256,8 +256,8 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
 
         # Verify that the mount point is removed from nodes after deleting pod
         for node, pvs in node_pv_dict.items():
-            cmd = f'oc debug nodes/{node} -- df'
-            df_on_node = run_cmd(cmd)
+            cmd = "df"
+            df_on_node = exec_cmd_on_debug_node(node_name, cmd)
             for pv in pvs:
                 assert pv not in df_on_node, (
                     f"{pv} is still present on node {node} after "
