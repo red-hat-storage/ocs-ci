@@ -1,5 +1,9 @@
+"""
+Helper functions file for working with object buckets
+"""
 import logging
 import os
+import shlex
 from uuid import uuid4
 
 import boto3
@@ -11,9 +15,86 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.pod import get_rgw_pods
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
-from tests.helpers import craft_s3_command, create_resource, logger
+from tests.helpers import create_resource
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
+
+
+def craft_s3_command(cmd, mcg_obj=None, api=False):
+    """
+    Crafts the AWS CLI S3 command including the
+    login credentials and command to be ran
+
+    Args:
+        mcg_obj: An MCG object containing the MCG S3 connection credentials
+        cmd: The AWSCLI command to run
+        api: True if the call is for s3api, false if s3
+
+    Returns:
+        str: The crafted command, ready to be executed on the pod
+
+    """
+    api = 'api' if api else ''
+    if mcg_obj:
+        base_command = (
+            f'sh -c "AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
+            f'AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} '
+            f'AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} '
+            f'AWS_DEFAULT_REGION={mcg_obj.region} '
+            f'aws s3{api} '
+            f'--endpoint={mcg_obj.s3_internal_endpoint} '
+        )
+        string_wrapper = '"'
+    else:
+        base_command = (
+            f"aws s3{api} --no-sign-request "
+        )
+        string_wrapper = ''
+
+    return f"{base_command}{cmd}{string_wrapper}"
+
+
+def verify_s3_object_integrity(original_object_path, result_object_path, awscli_pod):
+    """
+    Verifies checksum between original object and result object on an awscli pod
+
+    Args:
+        original_object_path (str): The Object that is uploaded to the s3 bucket
+        result_object_path (str):  The Object that is downloaded from the s3 bucket
+        awscli_pod (pod): A pod running the AWSCLI tools
+
+    Returns:
+        bool: True if checksum matches, False otherwise
+
+    """
+    md5sum = shlex.split(awscli_pod.exec_cmd_on_pod(command=f'md5sum {original_object_path} {result_object_path}'))
+    if md5sum[0] == md5sum[2]:
+        logger.info(f'Passed: MD5 comparison for {original_object_path} and {result_object_path}')
+        return True
+    else:
+        logger.error(
+            f'Failed: MD5 comparison of {original_object_path} and {result_object_path} - '
+            f'{md5sum[0]} ≠ {md5sum[2]}'
+        )
+        return False
+
+
+def retrieve_test_objects_to_pod(podobj, target_dir):
+    """
+    Downloads all the test objects to a given directory in a given pod.
+
+    Args:
+        podobj (OCS): The pod object to download the objects to
+        target_dir:  The fully qualified path of the download target folder
+
+    Returns:
+        list: A list of the downloaded objects' names
+
+    """
+    sync_object_directory(podobj, f's3://{constants.TEST_FILES_BUCKET}', target_dir)
+    downloaded_objects = podobj.exec_cmd_on_pod(f'ls -A1 {target_dir}').split(' ')
+    logger.info(f'Downloaded objects: {downloaded_objects}')
+    return downloaded_objects
 
 
 def retrieve_anon_s3_resource():
@@ -35,25 +116,7 @@ def retrieve_anon_s3_resource():
     return anon_s3_resource
 
 
-def retrieve_test_objects_to_pod(podobj, target_dir):
-    """
-    Downloads all the test objects to a given directory in a given pod.
-
-    Args:
-        podobj (OCS): The pod object to download the objects to
-        target_dir:  The fully qualified path of the download target folder
-
-    Returns:
-        list: A list of the downloaded objects' names
-
-    """
-    sync_object_directory(podobj, f's3://{constants.TEST_FILES_BUCKET}', target_dir)
-    downloaded_objects = podobj.exec_cmd_on_pod(f'ls -A1 {target_dir}').split(' ')
-    logger.info(f'Downloaded objects: {downloaded_objects}')
-    return downloaded_objects
-
-
-def sync_object_directory(podobj, src, target, mcg_obj=None):
+def sync_object_directory(podobj, src, target, s3_obj=None):
     """
     Syncs objects between a target and source directories
 
@@ -61,18 +124,18 @@ def sync_object_directory(podobj, src, target, mcg_obj=None):
         podobj (OCS): The pod on which to execute the commands and download the objects to
         src (str): Fully qualified object source path
         target (str): Fully qualified object target path
-        mcg_obj (MCG, optional): The MCG object to use in case the target or source
+        s3_obj (MCG, optional): The MCG object to use in case the target or source
                                  are in an MCG
 
     """
     logger.info(f'Syncing all objects and directories from {src} to {target}')
     retrieve_cmd = f'sync {src} {target}'
-    if mcg_obj:
-        secrets = [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+    if s3_obj:
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
     else:
         secrets = None
     podobj.exec_cmd_on_pod(
-        command=craft_s3_command(retrieve_cmd, mcg_obj), out_yaml_format=False,
+        command=craft_s3_command(retrieve_cmd, s3_obj), out_yaml_format=False,
         secrets=secrets
     ), 'Failed to sync objects'
     # Todo: check that all objects were synced successfully
@@ -96,7 +159,7 @@ def rm_object_recursive(podobj, target, mcg_obj, option=''):
         command=craft_s3_command(rm_command, mcg_obj),
         out_yaml_format=False,
         secrets=[mcg_obj.access_key_id, mcg_obj.access_key,
-                 mcg_obj.s3_endpoint]
+                 mcg_obj.s3_internal_endpoint]
     )
 
 
@@ -133,7 +196,7 @@ def write_individual_s3_objects(mcg_obj, awscli_pod, bucket_factory, downloaded_
         copycommand = f"cp {target_dir}{obj_name} {full_object_path}"
         assert 'Completed' in awscli_pod.exec_cmd_on_pod(
             command=craft_s3_command(copycommand, mcg_obj), out_yaml_format=False,
-            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_internal_endpoint]
         )
 
 
@@ -155,7 +218,7 @@ def upload_parts(mcg_obj, awscli_pod, bucketname, object_key, body_path, upload_
 
     """
     parts = []
-    secrets = [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+    secrets = [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_internal_endpoint]
     for count, part in enumerate(uploaded_parts, 1):
         upload_cmd = (
             f'upload-part --bucket {bucketname} --key {object_key}'
@@ -287,10 +350,10 @@ def wait_for_pv_backingstore(backingstore_name, namespace=None):
         backingstore_name=backingstore_name, namespace=namespace
     )
     if not sample.wait_for_func_status(result=True):
-        log.error(f'Backing Store {backingstore_name} never reached OPTIMAL state')
+        logger.error(f'Backing Store {backingstore_name} never reached OPTIMAL state')
         raise TimeoutExpiredError
     else:
-        log.info(f'Backing Store {backingstore_name} created successfully')
+        logger.info(f'Backing Store {backingstore_name} created successfully')
 
 
 def check_pv_backingstore_status(backingstore_name, namespace=None):
@@ -651,7 +714,7 @@ def del_objects(uploaded_objects_paths, awscli_pod, mcg_obj):
         logger.info(f'Deleting object {uploaded_filename}')
         awscli_pod.exec_cmd_on_pod(
             command=craft_s3_command(mcg_obj, "rm " + uploaded_filename),
-            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_internal_endpoint]
         )
 
 

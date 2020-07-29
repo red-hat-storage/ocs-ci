@@ -7,5 +7,3 @@ metadata:
 spec:
   storageClassName: openshift-storage.noobaa.io
   bucketName: noobaa-obc
-  additionalConfig:
-    bucketclass: noobaa-default-bucket-class
