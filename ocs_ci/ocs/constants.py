@@ -105,6 +105,7 @@ CLUSTER_SERVICE_VERSION = 'csv'
 JOB = 'job'
 LOCAL_VOLUME = 'localvolume'
 PROXY = 'Proxy'
+MACHINECONFIGPOOL = "MachineConfigPool"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -176,7 +177,13 @@ LOCAL_STORAGE_NAMESPACE = 'local-storage'
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
 DEFAULT_STORAGECLASS_RBD = f'{DEFAULT_CLUSTERNAME}-ceph-rbd'
+DEFAULT_STORAGECLASS_RGW = f'{DEFAULT_CLUSTERNAME}-ceph-rgw'
 DEFAULT_STORAGECLASS_LSO = 'localblock'
+
+# Independent mode default StorageClasses
+INDEPENDENT_DEFAULT_CLUSTER_NAME = 'ocs-independent-storagecluster'
+INDEPENDENT_DEFAULT_STORAGECLASS_RGW = f'{INDEPENDENT_DEFAULT_CLUSTER_NAME}-ceph-rgw'
+
 
 # encoded value of 'admin'
 ADMIN_USER = 'admin'

@@ -10,9 +10,10 @@ from ocs_ci.framework.testlib import (
     ManageTest, tier1, tier2, tier3, acceptance
 )
 from ocs_ci.ocs import constants
-from tests.manage.mcg import helpers
-from tests.manage.mcg.helpers import retrieve_anon_s3_resource
-from tests.helpers import craft_s3_command
+from ocs_ci.ocs.bucket_utils import (
+    sync_object_directory, retrieve_test_objects_to_pod,
+    retrieve_anon_s3_resource, craft_s3_command
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,11 +52,11 @@ class TestBucketIO(ManageTest):
         data_dir = '/data'
         bucketname = bucket_factory(1)[0].name
         full_object_path = f"s3://{bucketname}"
-        downloaded_files = helpers.retrieve_test_objects_to_pod(
+        downloaded_files = retrieve_test_objects_to_pod(
             awscli_pod, data_dir
         )
         # Write all downloaded objects to the new bucket
-        helpers.sync_object_directory(
+        sync_object_directory(
             awscli_pod, data_dir, full_object_path, mcg_obj
         )
 
@@ -76,11 +77,11 @@ class TestBucketIO(ManageTest):
         """
         # TODO: Privatize test bucket
         download_dir = '/aws/downloaded'
-        helpers.retrieve_test_objects_to_pod(awscli_pod, download_dir)
+        retrieve_test_objects_to_pod(awscli_pod, download_dir)
         bucket = bucket_factory(1)[0]
         bucketname = bucket.name
         full_object_path = f"s3://{bucketname}"
-        helpers.sync_object_directory(
+        sync_object_directory(
             awscli_pod, download_dir, full_object_path, mcg_obj
         )
 
@@ -157,7 +158,7 @@ class TestBucketIO(ManageTest):
         base_path = f"s3://{bucketname}"
         for i in range(amount):
             full_object_path = base_path + f"/{i}/"
-            helpers.sync_object_directory(
+            sync_object_directory(
                 awscli_pod, data_dir, full_object_path, mcg_obj
             )
 
@@ -198,7 +199,7 @@ class TestBucketIO(ManageTest):
             sh='sh'
         )
         # Write all empty objects to the new bucket
-        helpers.sync_object_directory(
+        sync_object_directory(
             awscli_pod, data_dir, full_object_path, mcg_obj
         )
 
@@ -250,7 +251,7 @@ class TestBucketIO(ManageTest):
         bucketname = bucket_factory(1)[0].name
         full_object_path = f"s3://{bucketname}"
         target_dir = '/data/'
-        helpers.retrieve_test_objects_to_pod(awscli_pod, target_dir)
+        retrieve_test_objects_to_pod(awscli_pod, target_dir)
         with ThreadPoolExecutor() as p:
             p.submit(pod_io, setup_rbd_cephfs_pods)
-            p.submit(helpers.sync_object_directory(awscli_pod, target_dir, full_object_path, mcg_obj))
+            p.submit(sync_object_directory(awscli_pod, target_dir, full_object_path, mcg_obj))

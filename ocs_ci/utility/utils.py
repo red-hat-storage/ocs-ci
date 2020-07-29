@@ -1906,7 +1906,7 @@ def get_ocs_version_from_image(image):
 
     """
     try:
-        version = image.split(':')[1].lstrip("latest-")
+        version = image.split(':')[1].lstrip("latest-").lstrip("stable-")
         version = Version.coerce(version)
         return "{major}.{minor}".format(
             major=version.major, minor=version.minor
@@ -2380,3 +2380,71 @@ def get_system_architecture():
     log.info('Checking architecture of system')
     node = get_typed_nodes(node_type=constants.WORKER_MACHINE)[0]
     return node.ocp.exec_oc_debug_cmd(node.data['metadata']['name'], ['uname -m'])
+
+
+def wait_for_machineconfigpool_status(node_type, timeout=900):
+    """
+    Check for Machineconfigpool status
+
+    Args:
+        node_type (str): The node type to check machineconfigpool
+            status is updated.
+            e.g: worker, master and all if we want to check for all nodes
+        timeout (int): Time in seconds to wait
+
+    """
+    # importing here to avoid dependencies
+    from ocs_ci.ocs import ocp
+    node_types = [node_type]
+    if node_type == "all":
+        node_types = [
+            f"{constants.WORKER_MACHINE}", f"{constants.MASTER_MACHINE}"
+        ]
+
+    for role in node_types:
+        log.info(f"Checking machineconfigpool status for {role} nodes")
+        ocp_obj = ocp.OCP(
+            kind=constants.MACHINECONFIGPOOL, resource_name=role
+        )
+        machine_count = ocp_obj.get()['status']['machineCount']
+
+        assert ocp_obj.wait_for_resource(
+            condition=str(machine_count),
+            column="READYMACHINECOUNT",
+            timeout=timeout,
+            sleep=5,
+        )
+
+
+def configure_chrony_and_wait_for_machineconfig_status(
+    node_type=constants.WORKER_MACHINE
+):
+    """
+    Configure chrony on the nodes
+
+    Args:
+        node_type (str): The node type to configure chrony
+            e.g: worker, master and all if we want to configure on all nodes
+
+    """
+    # importing here to avoid dependencies
+    from ocs_ci.utility.templating import load_yaml
+    from ocs_ci.ocs.resources.ocs import OCS
+    chrony_data = load_yaml(constants.NTP_CHRONY_CONF)
+
+    node_types = [node_type]
+    if node_type == "all":
+        node_types = [
+            f"{constants.WORKER_MACHINE}", f"{constants.MASTER_MACHINE}"
+        ]
+
+    for role in node_types:
+        log.info(f"Creating chrony for {role} nodes")
+        chrony_data['metadata']['labels']['machineconfiguration.openshift.io/role'] = role
+        chrony_data['metadata']['name'] = f"{role}-chrony-configuration"
+        chrony_obj = OCS(**chrony_data)
+        chrony_obj.create()
+
+        # sleep here to start update machineconfigpool status
+        time.sleep(60)
+        wait_for_machineconfigpool_status(role)

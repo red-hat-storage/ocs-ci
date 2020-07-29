@@ -897,3 +897,17 @@ def collect_prometheus_metrics(
         log.info(f'Saving {metric} data into {file_name}')
         with open(file_name, 'w') as outfile:
             json.dump(datapoints.json(), outfile)
+
+
+def oc_get_all_obc_names():
+    """
+    Returns:
+        set: A set of all OBC names
+
+    """
+    all_obcs_in_namespace = OCP(
+        namespace=ocsci_config.ENV_DATA['cluster_namespace'], kind='obc'
+    ).get().get('items')
+    return {
+        obc.get('spec').get('bucketName') for obc in all_obcs_in_namespace
+    }
