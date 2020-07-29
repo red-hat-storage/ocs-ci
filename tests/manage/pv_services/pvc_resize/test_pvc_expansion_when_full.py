@@ -250,7 +250,7 @@ class TestPvcExpansionWhenFull(ManageTest):
         log.info("Run IO after PVC expansion.")
         for pod_obj in self.pods:
             pod_obj.run_io(
-                'fs', size=f'3G', io_direction='write', runtime=60,
+                'fs', size='3G', io_direction='write', runtime=60,
                 fio_filename=f'{pod_obj.name}_f2'
             )
 
