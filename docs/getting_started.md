@@ -51,23 +51,26 @@ After cloning the repository and setting all dependencies create a configuration
 
 ## Installing
 
-It is recommended that you use a python virtual environment to install the
-necessary dependencies
+When developing or trying out the ocs-ci, it is recommended that you use a
+python virtual environment to install the necessary dependencies and manage
+the library modules.
 
-1. Clone ocs-ci repository from
-    [https://github.com/red-hat-storage/ocs-ci](https://github.com/red-hat-storage/ocs-ci)
-    via cmd `git clone git@github.com:red-hat-storage/ocs-ci.git`.
-2. Go to ocs-ci folder `cd ocs-ci`.
-3. Setup a python virtual environment. This is actually quite easy to do
-    now. Use hidden `.venv` or normal `venv` folder for virtual env as we are
-    ignoring this in flake8 configuration in tox.
+1. Clone the [ocs-ci repository](https://github.com/red-hat-storage/ocs-ci)
+    via the `git clone git@github.com:red-hat-storage/ocs-ci.git` command.
+2. Go to the ocs-ci directory: `cd ocs-ci`.
+3. Set up a [python virtual environment](https://docs.python.org/3.6/tutorial/venv.html).
+   Typically, one will use a directory named `.venv` or `venv`. Both names are
+   safe to use and ignored by the flake8 configuration in tox.
+   Example:
 
     * `python -m venv <path/to/venv>`
     * `source <path/to/.venv>/bin/activate`
 
 4. Upgrade pip and setuptools with `pip install --upgrade pip setuptools`
 5. Install requirements with `pip install -r requirements.txt`
-6. Install pre-config to enforce commits sign-offs, flake8 compliance and more
+6. If you plan on working on the sources, you may also install the
+   development decencies, such as
+   `pre-config` tool to enforce commits sign-offs, flake8 compliance and more:
 
    * `pip install -r requirements-dev.txt`
    * `pre-commit install --hook-type pre-commit --hook-type commit-msg`
