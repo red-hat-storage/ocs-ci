@@ -32,7 +32,7 @@ spec:
       read_ramp_time: 5
       write_ramp_time: 5
       filesize: 10GiB
-      log_sample_rate: 2000
+      log_sample_rate: 10000
       storageclass: ocs-storagecluster-ceph-rbd
       storagesize: 12Gi
 #      rook_ceph_drop_caches: True
@@ -45,7 +45,6 @@ spec:
     - jobname_match: write
       params:
         - fsync_on_close=1
-        - create_on_open=1
         - runtime={{ workload_args.write_runtime }}
         - ramp_time={{ workload_args.write_ramp_time }}
     - jobname_match: read

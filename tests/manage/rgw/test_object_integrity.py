@@ -1,6 +1,6 @@
 import logging
-
 import pytest
+
 from ocs_ci.ocs.bucket_utils import (
     retrieve_test_objects_to_pod, sync_object_directory,
     verify_s3_object_integrity
@@ -17,6 +17,7 @@ class TestObjectIntegrity(ManageTest):
     Test data integrity of RGW buckets
     """
     @tier1
+    @pytest.mark.polarion_id("OCS-2246")
     def test_check_object_integrity(self, awscli_pod, rgw_bucket_factory):
         """
         Test object integrity using md5sum
@@ -49,7 +50,7 @@ class TestObjectIntegrity(ManageTest):
                 result_object_path=f'{result_dir}/{obj}', awscli_pod=awscli_pod
             ), 'Checksum comparision between original and result object failed'
 
-    @pytest.mark.polarion_id("OCS-1945")
+    @pytest.mark.polarion_id("OCS-2243")
     @tier2
     def test_empty_file_integrity(
         self, awscli_pod, rgw_bucket_factory

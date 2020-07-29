@@ -28,7 +28,7 @@ setup(
         'pytest==5.3.5',
         'pytest-reportportal==1.10.0',
         'pytest-logger==0.5.1',
-        'dataclasses==0.6',  # For compatibility with python 3.6
+        'dataclasses==0.7;python_version < "3.7"',
         'pytest-html==2.1.1',
         'bs4==0.0.1',
         'gspread==3.6.0',

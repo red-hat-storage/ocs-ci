@@ -1,5 +1,5 @@
 import logging
-
+import pytest
 import uuid
 
 from ocs_ci.framework.testlib import (
@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 def setup(pod_obj, rgw_bucket_factory):
     """
-    Setup function
+    Create the file to be used for the multipart upload test,
+    and the bucket to upload it to.
 
      Args:
         pod_obj (Pod): A pod running the AWS CLI tools
@@ -48,6 +49,7 @@ class TestS3MultipartUpload(ManageTest):
     Test Multipart upload on RGW buckets
     """
     @tier1
+    @pytest.mark.polarion_id("OCS-2245")
     def test_multipart_upload_operations(self, awscli_pod, rgw_bucket_factory):
         """
         Test Multipart upload operations on bucket and verifies the integrity of the downloaded object
