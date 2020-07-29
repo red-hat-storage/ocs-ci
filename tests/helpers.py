@@ -234,7 +234,8 @@ def create_pod(
 
     # configure http[s]_proxy env variable, if required
     try:
-        if 'http_proxy' in config.ENV_DATA:
+        http_proxy, https_proxy = get_cluster_proxies()
+        if http_proxy:
             if 'containers' in pod_data['spec']:
                 container = pod_data['spec']['containers'][0]
             else:
@@ -243,13 +244,11 @@ def create_pod(
                 container['env'] = []
             container['env'].append({
                 'name': 'http_proxy',
-                'value': config.ENV_DATA['http_proxy'],
+                'value': http_proxy,
             })
             container['env'].append({
                 'name': 'https_proxy',
-                'value': config.ENV_DATA.get(
-                    'https_proxy', config.ENV_DATA['http_proxy']
-                ),
+                'value': https_proxy,
             })
     except KeyError as err:
         logging.warning(
@@ -984,9 +983,18 @@ def create_build_from_docker_image(
 
     """
     base_image = source_image + ':' + source_image_label
-    docker_file = (f"FROM {base_image}\n "
-                   f"RUN yum install -y {install_package}\n "
-                   f"CMD tail -f /dev/null")
+    cmd = f'yum install -y {install_package}'
+    http_proxy, https_proxy = get_cluster_proxies()
+    if http_proxy:
+        cmd = (
+            f"http_proxy={http_proxy} https_proxy={https_proxy} {cmd}"
+        )
+    docker_file = (
+        f"FROM {base_image}\n "
+        f" RUN {cmd}\n"
+        f"CMD tail -f /dev/null"
+    )
+
     command = f"new-build -D $\'{docker_file}\' --name={image_name}"
     kubeconfig = os.getenv('KUBECONFIG')
 
@@ -1010,7 +1018,7 @@ def create_build_from_docker_image(
     out = result.stdout.decode()
     logger.info(out)
     if 'Success' in out:
-        # Build becomes ready once build pod goes into Comleted state
+        # Build becomes ready once build pod goes into Completed state
         pod_obj = OCP(kind='Pod', resource_name=image_name)
         if pod_obj.wait_for_resource(
             condition='Completed',
@@ -1625,7 +1633,6 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
             f"aws s3{api} --no-sign-request "
         )
         string_wrapper = ''
-
     return f"{base_command}{cmd}{string_wrapper}"
 
 
@@ -1738,7 +1745,7 @@ def create_multiple_pvc_parallel(
     with ThreadPoolExecutor() as executor:
         for objs in pvc_objs_list:
             obj_status_list.append(
-                executor.submit(wait_for_resource_state, objs, 'Bound')
+                executor.submit(wait_for_resource_state, objs, 'Bound', 90)
             )
     if False in [obj.result() for obj in obj_status_list]:
         raise TimeoutExpiredError
@@ -2339,6 +2346,19 @@ def retrieve_default_ingress_crt():
         crtfile.write(decoded_crt)
 
 
+def storagecluster_independent_check():
+    """
+    Check whether the storagecluster is running in independent mode
+    by checking the value of spec.externalStorage.enable
+    """
+    storage_cluster = OCP(
+        kind='StorageCluster',
+        namespace=config.ENV_DATA['cluster_namespace']
+    ).get().get('items')[0]
+
+    return storage_cluster.get('spec').get('externalStorage').get('enable')
+
+
 def get_pv_size(storageclass=None):
     """
     Get Pv size from requested storageclass
@@ -2358,3 +2378,33 @@ def get_pv_size(storageclass=None):
         if pv_obj['spec']['storageClassName'] == storageclass:
             return_list.append(pv_obj['spec']['capacity']['storage'])
     return return_list
+
+
+def get_cluster_proxies():
+    """
+    Get http and https proxy configuration.
+    * If configuration ENV_DATA['http_proxy'] (and prospectively
+        ENV_DATA['https_proxy']) exists, return the respective values.
+        (If https_proxy not defined, use value from http_proxy.)
+    * If configuration ENV_DATA['http_proxy'] doesn't exist, try to gather
+        cluster wide proxy configuration.
+    * If no proxy configuration found, return empty string for both http_proxy
+        and https_proxy.
+
+    Returns:
+        tuple: (http_proxy, https_proxy)
+
+    """
+    if 'http_proxy' in config.ENV_DATA:
+        http_proxy = config.ENV_DATA['http_proxy']
+        https_proxy = config.ENV_DATA.get(
+            'https_proxy', config.ENV_DATA['http_proxy']
+        )
+    else:
+        ocp_obj = ocp.OCP(kind=constants.PROXY, resource_name='cluster')
+        proxy_obj = ocp_obj.get()
+        http_proxy = proxy_obj.get('spec', {}).get('httpProxy', '')
+        https_proxy = proxy_obj.get('spec', {}).get('httpsProxy', '')
+    logger.info("Using http_proxy: '%s'", http_proxy)
+    logger.info("Using https_proxy: '%s'", https_proxy)
+    return http_proxy, https_proxy

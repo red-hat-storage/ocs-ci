@@ -1350,7 +1350,7 @@ def ceph_health_check_base(namespace=None):
         f"oc -n {namespace} get pod -l 'app=rook-ceph-tools' "
         f"-o jsonpath='{{.items[0].metadata.name}}'"
     )
-    health = run_cmd(f"oc -n {namespace} exec {tools_pod} ceph health")
+    health = run_cmd(f"oc -n {namespace} exec {tools_pod} -- ceph health")
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
@@ -1778,6 +1778,7 @@ def convert_yaml2tfvars(yaml):
     from ocs_ci.utility.templating import load_yaml
     data = load_yaml(yaml)
     tfvars_file = os.path.splitext(yaml)[0]
+    log.debug(f"Converting {yaml} to {tfvars_file}")
     with open(tfvars_file, "w+") as fd:
         for key, val in data.items():
             if key == "control_plane_ignition":
@@ -1790,6 +1791,10 @@ def convert_yaml2tfvars(yaml):
                 fd.write("compute_ignition = <<END_OF_WORKER_IGNITION\n")
                 fd.write(f"{val}\n")
                 fd.write("END_OF_WORKER_IGNITION\n")
+                continue
+
+            if key == "vm_dns_addresses":
+                fd.write(f'vm_dns_addresses = ["{val}"]\n')
                 continue
 
             fd.write(key)
@@ -2013,7 +2018,7 @@ def config_to_string(config):
 
     """
     strio = io.StringIO()
-    config.write(strio)
+    config.write(strio, space_around_delimiters=False)
     return strio.getvalue()
 
 
@@ -2051,29 +2056,15 @@ def convert_device_size(unformatted_size, units_to_covert_to):
 
     """
     units = unformatted_size[-2:]
-    absolute_size = int(unformatted_size[:-2])
-
-    if units_to_covert_to == 'TB':
-        if units == 'Ti':
-            return absolute_size
-        elif units == 'Gi':
-            return absolute_size * 1024
-        elif units == 'Mi':
-            return absolute_size * 1024 * 1024
-    elif units_to_covert_to == 'GB':
-        if units == 'Ti':
-            return absolute_size / 1024
-        elif units == 'Gi':
-            return absolute_size
-        elif units == 'Mi':
-            return absolute_size * 1024
-    elif units_to_covert_to == 'MB':
-        if units == 'Ti':
-            return absolute_size / 1024 / 1024
-        elif units == 'Gi':
-            return absolute_size / 1024
-        elif units == 'Mi':
-            return absolute_size
+    abso = int(unformatted_size[:-2])
+    conversion = {
+        'TB': {'Ti': abso, 'Gi': abso / 1000, 'Mi': abso / 1e+6, 'Ki': abso / 1e+9},
+        'GB': {'Ti': abso * 1000, 'Gi': abso, 'Mi': abso / 1000, 'Ki': abso / 1e+6},
+        'MB': {'Ti': abso * 1e+6, 'Gi': abso * 1000, 'Mi': abso, 'Ki': abso / 1000},
+        'KB': {'Ti': abso * 1e+9, 'Gi': abso * 1e+6, 'Mi': abso * 1000, 'Ki': abso},
+        'B': {'Ti': abso * 1e+12, 'Gi': abso * 1e+9, 'Mi': abso * 1e+6, 'Ki': abso * 1000}
+    }
+    return conversion[units_to_covert_to][units]
 
 
 def mirror_image(image):
@@ -2320,3 +2311,125 @@ def get_terraform(version=None, bin_dir=None):
     os.chdir(previous_dir)
 
     return terraform_binary_path
+
+
+def get_module_ip(terraform_state_file, module):
+    """
+    Gets the node IP from terraform.tfstate file
+
+    Args:
+        terraform_state_file (str): Path to terraform state file
+        module (str): Module name in terraform.tfstate file
+            e.g: constants.LOAD_BALANCER_MODULE
+
+    Returns:
+        list: IP of the node
+
+    """
+    ips = []
+    with open(terraform_state_file) as fd:
+        obj = hcl.load(fd)
+
+        if config.ENV_DATA.get('folder_structure'):
+            resources = obj['resources']
+            log.debug(f"Extracting module information for {module}")
+            log.debug(f"Resource in {terraform_state_file}: {resources}")
+            for resource in resources:
+                if (
+                    resource.get('module') == module
+                    and resource.get('mode') == "data"
+                ):
+                    for each_resource in resource['instances']:
+                        resource_body = each_resource['attributes']['body']
+                        ips.append(resource_body.split("\"")[3])
+        else:
+            modules = obj['modules']
+            target_module = module.split("_")[1]
+            log.debug(f"Extracting module information for {module}")
+            log.debug(f"Modules in {terraform_state_file}: {modules}")
+            for each_module in modules:
+                if target_module in each_module['path']:
+                    return each_module['outputs']['ip_addresses']['value']
+
+        return ips
+
+
+def set_aws_region(region=None):
+    """
+    Exports environment variable AWS_REGION
+
+    Args:
+        region (str): AWS region to export
+
+    """
+    log.debug("Exporting environment variable AWS_REGION")
+    region = region or config.ENV_DATA['region']
+    os.environ['AWS_REGION'] = region
+
+
+def wait_for_machineconfigpool_status(node_type, timeout=900):
+    """
+    Check for Machineconfigpool status
+
+    Args:
+        node_type (str): The node type to check machineconfigpool
+            status is updated.
+            e.g: worker, master and all if we want to check for all nodes
+        timeout (int): Time in seconds to wait
+
+    """
+    # importing here to avoid dependencies
+    from ocs_ci.ocs import ocp
+    node_types = [node_type]
+    if node_type == "all":
+        node_types = [
+            f"{constants.WORKER_MACHINE}", f"{constants.MASTER_MACHINE}"
+        ]
+
+    for role in node_types:
+        log.info(f"Checking machineconfigpool status for {role} nodes")
+        ocp_obj = ocp.OCP(
+            kind=constants.MACHINECONFIGPOOL, resource_name=role
+        )
+        machine_count = ocp_obj.get()['status']['machineCount']
+
+        assert ocp_obj.wait_for_resource(
+            condition=str(machine_count),
+            column="READYMACHINECOUNT",
+            timeout=timeout,
+            sleep=5,
+        )
+
+
+def configure_chrony_and_wait_for_machineconfig_status(
+    node_type=constants.WORKER_MACHINE
+):
+    """
+    Configure chrony on the nodes
+
+    Args:
+        node_type (str): The node type to configure chrony
+            e.g: worker, master and all if we want to configure on all nodes
+
+    """
+    # importing here to avoid dependencies
+    from ocs_ci.utility.templating import load_yaml
+    from ocs_ci.ocs.resources.ocs import OCS
+    chrony_data = load_yaml(constants.NTP_CHRONY_CONF)
+
+    node_types = [node_type]
+    if node_type == "all":
+        node_types = [
+            f"{constants.WORKER_MACHINE}", f"{constants.MASTER_MACHINE}"
+        ]
+
+    for role in node_types:
+        log.info(f"Creating chrony for {role} nodes")
+        chrony_data['metadata']['labels']['machineconfiguration.openshift.io/role'] = role
+        chrony_data['metadata']['name'] = f"{role}-chrony-configuration"
+        chrony_obj = OCS(**chrony_data)
+        chrony_obj.create()
+
+        # sleep here to start update machineconfigpool status
+        time.sleep(60)
+        wait_for_machineconfigpool_status(role)

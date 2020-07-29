@@ -45,8 +45,8 @@ class RipSaw(object):
         self.namespace = self.args.get('namespace', RIPSAW_NAMESPACE)
         self.pgsql_is_setup = False
         self.ocp = OCP()
-        self.ns_obj = OCP(namespace=RIPSAW_NAMESPACE, kind='namespace')
-        self.pod_obj = OCP(kind='pod')
+        self.ns_obj = OCP(kind='namespace')
+        self.pod_obj = OCP(namespace=RIPSAW_NAMESPACE, kind='pod')
         self._create_namespace()
         self._clone_ripsaw()
 
@@ -87,6 +87,28 @@ class RipSaw(object):
         run('oc apply -f deploy', shell=True, check=True, cwd=self.dir)
         run(f'oc apply -f {crd}', shell=True, check=True, cwd=self.dir)
         run(f'oc apply -f {self.operator}', shell=True, check=True, cwd=self.dir)
+
+    def get_uuid(self, benchmark):
+        """
+        Getting the UUID of the test.
+           when ripsaw used for running a benchmark tests, each run get its own
+           UUID, so the results in the elastic-search server can be sorted.
+
+        Args:
+            benchmark (str): the name of the main pod in the test
+
+        Return:
+            str: the UUID of the test
+
+        """
+        output = self.pod_obj.exec_oc_cmd(f'exec {benchmark} -- env')
+        uuid = ''
+        for line in output.split():
+            if 'uuid=' in line:
+                uuid = line.split('=')[1]
+                break
+        log.info(f'The UUID of the test is : {uuid}')
+        return uuid
 
     def cleanup(self):
         run(f'oc delete -f {self.crd}', shell=True, cwd=self.dir)

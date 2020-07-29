@@ -28,7 +28,7 @@ setup(
         'pytest==5.3.5',
         'pytest-reportportal==1.10.0',
         'pytest-logger==0.5.1',
-        'dataclasses==0.6',  # For compatibility with python 3.6
+        'dataclasses==0.7;python_version < "3.7"',
         'pytest-html==2.1.1',
         'bs4==0.0.1',
         'gspread==3.6.0',
@@ -49,7 +49,15 @@ setup(
         'numpy==1.18.5',
         'python-ipmi==0.4.2',
         'scipy==1.4.1',
-        'PrettyTable==0.7.2'
+        'PrettyTable==0.7.2',
+        'azure-common==1.1.25',
+        'azure-mgmt-compute==12.0.0',
+        'azure-mgmt-network==10.2.0',
+        'azure-mgmt-resource==10.0.0',
+        'msrestazure==0.6.3',
+        'python-novaclient==17.1.0',
+        'python-cinderclient==7.1.0',
+        'keystoneauth1==4.2.0',
     ],
     entry_points={
         'console_scripts': [

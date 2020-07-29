@@ -7,10 +7,12 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_OPTIMAL
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from tests.manage.mcg.helpers import (
-    retrieve_test_objects_to_pod, sync_object_directory
+from ocs_ci.ocs.bucket_utils import (
+    retrieve_test_objects_to_pod, sync_object_directory,
+    verify_s3_object_integrity
 )
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -35,12 +37,12 @@ def wait_for_active_pods(job, desired_count, timeout=3):
         bool: If job has desired number of active pods
 
     """
-    job_name = job.ocp.resource_name
+    job_name = job.name
     logger.info(f"Checking number of active pods for job {job_name}")
 
     def _retrieve_job_state():
         job_obj = job.ocp.get(resource_name=job_name, out_yaml_format=True)
-        return job_obj.get('items').get(0).get('status').get('active')
+        return job_obj.get('items')[0]['status']['active']
 
     try:
         for state in TimeoutSampler(
@@ -58,6 +60,22 @@ def wait_for_active_pods(job, desired_count, timeout=3):
         logger.error(
             f"Job {job_name} doesn't have correct number of active pods ({desired_count})"
         )
+        job_pods = pod.get_pods_having_label(
+            f"job-name={job_name}",
+            job.namespace
+        )
+        for job_pod in job_pods:
+            logger.info(
+                f"Description of job pod {job_pod['metadata']['name']}: {job_pod}"
+            )
+            pod_logs = pod.get_pod_logs(
+                job_pod['metadata']['name'],
+                namespace=job_pod['metadata']['namespace']
+            )
+            logger.info(
+                f"Logs from job pod {job_pod['metadata']['name']}: {pod_logs}"
+            )
+
         return False
 
 
@@ -115,7 +133,7 @@ def test_fill_bucket(
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
         for i in range(3):
-            assert mcg_obj_session.verify_s3_object_integrity(
+            assert verify_s3_object_integrity(
                 original_object_path=f'{LOCAL_TESTOBJS_DIR_PATH}/{obj}',
                 result_object_path=f'{LOCAL_TEMP_PATH}/{i}/{obj}',
                 awscli_pod=awscli_pod_session
@@ -144,7 +162,7 @@ def test_noobaa_postupgrade(
 
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
-        assert mcg_obj_session.verify_s3_object_integrity(
+        assert verify_s3_object_integrity(
             original_object_path=f'{LOCAL_TESTOBJS_DIR_PATH}/{obj}',
             result_object_path=f'{LOCAL_TEMP_PATH}/{obj}',
             awscli_pod=awscli_pod_session
@@ -210,7 +228,9 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
     Confirm that there is MCG workload job running before upgrade.
     """
     # wait a few seconds for fio job to start
-    assert wait_for_active_pods(mcg_workload_job, 1, timeout=20)
+    assert wait_for_active_pods(mcg_workload_job, 1, timeout=20), (
+        f"Job {mcg_workload_job.name} doesn't have any running pod"
+    )
 
 
 @post_upgrade
@@ -219,4 +239,6 @@ def test_upgrade_mcg_io(mcg_workload_job):
     """
     Confirm that there is MCG workload job running after upgrade.
     """
-    assert wait_for_active_pods(mcg_workload_job, 1)
+    assert wait_for_active_pods(mcg_workload_job, 1), (
+        f"Job {mcg_workload_job.name} doesn't have any running pod"
+    )
