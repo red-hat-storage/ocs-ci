@@ -13,10 +13,13 @@
 
 #### AWS (IPI and UPI)
 
-Configure AWS account credentials when testing with AWS platforms.
-Check the default section in `~/.aws/credentials` for access/secret key
-[check aws-configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
-<!-- TODO: check if the AWS_PROFILE environment var is honored. -->
+Configure AWS account credentials when testing with AWS platforms, using the
+`aws` command line program.
+Ensure that the [AWS configuration file](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html)
+is properly set up: either the default section in `~/.aws/credentials` must
+have the correct values for the access key and secret key or you must ensure
+that the profile you are using is set with the `AWS_PROFILE` environment
+variable.
 
 #### AWS UPI
 
