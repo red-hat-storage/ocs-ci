@@ -2369,17 +2369,14 @@ def set_aws_region(region=None):
 
 def get_system_architecture():
     """
-    Get output from ''uname -m' command run on first worker node.
+    Get output from 'uname -m' command run on first worker node.
 
     Returns:
         str: Architecture of system
+
     """
-    from ocs_ci.ocs import ocp
+    from ocs_ci.ocs.node import get_typed_nodes
 
-    node_obj = ocp.OCP(kind=constants.NODE)
     log.info('Checking architecture of system')
-
-    node = node_obj.get(
-        selector=constants.WORKER_LABEL
-    ).get('items')[0]['metadata']['name']
-    return node_obj.exec_oc_debug_cmd(node, ['uname -m'])
+    node = get_typed_nodes(node_type=constants.WORKER_MACHINE)[0]
+    return node.ocp.exec_oc_debug_cmd(node.data['metadata']['name'], ['uname -m'])
