@@ -548,7 +548,7 @@ class MCG:
         def _check_state():
             sysinfo = self.read_system()
             for pool in sysinfo.get('pools'):
-                if pool.get('name') == backingstore_name:
+                if pool.get('name') in backingstore_name:
                     current_state = pool.get('mode')
                     logger.info(
                         f'Current state of backingstore {backingstore_name} '

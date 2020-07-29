@@ -1564,16 +1564,6 @@ def mcg_obj_session(request):
     return mcg_obj_fixture(request)
 
 
-@pytest.fixture()
-def mcg_obj_with_aws(request):
-    return mcg_obj_fixture(request, create_aws_creds=True)
-
-
-@pytest.fixture(scope='session')
-def mcg_obj_with_aws_session(request):
-    return mcg_obj_fixture(request, create_aws_creds=True)
-
-
 def mcg_obj_fixture(request, *args, **kwargs):
     """
     Returns an MCG resource that's connected to the S3 endpoint
@@ -1859,7 +1849,7 @@ def cloud_uls_factory(request, cld_mgr):
         'aws': cld_mgr.aws_client,
         'google': cld_mgr.google_client,
         'azure': cld_mgr.azure_client,
-        'ibmcos': cld_mgr.ibmcos_client
+        # TODO: Implement - 'ibmcos': cld_mgr.ibmcos_client
     }
 
     def _create_uls(uls_dict):
@@ -1906,7 +1896,7 @@ def cloud_uls_factory(request, cld_mgr):
 
     def uls_cleanup():
         for cloud, uls_set in all_created_uls.items():
-            client = ulsMap[cloud]
+            client = ulsMap.get(cloud)
             if client is not None:
                 all_existing_uls = client.get_all_uls_names()
                 for uls in uls_set:
@@ -2055,7 +2045,7 @@ def multiregion_resources_fixture(request, cld_mgr, mcg_obj):
 @pytest.fixture()
 def multiregion_mirror_setup(mcg_obj, multiregion_resources, backingstore_factory, bucket_factory):
     return multiregion_mirror_setup_fixture(
-        mcg_obj_with_aws,
+        mcg_obj,
         multiregion_resources,
         backingstore_factory,
         bucket_factory
@@ -2078,7 +2068,7 @@ def multiregion_mirror_setup_session(
 
 
 def multiregion_mirror_setup_fixture(
-    mcg_obj_with_aws,
+    mcg_obj,
     multiregion_resources,
     backingstore_factory,
     bucket_factory
@@ -2105,7 +2095,7 @@ def multiregion_mirror_setup_fixture(
 
     # Create a new mirror bucketclass that'll use all the backing stores we
     # created
-    bucketclass = mcg_obj_with_aws.oc_create_bucketclass(
+    bucketclass = mcg_obj.oc_create_bucketclass(
         helpers.create_unique_resource_name(
             resource_description='testbc',
             resource_type='bucketclass'

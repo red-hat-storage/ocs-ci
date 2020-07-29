@@ -30,7 +30,7 @@ class CloudManager(ABC):
             'AWS': S3Client,
             'GOOGLE': GoogleClient,
             'AZURE': AzureClient,
-            'IBMCOS': S3Client
+            # TODO: Implement - 'IBMCOS': S3Client
         }
         cred_dict = load_auth_config()
         for cloud_name in cred_dict:
@@ -253,12 +253,11 @@ class S3Client(CloudClient):
                 ]
             }
             bucket_policy = json.dumps(bucket_policy)
-            s3_client = self.client.meta.client
-            s3_client.put_bucket_policy(
+            self.client.meta.client.put_bucket_policy(
                 Bucket=aws_bucket_name, Policy=bucket_policy
             )
         else:
-            s3_client.delete_bucket_policy(
+            self.client.meta.client.delete_bucket_policy(
                 Bucket=aws_bucket_name
             )
 
