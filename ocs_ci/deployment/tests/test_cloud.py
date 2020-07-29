@@ -7,7 +7,7 @@ import pytest
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import InvalidDeploymentPlatfrom
+from ocs_ci.ocs import exceptions
 
 
 def test_clouddeploymentbase_init(clusterdir):
@@ -39,5 +39,20 @@ def test_clouddeploymentbase_has_no_default_storageclass(clusterdir):
     """
     cloud = CloudDeploymentBase()
     assert cloud.DEFAULT_STORAGECLASS is None
-    with pytest.raises(InvalidDeploymentPlatfrom):
+    with pytest.raises(exceptions.InvalidDeploymentPlatfrom):
         cloud.patch_default_sc_to_non_default()
+
+
+def test_clouddeploymentbase_deploy_ocp_with_taken_cluster_name(clusterdir):
+    """
+    Check that ocp deploy fails when one tries to deploy a cluster with
+    already taken cluster name.
+    """
+    cloud = CloudDeploymentBase()
+    # monkey patch test implementation of check_cluster_existence() method,
+    # which is not implemented in CloudDeploymentBase base class, so that
+    # current cluster name is considered as already taken
+    cloud.check_cluster_existence = lambda pr: pr in clusterdir['clusterName']
+    # trying to deploy with already taken cluster name
+    with pytest.raises(exceptions.SameNamePrefixClusterAlreadyExistsException):
+        cloud.deploy_ocp()

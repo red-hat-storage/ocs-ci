@@ -135,7 +135,8 @@ class AWSBase(CloudDeploymentBase):
                 False otherwise
 
         """
-        instances = self.aws.get_instances_by_name_pattern(cluster_name_prefix)
+        cluster_name_pattern = cluster_name_prefix + "*"
+        instances = self.aws.get_instances_by_name_pattern(cluster_name_pattern)
         instance_objs = [
             self.aws.get_ec2_instance(ins.get('id')) for ins in instances
         ]
@@ -162,6 +163,9 @@ class AWSIPI(AWSBase):
     def __init__(self):
         self.name = self.__class__.__name__
         super(AWSIPI, self).__init__()
+        # dict of cluster prefixes with special handling rules (for existence
+        # check or during a cluster cleanup)
+        self.cluster_prefixes_special_rules = CLUSTER_PREFIXES_SPECIAL_RULES
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
         """
@@ -171,23 +175,6 @@ class AWSIPI(AWSBase):
             log_cli_level (str): openshift installer's log level
                 (default: "DEBUG")
         """
-        # TODO: move this check somewhere else! maybe cloud base?
-        if not config.DEPLOYMENT.get('force_deploy_multiple_clusters'):
-            cluster_name = config.ENV_DATA['cluster_name']
-            cluster_name_parts = cluster_name.split("-")
-            prefix = cluster_name_parts[0]
-            if prefix.lower() in CLUSTER_PREFIXES_SPECIAL_RULES.keys():
-                # if the prefix is a cleanup special rule, use the next part of
-                # the cluster name as the prefix
-                prefix = cluster_name_parts[1]
-            prefix += "*"
-
-            if self.check_cluster_existence(prefix):
-                raise exceptions.SameNamePrefixClusterAlreadyExistsException(
-                    f"Cluster with name prefix {prefix} already exists. "
-                    f"Please destroy the existing cluster for a new cluster "
-                    f"deployment"
-                )
         super(AWSIPI, self).deploy_ocp(log_cli_level)
         if config.DEPLOYMENT.get('host_network'):
             self.host_network_update()
