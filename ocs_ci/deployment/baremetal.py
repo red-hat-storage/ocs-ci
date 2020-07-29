@@ -395,6 +395,13 @@ class BAREMETALUPI(Deployment):
                 f"cluster --type merge --patch {patch}"
             )
 
+        def destroy(self, log_level=''):
+            """
+            Destroy OCP cluster specific to BM UPI
+            """
+            # Skip destroy cluster for BM UPI
+            pass
+
 
 def clean_disk():
     """
