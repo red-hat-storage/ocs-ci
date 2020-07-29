@@ -24,13 +24,14 @@ from ocs_ci.framework.pytest_customization.marks import (
     deployment, ignore_leftovers, tier_marks, ignore_leftover_label
 )
 from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
+from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.node import check_nodes_specs
 from ocs_ci.ocs.resources.mcg import MCG
-from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
+from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods
 from ocs_ci.ocs.resources.pvc import PVC
@@ -56,14 +57,14 @@ from ocs_ci.utility.utils import (
 )
 from tests import helpers
 from tests.helpers import create_unique_resource_name
-from tests.manage.mcg.helpers import get_rgw_restart_counts
-from tests.manage.mcg.helpers import (
+from ocs_ci.ocs.bucket_utils import (
     oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
     oc_create_s3comp_backingstore, oc_create_pv_backingstore, cli_create_aws_backingstore,
     cli_create_google_backingstore, cli_create_azure_backingstore, cli_create_s3comp_backingstore,
-    cli_create_pv_backingstore
+    cli_create_pv_backingstore, get_rgw_restart_counts
 )
 from ocs_ci.ocs.pgsql import Postgresql
+from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.amq import AMQ
@@ -1537,6 +1538,26 @@ def cld_mgr(request):
 
 
 @pytest.fixture()
+def rgw_obj(request):
+    return rgw_obj_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def rgw_obj_session(request):
+    return rgw_obj_fixture(request)
+
+
+def rgw_obj_fixture(request):
+    """
+    Returns an RGW resource that represents RGW in the cluster
+
+    Returns:
+        RGW: An RGW resource
+    """
+    return RGW()
+
+
+@pytest.fixture()
 def mcg_obj(request):
     return mcg_obj_fixture(request)
 
@@ -1577,22 +1598,18 @@ def mcg_obj_fixture(request, *args, **kwargs):
 
 
 @pytest.fixture()
-def awscli_pod(request, mcg_obj):
-    return awscli_pod_fixture(request, mcg_obj)
+def awscli_pod(request):
+    return awscli_pod_fixture(request)
 
 
 @pytest.fixture(scope='session')
-def awscli_pod_session(request, mcg_obj_session):
-    return awscli_pod_fixture(request, mcg_obj_session)
+def awscli_pod_session(request):
+    return awscli_pod_fixture(request)
 
 
-def awscli_pod_fixture(request, mcg_obj):
+def awscli_pod_fixture(request):
     """
     Creates a new AWSCLI pod for relaying commands
-
-    Args:
-        mcg_obj: An object representing the current
-        state of the MCG in the cluster
 
     Returns:
         pod: A pod running the AWS CLI
@@ -1687,13 +1704,13 @@ def uploaded_objects_fixture(
         for uploaded_filename in uploaded_objects_paths:
             log.info(f'Deleting object {uploaded_filename}')
             awscli_pod.exec_cmd_on_pod(
-                command=helpers.craft_s3_command(
+                command=craft_s3_command(
                     "rm " + uploaded_filename, mcg_obj
                 ),
                 secrets=[
                     mcg_obj.access_key_id,
                     mcg_obj.access_key,
-                    mcg_obj.s3_endpoint
+                    mcg_obj.s3_internal_endpoint
                 ]
             )
 
@@ -1731,16 +1748,32 @@ def verify_rgw_restart_count_fixture(request):
 
 
 @pytest.fixture()
+def rgw_bucket_factory(request, rgw_obj):
+    return bucket_factory_fixture(request, mcg_obj=None, rgw_obj=rgw_obj)
+
+
+@pytest.fixture(scope='session')
+def rgw_bucket_factory_session(request, rgw_obj_session):
+    return bucket_factory_fixture(request, mcg_obj=None, rgw_obj=rgw_obj_session)
+
+
+@pytest.fixture()
 def bucket_factory(request, mcg_obj):
-    return bucket_factory_fixture(request, mcg_obj)
+    """
+    Returns an MCG bucket factory
+    """
+    return bucket_factory_fixture(request, mcg_obj, rgw_obj=None)
 
 
 @pytest.fixture(scope='session')
 def bucket_factory_session(request, mcg_obj_session):
-    return bucket_factory_fixture(request, mcg_obj_session)
+    """
+    Returns a session-scoped MCG bucket factory
+    """
+    return bucket_factory_fixture(request, mcg_obj_session, rgw_obj_session=None)
 
 
-def bucket_factory_fixture(request, mcg_obj):
+def bucket_factory_fixture(request, mcg_obj, rgw_obj):
     """
     Create a bucket factory. Calling this fixture creates a new bucket(s).
     For a custom amount, provide the 'amount' parameter.
@@ -1751,12 +1784,6 @@ def bucket_factory_fixture(request, mcg_obj):
 
     """
     created_buckets = []
-
-    bucketMap = {
-        's3': S3Bucket,
-        'oc': OCBucket,
-        'cli': CLIBucket
-    }
 
     def _create_buckets(
         amount=1, interface='S3',
@@ -1775,18 +1802,19 @@ def bucket_factory_fixture(request, mcg_obj):
                 buckets
 
         """
-        if interface.lower() not in bucketMap:
+        if interface.lower() not in BUCKET_MAP:
             raise RuntimeError(
                 f'Invalid interface type received: {interface}. '
-                f'available types: {", ".join(bucketMap.keys())}'
+                f'available types: {", ".join(BUCKET_MAP.keys())}'
             )
         for i in range(amount):
             bucket_name = helpers.create_unique_resource_name(
                 resource_description='bucket', resource_type=interface.lower()
             )
-            created_bucket = bucketMap[interface.lower()](
-                mcg_obj,
+            created_bucket = BUCKET_MAP[interface.lower()](
                 bucket_name,
+                mcg=mcg_obj,
+                rgw=rgw_obj,
                 *args,
                 **kwargs
             )
@@ -1798,18 +1826,15 @@ def bucket_factory_fixture(request, mcg_obj):
         return created_buckets
 
     def bucket_cleanup():
-        all_existing_buckets = mcg_obj.s3_get_all_bucket_names()
         for bucket in created_buckets:
-            if bucket.name in all_existing_buckets:
-                log.info(f'Cleaning up bucket {bucket.name}')
+            log.info(f'Cleaning up bucket {bucket.name}')
+            try:
                 bucket.delete()
-                log.info(
-                    f"Verifying whether bucket: {bucket.name} exists after"
-                    f" deletion"
-                )
-                assert not mcg_obj.s3_verify_bucket_exists(bucket.name)
-            else:
-                log.info(f'Bucket {bucket.name} not found.')
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'NoSuchBucket':
+                    log.warn(f'{bucket.name} could not be found in cleanup')
+                else:
+                    raise
 
     request.addfinalizer(bucket_cleanup)
 

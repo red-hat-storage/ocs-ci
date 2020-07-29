@@ -10,7 +10,10 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_AUTH_FAILED, BS_OPTIMAL
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
-from tests.manage.mcg.helpers import retrieve_test_objects_to_pod, sync_object_directory
+from ocs_ci.ocs.bucket_utils import (
+    retrieve_test_objects_to_pod, sync_object_directory,
+    verify_s3_object_integrity
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +102,7 @@ class TestMultiRegion:
 
         # Checksum is compared between original and result object
         for obj in downloaded_objs:
-            assert mcg_obj_with_aws.verify_s3_object_integrity(
+            assert verify_s3_object_integrity(
                 original_object_path=f'{local_testobjs_dir_path}/{obj}',
                 result_object_path=f'{local_temp_path}/{obj}', awscli_pod=awscli_pod
             ), 'Checksum comparision between original and result object failed'
@@ -121,7 +124,7 @@ class TestMultiRegion:
 
         # Checksum is compared between original and result object
         for obj in downloaded_objs:
-            assert mcg_obj_with_aws.verify_s3_object_integrity(
+            assert verify_s3_object_integrity(
                 original_object_path=f'{local_testobjs_dir_path}/{obj}',
                 result_object_path=f'{local_temp_path}/{obj}', awscli_pod=awscli_pod
             ), 'Checksum comparision between original and result object failed'

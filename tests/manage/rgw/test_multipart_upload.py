@@ -1,5 +1,4 @@
 import logging
-
 import pytest
 import uuid
 
@@ -12,27 +11,29 @@ from ocs_ci.ocs.bucket_utils import (
     upload_parts, list_uploaded_parts, complete_multipart_upload,
     sync_object_directory
 )
+from ocs_ci.ocs.resources.objectbucket import OBC
 
 logger = logging.getLogger(__name__)
 
 
-def setup(pod_obj, bucket_factory):
+def setup(pod_obj, rgw_bucket_factory):
     """
-    Setup function
+    Create the file to be used for the multipart upload test,
+    and the bucket to upload it to.
 
      Args:
         pod_obj (Pod): A pod running the AWS CLI tools
-        bucket_factory: Calling this fixture creates a new bucket(s)
+        rgw_bucket_factory: Calling this fixture creates a new bucket(s)
 
     Returns:
         Tuple: Returns tuple containing the params used in this test case
 
     """
-    bucket = bucket_factory(amount=1, interface='OC')[0].name
+    bucket = rgw_bucket_factory(amount=1, interface='RGW-OC')[0]
     object_key = "ObjKey-" + str(uuid.uuid4().hex)
     origin_dir = "/aws/objectdir"
     res_dir = "/aws/partsdir"
-    full_object_path = f"s3://{bucket}"
+    full_object_path = f"s3://{bucket.name}"
     # Creates a 500MB file and splits it into multiple parts
     pod_obj.exec_cmd_on_pod(
         f'sh -c "mkdir {origin_dir}; mkdir {res_dir}; '
@@ -45,40 +46,42 @@ def setup(pod_obj, bucket_factory):
 
 class TestS3MultipartUpload(ManageTest):
     """
-    Test Multipart upload on Noobaa buckets
+    Test Multipart upload on RGW buckets
     """
-    @pytest.mark.polarion_id("OCS-1387")
     @tier1
-    def test_multipart_upload_operations(self, mcg_obj, awscli_pod, bucket_factory):
+    @pytest.mark.polarion_id("OCS-2245")
+    def test_multipart_upload_operations(self, awscli_pod, rgw_bucket_factory):
         """
         Test Multipart upload operations on bucket and verifies the integrity of the downloaded object
         """
-        bucket, key, origin_dir, res_dir, object_path, parts = setup(awscli_pod, bucket_factory)
+        bucket, key, origin_dir, res_dir, object_path, parts = setup(awscli_pod, rgw_bucket_factory)
+        bucketname = bucket.name
+        bucket = OBC(bucketname)
 
         # Abort all Multipart Uploads for this Bucket (optional, for starting over)
-        logger.info(f'Aborting any Multipart Upload on bucket:{bucket}')
-        abort_all_multipart_upload(mcg_obj, bucket, key)
+        logger.info(f'Aborting any Multipart Upload on bucket:{bucketname}')
+        abort_all_multipart_upload(bucket, bucketname, key)
 
         # Create & list Multipart Upload on the Bucket
-        logger.info(f'Initiating Multipart Upload on Bucket: {bucket} with Key {key}')
-        upload_id = create_multipart_upload(mcg_obj, bucket, key)
-        logger.info(f'Listing the Multipart Upload : {list_multipart_upload(mcg_obj, bucket)}')
+        logger.info(f'Initiating Multipart Upload on Bucket: {bucketname} with Key {key}')
+        upload_id = create_multipart_upload(bucket, bucketname, key)
+        logger.info(f'Listing the Multipart Upload: {list_multipart_upload(bucket, bucketname)}')
 
         # Uploading individual parts to the Bucket
-        logger.info(f'Uploading individual parts to the bucket {bucket}')
-        uploaded_parts = upload_parts(mcg_obj, awscli_pod, bucket, key, res_dir, upload_id, parts)
+        logger.info(f'Uploading individual parts to the bucket {bucketname}')
+        uploaded_parts = upload_parts(bucket, awscli_pod, bucketname, key, res_dir, upload_id, parts)
 
         # Listing the Uploaded parts
-        logger.info(f'Listing the individual parts : {list_uploaded_parts(mcg_obj, bucket, key, upload_id)}')
+        logger.info(f'Listing the individual parts: {list_uploaded_parts(bucket, bucketname, key, upload_id)}')
 
         # Completing the Multipart Upload
-        logger.info(f'Completing the Multipart Upload on bucket: {bucket}')
-        logger.info(complete_multipart_upload(mcg_obj, bucket, key, upload_id, uploaded_parts))
+        logger.info(f'Completing the Multipart Upload on bucket: {bucketname}')
+        logger.info(complete_multipart_upload(bucket, bucketname, key, upload_id, uploaded_parts))
 
         # Checksum Validation: Downloading the object after completing Multipart Upload and verifying its integrity
-        logger.info('Downloading the completed multipart object from MCG bucket to awscli pod')
+        logger.info('Downloading the completed multipart object from the RGW bucket to the awscli pod')
         sync_object_directory(
-            awscli_pod, object_path, res_dir, mcg_obj
+            awscli_pod, object_path, res_dir, bucket
         )
         assert verify_s3_object_integrity(
             original_object_path=f'{origin_dir}/{key}',

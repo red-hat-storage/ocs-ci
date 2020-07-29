@@ -1633,7 +1633,6 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
             f"aws s3{api} --no-sign-request "
         )
         string_wrapper = ''
-
     return f"{base_command}{cmd}{string_wrapper}"
 
 
@@ -2345,6 +2344,19 @@ def retrieve_default_ingress_crt():
 
     with open(constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, 'w') as crtfile:
         crtfile.write(decoded_crt)
+
+
+def storagecluster_independent_check():
+    """
+    Check whether the storagecluster is running in independent mode
+    by checking the value of spec.externalStorage.enable
+    """
+    storage_cluster = OCP(
+        kind='StorageCluster',
+        namespace=config.ENV_DATA['cluster_namespace']
+    ).get().get('items')[0]
+
+    return storage_cluster.get('spec').get('externalStorage').get('enable')
 
 
 def get_pv_size(storageclass=None):
