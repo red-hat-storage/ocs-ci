@@ -50,7 +50,7 @@ class AZUREBase(CloudDeploymentBase):
         # ask about all azure resource groups, and filter it by cluster name
         # prefix (there is azure resource group for each cluster, which
         # contains all other azure resources of the cluster)
-        resource_groups = self.azure.resource_client.resource_groups.list()
+        resource_groups = self.azure_util.resource_client.resource_groups.list()
         for rg in resource_groups:
             if rg.name.startswith(cluster_name_prefix):
                 logger.info(

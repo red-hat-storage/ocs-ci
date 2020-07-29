@@ -167,7 +167,7 @@ class AZURE:
         if self._client_id is None:
             self._client_id = sp_dict['clientId']
         if self._client_secret is None:
-            self.self_client_secret = sp_dict['clientSecret']
+            self._client_secret = sp_dict['clientSecret']
         # create azure SP Credentials object
         self._credentials = ServicePrincipalCredentials(
             client_id=self._client_id,
