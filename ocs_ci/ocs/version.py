@@ -25,11 +25,71 @@ import sys
 
 from ocs_ci import framework
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants, node, ocp
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import utils
 
 
 logger = logging.getLogger(__name__)
+
+
+def get_environment_info():
+    """
+    Getting the environment information, Information that will be collected
+
+    Versions:
+        OCP - version / build / channel
+        OCS - version / build
+        Ceph - version
+        Rook - version
+
+    Platform:
+        BM / VmWare / Cloud provider etc.
+        Instance type / architecture
+        Cluster name
+        User name that run the test
+
+    Return:
+      dict: dictionary that contain the environment information
+
+    """
+    results = {}
+    # getting the name and email  of the user that running the test.
+    try:
+        user = utils.run_cmd('git config --get user.name').strip()
+        email = utils.run_cmd('git config --get user.email').strip()
+        results['user'] = f'{user} <{email}>'
+    except CommandFailed:
+        # if no git user define, the default user is none
+        results['user'] = ''
+
+    results['clustername'] = ocp.get_clustername()
+    results['platform'] = node.get_provider()
+    if results['platform'].lower() not in constants.ON_PREM_PLATFORMS:
+        results['platform'] = results['platform'].upper()
+
+    results['ocp_build'] = ocp.get_build()
+    results['ocp_channel'] = ocp.get_ocp_channel()
+    results['ocp_version'] = utils.get_ocp_version()
+
+    results['ceph_version'] = utils.get_ceph_version()
+    results['rook_version'] = utils.get_rook_version()
+
+    results['ocs_build'] = ocp.get_ocs_version()
+    # Extracting the version number x.y.z from full build name
+    m = re.match(r"(\d.\d).(\d)", results['ocs_build'])
+    if m and m.group(1) is not None:
+        results['ocs_version'] = m.group(1)
+
+    # Getting the instance type for cloud or Arch type for None cloud
+    worker_lbl = node.get_typed_nodes(num_of_nodes=1)[0].data['metadata']['labels']
+    if 'beta.kubernetes.io/instance-type' in worker_lbl:
+        results['worker_type'] = worker_lbl['beta.kubernetes.io/instance-type']
+    else:
+        results['worker_type'] = worker_lbl['kubernetes.io/arch']
+
+    return results
 
 
 def get_ocs_version():
@@ -49,6 +109,9 @@ def get_ocs_version():
     # https://github.com/openshift/cluster-version-operator/blob/master/docs/dev/clusterversion.md
     ocp = OCP(kind="clusterversion")
     cluster_version = ocp.get("version")
+
+    # Adding another key in the dict to preserve usability
+    cluster_version['ENV'] = get_environment_info()
 
     # TODO: When OLM (operator-lifecycle-manager) maintains OCS, it will be
     # possible to add a check via CSV (cluster service version) to get OCS
