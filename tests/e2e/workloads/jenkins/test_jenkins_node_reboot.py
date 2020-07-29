@@ -15,12 +15,15 @@ log = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope='function')
-def jenkins(request):
+def jenkins(request, nodes):
 
     jenkins = Jenkins()
 
     def teardown():
         jenkins.cleanup()
+        # Make sure all VMs are up by the end of the test
+        nodes.restart_nodes_by_stop_and_start_teardown()
+
     request.addfinalizer(teardown)
     return jenkins
 
