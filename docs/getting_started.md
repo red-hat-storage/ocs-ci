@@ -169,6 +169,45 @@ quay:
   access_token: 'YOUR_TOKEN'
 ```
 
+## Deploying Clusters and Running Tests
+
+Once you have set up the configuration files you are ready to start
+executing the code included in the ocs-ci. First you must prepare
+your environment for running the scripts:
+
+* Run: `python setup.py develop`
+* Verify that the `run-ci` script is now available in your path.
+  Run `run-ci --help` and check that it prints help text.
+
+### Deploying a Cluster
+
+<!-- TODO(jjm) - I haven't got a working cluster using this yet. -->
+
+When using a OpenShift with automatically provisioned hosts, you can request
+that the ocs ci system set up the cluster for you. Example:
+
+```
+run-ci -m deployment --deploy --ocsci-conf <my_config.yaml>  --cluster-path=<cluster_dir>  --cluster-name=<prefix>-<name>
+```
+
+Depending on your infrastructure you may have additional options to pass. For
+shared infrastructure on Red Hat AWS the prefix value in the cluster name should
+be your kerberos id.
+
+### Running Tests
+
+<!-- TODO(jjm) - I haven't gotten a cluster yet so this is speculation. -->
+
+To execute tests against a cluster that was deployed as in the previous section:
+
+```
+run-ci --ocsci-conf=ocs-ci-ocs.yaml --cluster-path=<cluster_dir>  --cluster-name=<prefix>-<name>
+```
+
+The `run-ci` tool wraps `py.test` any valid options for that tool can be passed
+to `run-ci` to limit test selection, configure logging, etc.
+
+
 ## Tests
 
 ### AWS and CentralCI Authentication files
