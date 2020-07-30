@@ -132,14 +132,16 @@ class MCG:
                 aws_access_key_id=self.aws_access_key_id,
                 aws_secret_access_key=self.aws_access_key
             )
+
+        if (
+            config.ENV_DATA['platform'].lower() == 'aws'
+            or storagecluster_independent_check() is False
+        ):
             logger.info('Checking whether RGW pod is not present on AWS platform')
             pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
-            assert len(pods) == 0, 'RGW pod should not exist on AWS platform'
+            assert len(pods) == 0, 'RGW pods should not exist in the current platform/cluster'
 
-        elif (
-            config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS
-            and storagecluster_independent_check() is False
-        ):
+        elif config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
             rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
             logger.info(f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform')
             rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
