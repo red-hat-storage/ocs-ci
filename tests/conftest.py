@@ -2613,14 +2613,6 @@ def node_drain_teardown(request):
         if scheduling_disabled_nodes:
             schedule_nodes(scheduling_disabled_nodes)
 
-        # Remove label created for DC app pods on all worker nodes
-        node_objs = get_node_objs()
-        for node_obj in node_objs:
-            if 'dc' in node_obj.get().get('metadata').get('labels').keys():
-                remove_label_from_worker_node(
-                    [node_obj.name], label_key="dc"
-                )
-
     request.addfinalizer(finalizer)
 
 

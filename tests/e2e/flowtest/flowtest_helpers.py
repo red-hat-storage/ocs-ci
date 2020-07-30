@@ -1,17 +1,11 @@
 import logging
 
-from ocs_ci.ocs import node, platform_nodes, defaults, exceptions
+from ocs_ci.ocs import node, defaults, exceptions, constants
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.resources import pod as pod_helpers
-from ocs_ci.ocs.resources.pod import wait_for_storage_pods
+from ocs_ci.ocs.resources.pod import check_pods_in_running_state
 from ocs_ci.utility.utils import TimeoutSampler
-from tests.manage.mcg.helpers import s3_delete_object, s3_put_object, s3_get_object
 from tests.sanity_helpers import Sanity
-from ocs_ci.framework.testlib import ignore_leftovers
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pvc import delete_pvcs
-from tests import helpers
-from tests.manage.z_cluster.pvc_ops import create_pvcs
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +39,7 @@ class FlowOperations:
             wait_for_nodes_status(status=constants.NODE_READY, timeout=300)
         if pod_status:
             logger.info(f"{operation_name}: Verifying StorageCluster pods are in running/completed state")
-            wait_for_storage_pods(timeout=300), 'Some pods were not in expected state'
+            assert check_pods_in_running_state(), 'Some pods were not in expected state'
 
     def node_operations_entry_criteria(
         self, node_type, number_of_nodes, operation_name="Node Operation", network_fail_time=None
@@ -69,13 +63,10 @@ class FlowOperations:
         typed_nodes = node.get_typed_nodes(
             node_type=node_type, num_of_nodes=number_of_nodes
         )
-        factory = platform_nodes.PlatformNodesFactory()
-        nodes = factory.get_nodes_platform()
-
         if network_fail_time:
-            return typed_nodes, nodes, network_fail_time
+            return typed_nodes, network_fail_time
         else:
-            return typed_nodes, nodes
+            return typed_nodes
 
     def add_capacity_entry_criteria(self):
         """
@@ -122,64 +113,6 @@ class FlowOperations:
         assert number_of_osds_added == 3, "Exit criteria verification FAILED: osd count mismatch"
 
         logger.info("Add capacity: Exit criteria verification: Success")
-
-
-@ignore_leftovers
-def create_pvc_delete(multi_pvc_factory, project=None):
-    """
-    Creates and deletes all types of PVCs
-
-    Returns:
-        bool : True if function runs successfully
-
-    """
-    # Create rbd pvcs
-    pvc_objs_rbd = create_pvcs(
-        multi_pvc_factory=multi_pvc_factory, interface='CephBlockPool',
-        project=project, status="", storageclass=None
-    )
-
-    # Create cephfs pvcs
-    pvc_objs_cephfs = create_pvcs(
-        multi_pvc_factory=multi_pvc_factory, interface='CephFileSystem',
-        project=project, status="", storageclass=None
-    )
-
-    all_pvc_to_delete = pvc_objs_rbd + pvc_objs_cephfs
-
-    # Check pvc status
-    for pvc_obj in all_pvc_to_delete:
-        helpers.wait_for_resource_state(
-            resource=pvc_obj, state=constants.STATUS_BOUND, timeout=300
-        )
-
-    # Start deleting PVC
-    delete_pvcs(all_pvc_to_delete)
-
-    # Check PVCs are deleted
-    for pvc_obj in all_pvc_to_delete:
-        pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
-
-    logger.info("All PVCs are deleted as expected")
-
-
-def obc_put_obj_create_delete(mcg_obj, bucket_factory):
-    """
-    Creates bucket then writes, reads and deletes objects
-
-    Returns:
-        bool : True if function runs successfully
-
-    """
-    bucket_name = bucket_factory(amount=1, interface='OC')[0].name
-    data = "A string data"
-
-    for i in range(0, 30):
-        key = 'Object-key-' + f"{i}"
-        logger.info(f"Write, read and delete object with key: {key}")
-        assert s3_put_object(mcg_obj, bucket_name, key, data), f"Failed: Put object, {key}"
-        assert s3_get_object(mcg_obj, bucket_name, key), f"Failed: Get object, {key}"
-        assert s3_delete_object(mcg_obj, bucket_name, key), f"Failed: Delete object, {key}"
 
 
 class BackgroundOps:
