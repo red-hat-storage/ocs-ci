@@ -800,7 +800,7 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
     else:
         node_type = constants.RHCOS
 
-    log.info(f"Preparing to create a new node...")
+    log.info("Preparing to create a new node...")
     node_conf = {'stack_name': stack_name_of_deleted_node}
     add_new_node_and_label_upi(node_type=node_type, num_nodes=1, node_conf=node_conf)
 
