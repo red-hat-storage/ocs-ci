@@ -806,4 +806,13 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
 
 
 def get_node_az(node):
+    """
+    Get the node availability zone
+
+    Args:
+        node (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        str: The name of the node availability zone
+    """
     return node.get().get('metadata', {}).get('labels', {}).get('topology.kubernetes.io/zone')
