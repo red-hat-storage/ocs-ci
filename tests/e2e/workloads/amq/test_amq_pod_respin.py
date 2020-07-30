@@ -7,7 +7,6 @@ from ocs_ci.framework.testlib import (
 )
 from tests.helpers import default_storage_class
 from tests.disruption_helpers import Disruptions
-from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.utils import TimeoutSampler
@@ -57,10 +56,8 @@ class TestAMQPodRespin(E2ETest):
 
         """
         sc_name = default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
-        self.amq_workload_dict = templating.load_yaml(constants.AMQ_SIMPLE_WORKLOAD_YAML)
-        self.amq, self.thread = amq_factory_fixture(
-            sc_name=sc_name.name, tiller_namespace="tiller",
-            amq_workload_yaml=self.amq_workload_dict, run_in_bg=True
+        self.amq, self.threads = amq_factory_fixture(
+            sc_name=sc_name.name
         )
 
     @pytest.mark.parametrize(
@@ -114,12 +111,7 @@ class TestAMQPodRespin(E2ETest):
             disruption.set_resource(resource=f'{pod_name}')
             disruption.delete_resource()
 
-        # Validate and collect the results
-        log.info("Validate amq benchmark is run completely")
-        result = self.thread.result(timeout=1800)
-        log.info(result)
-        assert self.amq.validate_amq_benchmark(
-            result=result, amq_workload_yaml=self.amq_workload_dict
-        ) is not None, (
-            "Benchmark did not completely run or might failed in between"
-        )
+            # Validate the results
+            log.info("Validate message run completely")
+            for thread in self.threads:
+                thread.result(timeout=1800)
