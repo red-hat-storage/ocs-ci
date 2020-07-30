@@ -1126,7 +1126,14 @@ class AWSUPINode(AWSNodes):
             boto3.Instance: instance of ec2 instance resource
 
         """
-        self.gather_worker_data(f"no{conf.get('zone')}")
+        logger.info(f"new rhcos node conf = {conf}")
+        stack_name = conf.get('stack_name')
+        if conf.get('stack_name'):
+            suffix = stack_name.split('-')[-1]
+        else:
+            suffix = f"no{conf.get('zone')}"
+
+        self.gather_worker_data(suffix)
         worker_template_path = self.get_rhcos_worker_template()
         self.bucket_name = constants.AWS_S3_UPI_BUCKET
         self.template_obj_key = f'{self.cluster_name}-workertemplate'

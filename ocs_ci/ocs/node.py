@@ -17,6 +17,7 @@ from ocs_ci.ocs import machine
 import tests.helpers
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions
+from ocs_ci.utility.aws import AWS
 
 log = logging.getLogger(__name__)
 
@@ -302,7 +303,7 @@ def add_new_node_and_label_it(machineset_name):
     return new_spun_node[0]
 
 
-def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True):
+def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True, node_conf=None):
     """
     Add a new node for aws/vmware upi platform and label it
 
@@ -310,17 +311,18 @@ def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True):
         node_type (str): Type of node, RHEL or RHCOS
         num_nodes (int): number of nodes to add
         mark_for_ocs_label (bool): True if label the new node
+        node_conf (dict): The node configurations.
 
     Retuns:
         bool: True if node addition has done successfully
 
     """
-
+    node_conf = node_conf or {}
     initial_nodes = tests.helpers.get_worker_nodes()
     from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
     plt = PlatformNodesFactory()
     node_util = plt.get_nodes_platform()
-    node_util.create_and_attach_nodes_to_cluster({}, node_type, num_nodes)
+    node_util.create_and_attach_nodes_to_cluster(node_conf, node_type, num_nodes)
     for sample in TimeoutSampler(
         timeout=600, sleep=6, func=tests.helpers.get_worker_nodes
     ):
@@ -778,12 +780,30 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
         osd_node_name (str): the name of the osd node
 
     """
-    osd_nodes = get_node_objs(node_names=[osd_node_name])
-    remove_nodes(osd_nodes)
+
+    osd_node = get_node_objs(node_names=[osd_node_name])[0]
+
+    # Get availability zone and stack name of the deleted node
+    aws = AWS()
+    az = get_node_az(osd_node)
+    instance_id_of_deleted_node = aws.get_instance_id_from_private_dns_name(osd_node.name)
+    stack_name_of_deleted_node = aws.get_stack_name_by_instance_id(instance_id_of_deleted_node)
+
+    remove_nodes([osd_node])
+
+    log.info(f"availability zone of deleted node = {az}")
+    log.info(f"instance id of deleted node = {instance_id_of_deleted_node}")
+    log.info(f"stack name of deleted node = {stack_name_of_deleted_node}")
 
     if config.ENV_DATA.get('rhel_workers'):
         node_type = constants.RHEL_OS
     else:
         node_type = constants.RHCOS
 
-    add_new_node_and_label_upi(node_type=node_type, num_nodes=3)
+    log.info(f"Preparing to create a new node...")
+    node_conf = {'stack_name': stack_name_of_deleted_node}
+    add_new_node_and_label_upi(node_type=node_type, num_nodes=1, node_conf=node_conf)
+
+
+def get_node_az(node):
+    return node.get().get('metadata', {}).get('labels', {}).get('topology.kubernetes.io/zone')
