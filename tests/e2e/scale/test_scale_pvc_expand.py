@@ -30,7 +30,7 @@ def resize_pvc(request):
 @pytest.mark.parametrize(
     argnames=[
         "start_io", "pvc_size", "pvc_new_size",
-        ],
+    ],
     argvalues=[
         pytest.param(
             *[False, '10Gi', 20], marks=pytest.mark.polarion_id("OCS-2250")
