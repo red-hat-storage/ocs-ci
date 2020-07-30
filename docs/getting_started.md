@@ -172,12 +172,10 @@ quay:
 ## Deploying Clusters and Running Tests
 
 Once you have set up the configuration files you are ready to start
-executing the code included in the ocs-ci. First you must prepare
-your environment for running the scripts:
-
-* Run: `python setup.py develop`
-* Verify that the `run-ci` script is now available in your path.
-  Run `run-ci --help` and check that it prints help text.
+executing the code included in the ocs-ci.
+Verify that the virtualenv is activated and hat the `run-ci` script is
+available in your path. Run `run-ci --help` and check that it prints help
+text.
 
 ### Deploying a Cluster
 
