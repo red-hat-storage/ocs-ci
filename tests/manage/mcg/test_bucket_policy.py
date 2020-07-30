@@ -7,8 +7,15 @@ import uuid
 
 from ocs_ci.ocs.exceptions import NoBucketPolicyResponse, InvalidStatusCode, UnexpectedBehaviour
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2, tier3, skipif_ocs_version
-from ocs_ci.ocs.resources.bucket_policy import OBC, NoobaaAccount, HttpResponseParser, gen_bucket_policy
-from tests.manage.mcg import helpers
+from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount, HttpResponseParser, gen_bucket_policy
+from ocs_ci.ocs.resources.objectbucket import OBC
+from ocs_ci.ocs.bucket_utils import (
+    put_bucket_policy, get_bucket_policy, s3_put_object,
+    delete_bucket_policy, s3_get_object, s3_delete_object,
+    create_multipart_upload, s3_put_bucket_website,
+    s3_get_bucket_website, s3_delete_bucket_website,
+    s3_get_bucket_versioning, s3_put_bucket_versioning
+)
 from ocs_ci.ocs.defaults import website_config, index, error
 from ocs_ci.ocs.constants import bucket_website_action_list, bucket_version_action_list, object_version_action_list
 
@@ -28,7 +35,7 @@ class TestS3BucketPolicy(ManageTest):
         """
         # Creating obc and obc object to get account details, keys etc
         obc_name = bucket_factory(amount=1, interface='OC')[0].name
-        obc_obj = OBC(mcg_obj, obc=obc_name)
+        obc_obj = OBC(obc_name)
 
         bucket_policy_generated = gen_bucket_policy(
             user_list=obc_obj.obc_account,
@@ -39,7 +46,7 @@ class TestS3BucketPolicy(ManageTest):
 
         # Add Bucket Policy
         logger.info(f'Creating bucket policy on bucket: {obc_obj.bucket_name}')
-        put_policy = helpers.put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy)
+        put_policy = put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy)
 
         if put_policy is not None:
             response = HttpResponseParser(put_policy)
@@ -52,7 +59,7 @@ class TestS3BucketPolicy(ManageTest):
 
         # Get bucket policy
         logger.info(f'Getting Bucket policy on bucket: {obc_obj.bucket_name}')
-        get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # Modifying bucket policy to take new policy
@@ -67,7 +74,7 @@ class TestS3BucketPolicy(ManageTest):
         )
         bucket_policy_modified = json.dumps(modified_policy_generated)
 
-        put_modified_policy = helpers.put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy_modified)
+        put_modified_policy = put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy_modified)
 
         if put_modified_policy is not None:
             response = HttpResponseParser(put_modified_policy)
@@ -79,7 +86,7 @@ class TestS3BucketPolicy(ManageTest):
             raise NoBucketPolicyResponse("Put modified policy response is none")
 
         # Get Modified Policy
-        get_modified_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        get_modified_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
         modified_policy = json.loads(get_modified_policy['Policy'])
         logger.info(f'Got modified bucket policy: {modified_policy}')
 
@@ -95,7 +102,7 @@ class TestS3BucketPolicy(ManageTest):
 
         # Delete Policy
         logger.info(f'Delete bucket policy by admin on bucket: {obc_obj.bucket_name}')
-        delete_policy = helpers.delete_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        delete_policy = delete_bucket_policy(mcg_obj, obc_obj.bucket_name)
         logger.info(f'Delete policy response: {delete_policy}')
 
         if delete_policy is not None:
@@ -109,7 +116,7 @@ class TestS3BucketPolicy(ManageTest):
 
         # Confirming again by calling get_bucket_policy
         try:
-            helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+            get_bucket_policy(mcg_obj, obc_obj.bucket_name)
         except boto3exception.ClientError as e:
             logger.info(e.response)
             response = HttpResponseParser(e.response)
@@ -126,7 +133,7 @@ class TestS3BucketPolicy(ManageTest):
         """
         # Creating obc and obc object to get account details, keys etc
         obc_name = bucket_factory(amount=1, interface='OC')[0].name
-        obc_obj = OBC(mcg_obj, obc=obc_name)
+        obc_obj = OBC(obc_name)
 
         bucket_policy_generated = gen_bucket_policy(
             user_list=obc_obj.obc_account,
@@ -137,7 +144,7 @@ class TestS3BucketPolicy(ManageTest):
 
         # Admin creates a policy on the user bucket, for Action: PutBucketPolicy
         logger.info(f'Creating policy by admin on bucket: {obc_obj.bucket_name}')
-        put_policy = helpers.put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy)
+        put_policy = put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy)
         logger.info(f'Put bucket policy response from admin: {put_policy}')
 
         # Verifying Put bucket policy by user by changing the actions to GetBucketPolicy & DeleteBucketPolicy
@@ -149,17 +156,17 @@ class TestS3BucketPolicy(ManageTest):
         bucket_policy1 = json.dumps(user_generated_policy)
 
         logger.info(f'Changing bucket policy by User on bucket: {obc_obj.bucket_name}')
-        put_policy_user = helpers.put_bucket_policy(obc_obj, obc_obj.bucket_name, bucket_policy1)
+        put_policy_user = put_bucket_policy(obc_obj, obc_obj.bucket_name, bucket_policy1)
         logger.info(f'Put bucket policy response from user: {put_policy_user}')
 
         # Verifying whether user can get the bucket policy after modification
-        get_policy = helpers.get_bucket_policy(obc_obj, obc_obj.bucket_name)
+        get_policy = get_bucket_policy(obc_obj, obc_obj.bucket_name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # Verifying whether user is not allowed Put the bucket policy after modification
         logger.info(f'Verifying whether user: {obc_obj.obc_account} is denied to put objects')
         try:
-            helpers.put_bucket_policy(obc_obj, obc_obj.bucket_name, bucket_policy1)
+            put_bucket_policy(obc_obj, obc_obj.bucket_name, bucket_policy1)
         except boto3exception.ClientError as e:
             logger.info(e.response)
             response = HttpResponseParser(e.response)
@@ -170,7 +177,7 @@ class TestS3BucketPolicy(ManageTest):
 
         # Verifying whether user can Delete the bucket policy after modification
         logger.info(f'Deleting bucket policy on bucket: {obc_obj.bucket_name}')
-        delete_policy = helpers.delete_bucket_policy(obc_obj, obc_obj.bucket_name)
+        delete_policy = delete_bucket_policy(obc_obj, obc_obj.bucket_name)
         logger.info(f'Delete policy response: {delete_policy}')
 
     @pytest.mark.polarion_id("OCS-2156")
@@ -184,7 +191,7 @@ class TestS3BucketPolicy(ManageTest):
 
         # Creating multiple obc users (accounts)
         obc = bucket_factory(amount=1, interface='OC')
-        obc_obj = OBC(mcg_obj, obc=obc[0].name)
+        obc_obj = OBC(obc[0].name)
 
         # Admin sets policy on obc bucket with obc account principal
         bucket_policy_generated = gen_bucket_policy(
@@ -195,22 +202,22 @@ class TestS3BucketPolicy(ManageTest):
         bucket_policy = json.dumps(bucket_policy_generated)
 
         logger.info(f'Creating bucket policy on bucket: {obc_obj.bucket_name} with principal: {obc_obj.obc_account}')
-        put_policy = helpers.put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy)
+        put_policy = put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy)
         logger.info(f'Put bucket policy response from Admin: {put_policy}')
 
         # Get Policy
         logger.info(f'Getting Bucket policy on bucket: {obc_obj.bucket_name}')
-        get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # Verifying whether obc account can put object
         logger.info(f'Adding object on bucket: {obc_obj.bucket_name}')
-        assert helpers.s3_put_object(obc_obj, obc_obj.bucket_name, object_key, data), "Failed: Put Object"
+        assert s3_put_object(obc_obj, obc_obj.bucket_name, object_key, data), "Failed: Put Object"
 
         # Verifying whether Get action is not allowed
         logger.info(f'Verifying whether user: {obc_obj.obc_account} is denied to Get object')
         try:
-            helpers.s3_get_object(obc_obj, obc_obj.bucket_name, object_key)
+            s3_get_object(obc_obj, obc_obj.bucket_name, object_key)
         except boto3exception.ClientError as e:
             logger.info(e.response)
             response = HttpResponseParser(e.response)
@@ -221,12 +228,12 @@ class TestS3BucketPolicy(ManageTest):
 
         # Verifying whether obc account allowed to create multipart
         logger.info(f'Creating multipart on bucket: {obc_obj.bucket_name} with key: {object_key}')
-        helpers.create_multipart_upload(obc_obj, obc_obj.bucket_name, object_key)
+        create_multipart_upload(obc_obj, obc_obj.bucket_name, object_key)
 
         # Verifying whether obc account is denied access to delete object
         logger.info(f'Verifying whether user: {obc_obj.obc_account} is denied to Delete object')
         try:
-            helpers.s3_delete_object(obc_obj, obc_obj.bucket_name, object_key)
+            s3_delete_object(obc_obj, obc_obj.bucket_name, object_key)
         except boto3exception.ClientError as e:
             logger.info(e.response)
             response = HttpResponseParser(e.response)
@@ -249,24 +256,24 @@ class TestS3BucketPolicy(ManageTest):
         new_policy = json.dumps(new_policy_generated)
 
         logger.info(f'Creating bucket policy on bucket: {obc_obj.bucket_name} with principal: {obc_obj.obc_account}')
-        put_policy = helpers.put_bucket_policy(mcg_obj, obc_obj.bucket_name, new_policy)
+        put_policy = put_bucket_policy(mcg_obj, obc_obj.bucket_name, new_policy)
         logger.info(f'Put bucket policy response from admin: {put_policy}')
 
         # Get Policy
         logger.info(f'Getting bucket policy on bucket: {obc_obj.bucket_name}')
-        get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # Verifying whether Get, Delete object is allowed
         logger.info(f'Getting object on bucket: {obc_obj.bucket_name} with user: {user.email_id}')
-        assert helpers.s3_get_object(user, obc_obj.bucket_name, object_key), "Failed: Get Object"
+        assert s3_get_object(user, obc_obj.bucket_name, object_key), "Failed: Get Object"
         logger.info(f'Deleting object on bucket: {obc_obj.bucket_name} with user: {user.email_id}')
-        assert helpers.s3_delete_object(user, obc_obj.bucket_name, object_key), "Failed: Delete Object"
+        assert s3_delete_object(user, obc_obj.bucket_name, object_key), "Failed: Delete Object"
 
         # Verifying whether Put object action is denied
         logger.info(f'Verifying whether user: {user.email_id} is denied to Put object after updating policy')
         try:
-            helpers.s3_put_object(user, obc_obj.bucket_name, object_key, data)
+            s3_put_object(user, obc_obj.bucket_name, object_key, data)
         except boto3exception.ClientError as e:
             logger.info(e.response)
             response = HttpResponseParser(e.response)
@@ -301,21 +308,21 @@ class TestS3BucketPolicy(ManageTest):
         bucket_policy = json.dumps(bucket_policy_generated)
 
         logger.info(f'Creating bucket policy on bucket: {s3_bucket.name} with wildcard (*) Principal')
-        put_policy = helpers.put_bucket_policy(mcg_obj, s3_bucket.name, bucket_policy)
+        put_policy = put_bucket_policy(mcg_obj, s3_bucket.name, bucket_policy)
         logger.info(f'Put bucket policy response from Admin: {put_policy}')
 
         # Getting Policy
         logger.info(f'Getting bucket policy on bucket: {s3_bucket.name}')
-        get_policy = helpers.get_bucket_policy(mcg_obj, s3_bucket.name)
+        get_policy = get_bucket_policy(mcg_obj, s3_bucket.name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # Admin writes an object to bucket
         logger.info(f'Writing object on bucket: {s3_bucket.name} by admin')
-        assert helpers.s3_put_object(mcg_obj, s3_bucket.name, object_key, data), "Failed: PutObject"
+        assert s3_put_object(mcg_obj, s3_bucket.name, object_key, data), "Failed: PutObject"
 
         # Reading the object by anonymous user
         logger.info(f'Getting object by user: {user.email_id} on bucket: {s3_bucket.name} ')
-        assert helpers.s3_get_object(user, s3_bucket.name, object_key), f"Failed: Get Object by user {user.email_id}"
+        assert s3_get_object(user, s3_bucket.name, object_key), f"Failed: Get Object by user {user.email_id}"
 
     @pytest.mark.polarion_id("OCS-2140")
     @tier2
@@ -325,7 +332,7 @@ class TestS3BucketPolicy(ManageTest):
         """
         # Creating a OBC (account)
         obc = bucket_factory(amount=1, interface='OC')
-        obc_obj = OBC(mcg_obj, obc=obc[0].name)
+        obc_obj = OBC(obc[0].name)
 
         # Admin sets policy with Put/Get bucket website actions
         bucket_policy_generated = gen_bucket_policy(
@@ -337,27 +344,27 @@ class TestS3BucketPolicy(ManageTest):
         bucket_policy = json.dumps(bucket_policy_generated)
 
         logger.info(f'Creating bucket policy on bucket: {obc_obj.bucket_name} with principal: {obc_obj.obc_account}')
-        assert helpers.put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy"
+        assert put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy"
 
         # Getting Policy
         logger.info(f'Getting bucket policy for bucket: {obc_obj.bucket_name}')
-        get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         logger.info(f"Adding bucket website config to: {obc_obj.bucket_name}")
-        assert helpers.s3_put_bucket_website(
+        assert s3_put_bucket_website(
             s3_obj=obc_obj, bucketname=obc_obj.bucket_name,
             website_config=website_config
         ), "Failed: PutBucketWebsite"
         logger.info(f"Getting bucket website config from: {obc_obj.bucket_name}")
-        assert helpers.s3_get_bucket_website(s3_obj=obc_obj, bucketname=obc_obj.bucket_name), "Failed: GetBucketWebsite"
+        assert s3_get_bucket_website(s3_obj=obc_obj, bucketname=obc_obj.bucket_name), "Failed: GetBucketWebsite"
 
         logger.info("Writing index and error data to the bucket")
-        assert helpers.s3_put_object(
+        assert s3_put_object(
             s3_obj=obc_obj, bucketname=obc_obj.bucket_name,
             object_key="index.html", data=index, content_type='text/html'
         ), "Failed: PutObject"
-        assert helpers.s3_put_object(
+        assert s3_put_object(
             s3_obj=obc_obj, bucketname=obc_obj.bucket_name,
             object_key="error.html", data=error, content_type='text/html'
         ), "Failed: PutObject"
@@ -365,7 +372,7 @@ class TestS3BucketPolicy(ManageTest):
         # Verifying whether DeleteBucketWebsite action is denied access
         logger.info(f'Verifying whether user: {obc_obj.obc_account} is denied to DeleteBucketWebsite')
         try:
-            helpers.s3_delete_bucket_website(s3_obj=obc_obj, bucketname=obc_obj.bucket_name)
+            s3_delete_bucket_website(s3_obj=obc_obj, bucketname=obc_obj.bucket_name)
         except boto3exception.ClientError as e:
             logger.info(e.response)
             response = HttpResponseParser(e.response)
@@ -384,15 +391,15 @@ class TestS3BucketPolicy(ManageTest):
         bucket_policy = json.dumps(bucket_policy_generated)
 
         logger.info(f'Creating bucket policy on bucket: {obc_obj.bucket_name} with principal: {obc_obj.obc_account}')
-        assert helpers.put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy"
+        assert put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy"
 
         # Getting Policy
         logger.info(f'Getting bucket policy for bucket: {obc_obj.bucket_name}')
-        get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         logger.info(f"Deleting bucket website config from bucket: {obc_obj.bucket_name}")
-        assert helpers.s3_delete_bucket_website(
+        assert s3_delete_bucket_website(
             s3_obj=obc_obj, bucketname=obc_obj.bucket_name
         ), "Failed: DeleteBucketWebsite"
 
@@ -408,7 +415,7 @@ class TestS3BucketPolicy(ManageTest):
 
         # Creating a OBC user (Account)
         obc = bucket_factory(amount=1, interface='OC')
-        obc_obj = OBC(mcg_obj, obc=obc[0].name)
+        obc_obj = OBC(obc[0].name)
 
         # Admin sets a policy on OBC bucket to allow versioning related actions
         bucket_policy_generated = gen_bucket_policy(
@@ -420,20 +427,20 @@ class TestS3BucketPolicy(ManageTest):
 
         # Creating policy
         logger.info(f'Creating bucket policy on bucket: {obc_obj.bucket_name} by Admin')
-        assert helpers.put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy"
+        assert put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy"
 
         # Getting Policy
         logger.info(f'Getting bucket policy on bucket: {obc_obj.bucket_name}')
-        get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         logger.info(f'Enabling bucket versioning on {obc_obj.bucket_name} using User: {obc_obj.obc_account}')
-        assert helpers.s3_put_bucket_versioning(
+        assert s3_put_bucket_versioning(
             s3_obj=obc_obj, bucketname=obc_obj.bucket_name, status="Enabled"
         ), "Failed: PutBucketVersioning"
 
         logger.info(f'Verifying whether versioning is enabled on bucket: {obc_obj.bucket_name}')
-        assert helpers.s3_get_bucket_versioning(
+        assert s3_get_bucket_versioning(
             s3_obj=obc_obj, bucketname=obc_obj.bucket_name
         ), "Failed: GetBucketVersioning"
 
@@ -446,16 +453,16 @@ class TestS3BucketPolicy(ManageTest):
         bucket_policy = json.dumps(bucket_policy_generated)
 
         logger.info(f'Creating bucket policy on bucket: {obc_obj.bucket_name} by Admin')
-        assert helpers.put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy"
+        assert put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy"
 
         # Getting Policy
         logger.info(f'Getting bucket policy for bucket: {obc_obj.bucket_name}')
-        get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         for key in range(5):
             logger.info(f"Writing {key} version of {object_key}")
-            obj = helpers.s3_put_object(
+            obj = s3_put_object(
                 s3_obj=obc_obj, bucketname=obc_obj.bucket_name,
                 object_key=object_key, data=data
             )
@@ -463,11 +470,11 @@ class TestS3BucketPolicy(ManageTest):
 
         for version in object_versions:
             logger.info(f"Reading version: {version} of {object_key}")
-            assert helpers.s3_get_object(
+            assert s3_get_object(
                 s3_obj=obc_obj, bucketname=obc_obj.bucket_name, object_key=object_key, versionid=version
             ), f"Failed: To Read object {version}"
             logger.info(f"Deleting version: {version} of {object_key}")
-            assert helpers.s3_delete_object(
+            assert s3_delete_object(
                 s3_obj=obc_obj, bucketname=obc_obj.bucket_name, object_key=object_key, versionid=version
             ), f"Failed: To Delete object with {version}"
 
@@ -479,22 +486,22 @@ class TestS3BucketPolicy(ManageTest):
         bucket_policy = json.dumps(bucket_policy_generated)
 
         logger.info(f'Creating bucket policy on bucket: {obc_obj.bucket_name} by Admin')
-        assert helpers.put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy"
+        assert put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy"
 
         # Getting Policy
         logger.info(f'Getting bucket policy on bucket: {obc_obj.bucket_name}')
-        get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         logger.info(f"Suspending bucket versioning on {obc_obj.bucket_name} using User: {obc_obj.obc_account}")
-        assert helpers.s3_put_bucket_versioning(
+        assert s3_put_bucket_versioning(
             s3_obj=obc_obj, bucketname=obc_obj.bucket_name, status="Suspended"
         ), "Failed: PutBucketVersioning"
 
         # Verifying whether GetBucketVersion action is denied access
         logger.info(f'Verifying whether user: {obc_obj.obc_account} is denied to GetBucketVersion')
         try:
-            helpers.s3_get_bucket_versioning(s3_obj=obc_obj, bucketname=obc_obj.bucket_name)
+            s3_get_bucket_versioning(s3_obj=obc_obj, bucketname=obc_obj.bucket_name)
         except boto3exception.ClientError as e:
             logger.info(e.response)
             response = HttpResponseParser(e.response)
@@ -514,11 +521,11 @@ class TestS3BucketPolicy(ManageTest):
 
         # Creating multiple obc user (account)
         obc = bucket_factory(amount=1, interface='OC')
-        obc_obj = OBC(mcg_obj, obc=obc[0].name)
+        obc_obj = OBC(obc[0].name)
 
         # Admin writes an object to bucket
         logger.info(f'Writing an object on bucket: {obc_obj.bucket_name} by Admin')
-        assert helpers.s3_put_object(mcg_obj, obc_obj.bucket_name, object_key, data), "Failed: PutObject"
+        assert s3_put_object(mcg_obj, obc_obj.bucket_name, object_key, data), "Failed: PutObject"
 
         # Admin sets policy with Effect: Deny on obc bucket with obc-account principal
         bucket_policy_generated = gen_bucket_policy(
@@ -530,17 +537,17 @@ class TestS3BucketPolicy(ManageTest):
         bucket_policy = json.dumps(bucket_policy_generated)
 
         logger.info(f'Creating bucket policy on bucket: {obc_obj.bucket_name} with principal: {obc_obj.obc_account}')
-        assert helpers.put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy"
+        assert put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy"
 
         # Getting Policy
         logger.info(f'Getting bucket policy from bucket: {obc_obj.bucket_name}')
-        get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # Verifying whether Get action is denied access
         logger.info(f'Verifying whether user: {obc_obj.obc_account} is denied to GetObject')
         try:
-            helpers.s3_get_object(obc_obj, obc_obj.bucket_name, object_key)
+            s3_get_object(obc_obj, obc_obj.bucket_name, object_key)
         except boto3exception.ClientError as e:
             logger.info(e.response)
             response = HttpResponseParser(e.response)
@@ -559,17 +566,17 @@ class TestS3BucketPolicy(ManageTest):
         bucket_policy = json.dumps(bucket_policy_generated)
 
         logger.info(f'Creating bucket policy on bucket: {obc_obj.bucket_name}')
-        assert helpers.put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy"
+        assert put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy"
 
         # Getting Policy
         logger.info(f'Getting bucket policy from bucket: {obc_obj.bucket_name}')
-        get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # Verifying whether delete action is denied
         logger.info(f'Verifying whether user: {obc_obj.obc_account} is denied to Get object')
         try:
-            helpers.s3_delete_object(obc_obj, obc_obj.bucket_name, object_key)
+            s3_delete_object(obc_obj, obc_obj.bucket_name, object_key)
         except boto3exception.ClientError as e:
             logger.info(e.response)
             response = HttpResponseParser(e.response)
@@ -591,7 +598,7 @@ class TestS3BucketPolicy(ManageTest):
 
         # Creating OBC (account) and Noobaa user account
         obc = bucket_factory(amount=1, interface='OC')
-        obc_obj = OBC(mcg_obj, obc=obc[0].name)
+        obc_obj = OBC(obc[0].name)
         noobaa_user = NoobaaAccount(mcg_obj, name=user_name, email=email, buckets=[obc_obj.bucket_name])
         accounts = [obc_obj, noobaa_user]
 
@@ -631,26 +638,26 @@ class TestS3BucketPolicy(ManageTest):
 
         # Creating Policy
         logger.info(f'Creating multi statement bucket policy on bucket: {obc_obj.bucket_name}')
-        assert helpers.put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy "
+        assert put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy), "Failed: PutBucketPolicy "
 
         # Getting Policy
         logger.info(f'Getting multi statement bucket policy from bucket: {obc_obj.bucket_name}')
-        get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # NooBaa user writes an object to bucket
         logger.info(f'Writing object on bucket: {obc_obj.bucket_name} with User: {noobaa_user.email_id}')
-        assert helpers.s3_put_object(noobaa_user, obc_obj.bucket_name, object_key, data), "Failed: Put Object"
+        assert s3_put_object(noobaa_user, obc_obj.bucket_name, object_key, data), "Failed: Put Object"
 
         # Verifying public read access
         logger.info(f'Reading object on bucket: {obc_obj.bucket_name} with User: {obc_obj.obc_account}')
-        assert helpers.s3_get_object(obc_obj, obc_obj.bucket_name, object_key), "Failed: Get Object"
+        assert s3_get_object(obc_obj, obc_obj.bucket_name, object_key), "Failed: Get Object"
 
         # Verifying Delete object is denied on both Accounts
         for user in accounts:
             logger.info(f"Verifying whether S3:DeleteObject action is denied access for {user}")
             try:
-                helpers.s3_delete_object(user, obc_obj.bucket_name, object_key)
+                s3_delete_object(user, obc_obj.bucket_name, object_key)
             except boto3exception.ClientError as e:
                 logger.info(e.response)
                 response = HttpResponseParser(e.response)
@@ -680,7 +687,7 @@ class TestS3BucketPolicy(ManageTest):
         """
         # Creating a OBC (Account)
         obc = bucket_factory(amount=1, interface='OC')
-        obc_obj = OBC(mcg_obj, obc=obc[0].name)
+        obc_obj = OBC(obc[0].name)
 
         # Policy tests invalid/non-existent principal. ie: test-user
         if policy_name == "invalid_principal":
@@ -714,7 +721,7 @@ class TestS3BucketPolicy(ManageTest):
 
         logger.info(f"Verifying Malformed Policy: {policy_name}")
         try:
-            helpers.put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy)
+            put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy)
         except boto3exception.ClientError as e:
             logger.info(e.response)
             response = HttpResponseParser(e.response)

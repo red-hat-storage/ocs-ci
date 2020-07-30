@@ -29,6 +29,7 @@ from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import create_directory_path, mirror_image, run_cmd
 
+
 log = logging.getLogger(__name__)
 
 
@@ -647,13 +648,23 @@ def setup_ceph_toolbox(force_setup=False):
     """
     namespace = ocsci_config.ENV_DATA['cluster_namespace']
     ceph_toolbox = get_pod_name_by_pattern('rook-ceph-tools', namespace)
+    # setup toolbox for independent mode
+    # Refer bz: 1856982 - invalid admin secret
     if len(ceph_toolbox) == 1:
         log.info("Ceph toolbox already exists, skipping")
         if force_setup:
             log.info("Running force setup for Ceph toolbox!")
         else:
             return
-    if ocsci_config.ENV_DATA.get("ocs_version") == '4.2':
+    independent_mode = ocsci_config.DEPLOYMENT.get("independent_mode")
+    if independent_mode:
+        toolbox = templating.load_yaml(constants.TOOL_POD_YAML)
+        keyring_dict = ocsci_config.INDEPENDENT_MODE.get("admin_keyring")
+        env = [{'name': 'ROOK_ADMIN_SECRET', 'value': keyring_dict['key']}]
+        toolbox['spec']['template']['spec']['containers'][0]['env'] = env
+        rook_toolbox = OCS(**toolbox)
+        rook_toolbox.create()
+    elif ocsci_config.ENV_DATA.get("ocs_version") == '4.2':
         rook_operator = get_pod_name_by_pattern(
             'rook-ceph-operator', namespace
         )
@@ -886,3 +897,17 @@ def collect_prometheus_metrics(
         log.info(f'Saving {metric} data into {file_name}')
         with open(file_name, 'w') as outfile:
             json.dump(datapoints.json(), outfile)
+
+
+def oc_get_all_obc_names():
+    """
+    Returns:
+        set: A set of all OBC names
+
+    """
+    all_obcs_in_namespace = OCP(
+        namespace=ocsci_config.ENV_DATA['cluster_namespace'], kind='obc'
+    ).get().get('items')
+    return {
+        obc.get('spec').get('bucketName') for obc in all_obcs_in_namespace
+    }

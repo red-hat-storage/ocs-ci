@@ -2,7 +2,6 @@ import base64
 import json
 import logging
 import os
-import shlex
 from time import sleep
 
 import boto3
@@ -188,17 +187,6 @@ class MCG:
         logger.warning(f'Bucket {bucket_name} was not found')
         return None
 
-    def oc_get_all_bucket_names(self):
-        """
-        Returns:
-            set: A set of all bucket names
-
-        """
-        all_obcs_in_namespace = OCP(namespace=self.namespace, kind='obc').get().get('items')
-        return {bucket.get('spec').get('bucketName')
-                for bucket
-                in all_obcs_in_namespace}
-
     def cli_get_all_bucket_names(self):
         """
         Returns:
@@ -240,28 +228,6 @@ class MCG:
             return True
         except ClientError:
             logger.info(f"{bucketname} does not exist")
-            return False
-
-    def verify_s3_object_integrity(self, original_object_path, result_object_path, awscli_pod):
-        """
-        Verifies checksum between orignial object and result object on an awscli pod
-
-        Args:
-            original_object_path (str): The Object that is uploaded to the s3 bucket
-            result_object_path (str):  The Object that is downloaded from the s3 bucket
-            awscli_pod (pod): A pod running the AWSCLI tools
-
-        Returns:
-              bool: True if checksum matches, False otherwise
-
-        """
-        md5sum = shlex.split(awscli_pod.exec_cmd_on_pod(command=f'md5sum {original_object_path} {result_object_path}'))
-        if md5sum[0] == md5sum[2]:
-            logger.info(f'Passed: MD5 comparison for {original_object_path} and {result_object_path}')
-            return True
-        else:
-            logger.error(f'Failed: MD5 comparison of {original_object_path} and {result_object_path} - '
-                         f'{md5sum[0]} ≠ {md5sum[2]}')
             return False
 
     def oc_verify_bucket_exists(self, bucketname):
