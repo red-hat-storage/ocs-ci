@@ -134,9 +134,7 @@ UPGRADE:
   ocp_channel: "candidate-4.5"
   ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
   ocp_arch: "x86_64"
-  # upgrade_logging_channel param needs change from 4.4 to 4.5 once OCP 4.5 GAed
-  # Issue to track https://github.com/red-hat-storage/ocs-ci/issues/2390
-  upgrade_logging_channel: "4.4"
+  upgrade_logging_channel: "4.5"
 
 # This section stores secret and uploaded from home dir or s3
 # for entry into this section, please email ecosystem team
