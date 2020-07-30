@@ -97,7 +97,7 @@ REPORTING:
 # This is the default information about environment.
 ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
-  storage_cluster_name: 'ocs-storagecluster'
+  storage_cluster_name: 'ocs-independent-storagecluster'
   storage_device_sets_name: "storageDeviceSets"
   cluster_namespace: 'openshift-storage'
   monitoring_enabled: true

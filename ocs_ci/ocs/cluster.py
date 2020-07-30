@@ -57,66 +57,66 @@ class CephCluster(object):
         self.CEPHCLUSTER = ocp.OCP(
             kind='CephCluster', namespace=config.ENV_DATA['cluster_namespace']
         )
-        self.CEPHFS = ocp.OCP(
-            kind='CephFilesystem',
-            namespace=config.ENV_DATA['cluster_namespace']
-        )
+        # self.CEPHFS = ocp.OCP(
+        #     kind='CephFilesystem',
+        #     namespace=config.ENV_DATA['cluster_namespace']
+        # )
         self.DEP = ocp.OCP(
             kind='Deployment',
             namespace=config.ENV_DATA['cluster_namespace']
         )
 
-        self.cluster_resource_config = self.CEPHCLUSTER.get().get('items')[0]
-        try:
-            self.cephfs_config = self.CEPHFS.get().get('items')[0]
-        except IndexError as e:
-            logging.warning(e)
-            logging.warning("No CephFS found")
-            self.cephfs_config = None
-
-        self._cluster_name = (
-            self.cluster_resource_config.get('metadata').get('name')
-        )
-        self._namespace = (
-            self.cluster_resource_config.get('metadata').get('namespace')
-        )
-
-        # We are not invoking ocs.create() here
-        # assuming cluster creation is done somewhere after deployment
-        # So just load ocs with existing cluster details
-        self.cluster = ocs.OCS(**self.cluster_resource_config)
-        if self.cephfs_config:
-            self.cephfs = ocs.OCS(**self.cephfs_config)
-        else:
-            self.cephfs = None
-
-        self.mon_selector = constant.MON_APP_LABEL
-        self.mds_selector = constant.MDS_APP_LABEL
+        # self.cluster_resource_config = self.CEPHCLUSTER.get().get('items')[0]
+        # try:
+        #     self.cephfs_config = self.CEPHFS.get().get('items')[0]
+        # except IndexError as e:
+        #     logging.warning(e)
+        #     logging.warning("No CephFS found")
+        #     self.cephfs_config = None
+        #
+        # self._cluster_name = (
+        #     self.cluster_resource_config.get('metadata').get('name')
+        # )
+        # self._namespace = (
+        #     self.cluster_resource_config.get('metadata').get('namespace')
+        # )
+        #
+        # # We are not invoking ocs.create() here
+        # # assuming cluster creation is done somewhere after deployment
+        # # So just load ocs with existing cluster details
+        # self.cluster = ocs.OCS(**self.cluster_resource_config)
+        # if self.cephfs_config:
+        #     self.cephfs = ocs.OCS(**self.cephfs_config)
+        # else:
+        #     self.cephfs = None
+        #
+        # self.mon_selector = constant.MON_APP_LABEL
+        # self.mds_selector = constant.MDS_APP_LABEL
         self.tool_selector = constant.TOOL_APP_LABEL
-        self.mgr_selector = constant.MGR_APP_LABEL
-        self.osd_selector = constant.OSD_APP_LABEL
-        self.noobaa_selector = constant.NOOBAA_APP_LABEL
-        self.noobaa_core_selector = constant.NOOBAA_CORE_POD_LABEL
-        self.mons = []
-        self._ceph_pods = []
-        self.mdss = []
-        self.mgrs = []
-        self.osds = []
-        self.noobaas = []
-        self.rgws = []
+        # self.mgr_selector = constant.MGR_APP_LABEL
+        # self.osd_selector = constant.OSD_APP_LABEL
+        # self.noobaa_selector = constant.NOOBAA_APP_LABEL
+        # self.noobaa_core_selector = constant.NOOBAA_CORE_POD_LABEL
+        # self.mons = []
+        # self._ceph_pods = []
+        # self.mdss = []
+        # self.mgrs = []
+        # self.osds = []
+        # self.noobaas = []
+        # self.rgws = []
         self.toolbox = None
-        self.mds_count = 0
-        self.mon_count = 0
-        self.mgr_count = 0
-        self.osd_count = 0
-        self.noobaa_count = 0
-        self.rgw_count = 0
-        self.mcg_obj = MCG()
-        self.scan_cluster()
-        logging.info(f"Number of mons = {self.mon_count}")
-        logging.info(f"Number of mds = {self.mds_count}")
-
-        self.used_space = 0
+        # self.mds_count = 0
+        # self.mon_count = 0
+        # self.mgr_count = 0
+        # self.osd_count = 0
+        # self.noobaa_count = 0
+        # self.rgw_count = 0
+        # self.mcg_obj = MCG()
+        # self.scan_cluster()
+        # logging.info(f"Number of mons = {self.mon_count}")
+        # logging.info(f"Number of mds = {self.mds_count}")
+        #
+        # self.used_space = 0
 
     @property
     def cluster_name(self):
