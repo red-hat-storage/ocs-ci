@@ -1537,7 +1537,7 @@ def load_auth_config():
 
     """
     log.info("Retrieving the authentication config dictionary")
-    auth_file = os.path.join(constants.TOP_DIR, 'data', 'auth.yaml')
+    auth_file = os.path.join(constants.TOP_DIR, 'data', constants.AUTHYAML)
     try:
         with open(auth_file) as f:
             return yaml.safe_load(f)

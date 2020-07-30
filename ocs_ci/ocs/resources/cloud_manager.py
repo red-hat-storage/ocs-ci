@@ -31,7 +31,7 @@ class CloudManager(ABC):
             'AZURE': AzureClient,
             # TODO: Implement - 'IBMCOS': S3Client
         }
-        cred_dict = load_auth_config()
+        cred_dict = load_auth_config().get('AUTH')
         for cloud_name in cred_dict:
             if cloud_name in cloud_map:
                 try:
