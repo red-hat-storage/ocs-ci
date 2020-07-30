@@ -17,7 +17,7 @@ from ocs_ci.framework.testlib import E2ETest, performance
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.cluster import CephCluster
-from ocs_ci.ocs.version import get_ocs_version
+from ocs_ci.ocs.version import get_environment_info
 
 log = logging.getLogger(__name__)
 
@@ -197,8 +197,7 @@ class TestFIOBenchmark(E2ETest):
         fio_cr['spec']['workload']['args']['servers'] = int(total_data_set / filesize)
         log.info(f'Total Data set to work on is : {total_data_set} GiB')
 
-        (environment, _) = get_ocs_version()
-        environment = environment['ENV']
+        environment = get_environment_info()
         if not environment['user'] == '':
             fio_cr['spec']['test_user'] = environment['user']
         fio_cr['spec']['clustername'] = environment['clustername']
