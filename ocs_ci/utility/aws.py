@@ -122,6 +122,38 @@ class AWS(object):
         """
         return self.ec2_resource.Instance(instance_id)
 
+    def get_instances_response_by_name_pattern(self, pattern=None, filter_by_cluster_name=True):
+        """
+        Get the instances by name tag pattern. If not specified it will return all the instances,
+        or will return the instances filtered by the cluster name.
+
+        Args:
+            pattern (str): Pattern of tag name like:
+                pbalogh-testing-cluster-55jx2-worker*
+            filter_by_cluster_name: Will be used only if 'pattern' param not specified.
+                If True it will filtered the instances by the cluster name,
+                else if False it will return all instances.
+
+        Returns:
+            list: list of instances dictionaries.
+        """
+        if not pattern:
+            if filter_by_cluster_name:
+                pattern = f"{config.ENV_DATA['cluster_name']}*"
+            else:
+                pattern = '*'
+
+        instances_response = self.ec2_client.describe_instances(
+            Filters=[
+                {
+                    'Name': 'tag:Name',
+                    'Values': [pattern],
+                },
+            ],
+        )['Reservations']
+
+        return instances_response
+
     def get_instances_by_name_pattern(self, pattern):
         """ Get instances by Name tag pattern
 
@@ -142,14 +174,7 @@ class AWS(object):
         Returns:
             list: contains dictionaries with instance details mentioned above
         """
-        instances_response = self.ec2_client.describe_instances(
-            Filters=[
-                {
-                    'Name': 'tag:Name',
-                    'Values': [pattern],
-                },
-            ],
-        )['Reservations']
+        instances_response = self.get_instances_response_by_name_pattern(pattern=pattern)
         instances = []
         for instance in instances_response:
             instance = instance['Instances'][0]
@@ -1014,35 +1039,34 @@ class AWS(object):
             }
         )
 
-    def get_instances_response_by_name_pattern(self, pattern=None, filter_by_cluster_name=True):
-        if not pattern:
-            if filter_by_cluster_name:
-                pattern = f"{config.ENV_DATA['cluster_name']}*"
-            else:
-                pattern = '*'
+    def get_instance_id_from_private_dns_name(self, private_dns_name):
+        """
+        Get the instance id from the private dns name of the instance
 
-        instances_response = self.ec2_client.describe_instances(
-            Filters=[
-                {
-                    'Name': 'tag:Name',
-                    'Values': [pattern],
-                },
-            ],
-        )['Reservations']
+        Args:
+            private_dns_name (str): The private DNS name of the instance
 
-        return instances_response
-
-    def get_instance_id_from_private_dns_name(self, private_dns_name, filter_by_cluster_name=True):
+        Returns:
+            str: The instance id associated to the private DNS name. If not found returns None
+        """
         instances_response = self.get_instances_response_by_name_pattern()
         for instance in instances_response:
             instance_dict = instance['Instances'][0]
-            print(instance_dict['PrivateDnsName'])
             if instance_dict['PrivateDnsName'] == private_dns_name:
                 return instance_dict['InstanceId']
 
         return None
 
     def get_stack_name_by_instance_id(self, instance_id):
+        """
+        Get the stack name by the instance id
+
+        Args:
+            instance_id (str): The instance id
+
+        Returns:
+            str: The stack name associated to the instance id. If not found returns None
+        """
         stack_name = None
         instances_response = self.get_instances_response_by_name_pattern()
         for instance in instances_response:
@@ -1271,10 +1295,7 @@ def delete_cluster_buckets(cluster_name):
             except ClientError as e:
                 logger.error(e)
         else:
-<<<<<<< HEAD
             logger.info("No matches found for pattern %s", pattern)
-=======
-            logger.warning("No matches found for pattern %s", pattern)
 
 
 def get_stack_name_from_instance_dict(instance_dict):
@@ -1286,4 +1307,3 @@ def get_stack_name_from_instance_dict(instance_dict):
             stack_name = tag.get('Value')
 
     return stack_name
->>>>>>> Get the stack name of deleted node, and use it for the conf of the new node
