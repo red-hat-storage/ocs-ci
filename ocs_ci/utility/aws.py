@@ -1014,6 +1014,44 @@ class AWS(object):
             }
         )
 
+    def get_instances_response_by_name_pattern(self, pattern=None, filter_by_cluster_name=True):
+        if not pattern:
+            if filter_by_cluster_name:
+                pattern = f"{config.ENV_DATA['cluster_name']}*"
+            else:
+                pattern = '*'
+
+        instances_response = self.ec2_client.describe_instances(
+            Filters=[
+                {
+                    'Name': 'tag:Name',
+                    'Values': [pattern],
+                },
+            ],
+        )['Reservations']
+
+        return instances_response
+
+    def get_instance_id_from_private_dns_name(self, private_dns_name, filter_by_cluster_name=True):
+        instances_response = self.get_instances_response_by_name_pattern()
+        for instance in instances_response:
+            instance_dict = instance['Instances'][0]
+            print(instance_dict['PrivateDnsName'])
+            if instance_dict['PrivateDnsName'] == private_dns_name:
+                return instance_dict['InstanceId']
+
+        return None
+
+    def get_stack_name_by_instance_id(self, instance_id):
+        stack_name = None
+        instances_response = self.get_instances_response_by_name_pattern()
+        for instance in instances_response:
+            instance_dict = instance['Instances'][0]
+            if instance_dict['InstanceId'] == instance_id:
+                stack_name = get_stack_name_from_instance_dict(instance_dict)
+
+        return stack_name
+
 
 def get_instances_ids_and_names(instances):
     """
@@ -1233,4 +1271,19 @@ def delete_cluster_buckets(cluster_name):
             except ClientError as e:
                 logger.error(e)
         else:
+<<<<<<< HEAD
             logger.info("No matches found for pattern %s", pattern)
+=======
+            logger.warning("No matches found for pattern %s", pattern)
+
+
+def get_stack_name_from_instance_dict(instance_dict):
+    tags = instance_dict.get('Tags', [])
+    stack_name = None
+
+    for tag in tags:
+        if tag.get('Key') == 'aws:cloudformation:stack-name':
+            stack_name = tag.get('Value')
+
+    return stack_name
+>>>>>>> Get the stack name of deleted node, and use it for the conf of the new node
