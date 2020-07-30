@@ -43,7 +43,9 @@ class TestAMQBasics(E2ETest):
         test_fixture_amq.setup_amq_cluster(sc.name)
 
         # Run open messages
-        test_fixture_amq.create_messaging_on_amq()
+        test_fixture_amq.create_messaging_on_amq(
+            num_of_producer_pods=3, num_of_consumer_pods=3
+        )
 
         # Wait for some time to generate msg
         waiting_time = 60
@@ -52,5 +54,5 @@ class TestAMQBasics(E2ETest):
 
         # Check messages are sent and received
         threads = test_fixture_amq.run_in_bg()
-        for t in threads:
-            t.join()
+        for thread in threads:
+            thread.result(timeout=1800)
