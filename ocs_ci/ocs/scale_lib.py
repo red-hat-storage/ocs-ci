@@ -253,8 +253,8 @@ class FioPodScale(object):
         Function to expand PVC size and verify the new size is reflected.
         """
         logging.info(f"PVC size is expanding to {pvc_new_size}")
-        for pvc in self.pvc_obj:
-            pvc.resize_pvc(new_size=pvc_new_size, verify=True)
+        for pvc_oj in self.pvc_obj:
+            pvc_oj.resize_pvc(new_size=pvc_new_size, verify=True)
         logging.info(f"Verified: Size of all PVCs are expanded to {pvc_new_size}G")
 
     def cleanup(self):

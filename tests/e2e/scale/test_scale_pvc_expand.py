@@ -28,18 +28,18 @@ def resize_pvc(request):
 @skipif_ocs_version('<4.5')
 @ignore_leftovers
 @pytest.mark.parametrize(
-        argnames=[
-            "start_io", "pvc_size", "pvc_new_size",
+    argnames=[
+        "start_io", "pvc_size", "pvc_new_size",
         ],
-        argvalues=[
-            pytest.param(
-                *[False, '10Gi', 20], marks=pytest.mark.polarion_id("OCS-2250")
-            ),
-            pytest.param(
-                 *[True, '50Gi', 60], marks=pytest.mark.polarion_id("OCS-2251")
-            )
-        ]
-    )
+    argvalues=[
+        pytest.param(
+            *[False, '10Gi', 20], marks=pytest.mark.polarion_id("OCS-2250")
+        ),
+        pytest.param(
+            *[True, '50Gi', 60], marks=pytest.mark.polarion_id("OCS-2251")
+        )
+    ]
+)
 class TestPVCExpand(E2ETest):
     """
     Scale test case for PVC size expansion
