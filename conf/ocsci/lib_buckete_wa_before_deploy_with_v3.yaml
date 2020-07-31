@@ -1,0 +1,6 @@
+---
+ENV_DATA:
+  disable_comunity_operator_source: true
+  lib_bucket_tag_before_ocs_deploy: "v3.0.0-2"
+  lib_bucket_image_before_ocs_deploy: "quay.io/dinhxuanvu/lib-bucket-provisioner"
+

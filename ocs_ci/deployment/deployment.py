@@ -347,8 +347,11 @@ class Deployment(object):
 
         if config.ENV_DATA.get('disable_comunity_operator_source'):
             disable_source(constants.COMMUNITY_OPERATORS)
+            image = config.ENV_DATA.get("lib_bucket_image_before_ocs_deploy")
             create_lib_bucket_catalog(
-                config.ENV_DATA.get("lib_bucket_tag_before_ocs_deploy", "v1")
+                config.ENV_DATA.get(
+                    "lib_bucket_tag_before_ocs_deploy", "v1"
+                ), image
             )
         if config.DEPLOYMENT.get('local_storage'):
             setup_local_storage()
@@ -740,6 +743,14 @@ class Deployment(object):
                     f"{ip_count}"
                 )
                 assert ip_count <= ip_after_second_deploy, "Install plans increased!"
+        if config.ENV_DATA.get("upgrade_lbp_to_v3"):
+            image = "quay.io/dinhxuanvu/lib-bucket-provisioner"
+            patch_lib_bucket_image(tag="v3.0.0-2", image=image)
+            logger.info("Waiting 60 secods before gather CSV info")
+            time.sleep(60)
+            get_csv_cmd = f"oc get csv -n {config.ENV_DATA['cluster_namespace']}"
+            csvs_out = run_cmd(get_csv_cmd)
+            logger.info(f"Available CSVs: {csvs_out}")
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -1063,19 +1074,21 @@ def disable_source(source_name):
     run_cmd(cmd)
 
 
-def create_lib_bucket_catalog(tag="v1"):
+def create_lib_bucket_catalog(tag="v1", image=None):
     """
     Create catalog source for lib bucket provisioner
 
     Args:
         tag (str): Tag of the image.
+        image (str): Image URL
 
     """
+    image = image or constants.LIB_BUCKET_CATALOG_IMAGE
     catalog_source_data = templating.load_yaml(
         constants.LIB_BUCKET_CATALOG_SOURCE_YAML
     )
     catalog_source_data['spec']['image'] = (
-        f"{constants.LIB_BUCKET_CATALOG_IMAGE}:{tag}"
+        f"{image}:{tag}"
     )
     catalog_source_manifest = tempfile.NamedTemporaryFile(
         mode='w+', prefix='catalog_source_manifest', delete=False
@@ -1093,17 +1106,18 @@ def create_lib_bucket_catalog(tag="v1"):
     catalog_source.wait_for_state("READY")
 
 
-def patch_lib_bucket_image(tag="v2"):
+def patch_lib_bucket_image(tag="v2", image=None):
     """
     Patch image
 
     Args:
         tag (str): Tag of the image.
+        image (str): Image URL
 
     """
     cs_name = constants.LIB_BUCKET_CATALOG_NAME
     namespace = constants.MARKETPLACE_NAMESPACE
-    image = constants.LIB_BUCKET_CATALOG_IMAGE
+    image = image or constants.LIB_BUCKET_CATALOG_IMAGE
     cmd = (
         f'oc patch -n {namespace} CatalogSource {cs_name} --type '
         f'merge -p \'{{"spec":{{"image": "{image}:{tag}"}}}}\''
