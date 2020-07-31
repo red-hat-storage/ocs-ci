@@ -27,7 +27,7 @@ def test_deployment(pvc_factory, pod_factory):
             # Check basic cluster functionality by creating resources
             # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
             # run IO and delete the resources
-            if config.DEPLOYMENT['independent_mode']:
+            if config.DEPLOYMENT['external_mode']:
                 sanity_helpers = SanityExternalCluster()
             else:
                 sanity_helpers = Sanity()

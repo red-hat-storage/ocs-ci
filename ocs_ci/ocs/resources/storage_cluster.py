@@ -116,7 +116,7 @@ def ocs_install_verification(
     pod = OCP(
         kind=constants.POD, namespace=namespace
     )
-    if not config.DEPLOYMENT['independent_mode']:
+    if not config.DEPLOYMENT['external_mode']:
         osd_count = (
             int(storage_cluster.data['spec']['storageDeviceSets'][0]['count'])
             * int(storage_cluster.data['spec']['storageDeviceSets'][0]['replica'])
@@ -128,7 +128,7 @@ def ocs_install_verification(
     min_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('minCount')
     max_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('maxCount')
 
-    if config.DEPLOYMENT['independent_mode']:
+    if config.DEPLOYMENT['external_mode']:
         resources_dict = {
             constants.OCS_OPERATOR_LABEL: 1,
             constants.OPERATOR_LABEL: 1,
@@ -191,6 +191,13 @@ def ocs_install_verification(
         f'{storage_cluster_name}-cephfs',
         f'{storage_cluster_name}-ceph-rbd'
     }
+    if config.DEPLOYMENT['external_mode']:
+        required_storage_classes.update(
+            {
+                f'{storage_cluster_name}-ceph-rgw',
+                f'{config.ENV_DATA["cluster_namespace"]}.noobaa.io'
+            }
+        )
     storage_classes = storage_class.get()
     storage_class_names = {
         item['metadata']['name'] for item in storage_classes['items']
@@ -198,7 +205,7 @@ def ocs_install_verification(
     assert required_storage_classes.issubset(storage_class_names)
 
     # Verify OSDs are distributed
-    if not config.DEPLOYMENT['independent_mode']:
+    if not config.DEPLOYMENT['external_mode']:
         if not skip_osd_distribution_check:
             log.info("Verifying OSDs are distributed evenly across worker nodes")
             ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
@@ -220,13 +227,13 @@ def ocs_install_verification(
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
-    if config.DEPLOYMENT['independent_mode']:
+    if config.DEPLOYMENT['external_mode']:
         sc_rbd = storage_class.get(
-            resource_name=constants.DEFAULT_INDEPENDENT_MODE_STORAGECLASS_RBD
+            resource_name=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         )
         sc_cephfs = storage_class.get(
             resource_name=(
-                constants.DEFAULT_INDEPENDENT_MODE_STORAGECLASS_CEPHFS
+                constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
             )
         )
     else:
@@ -243,7 +250,7 @@ def ocs_install_verification(
     log.info("Verified node and provisioner secret names in storage class.")
 
     # Verify ceph osd tree output
-    if not config.DEPLOYMENT['independent_mode']:
+    if not config.DEPLOYMENT['external_mode']:
         log.info(
             "Verifying ceph osd tree output and checking for device set PVC names "
             "in the output."

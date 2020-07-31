@@ -503,14 +503,14 @@ class Deployment(object):
             log_suffix="ui-deployment"
         )
 
-    def deploy_with_independent_mode(self):
+    def deploy_with_external_mode(self):
         """
         This function handles the deployment of OCS on
         external/indpendent RHCS cluster
 
         """
         live_deployment = config.DEPLOYMENT.get('live_deployment')
-        logger.info("Deploying OCS with independent mode RHCS")
+        logger.info("Deploying OCS with external mode RHCS")
         logger.info("Creating namespace and operator group")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
         if not live_deployment:
@@ -527,11 +527,11 @@ class Deployment(object):
         csv = CSV(resource_name=csv_name, namespace=self.namespace)
         csv.wait_for_phase("Succeeded", timeout=720)
 
-        # Create secret for independent cluster
+        # Create secret for external cluster
         secret_data = templating.load_yaml(
-            constants.INDEPENDENT_CLUSTER_SECRET_YAML
+            constants.EXTERNAL_CLUSTER_SECRET_YAML
         )
-        external_cluster_details = config.INDEPENDENT_MODE.get(
+        external_cluster_details = config.EXTERNAL_MODE.get(
             'external_cluster_details',
             ''
         )
@@ -552,7 +552,7 @@ class Deployment(object):
         run_cmd(f"oc create -f {secret_data_yaml.name}")
 
         cluster_data = templating.load_yaml(
-            constants.INDEPENDENT_STORAGE_CLUSTER_YAML
+            constants.EXTERNAL_STORAGE_CLUSTER_YAML
         )
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
@@ -564,13 +564,13 @@ class Deployment(object):
             cluster_data, cluster_data_yaml.name
         )
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
-        self.independent_post_deploy_validation()
+        self.external_post_deploy_validatio()
         setup_ceph_toolbox()
 
-    def independent_post_deploy_validation(self):
+    def external_post_deploy_validation(self):
         """
         This function validates successful deployment of OCS
-        in independent mode, some of the steps overlaps with
+        in external mode, some of the steps overlaps with
         converged mode
 
         """
@@ -596,9 +596,9 @@ class Deployment(object):
         except (IndexError, CommandFailed):
             logger.info("Running OCS basic installation")
 
-        if config.DEPLOYMENT['independent_mode']:
-            logger.info("Deploying OCS on independent mode RHCS")
-            return self.deploy_with_independent_mode()
+        if config.DEPLOYMENT['external_mode']:
+            logger.info("Deploying OCS on external mode RHCS")
+            return self.deploy_with_external_mode()
 
         self.deploy_ocs_via_operator()
         pod = ocp.OCP(

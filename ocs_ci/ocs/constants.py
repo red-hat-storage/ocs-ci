@@ -161,7 +161,7 @@ CODESPEED_URL = 'http://10.0.78.167:8000/'
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
 DEFAULT_CLUSTERNAME = 'ocs-storagecluster'
-DEFAULT_CLUSTERNAME_INDEPENDENT_MODE = 'ocs-independent-storagecluster'
+DEFAULT_CLUSTERNAME_EXTERNAL_MODE = 'ocs-external-storagecluster'
 DEFAULT_BLOCKPOOL = f'{DEFAULT_CLUSTERNAME}-cephblockpool'
 METADATA_POOL = f'{DEFAULT_CLUSTERNAME}-cephfilesystem-metadata'
 DATA_POOL = f'{DEFAULT_CLUSTERNAME}-cephfilesystem-data0'
@@ -189,11 +189,11 @@ INDEPENDENT_DEFAULT_CLUSTER_NAME = 'ocs-independent-storagecluster'
 INDEPENDENT_DEFAULT_STORAGECLASS_RGW = f'{INDEPENDENT_DEFAULT_CLUSTER_NAME}-ceph-rgw'
 
 # Default StorageClass for Independent-mode
-DEFAULT_INDEPENDENT_MODE_STORAGECLASS_CEPHFS = (
-    f'{DEFAULT_CLUSTERNAME_INDEPENDENT_MODE}-cephfs'
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS = (
+    f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephfs'
 )
-DEFAULT_INDEPENDENT_MODE_STORAGECLASS_RBD = (
-    f'{DEFAULT_CLUSTERNAME_INDEPENDENT_MODE}-ceph-rbd'
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD = (
+    f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rbd'
 )
 
 # encoded value of 'admin'
@@ -509,12 +509,12 @@ STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
 )
 
-INDEPENDENT_STORAGE_CLUSTER_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "independent-storage-cluster.yaml"
+EXTERNAL_STORAGE_CLUSTER_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "external-storage-cluster.yaml"
 )
 
-INDEPENDENT_CLUSTER_SECRET_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "independent-cluster-secret.yaml"
+EXTERNAL_CLUSTER_SECRET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "external-cluster-secret.yaml"
 )
 
 OPERATOR_SOURCE_SECRET_YAML = os.path.join(
