@@ -122,17 +122,20 @@ class AWS(object):
         """
         return self.ec2_resource.Instance(instance_id)
 
-    def get_instances_response_by_name_pattern(self, pattern=None, filter_by_cluster_name=True):
+    def get_instances_response_by_name_pattern(
+        self, pattern=None, filter_by_cluster_name=True
+    ):
         """
-        Get the instances by name tag pattern. If not specified it will return all the instances,
-        or will return the instances filtered by the cluster name.
+        Get the instances by name tag pattern. If not specified it will return
+        all the instances, or will return the instances
+        filtered by the cluster name.
 
         Args:
             pattern (str): Pattern of tag name like:
                 pbalogh-testing-cluster-55jx2-worker*
-            filter_by_cluster_name: Will be used only if 'pattern' param not specified.
-                If True it will filtered the instances by the cluster name,
-                else if False it will return all instances.
+            filter_by_cluster_name: Will be used only if the 'pattern' param
+                not specified. If True it filters the instances
+                by the cluster name, else if False it returns all instances.
 
         Returns:
             list: list of instances dictionaries.
@@ -1047,7 +1050,8 @@ class AWS(object):
             private_dns_name (str): The private DNS name of the instance
 
         Returns:
-            str: The instance id associated to the private DNS name. If not found returns None
+            str: The instance id associated to the private DNS name.
+                 If not found returns None
         """
         instances_response = self.get_instances_response_by_name_pattern()
         for instance in instances_response:
@@ -1065,7 +1069,8 @@ class AWS(object):
             instance_id (str): The instance id
 
         Returns:
-            str: The stack name associated to the instance id. If not found returns None
+            str: The stack name associated to the instance id.
+                 If not found returns None
         """
         stack_name = None
         instances_response = self.get_instances_response_by_name_pattern()
@@ -1299,6 +1304,16 @@ def delete_cluster_buckets(cluster_name):
 
 
 def get_stack_name_from_instance_dict(instance_dict):
+    """
+    Get the stack name by the given instance dictionary from AWS
+
+    Args:
+        instance_dict (dict): The instance dictionary from AWS
+
+    Returns:
+        str: The stack name of the given instance dictionary from AWS.
+             If not found returns None
+    """
     tags = instance_dict.get('Tags', [])
     stack_name = None
 
