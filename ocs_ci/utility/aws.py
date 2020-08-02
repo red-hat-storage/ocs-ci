@@ -1318,7 +1318,7 @@ def get_stack_name_from_instance_dict(instance_dict):
     stack_name = None
 
     for tag in tags:
-        if tag.get('Key') == 'aws:cloudformation:stack-name':
+        if tag.get('Key') == constants.AWS_CLOUDFORMATION_TAG:
             stack_name = tag.get('Value')
 
     return stack_name

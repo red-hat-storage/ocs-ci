@@ -1051,6 +1051,20 @@ class AWSNodes(NodesBase):
             host, pem_dst_path, cmd, user=constants.EC2_USER
         )
 
+    def get_stack_name_of_node(self, node_name):
+        """
+        Get the stack name of a given node
+
+        Args:
+            node_name (str): the name of the node
+
+        Returns:
+            str: The stack name of the given node
+        """
+        instance_id = self.aws.get_instance_id_from_private_dns_name(node_name)
+        stack_name = self.aws.get_stack_name_by_instance_id(instance_id)
+        return stack_name
+
 
 class AWSUPINode(AWSNodes):
     """

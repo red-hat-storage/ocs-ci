@@ -1015,3 +1015,6 @@ MAX_OSDS = 15
 # Minimum cluster requirements in term of node specs
 MIN_NODE_CPU = 16
 MIN_NODE_MEMORY = 64 * 10 ** 9
+
+# aws tags
+AWS_CLOUDFORMATION_TAG = 'aws:cloudformation:stack-name'
