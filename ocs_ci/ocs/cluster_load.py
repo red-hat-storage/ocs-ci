@@ -266,7 +266,7 @@ class ClusterLoad:
 
         self.cluster_limit = cluster_limit
         logger.info(wrap_msg(f"The cluster IOPS limit is {self.cluster_limit:.2f}"))
-        logger.info(f"Deleting all DC FIO pods that have large FIO rate")
+        logger.info("Deleting all DC FIO pods that have large FIO rate")
         while self.dc_objs:
             self.decrease_load(wait=False)
 
@@ -274,9 +274,7 @@ class ClusterLoad:
         # Creating the first pod of small FIO 'rate' param, to speed up the process.
         # In the meantime, the load will drop, following the deletion of the
         # FIO pods with large FIO 'rate' param
-        logger.info(
-            f"Creating FIO pods, one by one, until the target percentage is reached"
-        )
+        logger.info("Creating FIO pods, one by one, until the target percentage is reached")
         self.increase_load_and_print_data()
         msg = (
             f"The target load, in IOPS, is: {target_iops}, which is "
