@@ -14,7 +14,7 @@ def pytest_collection_modifyitems(items):
         items: list of collected tests
 
     """
-    for item in items:
+    for item in items.copy():
         if r'manage/rgw' in str(item.fspath):
             if config.ENV_DATA['platform'].lower() not in ON_PREM_PLATFORMS:
                 log.info(
