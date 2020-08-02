@@ -19,7 +19,8 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 from tests.helpers import (
     create_unique_resource_name, create_resource,
-    calc_local_file_md5_sum, retrieve_default_ingress_crt
+    calc_local_file_md5_sum, retrieve_default_ingress_crt,
+    storagecluster_independent_check
 )
 import subprocess
 import stat
@@ -131,9 +132,14 @@ class MCG:
                 aws_access_key_id=self.aws_access_key_id,
                 aws_secret_access_key=self.aws_access_key
             )
+
+        if (
+            config.ENV_DATA['platform'].lower() in constants.CLOUD_PLATFORMS
+            or storagecluster_independent_check()
+        ):
             logger.info('Checking whether RGW pod is not present on AWS platform')
             pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
-            assert len(pods) == 0, 'RGW pod should not exist on AWS platform'
+            assert not pods, 'RGW pods should not exist in the current platform/cluster'
 
         elif config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
             rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
