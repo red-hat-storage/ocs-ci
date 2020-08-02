@@ -1115,7 +1115,7 @@ def confirm_cluster_operator_version(target_version, cluster_operator):
     return False
 
 
-def upgrade_ocp(image_path, image):
+def upgrade_ocp(image=None, image_path=None):
     """
     upgrade OCP version
 
@@ -1125,11 +1125,21 @@ def upgrade_ocp(image_path, image):
 
     """
     ocp = OCP()
-    ocp.exec_oc_cmd(
-        f"adm upgrade --to-image={image_path}:{image} "
-        f"--allow-explicit-upgrade --force "
-    )
-    log.info(f"Upgrading OCP to version: {image} ")
+    if image and image_path:
+        upgrade_cmd = ocp.exec_oc_cmd(
+            f"adm upgrade --to-image={image_path}:{image} "
+            f"--allow-explicit-upgrade --force "
+        )
+        log.info(f"Upgrading OCP to version: {image} ")
+        log.debug(f"Upgrade command {upgrade_cmd}")
+    elif image and not image_path:
+        upgrade_cmd = ocp.exec_oc_cmd(f"adm upgrade --to {image}")
+        log.info(f"Upgrading OCP to version: {image} ")
+        log.debug(f"Upgrade command {upgrade_cmd}")
+    else:
+        upgrade_cmd = ocp.exec_oc_cmd("adm upgrade --to-latest")
+        log.info("Upgrading OCP to version latest build ")
+        log.debug(f"Upgrade command {upgrade_cmd}")
 
 
 def get_current_oc_version():

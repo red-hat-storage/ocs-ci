@@ -2,18 +2,11 @@ import logging
 
 from ocs_ci.ocs import ocp
 from ocs_ci.framework import config
-from ocs_ci.utility.utils import (
-    TimeoutSampler,
-    get_latest_ocp_version,
-    expose_ocp_version,
-)
+from ocs_ci.utility.utils import TimeoutSampler, get_latest_ocp_version
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 
 logger = logging.getLogger(__name__)
-
-
-# TODO: add image type validation (ga to ga , nightly to nightly, newer than current etc.)
 
 
 @ignore_leftovers
@@ -26,30 +19,41 @@ class TestUpgradeOCP(ManageTest):
     4. check all OCP ClusterOperators
     5. check OCP version
     5. monitor cluster health
+
     """
 
     def test_upgrade_ocp(self):
         """
         Tests OCS stability when upgrading OCP
 
+        How to creates new config files for ocp upgrade:
+            1. in case of upgrade within the same subscription channel to
+             latest version, no further configuration needed
+            2. use 'ocp_channel' param to select subscription channel.
+             unless specific image will be defined, ocp upgrade to latest build
+             in this channel
+            3. use 'ocp_upgrade_version' to select specific build
+            4. use 'ocp_arch' param if architecture other than x86_64 needed.
+             using this param must be together with 'ocp_upgrade_version'
+
         """
 
         ceph_cluster = CephCluster()
         with CephHealthMonitor(ceph_cluster):
 
+            ocp_channel = config.UPGRADE.get(
+                'ocp_channel', ocp.get_ocp_upgrade_channel()
+            )
             ocp_upgrade_version = config.UPGRADE.get('ocp_upgrade_version')
-            if not ocp_upgrade_version:
-                ocp_channel = config.UPGRADE['ocp_channel']
-                ocp_upgrade_version = get_latest_ocp_version(channel=ocp_channel)
-                ocp_arch = config.UPGRADE['ocp_arch']
+            target_image = ocp_upgrade_version
+            ocp_arch = config.UPGRADE.get('ocp_arch')
+            if ocp_arch:
                 target_image = f"{ocp_upgrade_version}-{ocp_arch}"
-            elif ocp_upgrade_version.endswith(".nightly"):
-                target_image = expose_ocp_version(ocp_upgrade_version)
 
-            logger.info(f"Target image; {target_image}")
+            logger.info(f"Target image: {target_image}")
 
-            image_path = config.UPGRADE['ocp_upgrade_path']
-            self.cluster_operators = ocp.get_all_cluster_operators()
+            image_path = config.UPGRADE.get('ocp_upgrade_path')
+            cluster_operators = ocp.get_all_cluster_operators()
             logger.info(f" oc version: {ocp.get_current_oc_version()}")
             # Verify Upgrade subscription channel:
             ocp.patch_ocp_upgrade_channel(ocp_channel)
@@ -64,12 +68,33 @@ class TestUpgradeOCP(ManageTest):
                     break
 
             # Upgrade OCP
-            logger.info(f"full upgrade path: {image_path}:{target_image}")
-            ocp.upgrade_ocp(image=target_image, image_path=image_path)
+            if target_image:
+                logger.info(
+                    f"full upgrade path: {image_path}:{target_image}"
+                )
+            else:
+                logger.info(f"Upgrading to latest build in channel {ocp_channel}")
+            upgrade_vars = {
+                'image': target_image,
+                'image_path': image_path
+            }
+            ocp.upgrade_ocp(**upgrade_vars)
 
             # Wait for upgrade
-            for ocp_operator in self.cluster_operators:
+            target_image = upgrade_vars.get('target_image')
+            if not target_image:
+                target_image = get_latest_ocp_version(ocp_channel)
+            for ocp_operator in cluster_operators:
                 logger.info(f"Checking upgrade status of {ocp_operator}:")
+                # ############ Workaround for issue 2624 #######
+                name_changed_between_versions = (
+                    'service-catalog-apiserver', 'service-catalog-controller-manager'
+                )
+                if ocp_operator in name_changed_between_versions:
+                    logger.info(f"{ocp_operator} upgrade will not be verified")
+                    continue
+                # ############ End of Workaround ###############
+
                 ver = ocp.get_cluster_operator_version(ocp_operator)
                 logger.info(f"current {ocp_operator} version: {ver}")
                 for sampler in TimeoutSampler(
@@ -80,14 +105,15 @@ class TestUpgradeOCP(ManageTest):
                     cluster_operator=ocp_operator
                 ):
                     logger.info(
-                        f"ClusterOperator upgrade "
+                        f"{ocp_operator} upgrade "
                         f"{'completed!' if sampler else 'did not completed yet!'}"
                     )
                     if sampler:
                         break
 
             # post upgrade validation: check cluster operator status
-            for ocp_operator in self.cluster_operators:
+            cluster_operators = ocp.get_all_cluster_operators()
+            for ocp_operator in cluster_operators:
                 logger.info(f"Checking cluster status of {ocp_operator}")
                 for sampler in TimeoutSampler(
                     timeout=2700,
@@ -96,7 +122,7 @@ class TestUpgradeOCP(ManageTest):
                     cluster_operator=ocp_operator
                 ):
                     logger.info(
-                        f"ClusterOperator status is  "
+                        f"{ocp_operator} status is  "
                         f"{'valid' if sampler else 'status is not valid'}"
                     )
                     if sampler:
@@ -111,3 +137,5 @@ class TestUpgradeOCP(ManageTest):
                 if sampler:
                     logger.info("Upgrade Completed Successfully!")
                     break
+
+    # TODO: add ceph health check here, with reasonable timeout before tear down starts

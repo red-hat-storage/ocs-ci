@@ -135,8 +135,6 @@ ENV_DATA:
 UPGRADE:
   upgrade_to_latest: true
   ocp_channel: "candidate-4.5"
-  ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
-  ocp_arch: "x86_64"
   upgrade_logging_channel: "4.5"
 
 # This section stores secret and uploaded from home dir or s3
