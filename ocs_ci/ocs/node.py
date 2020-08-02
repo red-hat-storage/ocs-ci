@@ -786,8 +786,12 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
     # Get availability zone and stack name of the deleted node
     aws = AWS()
     az = get_node_az(osd_node)
-    instance_id_of_deleted_node = aws.get_instance_id_from_private_dns_name(osd_node.name)
-    stack_name_of_deleted_node = aws.get_stack_name_by_instance_id(instance_id_of_deleted_node)
+    instance_id_of_deleted_node = (
+        aws.get_instance_id_from_private_dns_name(osd_node.name)
+    )
+    stack_name_of_deleted_node = (
+        aws.get_stack_name_by_instance_id(instance_id_of_deleted_node)
+    )
 
     remove_nodes([osd_node])
 
@@ -802,7 +806,7 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
 
     log.info("Preparing to create a new node...")
     node_conf = {'stack_name': stack_name_of_deleted_node}
-    add_new_node_and_label_upi(node_type=node_type, num_nodes=1, node_conf=node_conf)
+    add_new_node_and_label_upi(node_type, 1, node_conf=node_conf)
 
 
 def get_node_az(node):
@@ -815,4 +819,5 @@ def get_node_az(node):
     Returns:
         str: The name of the node availability zone
     """
-    return node.get().get('metadata', {}).get('labels', {}).get('topology.kubernetes.io/zone')
+    labels = node.get().get('metadata', {}).get('labels', {})
+    return labels.get('topology.kubernetes.io/zone')
