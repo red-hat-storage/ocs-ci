@@ -74,7 +74,7 @@ class ClusterLoad:
             project_name = f"{defaults.BG_LOAD_NAMESPACE}-{uuid4().hex[:5]}"
             self.project = project_factory(project_name=project_name)
 
-    def increase_load(self, rate='5M', wait=True):
+    def increase_load(self, rate='8M', wait=True):
         """
         Create a PVC, a service account and a DeploymentConfig of FIO pod
 
