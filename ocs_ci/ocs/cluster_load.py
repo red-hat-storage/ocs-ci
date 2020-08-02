@@ -340,23 +340,6 @@ class ClusterLoad:
             time.sleep(5)
         return round(get_trim_mean(vals), 5)
 
-    def get_metrics(self, mute_logs=False):
-        """
-        Get different cluster load and utilization metrics
-
-        Args:
-            mute_logs (bool): True for muting the logs, False otherwise
-
-        """
-        return {
-            "throughput": self.get_query(constants.THROUGHPUT_QUERY, mute_logs=mute_logs) * (
-                constants.TP_CONVERSION.get(' B/s')
-            ),
-            "latency": self.get_query(constants.LATENCY_QUERY, mute_logs=mute_logs) * 1000,
-            "iops": self.get_query(constants.IOPS_QUERY, mute_logs=mute_logs),
-            "used_space": self.get_query(constants.USED_SPACE_QUERY, mute_logs=mute_logs) / 1e+9
-        }
-
     def print_metrics(self, mute_logs=False):
         """
         Print metrics
@@ -366,7 +349,14 @@ class ClusterLoad:
 
         """
         high_latency = 200
-        metrics = self.get_metrics(mute_logs=mute_logs)
+        metrics = {
+            "throughput": self.get_query(constants.THROUGHPUT_QUERY, mute_logs=mute_logs) * (
+                constants.TP_CONVERSION.get(' B/s')
+            ),
+            "latency": self.get_query(constants.LATENCY_QUERY, mute_logs=mute_logs) * 1000,
+            "iops": self.get_query(constants.IOPS_QUERY, mute_logs=mute_logs),
+            "used_space": self.get_query(constants.USED_SPACE_QUERY, mute_logs=mute_logs) / 1e+9
+        }
         limit_msg = (
             f" ({metrics.get('iops') / self.cluster_limit * 100:.2f}% of the "
             f"{self.cluster_limit:.2f} limit)"
