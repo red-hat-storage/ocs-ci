@@ -18,7 +18,7 @@ def pytest_collection_modifyitems(items):
         if r'manage/rgw' in str(item.fspath):
             if config.ENV_DATA['platform'].lower() not in ON_PREM_PLATFORMS:
                 log.info(
-                    f"Test: {item} will be skipped due to {config.ENV_DATA['platform'].lower()}"
-                    f" not being an on-prem platform"
+                    f"Test {item} is removed from the collected items"
+                    f" due to {config.ENV_DATA['platform'].lower()} not being an on-prem platform"
                 )
                 items.remove(item)
