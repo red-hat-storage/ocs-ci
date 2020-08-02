@@ -224,10 +224,7 @@ class ClusterLoad:
             # most chances the limit has been reached
             elif latency > 2000:
                 logger.info(
-                    wrap_msg(
-                        "The limit was determined by latency, which is "
-                        f"higher than 3 seconds - {latency} ms"
-                    )
+                    wrap_msg(f"The limit was determined by the high latency - {latency} ms")
                 )
                 break
 
