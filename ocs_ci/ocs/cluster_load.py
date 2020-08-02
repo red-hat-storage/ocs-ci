@@ -6,6 +6,9 @@ import logging
 import time
 from datetime import datetime
 from uuid import uuid4
+import math
+
+from range_key_dict import RangeKeyDict
 
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.utils import get_trim_mean
@@ -281,24 +284,14 @@ class ClusterLoad:
         )
         logger.info(wrap_msg(msg))
 
-        if target_iops < 400:
-            allowed_diff = 0.82
-            wait_factor = 0.4
-        elif 400 <= target_iops <= 800:
-            allowed_diff = 0.85
-            wait_factor = 0.5
-        elif 800 <= target_iops <= 1200:
-            allowed_diff = 0.88
-            wait_factor = 0.6
-        elif 1200 <= target_iops <= 1600:
-            allowed_diff = 0.91
-            wait_factor = 0.7
-        else:
-            allowed_diff = 0.94
-            wait_factor = 0.8
-
-        while self.current_iops < target_iops * allowed_diff:
-            wait = False if self.current_iops < target_iops * wait_factor else True
+        range_map = RangeKeyDict(
+            {
+                (0, 400): (0.82, 0.4), (400, 800): (0.85, 0.5),
+                (800, 1200): (0.88, 0.6), (1600, math.inf): (0.94, 0.8)
+            }
+        )
+        while self.current_iops < target_iops * range_map[target_iops][0]:
+            wait = False if self.current_iops < target_iops * range_map[target_iops][1] else True
             self.increase_load_and_print_data(wait=wait)
 
         msg = f"The target load, of {self.target_percentage * 100}%, has been reached"
