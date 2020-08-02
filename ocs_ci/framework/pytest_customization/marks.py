@@ -137,6 +137,12 @@ skipif_aws_i3 = pytest.mark.skipif(
     reason="Test will not run on AWS i3"
 )
 
+skipif_bm = pytest.mark.skipif(
+    config.ENV_DATA['platform'].lower() == 'baremetal'
+    and config.DEPLOYMENT.get('local_storage') is True,
+    reason="Test will not run on Bare Metal"
+)
+
 # Filter warnings
 filter_insecure_request_warning = pytest.mark.filterwarnings(
     'ignore::urllib3.exceptions.InsecureRequestWarning'
