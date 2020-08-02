@@ -134,8 +134,8 @@ class MCG:
             )
 
         if (
-            config.ENV_DATA['platform'].lower() == 'aws'
-            or storagecluster_independent_check() is False
+            config.ENV_DATA['platform'].lower() in constants.CLOUD_PLATFORMS
+            or storagecluster_independent_check() is True
         ):
             logger.info('Checking whether RGW pod is not present on AWS platform')
             pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
