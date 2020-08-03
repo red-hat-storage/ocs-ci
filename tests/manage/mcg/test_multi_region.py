@@ -18,6 +18,7 @@ from ocs_ci.ocs.bucket_utils import (
 
 logger = logging.getLogger(__name__)
 
+
 @skipif_aws_creds_are_missing
 class TestMultiRegion:
     """

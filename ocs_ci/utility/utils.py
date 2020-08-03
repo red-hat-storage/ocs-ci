@@ -1542,11 +1542,10 @@ def load_auth_config():
         with open(auth_file) as f:
             return yaml.safe_load(f)
     except FileNotFoundError:
-        log.error(
+        log.warn(
             f'Unable to find the authentication configuration at {auth_file}, '
             f'please refer to the getting started guide ({constants.AUTH_CONFIG_DOCS})'
         )
-        raise
 
 
 def get_ocs_olm_operator_tags(limit=100):
