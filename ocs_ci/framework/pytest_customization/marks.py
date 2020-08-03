@@ -143,6 +143,12 @@ skipif_bm = pytest.mark.skipif(
     reason="Test will not run on Bare Metal"
 )
 
+skipif_external_mode = pytest.mark.skipif(
+    config.DEPLOYMENT.get('independent_mode') is True,
+    reason="Test will not run on External Mode cluster"
+)
+
+
 # Filter warnings
 filter_insecure_request_warning = pytest.mark.filterwarnings(
     'ignore::urllib3.exceptions.InsecureRequestWarning'
