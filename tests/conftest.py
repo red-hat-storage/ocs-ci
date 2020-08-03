@@ -1749,12 +1749,12 @@ def verify_rgw_restart_count_fixture(request):
 
 @pytest.fixture()
 def rgw_bucket_factory(request, rgw_obj):
-    return bucket_factory_fixture(request, mcg_obj=None, rgw_obj=rgw_obj)
+    return bucket_factory_fixture(request, rgw_obj=rgw_obj)
 
 
 @pytest.fixture(scope='session')
 def rgw_bucket_factory_session(request, rgw_obj_session):
-    return bucket_factory_fixture(request, mcg_obj=None, rgw_obj=rgw_obj_session)
+    return bucket_factory_fixture(request, rgw_obj=rgw_obj_session)
 
 
 @pytest.fixture()
@@ -1762,7 +1762,7 @@ def bucket_factory(request, mcg_obj):
     """
     Returns an MCG bucket factory
     """
-    return bucket_factory_fixture(request, mcg_obj, rgw_obj=None)
+    return bucket_factory_fixture(request, mcg_obj)
 
 
 @pytest.fixture(scope='session')
@@ -1770,17 +1770,18 @@ def bucket_factory_session(request, mcg_obj_session):
     """
     Returns a session-scoped MCG bucket factory
     """
-    return bucket_factory_fixture(request, mcg_obj_session, rgw_obj_session=None)
+    return bucket_factory_fixture(request, mcg_obj_session)
 
 
-def bucket_factory_fixture(request, mcg_obj, rgw_obj):
+def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
     """
     Create a bucket factory. Calling this fixture creates a new bucket(s).
     For a custom amount, provide the 'amount' parameter.
 
     Args:
         mcg_obj (MCG): An MCG object containing the MCG S3 connection
-        credentials
+            credentials
+        rgw_obj (RGW): An RGW object
 
     """
     created_buckets = []
