@@ -112,13 +112,15 @@ def wait_for_nodes_status(
         for sample in TimeoutSampler(timeout, 3, get_node_objs, nodes_not_in_state):
             for node in sample:
                 if node.ocp.get_resource_status(node.name) == status:
+                    log.info(f"Node {node.name} reached status {status}")
                     nodes_not_in_state.remove(node.name)
             if not nodes_not_in_state:
                 break
-
+        log.info(f"The following nodes reached status {status}: {node_names}")
     except TimeoutExpiredError:
         log.error(
-            f"The following nodes haven't reached status {status}: {node_names}"
+            f"The following nodes haven't reached status {status}: "
+            f"{nodes_not_in_state}"
         )
         raise exceptions.ResourceWrongStatusException(
             node_names, [n.describe() for n in get_node_objs(node_names)]
