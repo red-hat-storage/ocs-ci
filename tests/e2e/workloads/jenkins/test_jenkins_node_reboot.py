@@ -49,10 +49,10 @@ class TestJenkinsNodeReboot(E2ETest):
         argnames=['node_type', 'num_projects', 'num_of_builds'],
         argvalues=[
             pytest.param(
-                *[WORKER_MACHINE, 5, 4], marks=pytest.mark.polarion_id("OCS-2178")
+                *[MASTER_MACHINE, 3, 6], marks=pytest.mark.polarion_id("OCS-2202")
             ),
             pytest.param(
-                *[MASTER_MACHINE, 3, 7], marks=pytest.mark.polarion_id("OCS-2202")
+                *[WORKER_MACHINE, 5, 4], marks=pytest.mark.polarion_id("OCS-2178")
             ),
         ]
     )
@@ -93,6 +93,8 @@ class TestJenkinsNodeReboot(E2ETest):
         if len(nodes_reboot) > 0:
             # Restart Node
             nodes.restart_nodes(get_node_objs(nodes_reboot))
+        else:
+            log.info('No node was reboot')
 
         # Wait build reach 'Complete' state
         jenkins.wait_for_build_to_complete()
