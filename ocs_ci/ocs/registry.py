@@ -98,16 +98,18 @@ def get_oc_podman_login_cmd():
 
     """
     user = config.RUN['username']
-    helpers.refresh_oc_login_connection()
-    ocp_obj = ocp.OCP()
-    token = ocp_obj.get_user_token()
-    route = get_default_route_name()
+    filename = os.path.join(
+        config.ENV_DATA['cluster_path'],
+        config.RUN['password_location']
+    )
+    with open(filename) as f:
+        password = f.read().strip()
+    cluster_name = config.ENV_DATA['cluster_name']
+    base_domain = config.ENV_DATA['base_domain']
     cmd_list = [
-        'export KUBECONFIG=/home/core/auth/kubeconfig',
-        f"podman login {route} -u {user} -p {token}"
+        f"oc login -u {user} -p {password} https://api-int.{cluster_name}.{base_domain}:6443",
+        f"podman login -u {user} -p $(oc whoami -t) image-registry.openshift-image-registry.svc:5000"
     ]
-    master_list = helpers.get_master_nodes()
-    helpers.rsync_kubeconf_to_node(node=master_list[0])
     return cmd_list
 
 
@@ -266,19 +268,18 @@ def image_push(image_url, namespace):
         registry_path (str): Uploaded image path
 
     """
+    image_path = f"image-registry.openshift-image-registry.svc:5000/{namespace}/image"
+    tag_cmd = f"podman tag {image_url} {image_path}"
+    push_cmd = f"podman push image-registry.openshift-image-registry.svc:5000/{namespace}/image"
     cmd_list = get_oc_podman_login_cmd()
-    route = get_default_route_name()
-    split_image_url = image_url.split("/")
-    tag_name = split_image_url[-1]
-    img_path = f"{route}/{namespace}/{tag_name}"
-    cmd_list.append(f"podman tag {image_url} {img_path}")
-    cmd_list.append(f"podman push {img_path}")
+    cmd_list.append(tag_cmd)
+    cmd_list.append(push_cmd)
     master_list = helpers.get_master_nodes()
     ocp_obj = ocp.OCP()
     ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=cmd_list)
-    logger.info(f"Pushed {img_path} to registry")
+    logger.info(f"Pushed {image_path} to registry")
     image_list_all()
-    return img_path
+    return image_path
 
 
 def image_list_all():
@@ -296,16 +297,18 @@ def image_list_all():
     return ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=cmd_list)
 
 
-def image_rm(registry_path):
+def image_rm(registry_path, image_url):
     """
     Function to remove images from registry
 
     Args:
         registry_path (str): Image registry path
+        image_url (str): Image url container image repo link
 
     """
     cmd_list = get_oc_podman_login_cmd()
-    cmd_list.append(f"podman rm {registry_path}")
+    cmd_list.append(f"podman rmi {registry_path}")
+    cmd_list.append(f"podman rmi {image_url}")
     master_list = helpers.get_master_nodes()
     ocp_obj = ocp.OCP()
     ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=cmd_list)

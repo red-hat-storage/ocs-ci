@@ -2,7 +2,7 @@ import os
 import logging
 import shutil
 from ocs_ci.utility.utils import run_cmd, clone_repo
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import ocp
 
 log = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ def svt_cleanup():
         bool: True if No exceptions, False otherwise
 
     """
-
+    ns_obj = ocp.OCP(kind='namespace')
     try:
         shutil.rmtree('/tmp/svt')
         shutil.rmtree('/tmp/venv')
@@ -80,11 +80,10 @@ def svt_cleanup():
             "nodejs-mongodb0",
             "rails-postgresql0",
             "tomcat8-mongodb0"]
-        oc = ocp.OCP(
-            kind=constants.DEPLOYMENT
-        )
+        # Reset namespace to default
+        ocp.switch_to_default_rook_cluster_project()
         for project in project_list:
-            oc.exec_oc_cmd(f"delete project {project} --ignore-not-found=true --wait=true")
+            ns_obj.wait_for_delete(resource_name=project)
 
         return True
     except Exception:
