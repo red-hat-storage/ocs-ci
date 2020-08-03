@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla, skipif_ocs_version
 )
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
 from ocs_ci.ocs.constants import BS_AUTH_FAILED, BS_OPTIMAL
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
@@ -17,7 +18,7 @@ from ocs_ci.ocs.bucket_utils import (
 
 logger = logging.getLogger(__name__)
 
-
+@skipif_aws_creds_are_missing
 class TestMultiRegion:
     """
     Test the multi region functionality

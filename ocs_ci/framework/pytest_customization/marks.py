@@ -19,6 +19,7 @@ from ocs_ci.ocs.constants import (
     ORDER_AFTER_UPGRADE,
     CLOUD_PLATFORMS,
 )
+from ocs_ci.utility.utils import load_auth_config
 
 # tier marks
 
@@ -128,6 +129,11 @@ skipif_aws_i3 = pytest.mark.skipif(
     config.ENV_DATA['platform'].lower() == 'aws'
     and config.DEPLOYMENT.get('local_storage') is True,
     reason="Test will not run on AWS i3"
+)
+
+skipif_aws_creds_are_missing = pytest.mark.skipif(
+    load_auth_config().get('AUTH', {}).get('AWS', {}).get('AWS_ACCESS_KEY_ID') is None,
+    reason="AWS credentials weren't found in the local auth.yaml"
 )
 
 # Filter warnings
