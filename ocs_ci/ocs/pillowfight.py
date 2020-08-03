@@ -60,11 +60,16 @@ class PillowFight(object):
         self.up_check = OCP(namespace=constants.COUCHBASE_OPERATOR)
         self.logs = tempfile.mkdtemp(prefix='pf_logs_')
 
-    def run_pillowfights(self, replicas=1):
+    def run_pillowfights(self, replicas=1, num_items=None, num_threads=None):
         """
         loop through all the yaml files extracted from the pillowfight repo
         and run them.  Run oc logs on the results and save the logs in self.logs
         directory
+
+        Args:
+            replicas (int): Number of pod replicas
+            num_items (str): Number of items to be loaded to the cluster
+            num_threads (str): Number of threads
 
         """
         ocp_local = OCP(namespace=self.namespace)
@@ -80,7 +85,12 @@ class PillowFight(object):
                 # for basic-fillowfight.yaml
                 pfight = templating.load_yaml(pf_fullpath)
                 pfight['metadata']['name'] = 'pillowfight-rbd-simple' + f"{i}"
-
+                # num of items
+                pfight['spec']['template']['spec']['containers'][0]['command'][4] = str(
+                    num_items) if num_items else '20000'
+                # num of threads
+                pfight['spec']['template']['spec']['containers'][0]['command'][13] = str(
+                    num_threads) if num_threads else '20'
                 lpillowfight = OCS(**pfight)
                 lpillowfight.create()
 
