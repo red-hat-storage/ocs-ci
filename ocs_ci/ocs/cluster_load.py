@@ -211,7 +211,13 @@ class ClusterLoad:
             cluster_used_space = get_percent_used_capacity()
 
             if len(latency_vals) > 1 and latency > 200:
-                # Checking for an exponential growth
+                # Checking for an exponential growth. In case the latest latency sample
+                # value is more than 128 times the first latency value sample, we can conclude
+                # that the cluster limit in terms of IOPS, has been reached.
+                # See https://blog.docbert.org/vdbench-curve/ for more details.
+                # In other cases, when the first latency sample value is greater than 3 ms,
+                # the multiplication factor we check according to, is lower, in order to
+                # determine the cluster load faster.
                 if latency > latency_vals[0] * 2 ** 7 or (
                     3 < latency_vals[0] > 50 and latency > 300 and len(latency_vals) > 5
                 ):
@@ -334,23 +340,6 @@ class ClusterLoad:
             time.sleep(5)
         return round(get_trim_mean(vals), 5)
 
-    def get_metrics(self, mute_logs=False):
-        """
-        Get different cluster load and utilization metrics
-
-        Args:
-            mute_logs (bool): True for muting the logs, False otherwise
-
-        """
-        return {
-            "throughput": self.get_query(constants.THROUGHPUT_QUERY, mute_logs=mute_logs) * (
-                constants.TP_CONVERSION.get(' B/s')
-            ),
-            "latency": self.get_query(constants.LATENCY_QUERY, mute_logs=mute_logs) * 1000,
-            "iops": self.get_query(constants.IOPS_QUERY, mute_logs=mute_logs),
-            "used_space": self.get_query(constants.USED_SPACE_QUERY, mute_logs=mute_logs) / 1e+9
-        }
-
     def print_metrics(self, mute_logs=False):
         """
         Print metrics
@@ -360,7 +349,14 @@ class ClusterLoad:
 
         """
         high_latency = 200
-        metrics = self.get_metrics(mute_logs=mute_logs)
+        metrics = {
+            "throughput": self.get_query(constants.THROUGHPUT_QUERY, mute_logs=mute_logs) * (
+                constants.TP_CONVERSION.get(' B/s')
+            ),
+            "latency": self.get_query(constants.LATENCY_QUERY, mute_logs=mute_logs) * 1000,
+            "iops": self.get_query(constants.IOPS_QUERY, mute_logs=mute_logs),
+            "used_space": self.get_query(constants.USED_SPACE_QUERY, mute_logs=mute_logs) / 1e+9
+        }
         limit_msg = (
             f" ({metrics.get('iops') / self.cluster_limit * 100:.2f}% of the "
             f"{self.cluster_limit:.2f} limit)"
