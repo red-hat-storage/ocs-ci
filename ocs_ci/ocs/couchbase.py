@@ -208,21 +208,25 @@ class CouchBase(PillowFight):
                     f'but only found {len(cb_wrk_pods)}'
                 )
 
-    def run_workload(self, replicas, run_in_bg=False):
+    def run_workload(self, replicas, num_items=None, num_threads=None, run_in_bg=False):
         """
         Running workload with pillow fight operator
         Args:
             replicas (int): Number of pods
+            num_items (str): Number of items to be loaded to the cluster
+            num_threads (str): Number of threads
             run_in_bg (bool) : Optional run IOs in background
 
         """
         self.result = None
+        logging.info('Running IOs...')
         if run_in_bg:
-            logging.info('Running IOs...')
             executor = ThreadPoolExecutor(1)
-            self.result = executor.submit(PillowFight.run_pillowfights, self, replicas=replicas)
+            self.result = executor.submit(PillowFight.run_pillowfights, self, replicas=replicas,
+                                          num_items=num_items, num_threads=num_threads
+                                          )
             return self.result
-        PillowFight.run_pillowfights(self, replicas=replicas)
+        PillowFight.run_pillowfights(self, replicas=replicas, num_items=num_items, num_threads=num_threads)
 
     def analyze_run(self, skip_analyze=False):
         """
