@@ -50,7 +50,8 @@ class PlatformNodesFactory:
             'vsphere': VMWareNodes,
             'aws': AWSNodes,
             'baremetal': BaremetalNodes,
-            'azure': AZURENodes
+            'azure': AZURENodes,
+            'gcp': NodesBase
         }
 
     def get_nodes_platform(self):

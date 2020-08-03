@@ -4,6 +4,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import exceptions
 from .aws import AWSIPI, AWSUPI
 from .azure import AZUREIPI
+from .gcp import GCPIPI
 from .vmware import VSPHEREUPI
 from .baremetal import BAREMETALUPI, BaremetalPSIUPI
 
@@ -24,6 +25,7 @@ class DeploymentFactory(object):
             'vsphere_upi': VSPHEREUPI,
             'baremetalpsi_upi': BaremetalPSIUPI,
             'baremetal_upi': BAREMETALUPI,
+            'gcp_ipi': GCPIPI,
         }
 
     def get_deployment(self):

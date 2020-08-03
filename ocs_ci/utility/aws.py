@@ -1220,13 +1220,17 @@ def delete_cluster_buckets(cluster_name):
     for pattern in patterns:
         r = re.compile(pattern)
         filtered_buckets = list(filter(r.search, bucket_names))
+        logger.info(f"Found buckets: {filtered_buckets}")
         if len(filtered_buckets) == 1:
             s3_resource = boto3.resource('s3', region_name=region)
             bucket_name = filtered_buckets[0]
-            logger.warning("Deleting all files in bucket %s", bucket_name)
-            bucket = s3_resource.Bucket(bucket_name)
-            bucket.objects.delete()
-            logger.warning("Deleting bucket %s", bucket_name)
-            bucket.delete()
+            logger.info("Deleting all files in bucket %s", bucket_name)
+            try:
+                bucket = s3_resource.Bucket(bucket_name)
+                bucket.objects.delete()
+                logger.info("Deleting bucket %s", bucket_name)
+                bucket.delete()
+            except ClientError as e:
+                logger.error(e)
         else:
-            logger.warning("No matches found for pattern %s", pattern)
+            logger.info("No matches found for pattern %s", pattern)

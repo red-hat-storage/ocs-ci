@@ -30,7 +30,7 @@ RUN:
   force_chrome_branch_base: "665006"
   force_chrome_branch_sha256sum: "a1ae2e0950828f991119825f62c24464ab3765aa219d150a94fb782a4c66a744"
   io_in_bg: False
-  io_load: 50
+  io_load: 30
   log_utilization: False
   # This config file disables scale app pods to use OCS workers
   use_ocs_worker_for_scale: False
@@ -134,9 +134,7 @@ UPGRADE:
   ocp_channel: "candidate-4.5"
   ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
   ocp_arch: "x86_64"
-  # upgrade_logging_channel param needs change from 4.4 to 4.5 once OCP 4.5 GAed
-  # Issue to track https://github.com/red-hat-storage/ocs-ci/issues/2390
-  upgrade_logging_channel: "4.4"
+  upgrade_logging_channel: "4.5"
 
 # This section stores secret and uploaded from home dir or s3
 # for entry into this section, please email ecosystem team

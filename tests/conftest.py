@@ -1736,12 +1736,12 @@ def verify_rgw_restart_count_fixture(request):
 
 @pytest.fixture()
 def rgw_bucket_factory(request, rgw_obj):
-    return bucket_factory_fixture(request, mcg_obj=None, rgw_obj=rgw_obj)
+    return bucket_factory_fixture(request, rgw_obj=rgw_obj)
 
 
 @pytest.fixture(scope='session')
 def rgw_bucket_factory_session(request, rgw_obj_session):
-    return bucket_factory_fixture(request, mcg_obj=None, rgw_obj=rgw_obj_session)
+    return bucket_factory_fixture(request, rgw_obj=rgw_obj_session)
 
 
 @pytest.fixture()
@@ -1749,7 +1749,7 @@ def bucket_factory(request, mcg_obj):
     """
     Returns an MCG bucket factory
     """
-    return bucket_factory_fixture(request, mcg_obj, rgw_obj=None)
+    return bucket_factory_fixture(request, mcg_obj)
 
 
 @pytest.fixture(scope='session')
@@ -1757,17 +1757,18 @@ def bucket_factory_session(request, mcg_obj_session):
     """
     Returns a session-scoped MCG bucket factory
     """
-    return bucket_factory_fixture(request, mcg_obj_session, rgw_obj_session=None)
+    return bucket_factory_fixture(request, mcg_obj_session)
 
 
-def bucket_factory_fixture(request, mcg_obj, rgw_obj):
+def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
     """
     Create a bucket factory. Calling this fixture creates a new bucket(s).
     For a custom amount, provide the 'amount' parameter.
 
     Args:
         mcg_obj (MCG): An MCG object containing the MCG S3 connection
-        credentials
+            credentials
+        rgw_obj (RGW): An RGW object
 
     """
     created_buckets = []
@@ -2494,28 +2495,28 @@ def amq_factory_fixture(request):
     amq = AMQ()
 
     def factory(
-        sc_name, tiller_namespace, kafka_namespace=constants.AMQ_NAMESPACE,
-        size=100, replicas=3, benchmark_pod_name="benchmark",
-        num_of_clients=8, worker=None, timeout=3600,
-        amq_workload_yaml=None, run_in_bg=False
+        sc_name, kafka_namespace=constants.AMQ_NAMESPACE,
+        size=100, replicas=3, topic_name='my-topic',
+        user_name="my-user", partitions=1,
+        topic_replicas=1, num_of_producer_pods=1,
+        num_of_consumer_pods=1, value='10000', since_time=1800
     ):
         """
         Factory to start amq workload
 
         Args:
             sc_name (str): Name of storage clase
-            tiller_namespace (str): Namespace where benchmark pods to be created
             kafka_namespace (str): Namespace where kafka cluster to be created
             size (int): Size of the storage
             replicas (int): Number of kafka and zookeeper pods to be created
-            benchmark_pod_name (str): Name of the benchmark pod
-            num_of_clients (int): Number of clients to be created
-            worker (str) : Loads to create on workloads separated with commas
-                e.g http://benchmark-worker-0.benchmark-worker:8080,
-                http://benchmark-worker-1.benchmark-worker:8080
-            timeout (int): Time to complete the run
-            amq_workload_yaml (dict): Contains amq workloads information keys and values
-            run_in_bg (bool): On true the workload will run in background
+            topic_name (str): Name of the topic to be created
+            user_name (str): Name of the user to be created
+            partitions (int): Number of partitions of topic
+            topic_replicas (int): Number of replicas of topic
+            num_of_producer_pods (int): Number of producer pods to be created
+            num_of_consumer_pods (int): Number of consumer pods to be created
+            value (str): Number of messages to be sent and received
+            since_time (int): Number of seconds to required to sent the msg
 
         """
         # Setup kafka cluster
@@ -2523,14 +2524,25 @@ def amq_factory_fixture(request):
             sc_name=sc_name, namespace=kafka_namespace, size=size, replicas=replicas
         )
 
-        # Run amq benchmark
-        result = amq.run_amq_benchmark(
-            benchmark_pod_name=benchmark_pod_name, kafka_namespace=kafka_namespace,
-            tiller_namespace=tiller_namespace, num_of_clients=num_of_clients, worker=worker,
-            timeout=timeout, amq_workload_yaml=amq_workload_yaml, run_in_bg=run_in_bg
+        # Run open messages
+        amq.create_messaging_on_amq(
+            topic_name=topic_name, user_name=user_name,
+            partitions=partitions, replicas=topic_replicas,
+            num_of_producer_pods=num_of_producer_pods,
+            num_of_consumer_pods=num_of_consumer_pods, value=value
         )
 
-        return amq, result
+        # Wait for some time to generate msg
+        waiting_time = 60
+        log.info(f"Waiting for {waiting_time}sec to generate msg")
+        time.sleep(waiting_time)
+
+        # Check messages are sent and received
+        threads = amq.run_in_bg(
+            namespace=kafka_namespace,
+            value=value, since_time=since_time)
+
+        return amq, threads
 
     def finalizer():
         """

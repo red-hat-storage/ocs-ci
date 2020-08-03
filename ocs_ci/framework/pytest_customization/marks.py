@@ -18,6 +18,7 @@ from ocs_ci.ocs.constants import (
     ORDER_AFTER_OCS_UPGRADE,
     ORDER_AFTER_UPGRADE,
     CLOUD_PLATFORMS,
+    ON_PREM_PLATFORMS,
 )
 from ocs_ci.utility.utils import load_auth_config
 
@@ -109,6 +110,12 @@ cloud_platform_required = pytest.mark.skipif(
     reason="Test runs ONLY on cloud based deployed cluster"
 )
 
+on_prem_platform_required = pytest.mark.skipif(
+    config.ENV_DATA['platform'].lower() not in ON_PREM_PLATFORMS,
+    reason="Test runs ONLY on on-prem based deployed cluster"
+)
+
+
 rh_internal_lab_required = pytest.mark.skipif(
     (config.ENV_DATA['platform'].lower() == 'aws'
         or config.ENV_DATA['platform'].lower() == 'azure'),
@@ -129,6 +136,12 @@ skipif_aws_i3 = pytest.mark.skipif(
     config.ENV_DATA['platform'].lower() == 'aws'
     and config.DEPLOYMENT.get('local_storage') is True,
     reason="Test will not run on AWS i3"
+)
+
+skipif_bm = pytest.mark.skipif(
+    config.ENV_DATA['platform'].lower() == 'baremetal'
+    and config.DEPLOYMENT.get('local_storage') is True,
+    reason="Test will not run on Bare Metal"
 )
 
 skipif_aws_creds_are_missing = pytest.mark.skipif(
