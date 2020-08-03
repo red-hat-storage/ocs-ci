@@ -14,6 +14,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs.cluster import CephCluster
 
 
 def add_capacity_test():
@@ -40,6 +41,10 @@ def add_capacity_test():
 
     ceph_health_check(
         namespace=config.ENV_DATA['cluster_namespace'], tries=80
+    )
+    ceph_cluster_obj = CephCluster()
+    assert ceph_cluster_obj.wait_for_rebalance(timeout=3600), (
+        "Data re-balance failed to complete"
     )
 
 
