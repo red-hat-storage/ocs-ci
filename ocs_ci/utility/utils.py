@@ -1546,6 +1546,7 @@ def load_auth_config():
             f'Unable to find the authentication configuration at {auth_file}, '
             f'please refer to the getting started guide ({constants.AUTH_CONFIG_DOCS})'
         )
+        return {}
 
 
 def get_ocs_olm_operator_tags(limit=100):
