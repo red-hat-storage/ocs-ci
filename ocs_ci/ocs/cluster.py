@@ -649,10 +649,7 @@ class CephCluster(object):
         Wait for re-balance to complete
 
         Args:
-            timeout (int): Time to wait for the completion of re-balance.
-                In case IO is running in the test background (according to --io-in-bg
-                run-ci param, the timeout will be determined by the amount of load
-                (io_load run-ci param)
+            timeout (int): Time to wait for the completion of re-balance
 
         Returns:
             bool: True if rebalance completed, False otherwise
