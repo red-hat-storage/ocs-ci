@@ -105,6 +105,9 @@ to the pytest.
    between 0 to 100. If not provided, the default is 30 (30%)
 * `--log-cluster-utilization` - If passed, metrics of the cluster utilization will be
    printed every 20 seconds
+* `--csv-change` - Allows changes in the OCS CSV. For example, usage of custom image,
+   like MCG or RHCS. The format should be:
+   <pattern_to_replace_from::pattern_to_replace_to>, while '::' is the delimiter
 
 ## Examples
 

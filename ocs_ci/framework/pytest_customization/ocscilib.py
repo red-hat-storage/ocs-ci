@@ -158,6 +158,14 @@ def pytest_addoption(parser):
         dest='flexy_env_file',
         help="Path to flexy environment file"
     )
+    parser.addoption(
+        '--csv-change',
+        dest='csv_change',
+        help=(
+            "Pattern or string to change in the CSV. Should contain the value to replace "
+            "from and the value to replace to, separated by '::'"
+        )
+    )
 
 
 def pytest_configure(config):
@@ -376,6 +384,11 @@ def process_cluster_cli_params(config):
             OCP_VERSION_CONF_DIR, version_config_file
         )
         load_config_file(version_config_file_path)
+    csv_change = get_cli_param(config, '--csv-change')
+    if csv_change:
+        csv_change = csv_change.split("::")
+        ocsci_config.DEPLOYMENT['csv_change_from'] = csv_change[0]
+        ocsci_config.DEPLOYMENT['csv_change_to'] = csv_change[1]
 
 
 def pytest_collection_modifyitems(session, config, items):
