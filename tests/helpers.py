@@ -2355,13 +2355,21 @@ def storagecluster_independent_check():
     """
     Check whether the storagecluster is running in independent mode
     by checking the value of spec.externalStorage.enable
+
+    Returns:
+        bool: True if storagecluster is running on external mode False otherwise
+
     """
     storage_cluster = OCP(
         kind='StorageCluster',
         namespace=config.ENV_DATA['cluster_namespace']
     ).get().get('items')[0]
 
-    return storage_cluster.get('spec').get('externalStorage').get('enable')
+    return bool(
+        storage_cluster.get('spec', {}).get(
+            'externalStorage', {}
+        ).get('enable', False)
+    )
 
 
 def get_pv_size(storageclass=None):
