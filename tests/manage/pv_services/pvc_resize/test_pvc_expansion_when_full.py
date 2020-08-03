@@ -48,7 +48,7 @@ class TestPvcExpansionWhenFull(ManageTest):
         for pod_obj in self.pods:
             pod_obj.run_io(
                 'fs', size=f'{self.pvc_size}G', io_direction='write',
-                runtime=60, fio_filename=f'{pod_obj.name}_f1'
+                runtime=30, rate='100M', fio_filename=f'{pod_obj.name}_f1'
             )
         log.info("Started IO on all to utilise 100% of PVCs")
         # Wait for IO to finish
