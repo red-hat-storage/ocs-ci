@@ -89,9 +89,12 @@ def get_registry_pod_obj():
     return pod_objs
 
 
-def get_oc_podman_login_cmd():
+def get_oc_podman_login_cmd(skip_tls_verify=True):
     """
     Function to get oc and podman login commands on node
+
+    Args:
+        skip_tls_verify (bool): If true, the server's certificate will not be checked for validity
 
     Returns:
         cmd_list (list): List of cmd for oc/podman login
@@ -107,9 +110,14 @@ def get_oc_podman_login_cmd():
     cluster_name = config.ENV_DATA['cluster_name']
     base_domain = config.ENV_DATA['base_domain']
     cmd_list = [
-        f"oc login -u {user} -p {password} https://api-int.{cluster_name}.{base_domain}:6443",
+        'export KUBECONFIG=/home/core/auth/kubeconfig',
+        f"oc login -u {user} -p {password} "
+        f"https://api-int.{cluster_name}.{base_domain}:6443"
+        f" --insecure-skip-tls-verify={skip_tls_verify}",
         f"podman login -u {user} -p $(oc whoami -t) image-registry.openshift-image-registry.svc:5000"
     ]
+    master_list = helpers.get_master_nodes()
+    helpers.rsync_kubeconf_to_node(node=master_list[0])
     return cmd_list
 
 
