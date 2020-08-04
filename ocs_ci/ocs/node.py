@@ -17,7 +17,6 @@ from ocs_ci.ocs import machine
 import tests.helpers
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions
-from ocs_ci.ocs.platform_nodes import PlatformNodesFactory, AWSNodes
 
 log = logging.getLogger(__name__)
 
@@ -319,6 +318,7 @@ def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True, no
     """
     node_conf = node_conf or {}
     initial_nodes = tests.helpers.get_worker_nodes()
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
     plt = PlatformNodesFactory()
     node_util = plt.get_nodes_platform()
     node_util.create_and_attach_nodes_to_cluster(node_conf, node_type, num_nodes)
@@ -782,6 +782,7 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
     az = get_node_az(osd_node)
+    from ocs_ci.ocs.platform_nodes import AWSNodes
     aws_nodes = AWSNodes()
     stack_name_of_deleted_node = aws_nodes.get_stack_name_of_node(osd_node_name)
 
