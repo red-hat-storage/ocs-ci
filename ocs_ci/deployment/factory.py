@@ -8,6 +8,7 @@ from .azure import AZUREIPI
 from .gcp import GCPIPI
 from .vmware import VSPHEREUPI
 from .baremetal import BAREMETALUPI, BaremetalPSIUPI
+from .openstack import OPENSTACKIPI
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class DeploymentFactory(object):
             'baremetal_upi': BAREMETALUPI,
             'gcp_ipi': GCPIPI,
             'powervs_upi': IBMDeployment,
+            'openstack_ipi': OPENSTACKIPI,
         }
 
     def get_deployment(self):
