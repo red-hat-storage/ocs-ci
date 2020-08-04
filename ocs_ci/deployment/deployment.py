@@ -564,7 +564,7 @@ class Deployment(object):
             cluster_data, cluster_data_yaml.name
         )
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
-        self.external_post_deploy_validatio()
+        self.external_post_deploy_validation()
         setup_ceph_toolbox()
 
     def external_post_deploy_validation(self):

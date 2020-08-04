@@ -128,32 +128,27 @@ def ocs_install_verification(
     min_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('minCount')
     max_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('maxCount')
 
-    if config.DEPLOYMENT['external_mode']:
-        resources_dict = {
-            constants.OCS_OPERATOR_LABEL: 1,
-            constants.OPERATOR_LABEL: 1,
-            constants.NOOBAA_DB_LABEL: 1,
-            constants.NOOBAA_OPERATOR_POD_LABEL: 1,
-            constants.NOOBAA_CORE_POD_LABEL: 1,
-            constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps
-        }
-    else:
-        resources_dict = {
-            constants.OCS_OPERATOR_LABEL: 1,
-            constants.OPERATOR_LABEL: 1,
-            constants.NOOBAA_DB_LABEL: 1,
-            constants.NOOBAA_OPERATOR_POD_LABEL: 1,
-            constants.NOOBAA_CORE_POD_LABEL: 1,
-            constants.MON_APP_LABEL: 3,
-            constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
-            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL: 2,
-            constants.CSI_RBDPLUGIN_LABEL: number_of_worker_nodes,
-            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL: 2,
-            constants.OSD_APP_LABEL: osd_count,
-            constants.MGR_APP_LABEL: 1,
-            constants.MDS_APP_LABEL: 2,
-            constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps
-        }
+    resources_dict = {
+        constants.OCS_OPERATOR_LABEL: 1,
+        constants.OPERATOR_LABEL: 1,
+        constants.NOOBAA_DB_LABEL: 1,
+        constants.NOOBAA_OPERATOR_POD_LABEL: 1,
+        constants.NOOBAA_CORE_POD_LABEL: 1,
+        constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps
+    }
+    if not config.DEPLOYMENT['external_mode']:
+        resources_dict.update(
+            {
+                constants.MON_APP_LABEL: 3,
+                constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
+                constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL: 2,
+                constants.CSI_RBDPLUGIN_LABEL: number_of_worker_nodes,
+                constants.CSI_RBDPLUGIN_PROVISIONER_LABEL: 2,
+                constants.OSD_APP_LABEL: osd_count,
+                constants.MGR_APP_LABEL: 1,
+                constants.MDS_APP_LABEL: 2,
+            }
+        )
     if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
         # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1857802 - RGW count is 1
         # post upgrade to OCS 4.5. Tracked with
