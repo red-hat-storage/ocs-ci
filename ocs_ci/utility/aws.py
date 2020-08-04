@@ -994,10 +994,15 @@ class AWS(object):
         record_sets = self.route53_client.list_resource_record_sets(
             HostedZoneId=hosted_zone_id
         )['ResourceRecordSets']
-        apps_record_set = [
+        apps_record_sets = [
             record_set for record_set in record_sets
             if record_set['Name'] == record_set_name
-        ][0]
+        ]
+        if apps_record_sets:
+            apps_record_set = apps_record_sets[0]
+        else:
+            logger.info(f"app record set not found for record {record_set_name}")
+            return
         self.route53_client.change_resource_record_sets(
             HostedZoneId=hosted_zone_id,
             ChangeBatch={
