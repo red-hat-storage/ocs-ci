@@ -88,7 +88,7 @@ class FlexyBase(object):
             self.clone_and_unlock_ocs_private_conf()
             config.FLEXY['VARIABLES_LOCATION'] = self.template_file
             config.FLEXY['INSTANCE_NAME_PREFIX'] = self.cluster_name
-            self.merge_flexy_env()
+        self.merge_flexy_env()
 
     def run_container(self, cmd_string):
         """
@@ -149,18 +149,7 @@ class FlexyBase(object):
 
         """
         args = list()
-        if self.is_jenkins_mount() and purpose == 'destroy':
-            flexy_private = os.path.join(
-                constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
-                constants.FLEXY_HOST_DIR,
-                "flexy-ocs-private"
-            )
-            flexy_env = os.path.join(
-                flexy_private, constants.FLEXY_DEFAULT_ENV_FILE
-            )
-            args.append(f"--env-file={flexy_env}")
-        else:
-            args.append(f"--env-file={self.flexy_env_file}")
+        args.append(f"--env-file={constants.FLEXY_ENV_FILE_UPDATED}")
         args.append(f"-w={self.flexy_mnt_container_dir}")
         # For destroy on NFS mount, relabel=shared will not work
         # with podman hence we will keep 'relabel=shared' only for
@@ -230,10 +219,12 @@ class FlexyBase(object):
             file_content = "[root]\n" + fp.read()
 
         config_parser.read_string(file_content)
+        applied_keys = []
         # Iterate over config_parser keys, if same key is present
         # in user supplied dict update config_parser
         for ele in config_parser.items('root'):
             if ele[0] in config.FLEXY:
+                applied_keys.append(ele[0])
                 # For LAUNCHER_VARS we need to merge the
                 # user provided dict with default obtained
                 # from env file
@@ -252,11 +243,14 @@ class FlexyBase(object):
                     config_parser.set('root', ele[0], config.FLEXY[ele[0]])
                 logger.info(f"env updated {ele[0]}:{config.FLEXY[ele[0]]}")
 
-        # write the updated config_parser content back to the env file
-        tmp_file = os.path.join(
-            self.flexy_host_private_conf_dir_path, f"{constants.FLEXY_DEFAULT_ENV_FILE}.tmp"
-        )
-        with open(tmp_file, "w") as fp:
+        # add new keys to env file
+        for key in config.FLEXY:
+            if key not in applied_keys:
+                logger.info(f"Adding {key}={config.FLEXY[key]}")
+                config_parser.set('root', key, f"{config.FLEXY[key]}")
+
+        # write the updated config_parser content to updated env file
+        with open(constants.FLEXY_ENV_FILE_UPDATED, "w") as fp:
             src = io.StringIO()
             dst = io.StringIO()
             config_parser.write(src)
@@ -271,11 +265,6 @@ class FlexyBase(object):
             # removed
             fp.write("".join(dst.readlines()[1:-1]))
 
-        # Move this tempfile to original file
-        os.rename(
-            tmp_file, self.flexy_env_file
-        )
-
     def flexy_post_processing(self):
         """
         Perform copying of flexy-dir to nfs mount
@@ -288,10 +277,6 @@ class FlexyBase(object):
             f"--kubeconfig {self.flexy_host_dir}/{auth_file} "
             f"-n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
             f"--from-file=.dockerconfigjson={constants.DATA_DIR}/pull-secret"
-        )
-        ntp_cmd = (
-            f"oc --kubeconfig {self.flexy_host_dir}/{auth_file} "
-            f"create -f {constants.NTP_CHRONY_CONF}"
         )
         abs_cluster_path = os.path.abspath(self.cluster_path)
         flexy_cluster_path = os.path.join(
@@ -338,8 +323,13 @@ class FlexyBase(object):
             )
             os.symlink(flexy_cluster_path, abs_cluster_path)
             run_cmd(secret_cmd)
-        logger.info("Creating NTP chrony")
-        run_cmd(ntp_cmd)
+        if not config.ENV_DATA.get('skip_ntp_configuration', False):
+            ntp_cmd = (
+                f"oc --kubeconfig {self.flexy_host_dir}/{auth_file} "
+                f"create -f {constants.NTP_CHRONY_CONF}"
+            )
+            logger.info("Creating NTP chrony")
+            run_cmd(ntp_cmd)
 
     def is_jenkins_mount(self):
         """
