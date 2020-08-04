@@ -20,6 +20,7 @@ from ocs_ci.ocs.constants import (
     CLOUD_PLATFORMS,
     ON_PREM_PLATFORMS,
 )
+from ocs_ci.utility.utils import load_auth_config
 
 # tier marks
 
@@ -93,6 +94,11 @@ ignore_leftover_label = pytest.mark.ignore_leftover_label
 run_this = pytest.mark.run_this
 
 # Skipif marks
+skipif_aws_creds_are_missing = pytest.mark.skipif(
+    load_auth_config().get('AUTH', {}).get('AWS', {}).get('AWS_ACCESS_KEY_ID') is None,
+    reason="AWS credentials weren't found in the local auth.yaml"
+)
+
 google_api_required = pytest.mark.skipif(
     not os.path.exists(os.path.expanduser(
         config.RUN['google_api_secret'])
