@@ -286,6 +286,10 @@ MCG_OBC_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml"
 )
 
+RGW_OBC_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "ObjectBucketClaim-RGW.yaml"
+)
+
 MCG_AWS_CREDS_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "AwsCreds.yaml"
 )
