@@ -15,6 +15,9 @@
 5. For UI testing follow the instructions in [openshift console](https://github.com/openshift/console#dependencies) repository.
    After clone of repository and setting all dependencies please create configuration file with RUN section with `openshift_console_path`
    parameter pointing to your local clone of openshift console repo. See example in `conf/ocsci/ui-testing.yaml`.
+6. Install the dependencies for scipy
+
+sudo  yum install atlas-devel openssl-devel libffi-devel gcc
 
 #### AWS UPI
 There are additional prerequisites if you plan to execute AWS UPI deployments
