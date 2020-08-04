@@ -456,70 +456,6 @@ class MCG:
             logger.error(f'Could not create connection {conn_name}')
             assert False
 
-    def create_new_backingstore_aws_bucket(self, backingstore_info):
-        """
-        Creates an S3 target bucket for NooBaa to use as a backing store
-
-        Args:
-            backingstore_info: A tuple containing the BS information
-            to be used in its creation.
-
-        """
-        if backingstore_info.get('name') is None:
-            backingstore_info['name'] = create_unique_resource_name('backingstorebucket', 'awsbucket')
-
-        if backingstore_info.get('region') is None:
-            self.aws_s3_resource.create_bucket(Bucket=backingstore_info['name'])
-        else:
-            self.aws_s3_resource.create_bucket(
-                Bucket=backingstore_info['name'],
-                CreateBucketConfiguration={
-                    'LocationConstraint': backingstore_info['region']
-                }
-            )
-
-    def create_aws_backingstore_secret(self, name):
-        """
-        Creates a secret for NooBaa's backingstore
-        Args:
-            name: The name to be given to the secret
-
-        Returns:
-            OCS: The secret resource
-
-        """
-        bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
-        bs_secret_data['metadata']['name'] += f'-{name}'
-        bs_secret_data['metadata']['namespace'] = self.namespace
-        bs_secret_data['data']['AWS_ACCESS_KEY_ID'] = base64.urlsafe_b64encode(
-            self.aws_access_key_id.encode('UTF-8')
-        ).decode('ascii')
-        bs_secret_data['data']['AWS_SECRET_ACCESS_KEY'] = base64.urlsafe_b64encode(
-            self.aws_access_key.encode('UTF-8')
-        ).decode('ascii')
-        return create_resource(**bs_secret_data)
-
-    def oc_create_aws_backingstore(self, name, targetbucket, secretname, region):
-        """
-        Creates a new NooBaa backing store
-        Args:
-            name: The name to be given to the backing store
-            targetbucket: The S3 target bucket to connect to
-            secretname: The secret to use for authentication
-            region: The target bucket's region
-
-        Returns:
-            OCS: The backingstore resource
-
-        """
-        bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
-        bs_data['metadata']['name'] += f'-{name}'
-        bs_data['metadata']['namespace'] = self.namespace
-        bs_data['spec']['awsS3']['secret']['name'] = secretname
-        bs_data['spec']['awsS3']['targetBucket'] = targetbucket
-        bs_data['spec']['awsS3']['region'] = region
-        return create_resource(**bs_data)
-
     def oc_create_bucketclass(self, name, backingstores, placement):
         """
         Creates a new NooBaa bucket class
@@ -539,46 +475,6 @@ class MCG:
         tiers['backingStores'] = backingstores
         tiers['placement'] = placement
         return create_resource(**bc_data)
-
-    def toggle_aws_bucket_readwrite(self, bucketname, block=True):
-        """
-        Toggles a bucket's IO using a bucket policy
-
-        Args:
-            bucketname: The name of the bucket that should be manipulated
-            block: Whether to block RW or un-block. True | False
-
-        """
-        if block:
-            bucket_policy = {
-                "Version": "2012-10-17",
-                "Id": "DenyReadWrite",
-                "Statement": [
-                    {
-                        "Effect": "Deny",
-                        "Principal": {
-                            "AWS": "*"
-                        },
-                        "Action": [
-                            "s3:GetObject",
-                            "s3:PutObject",
-                            "s3:ListBucket"
-                        ],
-                        "Resource": [
-                            f"arn:aws:s3:::{bucketname}/*",
-                            f"arn:aws:s3:::{bucketname}"
-                        ]
-                    }
-                ]
-            }
-            bucket_policy = json.dumps(bucket_policy)
-            self.aws_s3_resource.meta.client.put_bucket_policy(
-                Bucket=bucketname, Policy=bucket_policy
-            )
-        else:
-            self.aws_s3_resource.meta.client.delete_bucket_policy(
-                Bucket=bucketname
-            )
 
     def check_if_mirroring_is_done(self, bucket_name):
         """
@@ -658,7 +554,7 @@ class MCG:
         def _check_state():
             sysinfo = self.read_system()
             for pool in sysinfo.get('pools'):
-                if pool.get('name') == backingstore_name:
+                if pool.get('name') in backingstore_name:
                     current_state = pool.get('mode')
                     logger.info(
                         f'Current state of backingstore {backingstore_name} '
