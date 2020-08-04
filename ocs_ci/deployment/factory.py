@@ -73,6 +73,12 @@ class DeploymentFactory(object):
 
             self.cls_map["rhv_ipi"] = RHVIPI
 
+        elif self.deployment_platform == constants.OPENSTACK_PLATFORM
+            from .openstack import OPENSTACKIPI
+
+            self.cls_map["openstack_ipi"] = OPENSTACKIPI
+
+
     def get_deployment(self):
         """
         Get the exact deployment class based on ENV_DATA

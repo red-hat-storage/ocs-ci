@@ -1,0 +1,6 @@
+---
+ENV_DATA:
+  platform: 'openstack'
+  deployment_type: 'ipi'
+  worker_replicas: 3
+  master_replicas: 3
