@@ -1,4 +1,0 @@
----
-# This config file will enable IO to be running in the background
-RUN:
-  io_in_bg: True

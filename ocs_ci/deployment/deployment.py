@@ -51,7 +51,8 @@ from ocs_ci.utility.utils import (
     run_cmd,
     set_selinux_permissions,
     set_registry_to_managed_state,
-    add_stage_cert
+    add_stage_cert,
+    modify_csv
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from tests import helpers
@@ -369,6 +370,14 @@ class Deployment(object):
         csv_name = package_manifest.get_current_csv(channel=channel)
         csv = CSV(resource_name=csv_name, namespace=self.namespace)
         csv.wait_for_phase("Succeeded", timeout=720)
+
+        # Modify the CSV with custom values if required
+        if all(key in config.DEPLOYMENT for key in ('csv_change_from', 'csv_change_to')):
+            modify_csv(
+                csv=csv_name,
+                replace_from=config.DEPLOYMENT['csv_change_from'],
+                replace_to=config.DEPLOYMENT['csv_change_to']
+            )
         cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
