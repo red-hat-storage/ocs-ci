@@ -111,7 +111,7 @@ class S3Client(CloudClient):
             self.access_key = key_id
             self.secret_key = access_key
         elif s3_comp:
-            logger.warn("Did not find S3 compatible credentials")
+            logger.warning("Did not find S3 compatible credentials")
             raise DefaultCredentialsError
         else:
             try:
@@ -123,7 +123,7 @@ class S3Client(CloudClient):
                 self.access_key = credentials.access_key
                 self.secret_key = credentials.secret_key
             except AttributeError:
-                logger.warn("Failed to find default AWS credentials")
+                logger.warning("Failed to find default AWS credentials")
                 raise DefaultCredentialsError
 
         self.secret = self.create_aws_secret()
