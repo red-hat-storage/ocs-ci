@@ -413,7 +413,10 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         upgrade_in_current_source=config.UPGRADE.get('upgrade_in_current_source', False)
     )
     upgrade_version = upgrade_ocs.get_upgrade_version()
-    assert upgrade_ocs.get_parsed_versions()[1] >= upgrade_ocs.get_parsed_versions()[0], (
+    parsed_version_before_upgrade, parsed_upgrade_version = (
+        upgrade_ocs.get_parsed_versions()
+    )
+    assert parsed_upgrade_version >= parsed_version_before_upgrade, (
         f"Version you would like to upgrade to: {upgrade_version} "
         f"is not higher or equal to the version you currently running: "
         f"{upgrade_ocs.version_before_upgrade}"
@@ -425,6 +428,27 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()
         upgrade_ocs.update_subscription(channel)
+
+        # This is recommended approach to fix the upgrade issue introduced by
+        # LBP V2 and ownership dependency blocking the upgrade
+        if parsed_upgrade_version >= parse_version('4.2'):
+            log.info("Sleep 30 seconds before checking LBP CSVs")
+            time.sleep(30)
+            all_csvs = CSV(namespace=upgrade_ocs.namespace).get()
+            lbp_csvs = [
+                csv for csv in all_csvs.get('items', []) if
+                "lib-bucket-provisioner" in csv['metadata']['name']
+                and csv['spec']['version'] == '1.0.0'
+            ]
+            if lbp_csvs:
+                lbp_v1_csv_name = lbp_csvs[0]['metadata']['name']
+                lbp_v1_csv = CSV(
+                    resource_name=lbp_v1_csv_name,
+                    namespace=upgrade_ocs.namespace
+                )
+                log.info(f"Deleting LBP CSV: {lbp_v1_csv_name}")
+                lbp_v1_csv.delete()
+
         if operation:
             log.info(f"Calling test function: {operation}")
             _ = operation(*operation_args, **operation_kwargs)
