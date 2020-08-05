@@ -46,7 +46,7 @@ class TestJenkinsNodeDrain(E2ETest):
         argnames=['node_type', 'num_projects', 'num_of_builds'],
         argvalues=[
             pytest.param(
-                *[WORKER_MACHINE, 4, 3], marks=pytest.mark.polarion_id("OCS-2177")
+                *[WORKER_MACHINE, 4, 3], marks=pytest.mark.polarion_id("OCS-2252")
             ),
             pytest.param(
                 *[MASTER_MACHINE, 3, 6], marks=pytest.mark.polarion_id("OCS-2176")
