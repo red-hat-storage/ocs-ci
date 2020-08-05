@@ -12,8 +12,7 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.utility.bootstrap import gather_bootstrap
-from ocs_ci.utility.utils import get_cluster_name
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import get_cluster_name, run_cmd
 
 
 logger = logging.getLogger(__name__)
