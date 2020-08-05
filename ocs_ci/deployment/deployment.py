@@ -18,7 +18,6 @@ from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
     CommandFailed,
-    InvalidDeploymentPlatfrom,
     ResourceWrongStatusException,
     UnavailableResourceException,
     UnsupportedPlatformError
@@ -74,7 +73,17 @@ class Deployment(object):
     # define it
     DEFAULT_STORAGECLASS = None
 
+    # Default storage class for LSO deployments. While each platform specific
+    # subclass can redefine it, there is a well established platform
+    # independent default value (based on OCS Installation guide), and it's
+    # redefinition is not necessary in normal cases.
+    DEFAULT_STORAGECLASS_LSO = 'localblock'
+
     def __init__(self):
+        if self.DEFAULT_STORAGECLASS is None:
+            err_msg = "DEFAULT_STORAGECLASS should be specified in base class"
+            logger.error(err_msg)
+            raise NotImplementedError(err_msg)
         self.platform = config.ENV_DATA['platform']
         self.ocp_deployment_type = config.ENV_DATA['deployment_type']
         self.cluster_path = config.ENV_DATA['cluster_path']
@@ -347,7 +356,7 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get('live_deployment')
 
         if config.DEPLOYMENT.get('local_storage'):
-            setup_local_storage()
+            setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
 
         if ui_deployment:
             if not live_deployment:
@@ -391,8 +400,10 @@ class Deployment(object):
         device_size = int(
             config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
         )
+
+        # set size of request for storage
         if self.platform.lower() == constants.BAREMETAL_PLATFORM:
-            pv_size_list = helpers.get_pv_size(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
+            pv_size_list = helpers.get_pv_size(storageclass=self.DEFAULT_STORAGECLASS_LSO)
             pv_size_list.sort()
             deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
                 'storage'
@@ -405,13 +416,13 @@ class Deployment(object):
         # set storage class to OCS default on current platform
         deviceset_data['dataPVCTemplate']['spec']['storageClassName'] = self.DEFAULT_STORAGECLASS
 
+        # StorageCluster tweaks for LSO
         if config.DEPLOYMENT.get('local_storage'):
             cluster_data['spec']['manageNodes'] = False
             cluster_data['spec']['monDataDirHostPath'] = '/var/lib/rook'
             deviceset_data['portable'] = False
-            deviceset_data['dataPVCTemplate']['spec'][
-                'storageClassName'
-            ] = 'localblock'
+            deviceset_data['dataPVCTemplate']['spec']['storageClassName'] = \
+                self.DEFAULT_STORAGECLASS_LSO
             if self.platform.lower() == constants.AWS_PLATFORM:
                 deviceset_data['count'] = 2
 
@@ -655,13 +666,6 @@ class Deployment(object):
         """
         Patch storage class which comes as default with installation to non-default
         """
-        if self.DEFAULT_STORAGECLASS is None:
-            error_msg = (
-                f"DEFAULT_STORAGECLASS not defined on {self.platform} platform"
-            )
-            logger.error(error_msg)
-            raise InvalidDeploymentPlatfrom(error_msg)
-
         logger.info(f"Patch {self.DEFAULT_STORAGECLASS} storageclass as non-default")
         patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
         run_cmd(
@@ -726,9 +730,13 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     catalog_source.wait_for_state("READY")
 
 
-def setup_local_storage():
+def setup_local_storage(storageclass):
     """
     Setup the necessary resources for enabling local storage.
+
+    Args:
+        storageclass (string): storageClassName value to be used in LocalVolume CR
+            based on LOCAL_VOLUME_YAML
 
     """
     # Get the worker nodes
@@ -811,6 +819,12 @@ def setup_local_storage():
     lv_data = templating.load_yaml(
         constants.LOCAL_VOLUME_YAML
     )
+
+    # Set storage class
+    logger.info(
+        "Updating LocalVolume CR data with LSO storageclass: %s", storageclass)
+    for scd in lv_data['spec']['storageClassDevices']:
+        scd['storageClassName'] = storageclass
 
     # Update local volume data with NVME IDs
     logger.info(
