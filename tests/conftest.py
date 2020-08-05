@@ -3,7 +3,6 @@ import os
 import random
 import time
 import tempfile
-import textwrap
 import threading
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
@@ -14,14 +13,20 @@ from functools import partial
 
 from botocore.exceptions import ClientError
 import pytest
-import yaml
 
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     deployment, ignore_leftovers, tier_marks, ignore_leftover_label
 )
-from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
+from ocs_ci.ocs import (
+    constants,
+    defaults,
+    fio_artefacts,
+    node,
+    ocp,
+    platform_nodes
+)
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.ocs.ocp import OCP
@@ -48,7 +53,6 @@ from ocs_ci.utility.utils import (
     get_rook_repo,
     get_ocp_version,
     TimeoutSampler,
-    update_container_with_mirrored_image,
 )
 from ocs_ci.utility.utils import (
     get_openshift_client, ocsci_log_path, get_testrun_name,
@@ -2218,132 +2222,60 @@ def install_logging(request):
 
 @pytest.fixture
 def fio_pvc_dict():
-    return fio_pvc_dict_fixture()
+    """
+    PVC template for fio workloads.
+    Note that all 'None' values needs to be defined before usage.
+
+    """
+    return fio_artefacts.get_pvc_dict()
 
 
 @pytest.fixture(scope='session')
 def fio_pvc_dict_session():
-    return fio_pvc_dict_fixture()
-
-
-def fio_pvc_dict_fixture():
     """
     PVC template for fio workloads.
     Note that all 'None' values needs to be defined before usage.
+
     """
-    # TODO(fbalak): load dictionary fixtures from one place
-    template = textwrap.dedent("""
-        kind: PersistentVolumeClaim
-        apiVersion: v1
-        metadata:
-          name: fio-target
-        spec:
-          storageClassName: None
-          accessModes: ["ReadWriteOnce"]
-          resources:
-            requests:
-              storage: None
-        """)
-    pvc_dict = yaml.safe_load(template)
-    return pvc_dict
+    return fio_artefacts.get_pvc_dict()
 
 
 @pytest.fixture
 def fio_configmap_dict():
-    return fio_configmap_dict_fixture()
+    """
+    ConfigMap template for fio workloads.
+    Note that you need to add actual configuration to workload.fio file.
+
+    """
+    return fio_artefacts.get_configmap_dict()
 
 
 @pytest.fixture(scope='session')
 def fio_configmap_dict_session():
-    return fio_configmap_dict_fixture()
-
-
-def fio_configmap_dict_fixture():
     """
     ConfigMap template for fio workloads.
     Note that you need to add actual configuration to workload.fio file.
+
     """
-    # TODO(fbalak): load dictionary fixtures from one place
-    template = textwrap.dedent("""
-        kind: ConfigMap
-        apiVersion: v1
-        metadata:
-          name: fio-config
-        data:
-          workload.fio: |
-            # here comes workload configuration
-        """)
-    cm_dict = yaml.safe_load(template)
-    return cm_dict
+    return fio_artefacts.get_configmap_dict()
 
 
 @pytest.fixture
 def fio_job_dict():
-    return fio_job_dict_fixture()
+    """
+    Job template for fio workloads.
+
+    """
+    return fio_artefacts.get_job_dict()
 
 
 @pytest.fixture(scope='session')
 def fio_job_dict_session():
-    return fio_job_dict_fixture()
-
-
-def fio_job_dict_fixture():
     """
     Job template for fio workloads.
+
     """
-    node_obj = ocp.OCP(kind=constants.NODE)
-
-    log.info('Checking architecture of system')
-    node = node_obj.get(
-        selector=constants.WORKER_LABEL
-    ).get('items')[0]['metadata']['name']
-    arch = node_obj.exec_oc_debug_cmd(node, ['uname -m'])
-    if arch.startswith('x86'):
-        image = 'quay.io/fbalak/fio-fedora:latest'
-    else:
-        image = 'quay.io/multiarch-origin-e2e/fio-fedora:latest'
-    log.info(f'Discovered architecture: {arch.strip()}')
-    log.info(f'Using image: {image}')
-
-    # TODO(fbalak): load dictionary fixtures from one place
-    template = textwrap.dedent(f"""
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: fio
-        spec:
-          backoffLimit: 0
-          template:
-            metadata:
-              name: fio
-            spec:
-              containers:
-                - name: fio
-                  image: {image}
-                  command:
-                    - "/usr/bin/fio"
-                    - "--output-format=json"
-                    - "/etc/fio/workload.fio"
-                  volumeMounts:
-                    - name: fio-target
-                      mountPath: /mnt/target
-                    - name: fio-config-volume
-                      mountPath: /etc/fio
-              restartPolicy: Never
-              volumes:
-                - name: fio-target
-                  persistentVolumeClaim:
-                    claimName: fio-target
-                - name: fio-config-volume
-                  configMap:
-                    name: fio-config
-        """)
-    job_dict = yaml.safe_load(template)
-
-    # overwrite used image (required for disconnected installation)
-    update_container_with_mirrored_image(job_dict)
-
-    return job_dict
+    return fio_artefacts.get_job_dict()
 
 
 @pytest.fixture(scope='function')
