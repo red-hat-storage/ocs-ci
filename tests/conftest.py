@@ -25,6 +25,7 @@ from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.bucketclass import BucketClass
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.backingstore import BackingStore
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
@@ -1830,6 +1831,78 @@ def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
 
 
 @pytest.fixture(scope='class')
+def bucket_class_factory(request, mcg_obj_session, backingstore_factory):
+    """
+    Create a bucket class factory. Calling this fixture creates a new custom bucket class.
+    For a custom backingstore(s), provide the 'backingstore_dict' parameter.
+
+    Args:
+        mcg_obj_session (MCG): An MCG object containing the MCG S3 connection credentials
+
+    """
+    interfaces = {
+        'OC': mcg_obj_session.oc_create_bucketclass,
+        'CLI': mcg_obj_session.cli_create_bucketclass
+    }
+    created_bucket_classes = []
+
+    def _create_bucket_class(
+        backingstore_dict='nooba-default-backing-store', interface='OC', placement='Spread'
+    ):
+        """
+        Creates and deletes all bucket classes that were created as part of the test
+
+        Args:
+
+            interface (str): The interface to use for creation of buckets.
+                OC | CLI
+            backingstore_dict (dict/list/str): Either the default backingstore or existing
+                list of backingstores or A dictionary compatible with the backing store factory
+                requirements.
+            placement (str): The Placement policy for this bucket class.
+                Spread | Mirror
+
+        Returns:
+            list: A Bucket Class object.
+
+        """
+        if interface.lower() not in interfaces.keys():
+            raise RuntimeError(
+                f'Invalid interface type received: {interface}. '
+                f'available types: {", ".join(interfaces)}'
+            )
+        backingstores = backingstore_dict
+        if isinstance(backingstore_dict, dict):
+            backingstores = backingstore_factory(interface, backingstore_dict)
+        bucket_class_name = helpers.create_unique_resource_name(
+            resource_description='bucketclass', resource_type=interface.lower()
+        )
+        interfaces[interface.lower()](
+            name=bucket_class_name,
+            backingstores=backingstores,
+            placement=placement
+        )
+        bucket_class_object = BucketClass(bucket_class_name, backingstores, placement)
+        created_bucket_classes.append(bucket_class_object)
+        return bucket_class_object
+
+    def bucket_class_cleanup():
+        for bucket_class in created_bucket_classes:
+            log.info(f'Cleaning up bucket {bucket_class.name}')
+            try:
+                bucket_class.delete()
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'NoSuchBucketClass':
+                    log.warning(f'{bucket_class.name} could not be found in cleanup')
+                else:
+                    raise
+
+    request.addfinalizer(bucket_class_cleanup)
+
+    return _create_bucket_class
+
+
+@pytest.fixture(scope='class')
 def cloud_uls_factory(request, cld_mgr):
     """
      Create a Underlying Storage factory.
@@ -1956,7 +2029,7 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
             i.e. - 'pv': [(3, 32, ocs-storagecluster-ceph-rbd),(2, 100, ocs-storagecluster-ceph-rbd)]
 
         Returns:
-            list: A list of backingstore names.
+            list: A list of backingstore objects.
 
         """
         if method.lower() not in cmdMap:
