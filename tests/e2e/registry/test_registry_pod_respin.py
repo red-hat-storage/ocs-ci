@@ -39,6 +39,8 @@ class TestRegistryPodRespin(E2ETest):
         Clean up svt
 
         """
+        self.image_path = None
+
         def finalizer():
             log.info("Remove image from registry")
             image_rm(registry_path=self.image_path, image_url=IMAGE_URL)
