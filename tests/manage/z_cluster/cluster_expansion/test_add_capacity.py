@@ -2,12 +2,11 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    polarion_id, pre_upgrade, skipif_aws_i3, skipif_bm, skipif_external_mode
+    polarion_id, skipif_aws_i3, skipif_bm, skipif_external_mode
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
-    skipif_ocs_version,
     tier1,
 )
 from ocs_ci.ocs import constants
@@ -66,19 +65,19 @@ class TestAddCapacity(ManageTest):
         add_capacity_test()
 
 
-@skipif_ocs_version('<4.4')
-@pre_upgrade
-@ignore_leftovers
-@polarion_id('OCS-1191')
-@skipif_aws_i3
-@skipif_bm
-@skipif_external_mode
-class TestAddCapacityPreUpgrade(ManageTest):
-    """
-    Automates adding variable capacity to the cluster while IOs running
-    """
-    def test_add_capacity_pre_upgrade(self):
-        """
-        Test to add variable capacity to the OSD cluster while IOs running
-        """
-        add_capacity_test()
+# @skipif_ocs_version('<4.4')
+# @pre_upgrade
+# @ignore_leftovers
+# @polarion_id('OCS-1191')
+# @skipif_aws_i3
+# @skipif_bm
+# @skipif_external_mode
+# class TestAddCapacityPreUpgrade(ManageTest):
+#     """
+#     Automates adding variable capacity to the cluster while IOs running
+#     """
+#     def test_add_capacity_pre_upgrade(self):
+#         """
+#         Test to add variable capacity to the OSD cluster while IOs running
+#         """
+#         add_capacity_test()
