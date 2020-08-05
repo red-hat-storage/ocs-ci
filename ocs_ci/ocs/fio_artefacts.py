@@ -12,54 +12,6 @@ from ocs_ci.utility.utils import (
 log = logging.getLogger(__name__)
 
 
-def get_fs_conf():
-    """
-    Basic fio configuration for upgrade utilization for fs based pvcs
-
-    Returns:
-        str: fio configuration
-
-    """
-    # TODO(fbalak): handle better fio size
-    fio_size = 1
-    return textwrap.dedent(f"""
-        [readwrite]
-        readwrite=randrw
-        buffered=1
-        blocksize=4k
-        ioengine=libaio
-        directory=/mnt/target
-        size={fio_size}G
-        time_based
-        runtime=24h
-        numjobs=10
-        """)
-
-
-def get_block_conf():
-    """
-    Basic fio configuration for upgrade utilization for block based pvcs
-
-    Returns:
-        str: fio configuration
-
-    """
-    # TODO(fbalak): handle better fio size
-    fio_size = 1
-    return textwrap.dedent(f"""
-        [readwrite]
-        readwrite=randrw
-        buffered=1
-        blocksize=4k
-        ioengine=libaio
-        filename=/dev/rbdblock
-        size={fio_size}G
-        time_based
-        runtime=24h
-        numjobs=10
-        """)
-
-
 def get_mcg_conf(mcg_obj, workload_bucket):
     """
     Basic fio configuration for upgrade utilization for NooBaa S3 bucket.

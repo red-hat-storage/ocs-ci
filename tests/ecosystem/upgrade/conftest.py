@@ -1,5 +1,6 @@
 import copy
 import logging
+import textwrap
 
 import pytest
 
@@ -180,7 +181,20 @@ def fio_conf_fs():
     Basic fio configuration for upgrade utilization for fs based pvcs
 
     """
-    return fio_artefacts.get_fs_conf()
+    # TODO(fbalak): handle better fio size
+    fio_size = 1
+    return textwrap.dedent(f"""
+        [readwrite]
+        readwrite=randrw
+        buffered=1
+        blocksize=4k
+        ioengine=libaio
+        directory=/mnt/target
+        size={fio_size}G
+        time_based
+        runtime=24h
+        numjobs=10
+        """)
 
 
 @pytest.fixture(scope='session')
@@ -189,7 +203,20 @@ def fio_conf_block():
     Basic fio configuration for upgrade utilization for block based pvcs
 
     """
-    return fio_artefacts.get_block_conf()
+    # TODO(fbalak): handle better fio size
+    fio_size = 1
+    return textwrap.dedent(f"""
+        [readwrite]
+        readwrite=randrw
+        buffered=1
+        blocksize=4k
+        ioengine=libaio
+        filename=/dev/rbdblock
+        size={fio_size}G
+        time_based
+        runtime=24h
+        numjobs=10
+        """)
 
 
 @pytest.fixture(scope='session')
