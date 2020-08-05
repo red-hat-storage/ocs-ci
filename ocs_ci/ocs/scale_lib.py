@@ -74,7 +74,8 @@ class FioPodScale(object):
             self.sa_name = None
 
     def create_multi_pvc_pod(
-        self, pods_per_iter=5, io_runtime=3600, start_io=False
+        self, pods_per_iter=5, io_runtime=3600, start_io=False,
+        pvc_size=None
     ):
         """
         Function to create PVC of different type and attach them to PODs and start IO.
@@ -84,6 +85,7 @@ class FioPodScale(object):
             Example, If 2 then 8 PVC+POD will be created with 2 each of 4 PVC types
             io_runtime (sec): Fio run time in seconds
             start_io (bool): If True start IO else don't
+            pvc_size (Gi): size of PVC
 
         Returns:
             pod_objs (obj): Objs of all the PODs created
@@ -92,7 +94,7 @@ class FioPodScale(object):
         """
         rbd_sc = helpers.default_storage_class(constants.CEPHBLOCKPOOL)
         cephfs_sc = helpers.default_storage_class(constants.CEPHFILESYSTEM)
-        pvc_size = f"{random.randrange(15, 105, 5)}Gi"
+        pvc_size = pvc_size or f"{random.randrange(15, 105, 5)}Gi"
         fio_size = get_size_based_on_cls_usage()
         fio_rate = get_rate_based_on_cls_iops()
         logging.info(f"Create {pods_per_iter * 4} PVCs and PODs")
@@ -105,6 +107,7 @@ class FioPodScale(object):
             sc_obj=rbd_sc, namespace=self.namespace, number_of_pvc=pods_per_iter,
             size=pvc_size, access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
         )
+
         # Appending all the pvc_obj and pod_obj to list
         pvc_objs, pod_objs = ([] for i in range(2))
         pvc_objs.extend(cephfs_pvcs + rbd_pvcs)
@@ -168,7 +171,8 @@ class FioPodScale(object):
         return pod_objs, pvc_objs
 
     def create_scale_pods(
-        self, scale_count=1500, pods_per_iter=5, io_runtime=None, start_io=None
+        self, scale_count=1500, pods_per_iter=5, io_runtime=None,
+        pvc_size=None, start_io=None
     ):
         """
         Main Function with scale pod creation flow and checks to add nodes.
@@ -179,6 +183,7 @@ class FioPodScale(object):
             io_runtime (sec): Fio run time in seconds
             start_io (bool): If True start IO else don't
             pods_per_iter (int): Number of PVC-POD to be created per PVC type
+            pvc_size (Gi): size of PVC
             Example, If 5 then 20 PVC+POD will be created with 5 each of 4 PVC types
             Test value in-between 5-10
 
@@ -213,10 +218,10 @@ class FioPodScale(object):
                 break
             else:
                 logger.info(f"Scaled PVC and POD count {len(all_pod_obj)}")
-                pod_obj, pvc_obj = self.create_multi_pvc_pod(
-                    pods_per_iter, io_runtime, start_io
+                self.pod_obj, self.pvc_obj = self.create_multi_pvc_pod(
+                    pods_per_iter, io_runtime, start_io, pvc_size
                 )
-                all_pod_obj.extend(pod_obj)
+                all_pod_obj.extend(self.pod_obj)
                 try:
                     # Check enough resources available in the dedicated app workers
                     check_enough_resource_available_in_workers(self.ms_name, self.pod_dict_path)
@@ -241,6 +246,15 @@ class FioPodScale(object):
                     raise UnexpectedBehaviour(
                         "Scaling PVC+POD failed analyze setup and log for more details"
                     )
+
+    def pvc_expansion(self, pvc_new_size):
+        """
+        Function to expand PVC size and verify the new size is reflected.
+        """
+        logging.info(f"PVC size is expanding to {pvc_new_size}")
+        for pvc_object in self.pvc_obj:
+            pvc_object.resize_pvc(new_size=pvc_new_size, verify=True)
+        logging.info(f"Verified: Size of all PVCs are expanded to {pvc_new_size}G")
 
     def cleanup(self):
         """
