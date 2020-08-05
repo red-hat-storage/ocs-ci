@@ -1,9 +1,9 @@
 ---
 # Config file for nightly OCP 4.4
 RUN:
-  client_version: '4.4.0-0.ci-2020-07-22-183130'
+  client_version: '4.4.0-0.nightly'
 DEPLOYMENT:
-  installer_version: "4.4.0-0.ci-2020-07-22-183130"
+  installer_version: "4.4.0-0.nightly"
   terraform_version: "0.11.14"
 ENV_DATA:
   vm_template: 'rhcos-4.4.3-x86_64-vmware.x86_64'
