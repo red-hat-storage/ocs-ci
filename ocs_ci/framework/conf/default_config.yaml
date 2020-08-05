@@ -79,11 +79,6 @@ DEPLOYMENT:
   # Following options are defaults for the min and max Noobaa endpoints
   min_noobaa_endpoints: 2
   max_noobaa_endpoints: 3
-  # The subnet prefix length to assign to each individual node.
-  # For example, if hostPrefix is set to 23, then each node is assigned a /23 subnet out of the given cidr,
-  # which allows for 510 (2^(32 - 23) - 2) pod IPs addresses.
-  # https://docs.openshift.com/container-platform/4.1/installing/installing_bare_metal/installing-bare-metal.html
-  cluster_host_prefix: 23
 
 # Section for reporting configuration
 REPORTING:
@@ -132,6 +127,11 @@ ENV_DATA:
   # terraform environment variables
   TF_LOG_LEVEL: TRACE
   TF_LOG_FILE: "terraform.log"
+  # The subnet prefix length to assign to each individual node.
+  # For example, if hostPrefix is set to 23, then each node is assigned a /23 subnet out of the given cidr,
+  # which allows for 510 (2^(32 - 23) - 2) pod IPs addresses.
+  # https://docs.openshift.com/container-platform/4.1/installing/installing_bare_metal/installing-bare-metal.html
+  cluster_host_prefix: 23
 
 # This section is related to upgrade
 UPGRADE:

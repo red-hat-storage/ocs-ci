@@ -2,5 +2,5 @@
 # The subnet prefix length to assign to each individual node.
 # For example, if hostPrefix is set to 22, then each node is assigned a /22 subnet out of the given cidr,
 # which allows to create 1000 pods per worker node
-DEPLOYMENT:
+ENV_DATA:
   cluster_host_prefix: 22
