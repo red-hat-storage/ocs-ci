@@ -3,3 +3,4 @@
 UPGRADE:
   ocp_upgrade_version: "4.4.0-0.nightly"
   ocp_upgrade_path: "registry.svc.ci.openshift.org/ocp/release"
+  ocp_channel: "stable-4.4"
