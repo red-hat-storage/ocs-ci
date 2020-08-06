@@ -26,7 +26,9 @@ class OCPDeployment:
         self.metadata = {}
         self.deployment_platform = config.ENV_DATA['platform'].lower()
         self.deployment_type = config.ENV_DATA['deployment_type'].lower()
-        if not getattr(self, 'flexy_deployment', False):
+        if not hasattr(self, 'flexy_deployment'):
+            self.flexy_deployment = False
+        if not self.flexy_deployment:
             self.installer = self.download_installer()
         self.cluster_path = config.ENV_DATA['cluster_path']
 
@@ -113,7 +115,7 @@ class OCPDeployment:
                 "stored at: %s",
                 self.cluster_path
             )
-        if not getattr(self, 'flexy_deployment', False):
+        if not self.flexy_deployment:
             self.create_config()
 
     def create_config(self):
