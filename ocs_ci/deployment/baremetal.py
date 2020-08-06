@@ -75,7 +75,7 @@ class BAREMETALUPI(Deployment):
                 worker_path: constants.WORKER_IGN
             }
 
-            for key, val in zip(upload_dict.items()):
+            for key, val in zip(upload_dict.keys(), upload_dict.values()):
                 upload_file(
                     self.host,
                     key,
@@ -126,7 +126,7 @@ class BAREMETALUPI(Deployment):
                 constants.PXE_CONF_FILE: "dnsmasq.pxe.conf",
                 constants.COMMON_CONF_FILE: "dnsmasq.common.conf"
             }
-            for key, val in zip(upload_dict.items()):
+            for key, val in zip(upload_dict.keys(), upload_dict.values()):
                 upload_file(
                     self.host,
                     key,
