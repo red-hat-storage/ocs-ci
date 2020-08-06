@@ -2455,6 +2455,7 @@ def configure_chrony_and_wait_for_machineconfig_status(
         time.sleep(60)
         wait_for_machineconfigpool_status(role)
 
+
 def modify_csv(csv, replace_from, replace_to):
     """
     Modify the CSV
@@ -2483,6 +2484,7 @@ def modify_csv(csv, replace_from, replace_to):
 
     run_cmd(f"chmod 777 {temp_file.name}")
     run_cmd(f"sh {temp_file.name}")
+
 
 def check_for_rhcos_images(url):
     """
