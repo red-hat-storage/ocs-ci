@@ -99,6 +99,21 @@ to the pytest.
   bugzilla_username = kerberos@redhat.com
   bugzilla_password = yourPassword
   ```
+* `--reserve`  option specific to use with downstream lab only
+   (when specified reserves any freely available testbed to run tier tests)
+* `--release` option specific to use with downstream lab
+    when specified with --testbed-name , releases the testbed to free pool
+* `--testbed-name` when specified with --reserve or --release , tries
+   to reserve specific testbed-name that matches the testbed-name
+   ```bash
+    # run-ci --reserve --testbed-name Common tests/ (reserve any testbed from Common Pool)
+    # run-ci --reserve --testbed-name Perf tests/ (reserve any testbed from Perf Pool)
+    # run-ci --reserve --testbed-name specific-testbed tests/(reserve specific testbed)
+
+    # to release a testbed
+    # run-ci --release --testbed-name specific-testbedname
+    ```
+* `--reserve-timeout` timeout if unable to reserve during specific time in seconds
 * `--collect-logs` - to collect OCS logs for failed test cases.
 * `--io-in-bg` - If passed, IO will be running in the test background.
 * `--io-load` - IOs throughput target percentage. The value should be

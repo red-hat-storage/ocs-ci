@@ -8,10 +8,14 @@ pytest which proccess config and passes all params to pytest.
 """
 import logging
 import os
+import re
 
 import pytest
+import socket
 
+from getpass import getuser
 from ocs_ci.framework import config as ocsci_config
+from uuid import uuid1
 from ocs_ci.framework.exceptions import (
     ClusterNameLengthError,
     ClusterNameNotProvidedError,
@@ -23,7 +27,13 @@ from ocs_ci.ocs.constants import (
     OCP_VERSION_CONF_DIR,
 )
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
+from ocs_ci.framework.testbed import ( 
+    reserve_testbed, release_testbed, check_request_met, 
+    check_existing_reservation, update_testbed_request
+)
+from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.ocs.resources.ocs import get_ocs_csv, get_version_info
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
 from ocs_ci.utility.utils import (
     dump_config_to_file, get_ceph_version, get_cluster_name,
@@ -35,6 +45,10 @@ __all__ = [
     "pytest_addoption",
 ]
 
+FORMAT = (
+    '%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s'
+)
+logging.basicConfig(level=logging.INFO, format=FORMAT)
 log = logging.getLogger(__name__)
 
 
@@ -166,6 +180,32 @@ def pytest_addoption(parser):
             "from and the value to replace to, separated by '::'"
         )
     )
+    parser.addoption(
+        '--reserve',
+        default=False,
+        action="store_true",
+        dest='reserve_testbed',
+        help="Reserve next free available testbed"
+    )
+    parser.addoption(
+        '--reserve-timeout',
+        dest='reserve_timeout',
+        type=int,
+        default=3600,
+        help="Timeout in seconds for reservation to exit"
+    )
+    parser.addoption(
+        '--release',
+        dest='release_testbed',
+        action="store_true",
+        default=False,
+        help="release testbed reserved by testbed-name"
+    )
+    parser.addoption(
+        '--testbed-name',
+        dest='testbed_name',
+        help="name of the testbed to reserve or release"
+    )
 
 
 def pytest_configure(config):
@@ -181,8 +221,16 @@ def pytest_configure(config):
     ocscilib_module = 'ocs_ci.framework.pytest_customization.ocscilib'
     if ocscilib_module not in config.getoption('-p'):
         return
+    user = socket.gethostname() + '-' + getuser()
+    if config.getoption('release_testbed'):
+        try_release_testbed(user, config)
+        return
     if not (config.getoption("--help") or config.getoption("collectonly")):
         process_cluster_cli_params(config)
+        if config.getoption('reserve_testbed'):
+            conf = try_reserve_testbed(user, config)
+            if conf is None:
+                pytest.exit("Reservation of testbed failed")
         config_file = os.path.expanduser(
             os.path.join(
                 ocsci_config.RUN['log_dir'],
@@ -283,6 +331,56 @@ def gather_version_info_for_report(config):
                 "Failed to gather version details! The report of version might"
                 "not be complete!"
             )
+
+
+def try_reserve_testbed(user, config):
+    testbed_name = config.option.testbed_name or None
+    timeout = config.option.reserve_timeout
+    launch_name = get_testrun_name() + user + uuid1().hex
+    ocsci_config.RUN['launch_name'] = launch_name
+    ocsci_config.RUN['testbed_name'] = testbed_name
+    ocsci_config.RUN['user'] = user
+    (tbname, config) = check_existing_reservation(user)
+    if not config:
+        if tbname is None:
+            reserve_testbed(launch_name, user, testbed_name, timeout)
+            param={'launch_name': launch_name, 'username': None}
+        else:
+            log.info("Existing Reservation still in progress, Checking...")
+            param = {'username': user, 'launch_name': None}
+        # check if we got the reservation
+        for ret in TimeoutSampler(timeout, 60, check_request_met, param):
+            log.info(ret)
+            requestmet = ret[0]
+            if requestmet is True:
+                ocsci_config.RUN['testbed_name'] = ret[1]
+                ocsci_config.RUN['testbed_config'] = ret[2]
+                log.info(f"Successfully Reserved {ret[1]}")
+                config = ret[2]
+                break
+            else:
+                log.info("Waiting for testbed to be reserved")
+    else:
+        log.info("Using existing testbed...")
+    m = re.search('(?=s3://(.*)/(.*))', config['s3'])
+    bucket_name = m.group(1)
+    testbed_name = m.group(2)
+    if bucket_name is None or testbed_name is None:
+        pytest.exit("Invalid config for testbed reservation found")
+    update_config_from_s3(bucket_name, testbed_name)
+    return config
+
+
+def try_release_testbed(user, config):
+    (tb_name, _) = check_existing_reservation(user)
+    if tb_name is None:
+        # try cli option
+        tb_name = config.option.testbed_name
+        if tb_name is None:
+            log.error("Empty Testbed Name in Config and CLI")
+            pytest.exit("No existing reservations in Config or CLI")
+    release_testbed(tb_name)
+    update_testbed_request(user)
 
 
 def get_cli_param(config, name_of_param, default=None):

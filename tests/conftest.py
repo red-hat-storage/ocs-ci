@@ -16,6 +16,7 @@ import pytest
 
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.framework import config
+from ocs_ci.framework.testbed import release_testbed
 from ocs_ci.framework.pytest_customization.marks import (
     deployment, ignore_leftovers, tier_marks, ignore_leftover_label
 )
@@ -1045,6 +1046,7 @@ def cluster(request, log_cli_level):
     if teardown:
         def cluster_teardown_finalizer():
             deployer.destroy_cluster(log_cli_level)
+            release_testbed(config.RUN['testbed_name'])
 
         request.addfinalizer(cluster_teardown_finalizer)
         log.info("Will teardown cluster because --teardown was provided")
