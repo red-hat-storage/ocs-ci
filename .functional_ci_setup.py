@@ -97,6 +97,7 @@ def get_ocsci_conf():
         ),
         REPORTING=dict(
             gather_on_deploy_failure=True,
+            gather_on_deploy_success=True,
         )
     )
     if env.get("DOWNSTREAM") == "true":
