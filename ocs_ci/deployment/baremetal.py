@@ -68,40 +68,23 @@ class BAREMETALUPI(Deployment):
             logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
             cmd = f"mkdir -m 755 {self.helper_node_details['bm_path_to_upload']}"
             assert self.helper_node_handler.exec_cmd(cmd=cmd), ("Failed to create required folder")
+            # Upload ignition to public access server
+            upload_dict = {
+                bootstrap_path: constants.BOOTSTRAP_IGN,
+                master_path: constants.MASTER_IGN,
+                worker_path: constants.WORKER_IGN
+            }
 
-            # Upload bootstrap ignition to public access server
-            upload_file(
-                self.host,
-                bootstrap_path,
-                os.path.join(
-                    self.helper_node_details['bm_path_to_upload'],
-                    f"{constants.BOOTSTRAP_IGN}"
-                ),
-                self.user,
-                key_file=self.private_key
-            )
-            # Upload Master ignition to public access server
-            upload_file(
-                self.host,
-                master_path,
-                os.path.join(
-                    self.helper_node_details['bm_path_to_upload'],
-                    f"{constants.MASTER_IGN}"
-                ),
-                self.user,
-                key_file=self.private_key
-            )
-            # Upload Worker ignition to public access server
-            upload_file(
-                self.host,
-                worker_path,
-                os.path.join(
-                    self.helper_node_details['bm_path_to_upload'],
-                    f"{constants.WORKER_IGN}"
-                ),
-                self.user,
-                key_file=self.private_key
-            )
+            for key, val in zip(upload_dict.items()):
+                upload_file(
+                    self.host,
+                    key,
+                    os.path.join(
+                        self.helper_node_details['bm_path_to_upload'], f"{val}"
+                    ),
+                    self.user,
+                    key_file=self.private_key
+                )
 
             # Perform Cleanup for stale entry's
             cmd = f"rm -rf {self.helper_node_details['bm_tftp_base_dir']}"
@@ -139,26 +122,21 @@ class BAREMETALUPI(Deployment):
             cmd = f"cp -ar /usr/share/syslinux/* {self.helper_node_details['bm_tftp_dir']}"
             assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Copy required files"
 
-            upload_file(
-                self.host,
-                constants.PXE_CONF_FILE,
-                os.path.join(
-                    self.helper_node_details['bm_dnsmasq_dir'],
-                    "dnsmasq.pxe.conf"
-                ),
-                self.user,
-                key_file=self.private_key
-            )
-            upload_file(
-                self.host,
-                constants.COMMON_CONF_FILE,
-                os.path.join(
-                    self.helper_node_details['bm_dnsmasq_dir'],
-                    "dnsmasq.common.conf"
-                ),
-                self.user,
-                key_file=self.private_key
-            )
+            upload_dict = {
+                constants.PXE_CONF_FILE: "dnsmasq.pxe.conf",
+                constants.COMMON_CONF_FILE: "dnsmasq.common.conf"
+            }
+            for key, val in zip(upload_dict.items()):
+                upload_file(
+                    self.host,
+                    key,
+                    os.path.join(
+                        self.helper_node_details['bm_dnsmasq_dir'],
+                        val
+                    ),
+                    self.user,
+                    key_file=self.private_key
+                )
             # Restarting dnsmasq service
             cmd = "systemctl restart dnsmasq"
             assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to restart dnsmasq service"
@@ -418,8 +396,10 @@ def clean_disk():
         lsblk_output = json.loads(str(out))
         lsblk_devices = lsblk_output['blockdevices']
         for lsblk_device in lsblk_devices:
-            base_cmd = """pvs --config "devices{filter = [ 'a|/dev/%s.*|', 'r|.*|' ] }" --reportformat json""" \
-                       % lsblk_device['name']
+            base_cmd = (
+                """pvs --config "devices{filter = [ 'a|/dev/%s.*|', 'r|.*|' ] }" --reportformat json"""
+                % lsblk_device['name']
+            )
 
             cmd = (
                 f"debug nodes/{worker.name} "
@@ -439,8 +419,10 @@ def clean_disk():
                         'hostname': f"{worker.name}", 'pv_name': f"{pv['pv_name']}"
                     }
                     lvm_to_clean.append(device_dict)
-            base_cmd = """vgs --config "devices{filter = [ 'a|/dev/%s.*|', 'r|.*|' ] }" --reportformat json""" \
-                       % lsblk_device['name']
+            base_cmd = (
+                """vgs --config "devices{filter = [ 'a|/dev/%s.*|', 'r|.*|' ] }" --reportformat json"""
+                % lsblk_device['name']
+            )
 
             cmd = (
                 f"debug nodes/{worker.name} "

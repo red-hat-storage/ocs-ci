@@ -2455,8 +2455,6 @@ def configure_chrony_and_wait_for_machineconfig_status(
         time.sleep(60)
         wait_for_machineconfigpool_status(role)
 
-
-<<<<<<< HEAD
 def modify_csv(csv, replace_from, replace_to):
     """
     Modify the CSV
@@ -2486,35 +2484,15 @@ def modify_csv(csv, replace_from, replace_to):
     run_cmd(f"chmod 777 {temp_file.name}")
     run_cmd(f"sh {temp_file.name}")
 
-
-def wait_for_machineconfigpool_status(resource_name, timeout=800):
-    """
-    Check for Machineconfigpool status
-
-    Args:
-        resource_name (str): The name of the resource to wait (master,worker)
-        timeout (int): Time in seconds to wait:
-
-
-    """
-    from ocs_ci.ocs import ocp
-    ocp_obj = ocp.OCP(kind=constants.MACHINECONFIGPOOL, resource_name=resource_name)
-    machine_count = ocp_obj.get()['status']['machineCount']
-
-    ocp_obj.wait_for_resource(condition=str(machine_count), column="READYMACHINECOUNT", timeout=timeout)
-
-
-=======
->>>>>>> a2a0fbbf... Resolved conflits
-def check_for_rhcos_images(path):
+def check_for_rhcos_images(url):
     """
     Check for rhcos images are present in given location
 
     Args:
-        path (str): rhcos_images path
+        url (str): rhcos_images url
     Returns:
         (bool): True if images present if not false
 
     """
-    r = requests.head(path)
+    r = requests.head(url)
     return r.status_code == requests.codes.ok
