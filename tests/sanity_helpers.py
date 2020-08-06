@@ -9,7 +9,7 @@ from ocs_ci.ocs.resources.pvc import delete_pvcs
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.cluster import CephCluster
 from tests import helpers
-from tests.manage.mcg.helpers import s3_delete_object, s3_get_object, s3_put_object
+from ocs_ci.ocs.bucket_utils import s3_delete_object, s3_get_object, s3_put_object
 from tests.manage.z_cluster.pvc_ops import create_pvcs
 
 logger = logging.getLogger(__name__)

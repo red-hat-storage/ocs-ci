@@ -59,7 +59,7 @@ from ocs_ci.utility.utils import (
     ceph_health_check_base, skipif_ocs_version
 )
 from tests import helpers
-from tests.helpers import create_unique_resource_name, remove_label_from_worker_node
+from tests.helpers import create_unique_resource_name
 from ocs_ci.ocs.bucket_utils import (
     oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
     oc_create_s3comp_backingstore, oc_create_pv_backingstore, cli_create_aws_backingstore,
