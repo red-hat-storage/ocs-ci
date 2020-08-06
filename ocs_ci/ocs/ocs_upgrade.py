@@ -434,20 +434,35 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         if parsed_upgrade_version >= parse_version('4.2'):
             log.info("Sleep 30 seconds before checking LBP CSVs")
             time.sleep(30)
+            lbp_subscription_names = []
+            all_subscriptions = OCP(
+                kind="subscription", namespace=upgrade_ocs.namespace,
+            ).get()
+            for subscription in all_subscriptions['items']:
+                if constants.LBP_SUBSCRIPTION in subscription['metadata']['name']:
+                    lbp_subscription_names.append(subscription['metadata']['name'])
+            for lbp_sub_name in lbp_subscription_names:
+                log.info(f"Deleting LBP subscription {lbp_sub_name}")
+                lbp_subscription = OCP(
+                    kind="subscription", namespace=upgrade_ocs.namespace,
+                    resource_name=lbp_sub_name
+                )
+                lbp_subscription.delete()
+            log.info("Sleep 30 seconds after deleting subscription")
+            time.sleep(30)
             all_csvs = CSV(namespace=upgrade_ocs.namespace).get()
             lbp_csvs = [
                 csv for csv in all_csvs.get('items', []) if
                 "lib-bucket-provisioner" in csv['metadata']['name']
-                and csv['spec']['version'] == '1.0.0'
             ]
-            if lbp_csvs:
-                lbp_v1_csv_name = lbp_csvs[0]['metadata']['name']
-                lbp_v1_csv = CSV(
+            for lbp_csv in lbp_csvs:
+                lbp_v1_csv_name = lbp_csv['metadata']['name']
+                csv_to_delete = CSV(
                     resource_name=lbp_v1_csv_name,
                     namespace=upgrade_ocs.namespace
                 )
                 log.info(f"Deleting LBP CSV: {lbp_v1_csv_name}")
-                lbp_v1_csv.delete()
+                csv_to_delete.delete()
 
         if operation:
             log.info(f"Calling test function: {operation}")
