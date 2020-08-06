@@ -137,7 +137,7 @@ class Sanity:
 class SanityExternalCluster(Sanity):
     """
     Helpers for health check and functional validation
-    in Independent mode
+    in External mode
     """
 
     def __init__(self):
