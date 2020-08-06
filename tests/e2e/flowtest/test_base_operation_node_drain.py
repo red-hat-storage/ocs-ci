@@ -9,8 +9,7 @@ from ocs_ci.ocs import node, constants
 from ocs_ci.framework.testlib import E2ETest, tier2, config, ignore_leftovers
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
-from tests.e2e.flowtest import flowtest_helpers
-from tests.e2e.flowtest.flowtest_helpers import FlowOperations
+from ocs_ci.ocs import flowtest
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +38,7 @@ class TestBaseOperationNodeDrain(E2ETest):
         """
         logger.info("Starting IO operations in Background")
         project = project_factory()
-        bg_handler = flowtest_helpers.BackgroundOps()
+        bg_handler = flowtest.BackgroundOps()
         executor_run_bg_ios_ops = ThreadPoolExecutor(max_workers=3)
 
         pgsql_workload = executor_run_bg_ios_ops.submit(
@@ -50,7 +49,7 @@ class TestBaseOperationNodeDrain(E2ETest):
         )
         logging.info("Started pgsql workload in background")
 
-        flow_ops = FlowOperations()
+        flow_ops = flowtest.FlowOperations()
 
         obc_ios = executor_run_bg_ios_ops.submit(
             bg_handler.handler,
