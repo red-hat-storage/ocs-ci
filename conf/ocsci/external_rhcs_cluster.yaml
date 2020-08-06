@@ -8,5 +8,5 @@ ENV_DATA:
 EXTERNAL_MODE:
   # base64 encoded data of json output
   # from exporter script
-  # https://github.com/rook/rook/blob/master/cluster/examples/kubernetes/ceph/create-external-cluster-resources.py&sa=D&ust=1594358560646000&usg=AFQjCNHNqJas0w2FqtjZM5d0-9N38-MJCw
+  # https://github.com/rook/rook/blob/master/cluster/examples/kubernetes/ceph/create-external-cluster-resources.py
   external_cluster_details: PLACE_HOLDER

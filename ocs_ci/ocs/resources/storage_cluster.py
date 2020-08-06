@@ -149,7 +149,10 @@ def ocs_install_verification(
                 constants.MDS_APP_LABEL: 2,
             }
         )
-    if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+    if (
+            config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS
+            and not config.DEPLOYMENT['external_mode']
+    ):
         # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1857802 - RGW count is 1
         # post upgrade to OCS 4.5. Tracked with
         # https://github.com/red-hat-storage/ocs-ci/issues/2532
