@@ -35,6 +35,8 @@ from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation
 )
+from ocs_ci.ocs.utils import setup_ceph_toolbox,collect_ocs_logs
+from ocs_ci.ocs.resources.backingstore import BackingStore
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.cloud_uls import (
     cloud_uls_factory as cloud_uls_factory_implementation
@@ -2558,6 +2560,7 @@ def node_restart_teardown(request, nodes):
     request.addfinalizer(finalizer)
 
 
+<<<<<<< HEAD
 @pytest.fixture()
 def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
     """
@@ -2592,3 +2595,22 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
     request.addfinalizer(ns_resources_and_connections_cleanup)
 
     return _create_ns_resources
+=======
+>>>>>>> 454b8316... resolve conflicts, readd the pytest.fixture
+@pytest.fixture(scope="session", autouse=True)
+def collect_logs_fixture(request):
+    """
+    This fixture collects ocs logs after tier execution and this will allow
+    to see the cluster's status after the execution on all execution status options.
+    """
+    def finalizer():
+        """
+        Tracking both logs separately reduce changes of collision
+        """
+        if not config.RUN['cli_params'].get('deploy') and \
+            not config.RUN['cli_params'].get('destroy'):
+            collect_ocs_logs('testcases', ocs=False, status_failure=False)
+            collect_ocs_logs('testcases', ocp=False, status_failure=False)
+
+    request.addfinalizer(finalizer)
+
