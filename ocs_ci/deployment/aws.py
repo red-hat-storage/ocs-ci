@@ -13,7 +13,6 @@ from ocs_ci.cleanup.aws.defaults import CLUSTER_PREFIXES_SPECIAL_RULES
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp
-from ocs_ci.ocs.parallel import parallel
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import (
@@ -27,7 +26,8 @@ from ocs_ci.utility.utils import (
     TimeoutSampler, get_ocp_version
 )
 from semantic_version import Version
-from .deployment import Deployment
+from .cloud import CloudDeploymentBase
+from .cloud import IPIOCPDeployment
 
 logger = logging.getLogger(__name__)
 
@@ -35,56 +35,17 @@ logger = logging.getLogger(__name__)
 __all__ = ['AWSIPI', 'AWSUPI']
 
 
-class AWSBase(Deployment):
+class AWSBase(CloudDeploymentBase):
+
+    # default storage class for StorageCluster CRD on AWS platform
+    DEFAULT_STORAGECLASS = "gp2"
+
     def __init__(self):
         """
         This would be base for both IPI and UPI deployment
         """
         super(AWSBase, self).__init__()
-        self.region = config.ENV_DATA['region']
         self.aws = AWSUtil(self.region)
-        if config.ENV_DATA.get('cluster_name'):
-            self.cluster_name = config.ENV_DATA['cluster_name']
-        else:
-            self.cluster_name = get_cluster_name(self.cluster_path)
-
-    def create_ebs_volumes(self, worker_pattern, size=100):
-        """
-        Add new ebs volumes to the workers
-
-        Args:
-            worker_pattern (str):  Worker name pattern e.g.:
-                cluster-55jx2-worker*
-            size (int): Size in GB (default: 100)
-        """
-        worker_instances = self.aws.get_instances_by_name_pattern(
-            worker_pattern
-        )
-        with parallel() as p:
-            for worker in worker_instances:
-                logger.info(
-                    f"Creating and attaching {size} GB "
-                    f"volume to {worker['name']}"
-                )
-                p.spawn(
-                    self.aws.create_volume_and_attach,
-                    availability_zone=worker['avz'],
-                    instance_id=worker['id'],
-                    name=f"{worker['name']}_extra_volume",
-                    size=size,
-                )
-
-    def add_volume(self, size=100):
-        """
-        Add a new volume to all the workers
-
-        Args:
-            size (int): Size of volume in GB (default: 100)
-        """
-        cluster_id = get_infra_id(self.cluster_path)
-        worker_pattern = f'{cluster_id}-worker*'
-        logger.info(f'Worker pattern: {worker_pattern}')
-        self.create_ebs_volumes(worker_pattern, size)
 
     def host_network_update(self):
         """
@@ -174,7 +135,8 @@ class AWSBase(Deployment):
                 False otherwise
 
         """
-        instances = self.aws.get_instances_by_name_pattern(cluster_name_prefix)
+        cluster_name_pattern = cluster_name_prefix + "*"
+        instances = self.aws.get_instances_by_name_pattern(cluster_name_pattern)
         instance_objs = [
             self.aws.get_ec2_instance(ins.get('id')) for ins in instances
         ]
@@ -195,53 +157,15 @@ class AWSIPI(AWSBase):
     """
     A class to handle AWS IPI specific deployment
     """
+
+    OCPDeployment = IPIOCPDeployment
+
     def __init__(self):
         self.name = self.__class__.__name__
         super(AWSIPI, self).__init__()
-
-    class OCPDeployment(BaseOCPDeployment):
-        def __init__(self):
-            super(AWSIPI.OCPDeployment, self).__init__()
-
-        def deploy_prereq(self):
-            """
-            Overriding deploy_prereq from parent. Perform all necessary
-            prerequisites for AWSIPI here.
-            """
-            super(AWSIPI.OCPDeployment, self).deploy_prereq()
-            if config.DEPLOYMENT['preserve_bootstrap_node']:
-                logger.info("Setting ENV VAR to preserve bootstrap node")
-                os.environ['OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP'] = 'True'
-                assert os.getenv(
-                    'OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP') == 'True'
-
-        def deploy(self, log_cli_level='DEBUG'):
-            """
-            Deployment specific to OCP cluster on this platform
-
-            Args:
-                log_cli_level (str): openshift installer's log level
-                    (default: "DEBUG")
-            """
-            logger.info("Deploying OCP cluster")
-            logger.info(
-                f"Openshift-installer will be using loglevel:{log_cli_level}"
-            )
-            try:
-                run_cmd(
-                    f"{self.installer} create cluster "
-                    f"--dir {self.cluster_path} "
-                    f"--log-level {log_cli_level}",
-                    timeout=3600
-                )
-            except exceptions.CommandFailed as e:
-                if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
-                    try:
-                        gather_bootstrap()
-                    except Exception as ex:
-                        logger.error(ex)
-                raise e
-            self.test_cluster()
+        # dict of cluster prefixes with special handling rules (for existence
+        # check or during a cluster cleanup)
+        self.cluster_prefixes_special_rules = CLUSTER_PREFIXES_SPECIAL_RULES
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
         """
@@ -251,22 +175,6 @@ class AWSIPI(AWSBase):
             log_cli_level (str): openshift installer's log level
                 (default: "DEBUG")
         """
-        if not config.DEPLOYMENT.get('force_deploy_multiple_clusters'):
-            cluster_name = config.ENV_DATA['cluster_name']
-            cluster_name_parts = cluster_name.split("-")
-            prefix = cluster_name_parts[0]
-            if prefix.lower() in CLUSTER_PREFIXES_SPECIAL_RULES.keys():
-                # if the prefix is a cleanup special rule, use the next part of
-                # the cluster name as the prefix
-                prefix = cluster_name_parts[1]
-            prefix += "*"
-
-            if self.check_cluster_existence(prefix):
-                raise exceptions.SameNamePrefixClusterAlreadyExistsException(
-                    f"Cluster with name prefix {prefix} already exists. "
-                    f"Please destroy the existing cluster for a new cluster "
-                    f"deployment"
-                )
         super(AWSIPI, self).deploy_ocp(log_cli_level)
         if config.DEPLOYMENT.get('host_network'):
             self.host_network_update()

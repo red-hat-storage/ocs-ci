@@ -1672,13 +1672,7 @@ class AZURENodes(NodesBase):
     """
     def __init__(self):
         super(AZURENodes, self).__init__()
-        self.subscription_id = config.ENV_DATA.get("azure_subscription_id")
-        self.client_id = config.ENV_DATA['azure_client_id']
-        self.client_secret = config.ENV_DATA['azure_client_secret']
-        self.tenant_id = config.ENV_DATA['azure_tenant_id']
-        self.resourcegroup = config.ENV_DATA['azure_resourcegroup']
-        self.azure = azure_utils.AZURE(self.subscription_id, self.client_id,
-                                       self.client_secret, self.tenant_id, self.resourcegroup)
+        self.azure = azure_utils.AZURE()
 
     def stop_nodes(self, nodes):
         raise NotImplementedError(

@@ -1,0 +1,45 @@
+apiVersion: {{ api_version | default('v1') }}
+baseDomain: {{ base_domain }}
+compute:
+  - name: worker
+    platform:
+      azure:
+        type: {{ worker_instance_type }}
+{% if worker_availability_zones %}
+        zones:
+  {% for zone in worker_availability_zones %}
+        - {{ zone }}
+  {% endfor %}
+{% endif %}
+    replicas: {{ worker_replicas | default(3) }}
+controlPlane:
+  name: master
+  platform:
+    azure:
+      type: {{ master_instance_type }}
+{% if master_availability_zones %}
+      zones:
+  {% for zone in master_availability_zones %}
+      - {{ zone }}
+  {% endfor %}
+{% endif %}
+  replicas: {{ master_replicas | default(3) }}
+metadata:
+  creationTimestamp: null
+  name: '{{ cluster_name }}'
+networking:
+  clusterNetwork:
+    - cidr: 10.128.0.0/14
+      hostPrefix: 23
+  machineCIDR: 10.0.0.0/16
+  networkType: OpenShiftSDN
+  serviceNetwork:
+    - 172.30.0.0/16
+{% if fips %}
+fips: {{ fips }}
+{% endif %}
+platform:
+  azure:
+    baseDomainResourceGroupName: ocsqe
+    region: {{ region }}
+pullSecret: ''

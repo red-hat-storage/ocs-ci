@@ -13,7 +13,7 @@ spec:
     placement: {}
     dataPVCTemplate:
       spec:
-        storageClassName: gp2
+        storageClassName: null
         accessModes:
         - ReadWriteOnce
         volumeMode: Block

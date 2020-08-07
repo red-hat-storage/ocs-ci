@@ -14,7 +14,7 @@ spec:
           values:
           - ""
   storageClassDevices:
-    - storageClassName: localblock
+    - storageClassName: null
       volumeMode: Block
       devicePaths:
         - PLACEHOLDER
