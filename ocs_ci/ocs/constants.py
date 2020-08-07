@@ -607,7 +607,7 @@ MARKETPLACE_NAMESPACE = "openshift-marketplace"
 MONITORING_NAMESPACE = "openshift-monitoring"
 OPERATOR_INTERNAL_SELECTOR = "ocs-operator-internal=true"
 OPERATOR_CS_QUAY_API_QUERY = (
-    'https://quay.io/api/v1/repository/rhceph-dev/ocs-olm-operator/'
+    'https://quay.io/api/v1/repository/rhceph-dev/{image}/'
     'tag/?onlyActiveTags=true&limit={tag_limit}'
 )
 
