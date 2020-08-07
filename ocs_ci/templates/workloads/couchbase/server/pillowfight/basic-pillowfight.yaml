@@ -12,6 +12,6 @@ spec:
         image: couchbaseutils/pillowfight:v2.9.3
         command: ["cbc-pillowfight",
                   "-U", "couchbase://cb-example-0000.cb-example.couchbase-operator-namespace.svc:8091/default?select_bucket=true",
-                  "-I", "10000", "-m", "1000", "-M", "1000",
+                  "-I", "10000", "-m", "1000", "-M", "10000",
                   "-c", "10000", "-T", "-t", "1", "-u", "Administrator", "-P", "password"]
       restartPolicy: Never
