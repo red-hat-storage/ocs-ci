@@ -17,7 +17,7 @@
    parameter pointing to your local clone of openshift console repo. See example in `conf/ocsci/ui-testing.yaml`.
 6. Install the dependencies for scipy
 
-    sudo yum install atlas-devel openssl-devel libffi-devel gcc gcc-gfortran
+    `sudo yum install atlas-devel openssl-devel libffi-devel gcc gcc-gfortran`
 
 #### AWS UPI
 There are additional prerequisites if you plan to execute AWS UPI deployments
