@@ -2055,13 +2055,13 @@ def multiregion_mirror_setup(mcg_obj, multiregion_resources, backingstore_factor
 
 @pytest.fixture(scope='session')
 def multiregion_mirror_setup_session(
-    mcg_obj_with_aws_session,
+    mcg_obj_session,
     multiregion_resources_session,
     backingstore_factory,
     bucket_factory_session
 ):
     return multiregion_mirror_setup_fixture(
-        mcg_obj_with_aws_session,
+        mcg_obj_session,
         multiregion_resources_session,
         backingstore_factory,
         bucket_factory_session
