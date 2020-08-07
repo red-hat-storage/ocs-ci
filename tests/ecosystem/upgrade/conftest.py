@@ -1,17 +1,15 @@
-import configparser
 import copy
 import logging
 import textwrap
 
 import pytest
 
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, ocp, fio_artefacts
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import Pod
-from ocs_ci.utility.utils import config_to_string
 from tests import helpers
 
 
@@ -228,21 +226,7 @@ def fio_conf_mcg(mcg_obj_session, bucket_factory_session):
 
     """
     workload_bucket = bucket_factory_session()
-    config = configparser.ConfigParser()
-    config.read_file(open(constants.FIO_S3))
-    config.set('global', 'name', workload_bucket[0].name)
-    config.set('global', 'http_s3_key', mcg_obj_session.access_key)
-    config.set('global', 'http_s3_keyid', mcg_obj_session.access_key_id)
-    config.set(
-        'global',
-        'http_host',
-        mcg_obj_session.s3_endpoint.lstrip('https://').rstrip(':443')
-    )
-    config.set('global', 'http_s3_region', mcg_obj_session.region)
-    config.set('global', 'filename', f"/{workload_bucket[0].name}/object")
-    config.set('create', 'time_based', '1')
-    config.set('create', 'runtime', '24h')
-    return config_to_string(config)
+    return fio_artefacts.get_mcg_conf(mcg_obj_session, workload_bucket)
 
 
 @pytest.fixture(scope='session')
