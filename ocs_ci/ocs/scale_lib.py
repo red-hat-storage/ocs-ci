@@ -1,10 +1,13 @@
 import logging
 import threading
 import random
+import time
 
 from tests import helpers
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
+from ocs_ci.utility import templating, utils
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs import constants, cluster, machine, node
 from ocs_ci.ocs.exceptions import (
@@ -142,7 +145,6 @@ class FioPodScale(object):
         pod_objs.extend(temp_pod_objs + rbd_rwx_pods)
 
         # Start IO
-        import time
         if start_io:
             threads = list()
             for pod_obj in temp_pod_objs:
@@ -649,3 +651,49 @@ def check_and_add_enough_worker(worker_count):
             raise UnavailableResourceException(
                 "There is no enough worker nodes to continue app pod scaling"
             )
+
+
+def increase_pods_per_worker_node_count(count=500):
+    """
+    Function to increase pods per node count, default OCP supports 250 pods per node,
+    from OCP 4.6 limit is going to be 500, but using this function can override this param
+    to create mode pods per worker nodes.
+    more detail: https://docs.openshift.com/container-platform/4.5/nodes/nodes/nodes-nodes-managing-max-pods.html
+    WARN: This function will perform Unscheduling of workers and back to Scheduled state
+    Please aware if there is any non-dc pods then expected to be terminated.
+
+    Args:
+        count (int): Required pods per node count
+
+    """
+    max_pods_template = templating.load_yaml(constants.PODS_PER_NODE_COUNT_YAML)
+    max_pods_template['spec']['kubeletConfig']['podsPerCore'] = 65
+    max_pods_template['spec']['kubeletConfig']['maxPods'] = count
+
+    # Create new max-pods label
+    max_pods_obj = OCS(**max_pods_template)
+    assert max_pods_obj.create()
+
+    # Apply the changes in the workers
+    label_cmd = "label machineconfigpool worker custom-kubelet=small-pods"
+    ocp = OCP()
+    assert ocp.exec_oc_cmd(command=label_cmd)
+
+    # First wait for Updating status to become True, default it will be False &
+    # machine_count and ready_machine_count will be equal
+    get_cmd = "get machineconfigpools -o yaml"
+    while True:
+        output = ocp.exec_oc_cmd(command=get_cmd)
+        update_status = output.get('items')[1].get('status').get('conditions')[4].get('status')
+        if update_status == 'True':
+            break
+        else:
+            logging.info("Sleep 5secs for updating status change")
+            time.sleep(5)
+
+    # Validate either change is successful
+    output = ocp.exec_oc_cmd(command=get_cmd)
+    machine_count = output.get('items')[1].get('status').get('machineCount')
+    # During manual execution observed each node took 240+ sec for update
+    timeout = machine_count * 300
+    utils.wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE, timeout=timeout)

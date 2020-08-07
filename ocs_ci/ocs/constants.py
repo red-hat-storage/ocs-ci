@@ -547,6 +547,9 @@ RSYNC_POD_YAML = os.path.join(
 MACHINESET_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "machine-set.yaml"
 )
+PODS_PER_NODE_COUNT_YAML = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "max-pods-per-node.yaml"
+)
 
 ANSIBLE_INVENTORY_YAML = os.path.join(
     "ocp-deployment", "inventory.yaml.j2"
