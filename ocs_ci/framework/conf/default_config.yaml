@@ -29,6 +29,7 @@ RUN:
   # Following chrome params are for openshift console UI testing
   force_chrome_branch_base: "665006"
   force_chrome_branch_sha256sum: "a1ae2e0950828f991119825f62c24464ab3765aa219d150a94fb782a4c66a744"
+  chrome_binary_path: "/usr/bin/chromium-browser"
   io_in_bg: False
   io_load: 30
   log_utilization: False
