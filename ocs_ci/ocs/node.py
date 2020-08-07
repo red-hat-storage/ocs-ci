@@ -304,7 +304,7 @@ def add_new_node_and_label_it(machineset_name):
     return new_spun_node[0]
 
 
-def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True):
+def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True, node_conf=None):
     """
     Add a new node for aws/vmware upi platform and label it
 
@@ -312,17 +312,18 @@ def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True):
         node_type (str): Type of node, RHEL or RHCOS
         num_nodes (int): number of nodes to add
         mark_for_ocs_label (bool): True if label the new node
+        node_conf (dict): The node configurations.
 
     Retuns:
         bool: True if node addition has done successfully
 
     """
-
+    node_conf = node_conf or {}
     initial_nodes = tests.helpers.get_worker_nodes()
     from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
     plt = PlatformNodesFactory()
     node_util = plt.get_nodes_platform()
-    node_util.create_and_attach_nodes_to_cluster({}, node_type, num_nodes)
+    node_util.create_and_attach_nodes_to_cluster(node_conf, node_type, num_nodes)
     for sample in TimeoutSampler(
         timeout=600, sleep=6, func=tests.helpers.get_worker_nodes
     ):
@@ -725,3 +726,93 @@ def check_nodes_specs(min_memory, min_cpu):
         f"{min_cpu} CPUs and {min_memory} Memory"
     )
     return True
+
+
+def delete_and_create_osd_node_aws_ipi(osd_node_name):
+    """
+    Unschedule, drain and delete osd node, and creating a new osd node.
+    At the end of the function there should be the same number of osd nodes as
+    it was in the beginning, and also ceph health should be OK.
+    This function is for AWS IPI.
+
+    Args:
+        osd_node_name (str): the name of the osd node
+
+    """
+    # Unscheduling node
+    unschedule_nodes([osd_node_name])
+    # Draining Node
+    drain_nodes([osd_node_name])
+    log.info("Getting machine name from specified node name")
+    machine_name = machine.get_machine_from_node_name(osd_node_name)
+    log.info(f"Node {osd_node_name} associated machine is {machine_name}")
+    log.info(f"Deleting machine {machine_name} and waiting for new machine to come up")
+    machine.delete_machine_and_check_state_of_new_spinned_machine(machine_name)
+    new_machine_list = machine.get_machines()
+    for machines in new_machine_list:
+        # Trimming is done to get just machine name
+        # eg:- machine_name:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b-nlgkr
+        # After trimming:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b
+        if re.match(machines.name[:-6], machine_name):
+            new_machine_name = machines.name
+    machineset_name = machine.get_machineset_from_machine_name(new_machine_name)
+    log.info("Waiting for new worker node to be in ready state")
+    machine.wait_for_new_node_to_be_ready(machineset_name)
+    new_node_name = get_node_from_machine_name(new_machine_name)
+    log.info("Adding ocs label to newly created worker node")
+    node_obj = ocp.OCP(kind='node')
+    node_obj.add_label(
+        resource_name=new_node_name,
+        label=constants.OPERATOR_NODE_LABEL
+    )
+    log.info(
+        f"Successfully labeled {new_node_name} with OCS storage label"
+    )
+
+
+def delete_and_create_osd_node_aws_upi(osd_node_name):
+    """
+    Unschedule, drain and delete osd node, and creating a new osd node.
+    At the end of the function there should be the same number of osd nodes as
+    it was in the beginning, and also ceph health should be OK.
+    This function is for AWS UPI.
+
+    Args:
+        osd_node_name (str): the name of the osd node
+
+    """
+
+    osd_node = get_node_objs(node_names=[osd_node_name])[0]
+    az = get_node_az(osd_node)
+    from ocs_ci.ocs.platform_nodes import AWSNodes
+    aws_nodes = AWSNodes()
+    stack_name_of_deleted_node = aws_nodes.get_stack_name_of_node(osd_node_name)
+
+    remove_nodes([osd_node])
+
+    log.info(f"name of deleted node = {osd_node_name}")
+    log.info(f"availability zone of deleted node = {az}")
+    log.info(f"stack name of deleted node = {stack_name_of_deleted_node}")
+
+    if config.ENV_DATA.get('rhel_workers'):
+        node_type = constants.RHEL_OS
+    else:
+        node_type = constants.RHCOS
+
+    log.info("Preparing to create a new node...")
+    node_conf = {'stack_name': stack_name_of_deleted_node}
+    add_new_node_and_label_upi(node_type, 1, node_conf=node_conf)
+
+
+def get_node_az(node):
+    """
+    Get the node availability zone
+
+    Args:
+        node (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        str: The name of the node availability zone
+    """
+    labels = node.get().get('metadata', {}).get('labels', {})
+    return labels.get('topology.kubernetes.io/zone')
