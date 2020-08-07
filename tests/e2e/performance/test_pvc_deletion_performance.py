@@ -7,8 +7,10 @@ import ocs_ci.ocs.exceptions as ex
 from ocs_ci.framework.testlib import (
     performance, E2ETest
 )
+
+from concurrent.futures import ThreadPoolExecutor
 from tests import helpers
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import defaults, constants
 from ocs_ci.utility.performance_dashboard import push_to_pvc_time_dashboard
 
 log = logging.getLogger(__name__)
@@ -86,3 +88,52 @@ class TestPVCDeletionPerformance(E2ETest):
                 f"PVC deletion time is {delete_time} and greater than {deletion_time} second"
             )
         push_to_pvc_time_dashboard(self.interface, "deletion", delete_time)
+
+    @pytest.mark.usefixtures(base_setup.__name__)
+    def test_multiple_pvc_deletion_measurement_performance(self, teardown_factory):
+        """
+        Measuring PVC deletion time of 120 PVCs in 180 seconds
+
+        Args:
+            teardown_factory: A fixture used when we want a new resource that was created during the tests
+                               to be removed in the teardown phase.
+        Returns:
+
+        """
+        number_of_pvcs = 120
+        log.info('Start creating new 120 PVCs')
+
+        pvc_objs = helpers.create_multiple_pvcs(
+            sc_name=self.sc_obj.name,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            number_of_pvc=number_of_pvcs,
+            size=self.pvc_size,
+        )
+        for pvc_obj in pvc_objs:
+            pvc_obj.reload()
+            teardown_factory(pvc_obj)
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            for pvc_obj in pvc_objs:
+                executor.submit(
+                    helpers.wait_for_resource_state, pvc_obj,
+                    constants.STATUS_BOUND
+                )
+
+                executor.submit(pvc_obj.reload)
+
+        start_time = helpers.get_start_deletion_time(
+            self.interface, pvc_objs[0].name
+        )
+        end_time = helpers.get_end_deletion_time(
+            self.interface, pvc_objs[number_of_pvcs - 1].name,
+        )
+        total = end_time - start_time
+        total_time = total.total_seconds()
+        if total_time > 180:
+            raise ex.PerformanceException(
+                f"{number_of_pvcs} PVCs deletion time is {total_time} and "
+                f"greater than 180 seconds"
+            )
+        logging.info(
+            f"{number_of_pvcs} PVCs deletion time took {total_time} seconds"
+        )
