@@ -68,8 +68,8 @@ class PillowFight(object):
 
         Args:
             replicas (int): Number of pod replicas
-            num_items (str): Number of items to be loaded to the cluster
-            num_threads (str): Number of threads
+            num_items (int): Number of items to be loaded to the cluster
+            num_threads (int): Number of threads
 
         """
         ocp_local = OCP(namespace=self.namespace)
