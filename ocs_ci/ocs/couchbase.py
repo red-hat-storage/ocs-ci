@@ -213,8 +213,8 @@ class CouchBase(PillowFight):
         Running workload with pillow fight operator
         Args:
             replicas (int): Number of pods
-            num_items (str): Number of items to be loaded to the cluster
-            num_threads (str): Number of threads
+            num_items (int): Number of items to be loaded to the cluster
+            num_threads (int): Number of threads
             run_in_bg (bool) : Optional run IOs in background
 
         """
