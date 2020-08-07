@@ -657,7 +657,7 @@ def increase_pods_per_worker_node_count(count=500):
     """
     Function to increase pods per node count, default OCP supports 250 pods per node,
     from OCP 4.6 limit is going to be 500, but using this function can override this param
-    to create mode pods per worker nodes.
+    to create more pods per worker nodes.
     more detail: https://docs.openshift.com/container-platform/4.5/nodes/nodes/nodes-nodes-managing-max-pods.html
     WARN: This function will perform Unscheduling of workers and back to Scheduled state
     Please aware if there is any non-dc pods then expected to be terminated.
