@@ -220,7 +220,7 @@ class ClusterLoad:
                 # the multiplication factor we check according to, is lower, in order to
                 # determine the cluster load faster.
                 if latency > latency_vals[0] * 2 ** 7 or (
-                    3 < latency_vals[0] < 50 and latency > 250 and len(latency_vals) > 5
+                    3 < latency_vals[0] < 50 and len(latency_vals) > 5
                 ):
                     logger.info(
                         wrap_msg("The cluster limit was determined by latency growth")
