@@ -497,12 +497,31 @@ def change_noobaa_endpoints_count(min_nb_eps=None, max_nb_eps=None):
         max_nb_eps (int): The number of required maximum Noobaa endpoints
 
     """
-    noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    if min_nb_eps:
-        log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
-        params = f'{{"spec":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}'
-        noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
-    if max_nb_eps:
-        log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
-        params = f'{{"spec":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}'
-        noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+    if float(config.ENV_DATA['ocs_version']) < 4.6:
+        noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        if min_nb_eps:
+            log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
+            params = f'{{"spec":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}'
+            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+        if max_nb_eps:
+            log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
+            params = f'{{"spec":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}'
+            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+    else:
+        sc = get_storage_cluster()
+        if min_nb_eps:
+            log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
+            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}}}'
+            sc.patch(
+                resource_name=sc.get()['items'][0]['metadata']['name'],
+                params=params,
+                format_type='merge'
+            )
+        if max_nb_eps:
+            log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
+            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}}}'
+            sc.patch(
+                resource_name=sc.get()['items'][0]['metadata']['name'],
+                params=params,
+                format_type='merge'
+            )
