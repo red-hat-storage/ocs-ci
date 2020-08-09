@@ -1274,7 +1274,6 @@ def update_config_from_s3(bucket_name=constants.OCSCI_DATA_BUCKET, filename=cons
         return None
 
 
-
 def delete_cluster_buckets(cluster_name):
     """
     Delete s3 buckets corresponding to a particular OCS cluster
