@@ -44,6 +44,7 @@ DEPLOYMENT:
   # if the installer version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version. You can also use the
   # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
+  ocp_arch: "x86_64"
   installer_version: "4.5.0-0.nightly"
   force_download_installer: True
   force_download_client: True
