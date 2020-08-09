@@ -1,10 +1,12 @@
 import logging
 import time
 import pytest
+import tempfile
 
+from ocs_ci.utility import templating
 from ocs_ci.ocs import ocp, constants, defaults
 from ocs_ci.framework.testlib import workloads, E2ETest, ignore_leftovers
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources import pod, pvc
 from tests.helpers import wait_for_resource_state, default_storage_class, modify_osd_replica_count
 from tests.disruption_helpers import Disruptions
 from tests.sanity_helpers import Sanity
@@ -489,4 +491,53 @@ class TestMonitoringBackedByOCS(E2ETest):
         for pod_obj in pods:
             assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
                 f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
+            )
+
+    @pytest.mark.polarion_id("OCS-638")
+    def test_monitoring_delete_pvc(self):
+        """
+        Test case to validate whether delete pvcs+configmap and recovery of a
+        node where monitoring pods running has no functional impact
+
+        """
+        # Get 'cluster-monitoring-config' configmap
+        ocp_configmap = ocp.OCP(namespace=constants.MONITORING_NAMESPACE, kind='configmap')
+        configmap_dict = ocp_configmap.get(resource_name='cluster-monitoring-config')
+        dir_configmap = tempfile.mkdtemp(prefix='configmap_')
+        yaml_file = f'{dir_configmap}/configmap.yaml'
+        templating.dump_data_to_temp_yaml(configmap_dict, yaml_file)
+
+        # Get prometheus and alertmanager pods
+        prometheus_alertmanager_pods = pod.get_all_pods(
+            namespace=defaults.OCS_MONITORING_NAMESPACE, selector=['prometheus', 'alertmanager']
+        )
+
+        # Get all pvc on monitoring namespace
+        pvc_objs_list = pvc.get_all_pvc_objs(namespace=constants.MONITORING_NAMESPACE)
+
+        # Delete configmap
+        ocp_configmap.delete(resource_name='cluster-monitoring-config')
+
+        # Delete all pvcs on monitoring namespace
+        pvc.delete_pvcs(pvc_objs=pvc_objs_list)
+
+        # Check all the prometheus and alertmanager pods are up
+        for pod_obj in prometheus_alertmanager_pods:
+            wait_for_resource_state(
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
+            )
+
+        # Create configmap
+        ocp_configmap.create(yaml_file=dir_configmap)
+
+        # Check all the PVCs are up
+        for pvc_obj in pvc_objs_list:
+            wait_for_resource_state(
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=180
+            )
+
+        # Check all the prometheus and alertmanager pods are up
+        for pod_obj in prometheus_alertmanager_pods:
+            wait_for_resource_state(
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
             )
