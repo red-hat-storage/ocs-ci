@@ -6,7 +6,7 @@ import random
 import traceback
 import re
 
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, NoCredentialsError
 
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import get_infra_id
@@ -1258,15 +1258,21 @@ def update_config_from_s3(bucket_name=constants.OCSCI_DATA_BUCKET, filename=cons
 
     Returns:
         dict: returns the updated file contents as python dict
-
+        None: In case the private bucket could not be accessed
     """
-    s3 = boto3.resource('s3')
-    with NamedTemporaryFile(mode='w', prefix='config', delete=True) as auth:
-        s3.meta.client.download_file(bucket_name, filename, auth.name)
-        config_yaml = load_yaml(auth.name)
-    # set in config and store it for that scope
-    config.update(config_yaml)
-    return config_yaml
+    try:
+        logger.info('Fetching authentication credentials from ocs-ci-data')
+        s3 = boto3.resource('s3')
+        with NamedTemporaryFile(mode='w', prefix='config', delete=True) as auth:
+            s3.meta.client.download_file(bucket_name, filename, auth.name)
+            config_yaml = load_yaml(auth.name)
+        # set in config and store it for that scope
+        config.update(config_yaml)
+        return config_yaml
+    except NoCredentialsError:
+        logger.warn('Failed to fetch auth.yaml from ocs-ci-data')
+        return None
+
 
 
 def delete_cluster_buckets(cluster_name):
