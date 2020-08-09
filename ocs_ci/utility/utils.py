@@ -518,9 +518,10 @@ def expose_ocp_version(version):
         str: Version of OCP exposed to full version if latest nighly passed
 
     """
+    ocp_mirror_path = config.DEPLOYMENT['ocp_mirror_path']
     if version.endswith(".nightly"):
         latest_nightly_url = (
-            f"https://openshift-release.svc.ci.openshift.org/api/v1/"
+            f"{ocp_mirror_path}"
             f"releasestream/{version}/latest"
         )
         version_url_content = get_url_content(latest_nightly_url)
@@ -661,11 +662,15 @@ def get_openshift_mirror_url(file_name, version):
         os_type = "linux"
     else:
         raise UnsupportedOSType
+
+    ocp_mirror_path = config.DEPLOYMENT['ocp_mirror_path']
+
     url_template = config.DEPLOYMENT.get(
         'ocp_url_template',
-        "https://openshift-release-artifacts.svc.ci.openshift.org/"
+        f"{ocp_mirror_path}"
         "{version}/{file_name}-{os_type}-{version}.tar.gz"
     )
+
     url = url_template.format(
         version=version,
         file_name=file_name,
