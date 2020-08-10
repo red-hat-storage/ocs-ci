@@ -50,7 +50,6 @@ from ocs_ci.utility.environment_check import (
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
-    get_rook_repo,
     get_ocp_version,
     TimeoutSampler,
 )
