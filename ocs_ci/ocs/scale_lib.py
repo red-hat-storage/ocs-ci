@@ -653,25 +653,30 @@ def check_and_add_enough_worker(worker_count):
             )
 
 
-def increase_pods_per_worker_node_count(count=500):
+def increase_pods_per_worker_node_count(pods_per_node=500, pods_per_core=10):
     """
     Function to increase pods per node count, default OCP supports 250 pods per node,
     from OCP 4.6 limit is going to be 500, but using this function can override this param
     to create more pods per worker nodes.
     more detail: https://docs.openshift.com/container-platform/4.5/nodes/nodes/nodes-nodes-managing-max-pods.html
-    WARN: This function will perform Unscheduling of workers and back to Scheduled state
+
+    Example: The default value for podsPerCore is 10 and the default value for maxPods is 250.
+    This means that unless the node has 25 cores or more, by default, podsPerCore will be the limiting factor.
+
+    WARN: This function will perform Unscheduling of workers and reboot so
     Please aware if there is any non-dc pods then expected to be terminated.
 
     Args:
-        count (int): Required pods per node count
+        pods_per_node (int): Pods per node limit count
+        pods_per_core (int): Pods per core limit count
 
     Raise:
         UnexpectedBehaviour if machineconfigpool not in Updating state within 40secs.
 
     """
     max_pods_template = templating.load_yaml(constants.PODS_PER_NODE_COUNT_YAML)
-    max_pods_template['spec']['kubeletConfig']['podsPerCore'] = 65
-    max_pods_template['spec']['kubeletConfig']['maxPods'] = count
+    max_pods_template['spec']['kubeletConfig']['podsPerCore'] = pods_per_core
+    max_pods_template['spec']['kubeletConfig']['maxPods'] = pods_per_node
 
     # Create new max-pods label
     max_pods_obj = OCS(**max_pods_template)
