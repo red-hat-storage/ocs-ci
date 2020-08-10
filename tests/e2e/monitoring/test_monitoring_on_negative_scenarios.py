@@ -541,3 +541,8 @@ class TestMonitoringBackedByOCS(E2ETest):
             wait_for_resource_state(
                 resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
             )
+
+        # Validate the prometheus health is ok
+        assert prometheus_health_check(), (
+            "Prometheus cluster health is not OK"
+        )
