@@ -25,7 +25,7 @@ from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.utils import setup_ceph_toolbox
+from ocs_ci.ocs.utils import setup_ceph_toolbox,collect_ocs_logs
 from ocs_ci.ocs.resources.backingstore import BackingStore
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.node import check_nodes_specs
@@ -2666,3 +2666,20 @@ def ceph_toolbox(request):
     if not (deploy or teardown or skip_ocs):
         # Creating toolbox pod
         setup_ceph_toolbox()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def collect_logs_fixture(request):
+    """
+    This fixture collects ocs logs after tier execution and this will allow
+    to see the cluster's status after the execution on all execution status options.
+    """
+    def finalizer():
+        '''
+        Tracking both logs separately reduce changes of collision
+        '''
+        if not config.RUN['cli_params'].get('deploy'):
+            collect_ocs_logs('deployment', ocs=False)
+            collect_ocs_logs('deployment', ocp=False)
+
+    request.addfinalizer(finalizer)
