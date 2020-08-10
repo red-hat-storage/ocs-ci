@@ -22,10 +22,6 @@ RUN:
   client_version: '4.5.0-0.nightly'
   bin_dir: './bin'
   google_api_secret: '~/.ocs-ci/google_api_secret.json'
-  rook_branch: "master"
-  # We can also specify the tag or specific commit id to checkout by changin
-  # following parameter in custom config file:
-  # rook_to_checkout: "commit_id or tag_name"
   # Following chrome params are for openshift console UI testing
   force_chrome_branch_base: "665006"
   force_chrome_branch_sha256sum: "a1ae2e0950828f991119825f62c24464ab3765aa219d150a94fb782a4c66a744"
