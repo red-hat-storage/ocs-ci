@@ -665,6 +665,9 @@ def increase_pods_per_worker_node_count(count=500):
     Args:
         count (int): Required pods per node count
 
+    Raise:
+        UnexpectedBehaviour if machineconfigpool not in Updating state within 40secs.
+
     """
     max_pods_template = templating.load_yaml(constants.PODS_PER_NODE_COUNT_YAML)
     max_pods_template['spec']['kubeletConfig']['podsPerCore'] = 65
@@ -682,13 +685,17 @@ def increase_pods_per_worker_node_count(count=500):
     # First wait for Updating status to become True, default it will be False &
     # machine_count and ready_machine_count will be equal
     get_cmd = "get machineconfigpools -o yaml"
+    timout_counter = 0
     while True:
         output = ocp.exec_oc_cmd(command=get_cmd)
         update_status = output.get('items')[1].get('status').get('conditions')[4].get('status')
         if update_status == 'True':
             break
+        elif timout_counter >= 8:
+            raise UnexpectedBehaviour("After 40sec machineconfigpool not in Updating state")
         else:
             logging.info("Sleep 5secs for updating status change")
+            timout_counter += 1
             time.sleep(5)
 
     # Validate either change is successful
