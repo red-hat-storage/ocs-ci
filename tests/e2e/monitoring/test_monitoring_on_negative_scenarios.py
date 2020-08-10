@@ -537,10 +537,16 @@ class TestMonitoringBackedByOCS(E2ETest):
             )
 
         # Check all the prometheus and alertmanager pods are up
+        # and pvc are mounted on monitoring pods
         for pod_obj in prometheus_alertmanager_pods:
             wait_for_resource_state(
                 resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
             )
+            mount_point = pod_obj.exec_cmd_on_pod(
+                command="df -kh", out_yaml_format=False,
+            )
+            assert "/dev/rbd" in mount_point, f"pvc is not mounted on pod {pod.name}"
+        log.info("Verified all pvc are mounted on monitoring pods")
 
         # Validate the prometheus health is ok
         assert prometheus_health_check(), (
