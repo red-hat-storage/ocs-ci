@@ -132,7 +132,7 @@ class Jenkins(object):
         """
         log.info(f"Waiting for the build to reach {JENKINS_BUILD_COMPLETE} state")
         for project in self.projects:
-            jenkins_builds = self.get_builds_obj(namespace=project)
+            jenkins_builds = self.get_builds_sorted_by_number(project=project)
             for jenkins_build in jenkins_builds:
                 if (jenkins_build.name, project) not in self.build_completed:
                     try:
@@ -153,6 +153,22 @@ class Jenkins(object):
                         log.error(error_msg)
                         self.print_completed_builds_results()
                         raise UnexpectedBehaviour(error_msg)
+
+    def get_builds_sorted_by_number(self, project):
+        """
+        Get builds per project and sort builds by build name number
+        Args:
+            project (str): project name
+
+        return:
+            jenkins_builds_sorted (lst): list of build (OCS obj)
+        """
+        jenkins_builds_unsorted = self.get_builds_obj(namespace=project)
+        jenkins_builds_sorted = [0] * self.num_of_builds
+        for build in jenkins_builds_unsorted:
+            build_num = int(re.sub("[^0-9]", "", build.name))
+            jenkins_builds_sorted[build_num - 1] = build
+        return jenkins_builds_sorted
 
     def get_jenkins_deploy_pods(self, namespace):
         """
