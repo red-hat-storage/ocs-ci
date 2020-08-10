@@ -42,7 +42,7 @@ def wait_for_active_pods(job, desired_count, timeout=3):
 
     def _retrieve_job_state():
         job_obj = job.ocp.get(resource_name=job_name, out_yaml_format=True)
-        return job_obj.get('items')[0]['status']['active']
+        return job_obj['status']['active']
 
     try:
         for state in TimeoutSampler(
