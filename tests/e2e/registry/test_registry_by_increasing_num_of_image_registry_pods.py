@@ -46,7 +46,7 @@ class TestRegistryByIncreasingNumPods(E2ETest):
             )
         ]
     )
-    def test_registry_respin_pod(self, count):
+    def test_registry_by_increasing_num_of_registry_pods(self, count):
         """
         Test registry by increasing number of registry pods and
         validate all the image-registry pod should have the same PVC backend.
