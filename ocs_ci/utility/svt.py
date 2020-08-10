@@ -1,8 +1,11 @@
 import os
 import logging
 import shutil
+import shlex
+from subprocess import Popen, PIPE
+
 from ocs_ci.utility.utils import run_cmd, clone_repo
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import ocp
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +55,26 @@ def svt_cluster_loader(clusterload_file="/tmp/svt/openshift_scalability/config/m
     os.chdir(cwd)
 
 
+def svt_setup(iterations):
+    """
+    Creates and run svt workload
+    """
+
+    svt_project_clone()
+    svt_create_venv_setup()
+    svt_cluster_loader()
+    cmd = (
+        "/bin/sh -c 'source /tmp/venv/bin/activate && "
+        f"python /tmp/svt/openshift_performance/ose3_perf/scripts/build_test.py -z -a -n {iterations}'"
+    )
+    log.info(f"Running command {cmd}")
+    build = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE)
+    stdout, stderr = build.communicate()
+    out = stderr.split('\n'.encode())[-10].split()[-1]
+    log.info(stderr)
+    assert (int(out) == 0), 'Failed builds found'
+
+
 def svt_cleanup():
     """
     Removes clonned SVT project and virtual environemt and Projects
@@ -64,7 +87,7 @@ def svt_cleanup():
         bool: True if No exceptions, False otherwise
 
     """
-
+    ns_obj = ocp.OCP(kind='namespace')
     try:
         shutil.rmtree('/tmp/svt')
         shutil.rmtree('/tmp/venv')
@@ -79,12 +102,13 @@ def svt_cleanup():
             "eap64-mysql0",
             "nodejs-mongodb0",
             "rails-postgresql0",
-            "tomcat8-mongodb0"]
-        oc = ocp.OCP(
-            kind=constants.DEPLOYMENT
-        )
+            "tomcat8-mongodb0"
+        ]
+        # Reset namespace to default
+        ocp.switch_to_default_rook_cluster_project()
         for project in project_list:
-            oc.exec_oc_cmd(f"delete project {project} --ignore-not-found=true --wait=true")
+            run_cmd(f'oc delete project {project}')
+            ns_obj.wait_for_delete(resource_name=project)
 
         return True
     except Exception:
