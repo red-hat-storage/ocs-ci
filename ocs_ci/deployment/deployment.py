@@ -574,10 +574,6 @@ class Deployment(object):
         converged mode
 
         """
-        # TODO: 1. HEALTH_OK + connected state from cephcluster
-        #       2. PVC and OBC creation chech
-        #       3. toolboxpod check
-        #       4. OCS pods status
         cephcluster = CephClusterExternal()
         cephcluster.cluster_health_check(timeout=300)
 
