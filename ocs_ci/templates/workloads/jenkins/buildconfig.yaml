@@ -3,6 +3,8 @@ apiVersion: "v1"
 metadata:
   name: "jax-rs-build"
 spec:
+  successfulBuildsHistoryLimit: 30
+  failedBuildsHistoryLimit: 30
   strategy:
     type: JenkinsPipeline
     jenkinsPipelineStrategy:

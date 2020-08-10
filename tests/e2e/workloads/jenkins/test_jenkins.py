@@ -36,7 +36,7 @@ class TestJenkinsWorkload(E2ETest):
         jenkins.create_ocs_jenkins_template()
 
     @pytest.mark.usefixtures(jenkins_setup.__name__)
-    def test_jenkins_workload_simple(self, jenkins, num_projects=5, num_of_builds=5):
+    def test_jenkins_workload_simple(self, jenkins, num_projects=30, num_of_builds=12):
         """
         Test jenkins workload
         """
