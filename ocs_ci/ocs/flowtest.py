@@ -4,7 +4,7 @@ from ocs_ci.ocs import node, defaults, exceptions, constants
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources.pod import check_pods_in_running_state
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from tests.sanity_helpers import Sanity
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ class FlowOperations:
         """
         self.sanity_helpers = Sanity()
 
-    def validate_cluster(self, node_status=False, pod_status=False, operation_name=""):
+    def validate_cluster(self, cluster_check=False, node_status=False, pod_status=False, operation_name=""):
         """
         Validates various ceph and ocs cluster checks
 
@@ -33,7 +33,11 @@ class FlowOperations:
 
         """
         logger.info(f"{operation_name}: Verifying cluster health")
-        self.sanity_helpers.health_check(cluster_check=False, tries=100)
+        assert ceph_health_check(
+            defaults.ROOK_CLUSTER_NAMESPACE, tries=100
+        ), "Entry criteria FAILED: Cluster is Unhealthy"
+        if cluster_check:
+            self.sanity_helpers.health_check(tries=100)
         if node_status:
             logger.info(f"{operation_name}: Verifying whether node is ready")
             wait_for_nodes_status(status=constants.NODE_READY, timeout=300)
