@@ -13,6 +13,8 @@ from tests import helpers
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.framework import config
 from ocs_ci.ocs.utils import mirror_image
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.utility.utils import TimeoutSampler
 
 
 logger = logging.getLogger(__name__)
@@ -439,3 +441,36 @@ def validate_image_exists(namespace=None):
                 return pod_obj.exec_cmd_on_pod(
                     command=f"find /registry/docker/registry/v2/repositories/{namespace}"
                 )
+
+
+def modify_registry_pod_count(count):
+    """
+    Function to modify registry replica count(increase/decrease pod count)
+
+    Args:
+        count (int): registry replica count to be changed to
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    params = ('{\"spec\":{\"replicas\":%d}}' % count)
+    ocp_obj = ocp.OCP(
+        kind=constants.IMAGE_REGISTRY_CONFIG,
+        namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+    )
+    ocp_obj.patch(params=params, format_type='merge'), (
+        "Failed to run patch command to increase number of image registry pod"
+    )
+
+    # Validate number of image registry pod should match the count
+    for pod_list in TimeoutSampler(
+        300, 10, get_pod_name_by_pattern,
+        'image-registry', constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+    ):
+        try:
+            if pod_list is not None and len(pod_list) == count + 1:
+                return True
+        except IndexError as ie:
+            logger.error(f"Number of image registry pod doesn't match the count. Error: {ie}")
+            return False
