@@ -4,7 +4,7 @@ from time import sleep
 
 from concurrent.futures import ThreadPoolExecutor
 
-from ocs_ci.framework.pytest_customization.marks import aws_platform_required, vsphere_platform_required
+from ocs_ci.framework.pytest_customization.marks import skipif_bm, skipif_aws_i3
 from ocs_ci.ocs import node, constants
 from ocs_ci.framework.testlib import E2ETest, tier2, config, ignore_leftovers
 from ocs_ci.ocs.ocp import OCP
@@ -21,8 +21,8 @@ class TestBaseOperationNodeDrain(E2ETest):
     Tests Story/Flow based test scenario: Node Drain
 
     """
-    @vsphere_platform_required
-    @aws_platform_required
+    @skipif_aws_i3
+    @skipif_bm
     @pytest.mark.polarion_id("OCS-2188")
     def test_base_operation_node_drain(
         self, node_drain_teardown, node_restart_teardown, nodes, pgsql_factory_fixture,
