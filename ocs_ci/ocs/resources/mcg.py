@@ -10,6 +10,7 @@ from botocore.client import ClientError
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.exceptions import CommandFailed, CredReqSecretNotFound, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
@@ -22,7 +23,6 @@ from tests.helpers import (
     calc_local_file_md5_sum, retrieve_default_ingress_crt,
     storagecluster_independent_check
 )
-from tests.manage.mcg.helpers import retrieve_verification_mode
 import subprocess
 import stat
 

@@ -4,7 +4,7 @@ import logging
 import boto3
 
 from ocs_ci.ocs import constants
-from tests.manage.mcg.helpers import retrieve_verification_mode
+from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 
 logger = logging.getLogger(__name__)
 

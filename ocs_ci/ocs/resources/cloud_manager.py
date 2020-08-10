@@ -12,11 +12,11 @@ from google.cloud import storage
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, load_auth_config
 from tests.helpers import create_resource
-from tests.manage.mcg.helpers import retrieve_verification_mode
 
 logger = logging.getLogger(name=__file__)
 
