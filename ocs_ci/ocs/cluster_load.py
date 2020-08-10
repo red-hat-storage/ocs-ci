@@ -70,6 +70,7 @@ class ClusterLoad:
         self.pvc_objs = list()
         self.previous_iops = None
         self.current_iops = None
+        self.rate = None
         self.pvc_size = int(get_osd_pods_memory_sum() * 0.5)
         self.sleep_time = 45
         self.target_pods_number = None
@@ -77,7 +78,7 @@ class ClusterLoad:
             project_name = f"{defaults.BG_LOAD_NAMESPACE}-{uuid4().hex[:5]}"
             self.project = project_factory(project_name=project_name)
 
-    def increase_load(self, rate='8M', wait=True):
+    def increase_load(self, rate, wait=True):
         """
         Create a PVC, a service account and a DeploymentConfig of FIO pod
 
@@ -143,7 +144,7 @@ class ClusterLoad:
             )
             time.sleep(self.sleep_time)
 
-    def increase_load_and_print_data(self, rate='8M', wait=True):
+    def increase_load_and_print_data(self, rate, wait=True):
         """
         Increase load and print data
 
@@ -210,7 +211,7 @@ class ClusterLoad:
 
             cluster_used_space = get_percent_used_capacity()
 
-            if len(latency_vals) > 1 and latency > 200:
+            if len(latency_vals) > 1 and latency > 250:
                 # Checking for an exponential growth. In case the latest latency sample
                 # value is more than 128 times the first latency value sample, we can conclude
                 # that the cluster limit in terms of IOPS, has been reached.
@@ -219,7 +220,7 @@ class ClusterLoad:
                 # the multiplication factor we check according to, is lower, in order to
                 # determine the cluster load faster.
                 if latency > latency_vals[0] * 2 ** 7 or (
-                    3 < latency_vals[0] > 50 and latency > 300 and len(latency_vals) > 5
+                    3 < latency_vals[0] < 50 and len(latency_vals) > 5
                 ):
                     logger.info(
                         wrap_msg("The cluster limit was determined by latency growth")
@@ -274,26 +275,34 @@ class ClusterLoad:
             self.decrease_load(wait=False)
 
         target_iops = self.cluster_limit * self.target_percentage
+
+        range_map = RangeKeyDict(
+            {
+                (0, 500): (6, 0.82, 0.4),
+                (500, 1000): (8, 0.84, 0.45),
+                (1000, 1500): (10, 0.86, 0.5),
+                (1500, 2000): (12, 0.88, 0.55),
+                (2000, 2500): (14, 0.90, 0.6),
+                (2500, 3000): (16, 0.92, 0.65),
+                (3000, 3500): (18, 0.94, 0.7),
+                (3500, math.inf): (20, 0.96, 0.75),
+            }
+        )
+        self.rate = f'{range_map[target_iops][0]}M'
         # Creating the first pod of small FIO 'rate' param, to speed up the process.
         # In the meantime, the load will drop, following the deletion of the
         # FIO pods with large FIO 'rate' param
         logger.info("Creating FIO pods, one by one, until the target percentage is reached")
-        self.increase_load_and_print_data()
+        self.increase_load_and_print_data(rate=self.rate)
         msg = (
             f"The target load, in IOPS, is: {target_iops}, which is "
             f"{self.target_percentage*100}% of the {self.cluster_limit} cluster limit"
         )
         logger.info(wrap_msg(msg))
 
-        range_map = RangeKeyDict(
-            {
-                (0, 400): (0.82, 0.4), (400, 800): (0.85, 0.5),
-                (800, 1200): (0.88, 0.6), (1600, math.inf): (0.94, 0.8)
-            }
-        )
-        while self.current_iops < target_iops * range_map[target_iops][0]:
-            wait = False if self.current_iops < target_iops * range_map[target_iops][1] else True
-            self.increase_load_and_print_data(wait=wait)
+        while self.current_iops < target_iops * range_map[target_iops][1]:
+            wait = False if self.current_iops < target_iops * range_map[target_iops][2] else True
+            self.increase_load_and_print_data(rate=self.rate, wait=wait)
 
         msg = f"The target load, of {self.target_percentage * 100}%, has been reached"
         logger.info(wrap_msg(msg))
@@ -397,4 +406,4 @@ class ClusterLoad:
                 f"Increasing back the load"
             )
             logger.info(wrap_msg(msg))
-            self.increase_load(wait=False)
+            self.increase_load(rate=self.rate, wait=False)
