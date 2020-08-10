@@ -170,6 +170,22 @@ class NoBucketPolicyResponse(Exception):
     pass
 
 
+class PSIVolumeCreationFailed(Exception):
+    pass
+
+
+class PSIVolumeNotInExpectedState(Exception):
+    pass
+
+
+class PSIVolumeDeletionFailed(Exception):
+    pass
+
+
+class FlexyDataNotFound(Exception):
+    pass
+
+
 class PendingCSRException(Exception):
     pass
 

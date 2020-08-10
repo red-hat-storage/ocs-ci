@@ -22,9 +22,11 @@ class Config:
     AUTH: dict = field(default_factory=dict)
     DEPLOYMENT: dict = field(default_factory=dict)
     ENV_DATA: dict = field(default_factory=dict)
+    INDEPENDENT_MODE: dict = field(default_factory=dict)
     REPORTING: dict = field(default_factory=dict)
     RUN: dict = field(default_factory=dict)
     UPGRADE: dict = field(default_factory=dict)
+    FLEXY: dict = field(default_factory=dict)
 
     def __post_init__(self):
         self.reset()
@@ -42,7 +44,10 @@ class Config:
         Return a fresh copy of the default configuration
         """
         with open(DEFAULT_CONFIG_PATH) as file_stream:
-            return yaml.safe_load(file_stream)
+            return {
+                k: (v if v is not None else {})
+                for (k, v) in yaml.safe_load(file_stream).items()
+            }
 
     def update(self, user_dict: dict):
         """

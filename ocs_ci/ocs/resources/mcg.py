@@ -2,7 +2,6 @@ import base64
 import json
 import logging
 import os
-import shlex
 from time import sleep
 
 import boto3
@@ -20,7 +19,8 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 from tests.helpers import (
     create_unique_resource_name, create_resource,
-    calc_local_file_md5_sum, retrieve_default_ingress_crt
+    calc_local_file_md5_sum, retrieve_default_ingress_crt,
+    storagecluster_independent_check
 )
 from tests.manage.mcg.helpers import retrieve_verification_mode
 import subprocess
@@ -29,7 +29,7 @@ import stat
 logger = logging.getLogger(name=__file__)
 
 
-class MCG(object):
+class MCG:
     """
     Wrapper class for the Multi Cloud Gateway's S3 service
     """
@@ -40,7 +40,7 @@ class MCG(object):
         namespace, noobaa_user, noobaa_password, noobaa_token
     ) = (None,) * 12
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         """
         Constructor for the MCG class
         """
@@ -118,7 +118,10 @@ class MCG(object):
 
         self.s3_client = self.s3_resource.meta.client
 
-        if config.ENV_DATA['platform'].lower() == 'aws':
+        if (
+            config.ENV_DATA['platform'].lower() == 'aws'
+            and kwargs.get('create_aws_creds')
+        ):
             (
                 self.cred_req_obj,
                 self.aws_access_key_id,
@@ -130,17 +133,23 @@ class MCG(object):
                 aws_access_key_id=self.aws_access_key_id,
                 aws_secret_access_key=self.aws_access_key
             )
+
+        if (
+            config.ENV_DATA['platform'].lower() in constants.CLOUD_PLATFORMS
+            or storagecluster_independent_check()
+        ):
             logger.info('Checking whether RGW pod is not present on AWS platform')
             pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
-            assert len(pods) == 0, 'RGW pod should not exist on AWS platform'
+            assert not pods, 'RGW pods should not exist in the current platform/cluster'
 
-        elif config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
-            logger.info('Checking for RGW pod on VSPHERE platform')
+        elif config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+            rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
+            logger.info(f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform')
             rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
             assert rgw_pod.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 selector=constants.RGW_APP_LABEL,
-                resource_count=1,
+                resource_count=rgw_count,
                 timeout=60
             )
 
@@ -180,17 +189,6 @@ class MCG(object):
                 return bucket
         logger.warning(f'Bucket {bucket_name} was not found')
         return None
-
-    def oc_get_all_bucket_names(self):
-        """
-        Returns:
-            set: A set of all bucket names
-
-        """
-        all_obcs_in_namespace = OCP(namespace=self.namespace, kind='obc').get().get('items')
-        return {bucket.get('spec').get('bucketName')
-                for bucket
-                in all_obcs_in_namespace}
 
     def cli_get_all_bucket_names(self):
         """
@@ -233,28 +231,6 @@ class MCG(object):
             return True
         except ClientError:
             logger.info(f"{bucketname} does not exist")
-            return False
-
-    def verify_s3_object_integrity(self, original_object_path, result_object_path, awscli_pod):
-        """
-        Verifies checksum between orignial object and result object on an awscli pod
-
-        Args:
-            original_object_path (str): The Object that is uploaded to the s3 bucket
-            result_object_path (str):  The Object that is downloaded from the s3 bucket
-            awscli_pod (pod): A pod running the AWSCLI tools
-
-        Returns:
-              bool: True if checksum matches, False otherwise
-
-        """
-        md5sum = shlex.split(awscli_pod.exec_cmd_on_pod(command=f'md5sum {original_object_path} {result_object_path}'))
-        if md5sum[0] == md5sum[2]:
-            logger.info(f'Passed: MD5 comparison for {original_object_path} and {result_object_path}')
-            return True
-        else:
-            logger.error(f'Failed: MD5 comparison of {original_object_path} and {result_object_path} - '
-                         f'{md5sum[0]} ≠ {md5sum[2]}')
             return False
 
     def oc_verify_bucket_exists(self, bucketname):
@@ -397,15 +373,13 @@ class MCG(object):
 
         def _check_aws_credentials():
             try:
-                s3_res = boto3.resource(
-                    's3', endpoint_url="https://s3.amazonaws.com",
+                sts = boto3.client(
+                    'sts',
                     aws_access_key_id=aws_access_key_id,
                     aws_secret_access_key=aws_access_key
                 )
-                test_bucket = s3_res.create_bucket(
-                    Bucket=create_unique_resource_name('cred-verify', 's3-bucket')
-                )
-                test_bucket.delete()
+                sts.get_caller_identity()
+
                 return True
 
             except ClientError:
@@ -413,7 +387,7 @@ class MCG(object):
                 return False
 
         try:
-            for api_test_result in TimeoutSampler(40, 5, _check_aws_credentials):
+            for api_test_result in TimeoutSampler(120, 5, _check_aws_credentials):
                 if api_test_result:
                     logger.info('AWS credentials created successfully.')
                     break
@@ -462,70 +436,6 @@ class MCG(object):
             logger.error(f'Could not create connection {conn_name}')
             assert False
 
-    def create_new_backingstore_aws_bucket(self, backingstore_info):
-        """
-        Creates an S3 target bucket for NooBaa to use as a backing store
-
-        Args:
-            backingstore_info: A tuple containing the BS information
-            to be used in its creation.
-
-        """
-        if backingstore_info.get('name') is None:
-            backingstore_info['name'] = create_unique_resource_name('backingstorebucket', 'awsbucket')
-
-        if backingstore_info.get('region') is None:
-            self.aws_s3_resource.create_bucket(Bucket=backingstore_info['name'])
-        else:
-            self.aws_s3_resource.create_bucket(
-                Bucket=backingstore_info['name'],
-                CreateBucketConfiguration={
-                    'LocationConstraint': backingstore_info['region']
-                }
-            )
-
-    def create_aws_backingstore_secret(self, name):
-        """
-        Creates a secret for NooBaa's backingstore
-        Args:
-            name: The name to be given to the secret
-
-        Returns:
-            OCS: The secret resource
-
-        """
-        bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
-        bs_secret_data['metadata']['name'] += f'-{name}'
-        bs_secret_data['metadata']['namespace'] = self.namespace
-        bs_secret_data['data']['AWS_ACCESS_KEY_ID'] = base64.urlsafe_b64encode(
-            self.aws_access_key_id.encode('UTF-8')
-        ).decode('ascii')
-        bs_secret_data['data']['AWS_SECRET_ACCESS_KEY'] = base64.urlsafe_b64encode(
-            self.aws_access_key.encode('UTF-8')
-        ).decode('ascii')
-        return create_resource(**bs_secret_data)
-
-    def oc_create_aws_backingstore(self, name, targetbucket, secretname, region):
-        """
-        Creates a new NooBaa backing store
-        Args:
-            name: The name to be given to the backing store
-            targetbucket: The S3 target bucket to connect to
-            secretname: The secret to use for authentication
-            region: The target bucket's region
-
-        Returns:
-            OCS: The backingstore resource
-
-        """
-        bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
-        bs_data['metadata']['name'] += f'-{name}'
-        bs_data['metadata']['namespace'] = self.namespace
-        bs_data['spec']['awsS3']['secret']['name'] = secretname
-        bs_data['spec']['awsS3']['targetBucket'] = targetbucket
-        bs_data['spec']['awsS3']['region'] = region
-        return create_resource(**bs_data)
-
     def oc_create_bucketclass(self, name, backingstores, placement):
         """
         Creates a new NooBaa bucket class
@@ -545,46 +455,6 @@ class MCG(object):
         tiers['backingStores'] = backingstores
         tiers['placement'] = placement
         return create_resource(**bc_data)
-
-    def toggle_aws_bucket_readwrite(self, bucketname, block=True):
-        """
-        Toggles a bucket's IO using a bucket policy
-
-        Args:
-            bucketname: The name of the bucket that should be manipulated
-            block: Whether to block RW or un-block. True | False
-
-        """
-        if block:
-            bucket_policy = {
-                "Version": "2012-10-17",
-                "Id": "DenyReadWrite",
-                "Statement": [
-                    {
-                        "Effect": "Deny",
-                        "Principal": {
-                            "AWS": "*"
-                        },
-                        "Action": [
-                            "s3:GetObject",
-                            "s3:PutObject",
-                            "s3:ListBucket"
-                        ],
-                        "Resource": [
-                            f"arn:aws:s3:::{bucketname}/*",
-                            f"arn:aws:s3:::{bucketname}"
-                        ]
-                    }
-                ]
-            }
-            bucket_policy = json.dumps(bucket_policy)
-            self.aws_s3_resource.meta.client.put_bucket_policy(
-                Bucket=bucketname, Policy=bucket_policy
-            )
-        else:
-            self.aws_s3_resource.meta.client.delete_bucket_policy(
-                Bucket=bucketname
-            )
 
     def check_if_mirroring_is_done(self, bucket_name):
         """
@@ -664,7 +534,7 @@ class MCG(object):
         def _check_state():
             sysinfo = self.read_system()
             for pool in sysinfo.get('pools'):
-                if pool.get('name') == backingstore_name:
+                if pool.get('name') in backingstore_name:
                     current_state = pool.get('mode')
                     logger.info(
                         f'Current state of backingstore {backingstore_name} '
@@ -784,7 +654,9 @@ class MCG(object):
         # Get noobaa status
         status = self.exec_mcg_cmd('status').stderr
         for line in status.split('\n'):
-            if 'Not Found' in line and 'Optional' not in line:
+            if any(
+                i in line for i in ['Not Found', 'Waiting for phase ready ...']
+            ) and 'Optional' not in line:
                 logger.error(f"Error in noobaa status output- {line}")
                 return False
         logger.info("Verified: noobaa status does not contain any error.")

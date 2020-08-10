@@ -10,7 +10,9 @@ from botocore.exceptions import ClientError
 from ocs_ci.framework import config
 
 
-from ocs_ci.ocs.constants import CLEANUP_YAML, TEMPLATE_CLEANUP_DIR
+from ocs_ci.ocs.constants import (
+    CLEANUP_YAML, TEMPLATE_CLEANUP_DIR, AWS_CLOUDFORMATION_TAG
+)
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import get_openshift_installer, destroy_cluster
 from ocs_ci.utility import templating
@@ -18,6 +20,7 @@ from ocs_ci.utility.aws import (
     AWS, delete_cluster_buckets, destroy_volumes, get_rhel_worker_instances,
     StackStatusError, terminate_rhel_workers
 )
+
 from ocs_ci.cleanup.aws import defaults
 
 
@@ -58,6 +61,7 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
             terminate_rhel_workers(rhel_workers)
         # Destroy extra volumes
         destroy_volumes(cluster_name)
+        aws.delete_apps_record_set(cluster_name)
 
         stack_names = list()
         # Get master, bootstrap and security group stacks
@@ -184,7 +188,7 @@ def get_clusters(time_to_delete, region_name, prefixes_hours_to_spare):
         if vpc_tags:
             cloudformation_vpc_name = [
                 tag['Value'] for tag in vpc_tags
-                if tag['Key'] == defaults.AWS_CLOUDFORMATION_TAG
+                if tag['Key'] == AWS_CLOUDFORMATION_TAG
             ]
             if cloudformation_vpc_name:
                 cloudformation_vpc_names.append(cloudformation_vpc_name[0])

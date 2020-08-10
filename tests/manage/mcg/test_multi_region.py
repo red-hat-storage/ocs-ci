@@ -3,19 +3,23 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, aws_platform_required, tier4, tier4a,
+    tier1, tier4, tier4a,
     bugzilla, skipif_ocs_version
 )
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
 from ocs_ci.ocs.constants import BS_AUTH_FAILED, BS_OPTIMAL
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
-from tests.manage.mcg.helpers import retrieve_test_objects_to_pod, sync_object_directory
+from ocs_ci.ocs.bucket_utils import (
+    retrieve_test_objects_to_pod, sync_object_directory,
+    verify_s3_object_integrity
+)
 
 logger = logging.getLogger(__name__)
 
 
-@aws_platform_required
+@skipif_aws_creds_are_missing
 class TestMultiRegion:
     """
     Test the multi region functionality
@@ -66,13 +70,17 @@ class TestMultiRegion:
     @bugzilla('1827317')
     @skipif_ocs_version("==4.4")
     @pytest.mark.polarion_id("OCS-1784")
-    def test_multiregion_mirror(self, mcg_obj, awscli_pod, multiregion_mirror_setup):
+    def test_multiregion_mirror(self, cld_mgr, mcg_obj, awscli_pod, multiregion_mirror_setup):
         """
         Test multi-region bucket creation using the S3 SDK
         """
 
-        bucket, backingstore1, backingstore2 = multiregion_mirror_setup
+        bucket, backingstores = multiregion_mirror_setup
+        backingstore1 = backingstores[0]
+        backingstore2 = backingstores[1]
+
         bucket_name = bucket.name
+        aws_client = cld_mgr.aws_client
 
         # Download test objects from the public bucket
         downloaded_objs = retrieve_test_objects_to_pod(awscli_pod, '/aws/original/')
@@ -90,8 +98,8 @@ class TestMultiRegion:
         mcg_obj.check_if_mirroring_is_done(bucket_name)
 
         # Bring bucket A down
-        mcg_obj.toggle_aws_bucket_readwrite(backingstore1['name'])
-        mcg_obj.check_backingstore_state('backing-store-' + backingstore1['name'], BS_AUTH_FAILED)
+        aws_client.toggle_aws_bucket_readwrite(backingstore1.uls_name)
+        mcg_obj.check_backingstore_state('backing-store-' + backingstore1.name, BS_AUTH_FAILED)
 
         # Verify integrity of B
         # Retrieve all objects from MCG bucket to result dir in Pod
@@ -99,7 +107,7 @@ class TestMultiRegion:
 
         # Checksum is compared between original and result object
         for obj in downloaded_objs:
-            assert mcg_obj.verify_s3_object_integrity(
+            assert verify_s3_object_integrity(
                 original_object_path=f'{local_testobjs_dir_path}/{obj}',
                 result_object_path=f'{local_temp_path}/{obj}', awscli_pod=awscli_pod
             ), 'Checksum comparision between original and result object failed'
@@ -109,11 +117,11 @@ class TestMultiRegion:
 
         # Bring B down, bring A up
         logger.info('Blocking bucket B')
-        mcg_obj.toggle_aws_bucket_readwrite(backingstore2['name'])
+        aws_client.toggle_aws_bucket_readwrite(backingstore2.uls_name)
         logger.info('Freeing bucket A')
-        mcg_obj.toggle_aws_bucket_readwrite(backingstore1['name'], block=False)
-        mcg_obj.check_backingstore_state('backing-store-' + backingstore1['name'], BS_OPTIMAL)
-        mcg_obj.check_backingstore_state('backing-store-' + backingstore2['name'], BS_AUTH_FAILED)
+        aws_client.toggle_aws_bucket_readwrite(backingstore1.uls_name, block=False)
+        mcg_obj.check_backingstore_state('backing-store-' + backingstore1.name, BS_OPTIMAL)
+        mcg_obj.check_backingstore_state('backing-store-' + backingstore2.name, BS_AUTH_FAILED)
 
         # Verify integrity of A
         # Retrieve all objects from MCG bucket to result dir in Pod
@@ -121,10 +129,10 @@ class TestMultiRegion:
 
         # Checksum is compared between original and result object
         for obj in downloaded_objs:
-            assert mcg_obj.verify_s3_object_integrity(
+            assert verify_s3_object_integrity(
                 original_object_path=f'{local_testobjs_dir_path}/{obj}',
                 result_object_path=f'{local_temp_path}/{obj}', awscli_pod=awscli_pod
             ), 'Checksum comparision between original and result object failed'
         # Bring B up
-        mcg_obj.toggle_aws_bucket_readwrite(backingstore2['name'], block=False)
-        mcg_obj.check_backingstore_state('backing-store-' + backingstore2['name'], BS_OPTIMAL)
+        aws_client.toggle_aws_bucket_readwrite(backingstore2.uls_name, block=False)
+        mcg_obj.check_backingstore_state('backing-store-' + backingstore2.name, BS_OPTIMAL)

@@ -511,6 +511,10 @@ class OCP(object):
                         resource_name, column, retry=retry, wait=sleep,
                     )
                     if status == condition:
+                        log.info(
+                            f"status of {resource_name} at {column}"
+                            " reached condition!"
+                        )
                         return True
                     log.info((
                         f"status of {resource_name} at column {column} was {status},"
@@ -691,8 +695,11 @@ class OCP(object):
         ]
         # WA, Failed to parse "oc get build" command
         # https://github.com/red-hat-storage/ocs-ci/issues/2312
-        if self.data['items'][0]['kind'].lower() == 'build':
-            return resource_info[column_index - 1]
+        try:
+            if self.data['items'][0]['kind'].lower() == 'build':
+                return resource_info[column_index - 1]
+        except Exception:
+            pass
 
         return resource_info[column_index]
 

@@ -292,7 +292,10 @@ class DisruptionBase(ManageTest):
                 constants.CEPHFILESYSTEM, 'delete_pvcs',
                 'cephfsplugin_provisioner'
             ],
-            marks=pytest.mark.polarion_id("OCS-951")
+            marks=[
+                pytest.mark.polarion_id("OCS-951"),
+                pytest.mark.bugzilla('1860891')
+            ]
         ),
         pytest.param(
             *[

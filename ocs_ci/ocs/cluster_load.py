@@ -6,6 +6,9 @@ import logging
 import time
 from datetime import datetime
 from uuid import uuid4
+import math
+
+from range_key_dict import RangeKeyDict
 
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.utils import get_trim_mean
@@ -17,6 +20,22 @@ from ocs_ci.ocs.cluster import (
 
 
 logger = logging.getLogger(__name__)
+
+
+def wrap_msg(msg):
+    """
+    Wrap a log message with '=' marks.
+    Necessary for making cluster load background logging distinguishable
+
+    Args:
+        msg (str): The log message to wrap
+
+    Returns:
+        str: The wrapped log message
+
+    """
+    marks = "=" * len(msg) if len(msg) < 150 else "=" * 150
+    return f"\n{marks}\n{msg}\n{marks}"
 
 
 class ClusterLoad:
@@ -49,14 +68,16 @@ class ClusterLoad:
         self.cluster_limit = None
         self.dc_objs = list()
         self.pvc_objs = list()
+        self.previous_iops = None
+        self.current_iops = None
         self.pvc_size = int(get_osd_pods_memory_sum() * 0.5)
-        self.io_file_size = f"{self.pvc_size * 1000 - 200}M"
-        self.sleep_time = 35
+        self.sleep_time = 45
+        self.target_pods_number = None
         if project_factory:
             project_name = f"{defaults.BG_LOAD_NAMESPACE}-{uuid4().hex[:5]}"
             self.project = project_factory(project_name=project_name)
 
-    def increase_load(self, rate=None, wait=True):
+    def increase_load(self, rate='8M', wait=True):
         """
         Create a PVC, a service account and a DeploymentConfig of FIO pod
 
@@ -82,7 +103,8 @@ class ClusterLoad:
         new_args = [
             x for x in args if not x.startswith('--filesize=') and not x.startswith('--rate=')
         ]
-        new_args.append(f"--filesize={self.io_file_size}")
+        io_file_size = f"{self.pvc_size * 1000 - 200}M"
+        new_args.append(f"--filesize={io_file_size}")
         new_args.append(f"--rate={rate}")
         dc_obj = self.pod_factory(
             pvc=pvc_obj, pod_dict_path=constants.FIO_DC_YAML,
@@ -116,9 +138,27 @@ class ClusterLoad:
         self.pvc_objs.remove(self.pvc_objs[-1])
         if wait:
             logger.info(
-                f"Waiting {self.sleep_time} seconds for IO to drop after the deletion of {dc_name}"
+                f"Waiting {self.sleep_time} seconds for IO to drop after "
+                f"the deletion of {dc_name}"
             )
             time.sleep(self.sleep_time)
+
+    def increase_load_and_print_data(self, rate='8M', wait=True):
+        """
+        Increase load and print data
+
+        Args:
+            rate (str): FIO 'rate' value (e.g. '20M')
+            wait (bool): True for waiting for IO to kick in on the
+                newly created pod, False otherwise
+
+        """
+        self.increase_load(rate=rate, wait=wait)
+        self.previous_iops = self.current_iops
+        self.current_iops = self.calc_trim_metric_mean(metric=constants.IOPS_QUERY)
+        msg = f"Current: {self.current_iops:.2f} || Previous: {self.previous_iops:.2f}"
+        logger.info(f"IOPS:{wrap_msg(msg)}")
+        self.print_metrics()
 
     def reach_cluster_load_percentage(self):
         """
@@ -139,133 +179,133 @@ class ClusterLoad:
         if not 0.1 < self.target_percentage < 0.95:
             logger.warning(
                 f"The target percentage is {self.target_percentage * 100}% which is "
-                f"not within the accepted range. Therefore, IO will not be started"
+                "not within the accepted range. Therefore, IO will not be started"
             )
             return
         low_diff_counter = 0
-        limit_reached = False
         cluster_limit = None
         latency_vals = list()
         time_to_wait = 60 * 30
         time_before = time.time()
 
-        current_iops = self.get_query(query=constants.IOPS_QUERY)
-
-        msg = (
-            "\n======================\nCurrent IOPS: {:.2f}"
-            "\nPrevious IOPS: {:.2f}\n======================"
-        )
+        self.current_iops = self.get_query(query=constants.IOPS_QUERY)
 
         # Creating FIO DeploymentConfig pods one by one, with a large value of FIO
         # 'rate' arg. This in order to determine the cluster limit faster.
         # Once determined, these pods will be deleted. Then, new FIO DC pods will be
         # created, with a smaller value of 'rate' param. This in order to be more
         # accurate with reaching the target percentage
-        rate = '250M'
-        while not limit_reached:
-            self.increase_load(rate=rate)
-            previous_iops = current_iops
-            current_iops = self.get_query(query=constants.IOPS_QUERY)
-            if current_iops > previous_iops:
-                cluster_limit = current_iops
-
-            logger.info(msg.format(current_iops, previous_iops, len(self.dc_objs)))
-            self.print_metrics()
+        while True:
+            wait = False if len(self.dc_objs) <= 1 else True
+            self.increase_load_and_print_data(rate='250M', wait=wait)
+            if self.current_iops > self.previous_iops:
+                cluster_limit = self.current_iops
 
             latency = self.calc_trim_metric_mean(metric=constants.LATENCY_QUERY) * 1000
             latency_vals.append(latency)
             logger.info(f"Latency values: {latency_vals}")
 
-            if len(latency_vals) > 1 and latency > 250:
-                # Checking for an exponential growth
-                if latency > latency_vals[0] * 2 ** 7:
-                    logger.info("Latency exponential growth was detected")
-                    limit_reached = True
+            iops_diff = (self.current_iops / self.previous_iops * 100) - 100
+            low_diff_counter += 1 if -15 < iops_diff < 10 else 0
 
-            # In case the latency is greater than 3 seconds,
+            cluster_used_space = get_percent_used_capacity()
+
+            if len(latency_vals) > 1 and latency > 200:
+                # Checking for an exponential growth. In case the latest latency sample
+                # value is more than 128 times the first latency value sample, we can conclude
+                # that the cluster limit in terms of IOPS, has been reached.
+                # See https://blog.docbert.org/vdbench-curve/ for more details.
+                # In other cases, when the first latency sample value is greater than 3 ms,
+                # the multiplication factor we check according to, is lower, in order to
+                # determine the cluster load faster.
+                if latency > latency_vals[0] * 2 ** 7 or (
+                    3 < latency_vals[0] > 50 and latency > 300 and len(latency_vals) > 5
+                ):
+                    logger.info(
+                        wrap_msg("The cluster limit was determined by latency growth")
+                    )
+                    break
+
+            # In case the latency is greater than 2 seconds,
             # most chances the limit has been reached
-            if latency > 3000:
+            elif latency > 2000:
                 logger.info(
-                    f"Limit was determined by latency, which is "
-                    f"higher than 3 seconds - {latency} ms"
+                    wrap_msg(f"The limit was determined by the high latency - {latency} ms")
                 )
-                limit_reached = True
+                break
 
             # For clusters that their nodes do not meet the minimum
             # resource requirements, the cluster limit is being reached
             # while the latency remains low. For that, the cluster limit
             # needs to be determined by the following condition of IOPS
             # diff between FIO pod creation iterations
-            iops_diff = (current_iops / previous_iops * 100) - 100
-            low_diff_counter += 1 if -15 < iops_diff < 10 else 0
-            if low_diff_counter > 3:
+            elif low_diff_counter > 3:
                 logger.warning(
-                    f"Limit was determined by low IOPS diff between "
-                    f"iterations - {iops_diff:.2f}%"
+                    wrap_msg(
+                        "Limit was determined by low IOPS diff between "
+                        f"iterations - {iops_diff:.2f}%"
+                    )
                 )
-                limit_reached = True
+                break
 
-            if time.time() > time_before + time_to_wait:
+            elif time.time() > time_before + time_to_wait:
                 logger.warning(
-                    f"Could not determine the cluster IOPS limit within"
-                    f"\nthe given {time_to_wait} seconds timeout. Breaking"
+                    wrap_msg(
+                        "Could not determine the cluster IOPS limit within"
+                        f"the given {time_to_wait} seconds timeout. Breaking"
+                    )
                 )
-                limit_reached = True
+                break
 
-            cluster_used_space = get_percent_used_capacity()
-            if cluster_used_space > 60:
+            elif cluster_used_space > 60:
                 logger.warning(
-                    f"Cluster used space is {cluster_used_space}%. Could "
-                    f"not reach the cluster IOPS limit before the "
-                    f"used spaced reached 60%. Breaking"
+                    wrap_msg(
+                        f"Cluster used space is {cluster_used_space}%. Could "
+                        "not reach the cluster IOPS limit before the "
+                        "used spaced reached 60%. Breaking"
+                    )
                 )
-                limit_reached = True
+                break
 
         self.cluster_limit = cluster_limit
-        logger.info(
-            f"\n===================================\nThe cluster IOPS limit "
-            f"is {self.cluster_limit:.2f}\n==================================="
-        )
-        logger.info(
-            f"Deleting all DC FIO pods that have FIO rate parameter of {rate}"
-        )
+        logger.info(wrap_msg(f"The cluster IOPS limit is {self.cluster_limit:.2f}"))
+        logger.info("Deleting all DC FIO pods that have large FIO rate")
         while self.dc_objs:
             self.decrease_load(wait=False)
 
+        target_iops = self.cluster_limit * self.target_percentage
         # Creating the first pod of small FIO 'rate' param, to speed up the process.
         # In the meantime, the load will drop, following the deletion of the
         # FIO pods with large FIO 'rate' param
-        rate = '15M'
-        logger.info(
-            f"Creating FIO pods with a rate parameter of {rate}, one by "
-            f"one, until the target percentage is reached"
+        logger.info("Creating FIO pods, one by one, until the target percentage is reached")
+        self.increase_load_and_print_data()
+        msg = (
+            f"The target load, in IOPS, is: {target_iops}, which is "
+            f"{self.target_percentage*100}% of the {self.cluster_limit} cluster limit"
         )
-        self.increase_load(rate=rate)
-        target_iops = self.cluster_limit * self.target_percentage
-        current_iops = self.get_query(query=constants.IOPS_QUERY)
-        logger.info(f"Target IOPS: {target_iops}")
-        logger.info(f"Current IOPS: {current_iops}")
+        logger.info(wrap_msg(msg))
 
-        while current_iops < target_iops * 0.95:
-            wait = False if current_iops < target_iops / 2 else True
-            self.increase_load(rate=rate, wait=wait)
-            previous_iops = current_iops
-            current_iops = self.get_query(query=constants.IOPS_QUERY)
-            logger.info(msg.format(current_iops, previous_iops, len(self.dc_objs)))
-            self.print_metrics()
-
-        logger.info(
-            f"\n========================================\n"
-            f"The target load, of {self.target_percentage * 100}%, has been reached"
-            f"\n=========================================="
+        range_map = RangeKeyDict(
+            {
+                (0, 400): (0.82, 0.4), (400, 800): (0.85, 0.5),
+                (800, 1200): (0.88, 0.6), (1600, math.inf): (0.94, 0.8)
+            }
         )
+        while self.current_iops < target_iops * range_map[target_iops][0]:
+            wait = False if self.current_iops < target_iops * range_map[target_iops][1] else True
+            self.increase_load_and_print_data(wait=wait)
 
-    def get_query(self, query):
+        msg = f"The target load, of {self.target_percentage * 100}%, has been reached"
+        logger.info(wrap_msg(msg))
+        self.target_pods_number = len(self.dc_objs)
+
+    def get_query(self, query, mute_logs=False):
         """
         Get query from Prometheus and parse it
 
         Args:
             query (str): Query to be done
+            mute_logs (bool): True for muting the logs, False otherwise
 
         Returns:
             float: the query result
@@ -274,16 +314,19 @@ class ClusterLoad:
         now = datetime.now
         timestamp = datetime.timestamp
         return float(
-            self.prometheus_api.query(query, str(timestamp(now())))[0]['value'][1]
+            self.prometheus_api.query(
+                query, str(timestamp(now())), mute_logs=mute_logs
+            )[0]['value'][1]
         )
 
-    def calc_trim_metric_mean(self, metric=constants.LATENCY_QUERY, samples=5):
+    def calc_trim_metric_mean(self, metric, samples=5, mute_logs=False):
         """
         Get the trimmed mean of a given metric
 
         Args:
             metric (str): The metric to calculate the average result for
             samples (int): The number of samples to take
+            mute_logs (bool): True for muting the logs, False otherwise
 
         Returns:
             float: The average result for the metric
@@ -291,50 +334,67 @@ class ClusterLoad:
         """
         vals = list()
         for i in range(samples):
-            vals.append(round(self.get_query(metric), 5))
+            vals.append(round(self.get_query(metric, mute_logs), 5))
             if i == samples - 1:
                 break
             time.sleep(5)
         return round(get_trim_mean(vals), 5)
 
-    def get_metrics(self):
-        """
-        Get different cluster load and utilization metrics
-        """
-        return {
-            "throughput": self.get_query(constants.THROUGHPUT_QUERY) * (
-                constants.TP_CONVERSION.get(' B/s')
-            ),
-            "latency": self.get_query(constants.LATENCY_QUERY) * 1000,
-            "iops": self.get_query(constants.IOPS_QUERY),
-            "used_space": self.get_query(constants.USED_SPACE_QUERY) / 1e+9
-        }
-
-    def print_metrics(self):
+    def print_metrics(self, mute_logs=False):
         """
         Print metrics
 
+        Args:
+            mute_logs (bool): True for muting the Prometheus logs, False otherwise
+
         """
-        high_latency = 500
-        metrics = self.get_metrics()
-        limit_msg = ""
-        pods_msg = ""
-        if self.cluster_limit:
-            limit_msg = (
-                f"({metrics.get('iops') / self.cluster_limit * 100:.2f}% of the "
-                f"{self.cluster_limit:.1f} limit)\n"
-            )
-        if self.dc_objs:
-            pods_msg = (
-                f"\nNumber of pods running FIO: {len(self.dc_objs)}"
-            )
-        logger.info(
-            f"\n===============================\n"
-            f"Cluster throughput: {metrics.get('throughput'):.2f} MB/s\n"
-            f"Cluster latency: {metrics.get('latency'):.2f} ms\n"
-            f"Cluster IOPS: {metrics.get('iops'):.2f}\n{limit_msg}"
-            f"Cluster used space: {metrics.get('used_space'):.2f} GB{pods_msg}"
-            f"\n==============================="
+        high_latency = 200
+        metrics = {
+            "throughput": self.get_query(constants.THROUGHPUT_QUERY, mute_logs=mute_logs) * (
+                constants.TP_CONVERSION.get(' B/s')
+            ),
+            "latency": self.get_query(constants.LATENCY_QUERY, mute_logs=mute_logs) * 1000,
+            "iops": self.get_query(constants.IOPS_QUERY, mute_logs=mute_logs),
+            "used_space": self.get_query(constants.USED_SPACE_QUERY, mute_logs=mute_logs) / 1e+9
+        }
+        limit_msg = (
+            f" ({metrics.get('iops') / self.cluster_limit * 100:.2f}% of the "
+            f"{self.cluster_limit:.2f} limit)"
+        ) if self.cluster_limit else ""
+        pods_msg = f" || Number of FIO pods: {len(self.dc_objs)}" if self.dc_objs else ""
+        msg = (
+            f"Throughput: {metrics.get('throughput'):.2f} MB/s || "
+            f"Latency: {metrics.get('latency'):.2f} ms || "
+            f"IOPS: {metrics.get('iops'):.2f}{limit_msg} || "
+            f"Used Space: {metrics.get('used_space'):.2f} GB{pods_msg}"
         )
+        logger.info(f"Cluster utilization:{wrap_msg(msg)}")
         if metrics.get('latency') > high_latency:
             logger.warning(f"Cluster latency is higher than {high_latency} ms!")
+
+    def adjust_load_if_needed(self):
+        """
+        Dynamically adjust the IO load based on the cluster latency.
+        In case the latency goes beyond 250 ms, start deleting FIO pods.
+        Once latency drops back below 100 ms, re-create the FIO pods
+        to make sure that cluster load is around the target percentage
+
+        """
+        latency = self.calc_trim_metric_mean(
+            constants.LATENCY_QUERY, mute_logs=True
+        )
+        if latency > 0.25 and len(self.dc_objs) > 0:
+            msg = (
+                f"Latency is too high - {latency * 1000:.2f} ms."
+                " Dropping the background load. Once the latency drops back to "
+                "normal, the background load will be increased back"
+            )
+            logger.warning(wrap_msg(msg))
+            self.decrease_load(wait=False)
+        if latency < 0.1 and self.target_pods_number > len(self.dc_objs):
+            msg = (
+                f"Latency is back to normal - {latency * 1000:.2f} ms. "
+                f"Increasing back the load"
+            )
+            logger.info(wrap_msg(msg))
+            self.increase_load(wait=False)

@@ -1350,7 +1350,7 @@ def ceph_health_check_base(namespace=None):
         f"oc -n {namespace} get pod -l 'app=rook-ceph-tools' "
         f"-o jsonpath='{{.items[0].metadata.name}}'"
     )
-    health = run_cmd(f"oc -n {namespace} exec {tools_pod} ceph health")
+    health = run_cmd(f"oc -n {namespace} exec {tools_pod} -- ceph health")
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
@@ -1537,16 +1537,16 @@ def load_auth_config():
 
     """
     log.info("Retrieving the authentication config dictionary")
-    auth_file = os.path.join(constants.TOP_DIR, 'data', 'auth.yaml')
+    auth_file = os.path.join(constants.TOP_DIR, 'data', constants.AUTHYAML)
     try:
         with open(auth_file) as f:
             return yaml.safe_load(f)
     except FileNotFoundError:
-        log.error(
+        log.warn(
             f'Unable to find the authentication configuration at {auth_file}, '
             f'please refer to the getting started guide ({constants.AUTH_CONFIG_DOCS})'
         )
-        raise
+        return {}
 
 
 def get_ocs_olm_operator_tags(limit=100):
@@ -1575,8 +1575,19 @@ def get_ocs_olm_operator_tags(limit=100):
         )
         raise
     headers = {'Authorization': f'Bearer {quay_access_token}'}
+    image = "ocs-registry"
+    try:
+        ocs_version = float(config.ENV_DATA.get('ocs_version'))
+        if ocs_version < 4.5:
+            image = "ocs-olm-operator"
+    except (ValueError, TypeError):
+        log.warning("Invalid ocs_version given, defaulting to ocs-registry image")
+        pass
     resp = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=limit),
+        constants.OPERATOR_CS_QUAY_API_QUERY.format(
+            tag_limit=limit,
+            image=image,
+        ),
         headers=headers
     )
     if not resp.ok:
@@ -1906,7 +1917,7 @@ def get_ocs_version_from_image(image):
 
     """
     try:
-        version = image.split(':')[1].lstrip("latest-")
+        version = image.split(':')[1].lstrip("latest-").lstrip("stable-")
         version = Version.coerce(version)
         return "{major}.{minor}".format(
             major=version.major, minor=version.minor
@@ -2056,29 +2067,15 @@ def convert_device_size(unformatted_size, units_to_covert_to):
 
     """
     units = unformatted_size[-2:]
-    absolute_size = int(unformatted_size[:-2])
-
-    if units_to_covert_to == 'TB':
-        if units == 'Ti':
-            return absolute_size
-        elif units == 'Gi':
-            return absolute_size * 1024
-        elif units == 'Mi':
-            return absolute_size * 1024 * 1024
-    elif units_to_covert_to == 'GB':
-        if units == 'Ti':
-            return absolute_size / 1024
-        elif units == 'Gi':
-            return absolute_size
-        elif units == 'Mi':
-            return absolute_size * 1024
-    elif units_to_covert_to == 'MB':
-        if units == 'Ti':
-            return absolute_size / 1024 / 1024
-        elif units == 'Gi':
-            return absolute_size / 1024
-        elif units == 'Mi':
-            return absolute_size
+    abso = int(unformatted_size[:-2])
+    conversion = {
+        'TB': {'Ti': abso, 'Gi': abso / 1000, 'Mi': abso / 1e+6, 'Ki': abso / 1e+9},
+        'GB': {'Ti': abso * 1000, 'Gi': abso, 'Mi': abso / 1000, 'Ki': abso / 1e+6},
+        'MB': {'Ti': abso * 1e+6, 'Gi': abso * 1000, 'Mi': abso, 'Ki': abso / 1000},
+        'KB': {'Ti': abso * 1e+9, 'Gi': abso * 1e+6, 'Mi': abso * 1000, 'Ki': abso},
+        'B': {'Ti': abso * 1e+12, 'Gi': abso * 1e+9, 'Mi': abso * 1e+6, 'Ki': abso * 1000}
+    }
+    return conversion[units_to_covert_to][units]
 
 
 def mirror_image(image):
@@ -2329,7 +2326,7 @@ def get_terraform(version=None, bin_dir=None):
 
 def get_module_ip(terraform_state_file, module):
     """
-    Gets the bootstrap node IP from terraform.tfstate file
+    Gets the node IP from terraform.tfstate file
 
     Args:
         terraform_state_file (str): Path to terraform state file
@@ -2337,19 +2334,35 @@ def get_module_ip(terraform_state_file, module):
             e.g: constants.LOAD_BALANCER_MODULE
 
     Returns:
-        str: IP of bootstrap node
+        list: IP of the node
 
     """
+    ips = []
     with open(terraform_state_file) as fd:
         obj = hcl.load(fd)
 
-        resources = obj['resources']
-        log.debug(f"Extracting module information for {module}")
-        log.debug(f"Resource in {terraform_state_file}: {resources}")
-        for resource in resources:
-            if resource['module'] == module:
-                resource_body = resource['instances'][0]['attributes']['body']
-                return resource_body.split("\"")[3]
+        if config.ENV_DATA.get('folder_structure'):
+            resources = obj['resources']
+            log.debug(f"Extracting module information for {module}")
+            log.debug(f"Resource in {terraform_state_file}: {resources}")
+            for resource in resources:
+                if (
+                    resource.get('module') == module
+                    and resource.get('mode') == "data"
+                ):
+                    for each_resource in resource['instances']:
+                        resource_body = each_resource['attributes']['body']
+                        ips.append(resource_body.split("\"")[3])
+        else:
+            modules = obj['modules']
+            target_module = module.split("_")[1]
+            log.debug(f"Extracting module information for {module}")
+            log.debug(f"Modules in {terraform_state_file}: {modules}")
+            for each_module in modules:
+                if target_module in each_module['path']:
+                    return each_module['outputs']['ip_addresses']['value']
+
+        return ips
 
 
 def set_aws_region(region=None):
@@ -2363,3 +2376,101 @@ def set_aws_region(region=None):
     log.debug("Exporting environment variable AWS_REGION")
     region = region or config.ENV_DATA['region']
     os.environ['AWS_REGION'] = region
+
+
+def wait_for_machineconfigpool_status(node_type, timeout=900):
+    """
+    Check for Machineconfigpool status
+
+    Args:
+        node_type (str): The node type to check machineconfigpool
+            status is updated.
+            e.g: worker, master and all if we want to check for all nodes
+        timeout (int): Time in seconds to wait
+
+    """
+    # importing here to avoid dependencies
+    from ocs_ci.ocs import ocp
+    node_types = [node_type]
+    if node_type == "all":
+        node_types = [
+            f"{constants.WORKER_MACHINE}", f"{constants.MASTER_MACHINE}"
+        ]
+
+    for role in node_types:
+        log.info(f"Checking machineconfigpool status for {role} nodes")
+        ocp_obj = ocp.OCP(
+            kind=constants.MACHINECONFIGPOOL, resource_name=role
+        )
+        machine_count = ocp_obj.get()['status']['machineCount']
+
+        assert ocp_obj.wait_for_resource(
+            condition=str(machine_count),
+            column="READYMACHINECOUNT",
+            timeout=timeout,
+            sleep=5,
+        )
+
+
+def configure_chrony_and_wait_for_machineconfig_status(
+    node_type=constants.WORKER_MACHINE
+):
+    """
+    Configure chrony on the nodes
+
+    Args:
+        node_type (str): The node type to configure chrony
+            e.g: worker, master and all if we want to configure on all nodes
+
+    """
+    # importing here to avoid dependencies
+    from ocs_ci.utility.templating import load_yaml
+    from ocs_ci.ocs.resources.ocs import OCS
+    chrony_data = load_yaml(constants.NTP_CHRONY_CONF)
+
+    node_types = [node_type]
+    if node_type == "all":
+        node_types = [
+            f"{constants.WORKER_MACHINE}", f"{constants.MASTER_MACHINE}"
+        ]
+
+    for role in node_types:
+        log.info(f"Creating chrony for {role} nodes")
+        chrony_data['metadata']['labels']['machineconfiguration.openshift.io/role'] = role
+        chrony_data['metadata']['name'] = f"{role}-chrony-configuration"
+        chrony_obj = OCS(**chrony_data)
+        chrony_obj.create()
+
+        # sleep here to start update machineconfigpool status
+        time.sleep(60)
+        wait_for_machineconfigpool_status(role)
+
+
+def modify_csv(csv, replace_from, replace_to):
+    """
+    Modify the CSV
+
+    Args:
+        csv (str): The CSV name
+        replace_from (str): The pattern to replace from in the CSV
+        replace_to (str): The pattern to replace to in the CSV
+
+    """
+    data = (
+        f"oc -n openshift-storage get csv {csv} -o yaml | sed"
+        f" 's,{replace_from},{replace_to},g' | oc replace -f -"
+    )
+    log.info(
+        f"CSV {csv} will be modified: {replace_from} will be replaced "
+        f"with {replace_to}.\nThe command that will be used for that is:\n{data}"
+    )
+
+    temp_file = NamedTemporaryFile(
+        mode='w+', prefix='csv_modification', suffix='.sh'
+    )
+
+    with open(temp_file.name, 'w') as t_file:
+        t_file.writelines(data)
+
+    run_cmd(f"chmod 777 {temp_file.name}")
+    run_cmd(f"sh {temp_file.name}")

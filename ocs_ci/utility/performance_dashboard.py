@@ -70,6 +70,24 @@ def initialize_data():
     return data_template
 
 
+def push_results(json_data):
+    """
+    Pushing the JSON data to the codespeed
+
+    Args:
+         json_data (dict): The json file to push
+
+    """
+
+    log.info(f'Trying to push {json_data} to codespeed server:  {constants.CODESPEED_URL}result/add/json/')
+    try:
+        request = requests.post(constants.CODESPEED_URL + 'result/add/json/', data=json_data)
+        log.info(f'POST request output is {request.text}')
+    except Exception:
+        # Catching any exception just to prevent the test from failed
+        log.error('Failed to push data to codespeed, make sure the server is up')
+
+
 def push_perf_dashboard(
     interface, read_iops, write_iops, bw_read, bw_write
 ):
@@ -108,5 +126,30 @@ def push_perf_dashboard(
     sample_data.append(data.copy())
 
     json_data = {'json': json.dumps(sample_data)}
-    log.info(f'Going to push {json_data} to codespeed')
-    requests.post(constants.CODESPEED_URL + 'result/add/json/', data=json_data)
+    push_results(json_data)
+
+
+def push_to_pvc_time_dashboard(
+    interface, action, duration
+):
+    """
+    Push JSON data to time pvc dashboard
+
+    Args:
+        interface (str): The interface used for getting the results
+        action (str): Can be either creation or deletion
+        duration(str); the duration of corresponding action
+    """
+    data = initialize_data()
+    interface = (
+        constants.RBD_INTERFACE if interface == constants.CEPHBLOCKPOOL else (
+            constants.CEPHFS_INTERFACE
+        )
+    )
+    sample_data = []
+    data['benchmark'] = f"{interface}-pvc-{action}-time"
+    data['result_value'] = duration
+    sample_data.append(data.copy())
+
+    json_data = {'json': json.dumps(sample_data)}
+    push_results(json_data)

@@ -38,6 +38,7 @@ class AWS(object):
     _ec2_resource = None
     _region_name = None
     _s3_client = None
+    _route53_client = None
 
     def __init__(self, region_name=None):
         """
@@ -92,6 +93,22 @@ class AWS(object):
             )
         return self._s3_client
 
+    @property
+    def route53_client(self):
+        """
+        Property for route53 client
+
+        Returns:
+            boto3.client: instance of route53 client
+
+        """
+        if not self._route53_client:
+            self._route53_client = boto3.client(
+                'route53',
+                region_name=self._region_name,
+            )
+        return self._route53_client
+
     def get_ec2_instance(self, instance_id):
         """
         Get instance of ec2 Instance
@@ -104,6 +121,41 @@ class AWS(object):
 
         """
         return self.ec2_resource.Instance(instance_id)
+
+    def get_instances_response_by_name_pattern(
+        self, pattern=None, filter_by_cluster_name=True
+    ):
+        """
+        Get the instances by name tag pattern. If not specified it will return
+        all the instances, or will return the instances
+        filtered by the cluster name.
+
+        Args:
+            pattern (str): Pattern of tag name like:
+                pbalogh-testing-cluster-55jx2-worker*
+            filter_by_cluster_name: Will be used only if the 'pattern' param
+                not specified. If True it filters the instances
+                by the cluster name, else if False it returns all instances.
+
+        Returns:
+            list: list of instances dictionaries.
+        """
+        if not pattern:
+            if filter_by_cluster_name:
+                pattern = f"{config.ENV_DATA['cluster_name']}*"
+            else:
+                pattern = '*'
+
+        instances_response = self.ec2_client.describe_instances(
+            Filters=[
+                {
+                    'Name': 'tag:Name',
+                    'Values': [pattern],
+                },
+            ],
+        )['Reservations']
+
+        return instances_response
 
     def get_instances_by_name_pattern(self, pattern):
         """ Get instances by Name tag pattern
@@ -125,14 +177,7 @@ class AWS(object):
         Returns:
             list: contains dictionaries with instance details mentioned above
         """
-        instances_response = self.ec2_client.describe_instances(
-            Filters=[
-                {
-                    'Name': 'tag:Name',
-                    'Values': [pattern],
-                },
-            ],
-        )['Reservations']
+        instances_response = self.get_instances_response_by_name_pattern(pattern=pattern)
         instances = []
         for instance in instances_response:
             instance = instance['Instances'][0]
@@ -953,6 +998,94 @@ class AWS(object):
         logger.info(f"Stackid = {stack_id}")
         return stack_name, stack_id
 
+    def delete_apps_record_set(self, cluster_name=None):
+        """
+        Delete apps record set that sometimes blocks sg stack deletion.
+            https://github.com/red-hat-storage/ocs-ci/issues/2549
+
+        Args:
+            cluster_name (str): Name of the cluster
+
+        """
+        cluster_name = cluster_name or config.ENV_DATA['cluster_name']
+        base_domain = config.ENV_DATA['base_domain']
+        hosted_zone_name = f"{cluster_name}.{base_domain}."
+        record_set_name = f"\\052.apps.{cluster_name}.{base_domain}."
+
+        hosted_zones = self.route53_client.list_hosted_zones_by_name()[
+            'HostedZones'
+        ]
+        hosted_zone_id = [
+            zone['Id'] for zone in hosted_zones
+            if zone['Name'] == hosted_zone_name
+        ][0]
+        record_sets = self.route53_client.list_resource_record_sets(
+            HostedZoneId=hosted_zone_id
+        )['ResourceRecordSets']
+        apps_record_sets = [
+            record_set for record_set in record_sets
+            if record_set['Name'] == record_set_name
+        ]
+        if apps_record_sets:
+            apps_record_set = apps_record_sets[0]
+        else:
+            logger.info(f"app record set not found for record {record_set_name}")
+            return
+        self.route53_client.change_resource_record_sets(
+            HostedZoneId=hosted_zone_id,
+            ChangeBatch={
+                'Changes': [
+                    {
+                        'Action': 'DELETE',
+                        'ResourceRecordSet': {
+                            'Name': record_set_name,
+                            'Type': apps_record_set['Type'],
+                            'AliasTarget': apps_record_set['AliasTarget']
+                        },
+                    }
+                ]
+            }
+        )
+
+    def get_instance_id_from_private_dns_name(self, private_dns_name):
+        """
+        Get the instance id from the private dns name of the instance
+
+        Args:
+            private_dns_name (str): The private DNS name of the instance
+
+        Returns:
+            str: The instance id associated to the private DNS name.
+                 If not found returns None
+        """
+        instances_response = self.get_instances_response_by_name_pattern()
+        for instance in instances_response:
+            instance_dict = instance['Instances'][0]
+            if instance_dict['PrivateDnsName'] == private_dns_name:
+                return instance_dict['InstanceId']
+
+        return None
+
+    def get_stack_name_by_instance_id(self, instance_id):
+        """
+        Get the stack name by the instance id
+
+        Args:
+            instance_id (str): The instance id
+
+        Returns:
+            str: The stack name associated to the instance id.
+                 If not found returns None
+        """
+        stack_name = None
+        instances_response = self.get_instances_response_by_name_pattern()
+        for instance in instances_response:
+            instance_dict = instance['Instances'][0]
+            if instance_dict['InstanceId'] == instance_id:
+                stack_name = get_stack_name_from_instance_dict(instance_dict)
+
+        return stack_name
+
 
 def get_instances_ids_and_names(instances):
     """
@@ -1159,13 +1292,38 @@ def delete_cluster_buckets(cluster_name):
     for pattern in patterns:
         r = re.compile(pattern)
         filtered_buckets = list(filter(r.search, bucket_names))
+        logger.info(f"Found buckets: {filtered_buckets}")
         if len(filtered_buckets) == 1:
             s3_resource = boto3.resource('s3', region_name=region)
             bucket_name = filtered_buckets[0]
-            logger.warning("Deleting all files in bucket %s", bucket_name)
-            bucket = s3_resource.Bucket(bucket_name)
-            bucket.objects.delete()
-            logger.warning("Deleting bucket %s", bucket_name)
-            bucket.delete()
+            logger.info("Deleting all files in bucket %s", bucket_name)
+            try:
+                bucket = s3_resource.Bucket(bucket_name)
+                bucket.objects.delete()
+                logger.info("Deleting bucket %s", bucket_name)
+                bucket.delete()
+            except ClientError as e:
+                logger.error(e)
         else:
-            logger.warning("No matches found for pattern %s", pattern)
+            logger.info("No matches found for pattern %s", pattern)
+
+
+def get_stack_name_from_instance_dict(instance_dict):
+    """
+    Get the stack name by the given instance dictionary from AWS
+
+    Args:
+        instance_dict (dict): The instance dictionary from AWS
+
+    Returns:
+        str: The stack name of the given instance dictionary from AWS.
+             If not found returns None
+    """
+    tags = instance_dict.get('Tags', [])
+    stack_name = None
+
+    for tag in tags:
+        if tag.get('Key') == constants.AWS_CLOUDFORMATION_TAG:
+            stack_name = tag.get('Value')
+
+    return stack_name

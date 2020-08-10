@@ -8,7 +8,7 @@ import time
 import json
 from subprocess import run, CalledProcessError
 from prettytable import PrettyTable
-from threading import Thread
+from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs.exceptions import (ResourceWrongStatusException, CommandFailed)
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
@@ -16,8 +16,9 @@ from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, utils
 from ocs_ci.utility.utils import run_cmd, exec_cmd, TimeoutSampler
+from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
 log = logging.getLogger(__name__)
 URL = "https://get.helm.sh/helm-v2.16.1-linux-amd64.tar.gz"
@@ -365,7 +366,8 @@ class AMQ(object):
         """
         cmd = f"oc logs -n {namespace} {pod} --since={since_time}s"
         msg = run_cmd(cmd)
-        if msg.find(f"Hello world - {int(value) - 1} ") is -1:
+        substring = f"Hello world - {int(value) - 1}"
+        if msg.find(substring) is -1:
             return False
         else:
             return True
@@ -393,8 +395,8 @@ class AMQ(object):
             ):
                 if msg:
                     break
-        log.error("Few messages are not sent")
-        raise Exception("All messages are not sent from the producer pod")
+        assert msg, "Few messages are not sent by producer"
+        log.info("Producer sent all messages")
 
     def validate_messages_are_consumed(self, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
         """
@@ -418,10 +420,9 @@ class AMQ(object):
                 900, 30, self.validate_msg, pod.name, namespace, value, since_time
             ):
                 if msg:
-                    log.info("Consumer pod received all messages sent by producer")
                     break
-        log.error("Few messages are not received")
-        raise Exception("Consumer pod received all messages sent by producer")
+        assert msg, "Consumer didn't receive all messages"
+        log.info("Consumer received all messages")
 
     def run_in_bg(self, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
         """
@@ -437,23 +438,25 @@ class AMQ(object):
         log.info("Running open messages on pod in bg")
         threads = []
 
-        thread1 = Thread(target=self.validate_messages_are_produced, args=(namespace, value, since_time))
-        thread1.start()
-        time.sleep(10)
-        threads.append(thread1)
-
-        thread2 = Thread(target=self.validate_messages_are_consumed, args=(namespace, value, since_time))
-        thread2.start()
-        time.sleep(10)
-        threads.append(thread2)
+        executor = ThreadPoolExecutor(2)
+        threads.append(
+            executor.submit(
+                self.validate_messages_are_produced, namespace, value, since_time
+            )
+        )
+        threads.append(
+            executor.submit(
+                self.validate_messages_are_consumed, namespace, value, since_time
+            )
+        )
 
         return threads
 
     def run_amq_benchmark(
         self, benchmark_pod_name="benchmark", kafka_namespace=constants.AMQ_NAMESPACE,
         tiller_namespace=AMQ_BENCHMARK_NAMESPACE,
-        num_of_clients=8, worker=None, timeout=3600,
-        amq_workload_yaml=None
+        num_of_clients=8, worker=None, timeout=1800,
+        amq_workload_yaml=None, run_in_bg=False
     ):
         """
         Run benchmark pod and get the results
@@ -479,9 +482,11 @@ class AMQ(object):
                 :producer_rate (int): Producer rate
                 :consumer_backlog_sizegb (int): Size of block in gb
                 :test_duration_minutes (int): Time to run the workloads
+            run_in_bg (bool): On true the workload will run in background
 
         Return:
-            result (str): Returns benchmark run information
+            result (str/Thread obj): Returns benchmark run information if run_in_bg is False.
+                Otherwise a thread of the amq workload execution
 
         """
 
@@ -569,10 +574,38 @@ class AMQ(object):
         else:
             cmd = "bin/benchmark --drivers /driver_kafka /amq_workload.yaml"
         log.info(f"Run benchmark and running command {cmd} inside the benchmark pod ")
+
+        if run_in_bg:
+            executor = ThreadPoolExecutor(1)
+            result = executor.submit(
+                self.run_amq_workload,
+                cmd, benchmark_pod_name, tiller_namespace, timeout
+            )
+            return result
+
         pod_obj = get_pod_obj(name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace)
         result = pod_obj.exec_cmd_on_pod(command=cmd, out_yaml_format=False, timeout=timeout)
 
         return result
+
+    def run_amq_workload(
+        self, command, benchmark_pod_name, tiller_namespace, timeout
+    ):
+        """
+        Runs amq workload in bg
+
+        Args:
+             command (str): Command to run on pod
+             benchmark_pod_name (str): Pod name
+             tiller_namespace (str): Namespace of pod
+             timeout (int): Time to complete the run
+
+        Returns:
+            result (str): Returns benchmark run information
+
+        """
+        pod_obj = get_pod_obj(name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace)
+        return pod_obj.exec_cmd_on_pod(command=command, out_yaml_format=False, timeout=timeout)
 
     def validate_amq_benchmark(self, result, amq_workload_yaml, benchmark_pod_name="benchmark"):
         """
@@ -638,6 +671,40 @@ class AMQ(object):
         log.info(f'\n{amq_benchmark_pod_table}\n')
 
         return res_dict
+
+    def export_amq_output_to_gsheet(self, amq_output, sheet_name, sheet_index):
+        """
+        Collect amq data to google spreadsheet
+
+        Args:
+            amq_output (dict):  amq output in dict
+            sheet_name (str): Name of the sheet
+            sheet_index (int): Index of sheet
+
+        """
+        # Collect data and export to Google doc spreadsheet
+        g_sheet = GoogleSpreadSheetAPI(
+            sheet_name=sheet_name, sheet_index=sheet_index
+        )
+        log.info("Exporting amq data to google spreadsheet")
+
+        headers_to_key = []
+        values = []
+        for key, val in amq_output.items():
+            headers_to_key.append(key)
+            values.append(val)
+
+        # Update amq_result to gsheet
+        g_sheet.insert_row(values, 2)
+        g_sheet.insert_row(headers_to_key, 2)
+
+        # Capturing versions(OCP, OCS and Ceph) and test run name
+        g_sheet.insert_row(
+            [f"ocp_version:{utils.get_cluster_version()}",
+             f"ocs_build_number:{utils.get_ocs_build_number()}",
+             f"ceph_version:{utils.get_ceph_version()}",
+             f"test_run_name:{utils.get_testrun_name()}"], 2
+        )
 
     def create_messaging_on_amq(self, topic_name='my-topic', user_name="my-user", partitions=1,
                                 replicas=1, num_of_producer_pods=1, num_of_consumer_pods=1,

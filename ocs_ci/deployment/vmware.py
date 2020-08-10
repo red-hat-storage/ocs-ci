@@ -34,6 +34,7 @@ from ocs_ci.utility.utils import (
     clone_repo, convert_yaml2tfvars, create_directory_path, read_file_as_str,
     remove_keys_from_tf_variable_file, replace_content_in_file, run_cmd,
     upload_file, wait_for_co, get_ocp_version, get_terraform, set_aws_region,
+    configure_chrony_and_wait_for_machineconfig_status,
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from semantic_version import Version
@@ -47,6 +48,10 @@ __all__ = ['VSPHEREUPI']
 
 
 class VSPHEREBASE(Deployment):
+
+    # default storage class for StorageCluster CRD on VmWare platform
+    DEFAULT_STORAGECLASS = "thin"
+
     def __init__(self):
         """
         This would be base for both IPI and UPI deployment
@@ -76,7 +81,7 @@ class VSPHEREBASE(Deployment):
 
         self.wait_time = 90
 
-    def attach_disk(self, size=100):
+    def attach_disk(self, size=100, disk_type=constants.VM_DISK_TYPE):
         """
         Add a new disk to all the workers nodes
 
@@ -96,7 +101,7 @@ class VSPHEREBASE(Deployment):
                     config.ENV_DATA.get("extra_disks", 1),
                     vm,
                     size,
-                    constants.VM_DISK_TYPE
+                    disk_type
                 )
 
     def add_nodes(self):
@@ -393,6 +398,7 @@ class VSPHEREUPI(VSPHEREBASE):
             self.folder_structure = False
             if Version.coerce(ocp_version) >= Version.coerce('4.5'):
                 self.folder_structure = True
+                config.ENV_DATA['folder_structure'] = self.folder_structure
 
         def deploy_prereq(self):
             """
@@ -588,6 +594,9 @@ class VSPHEREUPI(VSPHEREBASE):
             logger.info("Removing RHCOS compute nodes from a cluster")
             remove_nodes(rhcos_nodes)
 
+        # configure chrony for all nodes
+        configure_chrony_and_wait_for_machineconfig_status(node_type="all")
+
     def destroy_cluster(self, log_level="DEBUG"):
         """
         Destroy OCP cluster specific to vSphere UPI
@@ -598,12 +607,26 @@ class VSPHEREUPI(VSPHEREBASE):
         """
         previous_dir = os.getcwd()
 
-        # Download terraform binary based on ocp version and
-        # update the installer path in ENV_DATA
-        # use "0.11.14" for releases below OCP 4.5
-        # TODO: For cluster installed by old version of terraform we need to
-        # still run old version for destroy ( upgrade scenario )
-        terraform_version = config.DEPLOYMENT['terraform_version']
+        # Download terraform binary based on terraform version
+        # in terraform.log
+        terraform_log_path = os.path.join(
+            config.ENV_DATA.get('cluster_path'),
+            config.ENV_DATA.get('TF_LOG_FILE')
+        )
+
+        # check for terraform.log, this check is for partially
+        # deployed clusters
+        try:
+            with open(terraform_log_path, 'r') as fd:
+                logger.debug(
+                    f"Reading terraform version from {terraform_log_path}"
+                )
+                version_line = fd.readline()
+                terraform_version = version_line.split()[-1]
+        except FileNotFoundError:
+            logger.debug(f"{terraform_log_path} file not found")
+            terraform_version = config.DEPLOYMENT['terraform_version']
+
         terraform_installer = get_terraform(version=terraform_version)
         config.ENV_DATA['terraform_installer'] = terraform_installer
 

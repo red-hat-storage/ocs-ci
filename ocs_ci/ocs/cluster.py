@@ -103,12 +103,14 @@ class CephCluster(object):
         self.mgrs = []
         self.osds = []
         self.noobaas = []
+        self.rgws = []
         self.toolbox = None
         self.mds_count = 0
         self.mon_count = 0
         self.mgr_count = 0
         self.osd_count = 0
         self.noobaa_count = 0
+        self.rgw_count = 0
         self.mcg_obj = MCG()
         self.scan_cluster()
         logging.info(f"Number of mons = {self.mon_count}")
@@ -143,6 +145,7 @@ class CephCluster(object):
         self.mgrs = pod.get_mgr_pods(self.mgr_selector, self.namespace)
         self.osds = pod.get_osd_pods(self.osd_selector, self.namespace)
         self.noobaas = pod.get_noobaa_pods(self.noobaa_selector, self.namespace)
+        self.rgws = pod.get_rgw_pods()
         self.toolbox = pod.get_ceph_tools_pod()
 
         # set port attrib on mon pods
@@ -164,6 +167,7 @@ class CephCluster(object):
         self.mgr_count = len(self.mgrs)
         self.osd_count = len(self.osds)
         self.noobaa_count = len(self.noobaas)
+        self.rgw_count = len(self.rgws)
 
     @staticmethod
     def set_port(pod):
@@ -242,17 +246,32 @@ class CephCluster(object):
             logger.error(e)
             raise exceptions.CephHealthException("Cluster health is NOT OK")
 
-        # check noobaa health
-        if not self.mcg_obj.status:
-            raise exceptions.NoobaaHealthException("Cluster health is NOT OK")
-
         # TODO: OSD and MGR health check
         logger.info("Cluster HEALTH_OK")
         # This scan is for reconcilation on *.count
         # because during first scan in this function some of the
         # pods may not be up and would have set count to lesser number
         self.scan_cluster()
-        return True
+
+        # Check Noobaa health
+        self.wait_for_noobaa_health_ok()
+
+    def noobaa_health_check(self):
+        """
+        Check Noobaa health
+
+        """
+        if not self.mcg_obj.status:
+            raise exceptions.NoobaaHealthException("Cluster health is NOT OK")
+
+    def wait_for_noobaa_health_ok(self, tries=60, delay=5):
+        """
+        Wait for Noobaa health to be OK
+        """
+        return retry(
+            exceptions.NoobaaHealthException,
+            tries=tries, delay=delay, backoff=1
+        )(self.noobaa_health_check)()
 
     def mon_change_count(self, new_count):
         """
@@ -625,6 +644,31 @@ class CephCluster(object):
                 and states['count'] == total_pg_count
             )
 
+    def wait_for_rebalance(self, timeout=600):
+        """
+        Wait for re-balance to complete
+
+        Args:
+            timeout (int): Time to wait for the completion of re-balance
+
+        Returns:
+            bool: True if rebalance completed, False otherwise
+
+        """
+        try:
+            for rebalance in TimeoutSampler(
+                timeout=timeout, sleep=10, func=self.get_rebalance_status
+            ):
+                if rebalance:
+                    logging.info("Re-balance is completed")
+                    return True
+        except exceptions.TimeoutExpiredError:
+            logger.error(
+                f"Data re-balance failed to complete within the given "
+                f"timeout of {timeout} seconds"
+            )
+            return False
+
     def time_taken_to_complete_rebalance(self, timeout=600):
         """
         This function calculates the time taken to complete
@@ -638,13 +682,12 @@ class CephCluster(object):
 
         """
         start_time = time.time()
-        for rebalance in TimeoutSampler(
-            timeout=timeout, sleep=10, func=self.get_rebalance_status
-        ):
-            if rebalance:
-                logging.info("Rebalance is completed")
-                time_taken = time.time() - start_time
-                return (time_taken / 60)
+        assert self.wait_for_rebalance(timeout=timeout), (
+            f"Data re-balance failed to complete within the given "
+            f"timeout of {timeout} seconds"
+        )
+        time_taken = time.time() - start_time
+        return time_taken / 60
 
 
 class CephHealthMonitor(threading.Thread):

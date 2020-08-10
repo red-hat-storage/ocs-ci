@@ -32,17 +32,25 @@ conf/deployment/aws/ipi_1az_rhcos_lso_3m_3w.yaml conf/ocsci/skip_ocs_deploy.yaml
 When you skip OCS installation, you will be able to install already released
 (so called live) version of OCS only.
 
-If you need to use dev. builds of OCS, you need to create a catalog source
-first:
+If you need to use dev. builds of OCS, you need to create a catalog source for
+these images first using
+``ocs_ci/templates/ocs-deployment/catalog-source.yaml`` template.
+
+In the template, you have to edit image specification of ocs-catalogsource
+and replace tag `latest` with either a version of your choice, eg.
+`4.4.0-420.ci` if you need to use particular CI build of OCS, or use one of
+release specific tags such as `latest-4.4` or `latest-stable-4.4`.
+There is no `latest` tag assigned to these `quay.io/rhceph-dev` dev container
+images.
+
+When you specify the tag in ``catalog-source.yaml`` file, you can create the
+catalog source via:
 
 ```
 $ oc create -f ocs_ci/templates/ocs-deployment/catalog-source.yaml
 ```
 
 Note that this assumes you have your environment configured as if you were
-running ocs-ci tests (`oc` can connect to your cluster, you have pull
-secret for `quay.io/rhceph-dev`, ...). See also [Usage](/docs/usage.md) guide.
-
-If you need to use particular CI build of OCS, edit image specification of
-ocs-catalogsource and relplace tag `latest` with a version of your choice, eg.
-`4.4.0-420.ci`.
+running ocs-ci tests (`oc` can connect to your cluster, pull secret provided to
+`openshift-installer` by ocs-ci during OCP deployment included one for
+`quay.io/rhceph-dev`). See also [Usage](/docs/usage.md) guide.
