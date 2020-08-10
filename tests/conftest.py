@@ -1355,13 +1355,6 @@ def multi_pvc_factory_fixture(
     return factory
 
 
-@pytest.fixture(scope="session", autouse=True)
-def rook_repo(request):
-    get_rook_repo(
-        config.RUN['rook_branch'], config.RUN.get('rook_to_checkout')
-    )
-
-
 @pytest.fixture(scope="function")
 def memory_leak_function(request):
     """
