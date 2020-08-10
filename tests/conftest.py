@@ -50,7 +50,6 @@ from ocs_ci.utility.environment_check import (
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
-    get_rook_repo,
     get_ocp_version,
     TimeoutSampler,
 )
@@ -1353,13 +1352,6 @@ def multi_pvc_factory_fixture(
         return pvc_list
 
     return factory
-
-
-@pytest.fixture(scope="session", autouse=True)
-def rook_repo(request):
-    get_rook_repo(
-        config.RUN['rook_branch'], config.RUN.get('rook_to_checkout')
-    )
 
 
 @pytest.fixture(scope="function")
