@@ -411,6 +411,7 @@ class ClusterLoad:
     def pause_load(self):
         """
         Pause the cluster load
+
         """
         logger.info(wrap_msg("Pausing the cluster load"))
         while self.dc_objs:
@@ -419,6 +420,7 @@ class ClusterLoad:
     def resume_load(self):
         """
         Resume the cluster load
+
         """
         logger.info(wrap_msg("Resuming the cluster load"))
         while len(self.dc_objs) < len(self.target_pods_number):

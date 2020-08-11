@@ -1167,15 +1167,15 @@ def cluster_load(
                 time.sleep(20)
                 try:
                     cl_load_obj.print_metrics(mute_logs=True)
-                    if get_test_status(TEMP_FILE) == 'to_be_paused':
-                        cl_load_obj.pause_load()
-                        set_test_status(TEMP_FILE, 'paused')
-                    elif get_test_status(TEMP_FILE) == 'to_be_resumed':
-                        cl_load_obj.resume_load()
-                        set_test_status(TEMP_FILE, 'running')
-                    elif get_test_status(TEMP_FILE) == 'running':
-                        if io_in_bg:
+                    if io_in_bg:
+                        if get_test_status(TEMP_FILE) == 'running':
                             cl_load_obj.adjust_load_if_needed()
+                        elif get_test_status(TEMP_FILE) == 'to_be_paused':
+                            cl_load_obj.pause_load()
+                            set_test_status(TEMP_FILE, 'paused')
+                        elif get_test_status(TEMP_FILE) == 'to_be_resumed':
+                            cl_load_obj.resume_load()
+                            set_test_status(TEMP_FILE, 'running')
 
                 # Any type of exception should be caught and we should continue.
                 # We don't want any test to fail
@@ -1190,14 +1190,19 @@ def cluster_load(
 def pause_cluster_load(request):
     """
     Pause the background cluster load
+
     """
     if config.RUN.get('io_in_bg'):
 
         def finalizer():
+            """
+            Resume the cluster load
+
+            """
             set_test_status(TEMP_FILE, 'to_be_resumed')
             try:
-                for status in TimeoutSampler(180, 3, get_test_status, TEMP_FILE):
-                    if status == 'running':
+                for load_status in TimeoutSampler(180, 3, get_test_status, TEMP_FILE):
+                    if load_status == 'running':
                         break
             except TimeoutExpiredError:
                 log.error("Cluster load was not resumed successfully")
