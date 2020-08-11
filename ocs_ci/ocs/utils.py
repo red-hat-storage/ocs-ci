@@ -657,14 +657,8 @@ def setup_ceph_toolbox(force_setup=False):
         else:
             return
     external_mode = ocsci_config.DEPLOYMENT.get("external_mode")
-    if external_mode:
-        toolbox = templating.load_yaml(constants.TOOL_POD_YAML)
-        keyring_dict = ocsci_config.EXTERNAL_MODE.get("admin_keyring")
-        env = [{'name': 'ROOK_ADMIN_SECRET', 'value': keyring_dict['key']}]
-        toolbox['spec']['template']['spec']['containers'][0]['env'] = env
-        rook_toolbox = OCS(**toolbox)
-        rook_toolbox.create()
-    elif ocsci_config.ENV_DATA.get("ocs_version") == '4.2':
+
+    if ocsci_config.ENV_DATA.get("ocs_version") == '4.2':
         rook_operator = get_pod_name_by_pattern(
             'rook-ceph-operator', namespace
         )
@@ -680,6 +674,13 @@ def setup_ceph_toolbox(force_setup=False):
         rook_toolbox = OCS(**tool_box_data)
         rook_toolbox.create()
     else:
+        if external_mode:
+            toolbox = templating.load_yaml(constants.TOOL_POD_YAML)
+            keyring_dict = ocsci_config.EXTERNAL_MODE.get("admin_keyring")
+            env = [{'name': 'ROOK_ADMIN_SECRET', 'value': keyring_dict['key']}]
+            toolbox['spec']['template']['spec']['containers'][0]['env'] = env
+            rook_toolbox = OCS(**toolbox)
+            rook_toolbox.create()
         # for OCS >= 4.3 there is new toolbox pod deployment done here:
         # https://github.com/openshift/ocs-operator/pull/207/
         log.info("starting ceph toolbox pod")
