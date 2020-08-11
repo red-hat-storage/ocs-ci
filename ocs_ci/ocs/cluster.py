@@ -1018,7 +1018,7 @@ def validate_pg_balancer():
         else:
             logging.error(
                 f"Eval value is {eval} and pg distribution "
-                f"average difference is <=10 which is high and not acceptable"
+                f"average difference is >=10 which is high and not acceptable"
             )
             return False
     else:
