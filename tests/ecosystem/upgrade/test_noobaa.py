@@ -3,7 +3,8 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    pre_upgrade, post_upgrade, aws_platform_required, bugzilla
+    pre_upgrade, post_upgrade, aws_platform_required, bugzilla,
+    skipif_aws_creds_are_missing
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_OPTIMAL
@@ -79,6 +80,7 @@ def wait_for_active_pods(job, desired_count, timeout=3):
         return False
 
 
+@skipif_aws_creds_are_missing
 @aws_platform_required
 @pre_upgrade
 def test_fill_bucket(
@@ -141,6 +143,7 @@ def test_fill_bucket(
     assert bucket.status == constants.STATUS_BOUND
 
 
+@skipif_aws_creds_are_missing
 @aws_platform_required
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2038")

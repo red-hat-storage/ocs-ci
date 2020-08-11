@@ -15,6 +15,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility import templating
+from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import TimeoutSampler, load_auth_config
 from tests.helpers import create_resource
 
@@ -33,7 +34,15 @@ class CloudManager(ABC):
             'AZURE': AzureClient,
             # TODO: Implement - 'IBMCOS': S3Client
         }
-        cred_dict = load_auth_config().get('AUTH')
+        try:
+            logger.info('Trying to load credentials from ocs-ci-data')
+            cred_dict = update_config_from_s3().get('AUTH')
+        except AttributeError:
+            logger.warn(
+                'Failed to load credentials from ocs-ci-data. '
+                'Loading from local auth.yaml'
+            )
+            cred_dict = load_auth_config().get('AUTH')
         for cloud_name in cred_dict:
             if cloud_name in cloud_map:
                 try:

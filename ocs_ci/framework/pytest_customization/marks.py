@@ -20,6 +20,7 @@ from ocs_ci.ocs.constants import (
     CLOUD_PLATFORMS,
     ON_PREM_PLATFORMS,
 )
+from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
 
 # tier marks
@@ -95,8 +96,14 @@ run_this = pytest.mark.run_this
 
 # Skipif marks
 skipif_aws_creds_are_missing = pytest.mark.skipif(
-    load_auth_config().get('AUTH', {}).get('AWS', {}).get('AWS_ACCESS_KEY_ID') is None,
-    reason="AWS credentials weren't found in the local auth.yaml"
+    (
+        load_auth_config().get('AUTH', {}).get('AWS', {}).get('AWS_ACCESS_KEY_ID') is None
+        and update_config_from_s3() is None
+    ),
+    reason=(
+        "AWS credentials weren't found in the local auth.yaml "
+        "and couldn't be fetched from the cloud"
+    )
 )
 
 google_api_required = pytest.mark.skipif(
