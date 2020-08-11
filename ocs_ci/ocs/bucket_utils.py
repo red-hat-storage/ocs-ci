@@ -35,12 +35,8 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
     """
     api = 'api' if api else ''
     if mcg_obj:
-        ca_bundle = (
-            '"' if retrieve_verification_mode() is True
-            else f'"AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
-        )
         base_command = (
-            f'sh -c {ca_bundle}'
+            f'sh -c "AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
             f'AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} '
             f'AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} '
             f'AWS_DEFAULT_REGION={mcg_obj.region} '
