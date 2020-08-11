@@ -1015,14 +1015,9 @@ MAX_OSDS = 15
 MIN_NODE_CPU = 16
 MIN_NODE_MEMORY = 64 * 10 ** 9
 
-<<<<<<< HEAD
 # aws tags
 AWS_CLOUDFORMATION_TAG = 'aws:cloudformation:stack-name'
 
-#Bare Metal constants
-=======
-=======
->>>>>>> e725cf64... rebase
 # Bare Metal constants
 BOOTSTRAP_PXE_FILE = os.path.join(
     TEMPLATE_DIR, "baremetal-pxefile", "bootstrap"
