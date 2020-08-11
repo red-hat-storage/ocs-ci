@@ -1091,6 +1091,21 @@ def log_cli_level(pytestconfig):
     return pytestconfig.getini('log_cli_level') or 'DEBUG'
 
 
+TEMP_FILE = (
+    tempfile.NamedTemporaryFile(mode='w+', prefix='test_status', delete=False)
+)
+
+
+def get_test_status(file):
+    with open(file.name, 'r') as t_file:
+        return t_file.readline()
+
+
+def set_test_status(file, status):
+    with open(file.name, 'w') as t_file:
+        t_file.writelines(status)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def cluster_load(
     request, project_factory_session, pvc_factory_session,
@@ -1127,25 +1142,13 @@ def cluster_load(
         if not cl_load_obj:
             cl_load_obj = ClusterLoad()
 
-        temp_file = tempfile.NamedTemporaryFile(
-            mode='w+', prefix='test_status', delete=False
-        )
-
-        def get_test_status():
-            with open(temp_file.name, 'r') as t_file:
-                return t_file.readline()
-
-        def set_test_status(status):
-            with open(temp_file.name, 'w') as t_file:
-                t_file.writelines(status)
-
-        set_test_status('running')
+        set_test_status(TEMP_FILE, 'running')
 
         def finalizer():
             """
             Stop the thread that executed watch_load()
             """
-            set_test_status('finished')
+            set_test_status(TEMP_FILE, 'finished')
             if thread:
                 thread.join()
 
@@ -1160,20 +1163,53 @@ def cluster_load(
             the IO load based on the cluster latency.
 
             """
-            while get_test_status() == 'running':
-                time.sleep(20)
-                try:
-                    cl_load_obj.print_metrics(mute_logs=True)
-                    if io_in_bg:
-                        cl_load_obj.adjust_load_if_needed()
+            while get_test_status(TEMP_FILE) != 'finished':
+                if get_test_status(TEMP_FILE) == 'to_be_resumed':
+                    cl_load_obj.resume_load()
+                    set_test_status(TEMP_FILE, 'running')
+                elif get_test_status(TEMP_FILE) == 'to_be_paused':
+                    cl_load_obj.pause_load()
+                    set_test_status(TEMP_FILE, 'paused')
+                elif get_test_status(TEMP_FILE) == 'running':
+                    time.sleep(20)
+                    try:
+                        cl_load_obj.print_metrics(mute_logs=True)
+                        if io_in_bg:
+                            cl_load_obj.adjust_load_if_needed()
 
-                # Any type of exception should be caught and we should continue.
-                # We don't want any test to fail
-                except Exception:
-                    continue
+                    # Any type of exception should be caught and we should continue.
+                    # We don't want any test to fail
+                    except Exception:
+                        continue
 
         thread = threading.Thread(target=watch_load)
         thread.start()
+
+
+@pytest.fixture()
+def pause_cluster_load(request):
+    """
+    Pause the background cluster load
+    """
+    if config.RUN.get('io_in_bg'):
+
+        def finalizer():
+            set_test_status(TEMP_FILE, 'to_be_resumed')
+            try:
+                for status in TimeoutSampler(180, 3, get_test_status, TEMP_FILE):
+                    if status == 'running':
+                        break
+            except TimeoutExpiredError:
+                log.error("Cluster load was not resumed successfully")
+        request.addfinalizer(finalizer)
+
+        set_test_status(TEMP_FILE, 'to_be_paused')
+        try:
+            for status in TimeoutSampler(180, 3, get_test_status, TEMP_FILE):
+                if status == 'paused':
+                    break
+        except TimeoutExpiredError:
+            log.error("Cluster load was not paused successfully")
 
 
 @pytest.fixture(
