@@ -316,8 +316,9 @@ class MCG:
             return bucket_data, bucket_data_reduced
 
         try:
+            expected_reduction = 100 * 1024 * 1024
             for total_size, total_reduced in TimeoutSampler(140, 5, _retrieve_reduction_data):
-                if total_size - total_reduced > 100 * 1024 * 1024:
+                if total_size - total_reduced > expected_reduction:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
                     )
@@ -330,7 +331,7 @@ class MCG:
         except TimeoutExpiredError:
             logger.error(
                 'Data reduction is insufficient. '
-                f'{total_size - total_reduced} bytes reduced.'
+                f'{total_size - total_reduced} bytes reduced out of {expected_reduction}.'
             )
             assert False
 
