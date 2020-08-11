@@ -89,6 +89,8 @@ HEALTHY_OB_CLI_MODE = 'Mode:OPTIMAL'
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
+CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
+CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
 DEPLOYMENT = "Deployment"
 JOB = "Job"
 STORAGECLASS = "StorageClass"

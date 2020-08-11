@@ -169,9 +169,9 @@ class TestFIOBenchmark(E2ETest):
             'ripsaw_v1alpha1_ripsaw_crd.yaml'
         )
         if interface == 'CephBlockPool':
-            sc = 'ocs-storagecluster-ceph-rbd'
+            sc = constants.CEPHBLOCKPOOL_SC
         else:
-            sc = 'ocs-storagecluster-cephfs'
+            sc = constants.CEPHFILESYSTEM_SC
 
         # Create fio benchmark
         log.info("Create resource file for fio workload")
