@@ -754,3 +754,11 @@ def obc_io_create_delete(mcg_obj, awscli_pod, bucket_factory):
     sync_object_directory(awscli_pod, dir, mcg_bucket_path, mcg_obj)
     del_objects(uploaded_objects_paths, awscli_pod, mcg_obj)
     awscli_pod.exec_cmd_on_pod(command=f'rm -rf {dir}')
+
+
+def retrieve_verification_mode():
+    if config.ENV_DATA['platform'].lower() == 'ibm_cloud':
+        verify = True
+    else:
+        verify = constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
+    return verify

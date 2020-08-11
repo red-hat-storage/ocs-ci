@@ -10,6 +10,7 @@ from botocore.client import ClientError
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.exceptions import CommandFailed, CredReqSecretNotFound, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
@@ -109,7 +110,7 @@ class MCG:
         ).json().get('reply').get('token')
 
         self.s3_resource = boto3.resource(
-            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH,
+            's3', verify=retrieve_verification_mode(),
             endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
@@ -286,7 +287,7 @@ class MCG:
         return requests.post(
             url=self.mgmt_endpoint,
             data=json.dumps(payload),
-            verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
+            verify=retrieve_verification_mode()
         )
 
     def check_data_reduction(self, bucketname):
@@ -301,34 +302,13 @@ class MCG:
         """
 
         def _retrieve_reduction_data():
-            payload = {
-                "api": "bucket_api",
-                "method": "read_bucket",
-                "params": {"name": bucketname},
-                "auth_token": self.noobaa_token
-            }
-            request_str = json.dumps(payload)
-            resp = requests.post(
-                url=self.mgmt_endpoint,
-                data=request_str,
-                verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
+            resp = self.send_rpc_query(
+                'bucket_api',
+                'read_bucket',
+                params={"name": bucketname}
             )
             bucket_data = resp.json().get('reply').get('data').get('size')
-
-            payload = {
-                "api": "bucket_api",
-                "method": "read_bucket",
-                "params": {"name": bucketname},
-                "auth_token": self.noobaa_token
-            }
-            request_str = json.dumps(payload)
-            resp = requests.post(
-                url=self.mgmt_endpoint,
-                data=request_str,
-                verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
-            )
             bucket_data_reduced = resp.json().get('reply').get('data').get('size_reduced')
-
             logger.info(
                 'Overall bytes stored: ' + str(bucket_data) + '. Reduced size: ' + str(bucket_data_reduced)
             )
@@ -336,8 +316,9 @@ class MCG:
             return bucket_data, bucket_data_reduced
 
         try:
+            expected_reduction = 100 * 1024 * 1024
             for total_size, total_reduced in TimeoutSampler(140, 5, _retrieve_reduction_data):
-                if total_size - total_reduced > 100 * 1024 * 1024:
+                if total_size - total_reduced > expected_reduction:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
                     )
@@ -349,7 +330,8 @@ class MCG:
                     )
         except TimeoutExpiredError:
             logger.error(
-                'Not enough data reduction. Something is wrong.'
+                'Data reduction is insufficient. '
+                f'{total_size - total_reduced} bytes reduced out of {expected_reduction}.'
             )
             assert False
 
