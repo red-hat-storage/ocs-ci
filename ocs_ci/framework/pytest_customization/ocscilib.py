@@ -423,8 +423,8 @@ def pytest_runtest_makereport(item, call):
         mcg = True if any(x in item.location[0] for x in ['mcg', 'ecosystem']) else False
         try:
             collect_ocs_logs(dir_name=test_case_name, ocp=ocp_logs_collection, mcg=mcg)
-        except Exception as ex:
-            log.error(f"Failed to collect OCS logs. Error: {ex}")
+        except Exception:
+            log.exception("Failed to collect OCS logs")
 
     # Collect Prometheus metrics if specified in gather_metrics_on_fail marker
     if (
@@ -440,8 +440,8 @@ def pytest_runtest_makereport(item, call):
                 call.start,
                 call.stop
             )
-        except Exception as ex:
-            log.error(f"Failed to collect prometheus metrics. Error: {ex}")
+        except Exception:
+            log.exception("Failed to collect prometheus metrics")
 
     # Get the performance metrics when tests fails for scale or performance tag
     from tests.helpers import collect_performance_stats
@@ -453,8 +453,8 @@ def pytest_runtest_makereport(item, call):
         test_case_name = item.name
         try:
             collect_performance_stats(test_case_name)
-        except Exception as ex:
-            log.error(f"Failed to collect performance stats. Error: {ex}")
+        except Exception:
+            log.exception("Failed to collect performance stats")
 
 
 def set_report_portal_tags(config):
