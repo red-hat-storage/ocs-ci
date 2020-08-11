@@ -37,9 +37,7 @@ class TestRegistryByIncreasingNumPods(E2ETest):
         request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
-        argnames=[
-            "count"
-        ],
+        argnames=["count"],
         argvalues=[
             pytest.param(
                 *[3], marks=pytest.mark.polarion_id("OCS-1900")
@@ -77,4 +75,4 @@ class TestRegistryByIncreasingNumPods(E2ETest):
             raise UnexpectedBehaviour("Image URL not present in registry")
 
         # Reduce number to 2
-        modify_registry_pod_count(count)
+        modify_registry_pod_count(count=2)

@@ -453,6 +453,9 @@ def modify_registry_pod_count(count):
     Returns:
         bool: True in case if changes are applied. False otherwise
 
+    Raises:
+        TimeoutExpiredError: When number of image registry pods doesn't match the count
+
     """
     params = ('{\"spec\":{\"replicas\":%d}}' % count)
     ocp_obj = ocp.OCP(
