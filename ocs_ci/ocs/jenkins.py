@@ -157,11 +157,13 @@ class Jenkins(object):
     def get_builds_sorted_by_number(self, project):
         """
         Get builds per project and sort builds by build name number
+
         Args:
             project (str): project name
 
-        return:
-            jenkins_builds_sorted (lst): list of build (OCS obj)
+        Returns:
+            List: List of Jenkins build OCS obj
+
         """
         jenkins_builds_unsorted = self.get_builds_obj(namespace=project)
         jenkins_builds_sorted = [0] * self.num_of_builds
