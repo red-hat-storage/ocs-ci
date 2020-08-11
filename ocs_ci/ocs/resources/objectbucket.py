@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 import boto3
 from tests.helpers import (
     create_resource, create_unique_resource_name,
-    storagecluster_independent_check
+    retrieve_rgw_storageclass_name
 )
 
 from ocs_ci.framework import config
@@ -390,11 +390,7 @@ class RGWOCBucket(OCBucket):
             self.name = create_unique_resource_name('oc', 'obc')
         obc_data['metadata']['name'] = self.name
         obc_data['spec']['bucketName'] = self.name
-        if storagecluster_independent_check():
-            sc_name = constants.INDEPENDENT_DEFAULT_STORAGECLASS_RGW
-        else:
-            sc_name = constants.DEFAULT_STORAGECLASS_RGW
-        obc_data['spec']['storageClassName'] = sc_name
+        obc_data['spec']['storageClassName'] = retrieve_rgw_storageclass_name()
         obc_data['metadata']['namespace'] = self.namespace
         create_resource(**obc_data)
 

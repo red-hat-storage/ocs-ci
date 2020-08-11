@@ -2372,6 +2372,14 @@ def storagecluster_independent_check():
     )
 
 
+def retrieve_rgw_storageclass_name():
+    if storagecluster_independent_check():
+        sc_name = constants.INDEPENDENT_DEFAULT_STORAGECLASS_RGW
+    else:
+        sc_name = constants.DEFAULT_STORAGECLASS_RGW
+    return sc_name
+
+
 def get_pv_size(storageclass=None):
     """
     Get Pv size from requested storageclass
