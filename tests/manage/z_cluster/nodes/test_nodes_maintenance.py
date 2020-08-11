@@ -19,7 +19,6 @@ from ocs_ci.framework.testlib import (
     ManageTest, aws_platform_required, ignore_leftovers,
     ipi_deployment_required, skipif_bm
 )
-from ocs_ci.framework import config
 from tests.sanity_helpers import Sanity
 from ocs_ci.ocs.resources import pod
 from tests.helpers import (
@@ -168,13 +167,8 @@ class TestNodesMaintenance(ManageTest):
         # Maintenance the node (unschedule and drain). The function contains logging
         drain_nodes([typed_node_name])
 
-        platform = config.ENV_DATA['platform']
-
         # Restarting the node
-        if platform == 'baremetal':
-            nodes.restart_nodes(nodes=typed_nodes)
-        else:
-            nodes.restart_nodes(nodes=typed_nodes, wait=False)
+        nodes.restart_nodes(nodes=typed_nodes, wait=False)
 
         try:
             wait_for_nodes_status(
