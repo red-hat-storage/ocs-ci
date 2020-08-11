@@ -80,10 +80,6 @@ class Deployment(object):
     DEFAULT_STORAGECLASS_LSO = 'localblock'
 
     def __init__(self):
-        if self.DEFAULT_STORAGECLASS is None:
-            err_msg = "DEFAULT_STORAGECLASS should be specified in base class"
-            logger.error(err_msg)
-            raise NotImplementedError(err_msg)
         self.platform = config.ENV_DATA['platform']
         self.ocp_deployment_type = config.ENV_DATA['deployment_type']
         self.cluster_path = config.ENV_DATA['cluster_path']
@@ -414,7 +410,10 @@ class Deployment(object):
             ] = f"{device_size}Gi"
 
         # set storage class to OCS default on current platform
-        deviceset_data['dataPVCTemplate']['spec']['storageClassName'] = self.DEFAULT_STORAGECLASS
+        if self.DEFAULT_STORAGECLASS:
+            deviceset_data['dataPVCTemplate']['spec'][
+                'storageClassName'
+            ] = self.DEFAULT_STORAGECLASS
 
         # StorageCluster tweaks for LSO
         if config.DEPLOYMENT.get('local_storage'):
@@ -666,6 +665,12 @@ class Deployment(object):
         """
         Patch storage class which comes as default with installation to non-default
         """
+        if not self.DEFAULT_STORAGECLASS:
+            logger.info(
+                "Default StorageClass is not set for this class: "
+                f"{self.__class__.__name__}"
+            )
+            return
         logger.info(f"Patch {self.DEFAULT_STORAGECLASS} storageclass as non-default")
         patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
         run_cmd(
