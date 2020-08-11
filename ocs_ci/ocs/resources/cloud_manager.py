@@ -12,7 +12,6 @@ from google.cloud import storage
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import update_config_from_s3
@@ -106,9 +105,7 @@ class S3Client(CloudClient):
 
     """
     def __init__(self, key_id=None, access_key=None, endpoint="https://s3.amazonaws.com",
-                 verify=None, auth_dict=None, *args, **kwargs):
-        if verify is None:
-            verify = retrieve_verification_mode()
+                 verify=True, auth_dict=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if auth_dict:
             key_id = auth_dict.get('AWS_ACCESS_KEY_ID')
