@@ -1173,13 +1173,12 @@ def cluster_load(
                     elif get_test_status(TEMP_FILE) == 'to_be_resumed':
                         cl_load_obj.resume_load()
                         set_test_status(TEMP_FILE, 'running')
-
                     elif get_test_status(TEMP_FILE) == 'running':
                         if io_in_bg:
                             cl_load_obj.adjust_load_if_needed()
 
-                    # Any type of exception should be caught and we should continue.
-                    # We don't want any test to fail
+                # Any type of exception should be caught and we should continue.
+                # We don't want any test to fail
                 except Exception:
                     continue
 
