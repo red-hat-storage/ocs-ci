@@ -2,7 +2,6 @@ import pytest
 import logging
 
 from ocs_ci.ocs.constants import OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.registry import (
     validate_registry_pod_status,
     image_pull, image_push, image_list_all, image_rm,
@@ -25,7 +24,7 @@ class TestRegistryByIncreasingNumPods(E2ETest):
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         """
-        Clean up svt
+        Remove the image
 
         """
         self.image_path = None
@@ -51,7 +50,9 @@ class TestRegistryByIncreasingNumPods(E2ETest):
 
         """
         # Increase the replica count to 3
-        modify_registry_pod_count(count)
+        assert modify_registry_pod_count(count), (
+            "Number of registry pod doesn't match the count"
+        )
 
         # Validate image registry pods
         validate_registry_pod_status()
@@ -70,9 +71,9 @@ class TestRegistryByIncreasingNumPods(E2ETest):
         log.info(f"Image list {img_list}")
 
         # Check either image present in registry or not
-        validate = check_image_exists_in_registry(image_url=IMAGE_URL)
-        if not validate:
-            raise UnexpectedBehaviour("Image URL not present in registry")
+        assert check_image_exists_in_registry(image_url=IMAGE_URL), (
+            "Image URL not present in registry"
+        )
 
         # Reduce number to 2
-        modify_registry_pod_count(count=2)
+        assert modify_registry_pod_count(count=2)
