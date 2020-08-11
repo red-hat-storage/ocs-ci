@@ -16,7 +16,7 @@ def pytest_collection_modifyitems(items):
     """
     if (
         config.ENV_DATA['platform'].lower() not in ON_PREM_PLATFORMS
-        or float(config.ENV_DATA['ocs_version']) >= 4.5
+        or float(config.ENV_DATA['ocs_version']) < 4.5
     ):
         for item in items.copy():
             if 'manage/rgw' in str(item.fspath):
