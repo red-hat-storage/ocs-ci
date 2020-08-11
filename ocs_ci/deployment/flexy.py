@@ -87,7 +87,7 @@ class FlexyBase(object):
         if not config.ENV_DATA.get('flexy_env_file'):
             self.clone_and_unlock_ocs_private_conf()
             config.FLEXY['VARIABLES_LOCATION'] = self.template_file
-            config.FLEXY['INSTANCE_NAME_PREFIX'] = self.cluster_name
+        config.FLEXY['INSTANCE_NAME_PREFIX'] = self.cluster_name
         self.merge_flexy_env()
 
     def run_container(self, cmd_string):
