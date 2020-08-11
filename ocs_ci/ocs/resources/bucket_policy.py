@@ -4,6 +4,7 @@ import logging
 import boto3
 
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 
 logger = logging.getLogger(__name__)
 
@@ -84,13 +85,13 @@ class NoobaaAccount(object):
         self.token = response['reply']['token']
 
         self.s3_resource = boto3.resource(
-            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
+            's3', verify=retrieve_verification_mode(), endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
         )
 
         self.s3_client = boto3.client(
-            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
+            's3', verify=retrieve_verification_mode(), endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
         )
