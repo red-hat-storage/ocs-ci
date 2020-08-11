@@ -1164,23 +1164,24 @@ def cluster_load(
 
             """
             while get_test_status(TEMP_FILE) != 'finished':
-                if get_test_status(TEMP_FILE) == 'to_be_resumed':
-                    cl_load_obj.resume_load()
-                    set_test_status(TEMP_FILE, 'running')
-                elif get_test_status(TEMP_FILE) == 'to_be_paused':
-                    cl_load_obj.pause_load()
-                    set_test_status(TEMP_FILE, 'paused')
-                elif get_test_status(TEMP_FILE) == 'running':
-                    time.sleep(20)
-                    try:
-                        cl_load_obj.print_metrics(mute_logs=True)
+                time.sleep(20)
+                try:
+                    cl_load_obj.print_metrics(mute_logs=True)
+                    if get_test_status(TEMP_FILE) == 'to_be_paused':
+                        cl_load_obj.pause_load()
+                        set_test_status(TEMP_FILE, 'paused')
+                    elif get_test_status(TEMP_FILE) == 'to_be_resumed':
+                        cl_load_obj.resume_load()
+                        set_test_status(TEMP_FILE, 'running')
+
+                    elif get_test_status(TEMP_FILE) == 'running':
                         if io_in_bg:
                             cl_load_obj.adjust_load_if_needed()
 
                     # Any type of exception should be caught and we should continue.
                     # We don't want any test to fail
-                    except Exception:
-                        continue
+                except Exception:
+                    continue
 
         thread = threading.Thread(target=watch_load)
         thread.start()
