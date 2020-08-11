@@ -6,6 +6,9 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility import utils
 from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_external_mode
+)
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +37,7 @@ def fioscale(request):
 
 @scale
 @ignore_leftovers
+@skipif_external_mode
 @pytest.mark.parametrize(
     argnames="resource_to_delete",
     argvalues=[
