@@ -20,15 +20,6 @@ class TestCloudDeployment(CloudDeploymentBase):
     DEFAULT_STORAGECLASS = "cloudstorage"
 
 
-def test_clouddeploymentbase_has_no_default_storageclass():
-    """
-    Check assumption that cloud base class doens't have the default
-    storageclass defined, and so it can't be instantiated.
-    """
-    with pytest.raises(NotImplementedError):
-        CloudDeploymentBase()
-
-
 def test_clouddeploymentbase_init(clusterdir):
     """
     Test that creation of CloudDeploymentBase object without any constructor
