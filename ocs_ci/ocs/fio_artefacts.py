@@ -29,10 +29,16 @@ def get_mcg_conf(mcg_obj, workload_bucket):
     config.set('global', 'name', workload_bucket[0].name)
     config.set('global', 'http_s3_key', mcg_obj.access_key)
     config.set('global', 'http_s3_keyid', mcg_obj.access_key_id)
+    if mcg_obj.s3_endpoint.startswith('https://'):
+        http_host = mcg_obj.s3_endpoint[len('https://'):]
+    elif mcg_obj.s3_endpoint.startswith('http://'):
+        http_host = mcg_obj.s3_endpoint[len('http://'):]
+    else:
+        http_host = mcg_obj.s3_endpoint
     config.set(
         'global',
         'http_host',
-        mcg_obj.s3_endpoint.lstrip('https://').rstrip(':443')
+        http_host.rstrip(':443')
     )
     config.set('global', 'http_s3_region', mcg_obj.region)
     config.set('global', 'filename', f"/{workload_bucket[0].name}/object")
