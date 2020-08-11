@@ -106,9 +106,7 @@ class S3Client(CloudClient):
 
     """
     def __init__(self, key_id=None, access_key=None, endpoint="https://s3.amazonaws.com",
-                 verify=None, auth_dict=None, *args, **kwargs):
-        if verify is None:
-            verify = retrieve_verification_mode()
+                 verify=True, auth_dict=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if auth_dict:
             key_id = auth_dict.get('AWS_ACCESS_KEY_ID')
