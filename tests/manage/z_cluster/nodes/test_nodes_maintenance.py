@@ -17,7 +17,7 @@ from ocs_ci.ocs.node import (
 from ocs_ci.framework.testlib import (
     tier1, tier2, tier3, tier4, tier4b,
     ManageTest, aws_platform_required, ignore_leftovers,
-    ipi_deployment_required
+    ipi_deployment_required, skipif_bm
 )
 from ocs_ci.framework import config
 from tests.sanity_helpers import Sanity
@@ -129,6 +129,7 @@ class TestNodesMaintenance(ManageTest):
 
     @tier4
     @tier4b
+    @skipif_bm
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
