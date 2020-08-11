@@ -305,7 +305,7 @@ class MCG:
             resp = self.send_rpc_query(
                 'bucket_api',
                 'read_bucket',
-                json.dumps({"name": bucketname})
+                params={"name": bucketname}
             )
             bucket_data = resp.json().get('reply').get('data').get('size')
             bucket_data_reduced = resp.json().get('reply').get('data').get('size_reduced')
@@ -329,7 +329,8 @@ class MCG:
                     )
         except TimeoutExpiredError:
             logger.error(
-                'Not enough data reduction. Something is wrong.'
+                'Data reduction is insufficient. '
+                f'{total_size - total_reduced} bytes reduced.'
             )
             assert False
 
