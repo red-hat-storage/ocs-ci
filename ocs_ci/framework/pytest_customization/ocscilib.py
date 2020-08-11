@@ -266,17 +266,14 @@ def gather_version_info_for_report(config):
             if key not in skip_list:
                 config._metadata[key] = val.rsplit('/')[-1]
         gather_version_completed = True
-    except ResourceNotFoundError as ex:
-        log.error(
-            "Problem occurred when looking for some resource! Error: %s",
-            ex
-        )
-    except FileNotFoundError as ex:
-        log.error("File not found! Error: %s", ex)
-    except CommandFailed as ex:
-        log.error("Failed to execute command! Error: %s", ex)
-    except Exception as ex:
-        log.error("Failed to gather version info! Error: %s", ex)
+    except ResourceNotFoundError:
+        log.exception("Problem occurred when looking for some resource!")
+    except FileNotFoundError:
+        log.exception("File not found!")
+    except CommandFailed:
+        log.exception("Failed to execute command!")
+    except Exception:
+        log.exception("Failed to gather version info!")
     finally:
         if not gather_version_completed:
             log.warning(
