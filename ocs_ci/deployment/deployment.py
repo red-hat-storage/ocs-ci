@@ -112,7 +112,6 @@ class Deployment(object):
             try:
                 self.deploy_ocs()
                 if config.REPORTING['gather_on_deploy_success']:
-                    collect_ocs_logs('deployment', ocs=False)
                     collect_ocs_logs('deployment', ocp=False)
             except Exception as e:
                 logger.error(e)
