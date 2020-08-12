@@ -162,7 +162,7 @@ skipif_bm = pytest.mark.skipif(
 )
 
 skipif_external_mode = pytest.mark.skipif(
-    config.DEPLOYMENT.get('independent_mode') is True,
+    config.DEPLOYMENT.get('external_mode') is True,
     reason="Test will not run on External Mode cluster"
 )
 
