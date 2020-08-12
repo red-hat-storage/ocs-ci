@@ -14,13 +14,18 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
-from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
+from ocs_ci.ocs.cluster import (
+    validate_cluster_on_pvc,
+    validate_pdb_creation,
+    CephClusterExternal
+)
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
     CommandFailed,
     ResourceWrongStatusException,
     UnavailableResourceException,
-    UnsupportedPlatformError
+    UnsupportedPlatformError,
+    ExternalClusterDetailsException
 )
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
@@ -498,6 +503,80 @@ class Deployment(object):
             log_suffix="ui-deployment"
         )
 
+    def deploy_with_external_mode(self):
+        """
+        This function handles the deployment of OCS on
+        external/indpendent RHCS cluster
+
+        """
+        live_deployment = config.DEPLOYMENT.get('live_deployment')
+        logger.info("Deploying OCS with external mode RHCS")
+        logger.info("Creating namespace and operator group")
+        run_cmd(f"oc create -f {constants.OLM_YAML}")
+        if not live_deployment:
+            self.create_ocs_operator_source()
+        self.subscribe_ocs()
+        operator_selector = get_selector_for_ocs_operator()
+        package_manifest = PackageManifest(
+            resource_name=defaults.OCS_OPERATOR_NAME,
+            selector=operator_selector,
+        )
+        package_manifest.wait_for_resource(timeout=300)
+        channel = config.DEPLOYMENT.get('ocs_csv_channel')
+        csv_name = package_manifest.get_current_csv(channel=channel)
+        csv = CSV(resource_name=csv_name, namespace=self.namespace)
+        csv.wait_for_phase("Succeeded", timeout=720)
+
+        # Create secret for external cluster
+        secret_data = templating.load_yaml(
+            constants.EXTERNAL_CLUSTER_SECRET_YAML
+        )
+        external_cluster_details = config.EXTERNAL_MODE.get(
+            'external_cluster_details',
+            ''
+        )
+        if not external_cluster_details:
+            raise ExternalClusterDetailsException(
+                "No external cluster data found"
+            )
+        secret_data['data']['external_cluster_details'] = (
+            external_cluster_details
+        )
+        secret_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='external_cluster_secret', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            secret_data, secret_data_yaml.name
+        )
+        logger.info("Creating external cluster secret")
+        run_cmd(f"oc create -f {secret_data_yaml.name}")
+
+        cluster_data = templating.load_yaml(
+            constants.EXTERNAL_STORAGE_CLUSTER_YAML
+        )
+        cluster_data['metadata']['name'] = config.ENV_DATA[
+            'storage_cluster_name'
+        ]
+        cluster_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='external_cluster_storage', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            cluster_data, cluster_data_yaml.name
+        )
+        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+        self.external_post_deploy_validation()
+        setup_ceph_toolbox()
+
+    def external_post_deploy_validation(self):
+        """
+        This function validates successful deployment of OCS
+        in external mode, some of the steps overlaps with
+        converged mode
+
+        """
+        cephcluster = CephClusterExternal()
+        cephcluster.cluster_health_check(timeout=300)
+
     def deploy_ocs(self):
         """
         Handle OCS deployment, since OCS deployment steps are common to any
@@ -512,6 +591,11 @@ class Deployment(object):
             return
         except (IndexError, CommandFailed):
             logger.info("Running OCS basic installation")
+
+        if config.DEPLOYMENT['external_mode']:
+            logger.info("Deploying OCS on external mode RHCS")
+            return self.deploy_with_external_mode()
+
         self.deploy_ocs_via_operator()
         pod = ocp.OCP(
             kind=constants.POD, namespace=self.namespace

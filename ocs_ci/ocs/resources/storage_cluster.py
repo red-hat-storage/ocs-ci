@@ -116,10 +116,11 @@ def ocs_install_verification(
     pod = OCP(
         kind=constants.POD, namespace=namespace
     )
-    osd_count = (
-        int(storage_cluster.data['spec']['storageDeviceSets'][0]['count'])
-        * int(storage_cluster.data['spec']['storageDeviceSets'][0]['replica'])
-    )
+    if not config.DEPLOYMENT['external_mode']:
+        osd_count = (
+            int(storage_cluster.data['spec']['storageDeviceSets'][0]['count'])
+            * int(storage_cluster.data['spec']['storageDeviceSets'][0]['replica'])
+        )
     rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
 
     # check noobaa CR for min number of noobaa endpoint pods
@@ -133,17 +134,23 @@ def ocs_install_verification(
         constants.NOOBAA_DB_LABEL: 1,
         constants.NOOBAA_OPERATOR_POD_LABEL: 1,
         constants.NOOBAA_CORE_POD_LABEL: 1,
-        constants.MON_APP_LABEL: 3,
-        constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
-        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL: 2,
-        constants.CSI_RBDPLUGIN_LABEL: number_of_worker_nodes,
-        constants.CSI_RBDPLUGIN_PROVISIONER_LABEL: 2,
-        constants.OSD_APP_LABEL: osd_count,
-        constants.MGR_APP_LABEL: 1,
-        constants.MDS_APP_LABEL: 2,
-        constants.RGW_APP_LABEL: rgw_count,
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps
     }
+    if not config.DEPLOYMENT['external_mode']:
+        resources_dict.update(
+            {
+                constants.MON_APP_LABEL: 3,
+                constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
+                constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL: 2,
+                constants.CSI_RBDPLUGIN_LABEL: number_of_worker_nodes,
+                constants.CSI_RBDPLUGIN_PROVISIONER_LABEL: 2,
+                constants.OSD_APP_LABEL: osd_count,
+                constants.MGR_APP_LABEL: 1,
+                constants.MDS_APP_LABEL: 2,
+                constants.RGW_APP_LABEL: rgw_count
+            }
+        )
+
     for label, count in resources_dict.items():
         if label == constants.RGW_APP_LABEL:
             if not config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
@@ -173,6 +180,13 @@ def ocs_install_verification(
         f'{storage_cluster_name}-cephfs',
         f'{storage_cluster_name}-ceph-rbd'
     }
+    if config.DEPLOYMENT['external_mode']:
+        required_storage_classes.update(
+            {
+                f'{storage_cluster_name}-ceph-rgw',
+                f'{config.ENV_DATA["cluster_namespace"]}.noobaa.io'
+            }
+        )
     storage_classes = storage_class.get()
     storage_class_names = {
         item['metadata']['name'] for item in storage_classes['items']
@@ -180,16 +194,17 @@ def ocs_install_verification(
     assert required_storage_classes.issubset(storage_class_names)
 
     # Verify OSDs are distributed
-    if not skip_osd_distribution_check:
-        log.info("Verifying OSDs are distributed evenly across worker nodes")
-        ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
-        osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)['items']
-        deviceset_count = get_deviceset_count()
-        node_names = [osd['spec']['nodeName'] for osd in osds]
-        for node in node_names:
-            assert not node_names.count(node) > deviceset_count, (
-                "OSD's are not distributed evenly across worker nodes"
-            )
+    if not config.DEPLOYMENT['external_mode']:
+        if not skip_osd_distribution_check:
+            log.info("Verifying OSDs are distributed evenly across worker nodes")
+            ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+            osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)['items']
+            deviceset_count = get_deviceset_count()
+            node_names = [osd['spec']['nodeName'] for osd in osds]
+            for node in node_names:
+                assert not node_names.count(node) > deviceset_count, (
+                    "OSD's are not distributed evenly across worker nodes"
+                )
 
     # Verify that CSI driver object contains provisioner names
     log.info("Verifying CSI driver object contains provisioner names.")
@@ -201,12 +216,22 @@ def ocs_install_verification(
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
-    sc_rbd = storage_class.get(
-        resource_name=constants.DEFAULT_STORAGECLASS_RBD
-    )
-    sc_cephfs = storage_class.get(
-        resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
-    )
+    if config.DEPLOYMENT['external_mode']:
+        sc_rbd = storage_class.get(
+            resource_name=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+        )
+        sc_cephfs = storage_class.get(
+            resource_name=(
+                constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+            )
+        )
+    else:
+        sc_rbd = storage_class.get(
+            resource_name=constants.DEFAULT_STORAGECLASS_RBD
+        )
+        sc_cephfs = storage_class.get(
+            resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
+        )
     assert sc_rbd['parameters']['csi.storage.k8s.io/node-stage-secret-name'] == constants.RBD_NODE_SECRET
     assert sc_rbd['parameters']['csi.storage.k8s.io/provisioner-secret-name'] == constants.RBD_PROVISIONER_SECRET
     assert sc_cephfs['parameters']['csi.storage.k8s.io/node-stage-secret-name'] == constants.CEPHFS_NODE_SECRET
@@ -214,42 +239,43 @@ def ocs_install_verification(
     log.info("Verified node and provisioner secret names in storage class.")
 
     # Verify ceph osd tree output
-    log.info(
-        "Verifying ceph osd tree output and checking for device set PVC names "
-        "in the output."
-    )
+    if not config.DEPLOYMENT['external_mode']:
+        log.info(
+            "Verifying ceph osd tree output and checking for device set PVC names "
+            "in the output."
+        )
 
-    if (
-        config.DEPLOYMENT.get('local_storage')
-        and config.ENV_DATA['platform'] != constants.BAREMETALPSI_PLATFORM
-    ):
-        deviceset_pvcs = get_compute_node_names()
-    else:
-        deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
+        if (
+            config.DEPLOYMENT.get('local_storage')
+            and config.ENV_DATA['platform'] != constants.BAREMETALPSI_PLATFORM
+        ):
+            deviceset_pvcs = get_compute_node_names()
+        else:
+            deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
 
-    ct_pod = get_ceph_tools_pod()
-    osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree', format='json')
-    schemas = {
-        'root': constants.OSD_TREE_ROOT,
-        'rack': constants.OSD_TREE_RACK,
-        'host': constants.OSD_TREE_HOST,
-        'osd': constants.OSD_TREE_OSD,
-        'region': constants.OSD_TREE_REGION,
-        'zone': constants.OSD_TREE_ZONE
-    }
-    schemas['host']['properties']['name'] = {'enum': deviceset_pvcs}
-    for item in osd_tree['nodes']:
-        validate(instance=item, schema=schemas[item['type']])
-        if item['type'] == 'host':
-            deviceset_pvcs.remove(item['name'])
-    assert not deviceset_pvcs, (
-        f"These device set PVCs are not given in ceph osd tree output "
-        f"- {deviceset_pvcs}"
-    )
-    log.info(
-        "Verified ceph osd tree output. Device set PVC names are given in the "
-        "output."
-    )
+        ct_pod = get_ceph_tools_pod()
+        osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree', format='json')
+        schemas = {
+            'root': constants.OSD_TREE_ROOT,
+            'rack': constants.OSD_TREE_RACK,
+            'host': constants.OSD_TREE_HOST,
+            'osd': constants.OSD_TREE_OSD,
+            'region': constants.OSD_TREE_REGION,
+            'zone': constants.OSD_TREE_ZONE
+        }
+        schemas['host']['properties']['name'] = {'enum': deviceset_pvcs}
+        for item in osd_tree['nodes']:
+            validate(instance=item, schema=schemas[item['type']])
+            if item['type'] == 'host':
+                deviceset_pvcs.remove(item['name'])
+        assert not deviceset_pvcs, (
+            f"These device set PVCs are not given in ceph osd tree output "
+            f"- {deviceset_pvcs}"
+        )
+        log.info(
+            "Verified ceph osd tree output. Device set PVC names are given in the "
+            "output."
+        )
 
     # TODO: Verify ceph osd tree output have osd listed as ssd
     # TODO: Verify ceph osd tree output have zone or rack based on AZ

@@ -1,4 +1,5 @@
 import logging
+import tempfile
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import ignore_leftovers
@@ -6,11 +7,13 @@ from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs.resources.pvc import delete_pvcs
-from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.ocs.cluster import CephCluster
 from tests import helpers
 from ocs_ci.ocs.bucket_utils import s3_delete_object, s3_get_object, s3_put_object
 from tests.manage.z_cluster.pvc_ops import create_pvcs
+from ocs_ci.utility.utils import ceph_health_check, run_cmd, TimeoutSampler
+from ocs_ci.utility import templating
+from ocs_ci.ocs.cluster import CephCluster, CephClusterExternal
+
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +63,7 @@ class Sanity:
             self.pod_objs.append(pod_factory(pvc=pvc_obj, interface=interface))
         if run_io:
             for pod in self.pod_objs:
-                pod.run_io('fs', '1G')
+                pod.run_io('fs', '1G', runtime=30)
             for pod in self.pod_objs:
                 get_fio_rw_iops(pod)
 
@@ -129,3 +132,64 @@ class Sanity:
             assert s3_put_object(mcg_obj, bucket_name, key, self.obj_data), f"Failed: Put object, {key}"
             assert s3_get_object(mcg_obj, bucket_name, key), f"Failed: Get object, {key}"
             assert s3_delete_object(mcg_obj, bucket_name, key), f"Failed: Delete object, {key}"
+
+
+class SanityExternalCluster(Sanity):
+    """
+    Helpers for health check and functional validation
+    in External mode
+    """
+
+    def __init__(self):
+        """
+        Initializer for Sanity class - Init CephCluster() in order to
+        set the cluster status before starting the tests
+        """
+        self.pvc_objs = list()
+        self.pod_objs = list()
+        self.ceph_cluster = CephClusterExternal()
+        self.create_obc()
+        self.verify_obc()
+
+    def create_obc(self):
+        """
+        OBC creation for RGW and Nooba
+        only applicable for external cluster
+
+        """
+        obc_rgw = templating.load_yaml(
+            constants.RGW_OBC_YAML
+        )
+        obc_rgw_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='obc_rgw_data', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            obc_rgw, obc_rgw_data_yaml.name
+        )
+        logger.info("Creating OBC for rgw")
+        run_cmd(f"oc create -f {obc_rgw_data_yaml.name}", timeout=2400)
+
+        obc_nooba = templating.load_yaml(
+            constants.MCG_OBC_YAML
+        )
+        obc_mcg_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='obc_mcg_data', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            obc_nooba, obc_mcg_data_yaml.name
+        )
+        logger.info("create OBC for mcg")
+        run_cmd(f"oc create -f {obc_mcg_data_yaml.name}", timeout=2400)
+
+    def verify_obc(self):
+        """
+        OBC verification from external cluster perspective,
+        we will check 2 OBCs
+
+        """
+        sample = TimeoutSampler(
+            300,
+            5,
+            self.ceph_cluster.noobaa_health_check
+        )
+        sample.wait_for_func_status(True)
