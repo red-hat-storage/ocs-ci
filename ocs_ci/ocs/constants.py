@@ -77,6 +77,7 @@ STATUS_RELEASED = 'Released'
 STATUS_COMPLETED = 'Completed'
 STATUS_ERROR = 'Error'
 STATUS_CLBO = 'CrashLoopBackOff'
+STATUS_READYTOUSE = 'READYTOUSE'
 
 # NooBaa statuses
 BS_AUTH_FAILED = 'AUTH_FAILED'
@@ -338,6 +339,19 @@ CSI_CEPHFS_PVC_YAML = os.path.join(
 CSI_RBD_PVC_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pvc.yaml"
 )
+
+CSI_RBD_PVC_RESTORE_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "pvc-restore.yaml"
+)
+
+CSI_RBD_SNAPSHOT_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "snapshot.yaml"
+)
+
+CSI_RBD_SNAPSHOTCLASS_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "snapshotclass.yaml"
+)
+
 CONFIGURE_PVC_ON_MONITORING_POD = os.path.join(
     TEMPLATE_CONFIGURE_PVC_MONITORING_POD, "configuring_pvc.yaml"
 )
