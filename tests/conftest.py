@@ -29,6 +29,7 @@ from ocs_ci.ocs import (
 )
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException, ResourceWrongStatusException
+from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.backingstore import BackingStore
@@ -2590,6 +2591,29 @@ def ceph_toolbox(request):
     if not (deploy or teardown or skip_ocs):
         # Creating toolbox pod
         setup_ceph_toolbox()
+
+
+@pytest.fixture(scope='function')
+def node_drain_teardown(request):
+    """
+    Tear down function after Node drain
+
+    """
+    def finalizer():
+        """
+        Make sure that all cluster's nodes are in 'Ready' state and if not,
+        change them back to 'Ready' state by marking them as schedulable
+
+        """
+        scheduling_disabled_nodes = [
+            n.name for n in get_node_objs() if n.ocp.get_resource_status(
+                n.name
+            ) == constants.NODE_READY_SCHEDULING_DISABLED
+        ]
+        if scheduling_disabled_nodes:
+            schedule_nodes(scheduling_disabled_nodes)
+
+    request.addfinalizer(finalizer)
 
 
 @pytest.fixture(scope='function')
