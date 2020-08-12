@@ -219,34 +219,25 @@ class FlexyBase(object):
             file_content = "[root]\n" + fp.read()
 
         config_parser.read_string(file_content)
-        applied_keys = []
         # Iterate over config_parser keys, if same key is present
         # in user supplied dict update config_parser
-        for ele in config_parser.items('root'):
-            if ele[0] in config.FLEXY:
-                applied_keys.append(ele[0])
-                # For LAUNCHER_VARS we need to merge the
-                # user provided dict with default obtained
-                # from env file
-                if ele[0] == 'LAUNCHER_VARS':
-                    config_parser.set(
-                        'root',
-                        ele[0],
-                        str(
-                            merge_dict(
-                                yaml.safe_load(config_parser['root'][ele[0]]),
-                                config.FLEXY[ele[0]]
-                            )
+        for key in config.FLEXY:
+            logger.info(f"Flexy env file - updating: {key}={config.FLEXY[key]}")
+            # For LAUNCHER_VARS we need to merge the
+            # user provided dict with default obtained
+            # from env file
+            if key == 'LAUNCHER_VARS':
+                config_parser.set(
+                    'root',
+                    key,
+                    str(
+                        merge_dict(
+                            yaml.safe_load(config_parser['root'][key]),
+                            config.FLEXY[key]
                         )
                     )
-                else:
-                    config_parser.set('root', ele[0], config.FLEXY[ele[0]])
-                logger.info(f"env updated {ele[0]}:{config.FLEXY[ele[0]]}")
-
-        # add new keys to env file
-        for key in config.FLEXY:
-            if key not in applied_keys:
-                logger.info(f"Adding {key}={config.FLEXY[key]}")
+                )
+            else:
                 config_parser.set('root', key, f"{config.FLEXY[key]}")
 
         # write the updated config_parser content to updated env file
