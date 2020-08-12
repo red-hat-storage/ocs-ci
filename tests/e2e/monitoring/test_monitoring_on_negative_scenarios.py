@@ -552,3 +552,28 @@ class TestMonitoringBackedByOCS(E2ETest):
         assert prometheus_health_check(), (
             "Prometheus cluster health is not OK"
         )
+
+    def test_monitoring_shutdown_mgr_pod(self, pods):
+        # Reduce mgr pod deployments to replicas=0
+        oc = ocp.OCP(
+            kind=constants.DEPLOYMENT, namespace='openshift-storage'
+        )
+        mgr_deployments = oc.get(selector=constants.MGR_APP_LABEL)['items']
+        mgr = mgr_deployments[0]['metadata']['name']
+        log.info(f"Downscaling deployment {mgr} to 0")
+        oc.exec_oc_cmd(f"scale --replicas=0 deployment/{mgr}")
+
+        log.info('wait 10min')
+        time.sleep(600)
+
+        log.info(f"Upscaling deployment {mgr} back to 1")
+        oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
+
+        # Check ceph health status metric is collected on prometheus pod
+        check_ceph_health_status_metrics_on_prometheus(mgr)
+
+        # Check for  ceph health check metrics is updated with new mgr pod
+        check_ceph_health_status_metrics_on_prometheus(mgr)
+
+        # Check prometheus cluster is healthy
+        assert prometheus_health_check(), "Prometheus health is degraded"
