@@ -161,6 +161,7 @@ CODESPEED_URL = 'http://10.0.78.167:8000/'
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
 DEFAULT_CLUSTERNAME = 'ocs-storagecluster'
+DEFAULT_CLUSTERNAME_EXTERNAL_MODE = 'ocs-external-storagecluster'
 DEFAULT_BLOCKPOOL = f'{DEFAULT_CLUSTERNAME}-cephblockpool'
 METADATA_POOL = f'{DEFAULT_CLUSTERNAME}-cephfilesystem-metadata'
 DATA_POOL = f'{DEFAULT_CLUSTERNAME}-cephfilesystem-data0'
@@ -184,9 +185,17 @@ DEFAULT_STORAGECLASS_RBD = f'{DEFAULT_CLUSTERNAME}-ceph-rbd'
 DEFAULT_STORAGECLASS_RGW = f'{DEFAULT_CLUSTERNAME}-ceph-rgw'
 
 # Independent mode default StorageClasses
-INDEPENDENT_DEFAULT_CLUSTER_NAME = 'ocs-independent-storagecluster'
-INDEPENDENT_DEFAULT_STORAGECLASS_RGW = f'{INDEPENDENT_DEFAULT_CLUSTER_NAME}-ceph-rgw'
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW = (
+    f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rgw'
+)
 
+# Default StorageClass for External-mode
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS = (
+    f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephfs'
+)
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD = (
+    f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rbd'
+)
 
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
@@ -276,6 +285,10 @@ CSI_PVC_YAML = os.path.join(
 
 MCG_OBC_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml"
+)
+
+RGW_OBC_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "ObjectBucketClaim-RGW.yaml"
 )
 
 MCG_AWS_CREDS_YAML = os.path.join(
@@ -499,6 +512,14 @@ SUBSCRIPTION_YAML = os.path.join(
 
 STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
+)
+
+EXTERNAL_STORAGE_CLUSTER_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "external-storage-cluster.yaml"
+)
+
+EXTERNAL_CLUSTER_SECRET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "external-cluster-secret.yaml"
 )
 
 OPERATOR_SOURCE_SECRET_YAML = os.path.join(
