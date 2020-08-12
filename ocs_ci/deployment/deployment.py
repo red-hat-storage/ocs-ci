@@ -27,7 +27,8 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     UnavailableResourceException,
     UnsupportedPlatformError,
-    ExternalClusterDetailsException
+    ExternalClusterDetailsException,
+    UnsupportedFeatureError,
 )
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
@@ -569,6 +570,16 @@ class Deployment(object):
             cluster_data['spec']['storageDeviceSets'] = deviceset
         else:
             cluster_data['spec']['storageDeviceSets'] = [deviceset_data]
+
+        if config.ENV_DATA.get("encryption_at_rest"):
+            if ocs_version < 4.6:
+                error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"
+                logger.error(error_message)
+                raise UnsupportedFeatureError(error_message)
+            logger.info("Enabling encryption at REST!")
+            cluster_data['spec']['encryption'] = {
+                'enable': True,
+            }
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode='w+', prefix='cluster_storage', delete=False
