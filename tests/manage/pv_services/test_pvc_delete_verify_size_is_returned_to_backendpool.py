@@ -89,11 +89,10 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
     """
     Testing after pvc deletion the size is returned to backendpool
     """
-
     @acceptance
     @tier1
     def test_pvc_delete_and_verify_size_is_returned_to_backend_pool(
-        self, pvc_factory, pod_factory
+        self, pause_cluster_load, pvc_factory, pod_factory
     ):
         """
         Test case to verify after delete pvc size returned to backend pools
