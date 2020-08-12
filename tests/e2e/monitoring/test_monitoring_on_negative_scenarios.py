@@ -13,7 +13,8 @@ from tests.sanity_helpers import Sanity
 from ocs_ci.ocs.monitoring import (
     check_pvcdata_collected_on_prometheus,
     check_ceph_health_status_metrics_on_prometheus,
-    prometheus_health_check
+    prometheus_health_check,
+    check_ceph_metrics_available
 )
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
@@ -570,11 +571,5 @@ class TestMonitoringBackedByOCS(E2ETest):
         log.info(f"Upscaling deployment {mgr} back to 1")
         oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
 
-        # Check ceph health status metric is collected on prometheus pod
-        check_ceph_health_status_metrics_on_prometheus(mgr)
-
-        # Check for  ceph health check metrics is updated with new mgr pod
-        check_ceph_health_status_metrics_on_prometheus(mgr)
-
-        # Check prometheus cluster is healthy
-        assert prometheus_health_check(), "Prometheus health is degraded"
+        # Check ceph metrics available
+        assert check_ceph_metrics_available(), "failed to get results for some metrics"
