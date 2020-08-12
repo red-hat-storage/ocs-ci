@@ -24,6 +24,7 @@ API_VERSION = "v1"
 CEPHFILESYSTEM_NAME = 'ocs-storagecluster-cephfilesystem'
 RBD_PROVISIONER = f'{ROOK_CLUSTER_NAMESPACE}.rbd.csi.ceph.com'
 CEPHFS_PROVISIONER = f'{ROOK_CLUSTER_NAMESPACE}.cephfs.csi.ceph.com'
+CSI_PROVISIONERS = {CEPHFS_PROVISIONER, RBD_PROVISIONER}
 
 TEMP_YAML = os.path.join(constants.TEMPLATE_DIR, "temp.yaml")
 
