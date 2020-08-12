@@ -553,6 +553,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             "Prometheus cluster health is not OK"
         )
 
+    @pytest.mark.polarion_id("OCS-1535")
     def test_monitoring_shutdown_mgr_pod(self, pods):
         # Reduce mgr pod deployments to replicas=0
         oc = ocp.OCP(
