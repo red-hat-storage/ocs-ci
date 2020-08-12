@@ -1259,6 +1259,7 @@ def update_config_from_s3(bucket_name=constants.OCSCI_DATA_BUCKET, filename=cons
     Returns:
         dict: returns the updated file contents as python dict
         None: In case the private bucket could not be accessed
+
     """
     try:
         logger.info('Fetching authentication credentials from ocs-ci-data')
@@ -1270,8 +1271,12 @@ def update_config_from_s3(bucket_name=constants.OCSCI_DATA_BUCKET, filename=cons
         config.update(config_yaml)
         return config_yaml
     except NoCredentialsError:
-        logger.warn('Failed to fetch auth.yaml from ocs-ci-data')
+        logger.warning('Failed to fetch auth.yaml from ocs-ci-data')
         return None
+    except ClientError:
+        logger.warning(f"Permission denied to access bucket {bucket_name}")
+        return None
+
 
 
 def delete_cluster_buckets(cluster_name):
