@@ -194,9 +194,10 @@ def ocs_install_verification(
     # Verify that CSI driver object contains provisioner names
     log.info("Verifying CSI driver object contains provisioner names.")
     csi_driver = OCP(kind="CSIDriver")
-    assert {defaults.CEPHFS_PROVISIONER, defaults.RBD_PROVISIONER} == (
+    csi_drivers = (
         {item['metadata']['name'] for item in csi_driver.get()['items']}
     )
+    assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
