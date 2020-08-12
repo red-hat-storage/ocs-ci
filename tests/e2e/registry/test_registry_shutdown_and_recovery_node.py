@@ -74,6 +74,7 @@ class TestRegistryShutdownAndRecoveryNode(E2ETest):
         Clean up svt
 
         """
+        self.image_path = []
 
         def finalizer():
 
@@ -106,8 +107,6 @@ class TestRegistryShutdownAndRecoveryNode(E2ETest):
 
         """
 
-        self.image_path = []
-
         # Get the node list
         node_list = get_typed_nodes(node_type='worker')
 
@@ -124,6 +123,7 @@ class TestRegistryShutdownAndRecoveryNode(E2ETest):
                 validate_registry_pod_and_run_workload(iterations, IMAGE_URL[0])
             )
 
+            # Start node
             nodes.start_nodes(nodes=[node])
 
             # Validate all nodes are in READY state and up
