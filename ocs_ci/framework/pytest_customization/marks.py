@@ -98,6 +98,7 @@ run_this = pytest.mark.run_this
 skipif_aws_creds_are_missing = pytest.mark.skipif(
     (
         load_auth_config().get('AUTH', {}).get('AWS', {}).get('AWS_ACCESS_KEY_ID') is None
+        and 'AWS_ACCESS_KEY_ID' not in os.environ
         and update_config_from_s3() is None
     ),
     reason=(
