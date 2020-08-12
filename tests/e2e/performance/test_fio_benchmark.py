@@ -34,6 +34,7 @@ def es(request):
     def teardown():
         if es is not None:
             es.cleanup()
+            time.sleep(10)
     request.addfinalizer(teardown)
     return es
 
@@ -46,6 +47,7 @@ def ripsaw(request):
 
     def teardown():
         ripsaw.cleanup()
+        time.sleep(10)
     request.addfinalizer(teardown)
     return ripsaw
 
