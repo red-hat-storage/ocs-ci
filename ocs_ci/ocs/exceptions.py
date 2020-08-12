@@ -194,5 +194,9 @@ class RDMDiskNotFound(Exception):
     pass
 
 
+class ExternalClusterDetailsException(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
