@@ -110,6 +110,7 @@ class TestPVCDeletionPerformance(E2ETest):
             number_of_pvc=number_of_pvcs,
             size=pvc_size,
         )
+        
         for pvc_obj in pvc_objs:
             pvc_obj.reload()
             teardown_factory(pvc_obj)
