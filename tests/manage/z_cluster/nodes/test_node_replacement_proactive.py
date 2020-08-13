@@ -47,17 +47,17 @@ class TestNodeReplacement(ManageTest):
         osd_node_name = pod.get_pod_node(random.choice(osd_pods_obj)).name
         log.info(f"Selected OSD is {osd_node_name}")
 
-        log.info("Creating dc pod backed with rbd pvc and running io in bg")
-        for worker_node in worker_node_list:
-            if worker_node != osd_node_name:
-                rbd_dc_pod = dc_pod_factory(interface=constants.CEPHBLOCKPOOL, node_name=worker_node, size=20)
-                pod.run_io_in_bg(rbd_dc_pod, expect_to_fail=False, fedora_dc=True)
-
-        log.info("Creating dc pod backed with cephfs pvc and running io in bg")
-        for worker_node in worker_node_list:
-            if worker_node != osd_node_name:
-                cephfs_dc_pod = dc_pod_factory(interface=constants.CEPHFILESYSTEM, node_name=worker_node, size=20)
-                pod.run_io_in_bg(cephfs_dc_pod, expect_to_fail=False, fedora_dc=True)
+        # log.info("Creating dc pod backed with rbd pvc and running io in bg")
+        # for worker_node in worker_node_list:
+        #     if worker_node != osd_node_name:
+        #         rbd_dc_pod = dc_pod_factory(interface=constants.CEPHBLOCKPOOL, node_name=worker_node, size=20)
+        #         pod.run_io_in_bg(rbd_dc_pod, expect_to_fail=False, fedora_dc=True)
+        #
+        # log.info("Creating dc pod backed with cephfs pvc and running io in bg")
+        # for worker_node in worker_node_list:
+        #     if worker_node != osd_node_name:
+        #         cephfs_dc_pod = dc_pod_factory(interface=constants.CEPHFILESYSTEM, node_name=worker_node, size=20)
+        #         pod.run_io_in_bg(cephfs_dc_pod, expect_to_fail=False, fedora_dc=True)
 
         # error message for invalid deployment configuration
         msg_invalid = (
@@ -82,15 +82,13 @@ class TestNodeReplacement(ManageTest):
                 log.error(msg_invalid)
                 pytest.fail(msg_invalid)
         elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
-            pytest.skip("Skipping add node in Vmware platform due to "
-                        "https://bugzilla.redhat.com/show_bug.cgi?id=1844521"
-                        )
+            node.delete_and_create_osd_node_aws_upi(osd_node_name)
 
         # Creating Resources
-        log.info("Creating Resources using sanity helpers")
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
-        # Deleting Resources
-        self.sanity_helpers.delete_resources()
-        # Verify everything running fine
+        # log.info("Creating Resources using sanity helpers")
+        # self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        # # Deleting Resources
+        # self.sanity_helpers.delete_resources()
+        # # Verify everything running fine
         log.info("Verifying All resources are Running and matches expected result")
         self.sanity_helpers.health_check(tries=30)
