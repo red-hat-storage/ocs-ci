@@ -14,10 +14,18 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
-from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
+from ocs_ci.ocs.cluster import (
+    validate_cluster_on_pvc,
+    validate_pdb_creation,
+    CephClusterExternal
+)
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, UnavailableResourceException, UnsupportedPlatformError,
-    ResourceWrongStatusException, CephHealthException
+    CephHealthException,
+    CommandFailed,
+    ResourceWrongStatusException,
+    UnavailableResourceException,
+    UnsupportedPlatformError,
+    ExternalClusterDetailsException
 )
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
@@ -64,6 +72,18 @@ class Deployment(object):
     """
     Base for all deployment platforms
     """
+
+    # Default storage class for StorageCluster CRD,
+    # every platform specific class which extending this base class should
+    # define it
+    DEFAULT_STORAGECLASS = None
+
+    # Default storage class for LSO deployments. While each platform specific
+    # subclass can redefine it, there is a well established platform
+    # independent default value (based on OCS Installation guide), and it's
+    # redefinition is not necessary in normal cases.
+    DEFAULT_STORAGECLASS_LSO = 'localblock'
+
     def __init__(self):
         self.platform = config.ENV_DATA['platform']
         self.ocp_deployment_type = config.ENV_DATA['deployment_type']
@@ -76,13 +96,6 @@ class Deployment(object):
         methods for platform specific config.
         """
         pass
-
-    def add_volume(self):
-        """
-        Implement add_volume in child class which is specific to
-        platform
-        """
-        raise NotImplementedError("add_volume functionality not implemented")
 
     def deploy_cluster(self, log_cli_level='DEBUG'):
         """
@@ -346,7 +359,7 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get('live_deployment')
 
         if config.DEPLOYMENT.get('local_storage'):
-            setup_local_storage()
+            setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
 
         if ui_deployment:
             if not live_deployment:
@@ -380,6 +393,8 @@ class Deployment(object):
                 replace_from=config.DEPLOYMENT['csv_change_from'],
                 replace_to=config.DEPLOYMENT['csv_change_to']
             )
+
+        # creating StorageCluster
         cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
@@ -388,8 +403,10 @@ class Deployment(object):
         device_size = int(
             config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
         )
+
+        # set size of request for storage
         if self.platform.lower() == constants.BAREMETAL_PLATFORM:
-            pv_size_list = helpers.get_pv_size(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
+            pv_size_list = helpers.get_pv_size(storageclass=self.DEFAULT_STORAGECLASS_LSO)
             pv_size_list.sort()
             deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
                 'storage'
@@ -399,18 +416,19 @@ class Deployment(object):
                 'storage'
             ] = f"{device_size}Gi"
 
-        if self.platform.lower() == constants.VSPHERE_PLATFORM:
+        # set storage class to OCS default on current platform
+        if self.DEFAULT_STORAGECLASS:
             deviceset_data['dataPVCTemplate']['spec'][
                 'storageClassName'
-            ] = constants.DEFAULT_SC_VSPHERE
+            ] = self.DEFAULT_STORAGECLASS
 
+        # StorageCluster tweaks for LSO
         if config.DEPLOYMENT.get('local_storage'):
             cluster_data['spec']['manageNodes'] = False
             cluster_data['spec']['monDataDirHostPath'] = '/var/lib/rook'
             deviceset_data['portable'] = False
-            deviceset_data['dataPVCTemplate']['spec'][
-                'storageClassName'
-            ] = 'localblock'
+            deviceset_data['dataPVCTemplate']['spec']['storageClassName'] = \
+                self.DEFAULT_STORAGECLASS_LSO
             if self.platform.lower() == constants.AWS_PLATFORM:
                 deviceset_data['count'] = 2
 
@@ -487,6 +505,80 @@ class Deployment(object):
             log_suffix="ui-deployment"
         )
 
+    def deploy_with_external_mode(self):
+        """
+        This function handles the deployment of OCS on
+        external/indpendent RHCS cluster
+
+        """
+        live_deployment = config.DEPLOYMENT.get('live_deployment')
+        logger.info("Deploying OCS with external mode RHCS")
+        logger.info("Creating namespace and operator group")
+        run_cmd(f"oc create -f {constants.OLM_YAML}")
+        if not live_deployment:
+            self.create_ocs_operator_source()
+        self.subscribe_ocs()
+        operator_selector = get_selector_for_ocs_operator()
+        package_manifest = PackageManifest(
+            resource_name=defaults.OCS_OPERATOR_NAME,
+            selector=operator_selector,
+        )
+        package_manifest.wait_for_resource(timeout=300)
+        channel = config.DEPLOYMENT.get('ocs_csv_channel')
+        csv_name = package_manifest.get_current_csv(channel=channel)
+        csv = CSV(resource_name=csv_name, namespace=self.namespace)
+        csv.wait_for_phase("Succeeded", timeout=720)
+
+        # Create secret for external cluster
+        secret_data = templating.load_yaml(
+            constants.EXTERNAL_CLUSTER_SECRET_YAML
+        )
+        external_cluster_details = config.EXTERNAL_MODE.get(
+            'external_cluster_details',
+            ''
+        )
+        if not external_cluster_details:
+            raise ExternalClusterDetailsException(
+                "No external cluster data found"
+            )
+        secret_data['data']['external_cluster_details'] = (
+            external_cluster_details
+        )
+        secret_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='external_cluster_secret', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            secret_data, secret_data_yaml.name
+        )
+        logger.info("Creating external cluster secret")
+        run_cmd(f"oc create -f {secret_data_yaml.name}")
+
+        cluster_data = templating.load_yaml(
+            constants.EXTERNAL_STORAGE_CLUSTER_YAML
+        )
+        cluster_data['metadata']['name'] = config.ENV_DATA[
+            'storage_cluster_name'
+        ]
+        cluster_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='external_cluster_storage', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            cluster_data, cluster_data_yaml.name
+        )
+        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+        self.external_post_deploy_validation()
+        setup_ceph_toolbox()
+
+    def external_post_deploy_validation(self):
+        """
+        This function validates successful deployment of OCS
+        in external mode, some of the steps overlaps with
+        converged mode
+
+        """
+        cephcluster = CephClusterExternal()
+        cephcluster.cluster_health_check(timeout=300)
+
     def deploy_ocs(self):
         """
         Handle OCS deployment, since OCS deployment steps are common to any
@@ -501,6 +593,11 @@ class Deployment(object):
             return
         except (IndexError, CommandFailed):
             logger.info("Running OCS basic installation")
+
+        if config.DEPLOYMENT['external_mode']:
+            logger.info("Deploying OCS on external mode RHCS")
+            return self.deploy_with_external_mode()
+
         self.deploy_ocs_via_operator()
         pod = ocp.OCP(
             kind=constants.POD, namespace=self.namespace
@@ -654,21 +751,19 @@ class Deployment(object):
         """
         Patch storage class which comes as default with installation to non-default
         """
-        sc_to_patch = None
-        if self.platform.lower() == constants.AWS_PLATFORM:
-            sc_to_patch = constants.DEFAULT_SC_AWS
-        elif self.platform.lower() == constants.VSPHERE_PLATFORM:
-            sc_to_patch = constants.DEFAULT_SC_VSPHERE
-        else:
-            logger.info(f"Unsupported platform {self.platform} to patch")
-        if sc_to_patch:
-            logger.info(f"Patch {sc_to_patch} storageclass as non-default")
-            patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
-            run_cmd(
-                f"oc patch storageclass {sc_to_patch} "
-                f"-p {patch} "
-                f"--request-timeout=120s"
+        if not self.DEFAULT_STORAGECLASS:
+            logger.info(
+                "Default StorageClass is not set for this class: "
+                f"{self.__class__.__name__}"
             )
+            return
+        logger.info(f"Patch {self.DEFAULT_STORAGECLASS} storageclass as non-default")
+        patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
+        run_cmd(
+            f"oc patch storageclass {self.DEFAULT_STORAGECLASS} "
+            f"-p {patch} "
+            f"--request-timeout=120s"
+        )
 
 
 def create_catalog_source(image=None, ignore_upgrade=False):
@@ -726,9 +821,13 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     catalog_source.wait_for_state("READY")
 
 
-def setup_local_storage():
+def setup_local_storage(storageclass):
     """
     Setup the necessary resources for enabling local storage.
+
+    Args:
+        storageclass (string): storageClassName value to be used in LocalVolume CR
+            based on LOCAL_VOLUME_YAML
 
     """
     # Get the worker nodes
@@ -811,6 +910,12 @@ def setup_local_storage():
     lv_data = templating.load_yaml(
         constants.LOCAL_VOLUME_YAML
     )
+
+    # Set storage class
+    logger.info(
+        "Updating LocalVolume CR data with LSO storageclass: %s", storageclass)
+    for scd in lv_data['spec']['storageClassDevices']:
+        scd['storageClassName'] = storageclass
 
     # Update local volume data with NVME IDs
     logger.info(

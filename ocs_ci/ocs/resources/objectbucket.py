@@ -9,6 +9,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
@@ -68,7 +69,7 @@ class OBC(object):
                 .get('serviceS3').get('externalDNS')[0]
             )
             self.s3_resource = boto3.resource(
-                's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH,
+                's3', verify=retrieve_verification_mode(),
                 endpoint_url=self.s3_external_endpoint,
                 aws_access_key_id=self.access_key_id,
                 aws_secret_access_key=self.access_key

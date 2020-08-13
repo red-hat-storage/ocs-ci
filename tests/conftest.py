@@ -3,7 +3,6 @@ import os
 import random
 import time
 import tempfile
-import textwrap
 import threading
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
@@ -14,16 +13,23 @@ from functools import partial
 
 from botocore.exceptions import ClientError
 import pytest
-import yaml
 
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     deployment, ignore_leftovers, tier_marks, ignore_leftover_label
 )
-from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
+from ocs_ci.ocs import (
+    constants,
+    defaults,
+    fio_artefacts,
+    node,
+    ocp,
+    platform_nodes
+)
 from ocs_ci.ocs.bucket_utils import craft_s3_command
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException, ResourceWrongStatusException
+from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import setup_ceph_toolbox,collect_ocs_logs
 from ocs_ci.ocs.resources.backingstore import BackingStore
@@ -45,10 +51,8 @@ from ocs_ci.utility.environment_check import (
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
-    get_rook_repo,
     get_ocp_version,
     TimeoutSampler,
-    update_container_with_mirrored_image,
 )
 from ocs_ci.utility.utils import (
     get_openshift_client, ocsci_log_path, get_testrun_name,
@@ -1088,6 +1092,21 @@ def log_cli_level(pytestconfig):
     return pytestconfig.getini('log_cli_level') or 'DEBUG'
 
 
+TEMP_FILE = (
+    tempfile.NamedTemporaryFile(mode='w+', prefix='test_status', delete=False)
+)
+
+
+def get_test_status(file):
+    with open(file.name, 'r') as t_file:
+        return t_file.readline()
+
+
+def set_test_status(file, status):
+    with open(file.name, 'w') as t_file:
+        t_file.writelines(status)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def cluster_load(
     request, project_factory_session, pvc_factory_session,
@@ -1124,25 +1143,13 @@ def cluster_load(
         if not cl_load_obj:
             cl_load_obj = ClusterLoad()
 
-        temp_file = tempfile.NamedTemporaryFile(
-            mode='w+', prefix='test_status', delete=False
-        )
-
-        def get_test_status():
-            with open(temp_file.name, 'r') as t_file:
-                return t_file.readline()
-
-        def set_test_status(status):
-            with open(temp_file.name, 'w') as t_file:
-                t_file.writelines(status)
-
-        set_test_status('running')
+        set_test_status(TEMP_FILE, 'running')
 
         def finalizer():
             """
             Stop the thread that executed watch_load()
             """
-            set_test_status('finished')
+            set_test_status(TEMP_FILE, 'finished')
             if thread:
                 thread.join()
 
@@ -1157,12 +1164,19 @@ def cluster_load(
             the IO load based on the cluster latency.
 
             """
-            while get_test_status() == 'running':
+            while get_test_status(TEMP_FILE) != 'finished':
                 time.sleep(20)
                 try:
                     cl_load_obj.print_metrics(mute_logs=True)
                     if io_in_bg:
-                        cl_load_obj.adjust_load_if_needed()
+                        if get_test_status(TEMP_FILE) == 'running':
+                            cl_load_obj.adjust_load_if_needed()
+                        elif get_test_status(TEMP_FILE) == 'to_be_paused':
+                            cl_load_obj.pause_load()
+                            set_test_status(TEMP_FILE, 'paused')
+                        elif get_test_status(TEMP_FILE) == 'to_be_resumed':
+                            cl_load_obj.resume_load()
+                            set_test_status(TEMP_FILE, 'running')
 
                 # Any type of exception should be caught and we should continue.
                 # We don't want any test to fail
@@ -1171,6 +1185,37 @@ def cluster_load(
 
         thread = threading.Thread(target=watch_load)
         thread.start()
+
+
+@pytest.fixture()
+def pause_cluster_load(request):
+    """
+    Pause the background cluster load
+
+    """
+    if config.RUN.get('io_in_bg'):
+
+        def finalizer():
+            """
+            Resume the cluster load
+
+            """
+            set_test_status(TEMP_FILE, 'to_be_resumed')
+            try:
+                for load_status in TimeoutSampler(180, 3, get_test_status, TEMP_FILE):
+                    if load_status == 'running':
+                        break
+            except TimeoutExpiredError:
+                log.error("Cluster load was not resumed successfully")
+        request.addfinalizer(finalizer)
+
+        set_test_status(TEMP_FILE, 'to_be_paused')
+        try:
+            for status in TimeoutSampler(180, 3, get_test_status, TEMP_FILE):
+                if status == 'paused':
+                    break
+        except TimeoutExpiredError:
+            log.error("Cluster load was not paused successfully")
 
 
 @pytest.fixture(
@@ -1349,13 +1394,6 @@ def multi_pvc_factory_fixture(
         return pvc_list
 
     return factory
-
-
-@pytest.fixture(scope="session", autouse=True)
-def rook_repo(request):
-    get_rook_repo(
-        config.RUN['rook_branch'], config.RUN.get('rook_to_checkout')
-    )
 
 
 @pytest.fixture(scope="function")
@@ -2055,13 +2093,13 @@ def multiregion_mirror_setup(mcg_obj, multiregion_resources, backingstore_factor
 
 @pytest.fixture(scope='session')
 def multiregion_mirror_setup_session(
-    mcg_obj_with_aws_session,
+    mcg_obj_session,
     multiregion_resources_session,
     backingstore_factory,
     bucket_factory_session
 ):
     return multiregion_mirror_setup_fixture(
-        mcg_obj_with_aws_session,
+        mcg_obj_session,
         multiregion_resources_session,
         backingstore_factory,
         bucket_factory_session
@@ -2218,132 +2256,60 @@ def install_logging(request):
 
 @pytest.fixture
 def fio_pvc_dict():
-    return fio_pvc_dict_fixture()
+    """
+    PVC template for fio workloads.
+    Note that all 'None' values needs to be defined before usage.
+
+    """
+    return fio_artefacts.get_pvc_dict()
 
 
 @pytest.fixture(scope='session')
 def fio_pvc_dict_session():
-    return fio_pvc_dict_fixture()
-
-
-def fio_pvc_dict_fixture():
     """
     PVC template for fio workloads.
     Note that all 'None' values needs to be defined before usage.
+
     """
-    # TODO(fbalak): load dictionary fixtures from one place
-    template = textwrap.dedent("""
-        kind: PersistentVolumeClaim
-        apiVersion: v1
-        metadata:
-          name: fio-target
-        spec:
-          storageClassName: None
-          accessModes: ["ReadWriteOnce"]
-          resources:
-            requests:
-              storage: None
-        """)
-    pvc_dict = yaml.safe_load(template)
-    return pvc_dict
+    return fio_artefacts.get_pvc_dict()
 
 
 @pytest.fixture
 def fio_configmap_dict():
-    return fio_configmap_dict_fixture()
+    """
+    ConfigMap template for fio workloads.
+    Note that you need to add actual configuration to workload.fio file.
+
+    """
+    return fio_artefacts.get_configmap_dict()
 
 
 @pytest.fixture(scope='session')
 def fio_configmap_dict_session():
-    return fio_configmap_dict_fixture()
-
-
-def fio_configmap_dict_fixture():
     """
     ConfigMap template for fio workloads.
     Note that you need to add actual configuration to workload.fio file.
+
     """
-    # TODO(fbalak): load dictionary fixtures from one place
-    template = textwrap.dedent("""
-        kind: ConfigMap
-        apiVersion: v1
-        metadata:
-          name: fio-config
-        data:
-          workload.fio: |
-            # here comes workload configuration
-        """)
-    cm_dict = yaml.safe_load(template)
-    return cm_dict
+    return fio_artefacts.get_configmap_dict()
 
 
 @pytest.fixture
 def fio_job_dict():
-    return fio_job_dict_fixture()
+    """
+    Job template for fio workloads.
+
+    """
+    return fio_artefacts.get_job_dict()
 
 
 @pytest.fixture(scope='session')
 def fio_job_dict_session():
-    return fio_job_dict_fixture()
-
-
-def fio_job_dict_fixture():
     """
     Job template for fio workloads.
+
     """
-    node_obj = ocp.OCP(kind=constants.NODE)
-
-    log.info('Checking architecture of system')
-    node = node_obj.get(
-        selector=constants.WORKER_LABEL
-    ).get('items')[0]['metadata']['name']
-    arch = node_obj.exec_oc_debug_cmd(node, ['uname -m'])
-    if arch.startswith('x86'):
-        image = 'quay.io/fbalak/fio-fedora:latest'
-    else:
-        image = 'quay.io/multiarch-origin-e2e/fio-fedora:latest'
-    log.info(f'Discovered architecture: {arch.strip()}')
-    log.info(f'Using image: {image}')
-
-    # TODO(fbalak): load dictionary fixtures from one place
-    template = textwrap.dedent(f"""
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: fio
-        spec:
-          backoffLimit: 0
-          template:
-            metadata:
-              name: fio
-            spec:
-              containers:
-                - name: fio
-                  image: {image}
-                  command:
-                    - "/usr/bin/fio"
-                    - "--output-format=json"
-                    - "/etc/fio/workload.fio"
-                  volumeMounts:
-                    - name: fio-target
-                      mountPath: /mnt/target
-                    - name: fio-config-volume
-                      mountPath: /etc/fio
-              restartPolicy: Never
-              volumes:
-                - name: fio-target
-                  persistentVolumeClaim:
-                    claimName: fio-target
-                - name: fio-config-volume
-                  configMap:
-                    name: fio-config
-        """)
-    job_dict = yaml.safe_load(template)
-
-    # overwrite used image (required for disconnected installation)
-    update_container_with_mirrored_image(job_dict)
-
-    return job_dict
+    return fio_artefacts.get_job_dict()
 
 
 @pytest.fixture(scope='function')
@@ -2668,18 +2634,52 @@ def ceph_toolbox(request):
         setup_ceph_toolbox()
 
 
-@pytest.fixture(scope="session", autouse=True)
-def collect_logs_fixture(request):
+@pytest.fixture(scope='function')
+def node_drain_teardown(request):
     """
-    This fixture collects ocs logs after tier execution and this will allow
-    to see the cluster's status after the execution on all execution status options.
+    Tear down function after Node drain
+
     """
     def finalizer():
-        '''
-        Tracking both logs separately reduce changes of collision
-        '''
-        if not config.RUN['cli_params'].get('deploy'):
-            collect_ocs_logs('testcases', ocs=False, status_failure=False)
-            collect_ocs_logs('testcases', ocp=False, status_failure=False)
+        """
+        Make sure that all cluster's nodes are in 'Ready' state and if not,
+        change them back to 'Ready' state by marking them as schedulable
+
+        """
+        scheduling_disabled_nodes = [
+            n.name for n in get_node_objs() if n.ocp.get_resource_status(
+                n.name
+            ) == constants.NODE_READY_SCHEDULING_DISABLED
+        ]
+        if scheduling_disabled_nodes:
+            schedule_nodes(scheduling_disabled_nodes)
+
+    request.addfinalizer(finalizer)
+
+
+@pytest.fixture(scope='function')
+def node_restart_teardown(request, nodes):
+    """
+    Make sure all nodes are up again
+    Make sure that all cluster's nodes are in 'Ready' state and if not,
+    change them back to 'Ready' state by restarting the nodes
+    """
+    def finalizer():
+        # Start the powered off nodes
+        nodes.restart_nodes_by_stop_and_start_teardown()
+        try:
+            node.wait_for_nodes_status(status=constants.NODE_READY)
+        except ResourceWrongStatusException:
+            # Restart the nodes if in NotReady state
+            not_ready_nodes = [
+                n for n in node.get_node_objs() if n
+                .ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
+            ]
+            if not_ready_nodes:
+                log.info(
+                    f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
+                )
+                nodes.restart_nodes(not_ready_nodes)
+                node.wait_for_nodes_status(status=constants.NODE_READY)
 
     request.addfinalizer(finalizer)

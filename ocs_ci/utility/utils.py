@@ -1575,8 +1575,19 @@ def get_ocs_olm_operator_tags(limit=100):
         )
         raise
     headers = {'Authorization': f'Bearer {quay_access_token}'}
+    image = "ocs-registry"
+    try:
+        ocs_version = float(config.ENV_DATA.get('ocs_version'))
+        if ocs_version < 4.5:
+            image = "ocs-olm-operator"
+    except (ValueError, TypeError):
+        log.warning("Invalid ocs_version given, defaulting to ocs-registry image")
+        pass
     resp = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=limit),
+        constants.OPERATOR_CS_QUAY_API_QUERY.format(
+            tag_limit=limit,
+            image=image,
+        ),
         headers=headers
     )
     if not resp.ok:

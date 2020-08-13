@@ -8,7 +8,9 @@ In the event values here have to be changed it should be under careful review
 and with consideration of the entire project.
 
 """
+
 import os
+
 
 # Directories
 TOP_DIR = os.path.dirname(
@@ -87,6 +89,8 @@ HEALTHY_OB_CLI_MODE = 'Mode:OPTIMAL'
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
+CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
+CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
 DEPLOYMENT = "Deployment"
 JOB = "Job"
 STORAGECLASS = "StorageClass"
@@ -157,6 +161,7 @@ CODESPEED_URL = 'http://10.0.78.167:8000/'
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
 DEFAULT_CLUSTERNAME = 'ocs-storagecluster'
+DEFAULT_CLUSTERNAME_EXTERNAL_MODE = 'ocs-external-storagecluster'
 DEFAULT_BLOCKPOOL = f'{DEFAULT_CLUSTERNAME}-cephblockpool'
 METADATA_POOL = f'{DEFAULT_CLUSTERNAME}-cephfilesystem-metadata'
 DATA_POOL = f'{DEFAULT_CLUSTERNAME}-cephfilesystem-data0'
@@ -178,12 +183,19 @@ LOCAL_STORAGE_NAMESPACE = 'local-storage'
 DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
 DEFAULT_STORAGECLASS_RBD = f'{DEFAULT_CLUSTERNAME}-ceph-rbd'
 DEFAULT_STORAGECLASS_RGW = f'{DEFAULT_CLUSTERNAME}-ceph-rgw'
-DEFAULT_STORAGECLASS_LSO = 'localblock'
 
 # Independent mode default StorageClasses
-INDEPENDENT_DEFAULT_CLUSTER_NAME = 'ocs-independent-storagecluster'
-INDEPENDENT_DEFAULT_STORAGECLASS_RGW = f'{INDEPENDENT_DEFAULT_CLUSTER_NAME}-ceph-rgw'
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW = (
+    f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rgw'
+)
 
+# Default StorageClass for External-mode
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS = (
+    f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephfs'
+)
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD = (
+    f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rbd'
+)
 
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
@@ -273,6 +285,10 @@ CSI_PVC_YAML = os.path.join(
 
 MCG_OBC_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml"
+)
+
+RGW_OBC_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "ObjectBucketClaim-RGW.yaml"
 )
 
 MCG_AWS_CREDS_YAML = os.path.join(
@@ -498,6 +514,14 @@ STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
 )
 
+EXTERNAL_STORAGE_CLUSTER_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "external-storage-cluster.yaml"
+)
+
+EXTERNAL_CLUSTER_SECRET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "external-cluster-secret.yaml"
+)
+
 OPERATOR_SOURCE_SECRET_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "operator-source-secret.yaml"
 )
@@ -606,7 +630,7 @@ MARKETPLACE_NAMESPACE = "openshift-marketplace"
 MONITORING_NAMESPACE = "openshift-monitoring"
 OPERATOR_INTERNAL_SELECTOR = "ocs-operator-internal=true"
 OPERATOR_CS_QUAY_API_QUERY = (
-    'https://quay.io/api/v1/repository/rhceph-dev/ocs-olm-operator/'
+    'https://quay.io/api/v1/repository/rhceph-dev/{image}/'
     'tag/?onlyActiveTags=true&limit={tag_limit}'
 )
 
@@ -634,10 +658,6 @@ BAREMETAL_PLATFORM = 'baremetal'
 ON_PREM_PLATFORMS = [VSPHERE_PLATFORM, BAREMETAL_PLATFORM]
 CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
 BAREMETALPSI_PLATFORM = 'baremetalpsi'
-
-# Default SC based on platforms
-DEFAULT_SC_AWS = "gp2"
-DEFAULT_SC_VSPHERE = "thin"
 
 # ignition files
 BOOTSTRAP_IGN = "bootstrap.ign"
@@ -1015,3 +1035,6 @@ MAX_OSDS = 15
 # Minimum cluster requirements in term of node specs
 MIN_NODE_CPU = 16
 MIN_NODE_MEMORY = 64 * 10 ** 9
+
+# aws tags
+AWS_CLOUDFORMATION_TAG = 'aws:cloudformation:stack-name'
