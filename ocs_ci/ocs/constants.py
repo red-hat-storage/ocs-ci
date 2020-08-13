@@ -667,6 +667,9 @@ BOOTSTRAP_IGN = "bootstrap.ign"
 MASTER_IGN = "master.ign"
 WORKER_IGN = "worker.ign"
 
+# terraform provider constants
+TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
+
 # vSphere related constants
 VSPHERE_NODE_USER = "core"
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
