@@ -9,8 +9,8 @@ import pytest
 import random
 
 from tests import helpers, disruption_helpers
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, delete_deploymentconfig_pods
+from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.resources.pod import get_all_pods, delete_deploymentconfig_pods
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3
 from ocs_ci.framework.testlib import E2ETest, workloads, tier1, ignore_leftovers
@@ -29,13 +29,6 @@ def setup_fixture(install_logging):
     logger.info("Testcases execution post deployment of openshift-logging")
 
 
-@pytest.mark.skipif(
-    get_ocp_version() == "4.5",
-    reason=(
-        "Skipping logging tests on OCP 4.5 cause of W/A issue: "
-        "https://github.com/red-hat-storage/ocs-ci/issues/2278"
-    )
-)
 @pytest.mark.usefixtures(
     setup_fixture.__name__
 )
@@ -73,42 +66,82 @@ class Testopenshiftloggingonocs(E2ETest):
         return pod_obj, pvc_obj
 
     @retry(ModuleNotFoundError, tries=5, delay=200, backoff=1)
-    def validate_project_exists(self, pvc_obj):
+    def validate_project_exists(self, project):
         """
         This function checks whether the new project exists in the
         EFK stack
-        """
-        pod_list = get_all_pods(namespace='openshift-logging')
-        elasticsearch_pod = [
-            pod.name for pod in pod_list if pod.name.startswith('elasticsearch')
-        ]
-        elasticsearch_pod_obj = get_pod_obj(
-            name=elasticsearch_pod[1], namespace='openshift-logging'
-        )
-        project_index = elasticsearch_pod_obj.exec_cmd_on_pod(
-            command='indices', out_yaml_format=False
-        )
-        project = pvc_obj.project.namespace
 
-        if project in project_index:
-            logger.info(f'The project {project} exists in the EFK stack')
-            for item in project_index.split("\n"):
-                if project in item:
-                    logger.info(item.strip())
-                    assert 'green' in item.strip(), f"Project {project} is Unhealthy"
+        Args:
+            project (str): The project
+
+        """
+
+        elasticsearch_pod_obj = self.get_elasticsearch_pod_obj()
+        if get_ocp_version() <= "4.4":
+
+            project_index = elasticsearch_pod_obj.exec_cmd_on_pod(
+                command='indices', out_yaml_format=False
+            )
+            if project in project_index:
+                logger.info(f'The project {project} exists in the EFK stack')
+                for item in project_index.split("\n"):
+                    if project in item:
+                        logger.info(item.strip())
+                        assert 'green' in item.strip(), f"Project {project} is Unhealthy"
+            else:
+                raise ModuleNotFoundError
         else:
-            raise ModuleNotFoundError
+            cmd = (
+                'es_util --query=*/_search?pretty -d \'{"query": {"match":'
+                f' {{"kubernetes.namespace_name": "{project}"}}}}}}\''
+            )
+            project_out = elasticsearch_pod_obj.exec_cmd_on_pod(
+                command=cmd, out_yaml_format=True
+            )
+            logger.info(project_out)
+
+            if project_out['hits']['max_score']:
+                logger.info("The Project exists on the EFK stack")
+            else:
+                raise ModuleNotFoundError
 
     def get_elasticsearch_pod_obj(self):
         """
         This function returns the Elasticsearch pod obj
+
         """
+
         pod_list = get_all_pods(namespace=constants.OPENSHIFT_LOGGING_NAMESPACE)
         elasticsearch_pod = [
-            pod for pod in pod_list if pod.name.startswith('elasticsearch')
+            pod for pod in pod_list if ('delete' not in pod.name) and (
+                'rollover' not in pod.name) and (
+                pod.name.startswith('elasticsearch')
+            )
         ]
         elasticsearch_pod_obj = random.choice(elasticsearch_pod)
         return elasticsearch_pod_obj
+
+    def check_filecount_in_project(self, project):
+        """
+        Check the files in the project
+
+        Args:
+            project (str): The project name
+
+        """
+
+        elasticsearch_pod_obj = self.get_elasticsearch_pod_obj()
+        cmd = f'es_util --query=project.{project}.*/_count'
+        if get_ocp_version() >= "4.5":
+            cmd = (
+                'es_util --query=*/_count?pretty -d \'{"query": {"match":'
+                f'{{"kubernetes.namespace_name": "{project}"}}}}}}\''
+            )
+        project_filecount = elasticsearch_pod_obj.exec_cmd_on_pod(command=cmd)
+        assert project_filecount['_shards']['successful'] != 0, (
+            f"No files found in project {project}"
+        )
+        logger.info(f'Total number of files and shards in project {project_filecount}')
 
     @pytest.mark.polarion_id("OCS-657")
     @tier1
@@ -127,7 +160,9 @@ class Testopenshiftloggingonocs(E2ETest):
         # Running IO on the app_pod
         pod_obj.run_io(storage_type='fs', size=6000)
 
-        self.validate_project_exists(pvc_obj)
+        # Validating if the project exists in EFK stack
+        project = pvc_obj.project.namespace
+        self.validate_project_exists(project)
 
     @pytest.mark.polarion_id("OCS-650")
     @workloads
@@ -157,18 +192,10 @@ class Testopenshiftloggingonocs(E2ETest):
         assert ocp_logging_obj.check_health_of_clusterlogging()
 
         # Check for the 1st project created in EFK stack before the respin
-        self.validate_project_exists(dc_pvc_obj)
+        self.validate_project_exists(project1)
 
         # Check the files in the project
-        elasticsearch_pod_obj = self.get_elasticsearch_pod_obj()
-
-        project1_filecount = elasticsearch_pod_obj.exec_cmd_on_pod(
-            command=f'es_util --query=project.{project1}.*/_count'
-        )
-        assert project1_filecount['_shards']['successful'] != 0, (
-            f"No files found in project {project1}"
-        )
-        logger.info(f'Total number of files in project 1 {project1_filecount}')
+        self.check_filecount_in_project(project1)
 
         # Create another app_pod in new project
         pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
@@ -176,15 +203,9 @@ class Testopenshiftloggingonocs(E2ETest):
         project2 = pvc_obj.project.namespace
 
         # Check the 2nd project exists in the EFK stack
-        self.validate_project_exists(pvc_obj)
+        self.validate_project_exists(project2)
 
-        project2_filecount = elasticsearch_pod_obj.exec_cmd_on_pod(
-            command=f'es_util --query=project.{project2}.*/_count', out_yaml_format=True
-        )
-        assert project2_filecount['_shards']['successful'] != 0, (
-            f"No files found in project {project2}"
-        )
-        logger.info(f'Total number of files in the project 2 {project2_filecount}')
+        self.check_filecount_in_project(project2)
 
     @pytest.mark.polarion_id("OCS-651")
     @workloads
@@ -202,17 +223,11 @@ class Testopenshiftloggingonocs(E2ETest):
         # Checks the health of logging cluster after a respin
         assert ocp_logging_obj.check_health_of_clusterlogging()
 
-        # Checks .operations index
-        es_pod_obj = self.get_elasticsearch_pod_obj()
-
-        operations_index = es_pod_obj.exec_cmd_on_pod(
-            command='es_util --query=.operations.*/_search?pretty', out_yaml_format=True
-        )
-        assert operations_index['_shards']['failed'] == 0, (
-            "Unable to access the logs of .operations from ES pods"
-        )
+        # Checks openshift-storage project exists and get filecount
+        self.check_filecount_in_project(project=defaults.ROOK_CLUSTER_NAMESPACE)
 
         # Creates new-project and app-pod and checks the logs are retained
         pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
 
-        self.validate_project_exists(pvc_obj)
+        project = pvc_obj.project.namespace
+        self.validate_project_exists(project)
