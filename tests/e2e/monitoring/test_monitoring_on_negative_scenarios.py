@@ -556,10 +556,16 @@ class TestMonitoringBackedByOCS(E2ETest):
 
     @pytest.mark.polarion_id("OCS-1535")
     def test_monitoring_shutdown_mgr_pod(self, pods):
+        # Check ceph metrics available
+        assert check_ceph_metrics_available(), "failed to get results for some metrics " \
+                                               "before Downscaling deployment mgr to 0"
+
         # Reduce mgr pod deployments to replicas=0
         oc = ocp.OCP(
             kind=constants.DEPLOYMENT, namespace='openshift-storage'
         )
+
+        # Downscaling deployment mgr to 0
         mgr_deployments = oc.get(selector=constants.MGR_APP_LABEL)['items']
         mgr = mgr_deployments[0]['metadata']['name']
         log.info(f"Downscaling deployment {mgr} to 0")
@@ -572,4 +578,5 @@ class TestMonitoringBackedByOCS(E2ETest):
         oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
 
         # Check ceph metrics available
-        assert check_ceph_metrics_available(), "failed to get results for some metrics"
+        assert check_ceph_metrics_available(), "failed to get results for some metrics" \
+                                               "after Downscaling and Upscaling deployment mgr"
