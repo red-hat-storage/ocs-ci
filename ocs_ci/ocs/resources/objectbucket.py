@@ -3,7 +3,7 @@ import logging
 from abc import ABC, abstractmethod
 
 import boto3
-from tests.helpers import create_resource, create_unique_resource_name
+from tests.helpers import create_resource, create_unique_resource_name, storagecluster_independent_check
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -387,7 +387,10 @@ class RGWOCBucket(OCBucket):
             self.name = create_unique_resource_name('oc', 'obc')
         obc_data['metadata']['name'] = self.name
         obc_data['spec']['bucketName'] = self.name
-        obc_data['spec']['storageClassName'] = constants.INDEPENDENT_DEFAULT_STORAGECLASS_RGW
+        if storagecluster_independent_check():
+            obc_data['spec']['storageClassName'] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW
+        else:
+            obc_data['spec']['storageClassName'] = constants.DEFAULT_STORAGECLASS_RGW
         obc_data['metadata']['namespace'] = self.namespace
         create_resource(**obc_data)
 
