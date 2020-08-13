@@ -223,10 +223,6 @@ class Deployment(object):
                     f"label nodes {workers_to_label} "
                     f"{constants.INFRA_NODE_LABEL} --overwrite"
                 )
-                label_cmds.append(
-                    f"annotate namespace {defaults.ROOK_CLUSTER_NAMESPACE} "
-                    f"{constants.NODE_SELECTOR_ANNOTATION}"
-                )
 
             for cmd in label_cmds:
                 _ocp.exec_oc_cmd(command=cmd)
@@ -501,6 +497,12 @@ class Deployment(object):
             cluster_data, cluster_data_yaml.name
         )
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+        if config.DEPLOYMENT["infra_nodes"]:
+            _ocp = ocp.OCP(kind='node')
+            _ocp.exec_oc_cmd(
+                command=f"annotate namespace {defaults.ROOK_CLUSTER_NAMESPACE} "
+                f"{constants.NODE_SELECTOR_ANNOTATION}"
+            )
 
     def deployment_with_ui(self):
         """
