@@ -423,5 +423,5 @@ class ClusterLoad:
 
         """
         logger.info(wrap_msg("Resuming the cluster load"))
-        while len(self.dc_objs) < len(self.target_pods_number):
+        while len(self.dc_objs) < self.target_pods_number:
             self.increase_load(rate=self.rate, wait=False)
