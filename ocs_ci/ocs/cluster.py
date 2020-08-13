@@ -991,7 +991,7 @@ def validate_pg_balancer():
     Validate either data is equally distributed to OSDs
 
     Returns:
-        bool: True if osd data consumption difference is <= 2% else False
+        bool: True if avg PG's per osd difference is <=10 else False
 
     """
     # Check OSD utilization either pg balancer is active
