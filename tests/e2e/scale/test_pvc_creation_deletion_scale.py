@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 
 
 @scale
-@pytest.mark.skip("Skip this test due to Cannot allocate memory problem")
+@pytest.mark.skip(reason="Skip this test due to Cannot allocate memory problem")
 class TestPVCCreationDeletionScale(E2ETest):
     """
     Base class for PVC scale creation and deletion
