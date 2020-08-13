@@ -121,6 +121,7 @@ class TestPVCDeletionPerformance(E2ETest):
                 )
 
                 executor.submit(pvc_obj.reload)
+
         assert pvc.delete_pvcs(pvc_objs[:number_of_pvcs], True), (
             "Deletion of PVCs failed"
         )
