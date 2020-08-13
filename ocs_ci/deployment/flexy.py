@@ -202,9 +202,9 @@ class FlexyBase(object):
 
     def merge_flexy_env(self):
         """
-        Update the ocs-osp.env file with the user supplied values.
-        This function assumes that flexy-ocs-private repo has been
-        already cloned
+        Update the Flexy env file with the user supplied values.
+        This function assumes that the flexy_env_file is available
+        (e.g. flexy-ocs-private repo has been already cloned).
 
         """
         config_parser = configparser.ConfigParser()
@@ -219,8 +219,8 @@ class FlexyBase(object):
             file_content = "[root]\n" + fp.read()
 
         config_parser.read_string(file_content)
-        # Iterate over config_parser keys, if same key is present
-        # in user supplied dict update config_parser
+        # add or update all values from config.FLEXY section into Flexy env
+        # configuration file
         for key in config.FLEXY:
             logger.info(f"Flexy env file - updating: {key}={config.FLEXY[key]}")
             # For LAUNCHER_VARS we need to merge the
