@@ -200,3 +200,7 @@ class ExternalClusterDetailsException(Exception):
 
 class CredReqSecretNotFound(Exception):
     pass
+
+
+class RhcosImageNotFound(Exception):
+    pass

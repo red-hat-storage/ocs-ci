@@ -1041,3 +1041,28 @@ MIN_NODE_MEMORY = 64 * 10 ** 9
 
 # aws tags
 AWS_CLOUDFORMATION_TAG = 'aws:cloudformation:stack-name'
+
+# Bare Metal constants
+BOOTSTRAP_PXE_FILE = os.path.join(
+    TEMPLATE_DIR, "baremetal-pxefile", "bootstrap"
+)
+MASTER_PXE_FILE = os.path.join(
+    TEMPLATE_DIR, "baremetal-pxefile", "master"
+)
+WORKER_PXE_FILE = os.path.join(
+    TEMPLATE_DIR, "baremetal-pxefile", "worker"
+)
+PXE_CONF_FILE = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "dnsmasq.pxe.conf"
+)
+COMMON_CONF_FILE = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "dnsmasq.common.conf"
+)
+RHCOS_IMAGES_FILE = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "rhcos_images.yaml"
+)
+PXE_FILE = os.path.join(
+    TEMPLATE_DIR, "baremetal-pxefile"
+)
+coreos_url_prefix = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos"
+BM_DEFAULT_CLUSTER_NAME = "ocp-baremetal-auto"
