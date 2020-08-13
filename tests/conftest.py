@@ -2683,3 +2683,20 @@ def node_restart_teardown(request, nodes):
                 node.wait_for_nodes_status(status=constants.NODE_READY)
 
     request.addfinalizer(finalizer)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def collect_logs_fixture(request):
+    """
+    This fixture collects ocs logs after tier execution and this will allow
+    to see the cluster's status after the execution on all execution status options.
+    """
+    def finalizer():
+        '''
+        Tracking both logs separately reduce changes of collision
+        '''
+        if not config.RUN['cli_params'].get('deploy'):
+            collect_ocs_logs('testcases', ocs=False, status_failure=False)
+            collect_ocs_logs('testcases', ocp=False, status_failure=False)
+
+    request.addfinalizer(finalizer)
