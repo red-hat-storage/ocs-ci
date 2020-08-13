@@ -200,9 +200,10 @@ class Deployment(object):
                 f"{to_label} or taint: {to_taint}!"
             )
 
+        _ocp = ocp.OCP(kind='node')
         workers_to_label = " ".join(distributed_worker_nodes[:to_label])
         if workers_to_label:
-            _ocp = ocp.OCP(kind='node')
+
             logger.info(
                 f"Label nodes: {workers_to_label} with label: "
                 f"{constants.OPERATOR_NODE_LABEL}"
