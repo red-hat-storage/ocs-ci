@@ -4,11 +4,14 @@ Test to verify PVC deletion performance
 import logging
 import pytest
 import ocs_ci.ocs.exceptions as ex
+import threading
 from ocs_ci.framework.testlib import (
     performance, E2ETest
 )
+
+from concurrent.futures import ThreadPoolExecutor
 from tests import helpers
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import defaults, constants
 from ocs_ci.utility.performance_dashboard import push_to_pvc_time_dashboard
 
 log = logging.getLogger(__name__)
@@ -86,3 +89,72 @@ class TestPVCDeletionPerformance(E2ETest):
                 f"PVC deletion time is {delete_time} and greater than {deletion_time} second"
             )
         push_to_pvc_time_dashboard(self.interface, "deletion", delete_time)
+
+    @pytest.mark.usefixtures(base_setup.__name__)
+    def test_multiple_pvc_deletion_measurement_performance(self, teardown_factory):
+        """
+        Measuring PVC deletion time of 120 PVCs in 180 seconds
+
+        Args:
+            teardown_factory: A fixture used when we want a new resource that was created during the tests
+                               to be removed in the teardown phase.
+        Returns:
+
+        """
+        number_of_pvcs = 120
+        pvc_size = '1Gi'
+        log.info('Start creating new 120 PVCs')
+
+        pvc_objs = helpers.create_multiple_pvcs(
+            sc_name=self.sc_obj.name,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            number_of_pvc=number_of_pvcs,
+            size=pvc_size,
+        )
+
+        for pvc_obj in pvc_objs:
+            pvc_obj.reload()
+            teardown_factory(pvc_obj)
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            for pvc_obj in pvc_objs:
+                executor.submit(
+                    helpers.wait_for_resource_state, pvc_obj,
+                    constants.STATUS_BOUND
+                )
+
+                executor.submit(pvc_obj.reload)
+        # Get pvc_name, require pvc_name to fetch deletion time data from log
+        threads = list()
+        for pvc_obj in pvc_objs:
+            process = threading.Thread(target=pvc_obj.reload)
+            process.start()
+            threads.append(process)
+        for process in threads:
+            process.join()
+
+        pvc_name_list, pv_name_list = ([] for i in range(2))
+        threads = list()
+        for pvc_obj in pvc_objs:
+            process1 = threading.Thread(target=pvc_name_list.append(pvc_obj.name))
+            process2 = threading.Thread(target=pv_name_list.append(pvc_obj.backed_pv))
+            process1.start()
+            process2.start()
+            threads.append(process1)
+            threads.append(process2)
+        for process in threads:
+            process.join()
+        log.info("Preparing to delete 120 PVC")
+
+        # Delete PVC
+        for obj in pvc_objs:
+            obj.delete()
+        for obj in pvc_objs:
+            obj.ocp.wait_for_delete(obj.name)
+
+        # Get PVC deletion time
+        pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
+            interface=self.interface, pv_name_list=pv_name_list
+        )
+        logging.info(
+            f"{number_of_pvcs} PVCs deletion time took {pvc_deletion_time}"
+        )
