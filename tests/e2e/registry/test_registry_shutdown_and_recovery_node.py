@@ -9,7 +9,7 @@ from ocs_ci.ocs.registry import (
     image_pull, image_push, image_list_all, image_rm,
     check_image_exists_in_registry
 )
-from ocs_ci.framework.testlib import E2ETest, workloads
+from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.utility.svt import svt_setup, svt_cleanup
 from ocs_ci.ocs.node import (
     wait_for_nodes_status, get_typed_nodes
@@ -54,6 +54,7 @@ def validate_registry_pod_and_run_workload(iterations, image_url):
 
 
 @workloads
+@ignore_leftovers
 class TestRegistryShutdownAndRecoveryNode(E2ETest):
     """
     Test to shutdown and recovery node and
