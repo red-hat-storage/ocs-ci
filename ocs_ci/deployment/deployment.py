@@ -207,21 +207,28 @@ class Deployment(object):
                 f"Label nodes: {workers_to_label} with label: "
                 f"{constants.OPERATOR_NODE_LABEL}"
             )
-            label_cmd = (
-                f"label nodes {workers_to_label} "
-                f"{constants.OPERATOR_NODE_LABEL} --overwrite"
-            )
+            label_cmds = [
+                (
+                    f"label nodes {workers_to_label} "
+                    f"{constants.OPERATOR_NODE_LABEL} --overwrite"
+                )
+            ]
             if config.DEPLOYMENT["infra_nodes"]:
                 logger.info(
                     f"Label nodes: {workers_to_label} with label: "
                     f"{constants.INFRA_NODE_LABEL}"
                 )
-                label_cmd = (
+                label_cmds.append(
                     f"label nodes {workers_to_label} "
                     f"{constants.INFRA_NODE_LABEL} --overwrite"
                 )
+                label_cmds.append(
+                    f"annotate namespace {defaults.ROOK_CLUSTER_NAMESPACE} "
+                    f"{constants.NODE_SELECTOR_ANNOTATION}"
+                )
 
-            _ocp.exec_oc_cmd(command=label_cmd)
+            for cmd in label_cmds:
+                _ocp.exec_oc_cmd(command=cmd)
 
         workers_to_taint = " ".join(distributed_worker_nodes[:to_taint])
         if workers_to_taint:
