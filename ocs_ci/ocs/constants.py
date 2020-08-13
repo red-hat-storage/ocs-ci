@@ -626,6 +626,7 @@ ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
+INFRA_NODE_LABEL = "node-role.kubernetes.io/infra=''"
 TOPOLOGY_ROOK_LABEL = "topology.rook.io/rack"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
 OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
