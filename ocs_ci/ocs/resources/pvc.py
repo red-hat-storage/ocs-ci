@@ -37,7 +37,7 @@ class PVC(OCS):
         Returns:
             int: PVC size
         """
-        unformatted_size = self.data.get('status').get('capacity').get('storage')
+        unformatted_size = self.data.get('spec').get('resources').get('requests').get('storage')
         return convert_device_size(unformatted_size, 'GB')
 
     @property
