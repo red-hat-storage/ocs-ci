@@ -991,28 +991,34 @@ def validate_pg_balancer():
     Validate either data is equally distributed to OSDs
 
     Returns:
-        bool: True if osd data consumption difference is <= 2% else False
+        bool: True if avg PG's per osd difference is <=10 else False
 
     """
     # Check OSD utilization either pg balancer is active
+    # TODO: Revisit this if pg difference value needs change
+    # TODO: Revisit eval value if pg balancer mode changes from 'upmap'
     if get_pg_balancer_status():
         eval = get_balancer_eval()
         osd_dict = get_pgs_per_osd()
-        osd_min_pg_value = min(osd_dict.values())
-        osd_max_pg_value = max(osd_dict.values())
-        diff = osd_max_pg_value - osd_min_pg_value
-        # TODO: Revisit this if pg difference value needs change
-        # TODO: Revisit eval value if pg balancer mode changes from 'upmap'
-        if diff <= 5 and eval <= 0.02:
+        osd_avg_pg_value = round(sum(osd_dict.values()) / len(osd_dict))
+        osd_pg_value_flag = True
+        for key, value in osd_dict.items():
+            diff = abs(value - osd_avg_pg_value)
+            if diff <= 10:
+                logging.info(f"{key} PG difference {diff} is acceptable")
+            else:
+                logging.error(f"{key} PG difference {diff} is not acceptable")
+                osd_pg_value_flag = False
+        if osd_pg_value_flag and eval <= 0.025:
             logging.info(
                 f"Eval value is {eval} and pg distribution "
-                f"difference is {diff} between high and low pgs per OSD"
+                f"average difference is <=10 which is acceptable"
             )
             return True
         else:
             logging.error(
                 f"Eval value is {eval} and pg distribution "
-                f"difference is {diff} between high and low pgs per OSD"
+                f"average difference is >=10 which is high and not acceptable"
             )
             return False
     else:
