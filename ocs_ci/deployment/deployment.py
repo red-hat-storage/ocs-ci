@@ -420,6 +420,8 @@ class Deployment(object):
                 'storageClassName'
             ] = self.DEFAULT_STORAGECLASS
 
+        ocs_version = float(config.ENV_DATA['ocs_version'])
+
         # StorageCluster tweaks for LSO
         if config.DEPLOYMENT.get('local_storage'):
             cluster_data['spec']['manageNodes'] = False
@@ -429,8 +431,18 @@ class Deployment(object):
                 self.DEFAULT_STORAGECLASS_LSO
             if self.platform.lower() == constants.AWS_PLATFORM:
                 deviceset_data['count'] = 2
+            if ocs_version >= 4.5:
+                deviceset_data['resources'] = {
+                    'limits': {
+                        'cpu': 2,
+                        'memory': '5Gi'
+                    },
+                    'requests': {
+                        'cpu': 1,
+                        'memory': '5Gi'
+                    }
+                }
 
-        ocs_version = float(config.ENV_DATA['ocs_version'])
         # Allow lower instance requests and limits for OCS deployment
         # The resources we need to change can be found here:
         # https://github.com/openshift/ocs-operator/blob/release-4.5/pkg/deploy-manager/storagecluster.go#L88-L116
@@ -451,20 +463,16 @@ class Deployment(object):
             if local_storage and platform == 'aws':
                 resources = {
                     'mds': {
-                        'limits': {'cpu': 3},
-                        'requests': {'cpu': 1}
-                    },
-                    'noobaa-core': {
-                        'limits': {'cpu': 2, 'memory': '8Gi'},
-                        'requests': {'cpu': 1, 'memory': '8Gi'}
-                    },
-                    'noobaa-db': {
-                        'limits': {'cpu': 2, 'memory': '8Gi'},
+                        'limits': {'cpu': 3, 'memory': '8Gi'},
                         'requests': {'cpu': 1, 'memory': '8Gi'}
                     }
                 }
-                if ocs_version >= 4.5:
-                    resources['noobaa-endpoint'] = {
+                if ocs_version < 4.5:
+                    resources['noobaa-core'] = {
+                        'limits': {'cpu': 2, 'memory': '8Gi'},
+                        'requests': {'cpu': 1, 'memory': '8Gi'}
+                    }
+                    resources['noobaa-db'] = {
                         'limits': {'cpu': 2, 'memory': '8Gi'},
                         'requests': {'cpu': 1, 'memory': '8Gi'}
                     }
