@@ -91,7 +91,7 @@ class TestPVCDeletionPerformance(E2ETest):
         push_to_pvc_time_dashboard(self.interface, "deletion", delete_time)
 
     @pytest.mark.usefixtures(base_setup.__name__)
-    def test_multiple_pvc_deletion_measurement_performance(self, teardown_factory):
+    def test_multiple_pvc_deletion_measurement_performance(self, teardown_factory,pvc_size):
         """
         Measuring PVC deletion time of 120 PVCs in 180 seconds
 
@@ -108,7 +108,7 @@ class TestPVCDeletionPerformance(E2ETest):
             sc_name=self.sc_obj.name,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             number_of_pvc=number_of_pvcs,
-            size=self.pvc_size,
+            size=pvc_size,
         )
         for pvc_obj in pvc_objs:
             pvc_obj.reload()

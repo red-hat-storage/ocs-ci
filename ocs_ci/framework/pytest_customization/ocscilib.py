@@ -132,6 +132,15 @@ def pytest_addoption(parser):
         """
     )
     parser.addoption(
+        '--ocp-installer-version',
+        dest='ocp_installer_version',
+        help="""
+        Specific OCP installer version to be used for deployment. This option
+        will generally be used for non-GA or nightly builds. (e.g. 4.5.5).
+        This option will overwrite any values set via --ocp-version.
+        """
+    )
+    parser.addoption(
         '--ocs-registry-image',
         dest='ocs_registry_image',
         help=(
@@ -384,6 +393,10 @@ def process_cluster_cli_params(config):
             OCP_VERSION_CONF_DIR, version_config_file
         )
         load_config_file(version_config_file_path)
+    ocp_installer_version = get_cli_param(config, '--ocp-installer-version')
+    if ocp_installer_version:
+        ocsci_config.DEPLOYMENT['installer_version'] = ocp_installer_version
+        ocsci_config.RUN['client_verison'] = ocp_installer_version
     csv_change = get_cli_param(config, '--csv-change')
     if csv_change:
         csv_change = csv_change.split("::")
