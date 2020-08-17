@@ -5,7 +5,9 @@ from concurrent.futures import ThreadPoolExecutor
 from time import sleep
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3, skipif_lso
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_aws_i3, skipif_lso, skipif_bm
+)
 from ocs_ci.framework.testlib import (
     ignore_leftovers, ManageTest, tier4, tier4a, tier4b, tier4c
 )
@@ -534,6 +536,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
         return True
 
+    @skipif_bm
     @tier4a
     @pytest.mark.parametrize(
         argnames=[
