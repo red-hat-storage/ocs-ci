@@ -9,7 +9,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier1
+from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result
@@ -89,6 +89,7 @@ def test_ceph_mgr_dashboard_not_deployed():
         assert "ceph-mgr-dashboard" not in route_name, msg
 
 
+@skipif_ocs_version('<4.6')
 @tier1
 @pytest.mark.bugzilla("1779336")
 @pytest.mark.polarion_id("OCS-1267")
