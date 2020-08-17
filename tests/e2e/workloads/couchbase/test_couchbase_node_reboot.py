@@ -3,7 +3,6 @@ import random
 
 import pytest
 
-from ocs_ci.utility.utils import TimeoutSampler
 from tests.sanity_helpers import Sanity
 from ocs_ci.framework.testlib import (
     E2ETest, workloads, ignore_leftovers
@@ -13,6 +12,7 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     get_node_resource_utilization_from_adm_top)
 from tests.helpers import get_master_nodes
+from ocs_ci.ocs import flowtest
 
 log = logging.getLogger(__name__)
 
@@ -72,11 +72,8 @@ class TestCouchBaseNodeReboot(E2ETest):
         )
         # Restart relevant node
         nodes.restart_nodes(node_1)
-        for sample in TimeoutSampler(300, 5, self.cb.result.done):
-            if sample:
-                break
-            else:
-                logging.info(
-                    "#### ....Waiting for couchbase threads to complete..."
-                )
+
+        bg_handler = flowtest.BackgroundOps()
+        bg_ops = [self.cb.result]
+        bg_handler.wait_for_bg_operations(bg_ops, timeout=3600)
         self.sanity_helpers.health_check()
