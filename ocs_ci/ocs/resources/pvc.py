@@ -10,7 +10,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 
 log = logging.getLogger(__name__)
 
@@ -36,13 +36,8 @@ class PVC(OCS):
         Returns:
             int: PVC size
         """
-        #  [:-2] -> to remove the 'Gi' from the size (e.g. '5Gi --> '5')
         unformatted_size = self.data.get('status').get('capacity').get('storage')
-        units = unformatted_size[-2:]
-        if units == 'Ti':
-            return int(unformatted_size[:-2]) * 1024
-        elif units == 'Gi':
-            return int(unformatted_size[:-2])
+        return convert_device_size(unformatted_size, 'GB')
 
     @property
     def status(self):
