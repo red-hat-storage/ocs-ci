@@ -123,10 +123,9 @@ def ocs_install_verification(
         )
     rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
 
-    # check noobaa CR for min number of noobaa endpoint pods
-    nb_obj = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    min_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('minCount')
-    max_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('maxCount')
+    # Fetch the min and max Noobaa endpoints from the run config
+    min_eps = config.DEPLOYMENT.get('min_noobaa_endpoints')
+    max_eps = config.DEPLOYMENT.get('max_noobaa_endpoints')
 
     resources_dict = {
         constants.OCS_OPERATOR_LABEL: 1,
