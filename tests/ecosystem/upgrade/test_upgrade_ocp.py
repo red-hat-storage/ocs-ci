@@ -13,9 +13,6 @@ from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 logger = logging.getLogger(__name__)
 
 
-# TODO: add image type validation (ga to ga , nightly to nightly, newer than current etc.)
-
-
 @ignore_leftovers
 @ocp_upgrade
 class TestUpgradeOCP(ManageTest):
@@ -37,9 +34,11 @@ class TestUpgradeOCP(ManageTest):
         ceph_cluster = CephCluster()
         with CephHealthMonitor(ceph_cluster):
 
+            ocp_channel = config.UPGRADE.get(
+                'ocp_channel', ocp.get_ocp_upgrade_channel()
+            )
             ocp_upgrade_version = config.UPGRADE.get('ocp_upgrade_version')
             if not ocp_upgrade_version:
-                ocp_channel = config.UPGRADE['ocp_channel']
                 ocp_upgrade_version = get_latest_ocp_version(channel=ocp_channel)
                 ocp_arch = config.UPGRADE['ocp_arch']
                 target_image = f"{ocp_upgrade_version}-{ocp_arch}"
@@ -49,7 +48,7 @@ class TestUpgradeOCP(ManageTest):
             logger.info(f"Target image; {target_image}")
 
             image_path = config.UPGRADE['ocp_upgrade_path']
-            self.cluster_operators = ocp.get_all_cluster_operators()
+            cluster_operators = ocp.get_all_cluster_operators()
             logger.info(f" oc version: {ocp.get_current_oc_version()}")
             # Verify Upgrade subscription channel:
             ocp.patch_ocp_upgrade_channel(ocp_channel)
@@ -68,7 +67,16 @@ class TestUpgradeOCP(ManageTest):
             ocp.upgrade_ocp(image=target_image, image_path=image_path)
 
             # Wait for upgrade
-            for ocp_operator in self.cluster_operators:
+            for ocp_operator in cluster_operators:
+                logger.info(f"Checking upgrade status of {ocp_operator}:")
+                # ############ Workaround for issue 2624 #######
+                name_changed_between_versions = (
+                    'service-catalog-apiserver', 'service-catalog-controller-manager'
+                )
+                if ocp_operator in name_changed_between_versions:
+                    logger.info(f"{ocp_operator} upgrade will not be verified")
+                    continue
+                # ############ End of Workaround ###############
                 logger.info(f"Checking upgrade status of {ocp_operator}:")
                 ver = ocp.get_cluster_operator_version(ocp_operator)
                 logger.info(f"current {ocp_operator} version: {ver}")
@@ -80,14 +88,15 @@ class TestUpgradeOCP(ManageTest):
                     cluster_operator=ocp_operator
                 ):
                     logger.info(
-                        f"ClusterOperator upgrade "
+                        f"{ocp_operator} upgrade "
                         f"{'completed!' if sampler else 'did not completed yet!'}"
                     )
                     if sampler:
                         break
 
             # post upgrade validation: check cluster operator status
-            for ocp_operator in self.cluster_operators:
+            cluster_operators = ocp.get_all_cluster_operators()
+            for ocp_operator in cluster_operators:
                 logger.info(f"Checking cluster status of {ocp_operator}")
                 for sampler in TimeoutSampler(
                     timeout=2700,
@@ -96,7 +105,7 @@ class TestUpgradeOCP(ManageTest):
                     cluster_operator=ocp_operator
                 ):
                     logger.info(
-                        f"ClusterOperator status is  "
+                        f"{ocp_operator} status is  "
                         f"{'valid' if sampler else 'status is not valid'}"
                     )
                     if sampler:
