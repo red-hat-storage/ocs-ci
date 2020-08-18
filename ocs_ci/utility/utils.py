@@ -2423,7 +2423,7 @@ def wait_for_machineconfigpool_status(node_type, timeout=900):
 
 
 def configure_chrony_and_wait_for_machineconfig_status(
-    node_type=constants.WORKER_MACHINE
+    node_type=constants.WORKER_MACHINE, timeout=900
 ):
     """
     Configure chrony on the nodes
@@ -2453,7 +2453,7 @@ def configure_chrony_and_wait_for_machineconfig_status(
 
         # sleep here to start update machineconfigpool status
         time.sleep(60)
-        wait_for_machineconfigpool_status(role)
+        wait_for_machineconfigpool_status(role, timeout=timeout)
 
 
 def modify_csv(csv, replace_from, replace_to):

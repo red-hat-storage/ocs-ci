@@ -595,7 +595,9 @@ class VSPHEREUPI(VSPHEREBASE):
             remove_nodes(rhcos_nodes)
 
         # configure chrony for all nodes
-        configure_chrony_and_wait_for_machineconfig_status(node_type="all")
+        configure_chrony_and_wait_for_machineconfig_status(
+            node_type="all", timeout=1200
+        )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
