@@ -672,6 +672,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             pod_list=new_dc_pods, fio_filename='io_file2', return_md5sum=False
         )
 
+    @skipif_bm
     @tier4b
     @pytest.mark.parametrize(
         argnames=[
@@ -823,6 +824,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             pod_list=new_dc_pods, fio_filename='io_file2', return_md5sum=False
         )
 
+    @skipif_bm
     @tier4c
     @pytest.mark.parametrize(
         argnames=[
