@@ -1015,10 +1015,15 @@ class AWS(object):
         hosted_zones = self.route53_client.list_hosted_zones_by_name()[
             'HostedZones'
         ]
-        hosted_zone_id = [
+        hosted_zone_ids = [
             zone['Id'] for zone in hosted_zones
             if zone['Name'] == hosted_zone_name
-        ][0]
+        ]
+        if hosted_zone_ids:
+            hosted_zone_id = hosted_zone_ids[0]
+        else:
+            logger.info(f"hosted zone {hosted_zone_name} not found")
+            return
         record_sets = self.route53_client.list_resource_record_sets(
             HostedZoneId=hosted_zone_id
         )['ResourceRecordSets']
@@ -1029,7 +1034,9 @@ class AWS(object):
         if apps_record_sets:
             apps_record_set = apps_record_sets[0]
         else:
-            logger.info(f"app record set not found for record {record_set_name}")
+            logger.info(
+                f"app record set not found for record {record_set_name}"
+            )
             return
         self.route53_client.change_resource_record_sets(
             HostedZoneId=hosted_zone_id,
