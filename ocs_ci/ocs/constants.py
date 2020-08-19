@@ -755,6 +755,7 @@ RHEL_POD_PACKAGES = ["openssh-clients", "openshift-ansible", "openshift-clients"
 POD_UPLOADPATH = RHEL_TMP_PATH = "/tmp/"
 YUM_REPOS_PATH = "/etc/yum.repos.d/"
 PEM_PATH = "/etc/pki/ca-trust/source/anchors/"
+FIPS_LOCATION = "/proc/sys/crypto/fips_enabled"
 
 # Upgrade related constants, keeping some space between, so we can add
 # additional order.
