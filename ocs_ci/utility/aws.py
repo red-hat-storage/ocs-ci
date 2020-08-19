@@ -1012,9 +1012,10 @@ class AWS(object):
         hosted_zone_name = f"{cluster_name}.{base_domain}."
         record_set_name = f"\\052.apps.{cluster_name}.{base_domain}."
 
-        hosted_zones = self.route53_client.list_hosted_zones_by_name()[
-            'HostedZones'
-        ]
+        hosted_zones = self.route53_client.list_hosted_zones_by_name(
+            DNSName=hosted_zone_name,
+            MaxItems='1'
+        )['HostedZones']
         hosted_zone_ids = [
             zone['Id'] for zone in hosted_zones
             if zone['Name'] == hosted_zone_name
