@@ -5,6 +5,7 @@ import string
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import exec_cmd
 
+
 def add_htpasswd_user(username, password, htpasswd_path):
     """
     Create a new user credentials with provided username and password.
@@ -20,7 +21,7 @@ def add_htpasswd_user(username, password, htpasswd_path):
     if os.path.isfile(htpasswd_path):
         cmd = ['htpasswd', '-B', '-b', htpasswd_path, username, password]
     else:
-        cmd = ['htpasswd',  '-c', '-B', '-b', htpasswd_path, username, password]
+        cmd = ['htpasswd', '-c', '-B', '-b', htpasswd_path, username, password]
     exec_cmd(cmd)
 
 
@@ -54,7 +55,7 @@ def delete_htpasswd_secret():
     Delete HTPasswd secret.
 
     """
-    cmd = f"oc delete secret htpass-secret -n openshift-config"
+    cmd = "oc delete secret htpass-secret -n openshift-config"
     exec_cmd(cmd)
 
 
@@ -120,7 +121,7 @@ def user_factory(request, htpasswd_path):
         if not _users:
             create_htpasswd_secret(htpasswd_path)
         else:
-            users.create_htpasswd_secret(htpasswd_path, replace=True)
+            create_htpasswd_secret(htpasswd_path, replace=True)
 
         # : is a delimiter in htpasswd file and it will ensure that only full
         # usernames are deleted

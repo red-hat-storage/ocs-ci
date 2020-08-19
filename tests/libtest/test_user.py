@@ -1,5 +1,4 @@
 import logging
-import pytest
 
 from ocs_ci.utility.utils import exec_cmd
 
