@@ -1568,7 +1568,7 @@ def get_ocs_olm_operator_tags(limit=100):
     log.info(f"Retrieving OCS OLM Operator tags (limit {limit})")
     try:
         quay_access_token = load_auth_config()['quay']['access_token']
-    except KeyError:
+    except (KeyError, TypeError):
         log.error(
             'Unable to retrieve the access token for quay, please refer to '
             f'the getting started guide ({constants.AUTH_CONFIG_DOCS}) '
