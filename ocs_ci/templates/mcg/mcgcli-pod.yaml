@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mcgcli-pod
+  namespace: openshift-storage
+spec:
+  serviceAccountName: mcgcli
+  containers:
+    - name: mcgcli
+      image: alpine:3.12
+      command: ['/bin/sh']
+      stdin: true
+      tty: true
