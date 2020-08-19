@@ -1,0 +1,6 @@
+BUILD_NUMBER: {{ build_number | default('1275') }}
+RHEL_WORKER_COUNT: {{ nodes_scaleup_count | default('3') }}
+CLUSTER_INFO_PATH: {{ cluster_info_path }}
+CREDS_ROOT_PATH: {{ credentials_path }}
+EXTRA_VARS: {{ extra_vars | default("")}}
+PLATFORM: {{ platform | default('vsphere') }}
