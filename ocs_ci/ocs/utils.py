@@ -912,3 +912,4 @@ def oc_get_all_obc_names():
     return {
         obc.get('spec').get('bucketName') for obc in all_obcs_in_namespace
     }
+
