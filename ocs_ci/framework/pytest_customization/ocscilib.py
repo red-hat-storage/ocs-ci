@@ -231,7 +231,8 @@ def pytest_configure(config):
             )
         except ResourceNotFoundError:
             # might be using exisitng cluster path using GUI installation
-            log.info("Unable to get CSV version for Reporting")
+            log.warning("Unable to get CSV version for Reporting")
+
 
 def gather_version_info_for_report(config):
     """
