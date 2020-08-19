@@ -13,7 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope='class')
 def fioscale(request):
     """
     FIO Scale fixture to create expected number of POD+PVC
@@ -25,8 +25,18 @@ def fioscale(request):
         node_selector=constants.SCALE_NODE_SELECTOR
     )
     fioscale.create_scale_pods(
-        scale_count=1500, pods_per_iter=10, io_runtime=36000,
+        scale_count=350, pods_per_iter=10, io_runtime=36000,
         start_io=True
+    )
+    fioscale.create_scale_pods(
+        scale_count=350, pods_per_iter=10, start_io=False
+    )
+    fioscale.create_scale_pods(
+        scale_count=400, pods_per_iter=10, io_runtime=3000,
+        start_io=True
+    )
+    fioscale.create_scale_pods(
+        scale_count=400, pods_per_iter=10, start_io=False
     )
 
     def teardown():

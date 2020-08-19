@@ -11,8 +11,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs import constants, cluster, machine, node
 from ocs_ci.ocs.exceptions import (
-    UnavailableResourceException, UnexpectedBehaviour, CephHealthException,
-    UnsupportedPlatformError
+    UnavailableResourceException, UnexpectedBehaviour, UnsupportedPlatformError
 )
 
 logger = logging.getLogger(__name__)
@@ -106,6 +105,7 @@ class FioPodScale(object):
             sc_obj=cephfs_sc, namespace=self.namespace, number_of_pvc=pods_per_iter,
             size=pvc_size, access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
         )
+        time.sleep(5)
         rbd_pvcs = helpers.create_multiple_pvc_parallel(
             sc_obj=rbd_sc, namespace=self.namespace, number_of_pvc=pods_per_iter,
             size=pvc_size, access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
@@ -225,16 +225,18 @@ class FioPodScale(object):
                 )
                 all_pod_obj.extend(self.pod_obj)
                 try:
+                    # TODO: Commented all ceph related and resource related checks, this
+                    # TODO: increases the TC exeuction time, will revisit if required.
                     # Check enough resources available in the dedicated app workers
-                    check_enough_resource_available_in_workers(self.ms_name, self.pod_dict_path)
+                    # check_enough_resource_available_in_workers(self.ms_name, self.pod_dict_path)
 
                     # Check for ceph cluster OSD utilization
-                    if not cluster.validate_osd_utilization(osd_used=75):
-                        logging.info("Cluster OSD utilization is below 75%")
-                    elif not cluster.validate_osd_utilization(osd_used=83):
-                        logger.warning("Cluster OSD utilization is above 75%")
-                    else:
-                        raise CephHealthException("Cluster OSDs are near full")
+                    # if not cluster.validate_osd_utilization(osd_used=75):
+                    #     logging.info("Cluster OSD utilization is below 75%")
+                    # elif not cluster.validate_osd_utilization(osd_used=83):
+                    #     logger.warning("Cluster OSD utilization is above 75%")
+                    # else:
+                    #     raise CephHealthException("Cluster OSDs are near full")
 
                     # Check for 500 pods per namespace
                     pod_objs = pod.get_all_pods(namespace=self.namespace_list[-1].namespace)
