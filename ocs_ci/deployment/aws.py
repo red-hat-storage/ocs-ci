@@ -220,7 +220,7 @@ class AWSUPI(AWSBase):
             super(AWSUPI.OCPDeployment, self).__init__()
             upi_repo_name = f'openshift-misc-{config.RUN["run_id"]}'
 
-            self.upi_common_base = 'v3-launch-templates/functionality-testing'
+            self.upi_common_base = 'functionality-testing'
             self.upi_repo_path = os.path.join(
                 constants.EXTERNAL_DIR, upi_repo_name,
             )
@@ -252,7 +252,8 @@ class AWSUPI(AWSBase):
                     'availability_zone_count', ''
                 )),
                 'BASE_DOMAIN': config.ENV_DATA['base_domain'],
-                'remove_bootstrap': 'yes'
+                'remove_bootstrap': 'yes',
+                'IAAS_PLATFORM': 'aws'
             }
             if config.DEPLOYMENT['preserve_bootstrap_node']:
                 logger.info("Setting ENV VAR to preserve bootstrap node")
