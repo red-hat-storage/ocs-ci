@@ -1066,3 +1066,9 @@ PXE_FILE = os.path.join(
 )
 coreos_url_prefix = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos"
 BM_DEFAULT_CLUSTER_NAME = "ocp-baremetal-auto"
+
+# MCG namespace constants
+MCG_NS_AWS_ENDPOINT = 'https://s3.amazonaws.com'
+MCG_NS_RESOURCE = 'ns_resource'
+MCG_NS_BUCKET = 'ns-bucket'
+MCG_NS_AWS_CONNECTION = 'aws_connection'
