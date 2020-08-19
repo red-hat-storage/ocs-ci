@@ -1,0 +1,31 @@
+[OSEv3:children]
+masters
+workers
+lb
+bootstrap
+
+[OSEv3:vars]
+ansible_become=True
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o VerifyHostKeyDNS=yes'
+ansible_ssh_private_key_file={{ssh_key_private}}
+ocp_platform={{ platform }}
+
+
+[lb]
+{% for node in lb %}
+{{ node }} ansible_user=core
+{% endfor %}
+
+[masters]
+{% for node in masters %}
+{{ node }} ansible_user=core
+{% endfor %}
+
+[workers]
+{% for node in workers %}
+{{ node }} ansible_user=core
+{% endfor %}
+
+{% for node in rhel_worker_nodes %}
+{{ node }} ansible_user=test
+{% endfor %}
