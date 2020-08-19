@@ -223,12 +223,15 @@ def pytest_configure(config):
         config._metadata['Test Run Name'] = get_testrun_name()
         gather_version_info_for_report(config)
 
-        ocs_csv = get_ocs_csv()
-        ocs_csv_version = ocs_csv.data['spec']['version']
-        config.addinivalue_line(
-            "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
-        )
-
+        try:
+            ocs_csv = get_ocs_csv()
+            ocs_csv_version = ocs_csv.data['spec']['version']
+            config.addinivalue_line(
+                "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
+            )
+        except ResourceNotFoundError:
+            # might be using exisitng cluster path using GUI installation
+            log.info("Unable to get CSV version for Reporting")
 
 def gather_version_info_for_report(config):
     """
