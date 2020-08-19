@@ -57,7 +57,7 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
         )
 
     @pytest.fixture(autouse=True)
-    def teardown(self, request, nodes):
+    def teardown(self, request):
         """
         Make sure ceph health is ok
 
