@@ -1593,9 +1593,10 @@ def mcgcli_pod_session(request):
 
 def mcgcli_pod_fixture(request):
     """
-    Copy the NooBaa CLI binary from the operator pod
-    if it wasn't found locally, or if the hashes between
-    the two don't match.
+    Grab the MCG CLI tool from the NooBaa operator pod,
+    create a dedicated pod for it to allow it to run regardless of
+    the code runner's OS (since the binary does not support macOS),
+    and upload the binary to it.
 
     """
     nb_operator_pod = Pod(
