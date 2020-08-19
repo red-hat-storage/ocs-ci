@@ -60,6 +60,7 @@ def ocs_install_verification(
     from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_all_pods
     from ocs_ci.ocs.cluster import validate_cluster_on_pvc
+    from ocs_ci.ocs.resources.fips import check_fips_enabled
     number_of_worker_nodes = len(get_typed_nodes())
     namespace = config.ENV_DATA['cluster_namespace']
     log.info("Verifying OCS installation")
@@ -348,6 +349,11 @@ def ocs_install_verification(
     assert utils.ceph_health_check(
         namespace, health_check_tries, health_check_delay
     )
+    if config.ENV_DATA.get('fips'):
+        # In case that fips is enabled when deploying,
+        # a verification of the installation of it will run
+        # on all running state pods
+        check_fips_enabled()
 
 
 def add_capacity(osd_size_capacity_requested):
