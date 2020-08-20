@@ -33,8 +33,8 @@ from ocs_ci.utility.templating import (
 )
 from ocs_ci.utility.utils import (
     clone_repo, convert_yaml2tfvars, create_directory_path, read_file_as_str,
-    remove_keys_from_tf_variable_file, replace_content_in_file, run_cmd,
-    upload_file, wait_for_co, get_ocp_version, get_terraform, set_aws_region,
+    replace_content_in_file, run_cmd, upload_file, wait_for_co,
+    get_ocp_version, get_terraform, set_aws_region,
     configure_chrony_and_wait_for_machineconfig_status,
     get_terraform_ignition_provider,
 )
@@ -210,91 +210,6 @@ class VSPHEREBASE(Deployment):
 
         # wait for nodes to be in READY state
         wait_for_nodes_status(timeout=300)
-
-    def generate_terraform_vars_for_scaleup(self):
-        """
-        Generates the terraform variables file for scaling nodes
-        """
-        logger.info("Generating terraform variables for scaling nodes")
-        _templating = Templating()
-        scale_up_terraform_var_template = "scale_up_terraform.tfvars.j2"
-        scale_up_terraform_var_template_path = os.path.join(
-            "ocp-deployment", scale_up_terraform_var_template
-        )
-        scale_up_terraform_config_str = _templating.render_template(
-            scale_up_terraform_var_template_path, config.ENV_DATA
-        )
-        scale_up_terraform_var_yaml = os.path.join(
-            self.cluster_path,
-            constants.TERRAFORM_DATA_DIR,
-            constants.SCALEUP_TERRAFORM_DATA_DIR,
-            "scale_up_terraform.tfvars.yaml"
-        )
-        with open(scale_up_terraform_var_yaml, "w") as f:
-            f.write(scale_up_terraform_config_str)
-
-        self.scale_up_terraform_var = convert_yaml2tfvars(
-            scale_up_terraform_var_yaml
-        )
-        logger.info(
-            f"scale-up terraform variable file: {self.scale_up_terraform_var}"
-        )
-
-        # append RHCOS ip list to terraform variable file
-        with open(self.scale_up_terraform_var, "a+") as fd:
-            fd.write(f"rhcos_list = {json.dumps(self.rhcos_ips)}")
-
-    def modify_scaleup_repo(self):
-        """
-        Modify the scale-up repo. Considering the user experience, removing the
-        access and secret keys and variable from appropriate location in the
-        scale-up repo
-        """
-        # remove access and secret key from constants.SCALEUP_VSPHERE_MAIN
-        access_key = 'access_key       = "${var.aws_access_key}"'
-        secret_key = 'secret_key       = "${var.aws_secret_key}"'
-        replace_content_in_file(
-            constants.SCALEUP_VSPHERE_MAIN,
-            f"{access_key}",
-            " "
-        )
-        replace_content_in_file(
-            constants.SCALEUP_VSPHERE_MAIN,
-            f"{secret_key}",
-            " "
-        )
-
-        # remove access and secret key from constants.SCALEUP_VSPHERE_ROUTE53
-        route53_access_key = 'access_key = "${var.access_key}"'
-        route53_secret_key = 'secret_key = "${var.secret_key}"'
-        replace_content_in_file(
-            constants.SCALEUP_VSPHERE_ROUTE53,
-            f"{route53_access_key}",
-            " "
-        )
-        replace_content_in_file(
-            constants.SCALEUP_VSPHERE_ROUTE53,
-            f"{route53_secret_key}",
-            " "
-        )
-
-        replace_content_in_file(
-            constants.SCALEUP_VSPHERE_ROUTE53,
-            "us-east-1",
-            f"{config.ENV_DATA.get('region')}"
-        )
-
-        # remove access and secret variables from scale-up repo
-        remove_keys_from_tf_variable_file(
-            constants.SCALEUP_VSPHERE_VARIABLES,
-            ['aws_access_key', 'aws_secret_key'])
-        remove_keys_from_tf_variable_file(
-            constants.SCALEUP_VSPHERE_ROUTE53_VARIABLES,
-            ['access_key', 'secret_key']
-        )
-
-        # change root disk size
-        change_vm_root_disk_size(constants.SCALEUP_VSPHERE_MACHINE_CONF)
 
     def delete_disks(self):
         """
@@ -691,6 +606,15 @@ class VSPHEREUPI(VSPHEREBASE):
         terraform_installer = get_terraform(version=terraform_version)
         config.ENV_DATA['terraform_installer'] = terraform_installer
 
+        # getting OCP version here since we run destroy job as
+        # separate job in jenkins
+        ocp_version = get_ocp_version()
+        self.folder_structure = False
+        if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+            set_aws_region()
+            self.folder_structure = True
+            config.ENV_DATA['folder_structure'] = self.folder_structure
+
         # delete the extra disks
         self.delete_disks()
 
@@ -729,14 +653,6 @@ class VSPHEREUPI(VSPHEREBASE):
         ):
             os.rename(f"{constants.VSPHERE_MAIN}.json", f"{constants.VSPHERE_MAIN}.json.backup")
 
-        # getting OCP version here since we run destroy job as
-        # separate job in jenkins
-        ocp_version = get_ocp_version()
-        self.folder_structure = False
-        if Version.coerce(ocp_version) >= Version.coerce('4.5'):
-            set_aws_region()
-            self.folder_structure = True
-
         # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
@@ -764,15 +680,24 @@ class VSPHEREUPI(VSPHEREBASE):
         clone_repo(
             constants.VSPHERE_SCALEUP_REPO, self.upi_scale_up_repo_path
         )
-        # modify scale-up repo
-        self.modify_scaleup_repo()
-
-        terraform_scale_up = Terraform(
-            os.path.join(
-                self.upi_scale_up_repo_path,
-                "v4-testing-misc/v4-scaleup/vsphere/"
-            )
+        # git clone repo from cluster-launcher
+        clone_repo(
+            constants.VSPHERE_CLUSTER_LAUNCHER, self.cluster_launcer_repo_path
         )
+
+        # modify scale-up repo
+        helpers = VSPHEREHELPERS()
+        helpers.modify_scaleup_repo()
+
+        vsphere_dir = constants.SCALEUP_VSPHERE_DIR
+        if Version.coerce(self.ocp_version) >= Version.coerce('4.5'):
+            vsphere_dir = os.path.join(
+                constants.CLUSTER_LAUNCHER_VSPHERE_DIR,
+                f"aos-{get_ocp_version('_')}",
+                "vsphere"
+            )
+
+        terraform_scale_up = Terraform(vsphere_dir)
         os.chdir(scale_up_terraform_data_dir)
         terraform_scale_up.initialize(upgrade=True)
         terraform_scale_up.destroy(scale_up_terraform_var)

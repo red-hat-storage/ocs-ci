@@ -2642,4 +2642,3 @@ def get_cluster_id(cluster_path):
     with open(metadata_file) as f:
         metadata = json.load(f)
     return metadata["clusterID"]
-
