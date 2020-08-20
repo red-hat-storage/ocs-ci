@@ -265,7 +265,6 @@ class VSPHEREHELPERS(object):
         terraform_config_str = self._templating.render_template(
             terraform_var_template_path, config.ENV_DATA
         )
-        logger.info(f"terraform_config_str: {terraform_config_str}")
         terraform_var_yaml = os.path.join(
             self.cluster_path,
             constants.TERRAFORM_DATA_DIR,
@@ -281,7 +280,6 @@ class VSPHEREHELPERS(object):
             f"\"dns_server: {config.ENV_DATA['dns']}"
             f"\\nremove_rhcos_worker: 'yes'\\n\""
         )
-        logger.info(f"template_vars : {template_vars}")
 
         replace_content_in_file(
             terraform_var_yaml,
@@ -296,14 +294,14 @@ class VSPHEREHELPERS(object):
         """
         # create config directory in scale_up_terraform_data directory
         sclaeup_data_config_dir = os.path.join(
-                self.cluster_path,
-                constants.TERRAFORM_DATA_DIR,
-                constants.SCALEUP_TERRAFORM_DATA_DIR,
-                "config"
-            )
+            self.cluster_path,
+            constants.TERRAFORM_DATA_DIR,
+            constants.SCALEUP_TERRAFORM_DATA_DIR,
+            "config"
+        )
         create_directory_path(sclaeup_data_config_dir)
 
-        #generate config yaml file
+        # generate config yaml file
         scale_up_config_var_template = "scale_up_config.yaml.j2"
         scale_up_config_var_template_path = os.path.join(
             "ocp-deployment", scale_up_config_var_template
@@ -314,8 +312,6 @@ class VSPHEREHELPERS(object):
         scale_up_config_str = self._templating.render_template(
             scale_up_config_var_template_path, config.ENV_DATA
         )
-        logger.info(f"scale_up_config_str: {scale_up_config_str}")
-
         scale_config_var_yaml = os.path.join(
             sclaeup_data_config_dir,
             "config.yaml"
@@ -324,4 +320,4 @@ class VSPHEREHELPERS(object):
         with open(scale_config_var_yaml, "w") as f:
             f.write(scale_up_config_str)
 
-        logger.info(f"scale_config_var_yaml : {scale_config_var_yaml}")
+        logger.debug(f"scaleup config yaml file : {scale_config_var_yaml}")

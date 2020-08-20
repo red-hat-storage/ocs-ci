@@ -153,8 +153,8 @@ class OCPINSTALLRHEL(object):
             constants.TERRAFORM_DATA_DIR,
             constants.INVENTORY_FILE
         )
-        logger.info(f"inventory_config_str: {inventory_config_str}")
-        logger.info(f"inventory_yaml: {inventory_yaml}")
+        logger.debug(f"inventory_config_str: {inventory_config_str}")
+        logger.debug(f"inventory_yaml: {inventory_yaml}")
         with open(inventory_yaml, "w") as f:
             f.write(inventory_config_str)
 
@@ -189,7 +189,6 @@ class OCPINSTALLRHEL(object):
         inventory_data_haproxy['workers'] = compute_address
 
         logger.info("Generating inventory file for haproxy")
-        logger.info(f"inventory_data_haproxy: {inventory_data_haproxy}")
         _templating = Templating()
         inventory_template_path_haproxy = os.path.join(
             "ocp-deployment", constants.INVENTORY_TEMPLATE_HAPROXY
@@ -202,8 +201,8 @@ class OCPINSTALLRHEL(object):
             constants.TERRAFORM_DATA_DIR,
             constants.INVENTORY_FILE_HAPROXY
         )
-        logger.info(f"inventory_config_haproxy_str: {inventory_config_haproxy_str}")
-        logger.info(f"inventory_yaml: {inventory_yaml_haproxy}")
+        logger.debug(f"inventory contents for haproxy: {inventory_config_haproxy_str}")
+        logger.debug(f"inventory yaml: {inventory_yaml_haproxy}")
         with open(inventory_yaml_haproxy, "w") as f:
             f.write(inventory_config_haproxy_str)
 
