@@ -707,6 +707,9 @@ CSR_BOOTSTRAPPER_NODE = "node-bootstrapper"
 VMFS = "VMFS"
 VSAN = "vsan"
 
+# terraform haproxy service
+TERRAFORM_HAPROXY_SERVICE = os.path.join(VSPHERE_DIR, "lb/haproxy.service")
+
 # Config related constants
 config_keys_patterns_to_censor = ['passw', 'token', 'secret']
 

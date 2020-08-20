@@ -964,6 +964,9 @@ def generate_terraform_vars_and_update_machine_conf():
 
         # update the machine configurations
         update_machine_conf(folder_structure)
+
+        if Version.coerce(ocp_version) >= Version.coerce('4.6'):
+            modify_haproxyservice()
     else:
         # generate terraform variable file
         generate_terraform_vars_with_out_folder()
@@ -1119,4 +1122,18 @@ def comment_bootstrap_in_lb_module():
         constants.VSPHERE_MAIN,
         replace_str,
         f"//{replace_str}"
+    )
+
+
+def modify_haproxyservice():
+    """
+    Add ExecStop in haproxy service
+    """
+    to_change = 'TimeoutStartSec=0'
+    execstop = f"{to_change}\nExecStop=/bin/podman rm -f haproxy"
+
+    replace_content_in_file(
+        constants.TERRAFORM_HAPROXY_SERVICE,
+        to_change,
+        execstop
     )
