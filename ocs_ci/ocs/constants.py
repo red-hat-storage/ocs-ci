@@ -668,6 +668,9 @@ BOOTSTRAP_IGN = "bootstrap.ign"
 MASTER_IGN = "master.ign"
 WORKER_IGN = "worker.ign"
 
+# terraform provider constants
+TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
+
 # vSphere related constants
 VSPHERE_NODE_USER = "core"
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
@@ -704,6 +707,9 @@ CSR_BOOTSTRAPPER_NODE = "node-bootstrapper"
 # VMware Datastore types
 VMFS = "VMFS"
 VSAN = "vsan"
+
+# terraform haproxy service
+TERRAFORM_HAPROXY_SERVICE = os.path.join(VSPHERE_DIR, "lb/haproxy.service")
 
 # Config related constants
 config_keys_patterns_to_censor = ['passw', 'token', 'secret']
