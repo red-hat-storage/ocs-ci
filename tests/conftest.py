@@ -1637,6 +1637,8 @@ def mcgcli_pod_fixture(request):
         pod_name=constants.MCGCLI_POD_NAME
     )
 
+    helpers.wait_for_resource_state(mcgcli_pod, constants.STATUS_RUNNING)
+
     if (
         not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
         or not _compare_cli_hashes()
