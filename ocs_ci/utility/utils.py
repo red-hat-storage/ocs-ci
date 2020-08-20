@@ -15,7 +15,7 @@ from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from scipy.stats import tmean, scoreatpercentile
-from shutil import which
+from shutil import which, move, rmtree
 
 import hcl
 import requests
@@ -721,6 +721,22 @@ def delete_file(file_name):
         file_name (str): Path to the file you want to delete
     """
     os.remove(file_name)
+
+
+def delete_dir(dir_name):
+    """
+    Deletes the directory
+
+    Args:
+        dir_name (str): Directory path to delete
+
+    """
+    try:
+        rmtree(dir_name)
+    except OSError as e:
+        log.error(
+            f"Failed to delete the directory {dir_name}. Error: {e.strerror}"
+        )
 
 
 class TimeoutSampler(object):
@@ -2332,6 +2348,51 @@ def get_terraform(version=None, bin_dir=None):
     os.chdir(previous_dir)
 
     return terraform_binary_path
+
+
+def get_terraform_ignition_provider(terraform_dir, version=None):
+    """
+    Downloads the terraform ignition provider
+
+    Args:
+        terraform_dir (str): Path to terraform working directory
+        version (str): Version of the terraform ignition provider to download
+
+    """
+    version = version or constants.TERRAFORM_IGNITION_PROVIDER_VERSION
+    terraform_ignition_provider_zip_file = (
+        f"terraform-provider-ignition-{version}-linux-amd64.tar.gz"
+    )
+    terraform_ignition_provider_dir = (
+        f"terraform-provider-ignition-{version}-linux-amd64"
+    )
+    terraform_plugins_path = ".terraform/plugins/linux_amd64/"
+    log.info(f"Downloading terraform ignition proivider version {version}")
+    previous_dir = os.getcwd()
+    os.chdir(terraform_dir)
+    url = (
+        "https://github.com/community-terraform-providers/"
+        f"terraform-provider-ignition/releases/download/{version}/"
+        f"{terraform_ignition_provider_zip_file}"
+    )
+
+    # Download and untar
+    download_file(url, terraform_ignition_provider_zip_file)
+    run_cmd(f"tar xzf {terraform_ignition_provider_zip_file}")
+
+    # move the ignition provider binary to plugins path
+    create_directory_path(terraform_plugins_path)
+    move(
+        f"{terraform_ignition_provider_dir}/terraform-provider-ignition",
+        terraform_plugins_path
+    )
+
+    # delete the downloaded files
+    delete_file(terraform_ignition_provider_zip_file)
+    delete_dir(terraform_ignition_provider_dir)
+
+    # return to the previous working directory
+    os.chdir(previous_dir)
 
 
 def get_module_ip(terraform_state_file, module):
