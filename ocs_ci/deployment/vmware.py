@@ -10,6 +10,7 @@ import time
 import hcl
 import yaml
 
+from ocs_ci.deployment.helpers.vsphere_helpers import VSPHEREHELPERS
 from ocs_ci.deployment.install_ocp_on_rhel import OCPINSTALLRHEL
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
@@ -74,11 +75,16 @@ class VSPHEREBASE(Deployment):
             constants.EXTERNAL_DIR,
             'openshift-misc'
         )
+        self.cluster_launcer_repo_path = os.path.join(
+            constants.EXTERNAL_DIR,
+            'cluster-launcher'
+        )
         os.environ['TF_LOG'] = config.ENV_DATA.get('TF_LOG_LEVEL', "TRACE")
         os.environ['TF_LOG_PATH'] = os.path.join(
             config.ENV_DATA.get('cluster_path'),
             config.ENV_DATA.get('TF_LOG_FILE')
         )
+        self.ocp_version = get_ocp_version()
 
         self.wait_time = 90
 
@@ -125,26 +131,55 @@ class VSPHEREBASE(Deployment):
             constants.VSPHERE_SCALEUP_REPO, self.upi_scale_up_repo_path
         )
 
-        # modify scale-up repo
-        self.modify_scaleup_repo()
+        # git clone repo from cluster-launcher
+        clone_repo(
+            constants.VSPHERE_CLUSTER_LAUNCHER, self.cluster_launcer_repo_path
+        )
+
+        helpers = VSPHEREHELPERS()
+        helpers.modify_scaleup_repo()
 
         config.ENV_DATA['vsphere_resource_pool'] = config.ENV_DATA.get(
             "cluster_name"
         )
 
         # sync guest time with host
+        sync_time_with_host_file = constants.SCALEUP_VSPHERE_MACHINE_CONF
+        if config.ENV_DATA['folder_structure']:
+            sync_time_with_host_file = os.path.join(
+                constants.CLUSTER_LAUNCHER_VSPHERE_DIR,
+                f"aos-{get_ocp_version(seperator='_')}",
+                constants.CLUSTER_LAUNCHER_MACHINE_CONF
+            )
         if config.ENV_DATA.get('sync_time_with_host'):
-            sync_time_with_host(constants.SCALEUP_VSPHERE_MACHINE_CONF, True)
+            sync_time_with_host(sync_time_with_host_file, True)
 
         # get the RHCOS worker list
-        self.rhcos_ips = get_node_ips()
-        logger.info(f"RHCOS IP's: {json.dumps(self.rhcos_ips)}")
+        rhcos_ips = get_node_ips()
+        logger.info(f"RHCOS IP's: {json.dumps(rhcos_ips)}")
 
         # generate terraform variable for scaling nodes
-        self.generate_terraform_vars_for_scaleup()
+        self.scale_up_terraform_var = (
+            helpers.generate_terraform_vars_for_scaleup(rhcos_ips)
+        )
+
+        # choose the vsphere_dir based on OCP version
+        # generate cluster_info and config yaml files
+        # for OCP version greater than 4.4
+        vsphere_dir = constants.SCALEUP_VSPHERE_DIR
+        rhel_module = "rhel-worker"
+        if Version.coerce(self.ocp_version) >= Version.coerce('4.5'):
+            vsphere_dir = os.path.join(
+                constants.CLUSTER_LAUNCHER_VSPHERE_DIR,
+                f"aos-{get_ocp_version('_')}",
+                "vsphere"
+            )
+            helpers.generate_cluster_info()
+            helpers.generate_config_yaml()
+            rhel_module = "RHEL_WORKER_LIST"
 
         # Add nodes using terraform
-        scaleup_terraform = Terraform(constants.SCALEUP_VSPHERE_DIR)
+        scaleup_terraform = Terraform(vsphere_dir)
         previous_dir = os.getcwd()
         os.chdir(scaleup_terraform_data_dir)
         scaleup_terraform.initialize()
@@ -155,9 +190,13 @@ class VSPHEREBASE(Deployment):
         )
         out = scaleup_terraform.output(
             scaleup_terraform_tfstate,
-            "rhel_worker"
+            rhel_module
         )
-        rhel_worker_nodes = json.loads(out)['value']
+        if config.ENV_DATA['folder_structure']:
+            rhel_worker_nodes = out.strip().replace("\"", '').split(",")
+        else:
+            rhel_worker_nodes = json.loads(out)['value']
+
         logger.info(f"RHEL worker nodes: {rhel_worker_nodes}")
         os.chdir(previous_dir)
 
