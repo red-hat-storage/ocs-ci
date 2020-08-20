@@ -11,6 +11,8 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
+from ocs_ci.utility import templating
+from tests import helpers
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +38,7 @@ class PVC(OCS):
         Returns:
             int: PVC size
         """
-        unformatted_size = self.data.get('status').get('capacity').get('storage')
+        unformatted_size = self.data.get('spec').get('resources').get('requests').get('storage')
         return convert_device_size(unformatted_size, 'GB')
 
     @property
@@ -301,3 +303,91 @@ def get_deviceset_pvs():
     """
     deviceset_pvcs = get_deviceset_pvcs()
     return [pvc.backed_pv_obj for pvc in deviceset_pvcs]
+
+
+def create_pvc_snapshot(pvc_name, snap_yaml, snap_name, sc_name):
+    """
+    Create snapshot of a PVC
+
+    Args:
+        pvc_name (str): Name of the PVC
+        snap_yaml (str): The path of snapshot yaml
+        snap_name (str): The name of the snapshot to be created
+        sc_name (str): The name of the snapshot class
+
+    Returns:
+        OCS object
+    """
+    snapshot_data = templating.load_yaml(snap_yaml)
+    snapshot_data['metadata']['name'] = snap_name
+    snapshot_data['spec']['volumeSnapshotClassName'] = sc_name
+    snapshot_data['spec']['source']['persistentVolumeClaimName'] = pvc_name
+    ocs_obj = OCS(**snapshot_data)
+    created_snap = ocs_obj.create(do_reload=True)
+    assert created_snap, f"Failed to create snapshot {snap_name}"
+    return ocs_obj
+
+
+def create_restore_pvc(
+    sc_name, snap_name, namespace, size,
+    pvc_name, volume_mode=None,
+    restore_pvc_yaml=constants.CSI_RBD_PVC_RESTORE_YAML
+):
+    """
+    Create PVC from snapshot
+
+    Args:
+        sc_name (str): The name of the storageclass
+        snap_name (str): The name of the snapshot from which pvc would
+        be created
+        namespace (str): The namespace for the PVC creation
+        size (str): Size of pvc being created
+        pvc_name (str): The name of the PVC being created
+        volume_mode (str): Volume mode for rbd RWX pvc i.e. 'Block'
+        restore_pvc_yaml (str): The location of pvc-restore.yaml
+
+    Returns:
+        PVC: PVC instance
+    """
+    pvc_data = templating.load_yaml(restore_pvc_yaml)
+    pvc_data['metadata']['name'] = pvc_name
+    pvc_data['metadata']['namespace'] = namespace
+    pvc_data['spec']['storageClassName'] = sc_name
+    pvc_data['spec']['resources']['requests']['storage'] = size
+    if volume_mode:
+        pvc_data['spec']['volumeMode'] = volume_mode
+    pvc_data['spec']['dataSource']['name'] = snap_name
+    pvc_obj = PVC(**pvc_data)
+    created_pvc = pvc_obj.create(do_reload=True)
+    assert created_pvc, f"Failed to create resource {pvc_name}"
+    return pvc_obj
+
+
+def create_pvc_clone(
+    sc_name, parent_pvc, clone_yaml, pvc_name=None, do_reload=True
+):
+    """
+    Create a cloned pvc from existing pvc
+
+    Args:
+        sc_name (str): The name of storage class (same for both parent and cloned pvc).
+        parent_pvc (str): Name of the parent pvc, whose clone is to be created.
+        pvc_name (str): The name of the PVC being created
+        do_reload (bool): True for wait for reloading PVC after its creation, False otherwise
+
+    Returns:
+        PVC: PVC instance
+
+    """
+    pvc_data = templating.load_yaml(clone_yaml)
+    pvc_data['metadata']['name'] = (
+        pvc_name if pvc_name else helpers.create_unique_resource_name(
+            'cloned', 'pvc'
+        )
+    )
+    pvc_data['spec']['storageClassName'] = sc_name
+    pvc_data['spec']['dataSource']['name'] = parent_pvc
+    ocs_obj = PVC(**pvc_data)
+    created_pvc = ocs_obj.create(do_reload=do_reload)
+    assert created_pvc, f"Failed to create resource {pvc_name}"
+    return ocs_obj

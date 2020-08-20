@@ -15,7 +15,7 @@ import shutil
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
-    get_ocp_version, clone_repo, run_cmd
+    get_ocp_version, clone_repo, run_cmd, expose_ocp_version
 )
 from ocs_ci.ocs import exceptions
 
@@ -87,8 +87,28 @@ class FlexyBase(object):
         if not config.ENV_DATA.get('flexy_env_file'):
             self.clone_and_unlock_ocs_private_conf()
             config.FLEXY['VARIABLES_LOCATION'] = self.template_file
-            config.FLEXY['INSTANCE_NAME_PREFIX'] = self.cluster_name
-            self.merge_flexy_env()
+        config.FLEXY['INSTANCE_NAME_PREFIX'] = self.cluster_name
+        config.FLEXY['LAUNCHER_VARS'].update(
+            self.get_installer_payload()
+        )
+        self.merge_flexy_env()
+
+    def get_installer_payload(self, version=None):
+        """
+        A proper installer payload url required for flexy
+        based on DEPLOYMENT['installer_version'].
+        If 'nigtly' is present then we will use registry.svc to get latest
+        nightly else if '-ga' is present then we will look for
+        ENV_DATA['installer_payload_image']
+
+        """
+        payload_img = {"installer_payload_image": None}
+        vers = version or config.DEPLOYMENT['installer_version']
+        installer_version = expose_ocp_version(vers)
+        payload_img['installer_payload_image'] = (
+            ":".join([constants.REGISTRY_SVC, installer_version])
+        )
+        return payload_img
 
     def run_container(self, cmd_string):
         """
@@ -149,18 +169,7 @@ class FlexyBase(object):
 
         """
         args = list()
-        if self.is_jenkins_mount() and purpose == 'destroy':
-            flexy_private = os.path.join(
-                constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
-                constants.FLEXY_HOST_DIR,
-                "flexy-ocs-private"
-            )
-            flexy_env = os.path.join(
-                flexy_private, constants.FLEXY_DEFAULT_ENV_FILE
-            )
-            args.append(f"--env-file={flexy_env}")
-        else:
-            args.append(f"--env-file={self.flexy_env_file}")
+        args.append(f"--env-file={constants.FLEXY_ENV_FILE_UPDATED}")
         args.append(f"-w={self.flexy_mnt_container_dir}")
         # For destroy on NFS mount, relabel=shared will not work
         # with podman hence we will keep 'relabel=shared' only for
@@ -213,9 +222,9 @@ class FlexyBase(object):
 
     def merge_flexy_env(self):
         """
-        Update the ocs-osp.env file with the user supplied values.
-        This function assumes that flexy-ocs-private repo has been
-        already cloned
+        Update the Flexy env file with the user supplied values.
+        This function assumes that the flexy_env_file is available
+        (e.g. flexy-ocs-private repo has been already cloned).
 
         """
         config_parser = configparser.ConfigParser()
@@ -230,33 +239,29 @@ class FlexyBase(object):
             file_content = "[root]\n" + fp.read()
 
         config_parser.read_string(file_content)
-        # Iterate over config_parser keys, if same key is present
-        # in user supplied dict update config_parser
-        for ele in config_parser.items('root'):
-            if ele[0] in config.FLEXY:
-                # For LAUNCHER_VARS we need to merge the
-                # user provided dict with default obtained
-                # from env file
-                if ele[0] == 'LAUNCHER_VARS':
-                    config_parser.set(
-                        'root',
-                        ele[0],
-                        str(
-                            merge_dict(
-                                yaml.safe_load(config_parser['root'][ele[0]]),
-                                config.FLEXY[ele[0]]
-                            )
+        # add or update all values from config.FLEXY section into Flexy env
+        # configuration file
+        for key in config.FLEXY:
+            logger.info(f"Flexy env file - updating: {key}={config.FLEXY[key]}")
+            # For LAUNCHER_VARS we need to merge the
+            # user provided dict with default obtained
+            # from env file
+            if key == 'LAUNCHER_VARS':
+                config_parser.set(
+                    'root',
+                    key,
+                    str(
+                        merge_dict(
+                            yaml.safe_load(config_parser['root'][key]),
+                            config.FLEXY[key]
                         )
                     )
-                else:
-                    config_parser.set('root', ele[0], config.FLEXY[ele[0]])
-                logger.info(f"env updated {ele[0]}:{config.FLEXY[ele[0]]}")
+                )
+            else:
+                config_parser.set('root', key, f"{config.FLEXY[key]}")
 
-        # write the updated config_parser content back to the env file
-        tmp_file = os.path.join(
-            self.flexy_host_private_conf_dir_path, f"{constants.FLEXY_DEFAULT_ENV_FILE}.tmp"
-        )
-        with open(tmp_file, "w") as fp:
+        # write the updated config_parser content to updated env file
+        with open(constants.FLEXY_ENV_FILE_UPDATED, "w") as fp:
             src = io.StringIO()
             dst = io.StringIO()
             config_parser.write(src)
@@ -271,11 +276,6 @@ class FlexyBase(object):
             # removed
             fp.write("".join(dst.readlines()[1:-1]))
 
-        # Move this tempfile to original file
-        os.rename(
-            tmp_file, self.flexy_env_file
-        )
-
     def flexy_post_processing(self):
         """
         Perform copying of flexy-dir to nfs mount
@@ -288,10 +288,6 @@ class FlexyBase(object):
             f"--kubeconfig {self.flexy_host_dir}/{auth_file} "
             f"-n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
             f"--from-file=.dockerconfigjson={constants.DATA_DIR}/pull-secret"
-        )
-        ntp_cmd = (
-            f"oc --kubeconfig {self.flexy_host_dir}/{auth_file} "
-            f"create -f {constants.NTP_CHRONY_CONF}"
         )
         abs_cluster_path = os.path.abspath(self.cluster_path)
         flexy_cluster_path = os.path.join(
@@ -338,8 +334,13 @@ class FlexyBase(object):
             )
             os.symlink(flexy_cluster_path, abs_cluster_path)
             run_cmd(secret_cmd)
-        logger.info("Creating NTP chrony")
-        run_cmd(ntp_cmd)
+        if not config.ENV_DATA.get('skip_ntp_configuration', False):
+            ntp_cmd = (
+                f"oc --kubeconfig {self.flexy_host_dir}/{auth_file} "
+                f"create -f {constants.NTP_CHRONY_CONF}"
+            )
+            logger.info("Creating NTP chrony")
+            run_cmd(ntp_cmd)
 
     def is_jenkins_mount(self):
         """

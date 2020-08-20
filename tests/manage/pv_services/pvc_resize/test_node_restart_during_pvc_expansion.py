@@ -7,7 +7,7 @@ from ocs_ci.utility.utils import ceph_health_check
 from tests.helpers import wait_for_resource_state
 from ocs_ci.framework.testlib import (
     skipif_ocs_version, ManageTest, tier4, tier4b, ignore_leftovers,
-    polarion_id
+    polarion_id, skipif_bm
 )
 
 log = logging.getLogger(__name__)
@@ -16,6 +16,7 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4b
 @ignore_leftovers
+@skipif_bm
 @skipif_ocs_version('<4.5')
 @polarion_id('OCS-2235')
 class TestNodeRestartDuringPvcExpansion(ManageTest):

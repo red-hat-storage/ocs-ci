@@ -70,8 +70,6 @@ DEPLOYMENT:
   # Following options are defaults for deployment from live content
   live_deployment: False
   preserve_bootstrap_node: False
-  # Following options are defaults for the max Noobaa endpoints
-  noobaa_endpoints: 2
   # Terraform version
   terraform_version: "0.12.26"
   # Following options are defaults for the min and max Noobaa endpoints
@@ -91,6 +89,7 @@ REPORTING:
   ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
   default_ocs_must_gather_latest_tag: 'latest-4.5'
   gather_on_deploy_failure: true
+  gather_on_deploy_success: true
 
 # This is the default information about environment.
 ENV_DATA:

@@ -172,6 +172,12 @@ skipif_lso = pytest.mark.skipif(
     reason="Test will not run on LSO deployed cluster"
 )
 
+metrics_for_external_mode_required = pytest.mark.skipif(
+    float(config.ENV_DATA['ocs_version']) < 4.6
+    and config.DEPLOYMENT.get('external_mode') is True,
+    reason="Metrics is not enabled for external mode OCS <4.6"
+)
+
 # Filter warnings
 filter_insecure_request_warning = pytest.mark.filterwarnings(
     'ignore::urllib3.exceptions.InsecureRequestWarning'
