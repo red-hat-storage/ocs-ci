@@ -1586,7 +1586,7 @@ def mcgcli_pod(request):
     return mcgcli_pod_fixture(request)
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope='session', autouse=True)
 def mcgcli_pod_session(request):
     return mcgcli_pod_fixture(request)
 
@@ -1678,16 +1678,16 @@ def mcgcli_pod_fixture(request):
 
 
 @pytest.fixture()
-def mcg_obj(request, mcgcli_pod):
-    return mcg_obj_fixture(request, mcgcli_pod)
+def mcg_obj(request):
+    return mcg_obj_fixture(request)
 
 
 @pytest.fixture(scope='session')
-def mcg_obj_session(request, mcgcli_pod_session):
-    return mcg_obj_fixture(request, mcgcli_pod_session)
+def mcg_obj_session(request):
+    return mcg_obj_fixture(request)
 
 
-def mcg_obj_fixture(request, mcgcli_pod_fixture, *args, **kwargs):
+def mcg_obj_fixture(request, *args, **kwargs):
     """
     Returns an MCG resource that's connected to the S3 endpoint
 
