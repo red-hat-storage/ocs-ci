@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4a
 @ignore_leftovers
+@bugzilla('1862981')
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement - AWS-IPI-Proactive
