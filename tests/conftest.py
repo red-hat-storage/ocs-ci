@@ -1623,14 +1623,15 @@ def mcgcli_pod_fixture(request):
         )
         return remote_cli_bin_md5 == local_cli_bin_md5
 
+    # Create a new serviceaccount
     mcgcli_sa = helpers.create_resource(
         **templating.load_yaml(constants.MCGCLI_SERVICEACCOUNT_YAML)
     )
-
+    # Bind the serviceaccount to a cluster-admin role to allow the CLI to run properly
     mcg_sa_crb = helpers.create_resource(
         **templating.load_yaml(constants.MCGCLI_SERVICEACCOUNT_CLUSTERROLEBINDING)
     )
-
+    # Create a pod that uses the serviceaccount
     mcgcli_pod = helpers.create_pod(
         namespace=config.ENV_DATA['cluster_namespace'],
         pod_dict_path=constants.MCGCLI_POD,
