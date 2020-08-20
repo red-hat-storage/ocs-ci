@@ -281,29 +281,31 @@ def ocs_install_verification(
     # TODO: Verify ceph osd tree output have zone or rack based on AZ
 
     # Verify CSI snapshotter sidecar container is not present
-    log.info("Verifying CSI snapshotter is not present.")
-    provisioner_pods = get_all_pods(
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-        selector=[
-            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+    # if the OCS version is < 4.6
+    if float(config.ENV_DATA['ocs_version']) < 4.6:
+        log.info("Verifying CSI snapshotter is not present.")
+        provisioner_pods = get_all_pods(
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            selector=[
+                constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+                constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+            ]
+        )
+        for pod_obj in provisioner_pods:
+            pod_info = pod_obj.get()
+            for container, image in get_images(data=pod_info).items():
+                assert ('snapshot' not in container) and ('snapshot' not in image), (
+                    f"Snapshot container is present in {pod_obj.name} pod. "
+                    f"Container {container}. Image {image}"
+                )
+        deployments = ocs_csv.get()['spec']['install']['spec']['deployments']
+        rook_ceph_operator_deployment = [
+            deployment_val for deployment_val in deployments if deployment_val['name'] == 'rook-ceph-operator'
         ]
-    )
-    for pod_obj in provisioner_pods:
-        pod_info = pod_obj.get()
-        for container, image in get_images(data=pod_info).items():
-            assert ('snapshot' not in container) and ('snapshot' not in image), (
-                f"Snapshot container is present in {pod_obj.name} pod. "
-                f"Container {container}. Image {image}"
-            )
-    deployments = ocs_csv.get()['spec']['install']['spec']['deployments']
-    rook_ceph_operator_deployment = [
-        deployment_val for deployment_val in deployments if deployment_val['name'] == 'rook-ceph-operator'
-    ]
-    assert {'name': 'CSI_ENABLE_SNAPSHOTTER', 'value': 'false'} in (
-        rook_ceph_operator_deployment[0]['spec']['template']['spec']['containers'][0]['env']
-    ), "CSI_ENABLE_SNAPSHOTTER value is not set to 'false'."
-    log.info("Verified: CSI snapshotter is not present.")
+        assert {'name': 'CSI_ENABLE_SNAPSHOTTER', 'value': 'false'} in (
+            rook_ceph_operator_deployment[0]['spec']['template']['spec']['containers'][0]['env']
+        ), "CSI_ENABLE_SNAPSHOTTER value is not set to 'false'."
+        log.info("Verified: CSI snapshotter is not present.")
 
     # Verify pool crush rule is with "type": "zone"
     if utils.get_az_count() == 3:
