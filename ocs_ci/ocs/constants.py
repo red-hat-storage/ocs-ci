@@ -974,6 +974,9 @@ FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
 FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
 FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/aosqe/flexy:poc"
+FLEXY_ENV_FILE_UPDATED = os.path.join(
+    FLEXY_HOST_DIR_PATH, 'ocs-flexy-env-file-updated.env'
+)
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
