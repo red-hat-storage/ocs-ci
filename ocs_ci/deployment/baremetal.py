@@ -496,6 +496,7 @@ class BaremetalPSIUPI(Deployment):
 
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
+            self.flexy_deployment = True
             super().__init__()
             self.flexy_instance = FlexyBaremetalPSI()
             self.psi_conf = load_auth_config()['psi']
