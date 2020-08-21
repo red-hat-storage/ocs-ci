@@ -71,17 +71,20 @@ class BasePvcPodCreateDelete(E2ETest):
 
         # IO will start based on TC requirement
         if start_io:
-            threads = list()
             for pod_obj in temp_pod_objs:
-                process = threading.Thread(target=pod_obj.run_io, args=('fs', '512M',))
-                process.start()
-                threads.append(process)
+                pod_obj.run_io('fs', '512M')
             for pod_obj in rbd_rwx_pods:
-                process = threading.Thread(target=pod_obj.run_io, args=('block', '512M',))
-                process.start()
-                threads.append(process)
-            for process in threads:
-                process.join()
+                pod_obj.run_io('block', '512M')
+
+        log.info("Fetching FIO results.")
+        for pod_obj in temp_pod_objs, rbd_rwx_pods:
+            fio_result = pod_obj.get_fio_results()
+            err_count = fio_result.get('jobs')[0].get('error')
+            assert err_count == 0, (
+                f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
+            )
+            log.info(f"FIO is success on pod {pod_obj.name}")
+        log.info("Verified FIO result on pods.")
 
     def delete_pvc_pod(self):
         """
