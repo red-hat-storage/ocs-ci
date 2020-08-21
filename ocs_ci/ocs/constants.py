@@ -273,8 +273,16 @@ ROOK_CSI_RBD_STORAGECLASS_YAML = os.path.join(
     ROOK_CSI_RBD_DIR, "storageclass.yaml"
 )
 
+CSI_RBD_PVC_CLONE_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "pvc-clone.yaml"
+)
+
 CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(
     TEMPLATE_CSI_FS_DIR, "storageclass.yaml"
+)
+
+CSI_CEPHFS_PVC_CLONE_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "pvc-clone.yaml"
 )
 
 ROOK_CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(
@@ -334,6 +342,18 @@ CSI_CEPHFS_SECRET_YAML = os.path.join(
 
 CSI_CEPHFS_PVC_YAML = os.path.join(
     TEMPLATE_CSI_FS_DIR, "pvc.yaml"
+)
+
+CSI_CEPHFS_PVC_RESTORE_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "pvc-restore.yaml"
+)
+
+CSI_CEPHFS_SNAPSHOT_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "snapshot.yaml"
+)
+
+CSI_CEPHFS_SNAPSHOTCLASS_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "snapshotclass.yaml"
 )
 
 CSI_RBD_PVC_YAML = os.path.join(
@@ -484,6 +504,10 @@ AWSCLI_SERVICE_CA_YAML = os.path.join(
 
 AWSCLI_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "awscli.yaml"
+)
+
+AWSCLI_MULTIARCH_POD_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "awscli_multiarch.yaml"
 )
 
 SERVICE_ACCOUNT_YAML = os.path.join(
@@ -735,6 +759,7 @@ RHEL_POD_PACKAGES = ["openssh-clients", "openshift-ansible", "openshift-clients"
 POD_UPLOADPATH = RHEL_TMP_PATH = "/tmp/"
 YUM_REPOS_PATH = "/etc/yum.repos.d/"
 PEM_PATH = "/etc/pki/ca-trust/source/anchors/"
+FIPS_LOCATION = "/proc/sys/crypto/fips_enabled"
 
 # Upgrade related constants, keeping some space between, so we can add
 # additional order.
@@ -898,7 +923,6 @@ MUST_GATHER_COMMANDS = [
     'ceph_osd_crush_show-tunables', 'ceph_osd_crush_dump', 'ceph_mon_stat',
     'ceph_mon_dump', 'ceph_mgr_dump', 'ceph_mds_stat', 'ceph_health_detail',
     'ceph_fs_ls', 'ceph_fs_dump', 'ceph_df', 'ceph_auth_list',
-    'ceph-volume_lvm_list'
 ]
 
 MUST_GATHER_COMMANDS_JSON = [
@@ -961,7 +985,7 @@ FLEXY_MNT_CONTAINER_DIR = '/mnt'
 FLEXY_HOST_DIR = 'flexy-dir'
 FLEXY_HOST_DIR_PATH = os.path.join(DATA_DIR, FLEXY_HOST_DIR)
 FLEXY_DEFAULT_ENV_FILE = "ocs-osp.env"
-OPENSHIFT_MISC_BASE = "private-openshift-misc/v3-launch-templates/functionality-testing"
+OPENSHIFT_MISC_BASE = "private-openshift-misc/functionality-testing"
 FLEXY_BAREMETAL_UPI_TEMPLATE = "upi-on-baremetal/versioned-installer-openstack"
 FLEXY_GIT_CRYPT_KEYFILE = os.path.join(DATA_DIR, "git-crypt-keyfile")
 NTP_CHRONY_CONF = os.path.join(
@@ -977,6 +1001,7 @@ FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/aosqe/flexy:poc"
 FLEXY_ENV_FILE_UPDATED = os.path.join(
     FLEXY_HOST_DIR_PATH, 'ocs-flexy-env-file-updated.env'
 )
+REGISTRY_SVC = "registry.svc.ci.openshift.org/ocp/release"
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"

@@ -1,0 +1,5 @@
+---
+# Use this config for upgrading of OCP 4.4 to 4.5 cluster
+UPGRADE:
+  ocp_upgrade_version: "4.5.0-0.nightly"
+  ocp_upgrade_path: "registry.svc.ci.openshift.org/ocp/release"
