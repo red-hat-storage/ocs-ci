@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
         )
     ]
 )
-class TestVerifyRwoUsingReplica2DcPod(ManageTest):
+class TestVerifyRwoUsingReplicatedPod(ManageTest):
     """
     This test class consists of tests to verify RWO volume is exclusively
     mounted.
@@ -45,12 +45,13 @@ class TestVerifyRwoUsingReplica2DcPod(ManageTest):
         """
         Create dc pod with replica 5
         """
+        self.replica_count = 5
         pvc_obj = pvc_factory(interface=interface, size=3)
         sa_obj = service_account_factory(project=pvc_obj.project)
         pod1 = create_pod(
             interface_type=interface, pvc_name=pvc_obj.name,
             namespace=pvc_obj.namespace, sa_name=sa_obj.name,
-            dc_deployment=True, replica_count=5,
+            dc_deployment=True, replica_count=self.replica_count,
             deploy_pod_status=constants.STATUS_RUNNING
         )
         self.name = pod1.labels['name']
@@ -69,14 +70,14 @@ class TestVerifyRwoUsingReplica2DcPod(ManageTest):
 
     def wait_for_pods_and_verify(self):
         """
-        Wait for both the pods to be created and verify only one pod is running
+        Wait for the pods to be created and verify only one pod is running
         """
         # Wait for pods
         for pods in TimeoutSampler(
             360, 2, func=pod.get_all_pods, namespace=self.namespace,
             selector=[self.name], selector_label='name'
         ):
-            if len(pods) == 5:
+            if len(pods) == self.replica_count:
                 break
 
         pods_iter = cycle(pods)
@@ -118,10 +119,10 @@ class TestVerifyRwoUsingReplica2DcPod(ManageTest):
                     f"running state."
                 )
 
-    def test_verify_rwo_using_replica_2_dc_pod(self):
+    def test_verify_rwo_using_replicated_pod(self):
         """
         This test case verifies that RWO volume is exclusively mounted by using
-        replica 2 dc
+        replica 5 dc
         """
         self.wait_for_pods_and_verify()
 
