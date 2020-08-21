@@ -395,6 +395,8 @@ class BAREMETALUPI(Deployment):
             """
             Check if BM Cluster already exist
 
+            Returns:
+                str: response status
             """
             headers = {'content-type': "application/json"}
             response = requests.get(
@@ -406,6 +408,12 @@ class BAREMETALUPI(Deployment):
         def update_bm_status(self, bm_status):
             """
             Update BM status when cluster is deployed/teardown
+
+            Args:
+                bm_status (str): Status to be updated
+
+            Returns:
+                str: response message
             """
             payload = {'status': bm_status}
             headers = {'content-type': "application/json"}
