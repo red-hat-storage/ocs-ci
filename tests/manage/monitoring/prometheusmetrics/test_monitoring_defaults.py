@@ -9,10 +9,12 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import metrics_for_external_mode_required
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result
+from tests.helpers import storagecluster_independent_check
 
 
 logger = logging.getLogger(__name__)
@@ -30,21 +32,31 @@ def test_monitoring_enabled():
     """
     prometheus = PrometheusAPI()
 
-    # ask for values of ceph_pool_stored metric
-    logger.info("Checking that ceph data are provided in OCS monitoring")
-    result = prometheus.query('ceph_pool_stored')
-    msg = "check that we actually received some values for a ceph query"
-    assert len(result) > 0, msg
-    for metric in result:
-        _, value = metric['value']
-        assert_msg = "number of bytes in a pool isn't a positive integer or zero"
-        assert int(value) >= 0, assert_msg
-    # additional check that values makes at least some sense
-    logger.info(
-        "Checking that size of ceph_pool_stored result matches number of pools")
-    ct_pod = pod.get_ceph_tools_pod()
-    ceph_pools = ct_pod.exec_ceph_cmd("ceph osd pool ls")
-    assert len(result) == len(ceph_pools)
+    if (
+        storagecluster_independent_check()
+        and float(config.ENV_DATA['ocs_version']) < 4.6
+    ):
+        logger.info(
+            f"Skipping ceph metrics because it is not enabled for external "
+            f"mode for OCS {float(config.ENV_DATA['ocs_version'])}"
+        )
+
+    else:
+        # ask for values of ceph_pool_stored metric
+        logger.info("Checking that ceph data are provided in OCS monitoring")
+        result = prometheus.query('ceph_pool_stored')
+        msg = "check that we actually received some values for a ceph query"
+        assert len(result) > 0, msg
+        for metric in result:
+            _, value = metric['value']
+            assert_msg = "number of bytes in a pool isn't a positive integer or zero"
+            assert int(value) >= 0, assert_msg
+        # additional check that values makes at least some sense
+        logger.info(
+            "Checking that size of ceph_pool_stored result matches number of pools")
+        ct_pod = pod.get_ceph_tools_pod()
+        ceph_pools = ct_pod.exec_ceph_cmd("ceph osd pool ls")
+        assert len(result) == len(ceph_pools)
 
     # again for a noobaa metric
     logger.info("Checking that MCG/NooBaa data are provided in OCS monitoring")
@@ -90,6 +102,7 @@ def test_ceph_mgr_dashboard_not_deployed():
 
 
 @skipif_ocs_version('<4.6')
+@metrics_for_external_mode_required
 @tier1
 @pytest.mark.bugzilla("1779336")
 @pytest.mark.polarion_id("OCS-1267")
@@ -124,6 +137,7 @@ def test_ceph_rbd_metrics_available():
 
 
 @tier1
+@metrics_for_external_mode_required
 @pytest.mark.polarion_id("OCS-1268")
 def test_ceph_metrics_available():
     """
@@ -410,6 +424,7 @@ def test_ceph_metrics_available():
 
 
 @tier1
+@metrics_for_external_mode_required
 @pytest.mark.post_ocp_upgrade
 @pytest.mark.polarion_id("OCS-1302")
 def test_monitoring_reporting_ok_when_idle(workload_idle):
