@@ -20,10 +20,10 @@ log = logging.getLogger(__name__)
     argnames=["interface"],
     argvalues=[
         pytest.param(
-            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("")
+            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id('OCS-251')
         ),
         pytest.param(
-            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("")
+            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id('OCS-251')
         )
     ]
 )
