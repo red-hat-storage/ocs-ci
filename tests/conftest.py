@@ -1581,16 +1581,7 @@ def rgw_obj_fixture(request):
     return RGW()
 
 
-@pytest.fixture()
-def mcgcli_pod(request):
-    return mcgcli_pod_fixture(request)
-
-
 @pytest.fixture(scope='session', autouse=True)
-def mcgcli_pod_session(request):
-    return mcgcli_pod_fixture(request)
-
-
 def mcgcli_pod_fixture(request):
     """
     Grab the MCG CLI tool from the NooBaa operator pod,
