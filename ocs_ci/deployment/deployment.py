@@ -734,7 +734,12 @@ class Deployment(object):
                 "The cluster specs do not meet the minimum requirements"
                 " and therefore, NooBaa auto scale will remain disabled"
             )
-            change_noobaa_endpoints_count(min_nb_eps=1, max_nb_eps=1)
+            config.DEPLOYMENT['min_noobaa_endpoints'] = 1
+            config.DEPLOYMENT['max_noobaa_endpoints'] = 1
+            change_noobaa_endpoints_count(
+                min_nb_eps=config.DEPLOYMENT['min_noobaa_endpoints'],
+                max_nb_eps=config.DEPLOYMENT['max_noobaa_endpoints']
+            )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
