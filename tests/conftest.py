@@ -2692,9 +2692,9 @@ def collect_logs_fixture(request):
     to see the cluster's status after the execution on all execution status options.
     """
     def finalizer():
-        '''
+        """
         Tracking both logs separately reduce changes of collision
-        '''
+        """
         if not config.RUN['cli_params'].get('deploy'):
             collect_ocs_logs('testcases', ocs=False, status_failure=False)
             collect_ocs_logs('testcases', ocp=False, status_failure=False)
