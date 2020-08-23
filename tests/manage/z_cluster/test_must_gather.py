@@ -135,8 +135,9 @@ class TestMustGather(ManageTest):
             f"Actual: {files}\nExpected: {constants.MUST_GATHER_COMMANDS}"
         )
         if sorted(constants.MUST_GATHER_COMMANDS_JSON) != sorted(files):
-            logger.warning("There are more actual must gather"
-                           " commands than expected")
+            logger.warning(
+                "There are more actual must gather commands than expected"
+            )
 
         # Verify that files for command output in json are present as expected
         commands_json = os.listdir(json_output_dir)
@@ -146,8 +147,9 @@ class TestMustGather(ManageTest):
             f"Expected: {constants.MUST_GATHER_COMMANDS_JSON}"
         )
         if sorted(constants.MUST_GATHER_COMMANDS_JSON) != sorted(commands_json):
-            logger.warning("There are more actual must gather"
-                           " commands than expected")
+            logger.warning(
+                "There are more actual must gather commands than expected"
+            )
 
         # Verify that command output files are not empty
         empty_files = []
