@@ -111,12 +111,9 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     )
     verify_pods_upgraded(old_images, selector=constants.MON_APP_LABEL, count=3)
     verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
-    # OSD upgrade have timeout 10mins for new attempt if cluster is not health.
-    # https://bugzilla.redhat.com/show_bug.cgi?id=1840729 setting timeout for
-    # 12.5 minutes per OSD
     verify_pods_upgraded(
         old_images, selector=constants.OSD_APP_LABEL, count=osd_count,
-        timeout=750 * osd_count,
+        timeout=600 * osd_count,
     )
     verify_pods_upgraded(old_images, selector=constants.MDS_APP_LABEL, count=2)
     if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
