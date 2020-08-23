@@ -123,10 +123,9 @@ def ocs_install_verification(
         )
     rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
 
-    # check noobaa CR for min number of noobaa endpoint pods
-    nb_obj = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    min_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('minCount')
-    max_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('maxCount')
+    # Fetch the min and max Noobaa endpoints from the run config
+    min_eps = config.DEPLOYMENT.get('min_noobaa_endpoints')
+    max_eps = config.DEPLOYMENT.get('max_noobaa_endpoints')
 
     resources_dict = {
         constants.OCS_OPERATOR_LABEL: 1,
@@ -499,12 +498,31 @@ def change_noobaa_endpoints_count(min_nb_eps=None, max_nb_eps=None):
         max_nb_eps (int): The number of required maximum Noobaa endpoints
 
     """
-    noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    if min_nb_eps:
-        log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
-        params = f'{{"spec":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}'
-        noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
-    if max_nb_eps:
-        log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
-        params = f'{{"spec":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}'
-        noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+    if float(config.ENV_DATA['ocs_version']) < 4.6:
+        noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        if min_nb_eps:
+            log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
+            params = f'{{"spec":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}'
+            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+        if max_nb_eps:
+            log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
+            params = f'{{"spec":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}'
+            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+    else:
+        sc = get_storage_cluster()
+        if min_nb_eps:
+            log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
+            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}}}'
+            sc.patch(
+                resource_name=sc.get()['items'][0]['metadata']['name'],
+                params=params,
+                format_type='merge'
+            )
+        if max_nb_eps:
+            log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
+            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}}}'
+            sc.patch(
+                resource_name=sc.get()['items'][0]['metadata']['name'],
+                params=params,
+                format_type='merge'
+            )
