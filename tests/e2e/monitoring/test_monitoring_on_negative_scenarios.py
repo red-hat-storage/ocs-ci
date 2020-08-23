@@ -150,6 +150,37 @@ class TestMonitoringBackedByOCS(E2ETest):
             )
         return pod_objs
 
+    @pytest.fixture()
+    def delete_configmap(self):
+        """
+        Delete config map and monitoring pvc
+
+        """
+        # Get 'cluster-monitoring-config' configmap
+        ocp_configmap = ocp.OCP(namespace=constants.MONITORING_NAMESPACE, kind='configmap')
+        configmap_dict = ocp_configmap.get(resource_name='cluster-monitoring-config')
+        dir_configmap = tempfile.mkdtemp(prefix='configmap_')
+        yaml_file = f'{dir_configmap}/configmap.yaml'
+        templating.dump_data_to_temp_yaml(configmap_dict, yaml_file)
+
+        # Get all pvc on monitoring namespace
+        pvc_objs_list = pvc.get_all_pvc_objs(namespace=constants.MONITORING_NAMESPACE)
+
+        # Delete configmap
+        ocp_configmap.delete(resource_name='cluster-monitoring-config')
+
+        # Delete all pvcs on monitoring namespace
+        pvc.delete_pvcs(pvc_objs=pvc_objs_list)
+
+        # Create configmap
+        ocp_configmap.create(yaml_file=dir_configmap)
+
+        # Check all the PVCs are up
+        for pvc_obj in pvc_objs_list:
+            wait_for_resource_state(
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=180
+            )
+
     @pytest.mark.polarion_id("OCS-576")
     def test_monitoring_after_restarting_prometheus_pod(self, pods):
         """
@@ -552,3 +583,33 @@ class TestMonitoringBackedByOCS(E2ETest):
         assert prometheus_health_check(), (
             "Prometheus cluster health is not OK"
         )
+
+    @pytest.mark.polarion_id("OCS-636")
+    def test_monitoring_shut_prometheus_node(self, delete_configmap, pods, nodes):
+        """
+        Test case to validate whether shutdown and recovery of a
+        node where monitoring pods running has no functional impact
+
+        """
+        # Get all prometheus pods
+        prometheus_pod_obj_list = pod.get_all_pods(
+            namespace=defaults.OCS_MONITORING_NAMESPACE, selector=['prometheus']
+        )
+
+        # Get the node where the prometheus pod is hosted
+        prometheus_node_obj = pod.get_pod_node(prometheus_pod_obj_list[0])
+
+        # Shutdown node where the prometheus pod is hosted
+        nodes.stop_nodes(nodes=[prometheus_node_obj])
+
+        log.info('Waiting for 20 seconds')
+        time.sleep(20)
+
+        # Powering on node
+        nodes.start_nodes(nodes=[prometheus_node_obj])
+
+        # check pvcdata collected on prometheus
+        for pod_obj in pods:
+            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
+                f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
+            )
