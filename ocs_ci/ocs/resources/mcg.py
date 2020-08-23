@@ -67,7 +67,7 @@ class MCG:
         ) + '/rpc'
         self.region = config.ENV_DATA['region']
 
-        self.mcgcli_pod = pod.get_pod_obj('mcgcli-pod')
+        self.mcgcli_pod = pod.get_pod_obj(name='mcgcli-pod', namespace=self.namespace)
 
         creds_secret_name = (
             get_noobaa.get('items')[0].get('status').get('accounts')
