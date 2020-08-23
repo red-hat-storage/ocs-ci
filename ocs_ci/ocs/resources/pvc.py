@@ -9,9 +9,10 @@ from ocs_ci.ocs.exceptions import UnavailableResourceException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.framework import config
-from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
+from ocs_ci.utility import templating
+from tests import helpers
 
 log = logging.getLogger(__name__)
 
@@ -360,3 +361,33 @@ def create_restore_pvc(
     created_pvc = pvc_obj.create(do_reload=True)
     assert created_pvc, f"Failed to create resource {pvc_name}"
     return pvc_obj
+
+
+def create_pvc_clone(
+    sc_name, parent_pvc, pvc_name=None, do_reload=True
+):
+    """
+    Create a cloned pvc from existing pvc
+
+    Args:
+        sc_name (str): The name of storage class (same for both parent and cloned pvc).
+        parent_pvc (str): Name of the parent pvc, whose clone is to be created.
+        pvc_name (str): The name of the PVC being created
+        do_reload (bool): True for wait for reloading PVC after its creation, False otherwise
+
+    Returns:
+        PVC: PVC instance
+
+    """
+    pvc_data = templating.load_yaml(constants.CSI_RBD_PVC_CLONE_YAML)
+    pvc_data['metadata']['name'] = (
+        pvc_name if pvc_name else helpers.create_unique_resource_name(
+            'cloned', 'pvc'
+        )
+    )
+    pvc_data['spec']['storageClassName'] = sc_name
+    pvc_data['spec']['dataSource']['name'] = parent_pvc
+    ocs_obj = PVC(**pvc_data)
+    created_pvc = ocs_obj.create(do_reload=do_reload)
+    assert created_pvc, f"Failed to create resource {pvc_name}"
+    return ocs_obj
