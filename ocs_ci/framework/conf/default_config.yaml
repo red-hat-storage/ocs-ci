@@ -70,8 +70,6 @@ DEPLOYMENT:
   # Following options are defaults for deployment from live content
   live_deployment: False
   preserve_bootstrap_node: False
-  # Following options are defaults for the max Noobaa endpoints
-  noobaa_endpoints: 2
   # Terraform version
   terraform_version: "0.12.26"
   # Following options are defaults for the min and max Noobaa endpoints

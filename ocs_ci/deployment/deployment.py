@@ -735,10 +735,13 @@ class Deployment(object):
                 " and therefore, NooBaa auto scale will remain disabled"
             )
             config.DEPLOYMENT['min_noobaa_endpoints'] = 1
-            config.DEPLOYMENT['max_noobaa_endpoints'] = 1
-            change_noobaa_endpoints_count(
-                min_nb_eps=config.DEPLOYMENT['min_noobaa_endpoints'],
-                max_nb_eps=config.DEPLOYMENT['max_noobaa_endpoints']
+            config.DEPLOYMENT['max_noobaa_endpoints'] = (
+                1 if float(config.ENV_DATA['ocs_version']) < 4.6 else 2
+            )
+            logger.info(
+                "The Noobaa endpoints auto scale values: min: "
+                f"{config.DEPLOYMENT['min_noobaa_endpoints']}, max: "
+                f"{config.DEPLOYMENT['max_noobaa_endpoints']}"
             )
 
     def destroy_cluster(self, log_level="DEBUG"):
