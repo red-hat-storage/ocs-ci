@@ -721,6 +721,8 @@ class Deployment(object):
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
+
+        # Modify Noobaa endpoint auto scale values according to the cluster specs
         if check_nodes_specs(min_cpu=constants.MIN_NODE_CPU, min_memory=constants.MIN_NODE_MEMORY):
             logger.info(
                 "The cluster specs meet the minimum requirements and "
@@ -731,10 +733,14 @@ class Deployment(object):
             change_noobaa_endpoints_count(min_nb_eps=min_nb_eps, max_nb_eps=max_nb_eps)
         else:
             logger.warning(
-                "The cluster specs do not meet the minimum requirements"
-                " and therefore, NooBaa auto scale will remain disabled"
+                "The cluster specs do not meet the minimum requirements and "
+                "therefore, NooBaa auto scale will remain with its default values"
             )
-            change_noobaa_endpoints_count(min_nb_eps=1, max_nb_eps=1)
+            min_eps = 1
+            max_eps = 1 if float(config.ENV_DATA['ocs_version']) < 4.6 else 2
+            logger.info(
+                f"The Noobaa endpoint auto scale values: min: {min_eps}, max: {max_eps}"
+            )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
