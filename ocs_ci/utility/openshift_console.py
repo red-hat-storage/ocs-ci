@@ -37,10 +37,19 @@ class OpenshiftConsole:
                 f"Support for {self.browser} hasn't been implemented yet!"
             )
         if self.browser == constants.CHROME_BROWSER:
+            # Those values are deprected in latest version of openshift-console
+            # but keeping them here for backward compatibility
             chrome_branch_base = config.RUN.get("force_chrome_branch_base")
             chrome_branch_sha = config.RUN.get("force_chrome_branch_sha256sum")
             self.env_vars["FORCE_CHROME_BRANCH_BASE"] = chrome_branch_base
             self.env_vars["FORCE_CHROME_BRANCH_SHA256SUM"] = chrome_branch_sha
+            # End of the deprecated section
+
+            chrome_path = config.RUN["chrome_binary_path"]
+            self.env_vars["CHROME_BINARY_PATH"] = chrome_path
+            chrome_version = run_cmd(f"{chrome_path} --version")
+            logger.info(f"Chrome version is: {chrome_version}")
+            self.env_vars["CHROME_VERSION"] = chrome_version
 
         htpasswd_secret = OCP(
             kind="Secret", resource_name=constants.HTPASSWD_SECRET_NAME
@@ -73,6 +82,12 @@ class OpenshiftConsole:
         logger.info(f"Bridge base address: {self.bridge_base_address}")
         self.env_vars["BRIDGE_KUBEADMIN_PASSWORD"] = get_kubeadmin_password()
         self.env_vars["BRIDGE_BASE_ADDRESS"] = self.bridge_base_address
+        no_failfast = config.RUN.get("openshift_console_no_failfast", False)
+        if no_failfast:
+            self.env_vars["NO_FAILFAST"] = "true"
+        extra_env_vars = config.RUN.get("extra_openshift_console_env_vars", {})
+        for key, value in extra_env_vars.items():
+            self.env_vars[key] = value
         self.env_vars.update(os.environ)
 
     def run_openshift_console(

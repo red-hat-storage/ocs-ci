@@ -19,7 +19,7 @@ from tests.helpers import create_resource
 logger = logging.getLogger(__name__)
 
 
-def craft_s3_command(cmd, mcg_obj=None, api=False):
+def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
     """
     Crafts the AWS CLI S3 command including the
     login credentials and command to be ran
@@ -28,6 +28,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
         mcg_obj: An MCG object containing the MCG S3 connection credentials
         cmd: The AWSCLI command to run
         api: True if the call is for s3api, false if s3
+        signed_request_creds: a dictionary containing AWS S3 creds for a signed request
 
     Returns:
         str: The crafted command, ready to be executed on the pod
@@ -42,6 +43,15 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
             f'AWS_DEFAULT_REGION={mcg_obj.region} '
             f'aws s3{api} '
             f'--endpoint={mcg_obj.s3_internal_endpoint} '
+        )
+        string_wrapper = '"'
+    elif signed_request_creds:
+        base_command = (
+            f'sh -c "AWS_ACCESS_KEY_ID={signed_request_creds.get("access_key_id")} '
+            f'AWS_SECRET_ACCESS_KEY={signed_request_creds.get("access_key")} '
+            f'AWS_DEFAULT_REGION={signed_request_creds.get("region")} '
+            f'aws s3{api} '
+            f'--endpoint={signed_request_creds.get("endpoint")} '
         )
         string_wrapper = '"'
     else:
@@ -115,7 +125,7 @@ def retrieve_anon_s3_resource():
     return anon_s3_resource
 
 
-def sync_object_directory(podobj, src, target, s3_obj=None):
+def sync_object_directory(podobj, src, target, s3_obj=None, signed_request_creds=None):
     """
     Syncs objects between a target and source directories
 
@@ -125,17 +135,21 @@ def sync_object_directory(podobj, src, target, s3_obj=None):
         target (str): Fully qualified object target path
         s3_obj (MCG, optional): The MCG object to use in case the target or source
                                  are in an MCG
-
+        signed_request_creds (dictionary, optional): the access_key, secret_key,
+            endpoint and region to use when willing to send signed aws s3 requests
     """
     logger.info(f'Syncing all objects and directories from {src} to {target}')
     retrieve_cmd = f'sync {src} {target}'
     if s3_obj:
         secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+    elif signed_request_creds:
+        secrets = [signed_request_creds.get('access_key_id'), signed_request_creds.get(
+            'access_key'), signed_request_creds.get('endpoint')]
     else:
         secrets = None
     podobj.exec_cmd_on_pod(
-        command=craft_s3_command(retrieve_cmd, s3_obj), out_yaml_format=False,
-        secrets=secrets
+        command=craft_s3_command(retrieve_cmd, s3_obj, signed_request_creds=signed_request_creds),
+        out_yaml_format=False, secrets=secrets
     ), 'Failed to sync objects'
     # Todo: check that all objects were synced successfully
 
@@ -754,3 +768,11 @@ def obc_io_create_delete(mcg_obj, awscli_pod, bucket_factory):
     sync_object_directory(awscli_pod, dir, mcg_bucket_path, mcg_obj)
     del_objects(uploaded_objects_paths, awscli_pod, mcg_obj)
     awscli_pod.exec_cmd_on_pod(command=f'rm -rf {dir}')
+
+
+def retrieve_verification_mode():
+    if config.ENV_DATA['platform'].lower() == 'ibm_cloud':
+        verify = True
+    else:
+        verify = constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
+    return verify

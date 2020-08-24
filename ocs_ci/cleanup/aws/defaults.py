@@ -13,5 +13,4 @@ CLUSTER_PREFIXES_SPECIAL_RULES = {
     'lr5': 120
 }
 MINIMUM_CLUSTER_RUNNING_TIME = 10
-AWS_CLOUDFORMATION_TAG = 'aws:cloudformation:stack-name'
 CONFIRMATION_ANSWER = 'yes-i-am-sure-i-want-to-proceed'

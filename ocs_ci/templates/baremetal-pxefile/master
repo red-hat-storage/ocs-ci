@@ -1,0 +1,11 @@
+DEFAULT menu.c32
+TIMEOUT 20
+PROMPT 0
+LABEL pxeboot
+    MENU LABEL PXE Boot
+    MENU DEFAULT
+    KERNEL rhcos-installer-kernel-x86_64
+    APPEND ip=dhcp rd.neednet=1 initrd=rhcos-installer-initramfs.x86_64.img console=ttyS0 console=tty0 coreos.inst=yes coreos.inst.install_dev=sda coreos.inst.image_url=http://magna012.ceph.redhat.com/ocs4qe/rhcos-metal.x86_64.raw.gz coreos.inst.ignition_url=http://magna012.ceph.redhat.com/ocs4qe/master.ign
+LABEL disk0
+  MENU LABEL Boot disk (0x80)
+  LOCALBOOT 0

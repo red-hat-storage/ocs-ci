@@ -8,7 +8,9 @@ In the event values here have to be changed it should be under careful review
 and with consideration of the entire project.
 
 """
+
 import os
+
 
 # Directories
 TOP_DIR = os.path.dirname(
@@ -75,6 +77,7 @@ STATUS_RELEASED = 'Released'
 STATUS_COMPLETED = 'Completed'
 STATUS_ERROR = 'Error'
 STATUS_CLBO = 'CrashLoopBackOff'
+STATUS_READYTOUSE = 'READYTOUSE'
 
 # NooBaa statuses
 BS_AUTH_FAILED = 'AUTH_FAILED'
@@ -87,6 +90,8 @@ HEALTHY_OB_CLI_MODE = 'Mode:OPTIMAL'
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
+CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
+CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
 DEPLOYMENT = "Deployment"
 JOB = "Job"
 STORAGECLASS = "StorageClass"
@@ -139,8 +144,9 @@ OPENSHIFT_MONITORING_NAMESPACE = "openshift-monitoring"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 MOUNT_POINT = '/var/lib/www/html'
+
 OCP_QE_MISC_REPO = (
-    "http://git.host.prod.eng.bos.redhat.com/git/openshift-misc.git"
+    "https://gitlab.cee.redhat.com/aosqe/flexy-templates.git"
 )
 CRITICAL_ERRORS = [
     "core dumped", "oom_reaper"
@@ -157,6 +163,7 @@ CODESPEED_URL = 'http://10.0.78.167:8000/'
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
 DEFAULT_CLUSTERNAME = 'ocs-storagecluster'
+DEFAULT_CLUSTERNAME_EXTERNAL_MODE = 'ocs-external-storagecluster'
 DEFAULT_BLOCKPOOL = f'{DEFAULT_CLUSTERNAME}-cephblockpool'
 METADATA_POOL = f'{DEFAULT_CLUSTERNAME}-cephfilesystem-metadata'
 DATA_POOL = f'{DEFAULT_CLUSTERNAME}-cephfilesystem-data0'
@@ -178,12 +185,19 @@ LOCAL_STORAGE_NAMESPACE = 'local-storage'
 DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
 DEFAULT_STORAGECLASS_RBD = f'{DEFAULT_CLUSTERNAME}-ceph-rbd'
 DEFAULT_STORAGECLASS_RGW = f'{DEFAULT_CLUSTERNAME}-ceph-rgw'
-DEFAULT_STORAGECLASS_LSO = 'localblock'
 
 # Independent mode default StorageClasses
-INDEPENDENT_DEFAULT_CLUSTER_NAME = 'ocs-independent-storagecluster'
-INDEPENDENT_DEFAULT_STORAGECLASS_RGW = f'{INDEPENDENT_DEFAULT_CLUSTER_NAME}-ceph-rgw'
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW = (
+    f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rgw'
+)
 
+# Default StorageClass for External-mode
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS = (
+    f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephfs'
+)
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD = (
+    f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rbd'
+)
 
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
@@ -275,6 +289,10 @@ MCG_OBC_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml"
 )
 
+RGW_OBC_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "ObjectBucketClaim-RGW.yaml"
+)
+
 MCG_AWS_CREDS_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "AwsCreds.yaml"
 )
@@ -321,6 +339,19 @@ CSI_CEPHFS_PVC_YAML = os.path.join(
 CSI_RBD_PVC_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pvc.yaml"
 )
+
+CSI_RBD_PVC_RESTORE_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "pvc-restore.yaml"
+)
+
+CSI_RBD_SNAPSHOT_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "snapshot.yaml"
+)
+
+CSI_RBD_SNAPSHOTCLASS_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "snapshotclass.yaml"
+)
+
 CONFIGURE_PVC_ON_MONITORING_POD = os.path.join(
     TEMPLATE_CONFIGURE_PVC_MONITORING_POD, "configuring_pvc.yaml"
 )
@@ -498,6 +529,14 @@ STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
 )
 
+EXTERNAL_STORAGE_CLUSTER_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "external-storage-cluster.yaml"
+)
+
+EXTERNAL_CLUSTER_SECRET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "external-cluster-secret.yaml"
+)
+
 OPERATOR_SOURCE_SECRET_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "operator-source-secret.yaml"
 )
@@ -546,6 +585,9 @@ RSYNC_POD_YAML = os.path.join(
 )
 MACHINESET_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "machine-set.yaml"
+)
+PODS_PER_NODE_COUNT_YAML = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "max-pods-per-node.yaml"
 )
 
 ANSIBLE_INVENTORY_YAML = os.path.join(
@@ -606,7 +648,7 @@ MARKETPLACE_NAMESPACE = "openshift-marketplace"
 MONITORING_NAMESPACE = "openshift-monitoring"
 OPERATOR_INTERNAL_SELECTOR = "ocs-operator-internal=true"
 OPERATOR_CS_QUAY_API_QUERY = (
-    'https://quay.io/api/v1/repository/rhceph-dev/ocs-olm-operator/'
+    'https://quay.io/api/v1/repository/rhceph-dev/{image}/'
     'tag/?onlyActiveTags=true&limit={tag_limit}'
 )
 
@@ -635,14 +677,13 @@ ON_PREM_PLATFORMS = [VSPHERE_PLATFORM, BAREMETAL_PLATFORM]
 CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
 BAREMETALPSI_PLATFORM = 'baremetalpsi'
 
-# Default SC based on platforms
-DEFAULT_SC_AWS = "gp2"
-DEFAULT_SC_VSPHERE = "thin"
-
 # ignition files
 BOOTSTRAP_IGN = "bootstrap.ign"
 MASTER_IGN = "master.ign"
 WORKER_IGN = "worker.ign"
+
+# terraform provider constants
+TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
 
 # vSphere related constants
 VSPHERE_NODE_USER = "core"
@@ -680,6 +721,9 @@ CSR_BOOTSTRAPPER_NODE = "node-bootstrapper"
 # VMware Datastore types
 VMFS = "VMFS"
 VSAN = "vsan"
+
+# terraform haproxy service
+TERRAFORM_HAPROXY_SERVICE = os.path.join(VSPHERE_DIR, "lb/haproxy.service")
 
 # Config related constants
 config_keys_patterns_to_censor = ['passw', 'token', 'secret']
@@ -917,7 +961,7 @@ FLEXY_MNT_CONTAINER_DIR = '/mnt'
 FLEXY_HOST_DIR = 'flexy-dir'
 FLEXY_HOST_DIR_PATH = os.path.join(DATA_DIR, FLEXY_HOST_DIR)
 FLEXY_DEFAULT_ENV_FILE = "ocs-osp.env"
-OPENSHIFT_MISC_BASE = "private-openshift-misc/v3-launch-templates/functionality-testing"
+OPENSHIFT_MISC_BASE = "private-openshift-misc/functionality-testing"
 FLEXY_BAREMETAL_UPI_TEMPLATE = "upi-on-baremetal/versioned-installer-openstack"
 FLEXY_GIT_CRYPT_KEYFILE = os.path.join(DATA_DIR, "git-crypt-keyfile")
 NTP_CHRONY_CONF = os.path.join(
@@ -930,6 +974,9 @@ FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
 FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
 FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/aosqe/flexy:poc"
+FLEXY_ENV_FILE_UPDATED = os.path.join(
+    FLEXY_HOST_DIR_PATH, 'ocs-flexy-env-file-updated.env'
+)
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
@@ -1015,3 +1062,37 @@ MAX_OSDS = 15
 # Minimum cluster requirements in term of node specs
 MIN_NODE_CPU = 16
 MIN_NODE_MEMORY = 64 * 10 ** 9
+
+# aws tags
+AWS_CLOUDFORMATION_TAG = 'aws:cloudformation:stack-name'
+
+# Bare Metal constants
+BOOTSTRAP_PXE_FILE = os.path.join(
+    TEMPLATE_DIR, "baremetal-pxefile", "bootstrap"
+)
+MASTER_PXE_FILE = os.path.join(
+    TEMPLATE_DIR, "baremetal-pxefile", "master"
+)
+WORKER_PXE_FILE = os.path.join(
+    TEMPLATE_DIR, "baremetal-pxefile", "worker"
+)
+PXE_CONF_FILE = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "dnsmasq.pxe.conf"
+)
+COMMON_CONF_FILE = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "dnsmasq.common.conf"
+)
+RHCOS_IMAGES_FILE = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "rhcos_images.yaml"
+)
+PXE_FILE = os.path.join(
+    TEMPLATE_DIR, "baremetal-pxefile"
+)
+coreos_url_prefix = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos"
+BM_DEFAULT_CLUSTER_NAME = "ocp-baremetal-auto"
+
+# MCG namespace constants
+MCG_NS_AWS_ENDPOINT = 'https://s3.amazonaws.com'
+MCG_NS_RESOURCE = 'ns_resource'
+MCG_NS_BUCKET = 'ns-bucket'
+MCG_NS_AWS_CONNECTION = 'aws_connection'

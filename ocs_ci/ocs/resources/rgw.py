@@ -13,7 +13,7 @@ class RGW(object):
         self.namespace = namespace if namespace else config.ENV_DATA['cluster_namespace']
 
         if storagecluster_independent_check():
-            sc_name = constants.INDEPENDENT_DEFAULT_STORAGECLASS_RGW
+            sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW
         else:
             sc_name = constants.DEFAULT_STORAGECLASS_RGW
 

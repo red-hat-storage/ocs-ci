@@ -22,18 +22,16 @@ RUN:
   client_version: '4.5.0-0.nightly'
   bin_dir: './bin'
   google_api_secret: '~/.ocs-ci/google_api_secret.json'
-  rook_branch: "master"
-  # We can also specify the tag or specific commit id to checkout by changin
-  # following parameter in custom config file:
-  # rook_to_checkout: "commit_id or tag_name"
   # Following chrome params are for openshift console UI testing
   force_chrome_branch_base: "665006"
   force_chrome_branch_sha256sum: "a1ae2e0950828f991119825f62c24464ab3765aa219d150a94fb782a4c66a744"
+  chrome_binary_path: "/usr/bin/chromium-browser"
   io_in_bg: False
   io_load: 30
   log_utilization: False
   # This config file disables scale app pods to use OCS workers
   use_ocs_worker_for_scale: False
+  load_status: None
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
@@ -48,8 +46,8 @@ DEPLOYMENT:
   force_download_installer: True
   force_download_client: True
   default_latest_tag: 'latest-4.5'
-  # define if ceph is setup as independent mode, default is false
-  independent_mode: False
+  # define if ceph is setup as external mode, default is false
+  external_mode: False
   # You can overwrite csv channel version by following parameter
   ocs_csv_channel: "stable-4.5"
   # you can overwrite the image for ocs operator catalog source by following parameter:
@@ -127,6 +125,11 @@ ENV_DATA:
   # terraform environment variables
   TF_LOG_LEVEL: TRACE
   TF_LOG_FILE: "terraform.log"
+  # The subnet prefix length to assign to each individual node.
+  # For example, if hostPrefix is set to 23, then each node is assigned a /23 subnet out of the given cidr,
+  # which allows for 510 (2^(32 - 23) - 2) pod IPs addresses.
+  # https://docs.openshift.com/container-platform/4.1/installing/installing_bare_metal/installing-bare-metal.html
+  cluster_host_prefix: 23
 
 # This section is related to upgrade
 UPGRADE:
@@ -142,13 +145,11 @@ UPGRADE:
 AUTH:
     test_quay_auth: test_secret
 
-# This section is for FLEXY, this is just dummy variable to have
-# FLEXY section here, all the defaults for FLEXY will be in
-# flexy_default_config.yaml
+# This section is for FLEXY, any variable in this section will be copied into
+# flexy env file
 FLEXY:
-  flexy_deploy: false
 
-# Defines the configuration of Independent Ceph Cluster
-INDEPENDENT_MODE:
+# Defines the configuration of external Ceph Cluster
+EXTERNAL_MODE:
   admin_keyring:
      key: PLACE_HOLDER

@@ -1,13 +1,16 @@
 ---
-apiVersion: snapshot.storage.k8s.io/v1alpha1
+apiVersion: snapshot.storage.k8s.io/v1beta1
 kind: VolumeSnapshotClass
 metadata:
   name: csi-rbdplugin-snapclass
-snapshotter: openshift-storage.rbd.csi.ceph.com
+driver: openshift-storage.rbd.csi.ceph.com
 parameters:
-  # Specify a string that identifies your cluster. Ceph CSI supports any
-  # unique string. When Ceph CSI is deployed by Rook use the Rook namespace,
-  # for example "rook-ceph".
+  # String representing a Ceph cluster to provision storage from.
+  # Should be unique across all Ceph clusters in use for provisioning,
+  # cannot be greater than 36 bytes in length, and should remain immutable for
+  # the lifetime of the StorageClass in use. When Ceph CSI is deployed by Rook
+  # use the Rook namespace, for example "rook-ceph".
   clusterID: openshift-storage
-  csi.storage.k8s.io/snapshotter-secret-name: csi-rbd-secret
-  csi.storage.k8s.io/snapshotter-secret-namespace: default
+  csi.storage.k8s.io/snapshotter-secret-name: rook-csi-rbd-provisioner
+  csi.storage.k8s.io/snapshotter-secret-namespace: openshift-storage
+deletionPolicy: Delete

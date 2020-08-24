@@ -10,6 +10,7 @@ from botocore.client import ClientError
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.exceptions import CommandFailed, CredReqSecretNotFound, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
@@ -109,7 +110,7 @@ class MCG:
         ).json().get('reply').get('token')
 
         self.s3_resource = boto3.resource(
-            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH,
+            's3', verify=retrieve_verification_mode(),
             endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
@@ -286,7 +287,7 @@ class MCG:
         return requests.post(
             url=self.mgmt_endpoint,
             data=json.dumps(payload),
-            verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
+            verify=retrieve_verification_mode()
         )
 
     def check_data_reduction(self, bucketname):
@@ -301,34 +302,13 @@ class MCG:
         """
 
         def _retrieve_reduction_data():
-            payload = {
-                "api": "bucket_api",
-                "method": "read_bucket",
-                "params": {"name": bucketname},
-                "auth_token": self.noobaa_token
-            }
-            request_str = json.dumps(payload)
-            resp = requests.post(
-                url=self.mgmt_endpoint,
-                data=request_str,
-                verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
+            resp = self.send_rpc_query(
+                'bucket_api',
+                'read_bucket',
+                params={"name": bucketname}
             )
             bucket_data = resp.json().get('reply').get('data').get('size')
-
-            payload = {
-                "api": "bucket_api",
-                "method": "read_bucket",
-                "params": {"name": bucketname},
-                "auth_token": self.noobaa_token
-            }
-            request_str = json.dumps(payload)
-            resp = requests.post(
-                url=self.mgmt_endpoint,
-                data=request_str,
-                verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
-            )
             bucket_data_reduced = resp.json().get('reply').get('data').get('size_reduced')
-
             logger.info(
                 'Overall bytes stored: ' + str(bucket_data) + '. Reduced size: ' + str(bucket_data_reduced)
             )
@@ -336,8 +316,9 @@ class MCG:
             return bucket_data, bucket_data_reduced
 
         try:
+            expected_reduction = 100 * 1024 * 1024
             for total_size, total_reduced in TimeoutSampler(140, 5, _retrieve_reduction_data):
-                if total_size - total_reduced > 100 * 1024 * 1024:
+                if total_size - total_reduced > expected_reduction:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
                     )
@@ -349,7 +330,8 @@ class MCG:
                     )
         except TimeoutExpiredError:
             logger.error(
-                'Not enough data reduction. Something is wrong.'
+                'Data reduction is insufficient. '
+                f'{total_size - total_reduced} bytes reduced out of {expected_reduction}.'
             )
             assert False
 
@@ -420,11 +402,12 @@ class MCG:
 
         return creds_request, aws_access_key_id, aws_access_key
 
-    def create_new_aws_connection(self, conn_name=None):
+    def create_new_aws_connection(self, cld_mgr, conn_name=None):
         """
         Creates a new NooBaa connection to an AWS backend
 
         Args:
+            cld_mgr: A cloud manager instance
             conn_name: The connection name to be used
 
         Returns:
@@ -438,9 +421,9 @@ class MCG:
             "auth_method": "AWS_V4",
             "endpoint": "https://s3.amazonaws.com",
             "endpoint_type": "AWS",
-            "identity": self.aws_access_key_id,
+            "identity": cld_mgr.aws_client.access_key,
             "name": conn_name,
-            "secret": self.aws_access_key
+            "secret": cld_mgr.aws_client.secret_key
         }
 
         try:
@@ -455,6 +438,84 @@ class MCG:
         except TimeoutExpiredError:
             logger.error(f'Could not create connection {conn_name}')
             assert False
+
+    def create_namespace_resource(self, ns_resource_name, conn_name, region, cld_mgr, cloud_uls_factory):
+        """
+        Creates a new namespace resource
+
+        Args:
+            ns_resource_name (str): The name to be given to the new namespace resource
+            conn_name (str): The external connection name to be used
+            region (str): The region name to be used
+            cld_mgr: A cloud manager instance
+            cloud_uls_factory: The cloud uls factory
+
+        Returns:
+            str: The name of the created target_bucket_name (cloud uls)
+        """
+        # Create External connection to AWS
+        assert self.create_new_aws_connection(cld_mgr, conn_name), "Failed to create a new AWS connection"
+
+        # Create the actual target bucket on AWS
+        uls_dict = cloud_uls_factory({'aws': [(1, region)]})
+        target_bucket_name = list(uls_dict['aws'])[0]
+
+        # Create namespace resource
+        self.send_rpc_query('pool_api', 'create_namespace_resource', {
+            'name': ns_resource_name,
+            'connection': conn_name,
+            'target_bucket': target_bucket_name}
+        )
+        return target_bucket_name
+
+    def check_ns_resource_validity(self, ns_resource_name, target_bucket_name, endpoint):
+        """
+        Check namespace resource validity
+
+        Args:
+            ns_resource_name (str): The name of the to be verified namespace resource
+            target_bucket_name (str): The name of the expected target bucket (uls)
+            endpoint: The expected endpoint path
+        """
+        # Retrieve the NooBaa system information
+        system_state = self.read_system()
+
+        # Retrieve the correct namespace resource info
+        match_resource = [
+            ns_resource for ns_resource in system_state
+            .get('namespace_resources') if ns_resource.get('name') == ns_resource_name
+        ]
+        assert match_resource, f"The NS resource named {ns_resource_name} was not found"
+        actual_target_bucket = match_resource[0].get('target_bucket')
+        actual_endpoint = match_resource[0].get('endpoint')
+
+        assert actual_target_bucket == target_bucket_name, (
+            f"The NS resource named {ns_resource_name} got "
+            f"wrong target bucket {actual_target_bucket} ≠ {target_bucket_name}"
+        )
+        assert actual_endpoint == endpoint, (
+            f"The NS resource named {ns_resource_name} got wrong endpoint "
+            f"{actual_endpoint} ≠ {endpoint}"
+        )
+
+    def delete_ns_connection(self, ns_connection_name):
+        """
+        Delete external connection
+
+        Args:
+            ns_connection_name (str): The name of the to be deleted external connection
+        """
+        self.send_rpc_query('account_api', 'delete_external_connection',
+                            {'connection_name': ns_connection_name})
+
+    def delete_ns_resource(self, ns_resource_name):
+        """
+        Delete namespace resource
+
+        Args:
+            ns_resource_name (str): The name of the to be deleted namespace resource
+        """
+        self.send_rpc_query('pool_api', 'delete_namespace_resource', {'name': ns_resource_name})
 
     def oc_create_bucketclass(self, name, backingstores, placement):
         """

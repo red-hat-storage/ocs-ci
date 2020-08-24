@@ -6,6 +6,10 @@ metadata:
   labels:
     app: ocs-storagecluster
 spec:
+  tolerations:
+    - key: "node.ocs.openshift.io/storage"
+      value: "true"
+      effect: NoSchedule
   nodeSelector:
     nodeSelectorTerms:
     - matchExpressions:
@@ -14,7 +18,7 @@ spec:
           values:
           - ""
   storageClassDevices:
-    - storageClassName: localblock
+    - storageClassName: null
       volumeMode: Block
       devicePaths:
         - PLACEHOLDER

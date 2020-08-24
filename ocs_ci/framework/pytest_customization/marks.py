@@ -20,6 +20,7 @@ from ocs_ci.ocs.constants import (
     CLOUD_PLATFORMS,
     ON_PREM_PLATFORMS,
 )
+from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
 
 # tier marks
@@ -95,8 +96,15 @@ run_this = pytest.mark.run_this
 
 # Skipif marks
 skipif_aws_creds_are_missing = pytest.mark.skipif(
-    load_auth_config().get('AUTH', {}).get('AWS', {}).get('AWS_ACCESS_KEY_ID') is None,
-    reason="AWS credentials weren't found in the local auth.yaml"
+    (
+        load_auth_config().get('AUTH', {}).get('AWS', {}).get('AWS_ACCESS_KEY_ID') is None
+        and 'AWS_ACCESS_KEY_ID' not in os.environ
+        and update_config_from_s3() is None
+    ),
+    reason=(
+        "AWS credentials weren't found in the local auth.yaml "
+        "and couldn't be fetched from the cloud"
+    )
 )
 
 google_api_required = pytest.mark.skipif(
@@ -108,6 +116,11 @@ google_api_required = pytest.mark.skipif(
 aws_platform_required = pytest.mark.skipif(
     config.ENV_DATA['platform'].lower() != 'aws',
     reason="Test runs ONLY on AWS deployed cluster"
+)
+
+azure_platform_required = pytest.mark.skipif(
+    config.ENV_DATA['platform'].lower() != 'azure',
+    reason="Test runs ONLY on Azure deployed cluster"
 )
 
 cloud_platform_required = pytest.mark.skipif(
@@ -150,10 +163,20 @@ skipif_bm = pytest.mark.skipif(
 )
 
 skipif_external_mode = pytest.mark.skipif(
-    config.DEPLOYMENT.get('independent_mode') is True,
+    config.DEPLOYMENT.get('external_mode') is True,
     reason="Test will not run on External Mode cluster"
 )
 
+skipif_lso = pytest.mark.skipif(
+    config.DEPLOYMENT.get('local_storage') is True,
+    reason="Test will not run on LSO deployed cluster"
+)
+
+metrics_for_external_mode_required = pytest.mark.skipif(
+    float(config.ENV_DATA['ocs_version']) < 4.6
+    and config.DEPLOYMENT.get('external_mode') is True,
+    reason="Metrics is not enabled for external mode OCS <4.6"
+)
 
 # Filter warnings
 filter_insecure_request_warning = pytest.mark.filterwarnings(

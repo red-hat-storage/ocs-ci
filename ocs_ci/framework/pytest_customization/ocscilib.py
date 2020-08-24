@@ -22,7 +22,7 @@ from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MIN_CHARACTERS,
     OCP_VERSION_CONF_DIR,
 )
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError, ChannelNotFound
 from ocs_ci.ocs.resources.ocs import get_ocs_csv, get_version_info
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
 from ocs_ci.utility.utils import (
@@ -132,6 +132,15 @@ def pytest_addoption(parser):
         """
     )
     parser.addoption(
+        '--ocp-installer-version',
+        dest='ocp_installer_version',
+        help="""
+        Specific OCP installer version to be used for deployment. This option
+        will generally be used for non-GA or nightly builds. (e.g. 4.5.5).
+        This option will overwrite any values set via --ocp-version.
+        """
+    )
+    parser.addoption(
         '--ocs-registry-image',
         dest='ocs_registry_image',
         help=(
@@ -223,11 +232,15 @@ def pytest_configure(config):
         config._metadata['Test Run Name'] = get_testrun_name()
         gather_version_info_for_report(config)
 
-        ocs_csv = get_ocs_csv()
-        ocs_csv_version = ocs_csv.data['spec']['version']
-        config.addinivalue_line(
-            "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
-        )
+        try:
+            ocs_csv = get_ocs_csv()
+            ocs_csv_version = ocs_csv.data['spec']['version']
+            config.addinivalue_line(
+                "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
+            )
+        except (ResourceNotFoundError, ChannelNotFound):
+            # might be using exisitng cluster path using GUI installation
+            log.warning("Unable to get CSV version for Reporting")
 
 
 def gather_version_info_for_report(config):
@@ -266,17 +279,14 @@ def gather_version_info_for_report(config):
             if key not in skip_list:
                 config._metadata[key] = val.rsplit('/')[-1]
         gather_version_completed = True
-    except ResourceNotFoundError as ex:
-        log.error(
-            "Problem occurred when looking for some resource! Error: %s",
-            ex
-        )
-    except FileNotFoundError as ex:
-        log.error("File not found! Error: %s", ex)
-    except CommandFailed as ex:
-        log.error("Failed to execute command! Error: %s", ex)
-    except Exception as ex:
-        log.error("Failed to gather version info! Error: %s", ex)
+    except ResourceNotFoundError:
+        log.exception("Problem occurred when looking for some resource!")
+    except FileNotFoundError:
+        log.exception("File not found!")
+    except CommandFailed:
+        log.exception("Failed to execute command!")
+    except Exception:
+        log.exception("Failed to gather version info!")
     finally:
         if not gather_version_completed:
             log.warning(
@@ -384,6 +394,10 @@ def process_cluster_cli_params(config):
             OCP_VERSION_CONF_DIR, version_config_file
         )
         load_config_file(version_config_file_path)
+    ocp_installer_version = get_cli_param(config, '--ocp-installer-version')
+    if ocp_installer_version:
+        ocsci_config.DEPLOYMENT['installer_version'] = ocp_installer_version
+        ocsci_config.RUN['client_verison'] = ocp_installer_version
     csv_change = get_cli_param(config, '--csv-change')
     if csv_change:
         csv_change = csv_change.split("::")
@@ -423,8 +437,8 @@ def pytest_runtest_makereport(item, call):
         mcg = True if any(x in item.location[0] for x in ['mcg', 'ecosystem']) else False
         try:
             collect_ocs_logs(dir_name=test_case_name, ocp=ocp_logs_collection, mcg=mcg)
-        except Exception as ex:
-            log.error(f"Failed to collect OCS logs. Error: {ex}")
+        except Exception:
+            log.exception("Failed to collect OCS logs")
 
     # Collect Prometheus metrics if specified in gather_metrics_on_fail marker
     if (
@@ -440,8 +454,8 @@ def pytest_runtest_makereport(item, call):
                 call.start,
                 call.stop
             )
-        except Exception as ex:
-            log.error(f"Failed to collect prometheus metrics. Error: {ex}")
+        except Exception:
+            log.exception("Failed to collect prometheus metrics")
 
     # Get the performance metrics when tests fails for scale or performance tag
     from tests.helpers import collect_performance_stats
@@ -453,8 +467,8 @@ def pytest_runtest_makereport(item, call):
         test_case_name = item.name
         try:
             collect_performance_stats(test_case_name)
-        except Exception as ex:
-            log.error(f"Failed to collect performance stats. Error: {ex}")
+        except Exception:
+            log.exception("Failed to collect performance stats")
 
 
 def set_report_portal_tags(config):

@@ -4,7 +4,8 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    ignore_leftovers, pre_upgrade, post_upgrade
+    ignore_leftovers, pre_upgrade, post_upgrade,
+    skipif_aws_creds_are_missing
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import ocp
@@ -14,6 +15,7 @@ from tests import helpers
 log = logging.getLogger(__name__)
 
 
+@skipif_aws_creds_are_missing
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2220")
 def test_storage_pods_running(multiregion_mirror_setup_session):
