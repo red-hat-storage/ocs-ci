@@ -361,7 +361,7 @@ def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True, no
             logging.info(
                 f"Successfully labeled {new_spun_node} with OCS storage label"
             )
-    return True
+    return new_spun_node
 
 
 def get_node_logs(node_name):
@@ -808,8 +808,9 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
     from ocs_ci.ocs.platform_nodes import AWSNodes
     aws_nodes = AWSNodes()
     stack_name_of_deleted_node = aws_nodes.get_stack_name_of_node(osd_node_name)
+    stack_name_of_deleted_node = 'ikave-aws-no1'
 
-    remove_nodes([osd_node])
+    # remove_nodes([osd_node])
 
     log.info(f"name of deleted node = {osd_node_name}")
     log.info(f"availability zone of deleted node = {az}")
@@ -822,7 +823,10 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
 
     log.info("Preparing to create a new node...")
     node_conf = {'stack_name': stack_name_of_deleted_node}
-    add_new_node_and_label_upi(node_type, 1, node_conf=node_conf)
+    new_nodes = add_new_node_and_label_upi(node_type, 1, node_conf=node_conf)
+
+    if verify_steps_after_node_replacement(osd_node, new_nodes[0]):
+        log.info("Finished verifying new node created successfully")
 
 
 def get_node_az(node):
@@ -914,3 +918,36 @@ def get_worker_nodes_not_in_ocs():
     ocs_node_names = [n.name for n in ocs_nodes]
     worker_nodes = get_typed_nodes(constants.WORKER_MACHINE)
     return [n for n in worker_nodes if n.name not in ocs_node_names]
+
+
+def verify_steps_after_node_replacement(old_node, new_node):
+    result = True
+
+    old_mgr_pod = pod.get_mgr_pods()[0]
+    old_mgr_pod.delete()
+    new_mgr_pod = pod.get_mgr_pods()[0]
+    if new_mgr_pod.name == old_mgr_pod.name:
+        log.warning("mgr pod name didn't change")
+        result = False
+
+    ocs_nodes = get_ocs_nodes()
+    ocs_node_names = [n.name for n in ocs_nodes]
+    if new_node.name not in ocs_node_names:
+        log.warning("The new node is not in ocs nodes")
+
+    csi_cephfsplugin_pods = pod.get_plugin_pods(interface=constants.CEPHFILESYSTEM)
+    csi_rbdplugin_pods = pod.get_plugin_pods(interface=constants.CEPHBLOCKPOOL)
+    csi_plugin_pods = csi_cephfsplugin_pods + csi_rbdplugin_pods
+    if not all([p.status == constants.STATUS_RUNNING for p in csi_plugin_pods]):
+        log.warning("Not all csi rbd and cephfs plugin pods in status running")
+        result = False
+
+    if not pod.check_pods_in_running_state():
+        log.warning("Not all pods in running state")
+        result = False
+
+    if old_node.name == new_node.name:
+        log.warning("Hostname didn't change")
+        result = False
+
+    return result
