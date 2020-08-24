@@ -1590,6 +1590,10 @@ def mcgcli_pod_fixture(request):
     and upload the binary to it.
 
     """
+    deploy = config.RUN['cli_params']['deploy']
+    skip_ocs = config.ENV_DATA['skip_ocs_deployment']
+    if deploy and skip_ocs:
+        return
     nb_operator_pod = Pod(
         **get_pods_having_label(
             constants.NOOBAA_OPERATOR_POD_LABEL, config.ENV_DATA['cluster_namespace']
