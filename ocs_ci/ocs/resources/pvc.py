@@ -364,7 +364,7 @@ def create_restore_pvc(
 
 
 def create_pvc_clone(
-    sc_name, parent_pvc, pvc_name=None, do_reload=True
+    sc_name, parent_pvc, clone_yaml, pvc_name=None, do_reload=True
 ):
     """
     Create a cloned pvc from existing pvc
@@ -379,7 +379,7 @@ def create_pvc_clone(
         PVC: PVC instance
 
     """
-    pvc_data = templating.load_yaml(constants.CSI_RBD_PVC_CLONE_YAML)
+    pvc_data = templating.load_yaml(clone_yaml)
     pvc_data['metadata']['name'] = (
         pvc_name if pvc_name else helpers.create_unique_resource_name(
             'cloned', 'pvc'

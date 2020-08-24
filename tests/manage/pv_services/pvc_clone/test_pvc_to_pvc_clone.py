@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
     argvalues=[
         pytest.param(
             constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("")
+        ),
+        pytest.param(
+            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("")
         )
     ]
 )
@@ -50,7 +53,7 @@ class TestClone(ManageTest):
             status=constants.STATUS_RUNNING
         )
 
-    def test_pvc_to_pvc_clone(self, interface_type, pod_factory, teardown_factory):
+    def test_pvc_to_pvc_clone(self, interface_type, teardown_factory):
         """
         Create a clone from an existing pvc,
         verify data is preserved in the cloning.
@@ -74,17 +77,26 @@ class TestClone(ManageTest):
         # Create a clone of the existing pvc.
         sc_name = self.pvc_obj.backed_sc
         parent_pvc = self.pvc_obj.name
-        cloned_pvc_obj = pvc.create_pvc_clone(sc_name, parent_pvc)
+        clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
+        if interface_type == constants.CEPHFILESYSTEM:
+            clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
+        cloned_pvc_obj = pvc.create_pvc_clone(sc_name, parent_pvc, clone_yaml)
         teardown_factory(cloned_pvc_obj)
         helpers.wait_for_resource_state(cloned_pvc_obj, constants.STATUS_BOUND)
         cloned_pvc_obj.reload()
 
         # Create and attach pod to the pvc
-        clone_pod_obj = pod_factory(
-            interface=interface_type,
-            pvc=cloned_pvc_obj,
-            status=constants.STATUS_RUNNING
+        clone_pod_obj = helpers.create_pod(
+            interface_type=interface_type, pvc_name=cloned_pvc_obj.name,
+            namespace=cloned_pvc_obj.namespace,
+            pod_dict_path=constants.NGINX_POD_YAML
         )
+        # Confirm that the pod is running
+        helpers.wait_for_resource_state(
+            resource=clone_pod_obj,
+            state=constants.STATUS_RUNNING
+        )
+        clone_pod_obj.reload()
         teardown_factory(clone_pod_obj)
 
         # Verify file's presence on the new pod

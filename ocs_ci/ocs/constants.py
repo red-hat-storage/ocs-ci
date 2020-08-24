@@ -281,6 +281,10 @@ CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(
     TEMPLATE_CSI_FS_DIR, "storageclass.yaml"
 )
 
+CSI_CEPHFS_PVC_CLONE_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "pvc-clone.yaml"
+)
+
 ROOK_CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(
     ROOK_CSI_CEPHFS_DIR, "storageclass.yaml"
 )
