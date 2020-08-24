@@ -35,6 +35,7 @@ from ocs_ci.utility.utils import (
     remove_keys_from_tf_variable_file, replace_content_in_file, run_cmd,
     upload_file, wait_for_co, get_ocp_version, get_terraform, set_aws_region,
     configure_chrony_and_wait_for_machineconfig_status,
+    get_terraform_ignition_provider,
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from semantic_version import Version
@@ -382,6 +383,16 @@ class VSPHEREUPI(VSPHEREBASE):
             )
             self.previous_dir = os.getcwd()
 
+            # get OCP version
+            ocp_version = get_ocp_version()
+
+            # create terraform_data directory
+            self.terraform_data_dir = os.path.join(
+                self.cluster_path,
+                constants.TERRAFORM_DATA_DIR
+            )
+            create_directory_path(self.terraform_data_dir)
+
             # Download terraform binary based on ocp version and
             # update the installer path in ENV_DATA
             # use "0.11.14" for releases below OCP 4.5
@@ -389,12 +400,15 @@ class VSPHEREUPI(VSPHEREBASE):
             terraform_installer = get_terraform(version=terraform_version)
             config.ENV_DATA['terraform_installer'] = terraform_installer
 
+            # Download terraform ignition provider
+            # ignition provider dependancy from OCP 4.6
+            if Version.coerce(ocp_version) >= Version.coerce('4.6'):
+                get_terraform_ignition_provider(self.terraform_data_dir)
+
             # Initialize Terraform
-            self.terraform_data_dir = os.path.join(self.cluster_path, constants.TERRAFORM_DATA_DIR)
-            create_directory_path(self.terraform_data_dir)
             self.terraform_work_dir = constants.VSPHERE_DIR
             self.terraform = Terraform(self.terraform_work_dir)
-            ocp_version = get_ocp_version()
+
             self.folder_structure = False
             if Version.coerce(ocp_version) >= Version.coerce('4.5'):
                 self.folder_structure = True
@@ -595,7 +609,9 @@ class VSPHEREUPI(VSPHEREBASE):
             remove_nodes(rhcos_nodes)
 
         # configure chrony for all nodes
-        configure_chrony_and_wait_for_machineconfig_status(node_type="all")
+        configure_chrony_and_wait_for_machineconfig_status(
+            node_type="all", timeout=1200
+        )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -679,7 +695,10 @@ class VSPHEREUPI(VSPHEREBASE):
         # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
-        terraform.initialize(upgrade=True)
+        if Version.coerce(ocp_version) >= Version.coerce('4.6'):
+            terraform.initialize()
+        else:
+            terraform.initialize(upgrade=True)
         terraform.destroy(tfvars, refresh=(not self.folder_structure))
         os.chdir(previous_dir)
 
@@ -947,6 +966,9 @@ def generate_terraform_vars_and_update_machine_conf():
 
         # update the machine configurations
         update_machine_conf(folder_structure)
+
+        if Version.coerce(ocp_version) >= Version.coerce('4.6'):
+            modify_haproxyservice()
     else:
         # generate terraform variable file
         generate_terraform_vars_with_out_folder()
@@ -1102,4 +1124,18 @@ def comment_bootstrap_in_lb_module():
         constants.VSPHERE_MAIN,
         replace_str,
         f"//{replace_str}"
+    )
+
+
+def modify_haproxyservice():
+    """
+    Add ExecStop in haproxy service
+    """
+    to_change = 'TimeoutStartSec=0'
+    execstop = f"{to_change}\nExecStop=/bin/podman rm -f haproxy"
+
+    replace_content_in_file(
+        constants.TERRAFORM_HAPROXY_SERVICE,
+        to_change,
+        execstop
     )

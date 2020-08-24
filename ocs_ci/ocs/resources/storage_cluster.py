@@ -123,10 +123,9 @@ def ocs_install_verification(
         )
     rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
 
-    # check noobaa CR for min number of noobaa endpoint pods
-    nb_obj = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    min_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('minCount')
-    max_eps = nb_obj.get().get('items')[0].get('spec').get('endpoints').get('maxCount')
+    # Fetch the min and max Noobaa endpoints from the run config
+    min_eps = config.DEPLOYMENT.get('min_noobaa_endpoints')
+    max_eps = config.DEPLOYMENT.get('max_noobaa_endpoints')
 
     resources_dict = {
         constants.OCS_OPERATOR_LABEL: 1,
@@ -281,29 +280,31 @@ def ocs_install_verification(
     # TODO: Verify ceph osd tree output have zone or rack based on AZ
 
     # Verify CSI snapshotter sidecar container is not present
-    log.info("Verifying CSI snapshotter is not present.")
-    provisioner_pods = get_all_pods(
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-        selector=[
-            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+    # if the OCS version is < 4.6
+    if float(config.ENV_DATA['ocs_version']) < 4.6:
+        log.info("Verifying CSI snapshotter is not present.")
+        provisioner_pods = get_all_pods(
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            selector=[
+                constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+                constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+            ]
+        )
+        for pod_obj in provisioner_pods:
+            pod_info = pod_obj.get()
+            for container, image in get_images(data=pod_info).items():
+                assert ('snapshot' not in container) and ('snapshot' not in image), (
+                    f"Snapshot container is present in {pod_obj.name} pod. "
+                    f"Container {container}. Image {image}"
+                )
+        deployments = ocs_csv.get()['spec']['install']['spec']['deployments']
+        rook_ceph_operator_deployment = [
+            deployment_val for deployment_val in deployments if deployment_val['name'] == 'rook-ceph-operator'
         ]
-    )
-    for pod_obj in provisioner_pods:
-        pod_info = pod_obj.get()
-        for container, image in get_images(data=pod_info).items():
-            assert ('snapshot' not in container) and ('snapshot' not in image), (
-                f"Snapshot container is present in {pod_obj.name} pod. "
-                f"Container {container}. Image {image}"
-            )
-    deployments = ocs_csv.get()['spec']['install']['spec']['deployments']
-    rook_ceph_operator_deployment = [
-        deployment_val for deployment_val in deployments if deployment_val['name'] == 'rook-ceph-operator'
-    ]
-    assert {'name': 'CSI_ENABLE_SNAPSHOTTER', 'value': 'false'} in (
-        rook_ceph_operator_deployment[0]['spec']['template']['spec']['containers'][0]['env']
-    ), "CSI_ENABLE_SNAPSHOTTER value is not set to 'false'."
-    log.info("Verified: CSI snapshotter is not present.")
+        assert {'name': 'CSI_ENABLE_SNAPSHOTTER', 'value': 'false'} in (
+            rook_ceph_operator_deployment[0]['spec']['template']['spec']['containers'][0]['env']
+        ), "CSI_ENABLE_SNAPSHOTTER value is not set to 'false'."
+        log.info("Verified: CSI snapshotter is not present.")
 
     # Verify pool crush rule is with "type": "zone"
     if utils.get_az_count() == 3:
@@ -497,12 +498,31 @@ def change_noobaa_endpoints_count(min_nb_eps=None, max_nb_eps=None):
         max_nb_eps (int): The number of required maximum Noobaa endpoints
 
     """
-    noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    if min_nb_eps:
-        log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
-        params = f'{{"spec":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}'
-        noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
-    if max_nb_eps:
-        log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
-        params = f'{{"spec":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}'
-        noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+    if float(config.ENV_DATA['ocs_version']) < 4.6:
+        noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        if min_nb_eps:
+            log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
+            params = f'{{"spec":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}'
+            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+        if max_nb_eps:
+            log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
+            params = f'{{"spec":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}'
+            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+    else:
+        sc = get_storage_cluster()
+        if min_nb_eps:
+            log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
+            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}}}'
+            sc.patch(
+                resource_name=sc.get()['items'][0]['metadata']['name'],
+                params=params,
+                format_type='merge'
+            )
+        if max_nb_eps:
+            log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
+            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}}}'
+            sc.patch(
+                resource_name=sc.get()['items'][0]['metadata']['name'],
+                params=params,
+                format_type='merge'
+            )

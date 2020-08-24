@@ -1092,21 +1092,6 @@ def log_cli_level(pytestconfig):
     return pytestconfig.getini('log_cli_level') or 'DEBUG'
 
 
-TEMP_FILE = (
-    tempfile.NamedTemporaryFile(mode='w+', prefix='test_status', delete=False)
-)
-
-
-def get_test_status(file):
-    with open(file.name, 'r') as t_file:
-        return t_file.readline()
-
-
-def set_test_status(file, status):
-    with open(file.name, 'w') as t_file:
-        t_file.writelines(status)
-
-
 @pytest.fixture(scope="session", autouse=True)
 def cluster_load(
     request, project_factory_session, pvc_factory_session,
@@ -1143,13 +1128,13 @@ def cluster_load(
         if not cl_load_obj:
             cl_load_obj = ClusterLoad()
 
-        set_test_status(TEMP_FILE, 'running')
+        config.RUN['load_status'] = 'running'
 
         def finalizer():
             """
             Stop the thread that executed watch_load()
             """
-            set_test_status(TEMP_FILE, 'finished')
+            config.RUN['load_status'] = 'finished'
             if thread:
                 thread.join()
 
@@ -1164,19 +1149,19 @@ def cluster_load(
             the IO load based on the cluster latency.
 
             """
-            while get_test_status(TEMP_FILE) != 'finished':
+            while config.RUN['load_status'] != 'finished':
                 time.sleep(20)
                 try:
                     cl_load_obj.print_metrics(mute_logs=True)
                     if io_in_bg:
-                        if get_test_status(TEMP_FILE) == 'running':
+                        if config.RUN['load_status'] == 'running':
                             cl_load_obj.adjust_load_if_needed()
-                        elif get_test_status(TEMP_FILE) == 'to_be_paused':
+                        elif config.RUN['load_status'] == 'to_be_paused':
                             cl_load_obj.pause_load()
-                            set_test_status(TEMP_FILE, 'paused')
-                        elif get_test_status(TEMP_FILE) == 'to_be_resumed':
+                            config.RUN['load_status'] = 'paused'
+                        elif config.RUN['load_status'] == 'to_be_resumed':
                             cl_load_obj.resume_load()
-                            set_test_status(TEMP_FILE, 'running')
+                            config.RUN['load_status'] = 'running'
 
                 # Any type of exception should be caught and we should continue.
                 # We don't want any test to fail
@@ -1200,19 +1185,19 @@ def pause_cluster_load(request):
             Resume the cluster load
 
             """
-            set_test_status(TEMP_FILE, 'to_be_resumed')
+            config.RUN['load_status'] = 'to_be_resumed'
             try:
-                for load_status in TimeoutSampler(180, 3, get_test_status, TEMP_FILE):
+                for load_status in TimeoutSampler(180, 3, config.RUN.get, 'load_status'):
                     if load_status == 'running':
                         break
             except TimeoutExpiredError:
                 log.error("Cluster load was not resumed successfully")
         request.addfinalizer(finalizer)
 
-        set_test_status(TEMP_FILE, 'to_be_paused')
+        config.RUN['load_status'] = 'to_be_paused'
         try:
-            for status in TimeoutSampler(180, 3, get_test_status, TEMP_FILE):
-                if status == 'paused':
+            for load_status in TimeoutSampler(180, 3, config.RUN.get, 'load_status'):
+                if load_status == 'paused':
                     break
         except TimeoutExpiredError:
             log.error("Cluster load was not paused successfully")
@@ -1821,7 +1806,7 @@ def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
         Args:
             amount (int): The amount of buckets to create
             interface (str): The interface to use for creation of buckets.
-                S3 | OC | CLI
+                S3 | OC | CLI | NAMESPACE
 
         Returns:
             list: A list of s3.Bucket objects, containing all the created
@@ -2685,6 +2670,42 @@ def node_restart_teardown(request, nodes):
     request.addfinalizer(finalizer)
 
 
+@pytest.fixture()
+def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
+    """
+    Create a namespace resource factory. Calling this fixture creates a new namespace resource.
+
+    """
+    created_ns_resources = []
+    created_ns_connections = []
+
+    def _create_ns_resources():
+        # Create random connection_name and random namespace resource name
+        rand_ns_resource = create_unique_resource_name(constants.MCG_NS_RESOURCE, 'aws')
+        rand_connection = create_unique_resource_name(constants.MCG_NS_AWS_CONNECTION, 'aws')
+
+        # Create the actual namespace resource
+        target_bucket_name = mcg_obj.create_namespace_resource(rand_ns_resource, rand_connection,
+                                                               config.ENV_DATA['region'], cld_mgr, cloud_uls_factory)
+        mcg_obj.check_ns_resource_validity(rand_ns_resource,
+                                           target_bucket_name, constants.MCG_NS_AWS_ENDPOINT)
+
+        created_ns_resources.append(rand_ns_resource)
+        created_ns_connections.append(rand_connection)
+        return target_bucket_name, rand_ns_resource
+
+    def ns_resources_and_connections_cleanup():
+        for ns_resource in created_ns_resources:
+            mcg_obj.delete_ns_resource(ns_resource)
+
+        for ns_connection in created_ns_connections:
+            mcg_obj.delete_ns_connection(ns_connection)
+
+    request.addfinalizer(ns_resources_and_connections_cleanup)
+
+    return _create_ns_resources
+
+
 @pytest.fixture(scope="session", autouse=True)
 def collect_logs_fixture(request):
     """
@@ -2700,4 +2721,3 @@ def collect_logs_fixture(request):
             collect_ocs_logs('testcases', ocp=False, status_failure=False)
 
     request.addfinalizer(finalizer)
-
