@@ -60,3 +60,6 @@
   rules noted in [Tracking of workarounds](./workarounds.md) page are
   followed. The person merging a workaround is responsible for checking that all
   information related to the workaround is correct.
+* MCG test cases should work on any cloud platform (AWS, Azure, GCP, ...).
+  Validation runs of MCG pull request should include runs of at least two such
+  platforms to verify this assumption.
