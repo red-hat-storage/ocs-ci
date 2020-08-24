@@ -386,8 +386,7 @@ class BAREMETALUPI(Deployment):
             """
             Destroy OCP cluster specific to BM UPI
             """
-            # Skip destroy cluster for BM UPI
-
+            logger.info("Updating BM status")
             result = self.update_bm_status(constants.BM_STATUS_ABSENT)
             assert result == constants.BM_STATUS_RESPONSE_UPDATED, "Failed to update request"
 
