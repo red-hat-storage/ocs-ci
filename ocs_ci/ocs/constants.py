@@ -313,6 +313,18 @@ MCG_BUCKETCLASS_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "BucketClass.yaml"
 )
 
+MCGCLI_SERVICEACCOUNT_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "mcgcli-serviceaccount.yaml"
+)
+
+MCGCLI_SERVICEACCOUNT_CLUSTERROLEBINDING = os.path.join(
+    TEMPLATE_MCG_DIR, "mcgcli-sa-clusterrolebinding.yaml"
+)
+
+MCGCLI_POD = os.path.join(
+    TEMPLATE_MCG_DIR, "mcgcli-pod.yaml"
+)
+
 CSI_RBD_POD_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pod.yaml"
 )
@@ -931,17 +943,19 @@ AWS_WORKER_LOGICAL_RESOURCE_ID = "Worker0"
 RHEL_WORKERS_CONF = os.path.join(CONF_DIR, 'ocsci/aws_upi_rhel_workers.yaml')
 
 # Users
-NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
+MCGCLI_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:mcgcli"
 
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
+NOOBAA_OPERATOR_MCGCLI_POD_PATH = "/mcg"
 DEFAULT_INGRESS_CRT = "router-ca.crt"
 DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
 SERVICE_CA_CRT = "service-ca.crt"
 SERVICE_CA_CRT_AWSCLI_PATH = f"/cert/{SERVICE_CA_CRT}"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
+MCGCLI_POD_NAME = 'mcgcli-pod'
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [

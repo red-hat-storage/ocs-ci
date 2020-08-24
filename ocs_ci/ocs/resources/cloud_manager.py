@@ -170,7 +170,7 @@ class S3Client(CloudClient):
         assert self.exec_uls_deletion(name)
         # Todo: rename client to resource (or find an alternative)
         sample = TimeoutSampler(
-            timeout=60, sleep=6, func=self.verify_uls_exists,
+            timeout=120, sleep=6, func=self.verify_uls_exists,
             uls_name=name
         )
         if not sample.wait_for_func_status(result=False):
