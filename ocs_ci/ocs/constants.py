@@ -898,7 +898,6 @@ MUST_GATHER_COMMANDS = [
     'ceph_osd_crush_show-tunables', 'ceph_osd_crush_dump', 'ceph_mon_stat',
     'ceph_mon_dump', 'ceph_mgr_dump', 'ceph_mds_stat', 'ceph_health_detail',
     'ceph_fs_ls', 'ceph_fs_dump', 'ceph_df', 'ceph_auth_list',
-    'ceph-volume_lvm_list'
 ]
 
 MUST_GATHER_COMMANDS_JSON = [
