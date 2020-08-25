@@ -58,6 +58,7 @@ setup(
         'python-novaclient==17.1.0',
         'python-cinderclient==7.1.0',
         'keystoneauth1==4.2.0',
+        'range-key-dict==1.1.0'
     ],
     entry_points={
         'console_scripts': [

@@ -110,9 +110,6 @@ def get_ocs_version():
     ocp = OCP(kind="clusterversion")
     cluster_version = ocp.get("version")
 
-    # Adding another key in the dict to preserve usability
-    cluster_version['ENV'] = get_environment_info()
-
     # TODO: When OLM (operator-lifecycle-manager) maintains OCS, it will be
     # possible to add a check via CSV (cluster service version) to get OCS
     # version in a similar way as it's done for OCP itself above.

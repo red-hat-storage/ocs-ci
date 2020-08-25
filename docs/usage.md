@@ -101,13 +101,13 @@ to the pytest.
   ```
 * `--collect-logs` - to collect OCS logs for failed test cases.
 * `--io-in-bg` - If passed, IO will be running in the test background.
-   The amount of IO load will be determined by the `--io-load` argument, if
-   provided. In case `--io-load` is not provided, IO load is set to 30% of
-   the cluster throughput limit.
 * `--io-load` - IOs throughput target percentage. The value should be
-   between 0 to 100. The default is 50 (50%)
+   between 0 to 100. If not provided, the default is 30 (30%)
 * `--log-cluster-utilization` - If passed, metrics of the cluster utilization will be
-   printed every 10 seconds
+   printed every 20 seconds
+* `--csv-change` - Allows changes in the OCS CSV. For example, usage of custom image,
+   like MCG or RHCS. The format should be:
+   <pattern_to_replace_from::pattern_to_replace_to>, while '::' is the delimiter
 
 ## Examples
 

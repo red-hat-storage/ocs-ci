@@ -6,6 +6,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     skipif_ocs_version, ManageTest, tier4, tier4b, ignore_leftover_label
 )
+from ocs_ci.utility.utils import ceph_health_check
 from tests import disruption_helpers
 
 log = logging.getLogger(__name__)
@@ -54,6 +55,19 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
         self.pvcs, self.pods = create_pvcs_and_pods(
             pvc_size=10, pods_for_rwx=2
         )
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        """
+        Make sure ceph health is ok
+
+        """
+
+        def finalizer():
+            assert ceph_health_check(), "Ceph cluster health is not OK"
+            log.info("Ceph cluster health is OK")
+
+        request.addfinalizer(finalizer)
 
     def test_resource_deletion_during_pvc_expansion(self, resource_to_delete):
         """

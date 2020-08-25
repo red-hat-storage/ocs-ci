@@ -15,13 +15,14 @@ from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from scipy.stats import tmean, scoreatpercentile
-from shutil import which
+from shutil import which, move, rmtree
 
 import hcl
 import requests
 import yaml
 from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
+from paramiko.auth_handler import AuthenticationException, SSHException
 from semantic_version import Version
 from tempfile import NamedTemporaryFile
 
@@ -720,6 +721,22 @@ def delete_file(file_name):
         file_name (str): Path to the file you want to delete
     """
     os.remove(file_name)
+
+
+def delete_dir(dir_name):
+    """
+    Deletes the directory
+
+    Args:
+        dir_name (str): Directory path to delete
+
+    """
+    try:
+        rmtree(dir_name)
+    except OSError as e:
+        log.error(
+            f"Failed to delete the directory {dir_name}. Error: {e.strerror}"
+        )
 
 
 class TimeoutSampler(object):
@@ -1537,16 +1554,16 @@ def load_auth_config():
 
     """
     log.info("Retrieving the authentication config dictionary")
-    auth_file = os.path.join(constants.TOP_DIR, 'data', 'auth.yaml')
+    auth_file = os.path.join(constants.TOP_DIR, 'data', constants.AUTHYAML)
     try:
         with open(auth_file) as f:
             return yaml.safe_load(f)
     except FileNotFoundError:
-        log.error(
+        log.warn(
             f'Unable to find the authentication configuration at {auth_file}, '
             f'please refer to the getting started guide ({constants.AUTH_CONFIG_DOCS})'
         )
-        raise
+        return {}
 
 
 def get_ocs_olm_operator_tags(limit=100):
@@ -1567,7 +1584,7 @@ def get_ocs_olm_operator_tags(limit=100):
     log.info(f"Retrieving OCS OLM Operator tags (limit {limit})")
     try:
         quay_access_token = load_auth_config()['quay']['access_token']
-    except KeyError:
+    except (KeyError, TypeError):
         log.error(
             'Unable to retrieve the access token for quay, please refer to '
             f'the getting started guide ({constants.AUTH_CONFIG_DOCS}) '
@@ -1575,8 +1592,19 @@ def get_ocs_olm_operator_tags(limit=100):
         )
         raise
     headers = {'Authorization': f'Bearer {quay_access_token}'}
+    image = "ocs-registry"
+    try:
+        ocs_version = float(config.ENV_DATA.get('ocs_version'))
+        if ocs_version < 4.5:
+            image = "ocs-olm-operator"
+    except (ValueError, TypeError):
+        log.warning("Invalid ocs_version given, defaulting to ocs-registry image")
+        pass
     resp = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=limit),
+        constants.OPERATOR_CS_QUAY_API_QUERY.format(
+            tag_limit=limit,
+            image=image,
+        ),
         headers=headers
     )
     if not resp.ok:
@@ -1599,7 +1627,7 @@ def check_if_executable_in_path(exec_name):
     return which(exec_name) is not None
 
 
-def upload_file(server, localpath, remotepath, user=None, password=None):
+def upload_file(server, localpath, remotepath, user=None, password=None, key_file=None):
     """
     Upload a file to remote server
 
@@ -1612,16 +1640,25 @@ def upload_file(server, localpath, remotepath, user=None, password=None):
     """
     if not user:
         user = 'root'
-
-    ssh = SSHClient()
-    ssh.set_missing_host_key_policy(
-        AutoAddPolicy())
-    ssh.connect(hostname=server, username=user, password=password)
-    sftp = ssh.open_sftp()
-    log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
-    sftp.put(localpath, remotepath)
-    sftp.close()
-    ssh.close()
+    try:
+        ssh = SSHClient()
+        ssh.set_missing_host_key_policy(AutoAddPolicy())
+        if password:
+            ssh.connect(hostname=server, username=user, password=password)
+        else:
+            log.info(key_file)
+            ssh.connect(hostname=server, username=user, key_filename=key_file)
+        sftp = ssh.open_sftp()
+        log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
+        sftp.put(localpath, remotepath)
+        sftp.close()
+        ssh.close()
+    except AuthenticationException as authException:
+        log.error(f"Authentication failed: {authException}")
+        raise authException
+    except SSHException as sshException:
+        log.error(f"SSH connection failed: {sshException}")
+        raise sshException
 
 
 def read_file_as_str(filepath):
@@ -2313,6 +2350,51 @@ def get_terraform(version=None, bin_dir=None):
     return terraform_binary_path
 
 
+def get_terraform_ignition_provider(terraform_dir, version=None):
+    """
+    Downloads the terraform ignition provider
+
+    Args:
+        terraform_dir (str): Path to terraform working directory
+        version (str): Version of the terraform ignition provider to download
+
+    """
+    version = version or constants.TERRAFORM_IGNITION_PROVIDER_VERSION
+    terraform_ignition_provider_zip_file = (
+        f"terraform-provider-ignition-{version}-linux-amd64.tar.gz"
+    )
+    terraform_ignition_provider_dir = (
+        f"terraform-provider-ignition-{version}-linux-amd64"
+    )
+    terraform_plugins_path = ".terraform/plugins/linux_amd64/"
+    log.info(f"Downloading terraform ignition proivider version {version}")
+    previous_dir = os.getcwd()
+    os.chdir(terraform_dir)
+    url = (
+        "https://github.com/community-terraform-providers/"
+        f"terraform-provider-ignition/releases/download/{version}/"
+        f"{terraform_ignition_provider_zip_file}"
+    )
+
+    # Download and untar
+    download_file(url, terraform_ignition_provider_zip_file)
+    run_cmd(f"tar xzf {terraform_ignition_provider_zip_file}")
+
+    # move the ignition provider binary to plugins path
+    create_directory_path(terraform_plugins_path)
+    move(
+        f"{terraform_ignition_provider_dir}/terraform-provider-ignition",
+        terraform_plugins_path
+    )
+
+    # delete the downloaded files
+    delete_file(terraform_ignition_provider_zip_file)
+    delete_dir(terraform_ignition_provider_dir)
+
+    # return to the previous working directory
+    os.chdir(previous_dir)
+
+
 def get_module_ip(terraform_state_file, module):
     """
     Gets the node IP from terraform.tfstate file
@@ -2417,7 +2499,7 @@ def wait_for_machineconfigpool_status(node_type, timeout=900):
 
 
 def configure_chrony_and_wait_for_machineconfig_status(
-    node_type=constants.WORKER_MACHINE
+    node_type=constants.WORKER_MACHINE, timeout=900
 ):
     """
     Configure chrony on the nodes
@@ -2447,4 +2529,48 @@ def configure_chrony_and_wait_for_machineconfig_status(
 
         # sleep here to start update machineconfigpool status
         time.sleep(60)
-        wait_for_machineconfigpool_status(role)
+        wait_for_machineconfigpool_status(role, timeout=timeout)
+
+
+def modify_csv(csv, replace_from, replace_to):
+    """
+    Modify the CSV
+
+    Args:
+        csv (str): The CSV name
+        replace_from (str): The pattern to replace from in the CSV
+        replace_to (str): The pattern to replace to in the CSV
+
+    """
+    data = (
+        f"oc -n openshift-storage get csv {csv} -o yaml | sed"
+        f" 's,{replace_from},{replace_to},g' | oc replace -f -"
+    )
+    log.info(
+        f"CSV {csv} will be modified: {replace_from} will be replaced "
+        f"with {replace_to}.\nThe command that will be used for that is:\n{data}"
+    )
+
+    temp_file = NamedTemporaryFile(
+        mode='w+', prefix='csv_modification', suffix='.sh'
+    )
+
+    with open(temp_file.name, 'w') as t_file:
+        t_file.writelines(data)
+
+    run_cmd(f"chmod 777 {temp_file.name}")
+    run_cmd(f"sh {temp_file.name}")
+
+
+def check_for_rhcos_images(url):
+    """
+    Check for rhcos images are present in given location
+
+    Args:
+        url (str): rhcos_images url
+    Returns:
+        (bool): True if images present if not false
+
+    """
+    r = requests.head(url)
+    return r.status_code == requests.codes.ok

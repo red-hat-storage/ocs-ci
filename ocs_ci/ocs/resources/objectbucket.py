@@ -3,12 +3,13 @@ import logging
 from abc import ABC, abstractmethod
 
 import boto3
-from tests.helpers import create_resource, create_unique_resource_name
+from tests.helpers import create_resource, create_unique_resource_name, storagecluster_independent_check
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
@@ -68,7 +69,7 @@ class OBC(object):
                 .get('serviceS3').get('externalDNS')[0]
             )
             self.s3_resource = boto3.resource(
-                's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH,
+                's3', verify=retrieve_verification_mode(),
                 endpoint_url=self.s3_external_endpoint,
                 aws_access_key_id=self.access_key_id,
                 aws_secret_access_key=self.access_key
@@ -237,6 +238,7 @@ class MCGCLIBucket(ObjectBucket):
     """
     Implementation of an MCG bucket using the NooBaa CLI
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         bc = f" --bucketclass={kwargs['bucketclass']}" if 'bucketclass' in kwargs else ''
@@ -282,6 +284,7 @@ class MCGS3Bucket(ObjectBucket):
     """
     Implementation of an MCG bucket using the S3 API
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.mcg.s3_resource.create_bucket(Bucket=self.name)
@@ -359,6 +362,7 @@ class MCGOCBucket(OCBucket):
     """
     Implementation of an MCG bucket using the OC CLI
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         obc_data = templating.load_yaml(constants.MCG_OBC_YAML)
@@ -379,6 +383,7 @@ class RGWOCBucket(OCBucket):
     """
     Implementation of an RGW bucket using the S3 API
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         obc_data = templating.load_yaml(constants.MCG_OBC_YAML)
@@ -386,14 +391,87 @@ class RGWOCBucket(OCBucket):
             self.name = create_unique_resource_name('oc', 'obc')
         obc_data['metadata']['name'] = self.name
         obc_data['spec']['bucketName'] = self.name
-        obc_data['spec']['storageClassName'] = constants.INDEPENDENT_DEFAULT_STORAGECLASS_RGW
+        if storagecluster_independent_check():
+            obc_data['spec']['storageClassName'] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW
+        else:
+            obc_data['spec']['storageClassName'] = constants.DEFAULT_STORAGECLASS_RGW
         obc_data['metadata']['namespace'] = self.namespace
         create_resource(**obc_data)
+
+
+class MCGNamespaceBucket(ObjectBucket):
+    """
+    Implementation of an MCG bucket using the S3 API
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.read_ns_resources = kwargs.get('read_ns_resources')
+        self.write_ns_resource = kwargs.get('write_ns_resource')
+        self.mcg.send_rpc_query('bucket_api', 'create_bucket', {
+            'name': self.name,
+            'namespace': {
+                'write_resource': self.write_ns_resource,
+                'read_resources': self.read_ns_resources
+            }
+        })
+
+    def internal_delete(self):
+        """
+        Deletes the bucket using the S3 API
+        """
+        self.mcg.send_rpc_query('bucket_api', 'delete_bucket', {'name': self.name})
+
+    @property
+    def internal_status(self):
+        """
+        Returns the OBC mode as shown in the NB UI and retrieved via RPC
+
+        Returns:
+            str: The bucket's mode
+
+        """
+        return self.mcg.get_bucket_info(self.name).get('mode')
+
+    def internal_verify_health(self):
+        """
+        Verifies that the bucket is healthy by checking its mode
+
+        Returns:
+            bool: True if the bucket is healthy, False otherwise
+
+        """
+        # Retrieve the NooBaa system information
+        system_state = self.mcg.read_system()
+
+        # Retrieve the correct namespace bucket info
+        match_buckets = [
+            ns_bucket for ns_bucket in system_state
+            .get('buckets') if ns_bucket.get('name') == self.name
+        ]
+        if not match_buckets:
+            return False
+        ns_properties = match_buckets[0].get('namespace')
+        actual_read_resources = ns_properties.get('read_resources')
+        actual_write_resource = ns_properties.get('write_resource')
+        return actual_read_resources == self.read_ns_resources and actual_write_resource == self.write_ns_resource
+
+    def internal_verify_deletion(self):
+        # Retrieve the NooBaa system information
+        system_state = self.mcg.read_system()
+
+        # Retrieve the correct namespace bucket info
+        match_buckets = [
+            ns_bucket for ns_bucket in system_state
+            .get('buckets') if ns_bucket.get('name') == self.name
+        ]
+        return len(match_buckets) == 0
 
 
 BUCKET_MAP = {
     's3': MCGS3Bucket,
     'oc': MCGOCBucket,
     'cli': MCGCLIBucket,
-    'rgw-oc': RGWOCBucket
+    'rgw-oc': RGWOCBucket,
+    'mcg-namespace': MCGNamespaceBucket
 }

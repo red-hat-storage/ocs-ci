@@ -10,19 +10,17 @@ from botocore.client import ClientError
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.exceptions import CommandFailed, CredReqSecretNotFound, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 from tests.helpers import (
     create_unique_resource_name, create_resource,
-    calc_local_file_md5_sum, retrieve_default_ingress_crt
+    retrieve_default_ingress_crt, storagecluster_independent_check
 )
-import subprocess
-import stat
 
 logger = logging.getLogger(name=__file__)
 
@@ -31,7 +29,6 @@ class MCG:
     """
     Wrapper class for the Multi Cloud Gateway's S3 service
     """
-
     (
         s3_resource, s3_endpoint, s3_internal_endpoint, ocp_resource,
         mgmt_endpoint, region, access_key_id, access_key,
@@ -43,16 +40,9 @@ class MCG:
         Constructor for the MCG class
         """
         self.namespace = config.ENV_DATA['cluster_namespace']
-        self.operator_pod = Pod(
-            **get_pods_having_label(
-                constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace
-            )[0]
-        )
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
-
-        self.retrieve_noobaa_cli_binary()
 
         """
         The certificate will be copied on each mcg_obj instantiation since
@@ -76,6 +66,8 @@ class MCG:
             .get('serviceMgmt').get('externalDNS')[0]
         ) + '/rpc'
         self.region = config.ENV_DATA['region']
+
+        self.mcgcli_pod = pod.get_pod_obj(name='mcgcli-pod', namespace=self.namespace)
 
         creds_secret_name = (
             get_noobaa.get('items')[0].get('status').get('accounts')
@@ -108,7 +100,7 @@ class MCG:
         ).json().get('reply').get('token')
 
         self.s3_resource = boto3.resource(
-            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH,
+            's3', verify=retrieve_verification_mode(),
             endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
@@ -131,9 +123,14 @@ class MCG:
                 aws_access_key_id=self.aws_access_key_id,
                 aws_secret_access_key=self.aws_access_key
             )
+
+        if (
+            config.ENV_DATA['platform'].lower() in constants.CLOUD_PLATFORMS
+            or storagecluster_independent_check()
+        ):
             logger.info('Checking whether RGW pod is not present on AWS platform')
             pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
-            assert len(pods) == 0, 'RGW pod should not exist on AWS platform'
+            assert not pods, 'RGW pods should not exist in the current platform/cluster'
 
         elif config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
             rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
@@ -280,7 +277,7 @@ class MCG:
         return requests.post(
             url=self.mgmt_endpoint,
             data=json.dumps(payload),
-            verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
+            verify=retrieve_verification_mode()
         )
 
     def check_data_reduction(self, bucketname):
@@ -295,34 +292,13 @@ class MCG:
         """
 
         def _retrieve_reduction_data():
-            payload = {
-                "api": "bucket_api",
-                "method": "read_bucket",
-                "params": {"name": bucketname},
-                "auth_token": self.noobaa_token
-            }
-            request_str = json.dumps(payload)
-            resp = requests.post(
-                url=self.mgmt_endpoint,
-                data=request_str,
-                verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
+            resp = self.send_rpc_query(
+                'bucket_api',
+                'read_bucket',
+                params={"name": bucketname}
             )
             bucket_data = resp.json().get('reply').get('data').get('size')
-
-            payload = {
-                "api": "bucket_api",
-                "method": "read_bucket",
-                "params": {"name": bucketname},
-                "auth_token": self.noobaa_token
-            }
-            request_str = json.dumps(payload)
-            resp = requests.post(
-                url=self.mgmt_endpoint,
-                data=request_str,
-                verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
-            )
             bucket_data_reduced = resp.json().get('reply').get('data').get('size_reduced')
-
             logger.info(
                 'Overall bytes stored: ' + str(bucket_data) + '. Reduced size: ' + str(bucket_data_reduced)
             )
@@ -330,8 +306,9 @@ class MCG:
             return bucket_data, bucket_data_reduced
 
         try:
+            expected_reduction = 100 * 1024 * 1024
             for total_size, total_reduced in TimeoutSampler(140, 5, _retrieve_reduction_data):
-                if total_size - total_reduced > 100 * 1024 * 1024:
+                if total_size - total_reduced > expected_reduction:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
                     )
@@ -343,7 +320,8 @@ class MCG:
                     )
         except TimeoutExpiredError:
             logger.error(
-                'Not enough data reduction. Something is wrong.'
+                'Data reduction is insufficient. '
+                f'{total_size - total_reduced} bytes reduced out of {expected_reduction}.'
             )
             assert False
 
@@ -414,11 +392,12 @@ class MCG:
 
         return creds_request, aws_access_key_id, aws_access_key
 
-    def create_new_aws_connection(self, conn_name=None):
+    def create_new_aws_connection(self, cld_mgr, conn_name=None):
         """
         Creates a new NooBaa connection to an AWS backend
 
         Args:
+            cld_mgr: A cloud manager instance
             conn_name: The connection name to be used
 
         Returns:
@@ -432,9 +411,9 @@ class MCG:
             "auth_method": "AWS_V4",
             "endpoint": "https://s3.amazonaws.com",
             "endpoint_type": "AWS",
-            "identity": self.aws_access_key_id,
+            "identity": cld_mgr.aws_client.access_key,
             "name": conn_name,
-            "secret": self.aws_access_key
+            "secret": cld_mgr.aws_client.secret_key
         }
 
         try:
@@ -450,69 +429,83 @@ class MCG:
             logger.error(f'Could not create connection {conn_name}')
             assert False
 
-    def create_new_backingstore_aws_bucket(self, backingstore_info):
+    def create_namespace_resource(self, ns_resource_name, conn_name, region, cld_mgr, cloud_uls_factory):
         """
-        Creates an S3 target bucket for NooBaa to use as a backing store
+        Creates a new namespace resource
 
         Args:
-            backingstore_info: A tuple containing the BS information
-            to be used in its creation.
-
-        """
-        if backingstore_info.get('name') is None:
-            backingstore_info['name'] = create_unique_resource_name('backingstorebucket', 'awsbucket')
-
-        if backingstore_info.get('region') is None:
-            self.aws_s3_resource.create_bucket(Bucket=backingstore_info['name'])
-        else:
-            self.aws_s3_resource.create_bucket(
-                Bucket=backingstore_info['name'],
-                CreateBucketConfiguration={
-                    'LocationConstraint': backingstore_info['region']
-                }
-            )
-
-    def create_aws_backingstore_secret(self, name):
-        """
-        Creates a secret for NooBaa's backingstore
-        Args:
-            name: The name to be given to the secret
+            ns_resource_name (str): The name to be given to the new namespace resource
+            conn_name (str): The external connection name to be used
+            region (str): The region name to be used
+            cld_mgr: A cloud manager instance
+            cloud_uls_factory: The cloud uls factory
 
         Returns:
-            OCS: The secret resource
-
+            str: The name of the created target_bucket_name (cloud uls)
         """
-        bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
-        bs_secret_data['metadata']['name'] += f'-{name}'
-        bs_secret_data['metadata']['namespace'] = self.namespace
-        bs_secret_data['data']['AWS_ACCESS_KEY_ID'] = base64.urlsafe_b64encode(
-            self.aws_access_key_id.encode('UTF-8')
-        ).decode('ascii')
-        bs_secret_data['data']['AWS_SECRET_ACCESS_KEY'] = base64.urlsafe_b64encode(
-            self.aws_access_key.encode('UTF-8')
-        ).decode('ascii')
-        return create_resource(**bs_secret_data)
+        # Create External connection to AWS
+        assert self.create_new_aws_connection(cld_mgr, conn_name), "Failed to create a new AWS connection"
 
-    def oc_create_aws_backingstore(self, name, targetbucket, secretname, region):
+        # Create the actual target bucket on AWS
+        uls_dict = cloud_uls_factory({'aws': [(1, region)]})
+        target_bucket_name = list(uls_dict['aws'])[0]
+
+        # Create namespace resource
+        self.send_rpc_query('pool_api', 'create_namespace_resource', {
+            'name': ns_resource_name,
+            'connection': conn_name,
+            'target_bucket': target_bucket_name}
+        )
+        return target_bucket_name
+
+    def check_ns_resource_validity(self, ns_resource_name, target_bucket_name, endpoint):
         """
-        Creates a new NooBaa backing store
+        Check namespace resource validity
+
         Args:
-            name: The name to be given to the backing store
-            targetbucket: The S3 target bucket to connect to
-            secretname: The secret to use for authentication
-            region: The target bucket's region
-
-        Returns:
-            OCS: The backingstore resource
-
+            ns_resource_name (str): The name of the to be verified namespace resource
+            target_bucket_name (str): The name of the expected target bucket (uls)
+            endpoint: The expected endpoint path
         """
-        bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
-        bs_data['metadata']['name'] += f'-{name}'
-        bs_data['metadata']['namespace'] = self.namespace
-        bs_data['spec']['awsS3']['secret']['name'] = secretname
-        bs_data['spec']['awsS3']['targetBucket'] = targetbucket
-        bs_data['spec']['awsS3']['region'] = region
-        return create_resource(**bs_data)
+        # Retrieve the NooBaa system information
+        system_state = self.read_system()
+
+        # Retrieve the correct namespace resource info
+        match_resource = [
+            ns_resource for ns_resource in system_state
+            .get('namespace_resources') if ns_resource.get('name') == ns_resource_name
+        ]
+        assert match_resource, f"The NS resource named {ns_resource_name} was not found"
+        actual_target_bucket = match_resource[0].get('target_bucket')
+        actual_endpoint = match_resource[0].get('endpoint')
+
+        assert actual_target_bucket == target_bucket_name, (
+            f"The NS resource named {ns_resource_name} got "
+            f"wrong target bucket {actual_target_bucket} ≠ {target_bucket_name}"
+        )
+        assert actual_endpoint == endpoint, (
+            f"The NS resource named {ns_resource_name} got wrong endpoint "
+            f"{actual_endpoint} ≠ {endpoint}"
+        )
+
+    def delete_ns_connection(self, ns_connection_name):
+        """
+        Delete external connection
+
+        Args:
+            ns_connection_name (str): The name of the to be deleted external connection
+        """
+        self.send_rpc_query('account_api', 'delete_external_connection',
+                            {'connection_name': ns_connection_name})
+
+    def delete_ns_resource(self, ns_resource_name):
+        """
+        Delete namespace resource
+
+        Args:
+            ns_resource_name (str): The name of the to be deleted namespace resource
+        """
+        self.send_rpc_query('pool_api', 'delete_namespace_resource', {'name': ns_resource_name})
 
     def oc_create_bucketclass(self, name, backingstores, placement):
         """
@@ -533,46 +526,6 @@ class MCG:
         tiers['backingStores'] = backingstores
         tiers['placement'] = placement
         return create_resource(**bc_data)
-
-    def toggle_aws_bucket_readwrite(self, bucketname, block=True):
-        """
-        Toggles a bucket's IO using a bucket policy
-
-        Args:
-            bucketname: The name of the bucket that should be manipulated
-            block: Whether to block RW or un-block. True | False
-
-        """
-        if block:
-            bucket_policy = {
-                "Version": "2012-10-17",
-                "Id": "DenyReadWrite",
-                "Statement": [
-                    {
-                        "Effect": "Deny",
-                        "Principal": {
-                            "AWS": "*"
-                        },
-                        "Action": [
-                            "s3:GetObject",
-                            "s3:PutObject",
-                            "s3:ListBucket"
-                        ],
-                        "Resource": [
-                            f"arn:aws:s3:::{bucketname}/*",
-                            f"arn:aws:s3:::{bucketname}"
-                        ]
-                    }
-                ]
-            }
-            bucket_policy = json.dumps(bucket_policy)
-            self.aws_s3_resource.meta.client.put_bucket_policy(
-                Bucket=bucketname, Policy=bucket_policy
-            )
-        else:
-            self.aws_s3_resource.meta.client.delete_bucket_policy(
-                Bucket=bucketname
-            )
 
     def check_if_mirroring_is_done(self, bucket_name):
         """
@@ -652,7 +605,7 @@ class MCG:
         def _check_state():
             sysinfo = self.read_system()
             for pool in sysinfo.get('pools'):
-                if pool.get('name') == backingstore_name:
+                if pool.get('name') in backingstore_name:
                     current_state = pool.get('mode')
                     logger.info(
                         f'Current state of backingstore {backingstore_name} '
@@ -684,7 +637,7 @@ class MCG:
 
     def exec_mcg_cmd(self, cmd, namespace=None, **kwargs):
         """
-        Executes an MCG CLI command through the noobaa-operator pod's CLI binary
+        Executes an MCG CLI command through the MCG CLI pod
 
         Args:
             cmd (str): The command to run
@@ -694,71 +647,19 @@ class MCG:
             str: stdout of the command
 
         """
-
         kubeconfig = os.getenv('KUBECONFIG')
         if kubeconfig:
-            kubeconfig = f"--kubeconfig {kubeconfig} "
+            kubeconfig = f"--kubeconfig {kubeconfig}"
 
         namespace = f'-n {namespace}' if namespace else f'-n {self.namespace}'
         result = exec_cmd(
-            f'{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}',
+            f'oc {namespace} {kubeconfig} rsh {self.mcgcli_pod.name} '
+            f'{constants.NOOBAA_OPERATOR_MCGCLI_POD_PATH} {cmd}',
             **kwargs
         )
         result.stdout = result.stdout.decode()
         result.stderr = result.stderr.decode()
         return result
-
-    def retrieve_noobaa_cli_binary(self):
-        """
-        Copy the NooBaa CLI binary from the operator pod
-        if it wasn't found locally, or if the hashes between
-        the two don't match.
-
-        """
-        def _compare_cli_hashes():
-            """
-            Verify that the remote and local CLI binaries are the same
-            in order to make sure the local bin is up to date
-
-            Returns:
-                bool: Whether the local and remote hashes are identical
-
-            """
-            remote_cli_bin_md5 = cal_md5sum(
-                self.operator_pod,
-                constants.NOOBAA_OPERATOR_POD_CLI_PATH
-            )
-            local_cli_bin_md5 = calc_local_file_md5_sum(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-            )
-            return remote_cli_bin_md5 == local_cli_bin_md5
-
-        if (
-            not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-            or not _compare_cli_hashes()
-        ):
-            cmd = (
-                f"oc exec -n {self.namespace} {self.operator_pod.name}"
-                f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-                f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
-            )
-            subprocess.run(cmd, shell=True)
-            # Add an executable bit in order to allow usage of the binary
-            current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-            os.chmod(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
-                current_file_permissions.st_mode | stat.S_IEXEC
-            )
-            # Make sure the binary was copied properly and has the correct permissions
-            assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH), (
-                f'MCG CLI file not found at {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}'
-            )
-            assert os.access(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK), (
-                "The MCG CLI binary does not have execution permissions"
-            )
-            assert _compare_cli_hashes(), (
-                "Binary hash doesn't match the one on the operator pod"
-            )
 
     @property
     def status(self):

@@ -3,37 +3,46 @@ import os
 import random
 import time
 import tempfile
-import textwrap
 import threading
+import subprocess
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from itertools import chain
 from math import floor
-from random import randrange
-from time import sleep
 from shutil import copyfile
 from functools import partial
 
-import pytest
-import yaml
 from botocore.exceptions import ClientError
+import pytest
 
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     deployment, ignore_leftovers, tier_marks, ignore_leftover_label
 )
-from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
+from ocs_ci.ocs import (
+    constants,
+    defaults,
+    fio_artefacts,
+    node,
+    ocp,
+    platform_nodes
+)
 from ocs_ci.ocs.bucket_utils import craft_s3_command
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException, ResourceWrongStatusException
+from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import setup_ceph_toolbox
+from ocs_ci.ocs.resources.backingstore import BackingStore
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.node import check_nodes_specs
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods
+from ocs_ci.ocs.resources.pod import (
+    get_rgw_pods, delete_deploymentconfig_pods,
+    cal_md5sum, get_pods_having_label, Pod
+)
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
@@ -47,7 +56,6 @@ from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
     ceph_health_check_base,
-    get_rook_repo,
     get_ocp_version,
     get_openshift_client,
     get_system_architecture,
@@ -55,7 +63,6 @@ from ocs_ci.utility.utils import (
     ocsci_log_path,
     skipif_ocs_version,
     TimeoutSampler,
-    update_container_with_mirrored_image,
 )
 from tests import helpers
 from tests.helpers import create_unique_resource_name
@@ -1127,25 +1134,13 @@ def cluster_load(
         if not cl_load_obj:
             cl_load_obj = ClusterLoad()
 
-        temp_file = tempfile.NamedTemporaryFile(
-            mode='w+', prefix='test_status', delete=False
-        )
-
-        def get_test_status():
-            with open(temp_file.name, 'r') as t_file:
-                return t_file.readline()
-
-        def set_test_status(status):
-            with open(temp_file.name, 'w') as t_file:
-                t_file.writelines(status)
-
-        set_test_status('running')
+        config.RUN['load_status'] = 'running'
 
         def finalizer():
             """
             Stop the thread that executed watch_load()
             """
-            set_test_status('finished')
+            config.RUN['load_status'] = 'finished'
             if thread:
                 thread.join()
 
@@ -1160,12 +1155,19 @@ def cluster_load(
             the IO load based on the cluster latency.
 
             """
-            while get_test_status() == 'running':
+            while config.RUN['load_status'] != 'finished':
                 time.sleep(20)
                 try:
                     cl_load_obj.print_metrics(mute_logs=True)
                     if io_in_bg:
-                        cl_load_obj.adjust_load_if_needed()
+                        if config.RUN['load_status'] == 'running':
+                            cl_load_obj.adjust_load_if_needed()
+                        elif config.RUN['load_status'] == 'to_be_paused':
+                            cl_load_obj.pause_load()
+                            config.RUN['load_status'] = 'paused'
+                        elif config.RUN['load_status'] == 'to_be_resumed':
+                            cl_load_obj.resume_load()
+                            config.RUN['load_status'] = 'running'
 
                 # Any type of exception should be caught and we should continue.
                 # We don't want any test to fail
@@ -1174,6 +1176,37 @@ def cluster_load(
 
         thread = threading.Thread(target=watch_load)
         thread.start()
+
+
+@pytest.fixture()
+def pause_cluster_load(request):
+    """
+    Pause the background cluster load
+
+    """
+    if config.RUN.get('io_in_bg'):
+
+        def finalizer():
+            """
+            Resume the cluster load
+
+            """
+            config.RUN['load_status'] = 'to_be_resumed'
+            try:
+                for load_status in TimeoutSampler(180, 3, config.RUN.get, 'load_status'):
+                    if load_status == 'running':
+                        break
+            except TimeoutExpiredError:
+                log.error("Cluster load was not resumed successfully")
+        request.addfinalizer(finalizer)
+
+        config.RUN['load_status'] = 'to_be_paused'
+        try:
+            for load_status in TimeoutSampler(180, 3, config.RUN.get, 'load_status'):
+                if load_status == 'paused':
+                    break
+        except TimeoutExpiredError:
+            log.error("Cluster load was not paused successfully")
 
 
 @pytest.fixture(
@@ -1354,13 +1387,6 @@ def multi_pvc_factory_fixture(
     return factory
 
 
-@pytest.fixture(scope="session", autouse=True)
-def rook_repo(request):
-    get_rook_repo(
-        config.RUN['rook_branch'], config.RUN.get('rook_to_checkout')
-    )
-
-
 @pytest.fixture(scope="function")
 def memory_leak_function(request):
     """
@@ -1523,20 +1549,18 @@ def cld_mgr(request):
         CloudManager: A CloudManager resource
 
     """
+    cld_mgr = CloudManager()
 
-    # Todo: Find a more elegant method
     def finalizer():
-        oc = ocp.OCP(
-            namespace='openshift-storage'
-        )
-        oc.exec_oc_cmd(
-            command='delete secret backing-store-secret-client-secret',
-            out_yaml_format=False
-        )
+        for client in vars(cld_mgr):
+            try:
+                getattr(cld_mgr, client).secret.delete()
+            except AttributeError:
+                log.info(f"{client} secret not found")
 
     request.addfinalizer(finalizer)
 
-    return CloudManager()
+    return cld_mgr
 
 
 @pytest.fixture()
@@ -1559,6 +1583,99 @@ def rgw_obj_fixture(request):
     return RGW()
 
 
+@pytest.fixture(scope='session', autouse=True)
+def mcgcli_pod_fixture(request):
+    """
+    Grab the MCG CLI tool from the NooBaa operator pod,
+    create a dedicated pod for it to allow it to run regardless of
+    the code runner's OS (since the binary does not support macOS),
+    and upload the binary to it.
+
+    """
+    deploy = config.RUN['cli_params']['deploy']
+    skip_ocs = config.ENV_DATA['skip_ocs_deployment']
+    if deploy and skip_ocs:
+        log.info('Skipping mcg operations for OCP only deployments.')
+        return
+    nb_operator_pod = Pod(
+        **get_pods_having_label(
+            constants.NOOBAA_OPERATOR_POD_LABEL, config.ENV_DATA['cluster_namespace']
+        )[0]
+    )
+
+    def _compare_cli_hashes():
+        """
+        Verify that the remote and local CLI binaries are the same
+        in order to make sure the local bin is up to date
+
+        Returns:
+            bool: Whether the local and remote hashes are identical
+
+        """
+        remote_cli_bin_md5 = cal_md5sum(
+            nb_operator_pod,
+            constants.NOOBAA_OPERATOR_POD_CLI_PATH
+        )
+        local_cli_bin_md5 = helpers.calc_local_file_md5_sum(
+            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+        )
+        return remote_cli_bin_md5 == local_cli_bin_md5
+
+    # Create a new serviceaccount
+    mcgcli_sa = helpers.create_resource(
+        **templating.load_yaml(constants.MCGCLI_SERVICEACCOUNT_YAML)
+    )
+    # Bind the serviceaccount to a cluster-admin role to allow the CLI to run properly
+    mcg_sa_crb = helpers.create_resource(
+        **templating.load_yaml(constants.MCGCLI_SERVICEACCOUNT_CLUSTERROLEBINDING)
+    )
+    # Create a pod that uses the serviceaccount
+    mcgcli_pod = helpers.create_pod(
+        namespace=config.ENV_DATA['cluster_namespace'],
+        pod_dict_path=constants.MCGCLI_POD,
+        pod_name=constants.MCGCLI_POD_NAME
+    )
+
+    helpers.wait_for_resource_state(mcgcli_pod, constants.STATUS_RUNNING)
+
+    if (
+        not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+        or not _compare_cli_hashes()
+    ):
+        log.info('Downloading the NooBaa CLI tool from the operator pod, this might take a while.')
+        cmd = (
+            f"oc exec -n {config.ENV_DATA['cluster_namespace']} {nb_operator_pod.name}"
+            f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
+            f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+        )
+        subprocess.run(cmd, shell=True)
+        # Make sure the binary was copied properly and has the correct permissions
+        assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH), (
+            f'MCG CLI file not found at {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}'
+        )
+        assert _compare_cli_hashes(), (
+            "Binary hash doesn't match the one on the operator pod"
+        )
+    log.info('Uploading the NooBaa CLI tool to the MCGCLI pod, this might take a while.')
+    cmd = (
+        f"cat {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} | "
+        f"oc exec -i -n {config.ENV_DATA['cluster_namespace']} "
+        f" {mcgcli_pod.name} tee {constants.NOOBAA_OPERATOR_MCGCLI_POD_PATH} > /dev/null"
+    )
+    subprocess.run(cmd, shell=True)
+
+    mcgcli_pod.exec_cmd_on_pod(f'chmod +x {constants.NOOBAA_OPERATOR_MCGCLI_POD_PATH}')
+
+    def _mcgcli_pod_cleanup():
+        mcgcli_pod.delete()
+        mcg_sa_crb.delete()
+        mcgcli_sa.delete()
+
+    request.addfinalizer(_mcgcli_pod_cleanup)
+
+    return mcgcli_pod
+
+
 @pytest.fixture()
 def mcg_obj(request):
     return mcg_obj_fixture(request)
@@ -1567,16 +1684,6 @@ def mcg_obj(request):
 @pytest.fixture(scope='session')
 def mcg_obj_session(request):
     return mcg_obj_fixture(request)
-
-
-@pytest.fixture()
-def mcg_obj_with_aws(request):
-    return mcg_obj_fixture(request, create_aws_creds=True)
-
-
-@pytest.fixture(scope='session')
-def mcg_obj_with_aws_session(request):
-    return mcg_obj_fixture(request, create_aws_creds=True)
 
 
 def mcg_obj_fixture(request, *args, **kwargs):
@@ -1760,12 +1867,12 @@ def verify_rgw_restart_count_fixture(request):
 
 @pytest.fixture()
 def rgw_bucket_factory(request, rgw_obj):
-    return bucket_factory_fixture(request, mcg_obj=None, rgw_obj=rgw_obj)
+    return bucket_factory_fixture(request, rgw_obj=rgw_obj)
 
 
 @pytest.fixture(scope='session')
 def rgw_bucket_factory_session(request, rgw_obj_session):
-    return bucket_factory_fixture(request, mcg_obj=None, rgw_obj=rgw_obj_session)
+    return bucket_factory_fixture(request, rgw_obj=rgw_obj_session)
 
 
 @pytest.fixture()
@@ -1773,7 +1880,7 @@ def bucket_factory(request, mcg_obj):
     """
     Returns an MCG bucket factory
     """
-    return bucket_factory_fixture(request, mcg_obj, rgw_obj=None)
+    return bucket_factory_fixture(request, mcg_obj)
 
 
 @pytest.fixture(scope='session')
@@ -1781,17 +1888,18 @@ def bucket_factory_session(request, mcg_obj_session):
     """
     Returns a session-scoped MCG bucket factory
     """
-    return bucket_factory_fixture(request, mcg_obj_session, rgw_obj_session=None)
+    return bucket_factory_fixture(request, mcg_obj_session)
 
 
-def bucket_factory_fixture(request, mcg_obj, rgw_obj):
+def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
     """
     Create a bucket factory. Calling this fixture creates a new bucket(s).
     For a custom amount, provide the 'amount' parameter.
 
     Args:
         mcg_obj (MCG): An MCG object containing the MCG S3 connection
-        credentials
+            credentials
+        rgw_obj (RGW): An RGW object
 
     """
     created_buckets = []
@@ -1806,7 +1914,7 @@ def bucket_factory_fixture(request, mcg_obj, rgw_obj):
         Args:
             amount (int): The amount of buckets to create
             interface (str): The interface to use for creation of buckets.
-                S3 | OC | CLI
+                S3 | OC | CLI | NAMESPACE
 
         Returns:
             list: A list of s3.Bucket objects, containing all the created
@@ -1866,14 +1974,14 @@ def cloud_uls_factory(request, cld_mgr):
         'aws': set(),
         'google': set(),
         'azure': set(),
-        's3comp': set()
+        'ibmcos': set()
     }
 
     ulsMap = {
         'aws': cld_mgr.aws_client,
         'google': cld_mgr.google_client,
         'azure': cld_mgr.azure_client,
-        's3comp': cld_mgr.s3comp_client
+        # TODO: Implement - 'ibmcos': cld_mgr.ibmcos_client
     }
 
     def _create_uls(uls_dict):
@@ -1896,7 +2004,7 @@ def cloud_uls_factory(request, cld_mgr):
             'aws': set(),
             'google': set(),
             'azure': set(),
-            's3comp': set()
+            'ibmcos': set()
         }
 
         for cloud, params in uls_dict.items():
@@ -1920,19 +2028,13 @@ def cloud_uls_factory(request, cld_mgr):
 
     def uls_cleanup():
         for cloud, uls_set in all_created_uls.items():
-            client = ulsMap[cloud]
+            client = ulsMap.get(cloud)
             if client is not None:
                 all_existing_uls = client.get_all_uls_names()
                 for uls in uls_set:
                     if uls in all_existing_uls:
                         log.info(f'Cleaning up uls {uls}')
                         client.delete_uls(uls)
-                        log.info(
-                            f"Verifying whether uls: {uls} exists after deletion"
-                        )
-                        assert not client.verify_uls_exists(uls), (
-                            f'Unable to delete Underlying Storage {uls}'
-                        )
                     else:
                         log.warning(f'Underlying Storage {uls} not found.')
 
@@ -1959,14 +2061,14 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
             'aws': oc_create_aws_backingstore,
             'google': oc_create_google_backingstore,
             'azure': oc_create_azure_backingstore,
-            's3comp': oc_create_s3comp_backingstore,
+            'ibmcos': oc_create_s3comp_backingstore,
             'pv': oc_create_pv_backingstore
         },
         'cli': {
             'aws': cli_create_aws_backingstore,
             'google': cli_create_google_backingstore,
             'azure': cli_create_azure_backingstore,
-            's3comp': cli_create_s3comp_backingstore,
+            'ibmcos': cli_create_s3comp_backingstore,
             'pv': cli_create_pv_backingstore
         }
     }
@@ -2022,7 +2124,12 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
                         )
                         # removing characters from name (pod name length bellow 64 characters issue)
                         backingstore_name = backingstore_name[:-16]
-                        created_backingstores.append(backingstore_name)
+                        created_backingstores.append(
+                            BackingStore(
+                                name=backingstore_name,
+                                uls_name=uls_name
+                            )
+                        )
                         cmdMap[method.lower()][cloud.lower()](
                             cld_mgr, backingstore_name, uls_name, region
                         )
@@ -2031,19 +2138,8 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
         return created_backingstores
 
     def backingstore_cleanup():
-        for backingstore_name in created_backingstores:
-            log.info(f'Cleaning up backingstore {backingstore_name}')
-            oc = ocp.OCP(
-                namespace=config.ENV_DATA['cluster_namespace']
-            )
-            oc.exec_oc_cmd(
-                command=f'delete backingstore {backingstore_name}',
-                out_yaml_format=False
-            )
-            log.info(
-                f"Verifying whether backingstore {backingstore_name} exists after deletion"
-            )
-            # Todo: implement deletion assertion
+        for backingstore in created_backingstores:
+            backingstore.delete()
 
     request.addfinalizer(backingstore_cleanup)
 
@@ -2051,16 +2147,16 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
 
 
 @pytest.fixture()
-def multiregion_resources(request, mcg_obj_with_aws):
-    return multiregion_resources_fixture(request, mcg_obj_with_aws)
+def multiregion_resources(request, cld_mgr, mcg_obj):
+    return multiregion_resources_fixture(request, cld_mgr, mcg_obj)
 
 
 @pytest.fixture(scope='session')
-def multiregion_resources_session(request, mcg_obj_with_aws_session):
-    return multiregion_resources_fixture(request, mcg_obj_with_aws_session)
+def multiregion_resources_session(request, cld_mgr, mcg_obj_session):
+    return multiregion_resources_fixture(request, cld_mgr, mcg_obj_session)
 
 
-def multiregion_resources_fixture(request, mcg_obj_with_aws):
+def multiregion_resources_fixture(request, cld_mgr, mcg_obj):
     bs_objs, bs_secrets, bucketclasses, aws_buckets = (
         [] for _ in range(4)
     )
@@ -2070,28 +2166,8 @@ def multiregion_resources_fixture(request, mcg_obj_with_aws):
         for resource in chain(bs_secrets, bucketclasses):
             resource.delete()
 
-        for backingstore in bs_objs:
-            backingstore.delete()
-            mcg_obj_with_aws.send_rpc_query(
-                'pool_api',
-                'delete_pool',
-                {'name': backingstore.name}
-            )
-
-        for aws_bucket_name in aws_buckets:
-            mcg_obj_with_aws.toggle_aws_bucket_readwrite(aws_bucket_name, block=False)
-            for _ in range(10):
-                try:
-                    mcg_obj_with_aws.aws_s3_resource.Bucket(
-                        aws_bucket_name
-                    ).objects.all().delete()
-                    mcg_obj_with_aws.aws_s3_resource.Bucket(aws_bucket_name).delete()
-                    break
-                except ClientError:
-                    log.info(
-                        f'Deletion of bucket {aws_bucket_name} failed. Retrying...'
-                    )
-                    sleep(3)
+        for aws_bucket in aws_buckets:
+            cld_mgr.toggle_aws_bucket_readwrite(aws_bucket.name, block=False)
 
     request.addfinalizer(resource_cleanup)
 
@@ -2099,30 +2175,34 @@ def multiregion_resources_fixture(request, mcg_obj_with_aws):
 
 
 @pytest.fixture()
-def multiregion_mirror_setup(mcg_obj_with_aws, multiregion_resources, bucket_factory):
+def multiregion_mirror_setup(mcg_obj, multiregion_resources, backingstore_factory, bucket_factory):
     return multiregion_mirror_setup_fixture(
-        mcg_obj_with_aws,
+        mcg_obj,
         multiregion_resources,
+        backingstore_factory,
         bucket_factory
     )
 
 
 @pytest.fixture(scope='session')
 def multiregion_mirror_setup_session(
-    mcg_obj_with_aws_session,
+    mcg_obj_session,
     multiregion_resources_session,
+    backingstore_factory,
     bucket_factory_session
 ):
     return multiregion_mirror_setup_fixture(
-        mcg_obj_with_aws_session,
+        mcg_obj_session,
         multiregion_resources_session,
+        backingstore_factory,
         bucket_factory_session
     )
 
 
 def multiregion_mirror_setup_fixture(
-    mcg_obj_with_aws,
+    mcg_obj,
     multiregion_resources,
+    backingstore_factory,
     bucket_factory
 ):
     # Setup
@@ -2138,58 +2218,28 @@ def multiregion_mirror_setup_fixture(
     ) = multiregion_resources
 
     # Define backing stores
-    backingstore1 = {
-        'name': helpers.create_unique_resource_name(
-            resource_description='testbs',
-            resource_type='s3bucket'
-        ),
-        'region': f'us-west-{randrange(1, 3)}'
-    }
-    backingstore2 = {
-        'name': helpers.create_unique_resource_name(
-            resource_description='testbs',
-            resource_type='s3bucket'
-        ),
-        'region': 'us-east-2'
-    }
-    # Create target buckets for them
-    mcg_obj_with_aws.create_new_backingstore_aws_bucket(backingstore1)
-    mcg_obj_with_aws.create_new_backingstore_aws_bucket(backingstore2)
-    aws_buckets.extend((backingstore1['name'], backingstore2['name']))
-    # Create a backing store secret
-    backingstore_secret = mcg_obj_with_aws.create_aws_backingstore_secret(
-        backingstore1['name'] + 'secret'
+    created_backingstores = backingstore_factory(
+        'OC',
+        {
+            'aws': [(1, 'us-west-1'), (1, 'us-east-2')]
+        }
     )
-    backingstore_secrets.append(backingstore_secret)
-    # Create AWS-backed backing stores on NooBaa
-    backingstore_obj_1 = mcg_obj_with_aws.oc_create_aws_backingstore(
-        backingstore1['name'],
-        backingstore1['name'],
-        backingstore_secret.name,
-        backingstore1['region']
-    )
-    backingstore_obj_2 = mcg_obj_with_aws.oc_create_aws_backingstore(
-        backingstore2['name'],
-        backingstore2['name'],
-        backingstore_secret.name,
-        backingstore2['region']
-    )
-    backingstore_objects.extend((backingstore_obj_1, backingstore_obj_2))
+
     # Create a new mirror bucketclass that'll use all the backing stores we
     # created
-    bucketclass = mcg_obj_with_aws.oc_create_bucketclass(
+    bucketclass = mcg_obj.oc_create_bucketclass(
         helpers.create_unique_resource_name(
             resource_description='testbc',
             resource_type='bucketclass'
         ),
-        [backingstore.name for backingstore in backingstore_objects], 'Mirror'
+        [backingstore.name for backingstore in created_backingstores], 'Mirror'
     )
     bucketclasses.append(bucketclass)
     # Create a NooBucket that'll use the bucket class in order to test
     # the mirroring policy
     bucket = bucket_factory(1, 'OC', bucketclass=bucketclass.name)[0]
 
-    return bucket, backingstore1, backingstore2
+    return bucket, created_backingstores
 
 
 @pytest.fixture(scope='session')
@@ -2299,126 +2349,59 @@ def install_logging(request):
 
 @pytest.fixture
 def fio_pvc_dict():
-    return fio_pvc_dict_fixture()
+    """
+    PVC template for fio workloads.
+    Note that all 'None' values needs to be defined before usage.
+
+    """
+    return fio_artefacts.get_pvc_dict()
 
 
 @pytest.fixture(scope='session')
 def fio_pvc_dict_session():
-    return fio_pvc_dict_fixture()
-
-
-def fio_pvc_dict_fixture():
     """
     PVC template for fio workloads.
     Note that all 'None' values needs to be defined before usage.
+
     """
-    # TODO(fbalak): load dictionary fixtures from one place
-    template = textwrap.dedent("""
-        kind: PersistentVolumeClaim
-        apiVersion: v1
-        metadata:
-          name: fio-target
-        spec:
-          storageClassName: None
-          accessModes: ["ReadWriteOnce"]
-          resources:
-            requests:
-              storage: None
-        """)
-    pvc_dict = yaml.safe_load(template)
-    return pvc_dict
+    return fio_artefacts.get_pvc_dict()
 
 
 @pytest.fixture
 def fio_configmap_dict():
-    return fio_configmap_dict_fixture()
+    """
+    ConfigMap template for fio workloads.
+    Note that you need to add actual configuration to workload.fio file.
+
+    """
+    return fio_artefacts.get_configmap_dict()
 
 
 @pytest.fixture(scope='session')
 def fio_configmap_dict_session():
-    return fio_configmap_dict_fixture()
-
-
-def fio_configmap_dict_fixture():
     """
     ConfigMap template for fio workloads.
     Note that you need to add actual configuration to workload.fio file.
+
     """
-    # TODO(fbalak): load dictionary fixtures from one place
-    template = textwrap.dedent("""
-        kind: ConfigMap
-        apiVersion: v1
-        metadata:
-          name: fio-config
-        data:
-          workload.fio: |
-            # here comes workload configuration
-        """)
-    cm_dict = yaml.safe_load(template)
-    return cm_dict
+    return fio_artefacts.get_configmap_dict()
 
 
 @pytest.fixture
 def fio_job_dict():
-    return fio_job_dict_fixture()
+    """
+    Job template for fio workloads.
+
+    """
+    return fio_artefacts.get_job_dict()
 
 
 @pytest.fixture(scope='session')
 def fio_job_dict_session():
-    return fio_job_dict_fixture()
-
-
-def fio_job_dict_fixture():
     """
     Job template for fio workloads.
     """
-    arch = get_system_architecture()
-    if arch.startswith('x86'):
-        image = 'quay.io/fbalak/fio-fedora:latest'
-    else:
-        image = 'quay.io/multiarch-origin-e2e/fio-fedora:latest'
-    log.info(f'Discovered architecture: {arch.strip()}')
-    log.info(f'Using image: {image}')
-
-    # TODO(fbalak): load dictionary fixtures from one place
-    template = textwrap.dedent(f"""
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: fio
-        spec:
-          backoffLimit: 0
-          template:
-            metadata:
-              name: fio
-            spec:
-              containers:
-                - name: fio
-                  image: {image}
-                  command:
-                    - "/usr/bin/fio"
-                    - "--output-format=json"
-                    - "/etc/fio/workload.fio"
-                  volumeMounts:
-                    - name: fio-target
-                      mountPath: /mnt/target
-                    - name: fio-config-volume
-                      mountPath: /etc/fio
-              restartPolicy: Never
-              volumes:
-                - name: fio-target
-                  persistentVolumeClaim:
-                    claimName: fio-target
-                - name: fio-config-volume
-                  configMap:
-                    name: fio-config
-        """)
-    job_dict = yaml.safe_load(template)
-
-    # overwrite used image (required for disconnected installation)
-    update_container_with_mirrored_image(job_dict)
-
-    return job_dict
+    return fio_artefacts.get_job_dict()
 
 
 @pytest.fixture(scope='function')
@@ -2570,28 +2553,28 @@ def amq_factory_fixture(request):
     amq = AMQ()
 
     def factory(
-        sc_name, tiller_namespace, kafka_namespace=constants.AMQ_NAMESPACE,
-        size=100, replicas=3, benchmark_pod_name="benchmark",
-        num_of_clients=8, worker=None, timeout=3600,
-        amq_workload_yaml=None, run_in_bg=False
+        sc_name, kafka_namespace=constants.AMQ_NAMESPACE,
+        size=100, replicas=3, topic_name='my-topic',
+        user_name="my-user", partitions=1,
+        topic_replicas=1, num_of_producer_pods=1,
+        num_of_consumer_pods=1, value='10000', since_time=1800
     ):
         """
         Factory to start amq workload
 
         Args:
             sc_name (str): Name of storage clase
-            tiller_namespace (str): Namespace where benchmark pods to be created
             kafka_namespace (str): Namespace where kafka cluster to be created
             size (int): Size of the storage
             replicas (int): Number of kafka and zookeeper pods to be created
-            benchmark_pod_name (str): Name of the benchmark pod
-            num_of_clients (int): Number of clients to be created
-            worker (str) : Loads to create on workloads separated with commas
-                e.g http://benchmark-worker-0.benchmark-worker:8080,
-                http://benchmark-worker-1.benchmark-worker:8080
-            timeout (int): Time to complete the run
-            amq_workload_yaml (dict): Contains amq workloads information keys and values
-            run_in_bg (bool): On true the workload will run in background
+            topic_name (str): Name of the topic to be created
+            user_name (str): Name of the user to be created
+            partitions (int): Number of partitions of topic
+            topic_replicas (int): Number of replicas of topic
+            num_of_producer_pods (int): Number of producer pods to be created
+            num_of_consumer_pods (int): Number of consumer pods to be created
+            value (str): Number of messages to be sent and received
+            since_time (int): Number of seconds to required to sent the msg
 
         """
         # Setup kafka cluster
@@ -2599,14 +2582,25 @@ def amq_factory_fixture(request):
             sc_name=sc_name, namespace=kafka_namespace, size=size, replicas=replicas
         )
 
-        # Run amq benchmark
-        result = amq.run_amq_benchmark(
-            benchmark_pod_name=benchmark_pod_name, kafka_namespace=kafka_namespace,
-            tiller_namespace=tiller_namespace, num_of_clients=num_of_clients, worker=worker,
-            timeout=timeout, amq_workload_yaml=amq_workload_yaml, run_in_bg=run_in_bg
+        # Run open messages
+        amq.create_messaging_on_amq(
+            topic_name=topic_name, user_name=user_name,
+            partitions=partitions, replicas=topic_replicas,
+            num_of_producer_pods=num_of_producer_pods,
+            num_of_consumer_pods=num_of_consumer_pods, value=value
         )
 
-        return amq, result
+        # Wait for some time to generate msg
+        waiting_time = 60
+        log.info(f"Waiting for {waiting_time}sec to generate msg")
+        time.sleep(waiting_time)
+
+        # Check messages are sent and received
+        threads = amq.run_in_bg(
+            namespace=kafka_namespace,
+            value=value, since_time=since_time)
+
+        return amq, threads
 
     def finalizer():
         """
@@ -2730,3 +2724,90 @@ def ceph_toolbox(request):
     if not (deploy or teardown or skip_ocs):
         # Creating toolbox pod
         setup_ceph_toolbox()
+
+
+@pytest.fixture(scope='function')
+def node_drain_teardown(request):
+    """
+    Tear down function after Node drain
+
+    """
+    def finalizer():
+        """
+        Make sure that all cluster's nodes are in 'Ready' state and if not,
+        change them back to 'Ready' state by marking them as schedulable
+
+        """
+        scheduling_disabled_nodes = [
+            n.name for n in get_node_objs() if n.ocp.get_resource_status(
+                n.name
+            ) == constants.NODE_READY_SCHEDULING_DISABLED
+        ]
+        if scheduling_disabled_nodes:
+            schedule_nodes(scheduling_disabled_nodes)
+
+    request.addfinalizer(finalizer)
+
+
+@pytest.fixture(scope='function')
+def node_restart_teardown(request, nodes):
+    """
+    Make sure all nodes are up again
+    Make sure that all cluster's nodes are in 'Ready' state and if not,
+    change them back to 'Ready' state by restarting the nodes
+    """
+    def finalizer():
+        # Start the powered off nodes
+        nodes.restart_nodes_by_stop_and_start_teardown()
+        try:
+            node.wait_for_nodes_status(status=constants.NODE_READY)
+        except ResourceWrongStatusException:
+            # Restart the nodes if in NotReady state
+            not_ready_nodes = [
+                n for n in node.get_node_objs() if n
+                .ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
+            ]
+            if not_ready_nodes:
+                log.info(
+                    f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
+                )
+                nodes.restart_nodes(not_ready_nodes)
+                node.wait_for_nodes_status(status=constants.NODE_READY)
+
+    request.addfinalizer(finalizer)
+
+
+@pytest.fixture()
+def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
+    """
+    Create a namespace resource factory. Calling this fixture creates a new namespace resource.
+
+    """
+    created_ns_resources = []
+    created_ns_connections = []
+
+    def _create_ns_resources():
+        # Create random connection_name and random namespace resource name
+        rand_ns_resource = create_unique_resource_name(constants.MCG_NS_RESOURCE, 'aws')
+        rand_connection = create_unique_resource_name(constants.MCG_NS_AWS_CONNECTION, 'aws')
+
+        # Create the actual namespace resource
+        target_bucket_name = mcg_obj.create_namespace_resource(rand_ns_resource, rand_connection,
+                                                               config.ENV_DATA['region'], cld_mgr, cloud_uls_factory)
+        mcg_obj.check_ns_resource_validity(rand_ns_resource,
+                                           target_bucket_name, constants.MCG_NS_AWS_ENDPOINT)
+
+        created_ns_resources.append(rand_ns_resource)
+        created_ns_connections.append(rand_connection)
+        return target_bucket_name, rand_ns_resource
+
+    def ns_resources_and_connections_cleanup():
+        for ns_resource in created_ns_resources:
+            mcg_obj.delete_ns_resource(ns_resource)
+
+        for ns_connection in created_ns_connections:
+            mcg_obj.delete_ns_connection(ns_connection)
+
+    request.addfinalizer(ns_resources_and_connections_cleanup)
+
+    return _create_ns_resources

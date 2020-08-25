@@ -644,6 +644,31 @@ class CephCluster(object):
                 and states['count'] == total_pg_count
             )
 
+    def wait_for_rebalance(self, timeout=600):
+        """
+        Wait for re-balance to complete
+
+        Args:
+            timeout (int): Time to wait for the completion of re-balance
+
+        Returns:
+            bool: True if rebalance completed, False otherwise
+
+        """
+        try:
+            for rebalance in TimeoutSampler(
+                timeout=timeout, sleep=10, func=self.get_rebalance_status
+            ):
+                if rebalance:
+                    logging.info("Re-balance is completed")
+                    return True
+        except exceptions.TimeoutExpiredError:
+            logger.error(
+                f"Data re-balance failed to complete within the given "
+                f"timeout of {timeout} seconds"
+            )
+            return False
+
     def time_taken_to_complete_rebalance(self, timeout=600):
         """
         This function calculates the time taken to complete
@@ -657,13 +682,12 @@ class CephCluster(object):
 
         """
         start_time = time.time()
-        for rebalance in TimeoutSampler(
-            timeout=timeout, sleep=10, func=self.get_rebalance_status
-        ):
-            if rebalance:
-                logging.info("Rebalance is completed")
-                time_taken = time.time() - start_time
-                return (time_taken / 60)
+        assert self.wait_for_rebalance(timeout=timeout), (
+            f"Data re-balance failed to complete within the given "
+            f"timeout of {timeout} seconds"
+        )
+        time_taken = time.time() - start_time
+        return time_taken / 60
 
 
 class CephHealthMonitor(threading.Thread):
@@ -967,28 +991,34 @@ def validate_pg_balancer():
     Validate either data is equally distributed to OSDs
 
     Returns:
-        bool: True if osd data consumption difference is <= 2% else False
+        bool: True if avg PG's per osd difference is <=10 else False
 
     """
     # Check OSD utilization either pg balancer is active
+    # TODO: Revisit this if pg difference value needs change
+    # TODO: Revisit eval value if pg balancer mode changes from 'upmap'
     if get_pg_balancer_status():
         eval = get_balancer_eval()
         osd_dict = get_pgs_per_osd()
-        osd_min_pg_value = min(osd_dict.values())
-        osd_max_pg_value = max(osd_dict.values())
-        diff = osd_max_pg_value - osd_min_pg_value
-        # TODO: Revisit this if pg difference value needs change
-        # TODO: Revisit eval value if pg balancer mode changes from 'upmap'
-        if diff <= 5 and eval <= 0.02:
+        osd_avg_pg_value = round(sum(osd_dict.values()) / len(osd_dict))
+        osd_pg_value_flag = True
+        for key, value in osd_dict.items():
+            diff = abs(value - osd_avg_pg_value)
+            if diff <= 10:
+                logging.info(f"{key} PG difference {diff} is acceptable")
+            else:
+                logging.error(f"{key} PG difference {diff} is not acceptable")
+                osd_pg_value_flag = False
+        if osd_pg_value_flag and eval <= 0.025:
             logging.info(
                 f"Eval value is {eval} and pg distribution "
-                f"difference is {diff} between high and low pgs per OSD"
+                f"average difference is <=10 which is acceptable"
             )
             return True
         else:
             logging.error(
                 f"Eval value is {eval} and pg distribution "
-                f"difference is {diff} between high and low pgs per OSD"
+                f"average difference is >=10 which is high and not acceptable"
             )
             return False
     else:
@@ -1171,3 +1201,81 @@ def check_osd_tree_1az_aws(osd_tree, number_of_osds):
     all_hosts_flatten = [item for sublist in all_hosts for item in sublist]
 
     return check_osds_in_hosts_osd_tree(all_hosts_flatten, osd_tree)
+
+
+class CephClusterExternal(CephCluster):
+    """
+    Handle all external ceph cluster related functionalities
+    Assumption: Cephcluster Kind resource exists
+
+    """
+
+    def __init__(self):
+        self.POD = ocp.OCP(
+            kind='Pod', namespace=config.ENV_DATA['cluster_namespace']
+        )
+        self.CEPHCLUSTER = ocp.OCP(
+            kind='CephCluster', namespace=config.ENV_DATA['cluster_namespace']
+        )
+
+        self.wait_for_cluster_cr()
+        self._cluster_name = (
+            self.cluster_resource.get('metadata').get('name')
+        )
+        self._namespace = (
+            self.cluster_resource.get('metadata').get('namespace')
+        )
+        self.cluster = ocs.OCS(**self.cluster_resource)
+        self.wait_for_nooba_cr()
+
+    @property
+    def cluster_name(self):
+        return self._cluster_name
+
+    @property
+    def namespace(self):
+        return self._namespace
+
+    @retry(IndexError, 10, 3, 1)
+    def wait_for_cluster_cr(self):
+        """
+        we have to wait for cluster cr to appear else
+        it leads to list index out of range error
+
+        """
+        cluster_cr = self.CEPHCLUSTER.get()
+        self.cluster_resource = cluster_cr.get('items')[0]
+
+    @retry((IndexError, AttributeError, TypeError), 100, 3, 1)
+    def wait_for_nooba_cr(self):
+        self.mcg_obj = MCG()
+
+    def cluster_health_check(self, timeout=300):
+        """
+        This would be a comprehensive cluster health check
+        which includes checking pods, external ceph cluster health.
+        raise exceptions.CephHealthException("Cluster health is NOT OK")
+        """
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=3,
+            func=self.is_health_ok
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise exceptions.CephHealthException("Cluster health is NOT OK")
+
+        self.wait_for_noobaa_health_ok()
+        self.validate_pvc()
+
+    def validate_pvc(self):
+        """
+        Check whether all PVCs are in bound state
+
+        """
+        ocs_pvc_obj = get_all_pvc_objs(namespace=self.namespace)
+
+        for pvc_obj in ocs_pvc_obj:
+            assert pvc_obj.status == constants.STATUS_BOUND, {
+                f"PVC {pvc_obj.name} is not Bound"
+            }
+            logger.info(f"PVC {pvc_obj.name} is in Bound state")

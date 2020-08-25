@@ -119,13 +119,7 @@ def verify_image_versions(old_images, upgrade_version):
     )
     verify_pods_upgraded(old_images, selector=constants.MDS_APP_LABEL, count=2)
     if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
-        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1857802 - RGW count is 1
-        # post upgrade to OCS 4.5. Tracked with
-        # https://github.com/red-hat-storage/ocs-ci/issues/2532
-        # TODO: uncomment the below 1 line:
-        # rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
-        # TODO: Delete the below 1 line
-        rgw_count = 1
+        rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
         verify_pods_upgraded(
             old_images, selector=constants.RGW_APP_LABEL, count=rgw_count
         )

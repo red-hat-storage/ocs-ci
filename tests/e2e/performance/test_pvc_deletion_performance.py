@@ -9,7 +9,7 @@ from ocs_ci.framework.testlib import (
 )
 from tests import helpers
 from ocs_ci.ocs import constants
-
+from ocs_ci.utility.performance_dashboard import push_to_pvc_time_dashboard
 
 log = logging.getLogger(__name__)
 
@@ -85,3 +85,4 @@ class TestPVCDeletionPerformance(E2ETest):
             raise ex.PerformanceException(
                 f"PVC deletion time is {delete_time} and greater than {deletion_time} second"
             )
+        push_to_pvc_time_dashboard(self.interface, "deletion", delete_time)

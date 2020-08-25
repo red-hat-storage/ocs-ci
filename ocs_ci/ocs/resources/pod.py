@@ -1174,46 +1174,22 @@ def plugin_provisioner_leader(interface, namespace=None):
     Returns:
         Pod: csi-cephfsplugin-provisioner or csi-rbdplugin-provisioner leader
             pod
+
     """
-    non_leader_msg = 'failed to acquire lease'
-    lease_acq_msg = 'successfully acquired lease'
-    lease_renew_msg = 'successfully renewed lease'
-    leader_pod = ''
-
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
     if interface == constants.CEPHBLOCKPOOL:
-        pods = get_rbdfsplugin_provisioner_pods(namespace=namespace)
+        lease_cmd = "get leases openshift-storage-rbd-csi-ceph-com -o yaml"
     if interface == constants.CEPHFILESYSTEM:
-        pods = get_cephfsplugin_provisioner_pods(namespace=namespace)
+        lease_cmd = "get leases openshift-storage-cephfs-csi-ceph-com -o yaml"
 
-    pods_log = {}
-    for pod in pods:
-        pods_log[pod] = get_pod_logs(
-            pod_name=pod.name, container='csi-provisioner'
-        ).split('\n')
+    ocp_obj = ocp.OCP(kind=constants.POD, namespace=namespace)
+    lease = ocp_obj.exec_oc_cmd(command=lease_cmd)
+    leader = lease.get('spec').get('holderIdentity').strip()
+    assert leader, "Couldn't identify plugin provisioner leader pod."
+    logger.info(f"Plugin provisioner leader pod is {leader}")
 
-    for pod, log_list in pods_log.items():
-        # Reverse the list to find last occurrence of message without
-        # iterating over all elements
-        log_list.reverse()
-        for log_msg in log_list:
-            # Check for last occurrence of leader messages.
-            # This will be the first occurrence in reversed list.
-            if (lease_renew_msg in log_msg) or (lease_acq_msg in log_msg):
-                curr_index = log_list.index(log_msg)
-                # Ensure that there is no non leader message logged after
-                # the last occurrence of leader message
-                if not any(
-                    non_leader_msg in msg for msg in log_list[:curr_index]
-                ):
-                    assert not leader_pod, (
-                        "Couldn't identify plugin provisioner leader pod by "
-                        "analysing the logs. Found more than one match."
-                    )
-                    leader_pod = pod
-                break
-
-    assert leader_pod, "Couldn't identify plugin provisioner leader pod."
-    logger.info(f"Plugin provisioner leader pod is {leader_pod.name}")
+    ocp_obj._resource_name = leader
+    leader_pod = Pod(**ocp_obj.get())
     return leader_pod
 
 

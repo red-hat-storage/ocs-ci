@@ -79,9 +79,10 @@ def push_results(json_data):
 
     """
 
-    log.info(f'Trying to push {json_data} to codespeed')
+    log.info(f'Trying to push {json_data} to codespeed server:  {constants.CODESPEED_URL}result/add/json/')
     try:
-        requests.post(constants.CODESPEED_URL + 'result/add/json/', data=json_data)
+        request = requests.post(constants.CODESPEED_URL + 'result/add/json/', data=json_data)
+        log.info(f'POST request output is {request.text}')
     except Exception:
         # Catching any exception just to prevent the test from failed
         log.error('Failed to push data to codespeed, make sure the server is up')

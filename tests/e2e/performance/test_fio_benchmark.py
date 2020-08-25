@@ -11,23 +11,31 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, node
 from ocs_ci.utility.performance_dashboard import push_perf_dashboard
 from ocs_ci.framework.testlib import E2ETest, performance
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.cluster import CephCluster
-from ocs_ci.ocs.version import get_ocs_version
+from ocs_ci.ocs.version import get_environment_info
 
 log = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope='function')
 def es(request):
+
+    # Create internal ES only if Cloud platform is tested
+    if node.get_provider().lower() in constants.CLOUD_PLATFORMS:
+        es = ElasticSearch()
+    else:
+        es = None
+
     def teardown():
-        es.cleanup()
+        if es is not None:
+            es.cleanup()
+            time.sleep(10)
     request.addfinalizer(teardown)
-    es = ElasticSearch()
     return es
 
 
@@ -39,6 +47,7 @@ def ripsaw(request):
 
     def teardown():
         ripsaw.cleanup()
+        time.sleep(10)
     request.addfinalizer(teardown)
     return ripsaw
 
@@ -161,26 +170,25 @@ class TestFIOBenchmark(E2ETest):
             'resources/crds/'
             'ripsaw_v1alpha1_ripsaw_crd.yaml'
         )
-        sc = 'ocs-storagecluster-ceph-rbd' if interface == 'CephBlockPool' else 'ocs-storagecluster-cephfs'
+        if interface == 'CephBlockPool':
+            sc = constants.CEPHBLOCKPOOL_SC
+        else:
+            sc = constants.CEPHFILESYSTEM_SC
 
         # Create fio benchmark
         log.info("Create resource file for fio workload")
         fio_cr = templating.load_yaml(constants.FIO_CR_YAML)
 
         # Saving the Original elastic-search IP and PORT - if defined in yaml
-        es_server = ""
-        es_port = ""
         if 'elasticsearch' in fio_cr['spec']:
-            if 'server' in fio_cr['spec']['elasticsearch']:
-                es_server = fio_cr['spec']['elasticsearch']['server']
-            if 'port' in fio_cr['spec']['elasticsearch']:
-                es_port = fio_cr['spec']['elasticsearch']['port']
+            backup_es = fio_cr['spec']['elasticsearch']
         else:
+            log.warning('Elastic Search information does not exists in YAML file')
             fio_cr['spec']['elasticsearch'] = {}
 
-        # Use the internal define elastic-search server in the test
-        fio_cr['spec']['elasticsearch'] = {'server': es.get_ip(),
-                                           'port': es.get_port()}
+        # Use the internal define elastic-search server in the test - if exist
+        if es:
+            fio_cr['spec']['elasticsearch'] = {'server': es.get_ip(), 'port': es.get_port()}
 
         # Setting the data set to 40% of the total storage capacity
         ceph_cluster = CephCluster()
@@ -197,8 +205,7 @@ class TestFIOBenchmark(E2ETest):
         fio_cr['spec']['workload']['args']['servers'] = int(total_data_set / filesize)
         log.info(f'Total Data set to work on is : {total_data_set} GiB')
 
-        (environment, _) = get_ocs_version()
-        environment = environment['ENV']
+        environment = get_environment_info()
         if not environment['user'] == '':
             fio_cr['spec']['test_user'] = environment['user']
         fio_cr['spec']['clustername'] = environment['clustername']
@@ -231,7 +238,7 @@ class TestFIOBenchmark(E2ETest):
         # Getting the UUID from inside the benchmark pod
         uuid = ripsaw.get_uuid(fio_client_pod)
         # Setting back the original elastic-search information
-        fio_cr['spec']['elasticsearch'] = {'server': es_server, 'port': es_port}
+        fio_cr['spec']['elasticsearch'] = backup_es
 
         full_results = FIOResultsAnalyse(uuid, fio_cr)
 
@@ -297,7 +304,10 @@ class TestFIOBenchmark(E2ETest):
 
         log.debug(f'Full results is : {full_results.results}')
 
-        es._copy(full_results.es)
+        # if Internal ES is exists, Copy all data from the Internal to main ES
+        if es:
+            log.info('Copy all data from Internal ES to Main ES')
+            es._copy(full_results.es)
         # Adding this sleep between the copy and the analyzing of the results
         # since sometimes the results of the read (just after write) are empty
         time.sleep(30)
