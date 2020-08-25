@@ -356,6 +356,18 @@ CSI_CEPHFS_PVC_YAML = os.path.join(
     TEMPLATE_CSI_FS_DIR, "pvc.yaml"
 )
 
+CSI_CEPHFS_PVC_RESTORE_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "pvc-restore.yaml"
+)
+
+CSI_CEPHFS_SNAPSHOT_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "snapshot.yaml"
+)
+
+CSI_CEPHFS_SNAPSHOTCLASS_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "snapshotclass.yaml"
+)
+
 CSI_RBD_PVC_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pvc.yaml"
 )
