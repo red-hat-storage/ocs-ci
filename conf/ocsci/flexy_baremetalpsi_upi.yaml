@@ -5,4 +5,5 @@ ENV_DATA:
   deployment_type: 'upi'
 
 FLEXY:
-  LAUNCHER_VARS: {"num_workers":"3", "openstack_network":"provider_net_cci_9","rhel_vm_template":"ql-rhel-7.6","qe_additional_repos":"[{'id': 'rhel7', 'name': 'rhel7', 'baseurl': 'http://pulp.dist.prod.ext.phx2.redhat.com/content/dist/rhel/server/7/7Server/x86_64/os', 'enabled': 1, 'gpgcheck': 0}]","vm_type_masters":"m1.large","vm_type_workers":"ci.m1.xlarge.ocs03","ssh_key_name":"openshift-dev","rhel_ansible_user":"cloud-user","installer_payload_image":"registry.svc.ci.openshift.org/ocp/release:4.5","num_nodes": 1}
+  LAUNCHER_VARS: {"num_workers":"3", "openstack_network":"provider_net_cci_9","rhel_vm_template":"ql-rhel-7.6","qe_additional_repos":"[{'id': 'rhel7', 'name': 'rhel7', 'baseurl': 'http://pulp.dist.prod.ext.phx2.redhat.com/content/dist/rhel/server/7/7Server/x86_64/os', 'enabled': 1, 'gpgcheck': 0}]","vm_type_masters":"m1.large","vm_type_workers":"m1.large","ssh_key_name":"openshift-dev","rhel_ansible_user":"cloud-user","installer_payload_image":"registry.svc.ci.openshift.org/ocp/release:4.5","num_nodes": 1}
+  GIT_PRIVATE_OPENSHIFT_MISC_URI: 'https://gitlab.cee.redhat.com/aosqe/flexy-templates.git'
