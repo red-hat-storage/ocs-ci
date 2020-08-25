@@ -1048,10 +1048,9 @@ def health_checker(request, tier_marks_name):
                     log.info("Ceph health check passed at setup")
                     return
             except CephHealthException:
-                # skipped = True
+                skipped = True
                 # skip because ceph is not in good health
-                # pytest.skip("Ceph health check failed at setup")
-                log.info("Continue the test with Ceph health check failed at setup")
+                pytest.skip("Ceph health check failed at setup")
 
 
 @pytest.fixture(scope="session", autouse=True)

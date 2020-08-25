@@ -808,9 +808,8 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
     from ocs_ci.ocs.platform_nodes import AWSNodes
     aws_nodes = AWSNodes()
     stack_name_of_deleted_node = aws_nodes.get_stack_name_of_node(osd_node_name)
-    stack_name_of_deleted_node = 'ikave-aws-no1'
 
-    # remove_nodes([osd_node])
+    remove_nodes([osd_node])
 
     log.info(f"name of deleted node = {osd_node_name}")
     log.info(f"availability zone of deleted node = {az}")
