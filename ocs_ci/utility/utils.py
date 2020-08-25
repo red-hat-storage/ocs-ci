@@ -520,6 +520,13 @@ def expose_ocp_version(version):
     """
     ocp_mirror_path = config.DEPLOYMENT['ocp_mirror_path']
     if version.endswith(".nightly"):
+        if ocp_arch == "s390x":
+            path = "https://openshift-release-s390x.apps.ci.l2s4.p1.openshiftapps.com/"
+        elif ocp_arch == "ppc64le":
+            path = "https://openshift-release-ppc64le.apps.ci.l2s4.p1.openshiftapps.com/"
+        else:
+            path = "https://openshift-release.svc.ci.openshift.org/api/v1/"
+
         latest_nightly_url = (
             f"{ocp_mirror_path}"
             f"releasestream/{version}/latest"
