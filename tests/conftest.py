@@ -1593,7 +1593,9 @@ def mcgcli_pod_fixture(request):
     teardown = config.RUN['cli_params'].get('teardown')
     skip_ocs = config.ENV_DATA['skip_ocs_deployment']
     if skip_ocs or teardown:
-        log.info('Skipping mcg operations for OCP only deployments.')
+        log.info(
+            'Skipping mcg operations for OCP only deployments and teardown.'
+        )
         return
     nb_operator_pod = Pod(
         **get_pods_having_label(
