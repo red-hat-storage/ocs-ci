@@ -1591,8 +1591,9 @@ def mcgcli_pod_fixture(request):
 
     """
     deploy = config.RUN['cli_params']['deploy']
+    teardown = config.RUN['cli_params'].get('teardown')
     skip_ocs = config.ENV_DATA['skip_ocs_deployment']
-    if deploy and skip_ocs:
+    if (deploy and skip_ocs) or teardown:
         log.info('Skipping mcg operations for OCP only deployments.')
         return
     nb_operator_pod = Pod(
