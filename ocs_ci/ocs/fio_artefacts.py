@@ -3,7 +3,7 @@ import logging
 import textwrap
 import yaml
 
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
     config_to_string,
     get_system_architecture,
