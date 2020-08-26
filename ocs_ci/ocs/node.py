@@ -798,16 +798,16 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
     """
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
-    # az = get_node_az(osd_node)
-    # from ocs_ci.ocs.platform_nodes import AWSNodes
-    # aws_nodes = AWSNodes()
-    # stack_name_of_deleted_node = aws_nodes.get_stack_name_of_node(osd_node_name)
-    #
-    # remove_nodes([osd_node])
-    #
-    # log.info(f"name of deleted node = {osd_node_name}")
-    # log.info(f"availability zone of deleted node = {az}")
-    # log.info(f"stack name of deleted node = {stack_name_of_deleted_node}")
+    az = get_node_az(osd_node)
+    from ocs_ci.ocs.platform_nodes import AWSNodes
+    aws_nodes = AWSNodes()
+    stack_name_of_deleted_node = aws_nodes.get_stack_name_of_node(osd_node_name)
+
+    remove_nodes([osd_node])
+
+    log.info(f"name of deleted node = {osd_node_name}")
+    log.info(f"availability zone of deleted node = {az}")
+    log.info(f"stack name of deleted node = {stack_name_of_deleted_node}")
 
     if config.ENV_DATA.get('rhel_workers'):
         node_type = constants.RHEL_OS
@@ -815,8 +815,8 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
         node_type = constants.RHCOS
 
     log.info("Preparing to create a new node...")
-    # node_conf = {'stack_name': stack_name_of_deleted_node}
-    add_new_node_and_label_upi(node_type, 1)
+    node_conf = {'stack_name': stack_name_of_deleted_node}
+    add_new_node_and_label_upi(node_type, 1, node_conf=node_conf)
 
 
 def get_node_az(node):
@@ -831,3 +831,29 @@ def get_node_az(node):
     """
     labels = node.get().get('metadata', {}).get('labels', {})
     return labels.get('topology.kubernetes.io/zone')
+
+
+def delete_and_create_osd_node_vsphere_upi(osd_node_name):
+    """
+    Unschedule, drain and delete osd node, and creating a new osd node.
+    At the end of the function there should be the same number of osd nodes as
+    it was in the beginning, and also ceph health should be OK.
+    This function is for vSphere UPI.
+
+    Args:
+        osd_node_name (str): the name of the osd node
+
+    """
+
+    osd_node = get_node_objs(node_names=[osd_node_name])[0]
+    remove_nodes([osd_node])
+
+    log.info(f"name of deleted node = {osd_node_name}")
+
+    if config.ENV_DATA.get('rhel_workers'):
+        node_type = constants.RHEL_OS
+    else:
+        node_type = constants.RHCOS
+
+    log.info("Preparing to create a new node...")
+    add_new_node_and_label_upi(node_type, 1)
