@@ -2716,7 +2716,8 @@ def collect_logs_fixture(request):
         """
         Tracking both logs separately reduce changes of collision
         """
-        if not config.RUN['cli_params'].get('deploy'):
+        if not config.RUN['cli_params'].get('deploy') and \
+            not config.RUN['cli_params'].get('destroy'):
             collect_ocs_logs('testcases', ocs=False, status_failure=False)
             collect_ocs_logs('testcases', ocp=False, status_failure=False)
 
