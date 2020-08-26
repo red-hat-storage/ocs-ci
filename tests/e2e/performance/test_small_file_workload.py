@@ -12,32 +12,30 @@ port 9200, this test can not be running in your host.
 # Builtin modules
 import logging
 import time
-import re
 
 # 3ed party modules
 import pytest
 import numpy as np
-from elasticsearch import (Elasticsearch, exceptions as ESExp)
+from elasticsearch import exceptions as ESExp
 
 # Local modules
-from ocs_ci.ocs.version import get_ocs_version
-from ocs_ci.ocs.ocp import (OCP, get_clustername, get_build, get_ocp_channel)
-from ocs_ci.ocs.node import get_provider
-from ocs_ci.utility.utils import TimeoutSampler, get_ocp_version, run_cmd
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, node
 from ocs_ci.framework.testlib import E2ETest, performance
+from ocs_ci.ocs.perfresult import PerfResult
 from tests.helpers import get_logs_with_errors
-from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.elasticsearch import ElasticSearch
+from ocs_ci.ocs.version import get_environment_info
 
 log = logging.getLogger(__name__)
 
 
-class SmallFileResultsAnalyse(object):
+class SmallFileResultsAnalyse(PerfResult):
     """
     This class is reading all test results from elasticsearch server (which the
     ripsaw running of the benchmark is generate), aggregate them by :
@@ -71,82 +69,28 @@ class SmallFileResultsAnalyse(object):
 
         """
 
-        self.uuid = uuid
+        super(SmallFileResultsAnalyse, self).__init__(uuid, crd)
 
-        self.server = crd['spec']['elasticsearch']['server']
-        self.port = crd['spec']['elasticsearch']['port']
         self.index = crd['spec']['es_index'] + '-results'
         self.new_index = crd['spec']['es_index'] + '-fullres'
-        self.all_results = {}
 
         # WA for Cloud environment where pod can not send results to ES
         self.dont_check = False
 
         # make sure we have connection to the elastic search server
-        log.info(f'Connecting to ES {self.server} on port {self.port}')
-        try:
-            self.es = Elasticsearch([{'host': self.server, 'port': self.port}])
-        except ESExp.ConnectionError:
-            log.error('can not connect to ES server {}:{}'.format(
-                self.server, self.port))
-            raise
+        self.es_connect()
 
         # Creating full results dictionary
-        self.results = {
-            'clustername': crd['spec']['clustername'],
-            'clients': crd['spec']['workload']['args']['clients'],
-            'samples': crd['spec']['workload']['args']['samples'],
-            'threads': crd['spec']['workload']['args']['threads'],
-            'operations': crd['spec']['workload']['args']['operation'],
-            'uuid': uuid,
-            'full-res': {}
-        }
+        self.add_key('clients', crd['spec']['workload']['args']['clients'])
+        self.add_key('samples', crd['spec']['workload']['args']['samples'])
+        self.add_key('threads', crd['spec']['workload']['args']['threads'])
+        self.add_key('operations', crd['spec']['workload']['args']['operation'])
+        self.add_key('full-res', {})
 
         # Calculate the number of records for the test
         self.records = self.results['clients'] * self.results['threads']
         self.records *= self.results['samples']
         self.records *= len(self.results['operations'])
-
-    def add_key(self, key, value):
-        """
-        Adding (key and value) to this object results dictionary as a new
-        dictionary.
-
-        Args:
-            key (str): String which will be the key for the value
-            value (*): value to add, can be any kind of data type
-
-        """
-        self.results.update({key: value})
-
-    def _copy(self):
-        """
-        Copy All data from the internal ES server to the main ES
-
-        """
-
-        # connecting to the internal ES via the local_server
-        try:
-            int_es = Elasticsearch([{'host': 'localhost',
-                                     'port': '9200'}])
-        except ESExp.ConnectionError:
-            log.error('Can not connect to the internal elastic-search server')
-            return
-
-        query = {'size': 10000, 'query': {'match_all': {}}}
-        for ind in ['ripsaw-smallfile-rsptimes', 'ripsaw-smallfile-results']:
-            log.info(f'Reading {ind} from internal ES server')
-            try:
-                result = int_es.search(index=ind, body=query)
-            except ESExp.NotFoundError:
-                log.warning(f'{ind} Not found in the Internal ES.')
-                continue
-
-            log.debug(f'The results from internal ES for {ind} are :{result}')
-            log.info(f'Writing {ind} into main ES server')
-            for doc in result['hits']['hits']:
-                log.debug(f'Going to write : {doc}')
-                self.es.index(index=ind, doc_type='_doc', body=doc['_source'])
 
     def read(self):
         """
@@ -154,10 +98,6 @@ class SmallFileResultsAnalyse(object):
         inside this object
 
         """
-
-        # Copying all results from internal ES to main ES
-        self._copy()
-
         query = {'query': {'match': {'uuid': self.uuid}}}
         log.info('Reading all data from ES server')
         try:
@@ -174,20 +114,6 @@ class SmallFileResultsAnalyse(object):
             log.warning(
                 'No data in ES server, disabling results calculation')
             self.dont_check = True
-
-    def write(self):
-        """
-        Writing the results to the elasticsearch server
-
-        """
-        log.info('Writing all data to ES server')
-        log.info(f'Params : index={self.new_index}')
-        log.info(f'         doc_type=_doc,body={self.results},id={self.uuid}')
-        log.info(f'the results data is {self.results}')
-        self.es.index(index=self.new_index,
-                      doc_type='_doc',
-                      body=self.results,
-                      id=self.uuid)
 
     def thread_read(self, host, op, snum):
         """
@@ -380,13 +306,18 @@ class SmallFileResultsAnalyse(object):
 
 @pytest.fixture(scope='function')
 def es(request):
+
+    # Create internal ES only if Cloud platform is tested
+    if node.get_provider().lower() in constants.CLOUD_PLATFORMS:
+        es = ElasticSearch()
+    else:
+        es = None
+
     def teardown():
-        es.cleanup()
-
+        if es is not None:
+            es.cleanup()
+            time.sleep(10)
     request.addfinalizer(teardown)
-
-    es = ElasticSearch()
-
     return es
 
 
@@ -394,6 +325,7 @@ def es(request):
 def ripsaw(request, storageclass_factory):
     def teardown():
         ripsaw.cleanup()
+        time.sleep(10)
 
     request.addfinalizer(teardown)
 
@@ -447,29 +379,16 @@ class TestSmallFileWorkload(E2ETest):
         # Loading the main template yaml file for the benchmark
         sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
 
-        # getting the name and email  of the user that running the test.
-        try:
-            user = run_cmd('git config --get user.name').strip()
-            email = run_cmd('git config --get user.email').strip()
-        except CommandFailed:
-            # if no git user define, use the default user from the CR file
-            user = sf_data['spec']['test_user']
-            email = ''
-
         # Saving the Original elastic-search IP and PORT - if defined in yaml
-        es_server = ""
-        es_port = ""
         if 'elasticsearch' in sf_data['spec']:
-            if 'server' in sf_data['spec']['elasticsearch']:
-                es_server = sf_data['spec']['elasticsearch']['server']
-            if 'port' in sf_data['spec']['elasticsearch']:
-                es_port = sf_data['spec']['elasticsearch']['port']
+            backup_es = sf_data['spec']['elasticsearch']
         else:
+            log.warning('Elastic Search information does not exists in YAML file')
             sf_data['spec']['elasticsearch'] = {}
 
-        # Use the internal define elastic-search server in the test
-        sf_data['spec']['elasticsearch'] = {'server': es.get_ip(),
-                                            'port': es.get_port()}
+        # Use the internal define elastic-search server in the test - if exist
+        if es:
+            sf_data['spec']['elasticsearch'] = {'server': es.get_ip(), 'port': es.get_port()}
 
         log.info("Apply Operator CRD")
         ripsaw.apply_crd('resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml')
@@ -488,8 +407,6 @@ class TestSmallFileWorkload(E2ETest):
         sf_data['spec']['workload']['args']['files'] = files
         sf_data['spec']['workload']['args']['threads'] = threads
         sf_data['spec']['workload']['args']['samples'] = samples
-        sf_data['spec']['clustername'] = get_clustername()
-        sf_data['spec']['test_user'] = f'{user}<{email}>'
         """
         Calculating the size of the volume that need to be test, it should
         be at least twice in the size then the size of the files, and at
@@ -503,6 +420,14 @@ class TestSmallFileWorkload(E2ETest):
         if vol_size < 100:
             vol_size = 100
         sf_data['spec']['workload']['args']['storagesize'] = f"{vol_size}Gi"
+        environment = get_environment_info()
+        if not environment['user'] == '':
+            sf_data['spec']['test_user'] = environment['user']
+        else:
+            # since full results object need this parameter, initialize it from CR file
+            environment['user'] = sf_data['spec']['test_user']
+
+        sf_data['spec']['clustername'] = environment['clustername']
 
         sf_obj = OCS(**sf_data)
         sf_obj.create()
@@ -528,42 +453,25 @@ class TestSmallFileWorkload(E2ETest):
             sleep=30,
             timeout=600
         )
-        start_time = time.time()
+        # Getting the start time of the test
+        start_time = time.strftime('%Y-%m-%dT%H:%M:%SGMT', time.gmtime())
+
+        test_start_time = time.time()
 
         # After testing manually, changing the timeout
         timeout = 3600
 
         # Getting the UUID from inside the benchmark pod
-        output = bench_pod.exec_oc_cmd(f'exec {small_file_client_pod} -- env')
-        for line in output.split():
-            if 'uuid=' in line:
-                uuid = line.split('=')[1]
-        log.info(f'the UUID of the test is : {uuid}')
-
+        uuid = ripsaw.get_uuid(small_file_client_pod)
         # Setting back the original elastic-search information
-        sf_data['spec']['elasticsearch'] = {'server': es_server,
-                                            'port': es_port}
+        if backup_es:
+            sf_data['spec']['elasticsearch'] = backup_es
 
         full_results = SmallFileResultsAnalyse(uuid, sf_data)
 
-        # Initialaize the results doc file.
-        full_results.add_key('user', sf_data['spec']['test_user'])
-        full_results.add_key('ocp_version', get_ocp_version())
-        full_results.add_key('ocp_build', get_build())
-        full_results.add_key('ocp_channel', get_ocp_channel())
-
-        # Getting the OCS version
-        (ocs_ver_info, _) = get_ocs_version()
-        ocs_ver_full = ocs_ver_info['status']['desired']['version']
-        m = re.match(r"(\d.\d).(\d)", ocs_ver_full)
-        if m and m.group(1) is not None:
-            ocs_ver = m.group(1)
-
-        full_results.add_key('ocs_version', ocs_ver)
-        full_results.add_key('vendor', get_provider())
-        full_results.add_key('start_time',
-                             time.strftime('%Y-%m-%dT%H:%M:%SGMT',
-                                           time.gmtime()))
+        # Initialize the results doc file.
+        for key in environment:
+            full_results.add_key(key, environment[key])
 
         # Calculating the total size of the working data set - in GB
         full_results.add_key(
@@ -584,29 +492,30 @@ class TestSmallFileWorkload(E2ETest):
                 out_yaml_format=False
             )
             if "RUN STATUS DONE" in logs:
-                full_results.add_key('end_time',
-                                     time.strftime('%Y-%m-%dT%H:%M:%SGMT',
-                                                   time.gmtime()))
+                # Getting the end time of the test
+                end_time = time.strftime('%Y-%m-%dT%H:%M:%SGMT', time.gmtime())
+                full_results.add_key('test_time', {'start': start_time,
+                                                   'end': end_time})
+                # if Internal ES is exists, Copy all data from the Internal to main ES
+                if es:
+                    log.info('Copy all data from Internal ES to Main ES')
+                    es._copy(full_results.es)
                 full_results.read()
                 if not full_results.dont_check:
                     full_results.add_key('hosts', full_results.get_clients_list())
                     full_results.init_full_results()
                     full_results.aggregate_host_results()
                     test_status = full_results.aggregate_samples_results()
-                    full_results.write()
+                    full_results.es_write()
 
                     # Creating full link to the results on the ES server
-                    res_link = 'http://'
-                    res_link += f'{full_results.server}:{full_results.port}/'
-                    res_link += f'{full_results.new_index}/_search?q='
-                    res_link += f'uuid:{full_results.uuid}'
-                    log.info(f'Full results can be found as : {res_link}')
+                    log.info(f'The Result can be found at ; {full_results.results_link()}')
                 else:
                     test_status = True
 
                 break
 
-            if timeout < (time.time() - start_time):
+            if timeout < (time.time() - test_start_time):
                 raise TimeoutError("Timed out waiting for benchmark to complete")
             time.sleep(30)
         assert (not get_logs_with_errors() and test_status), 'Test Failed'
