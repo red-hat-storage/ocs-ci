@@ -121,7 +121,14 @@ def ocs_install_verification(
             int(storage_cluster.data['spec']['storageDeviceSets'][0]['count'])
             * int(storage_cluster.data['spec']['storageDeviceSets'][0]['replica'])
         )
-    rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
+    rgw_count = None
+    if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1857802 - RGW count is 1
+        # post upgrade to OCS 4.5. Tracked with
+        # https://github.com/red-hat-storage/ocs-ci/issues/2532
+        rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 and not (
+            post_upgrade_verification
+        ) else 1
 
     # Fetch the min and max Noobaa endpoints from the run config
     if check_nodes_specs(min_cpu=constants.MIN_NODE_CPU, min_memory=constants.MIN_NODE_MEMORY):
