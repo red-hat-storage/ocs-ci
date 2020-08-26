@@ -2,6 +2,6 @@
 ENV_DATA:
   platform: 'vsphere'
   deployment_type: 'upi'
-  worker_replicas: 3
+  worker_replicas: 6
   master_replicas: 3
   fio_storageutilization_min_mbps: 10.0
