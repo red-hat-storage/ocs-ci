@@ -1457,7 +1457,7 @@ class VSPHEREUPINode(VMWareNodes):
             constants.TERRAFORM_DATA_DIR
         )
         self.terraform_work_dir = constants.VSPHERE_DIR
-        self.terraform = Terraform(self.terraform_work_dir, bin_path='/home/yitzhak/RedHatProjects/ocs-ci/bin')
+        self.terraform = Terraform(self.terraform_work_dir)
         self.upi_repo_path = os.path.join(
             constants.EXTERNAL_DIR, 'installer',
         )
