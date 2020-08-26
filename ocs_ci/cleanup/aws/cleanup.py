@@ -147,33 +147,22 @@ def get_clusters(time_to_delete, region_name, prefixes_hours_to_spare):
     def determine_cluster_deletion(ec2_instances, cluster_name):
         for instance in ec2_instances:
             allowed_running_time = time_to_delete
-            do_not_delete = False
             if instance.state["Name"] == "running":
                 for prefix, hours in prefixes_hours_to_spare.items():
                     # case insensitive 'startswith'
                     if bool(re.match(prefix, cluster_name, re.I)):
-                        if hours == 'never':
-                            do_not_delete = True
-                        else:
-                            allowed_running_time = int(hours) * 60 * 60
+                        allowed_running_time = int(hours) * 60 * 60
                         break
-                if do_not_delete:
-                    logger.info(
-                        "%s marked as 'do not delete' and will not be "
-                        "destroyed", cluster_name
-                    )
-                    return False
-                else:
-                    launch_time = instance.launch_time
-                    current_time = datetime.datetime.now(launch_time.tzinfo)
-                    running_time = current_time - launch_time
-                    logger.info(
-                        f"Instance {[tag['Value'] for tag in instance.tags if tag['Key'] == 'Name'][0]} "
-                        f"(id: {instance.id}) running time is {running_time} hours while the allowed"
-                        f" running time for it is {allowed_running_time/3600} hours"
-                    )
-                    if running_time.total_seconds() > allowed_running_time:
-                        return True
+                launch_time = instance.launch_time
+                current_time = datetime.datetime.now(launch_time.tzinfo)
+                running_time = current_time - launch_time
+                logger.info(
+                    f"Instance {[tag['Value'] for tag in instance.tags if tag['Key'] == 'Name'][0]} "
+                    f"(id: {instance.id}) running time is {running_time} hours while the allowed"
+                    f" running time for it is {allowed_running_time/3600} hours"
+                )
+                if running_time.total_seconds() > allowed_running_time:
+                    return True
         return False
 
     aws = AWS(region_name=region_name)
