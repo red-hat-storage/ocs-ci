@@ -3,9 +3,10 @@ import logging
 import textwrap
 import yaml
 
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
     config_to_string,
+    get_system_architecture,
     update_container_with_mirrored_image
 )
 
@@ -102,13 +103,7 @@ def get_job_dict():
         dict: YAML data for a job object
 
     """
-    node_obj = ocp.OCP(kind=constants.NODE)
-
-    log.info('Checking architecture of system')
-    node = node_obj.get(
-        selector=constants.WORKER_LABEL
-    ).get('items')[0]['metadata']['name']
-    arch = node_obj.exec_oc_debug_cmd(node, ['uname -m'])
+    arch = get_system_architecture()
     if arch.startswith('x86'):
         image = 'quay.io/fbalak/fio-fedora:latest'
     else:
