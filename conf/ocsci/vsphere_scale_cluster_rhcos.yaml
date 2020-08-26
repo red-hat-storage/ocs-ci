@@ -3,11 +3,9 @@
 DEPLOYMENT:
   allow_lower_instance_requirements: false
 ENV_DATA:
-  scale_up: True
-  nodes_scaleup_count: '3'
   platform: 'vsphere'
   deployment_type: 'upi'
-  worker_replicas: 3
+  worker_replicas: 6
   master_replicas: 3
   worker_num_cpus: '16'
   master_num_cpus: '4'
