@@ -102,6 +102,7 @@ class TestMonitoringVersionMismatch(E2ETest):
         image = ocp_obj.describe(resource_name=resource_name)
         image_list = image.split()
         index = image_list.index(find_image)
+        # The image name is two places after the "find_image" (in image_list)
         return image_list[index + 2]
 
     def get_rook_ceph_version(self, name):
@@ -109,7 +110,7 @@ class TestMonitoringVersionMismatch(E2ETest):
         Get Ceph version
 
         Args:
-            name (str): nome of pod
+            name (str): name of pod
 
         Returns:
             rook_ceph_version (str): ceph version
