@@ -556,6 +556,10 @@ class TestMonitoringBackedByOCS(E2ETest):
 
     @pytest.mark.polarion_id("OCS-1535")
     def test_monitoring_shutdown_mgr_pod(self, pods):
+        """
+        Montoring backed by OCS, bring mgr down(replica: 0) for some time
+        and check ceph related metrics
+        """
         # Check ceph metrics available
         assert check_ceph_metrics_available(), "failed to get results for some metrics " \
                                                "before Downscaling deployment mgr to 0"
@@ -576,6 +580,9 @@ class TestMonitoringBackedByOCS(E2ETest):
 
         log.info(f"Upscaling deployment {mgr} back to 1")
         oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
+
+        log.info('wait 20 sec')
+        time.sleep(20)
 
         # Check ceph metrics available
         assert check_ceph_metrics_available(), "failed to get results for some metrics" \
