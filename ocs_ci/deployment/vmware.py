@@ -608,10 +608,16 @@ class VSPHEREUPI(VSPHEREBASE):
             logger.info("Removing RHCOS compute nodes from a cluster")
             remove_nodes(rhcos_nodes)
 
-        # configure chrony for all nodes
-        configure_chrony_and_wait_for_machineconfig_status(
-            node_type="all", timeout=1200
+        # get datastore type and configure chrony for all nodes ONLY if
+        # datstore type is vsan
+        datastore_type = self.vsphere.get_datastore_type_by_name(
+            self.datastore,
+            self.datacenter
         )
+        if datastore_type != constants.VMFS:
+            configure_chrony_and_wait_for_machineconfig_status(
+                node_type="all", timeout=1200
+            )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
