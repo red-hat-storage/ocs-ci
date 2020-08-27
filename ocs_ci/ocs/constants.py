@@ -1014,6 +1014,7 @@ FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/aosqe/flexy:poc"
 FLEXY_ENV_FILE_UPDATED = os.path.join(
     FLEXY_HOST_DIR_PATH, 'ocs-flexy-env-file-updated.env'
 )
+REGISTRY_SVC = "registry.svc.ci.openshift.org/ocp/release"
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
