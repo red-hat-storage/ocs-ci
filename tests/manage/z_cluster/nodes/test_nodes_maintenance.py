@@ -124,7 +124,7 @@ class TestNodesMaintenance(ManageTest):
         schedule_nodes([typed_node_name])
 
         # Perform cluster and Ceph health checks
-        self.sanity_helpers.health_check(tries=30)
+        self.sanity_helpers.health_check(tries=60)
 
     @tier4
     @tier4b
