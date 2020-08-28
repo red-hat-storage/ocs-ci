@@ -4,6 +4,7 @@ from tests.helpers import create_unique_resource_name
 
 log = logging.getLogger(__name__)
 
+
 def cloud_uls_factory(request, cld_mgr):
     """
     Create an Underlying Storage factory.

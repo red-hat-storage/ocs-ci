@@ -97,8 +97,6 @@ def test_fill_bucket(
         bucket,
         created_backingstores
     ) = multiregion_mirror_setup_session
-    backingstore1 = created_backingstores[0]
-    backingstore2 = created_backingstores[1]
 
     mcg_bucket_path = f's3://{bucket.name}'
 
