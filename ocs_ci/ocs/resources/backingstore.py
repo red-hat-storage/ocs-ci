@@ -8,6 +8,7 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
+from tests.helpers import create_unique_resource_name
 
 log = logging.getLogger(__name__)
 
@@ -40,18 +41,18 @@ class BackingStore():
 
 def backingstore_factory(request, cld_mgr, cloud_uls_factory):
     """
-        Create a Backing Store factory.
-        Calling this fixture creates a new Backing Store(s).
+    Create a Backing Store factory.
+    Calling this fixture creates a new Backing Store(s).
 
-        Args:
-            request (object): Pytest built-in fixture
-            cld_mgr (CloudManager): Cloud Manager object containing all
-                connections to clouds
-            cloud_uls_factory: Factory for underlying storage creation
+    Args:
+        request (object): Pytest built-in fixture
+        cld_mgr (CloudManager): Cloud Manager object containing all
+            connections to clouds
+        cloud_uls_factory: Factory for underlying storage creation
 
-        Returns:
-            func: Factory method - each call to this function creates
-                a backingstore
+    Returns:
+        func: Factory method - each call to this function creates
+            a backingstore
 
     """
     created_backingstores = []

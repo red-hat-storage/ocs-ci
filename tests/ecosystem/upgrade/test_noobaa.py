@@ -95,9 +95,11 @@ def test_fill_bucket(
 
     (
         bucket,
-        backingstore1,
-        backingstore2
+        created_backingstores
     ) = multiregion_mirror_setup_session
+    backingstore1 = created_backingstores[0]
+    backingstore2 = created_backingstores[1]
+
     mcg_bucket_path = f's3://{bucket.name}'
 
     # Download test objects from the public bucket
@@ -158,9 +160,10 @@ def test_noobaa_postupgrade(
 
     (
         bucket,
-        backingstore1,
-        backingstore2
+        created_backingstores
     ) = multiregion_mirror_setup_session
+    backingstore1 = created_backingstores[0]
+    backingstore2 = created_backingstores[1]
     mcg_bucket_path = f's3://{bucket.name}'
 
     # Checksum is compared between original and result object

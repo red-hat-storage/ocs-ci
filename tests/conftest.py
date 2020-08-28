@@ -37,6 +37,9 @@ from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation
 )
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
+from ocs_ci.ocs.resources.cloud_uls import (
+    cloud_uls_factory as cloud_uls_factory_implementation
+)
 from ocs_ci.ocs.node import check_nodes_specs
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
@@ -1962,84 +1965,29 @@ def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
 @pytest.fixture(scope='class')
 def cloud_uls_factory(request, cld_mgr):
     """
-     Create a Underlying Storage factory.
-     Calling this fixture creates a new underlying storage(s).
+    Create an Underlying Storage factory.
+    Calling this fixture creates a new underlying storage(s).
 
-     Args:
-        cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
+    Returns:
+       func: Factory method - each call to this function creates
+           an Underlying Storage factory
 
     """
-    all_created_uls = {
-        'aws': set(),
-        'google': set(),
-        'azure': set(),
-        'ibmcos': set()
-    }
-
-    ulsMap = {
-        'aws': cld_mgr.aws_client,
-        'google': cld_mgr.google_client,
-        'azure': cld_mgr.azure_client,
-        # TODO: Implement - 'ibmcos': cld_mgr.ibmcos_client
-    }
-
-    def _create_uls(uls_dict):
-        """
-        Creates and deletes all underlying storage that were created as part of the test
-
-        Args:
-            uls_dict (dict): Dictionary containing storage provider as key and a list of tuples
-            as value.
-            each tuple contain amount as first parameter and region as second parameter.
-            Cloud backing stores form - 'CloudName': [(amount, region), (amount, region)]
-            i.e. - 'aws': [(3, us-west-1),(2, eu-west-2)]
+    return cloud_uls_factory_implementation(request, cld_mgr)
 
 
-        Returns:
-            dict: A dictionary of cloud names as keys and uls names sets as value.
+@pytest.fixture(scope='session')
+def cloud_uls_factory_session(request, cld_mgr):
+    """
+    Create an Underlying Storage factory.
+    Calling this fixture creates a new underlying storage(s).
 
-        """
-        current_call_created_uls = {
-            'aws': set(),
-            'google': set(),
-            'azure': set(),
-            'ibmcos': set()
-        }
+    Returns:
+       func: Factory method - each call to this function creates
+           an Underlying Storage factory
 
-        for cloud, params in uls_dict.items():
-            if cloud.lower() not in ulsMap:
-                raise RuntimeError(
-                    f'Invalid interface type received: {cloud}. '
-                    f'available types: {", ".join(ulsMap.keys())}'
-                )
-            log.info(f'Creating uls for cloud {cloud.lower()}')
-            for tup in params:
-                amount, region = tup
-                for i in range(amount):
-                    uls_name = create_unique_resource_name(
-                        resource_description='uls', resource_type=cloud.lower()
-                    )
-                    ulsMap[cloud.lower()].create_uls(uls_name, region)
-                    all_created_uls[cloud].add(uls_name)
-                    current_call_created_uls[cloud.lower()].add(uls_name)
-
-            return current_call_created_uls
-
-    def uls_cleanup():
-        for cloud, uls_set in all_created_uls.items():
-            client = ulsMap.get(cloud)
-            if client is not None:
-                all_existing_uls = client.get_all_uls_names()
-                for uls in uls_set:
-                    if uls in all_existing_uls:
-                        log.info(f'Cleaning up uls {uls}')
-                        client.delete_uls(uls)
-                    else:
-                        log.warning(f'Underlying Storage {uls} not found.')
-
-    request.addfinalizer(uls_cleanup)
-
-    return _create_uls
+    """
+    return cloud_uls_factory_implementation(request, cld_mgr)
 
 
 @pytest.fixture(scope='class')
@@ -2047,10 +1995,6 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
     """
         Create a Backing Store factory.
         Calling this fixture creates a new Backing Store(s).
-
-        Args:
-            cloud_uls_factory: Factory for underlying storage creation
-            cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
 
         Returns:
             func: Factory method - each call to this function creates
@@ -2065,14 +2009,10 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
 
 
 @pytest.fixture(scope='session')
-def backingstore_factory_session(request, cld_mgr, cloud_uls_factory):
+def backingstore_factory_session(request, cld_mgr, cloud_uls_factory_session):
     """
         Create a Backing Store factory.
         Calling this fixture creates a new Backing Store(s).
-
-        Args:
-            cloud_uls_factory: Factory for underlying storage creation
-            cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
 
         Returns:
             func: Factory method - each call to this function creates
@@ -2082,7 +2022,7 @@ def backingstore_factory_session(request, cld_mgr, cloud_uls_factory):
     return backingstore_factory_implementation(
         request,
         cld_mgr,
-        cloud_uls_factory
+        cloud_uls_factory_session
     )
 
 
