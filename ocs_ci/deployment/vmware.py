@@ -973,7 +973,7 @@ def generate_terraform_vars_and_update_machine_conf():
         # update the machine configurations
         update_machine_conf(folder_structure)
 
-        if Version.coerce(ocp_version) >= Version.coerce('4.6'):
+        if Version.coerce(ocp_version) >= Version.coerce('4.5'):
             modify_haproxyservice()
     else:
         # generate terraform variable file
