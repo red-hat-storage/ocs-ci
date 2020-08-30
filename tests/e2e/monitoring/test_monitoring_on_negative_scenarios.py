@@ -13,7 +13,7 @@ from tests.sanity_helpers import Sanity
 from ocs_ci.ocs.monitoring import (
     check_pvcdata_collected_on_prometheus,
     check_ceph_health_status_metrics_on_prometheus,
-    prometheus_health_check
+    prometheus_health_check, check_ceph_metrics_available
 )
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
@@ -552,3 +552,37 @@ class TestMonitoringBackedByOCS(E2ETest):
         assert prometheus_health_check(), (
             "Prometheus cluster health is not OK"
         )
+
+    @pytest.mark.polarion_id("OCS-1535")
+    def test_monitoring_shutdown_mgr_pod(self, pods):
+        """
+        Montoring backed by OCS, bring mgr down(replica: 0) for some time
+        and check ceph related metrics
+        """
+        # Check ceph metrics available
+        assert check_ceph_metrics_available(), "failed to get results for some metrics " \
+                                               "before Downscaling deployment mgr to 0"
+
+        # Reduce mgr pod deployments to replicas=0
+        oc = ocp.OCP(
+            kind=constants.DEPLOYMENT, namespace='openshift-storage'
+        )
+
+        # Downscaling deployment mgr to 0
+        mgr_deployments = oc.get(selector=constants.MGR_APP_LABEL)['items']
+        mgr = mgr_deployments[0]['metadata']['name']
+        log.info(f"Downscaling deployment {mgr} to 0")
+        oc.exec_oc_cmd(f"scale --replicas=0 deployment/{mgr}")
+
+        log.info('wait 5min')
+        time.sleep(300)
+
+        log.info(f"Upscaling deployment {mgr} back to 1")
+        oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
+
+        log.info('wait 20 sec')
+        time.sleep(20)
+
+        # Check ceph metrics available
+        assert check_ceph_metrics_available(), "failed to get results for some metrics" \
+                                               "after Downscaling and Upscaling deployment mgr"

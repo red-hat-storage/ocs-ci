@@ -15,6 +15,8 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
 )
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs import metrics
+from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
@@ -227,3 +229,21 @@ def prometheus_health_check(name=constants.MONITORING, kind=constants.CLUSTER_OP
 
     logging.error(f"Prometheus cluster is degraded {health_conditions}")
     return False
+
+
+def check_ceph_metrics_available():
+    """
+    Check ceph metrics available
+
+    Returns:
+        bool: True on success, false otherwise
+
+    """
+    logger.info('check ceph metrics available')
+    # Check ceph metrics available
+    prometheus = ocs_ci.utility.prometheus.PrometheusAPI()
+    list_of_metrics_without_results = metrics.get_missing_metrics(
+        prometheus,
+        metrics.ceph_metrics,
+        current_platform=config.ENV_DATA['platform'].lower())
+    return list_of_metrics_without_results == []
