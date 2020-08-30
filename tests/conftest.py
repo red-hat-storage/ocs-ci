@@ -1583,7 +1583,7 @@ def rgw_obj_fixture(request):
     return RGW()
 
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope='session')
 def mcgcli_pod_fixture(request):
     """
     Grab the MCG CLI tool from the NooBaa operator pod,
@@ -1679,12 +1679,12 @@ def mcgcli_pod_fixture(request):
 
 
 @pytest.fixture()
-def mcg_obj(request):
+def mcg_obj(request, mcgcli_pod_fixture):
     return mcg_obj_fixture(request)
 
 
 @pytest.fixture(scope='session')
-def mcg_obj_session(request):
+def mcg_obj_session(request, mcgcli_pod_fixture):
     return mcg_obj_fixture(request)
 
 
