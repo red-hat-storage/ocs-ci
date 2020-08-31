@@ -4,7 +4,7 @@ from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.machine import get_labeled_nodes
 from ocs_ci.ocs.node import get_all_nodes
-from ocs_ci.ocs.ocp import switch_to_project
+from ocs_ci.ocs.ocp import switch_to_project, get_ocs_version
 from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass, get_all_pvcs
 from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
 from ocs_ci.utility.localstorage import check_local_volume
@@ -150,6 +150,7 @@ def uninstall_ocs():
     """
     ocp_obj = ocp.OCP()
     provisioners = constants.OCS_PROVISIONERS
+    ocs_version = get_ocs_version()
 
     # List the storage classes
     sc_list = [sc for sc in get_all_storageclass() if sc.get('provisioner') in provisioners]
@@ -219,10 +220,15 @@ def uninstall_ocs():
         uninstall_lso(lso_sc)
 
     log.info("Delete the storage classes with an openshift-storage provisioner list")
-    for storage_class in sc_list:
-        log.info(f"Deleting storage class {storage_class.get('metadata').get('name')}")
-        sc_obj = ocp.OCP(kind=constants.STORAGECLASS)
-        sc_obj.delete(resource_name=storage_class.get('metadata').get('name'))
+    if ocs_version < '4.5':
+        for storage_class in sc_list:
+            log.info(f"Deleting storage class {storage_class.get('metadata').get('name')}")
+            sc_obj = ocp.OCP(kind=constants.STORAGECLASS)
+            sc_obj.delete(resource_name=storage_class.get('metadata').get('name'))
+    else:
+        log.info("deleting noobaa storage class")
+        noobaa_sc = ocp.OCP(kind=constants.STORAGECLASS)
+        noobaa_sc.delete(resource_name=constants.NOOBAA_SC)
 
     log.info("Unlabeling storage nodes")
     nodes_list = get_all_nodes()
