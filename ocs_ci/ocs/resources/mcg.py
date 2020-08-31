@@ -15,6 +15,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, CredReqSecretNotFound, TimeoutE
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
+from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 from tests.helpers import (
@@ -133,7 +134,9 @@ class MCG:
             assert not pods, 'RGW pods should not exist in the current platform/cluster'
 
         elif config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
-            rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
+            rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 and not (
+                check_if_cluster_was_upgraded()
+            ) else 1
             logger.info(f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform')
             rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
             assert rgw_pod.wait_for_resource(
