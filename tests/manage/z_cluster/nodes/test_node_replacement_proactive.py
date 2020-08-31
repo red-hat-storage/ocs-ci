@@ -59,17 +59,28 @@ class TestNodeReplacement(ManageTest):
                 cephfs_dc_pod = dc_pod_factory(interface=constants.CEPHFILESYSTEM, node_name=worker_node, size=20)
                 pod.run_io_in_bg(cephfs_dc_pod, expect_to_fail=False, fedora_dc=True)
 
+        # error message for invalid deployment configuration
+        msg_invalid = (
+            "ocs-ci config 'deployment_type' value "
+            f"'{config.ENV_DATA['deployment_type']}' is not valid, "
+            f"results of this test run are all invalid."
+        )
+        # TODO: refactor this so that AWS is not a "special" platform
         if config.ENV_DATA['platform'].lower() == constants.AWS_PLATFORM:
             if config.ENV_DATA['deployment_type'] == 'ipi':
-                node.delete_and_create_osd_node_aws_ipi(osd_node_name)
+                node.delete_and_create_osd_node_ipi(osd_node_name)
 
             elif config.ENV_DATA['deployment_type'] == 'upi':
                 node.delete_and_create_osd_node_aws_upi(osd_node_name)
             else:
-                pytest.fail(
-                    f"ocs-ci config 'deployment_type' value '{config.ENV_DATA['deployment_type']}' is not valid, "
-                    f"results of this test run are all invalid.")
-
+                log.error(msg_invalid)
+                pytest.fail(msg_invalid)
+        elif config.ENV_DATA['platform'].lower() in constants.CLOUD_PLATFORMS:
+            if config.ENV_DATA['deployment_type'] == 'ipi':
+                node.delete_and_create_osd_node_ipi(osd_node_name)
+            else:
+                log.error(msg_invalid)
+                pytest.fail(msg_invalid)
         elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
             pytest.skip("Skipping add node in Vmware platform due to "
                         "https://bugzilla.redhat.com/show_bug.cgi?id=1844521"

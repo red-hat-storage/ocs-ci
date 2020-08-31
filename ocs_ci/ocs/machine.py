@@ -361,12 +361,12 @@ def get_machine_from_node_name(node_name):
 
     Returns:
         str: Machine name
+
     """
     machine_objs = get_machine_objs()
     for machine in machine_objs:
-        if machine.get().get(
-                'status'
-        ).get('addresses')[1].get('address') == node_name:
+        machine_dict = machine.get()
+        if machine_dict['status']['nodeRef']['name'] == node_name:
             return machine.name
 
 
