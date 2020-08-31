@@ -20,7 +20,17 @@ from ocs_ci.utility.utils import (
     get_ocp_version, run_cmd
 )
 
+
 logger = logging.getLogger(__name__)
+
+
+@pytest.fixture()
+def setup_fixture(install_logging):
+    """
+    Installs openshift-logging before upgrade
+    """
+
+    logger.info("Upgrade logging")
 
 
 def check_cluster_logging():
@@ -161,6 +171,9 @@ def upgrade_info(channel):
 
 
 @post_ocp_upgrade
+@pytest.mark.usefixtures(
+    setup_fixture.__name__
+)
 @pytest.mark.polarion_id("OCS-2201")
 class TestUpgradeLogging():
     """
@@ -174,7 +187,7 @@ class TestUpgradeLogging():
 
     """
 
-    def test_upgrade_logging(self):
+    def test_upgrade_logging(self, install_logging):
         """
         This function contains test to upgrade openshift-logging
         with Entry and Exit criteria for checks
