@@ -187,7 +187,7 @@ class TestUpgradeLogging():
 
     """
 
-    def test_upgrade_logging(self, install_logging):
+    def test_upgrade_logging(self):
         """
         This function contains test to upgrade openshift-logging
         with Entry and Exit criteria for checks
