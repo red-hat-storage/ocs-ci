@@ -14,13 +14,17 @@ from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.exceptions import CommandFailed, CredReqSecretNotFound, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 from tests.helpers import (
     create_unique_resource_name, create_resource,
-    retrieve_default_ingress_crt, storagecluster_independent_check
+    calc_local_file_md5_sum, retrieve_default_ingress_crt,
+    storagecluster_independent_check
 )
+import subprocess
+import stat
 
 logger = logging.getLogger(name=__file__)
 
@@ -29,6 +33,7 @@ class MCG:
     """
     Wrapper class for the Multi Cloud Gateway's S3 service
     """
+
     (
         s3_resource, s3_endpoint, s3_internal_endpoint, ocp_resource,
         mgmt_endpoint, region, access_key_id, access_key,
@@ -40,9 +45,16 @@ class MCG:
         Constructor for the MCG class
         """
         self.namespace = config.ENV_DATA['cluster_namespace']
+        self.operator_pod = Pod(
+            **get_pods_having_label(
+                constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace
+            )[0]
+        )
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
+
+        self.retrieve_noobaa_cli_binary()
 
         """
         The certificate will be copied on each mcg_obj instantiation since
@@ -66,8 +78,6 @@ class MCG:
             .get('serviceMgmt').get('externalDNS')[0]
         ) + '/rpc'
         self.region = config.ENV_DATA['region']
-
-        self.mcgcli_pod = pod.get_pod_obj(name='mcgcli-pod', namespace=self.namespace)
 
         creds_secret_name = (
             get_noobaa.get('items')[0].get('status').get('accounts')
@@ -637,7 +647,7 @@ class MCG:
 
     def exec_mcg_cmd(self, cmd, namespace=None, **kwargs):
         """
-        Executes an MCG CLI command through the MCG CLI pod
+        Executes an MCG CLI command through the noobaa-operator pod's CLI binary
 
         Args:
             cmd (str): The command to run
@@ -647,19 +657,71 @@ class MCG:
             str: stdout of the command
 
         """
+
         kubeconfig = os.getenv('KUBECONFIG')
         if kubeconfig:
-            kubeconfig = f"--kubeconfig {kubeconfig}"
+            kubeconfig = f"--kubeconfig {kubeconfig} "
 
         namespace = f'-n {namespace}' if namespace else f'-n {self.namespace}'
         result = exec_cmd(
-            f'oc {namespace} {kubeconfig} rsh {self.mcgcli_pod.name} '
-            f'{constants.NOOBAA_OPERATOR_MCGCLI_POD_PATH} {cmd}',
+            f'{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}',
             **kwargs
         )
         result.stdout = result.stdout.decode()
         result.stderr = result.stderr.decode()
         return result
+
+    def retrieve_noobaa_cli_binary(self):
+        """
+        Copy the NooBaa CLI binary from the operator pod
+        if it wasn't found locally, or if the hashes between
+        the two don't match.
+
+        """
+        def _compare_cli_hashes():
+            """
+            Verify that the remote and local CLI binaries are the same
+            in order to make sure the local bin is up to date
+
+            Returns:
+                bool: Whether the local and remote hashes are identical
+
+            """
+            remote_cli_bin_md5 = cal_md5sum(
+                self.operator_pod,
+                constants.NOOBAA_OPERATOR_POD_CLI_PATH
+            )
+            local_cli_bin_md5 = calc_local_file_md5_sum(
+                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+            )
+            return remote_cli_bin_md5 == local_cli_bin_md5
+
+        if (
+            not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+            or not _compare_cli_hashes()
+        ):
+            cmd = (
+                f"oc exec -n {self.namespace} {self.operator_pod.name}"
+                f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
+                f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+            )
+            subprocess.run(cmd, shell=True)
+            # Add an executable bit in order to allow usage of the binary
+            current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+            os.chmod(
+                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
+                current_file_permissions.st_mode | stat.S_IEXEC
+            )
+            # Make sure the binary was copied properly and has the correct permissions
+            assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH), (
+                f'MCG CLI file not found at {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}'
+            )
+            assert os.access(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK), (
+                "The MCG CLI binary does not have execution permissions"
+            )
+            assert _compare_cli_hashes(), (
+                "Binary hash doesn't match the one on the operator pod"
+            )
 
     @property
     def status(self):

@@ -4,7 +4,6 @@ import random
 import time
 import tempfile
 import threading
-import subprocess
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from itertools import chain
@@ -44,10 +43,7 @@ from ocs_ci.ocs.node import check_nodes_specs
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import (
-    get_rgw_pods, delete_deploymentconfig_pods,
-    cal_md5sum, get_pods_having_label, Pod
-)
+from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
@@ -1581,94 +1577,6 @@ def rgw_obj_fixture(request):
         RGW: An RGW resource
     """
     return RGW()
-
-
-@pytest.fixture(scope='session', autouse=True)
-def mcgcli_pod_fixture(request):
-    """
-    Grab the MCG CLI tool from the NooBaa operator pod,
-    create a dedicated pod for it to allow it to run regardless of
-    the code runner's OS (since the binary does not support macOS),
-    and upload the binary to it.
-
-    """
-    nb_operator_pod = Pod(
-        **get_pods_having_label(
-            constants.NOOBAA_OPERATOR_POD_LABEL, config.ENV_DATA['cluster_namespace']
-        )[0]
-    )
-
-    def _compare_cli_hashes():
-        """
-        Verify that the remote and local CLI binaries are the same
-        in order to make sure the local bin is up to date
-
-        Returns:
-            bool: Whether the local and remote hashes are identical
-
-        """
-        remote_cli_bin_md5 = cal_md5sum(
-            nb_operator_pod,
-            constants.NOOBAA_OPERATOR_POD_CLI_PATH
-        )
-        local_cli_bin_md5 = helpers.calc_local_file_md5_sum(
-            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-        )
-        return remote_cli_bin_md5 == local_cli_bin_md5
-
-    # Create a new serviceaccount
-    mcgcli_sa = helpers.create_resource(
-        **templating.load_yaml(constants.MCGCLI_SERVICEACCOUNT_YAML)
-    )
-    # Bind the serviceaccount to a cluster-admin role to allow the CLI to run properly
-    mcg_sa_crb = helpers.create_resource(
-        **templating.load_yaml(constants.MCGCLI_SERVICEACCOUNT_CLUSTERROLEBINDING)
-    )
-    # Create a pod that uses the serviceaccount
-    mcgcli_pod = helpers.create_pod(
-        namespace=config.ENV_DATA['cluster_namespace'],
-        pod_dict_path=constants.MCGCLI_POD,
-        pod_name=constants.MCGCLI_POD_NAME
-    )
-
-    helpers.wait_for_resource_state(mcgcli_pod, constants.STATUS_RUNNING)
-
-    if (
-        not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-        or not _compare_cli_hashes()
-    ):
-        log.info('Downloading the NooBaa CLI tool from the operator pod, this might take a while.')
-        cmd = (
-            f"oc exec -n {config.ENV_DATA['cluster_namespace']} {nb_operator_pod.name}"
-            f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-            f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
-        )
-        subprocess.run(cmd, shell=True)
-        # Make sure the binary was copied properly and has the correct permissions
-        assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH), (
-            f'MCG CLI file not found at {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}'
-        )
-        assert _compare_cli_hashes(), (
-            "Binary hash doesn't match the one on the operator pod"
-        )
-    log.info('Uploading the NooBaa CLI tool to the MCGCLI pod, this might take a while.')
-    cmd = (
-        f"cat {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} | "
-        f"oc exec -i -n {config.ENV_DATA['cluster_namespace']} "
-        f" {mcgcli_pod.name} tee {constants.NOOBAA_OPERATOR_MCGCLI_POD_PATH} > /dev/null"
-    )
-    subprocess.run(cmd, shell=True)
-
-    mcgcli_pod.exec_cmd_on_pod(f'chmod +x {constants.NOOBAA_OPERATOR_MCGCLI_POD_PATH}')
-
-    def _mcgcli_pod_cleanup():
-        mcgcli_pod.delete()
-        mcg_sa_crb.delete()
-        mcgcli_sa.delete()
-
-    request.addfinalizer(_mcgcli_pod_cleanup)
-
-    return mcgcli_pod
 
 
 @pytest.fixture()
