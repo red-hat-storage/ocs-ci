@@ -560,8 +560,9 @@ class TestMonitoringBackedByOCS(E2ETest):
         and check ceph related metrics
         """
         # Check ceph metrics available
-        assert check_ceph_metrics_available(), "failed to get results for some metrics " \
-                                               "before Downscaling deployment mgr to 0"
+        assert check_ceph_metrics_available(), (
+            "failed to get results for some metrics before Downscaling deployment mgr to 0"
+        )
 
         # Reduce mgr pod deployments to replicas=0
         oc = ocp.OCP(
@@ -584,5 +585,6 @@ class TestMonitoringBackedByOCS(E2ETest):
         time.sleep(20)
 
         # Check ceph metrics available
-        assert check_ceph_metrics_available(), "failed to get results for some metrics" \
-                                               "after Downscaling and Upscaling deployment mgr"
+        assert check_ceph_metrics_available(), (
+            "failed to get results for some metrics after Downscaling and Upscaling deployment mgr"
+        )
