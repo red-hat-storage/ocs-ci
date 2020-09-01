@@ -582,7 +582,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
 
         log.info('wait 20 sec')
-        time.sleep(20)
+        time.sleep(60)
 
         # Check ceph metrics available
         assert check_ceph_metrics_available(), (
