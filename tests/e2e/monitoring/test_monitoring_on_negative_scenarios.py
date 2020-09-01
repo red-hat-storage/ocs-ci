@@ -575,7 +575,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         log.info(f"Downscaling deployment {mgr} to 0")
         oc.exec_oc_cmd(f"scale --replicas=0 deployment/{mgr}")
 
-        log.info('wait 5min')
+        log.info('wait 5 min')
         time.sleep(300)
 
         log.info(f"Upscaling deployment {mgr} back to 1")
