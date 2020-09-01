@@ -50,6 +50,7 @@ class TestS3MultipartUpload(ManageTest):
     """
     @tier1
     @pytest.mark.polarion_id("OCS-2245")
+    @pytest.mark.skip(reason="Skipped because of https://github.com/red-hat-storage/ocs-ci/issues/2832")
     def test_multipart_upload_operations(self, awscli_pod, rgw_bucket_factory):
         """
         Test Multipart upload operations on bucket and verifies the integrity of the downloaded object
