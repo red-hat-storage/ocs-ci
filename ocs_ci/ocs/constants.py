@@ -946,7 +946,7 @@ OSD_TREE_ZONE = {
 GATHER_BOOTSTRAP_PATTERN = 'openshift-install gather bootstrap --help'
 
 # must-gather commands output files
-MUST_GATHER_COMMANDS = [
+BASE_MUST_GATHER_COMMANDS = [
     'ceph_versions', 'ceph_status', 'ceph_report', 'ceph_pg_dump',
     'ceph_osd_tree', 'ceph_osd_stat', 'ceph_osd_dump', 'ceph_osd_df_tree',
     'ceph_osd_crush_show-tunables', 'ceph_osd_crush_dump', 'ceph_mon_stat',
@@ -954,7 +954,83 @@ MUST_GATHER_COMMANDS = [
     'ceph_fs_ls', 'ceph_fs_dump', 'ceph_df', 'ceph_auth_list',
 ]
 
-MUST_GATHER_COMMANDS_JSON = [
+EXT_MUST_GATHER_COMMANDS = [
+    'ceph_versions', 'ceph_status', 'ceph_report', 'ceph_pg_dump',
+    'ceph_osd_tree', 'ceph_osd_stat', 'ceph_osd_dump', 'ceph_osd_df_tree',
+    'ceph_osd_crush_show-tunables', 'ceph_osd_crush_dump', 'ceph_mon_stat',
+    'ceph_mon_dump', 'ceph_mgr_dump', 'ceph_mds_stat', 'ceph_health_detail',
+    'ceph_fs_ls', 'ceph_fs_dump', 'ceph_df', 'ceph_auth_list',
+    'ceph_balancer_dump', 'ceph_balancer_pool_ls', 'ceph_balancer_status',
+    'ceph_config_dump', 'ceph_config-key_ls', 'ceph_crash_ls',
+    'ceph_crash_stat', 'ceph_device_ls', 'ceph_fs_status',
+    'ceph_fs_subvolumegroup_ls_ocs-storagecluster-cephfilesystem',
+    'ceph_fs_subvolume_ls_ocs-storagecluster-cephfilesystem_csi',
+    'ceph_mgr_module_ls', 'ceph_mgr_services', 'ceph_osd_utilization',
+    'ceph_osd_crush_weight-set_ls', 'ceph_osd_crush_weight-set_dump',
+    'ceph_osd_crush_rule_dump', 'ceph_osd_crush_rule_ls',
+    'ceph_osd_crush_class_ls', 'ceph_osd_perf',
+    'ceph_osd_numa-status', 'ceph_osd_getmaxosd', 'ceph_osd_drain_status',
+    'ceph_osd_pool_ls_detail', 'ceph_osd_lspools', 'ceph_osd_df',
+    'ceph_osd_blocked-by', 'ceph_osd_blacklist_ls', 'ceph_pg_stat',
+    'ceph_pool_autoscale-status', 'ceph_progress', 'ceph_progress_json',
+    'ceph_quorum_status', 'ceph_service_dump', 'ceph_time-sync-status'
+]
+
+
+BASE_MUST_GATHER_COMMANDS_JSON = [
+    'ceph_versions_--format_json-pretty', 'ceph_status_--format_json-pretty',
+    'ceph_report_--format_json-pretty', 'ceph_pg_dump_--format_json-pretty',
+    'ceph_osd_tree_--format_json-pretty',
+    'ceph_osd_stat_--format_json-pretty',
+    'ceph_osd_dump_--format_json-pretty',
+    'ceph_osd_df_tree_--format_json-pretty',
+    'ceph_osd_crush_show-tunables_--format_json-pretty',
+    'ceph_osd_crush_dump_--format_json-pretty',
+    'ceph_mon_stat_--format_json-pretty', 'ceph_mon_dump_--format_json-pretty',
+    'ceph_mgr_dump_--format_json-pretty', 'ceph_mds_stat_--format_json-pretty',
+    'ceph_health_detail_--format_json-pretty',
+    'ceph_fs_ls_--format_json-pretty', 'ceph_fs_dump_--format_json-pretty',
+    'ceph_df_--format_json-pretty', 'ceph_auth_list_--format_json-pretty',
+    'ceph_balancer_dump_--format_json-pretty',
+    'ceph_balancer_pool_ls_--format_json-pretty',
+    'ceph_balancer_status_--format_json-pretty',
+    'ceph_config_dump_--format_json-pretty',
+    'ceph_config-key_ls_--format_json-pretty',
+    'ceph_crash_ls_--format_json-pretty',
+    'ceph_crash_stat_--format_json-pretty',
+    'ceph_device_ls_--format_json-pretty',
+    'ceph_fs_status_--format_json-pretty',
+    'ceph_fs_subvolumegroup_ls_ocs-storagecluster-'
+    'cephfilesystem_--format_json-pretty',
+    'ceph_fs_subvolume_ls_ocs-storagecluster-'
+    'cephfilesystem_csi_--format_json-pretty',
+    'ceph_mgr_module_ls_--format_json-pretty',
+    'ceph_mgr_services_--format_json-pretty',
+    'ceph_osd_utilization_--format_json-pretty',
+    'ceph_osd_crush_weight-set_ls_--format_json-pretty',
+    'ceph_osd_crush_weight-set_dump_--format_json-pretty',
+    'ceph_osd_crush_rule_dump_--format_json-pretty',
+    'ceph_osd_crush_rule_ls_--format_json-pretty',
+    'ceph_osd_crush_class_ls_--format_json-pretty',
+    'ceph_osd_perf_--format_json-pretty',
+    'ceph_osd_numa-status_--format_json-pretty',
+    'ceph_osd_getmaxosd_--format_json-pretty',
+    'ceph_osd_drain_status_--format_json-pretty',
+    'ceph_osd_pool_ls_detail_--format_json-pretty',
+    'ceph_osd_lspools_--format_json-pretty',
+    'ceph_osd_df_--format_json-pretty',
+    'ceph_osd_blocked-by_--format_json-pretty',
+    'ceph_osd_blacklist_ls_--format_json-pretty',
+    'ceph_pg_stat_--format_json-pretty',
+    'ceph_pool_autoscale-status_--format_json-pretty',
+    'ceph_progress_--format_json-pretty',
+    'ceph_progress_json_--format_json-pretty',
+    'ceph_quorum_status_--format_json-pretty',
+    'ceph_service_dump_--format_json-pretty',
+    'ceph_time-sync-status_--format_json-pretty'
+]
+
+EXT_MUST_GATHER_COMMANDS_JSON = [
     'ceph_versions_--format_json-pretty', 'ceph_status_--format_json-pretty',
     'ceph_report_--format_json-pretty', 'ceph_pg_dump_--format_json-pretty',
     'ceph_osd_tree_--format_json-pretty', 'ceph_osd_stat_--format_json-pretty',
