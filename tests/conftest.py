@@ -2595,8 +2595,8 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
     request.addfinalizer(ns_resources_and_connections_cleanup)
 
     return _create_ns_resources
-=======
->>>>>>> 454b8316... resolve conflicts, readd the pytest.fixture
+
+
 @pytest.fixture(scope="session", autouse=True)
 def collect_logs_fixture(request):
     """
