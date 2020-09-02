@@ -2612,3 +2612,4 @@ def collect_logs_fixture(request):
             collect_ocs_logs('testcases', ocp=False, status_failure=False)
 
     request.addfinalizer(finalizer)
+
