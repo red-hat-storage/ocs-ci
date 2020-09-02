@@ -2509,7 +2509,6 @@ def ceph_toolbox(request):
         setup_ceph_toolbox()
 
 
-<<<<<<< HEAD
 @pytest.fixture(scope='function')
 def node_drain_teardown(request):
     """
@@ -2613,4 +2612,3 @@ def collect_logs_fixture(request):
             collect_ocs_logs('testcases', ocp=False, status_failure=False)
 
     request.addfinalizer(finalizer)
-

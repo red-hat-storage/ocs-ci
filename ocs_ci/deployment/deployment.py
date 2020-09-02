@@ -120,8 +120,6 @@ class Deployment(object):
                     raise
 
         if not config.ENV_DATA['skip_ocs_deployment']:
-            # Let's do the collections separately to guard against one
-            # of them failing
             try:
                 self.deploy_ocs()
                 if config.REPORTING['gather_on_deploy_success']:
@@ -129,6 +127,8 @@ class Deployment(object):
             except Exception as e:
                 logger.error(e)
                 if config.REPORTING['gather_on_deploy_failure']:
+                    # Let's do the collections separately to guard against one
+                    # of them failing
                     collect_ocs_logs('deployment', ocs=False)
                     collect_ocs_logs('deployment', ocp=False)
                 raise
