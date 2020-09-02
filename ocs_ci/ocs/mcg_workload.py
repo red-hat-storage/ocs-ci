@@ -2,6 +2,7 @@ import logging
 
 from ocs_ci.ocs import constants, ocp, fio_artefacts
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.utils import TimeoutSampler

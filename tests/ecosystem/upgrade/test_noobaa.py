@@ -13,7 +13,6 @@ from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity
 )
 from ocs_ci.ocs.mcg_workload import wait_for_active_pods
-from ocs_ci.ocs.resources import pod
 
 logger = logging.getLogger(__name__)
 
