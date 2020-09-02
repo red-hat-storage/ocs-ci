@@ -226,7 +226,7 @@ def wait_for_active_pods(job, desired_count, timeout=3):
 
     """
     job_name = job.name
-    logger.info(f"Checking number of active pods for job {job_name}")
+    log.info(f"Checking number of active pods for job {job_name}")
 
     def _retrieve_job_state():
         job_obj = job.ocp.get(resource_name=job_name, out_yaml_format=True)
@@ -241,11 +241,11 @@ def wait_for_active_pods(job, desired_count, timeout=3):
             if state == desired_count:
                 return True
             else:
-                logger.debug(
+                log.debug(
                     f"Number of active pods for job {job_name}: {state}"
                 )
     except TimeoutExpiredError:
-        logger.error(
+        log.error(
             f"Job {job_name} doesn't have correct number of active pods ({desired_count})"
         )
         job_pods = pod.get_pods_having_label(
@@ -253,14 +253,14 @@ def wait_for_active_pods(job, desired_count, timeout=3):
             job.namespace
         )
         for job_pod in job_pods:
-            logger.info(
+            log.info(
                 f"Description of job pod {job_pod['metadata']['name']}: {job_pod}"
             )
             pod_logs = pod.get_pod_logs(
                 job_pod['metadata']['name'],
                 namespace=job_pod['metadata']['namespace']
             )
-            logger.info(
+            log.info(
                 f"Logs from job pod {job_pod['metadata']['name']}: {pod_logs}"
             )
 
