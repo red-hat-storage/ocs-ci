@@ -2579,7 +2579,7 @@ def check_for_rhcos_images(url):
 
 def download_file_from_git_repo(git_repo_url, path_to_file_in_git, filename):
     """
-    Download a file from a specified url
+    Download a file from a specified git repository
 
     Args:
         git_repo_url (str): The git repository url
@@ -2592,8 +2592,7 @@ def download_file_from_git_repo(git_repo_url, path_to_file_in_git, filename):
         f"Download file '{path_to_file_in_git}' from "
         f"git repository {git_repo_url} to local file '{filename}'."
     )
-    with open(filename, "wb") as f:
-        t = mkdtemp()
-        git.Repo.clone_from(git_repo_url, t, branch='master', depth=1)
-        move(os.path.join(t, path_to_file_in_git), filename)
-        rmtree(t)
+    t = mkdtemp()
+    git.Repo.clone_from(git_repo_url, t, branch='master', depth=1)
+    move(os.path.join(t, path_to_file_in_git), filename)
+    rmtree(t)

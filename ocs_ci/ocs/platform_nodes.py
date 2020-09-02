@@ -32,8 +32,7 @@ from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
     replace_content_in_file,
     get_ocp_version, TimeoutSampler,
-    download_file, delete_file, AZInfo,
-    download_file_from_git_repo,
+    delete_file, AZInfo, download_file_from_git_repo,
 )
 from ocs_ci.ocs.node import wait_for_nodes_status
 
@@ -1300,7 +1299,7 @@ class AWSUPINode(AWSNodes):
             f'{constants.AWS_WORKER_NODE_TEMPLATE}'
         )
         logger.info(
-            f"Getting file {path_to_file} from "
+            f"Getting file '{path_to_file}' from "
             f"git repository {constants.OCP_QE_MISC_REPO}"
         )
         tmp_file = os.path.join(
