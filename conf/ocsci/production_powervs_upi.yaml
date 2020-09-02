@@ -1,0 +1,30 @@
+RUN:
+  bin_dir: '/usr/local/bin'
+
+DEPLOYMENT:
+  local_storage: True
+  force_download_installer: False
+  force_download_client: False
+  ocs_csv_channel: "stable-4.6"
+  default_latest_tag: "latest-4.6"
+ENV_DATA:
+  storage_device_sets_name: "ocs-deviceset"
+  ocs_version: '4.6'
+  skip_ocp_deployment: true
+  skip_ocs_deployment: false
+  platform: 'powervs'
+  disk_pattern: '/dev/vdc'
+  deployment_type: 'upi'
+  monitoring_enabled: false
+
+REPORTING:
+  email:
+    address: "ocs-ci@redhat.com"
+    smtp_server: "localhost"
+  polarion:
+    project_id: "OpenShiftContainerStorage"
+  us_ds: 'DS'
+  ocp_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
+  ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
+  default_ocs_must_gather_latest_tag: 'latest-4.6'
+  gather_on_deploy_failure: true

@@ -565,6 +565,10 @@ STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
 )
 
+IBM_STORAGE_CLUSTER_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "ibm-storage-cluster.yaml"
+)
+
 EXTERNAL_STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "external-storage-cluster.yaml"
 )
@@ -709,6 +713,7 @@ AZURE_PLATFORM = 'azure'
 GCP_PLATFORM = 'gcp'
 VSPHERE_PLATFORM = 'vsphere'
 BAREMETAL_PLATFORM = 'baremetal'
+IBM_POWER_PLATFORM = "powervs"
 ON_PREM_PLATFORMS = [VSPHERE_PLATFORM, BAREMETAL_PLATFORM]
 CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
 BAREMETALPSI_PLATFORM = 'baremetalpsi'
@@ -792,6 +797,7 @@ LATEST_TAGS = (
     '4.3-rc', 'latest-4.3', 'latest-stable-4.3',
     '4.4-rc', 'latest-4.4', 'latest-stable-4.4',
     '4.5-rc', 'latest-4.5', 'latest-stable-4.5',
+    '4.6-rc', 'latest-4.6',
 )
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
