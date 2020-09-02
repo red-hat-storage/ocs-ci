@@ -1469,7 +1469,7 @@ def get_running_state_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     running_pods_object = list()
     for pod in list_of_pods:
         status = ocp_pod_obj.get_resource(pod.name, 'STATUS')
-        if status in "Running":
+        if "Running" in status:
             running_pods_object.append(pod)
 
     return running_pods_object
