@@ -13,7 +13,7 @@ from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 logger = logging.getLogger(__name__)
 
 
-class TestBucketCreation:
+class TestBucketCreation(MCGTest):
     """
     Test creation of a bucket
     """

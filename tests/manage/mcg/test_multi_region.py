@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 @skipif_aws_creds_are_missing
-class TestMultiRegion:
+class TestMultiRegion(MCGTest):
     """
     Test the multi region functionality
     """

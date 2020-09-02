@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 ERRATIC_TIMEOUTS_SKIP_REASON = 'Skipped because of erratic timeouts'
 
 
-class TestBucketDeletion:
+class TestBucketDeletion(MCGTest):
     """
     Test bucket Creation Deletion of buckets
     """

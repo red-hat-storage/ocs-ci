@@ -4,7 +4,7 @@ import pytest
 import uuid
 
 from ocs_ci.framework.testlib import (
-    ManageTest, tier1
+    tier1
 )
 from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity, abort_all_multipart_upload,
@@ -43,7 +43,7 @@ def setup(pod_obj, bucket_factory):
     return bucket, object_key, origin_dir, res_dir, full_object_path, parts
 
 
-class TestS3MultipartUpload(ManageTest):
+class TestS3MultipartUpload(MCGTest):
     """
     Test Multipart upload on Noobaa buckets
     """

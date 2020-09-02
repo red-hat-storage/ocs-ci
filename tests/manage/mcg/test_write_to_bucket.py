@@ -7,7 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required
 )
 from ocs_ci.framework.testlib import (
-    ManageTest, tier1, tier2, tier3, acceptance
+    tier1, tier2, tier3, acceptance
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
@@ -36,7 +36,7 @@ def pod_io(pods):
             p.submit(pod.run_io, 'fs', '1G')
 
 
-class TestBucketIO(ManageTest):
+class TestBucketIO(MCGTest):
     """
     Test IO of a bucket
     """
