@@ -3,6 +3,7 @@ import time
 import pytest
 import tempfile
 
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
 from ocs_ci.ocs import ocp, constants, defaults
 from ocs_ci.framework.testlib import workloads, E2ETest, ignore_leftovers
@@ -564,25 +565,28 @@ class TestMonitoringBackedByOCS(E2ETest):
             "failed to get results for some metrics before Downscaling deployment mgr to 0"
         )
 
-        # Reduce mgr pod deployments to replicas=0
-        oc = ocp.OCP(
-            kind=constants.DEPLOYMENT, namespace='openshift-storage'
-        )
-
-        # Downscaling deployment mgr to 0
-        mgr_deployments = oc.get(selector=constants.MGR_APP_LABEL)['items']
+        # Get pod mge name and mgr deployment
+        oc_deployment = ocp.OCP(kind=constants.DEPLOYMENT, namespace='openshift-storage')
+        mgr_deployments = oc_deployment.get(selector=constants.MGR_APP_LABEL)['items']
         mgr = mgr_deployments[0]['metadata']['name']
-        log.info(f"Downscaling deployment {mgr} to 0")
-        oc.exec_oc_cmd(f"scale --replicas=0 deployment/{mgr}")
+        pod_mgr_name = get_pod_name_by_pattern(pattern=mgr, namespace='openshift-storage')
 
-        log.info('wait 5 min')
-        time.sleep(300)
+        log.info(f"Downscaling deployment {mgr} to 0")
+        oc_deployment.exec_oc_cmd(f"scale --replicas=0 deployment/{mgr}")
+
+        oc_pod = ocp.OCP(kind=constants.POD, namespace='openshift-storage')
+        oc_pod.wait_for_delete(resource_name=pod_mgr_name[0])
 
         log.info(f"Upscaling deployment {mgr} back to 1")
-        oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
+        oc_deployment.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
 
-        log.info('wait 20 sec')
-        time.sleep(60)
+        log.info("Get pod mgr obj and wait to Running state")
+        time.sleep(20)
+        pod_mgr_name = get_pod_name_by_pattern(pattern=mgr, namespace='openshift-storage')
+        pod_mgr_obj = pod.get_pod_obj(name=pod_mgr_name[0], namespace='openshift-storage')
+        wait_for_resource_state(
+            resource=pod_mgr_obj, state=constants.STATUS_RUNNING, timeout=180
+        )
 
         # Check ceph metrics available
         assert check_ceph_metrics_available(), (
