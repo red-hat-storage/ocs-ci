@@ -49,7 +49,7 @@ from ocs_ci.ocs.node import check_nodes_specs
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods
+from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods, get_pods_having_label
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
@@ -2782,7 +2782,6 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
 
     return _create_ns_resources
 
-
 @pytest.fixture()
 def snapshot_factory(request):
     """
@@ -2924,3 +2923,63 @@ def collect_logs_fixture(request):
                 collect_ocs_logs('testcases', ocp=False, status_failure=False)
 
     request.addfinalizer(finalizer)
+
+@pytest.fixture(scope='function')
+def nb_ensure_endpoint_count(request):
+    """
+    Validate and ensure the number of running noobaa endpoints
+    """
+    cls_inst = request.node.cls
+    min_ep_count = cls_inst.MIN_EP_COUNT
+    max_ep_count = cls_inst.MAX_EP_COUNT
+
+    assert min_ep_count <= max_ep_count
+    namespace = defaults.ROOK_CLUSTER_NAMESPACE
+    should_wait = False
+
+    # prior to 4.6 we configured the ep count directly on the noobaa cr.
+    if float(config.ENV_DATA['ocs_version']) < 4.6:
+        noobaa = OCP(kind='noobaa', namespace=namespace)
+        resource = noobaa.get()['items'][0]
+        resource_name = resource['metadata']['name']
+
+        if resource['spec']['endpoints']['minCount'] != min_ep_count:
+            log.info(f"Changing minimum Noobaa endpoints to {min_ep_count}")
+            params = f'{{"spec":{{"endpoints":{{"minCount":{min_ep_count}}}}}}}'
+            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+            should_wait = True
+
+        if resource['spec']['endpoints']['maxCount'] != max_ep_count:
+            log.info(f"Changing minimum Noobaa endpoints to {max_ep_count}")
+            params = f'{{"spec":{{"endpoints":{{"minCount":{max_ep_count}}}}}}}'
+            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+            should_wait = True
+
+    else:
+        storage_cluster = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
+        resource = sc.get()['items'][0]
+        resource_name = resource['metadata']['name']
+
+        if resource['spec']['multiCloudGateway']['endpoints']['minCount'] != min_ep_count:
+            log.info(f"Changing minimum Noobaa endpoints to {min_ep_count}")
+            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"minCount":{min_ep_count}}}}}}}}}'
+            storage_cluster.patch(resource_name=resource_name, params=params, format_type='merge')
+            should_wait = True
+
+        if resource['spec']['multiCloudGateway']['endpoints']['maxCount'] != max_ep_count:
+            log.info(f"Changing maximum Noobaa endpoints to {max_ep_count}")
+            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"maxCount":{max_ep_count}}}}}}}}}'
+            storage_cluster.patch(resource_name=resource_name, params=params, format_type='merge')
+            should_wait = True
+
+    if should_wait:
+        time.sleep(5 * 60) # 5 min
+
+    pods_info = get_pods_having_label(label=constants.NOOBAA_ENDPOINT_POD_LABEL, namespace=namespace):
+    ready_count = 0;
+    for ep_info in pods_info:
+        if ep_info['pod_info']['containerStatuses'][0]['ready'] == 'true':
+            ready_count += 1
+
+    assert min_ep_count <= ready_count and ready_count <= max_ep_count
+
