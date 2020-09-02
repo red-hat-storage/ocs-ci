@@ -4,12 +4,11 @@ import textwrap
 
 import pytest
 
-from ocs_ci.ocs import constants, ocp, fio_artefacts
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.mcg_workload import create_workload_job
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
-from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import Pod
 from tests import helpers
 
@@ -548,10 +547,7 @@ def pre_upgrade_pods_running_io(
 @pytest.fixture(scope='session')
 def mcg_workload_job(
     fio_project_mcg,
-    tmp_path,
-    bucket_factory_session,
-    request,
-    mcg_obj_session
+    mcg_job_factory_session,
 ):
     """
     Creates kubernetes job that should utilize MCG during upgrade.
@@ -560,24 +556,10 @@ def mcg_workload_job(
         object: Job object
 
     """
-    job = create_workload_job(
+    return mcg_job_factory_session(
         job_name="mcg-workload",
-        bucket=bucket_factory_session(),
-        project=fio_project_mcg,
-        mcg_obj=mcg_obj_session,
-        tmp_path=tmp_path
+        project=fio_project_mcg
     )
-
-    def teardown():
-        """
-        Delete mcg job
-        """
-        job.delete()
-        job.ocp.wait_for_delete(job.name)
-
-    request.addfinalizer(teardown)
-
-    return job
 
 
 @pytest.fixture(scope='session')
