@@ -7,7 +7,6 @@ import pytest
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.mcg_workload import create_workload_job
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.resources.pod import Pod
 from tests import helpers

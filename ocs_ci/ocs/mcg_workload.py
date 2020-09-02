@@ -1,15 +1,16 @@
 import logging
 
 from ocs_ci.ocs import constants, ocp, fio_artefacts
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.utility.utils import TimeoutSampler
 from tests.helpers import create_unique_resource_name
-
 
 log = logging.getLogger(__name__)
 
 
-def get_configmap_dict(fio_job, mcg_obj, bucket):
+def get_configmap_dict(fio_job, mcg_obj, bucket, custom_options=None):
     """
     Fio configmap dictionary with configuration set for MCG workload.
 
@@ -17,6 +18,13 @@ def get_configmap_dict(fio_job, mcg_obj, bucket):
         fio_job (dict): Definition of fio job
         mcg_obj (obj): instance of MCG class
         bucket (obj): MCG bucket to be used for workload
+        custom_options (dict): Dictionary of lists containing tuples with
+            additional configuration for fio in format:
+            {'section': [('option', 'value'),...],...}
+            e.g.
+            {'global':[('name','bucketname')],'create':[('time_based','1'),('runtime','48h')]}
+            Those values can be added to the config or rewrite already existing
+            values
 
     Returns:
         dict: Configmap definition
@@ -27,7 +35,8 @@ def get_configmap_dict(fio_job, mcg_obj, bucket):
     configmap['metadata']['name'] = config_name
     configmap["data"]["workload.fio"] = fio_artefacts.get_mcg_conf(
         mcg_obj,
-        bucket
+        bucket,
+        custom_options
     )
     return configmap
 
@@ -66,7 +75,8 @@ def create_workload_job(
     bucket,
     project,
     mcg_obj,
-    resource_path
+    resource_path,
+    custom_options=None
 ):
     """
     Creates kubernetes job that should utilize MCG bucket.
@@ -79,6 +89,13 @@ def create_workload_job(
         mcg_obj (obj): instance of MCG class
         resource_path (str): path to directory where should be created
             resources
+        custom_options (dict): Dictionary of lists containing tuples with
+            additional configuration for fio in format:
+            {'section': [('option', 'value'),...],...}
+            e.g.
+            {'global':[('name','bucketname')],'create':[('time_based','1'),('runtime','48h')]}
+            Those values can be added to the config or rewrite already existing
+            values
 
     Returns:
         obj: Job object
@@ -88,7 +105,8 @@ def create_workload_job(
     fio_configmap_dict = get_configmap_dict(
         fio_job_dict,
         mcg_obj,
-        bucket
+        bucket,
+        custom_options
     )
     fio_objs = [fio_configmap_dict, fio_job_dict]
 
@@ -139,6 +157,7 @@ def mcg_job_factory(
         job_name=None,
         bucket=None,
         project=None,
+        custom_options=None
     ):
         """
         Args:
@@ -149,6 +168,13 @@ def mcg_job_factory(
             mcg_obj (obj): instance of MCG class
             resource_path (str): path to directory where should be created
                 resources
+            custom_options (dict): Dictionary of lists containing tuples with
+                additional configuration for fio in format:
+                {'section': [('option', 'value'),...],...}
+                e.g.
+                {'global':[('name','bucketname')],'create':[('time_based','1'),('runtime','48h')]}
+                Those values can be added to the config or rewrite already existing
+                values
 
         Returns:
             func: MCG workload job factory function
@@ -165,7 +191,8 @@ def mcg_job_factory(
             bucket,
             project,
             mcg_obj,
-            resource_path
+            resource_path,
+            custom_options
         )
         instances.append(job)
         return job
@@ -182,3 +209,59 @@ def mcg_job_factory(
 
     request.addfinalizer(_finalizer)
     return _factory
+
+
+def wait_for_active_pods(job, desired_count, timeout=3):
+    """
+    Wait for job to load desired number of active pods in time specified
+    in timeout.
+
+    Args:
+        job (obj): OCS job object
+        desired_count (str): Number of desired active pods for provided job
+        timeout (int): Number of seconds to wait for the job to get into state
+
+    Returns:
+        bool: If job has desired number of active pods
+
+    """
+    job_name = job.name
+    logger.info(f"Checking number of active pods for job {job_name}")
+
+    def _retrieve_job_state():
+        job_obj = job.ocp.get(resource_name=job_name, out_yaml_format=True)
+        return job_obj['status']['active']
+
+    try:
+        for state in TimeoutSampler(
+            timeout=timeout,
+            sleep=3,
+            func=_retrieve_job_state
+        ):
+            if state == desired_count:
+                return True
+            else:
+                logger.debug(
+                    f"Number of active pods for job {job_name}: {state}"
+                )
+    except TimeoutExpiredError:
+        logger.error(
+            f"Job {job_name} doesn't have correct number of active pods ({desired_count})"
+        )
+        job_pods = pod.get_pods_having_label(
+            f"job-name={job_name}",
+            job.namespace
+        )
+        for job_pod in job_pods:
+            logger.info(
+                f"Description of job pod {job_pod['metadata']['name']}: {job_pod}"
+            )
+            pod_logs = pod.get_pod_logs(
+                job_pod['metadata']['name'],
+                namespace=job_pod['metadata']['namespace']
+            )
+            logger.info(
+                f"Logs from job pod {job_pod['metadata']['name']}: {pod_logs}"
+            )
+
+        return False
