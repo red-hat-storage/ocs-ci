@@ -574,13 +574,14 @@ class TestMonitoringBackedByOCS(E2ETest):
         log.info(f"Downscaling deployment {mgr} to 0")
         oc_deployment.exec_oc_cmd(f"scale --replicas=0 deployment/{mgr}")
 
+        log.info(f"Waiting for mgr pod {pod_mgr_name} to be reach deleted state")
         oc_pod = ocp.OCP(kind=constants.POD, namespace='openshift-storage')
         oc_pod.wait_for_delete(resource_name=pod_mgr_name[0])
 
         log.info(f"Upscaling deployment {mgr} back to 1")
         oc_deployment.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
 
-        log.info("Get pod mgr obj and wait to Running state")
+        log.info("Waiting for mgr pod to be reach Running state")
         time.sleep(20)
         pod_mgr_name = get_pod_name_by_pattern(pattern=mgr, namespace='openshift-storage')
         pod_mgr_obj = pod.get_pod_obj(name=pod_mgr_name[0], namespace='openshift-storage')
