@@ -20,70 +20,90 @@ class TestBucketCreation:
     ERRATIC_TIMEOUTS_SKIP_REASON = 'Skipped because of erratic timeouts'
 
     @pytest.mark.parametrize(
-        argnames="amount,interface",
+        argnames="amount,interface,bucketclass_dict",
         argvalues=[
             pytest.param(
-                *[3, 'S3'],
+                *[3, 'S3', None],
                 marks=[pytest.mark.polarion_id("OCS-1298"), tier1, acceptance]
             ),
             pytest.param(
-                *[100, 'S3'],
+                *[100, 'S3', None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance, pytest.mark.polarion_id("OCS-1823")
                 ]
             ),
             pytest.param(
-                *[1000, 'S3'],
+                *[1000, 'S3', None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance, pytest.mark.polarion_id("OCS-1824")
                 ]
             ),
             pytest.param(
-                *[3, 'OC'],
+                *[3, 'OC', None],
                 marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1298")]
             ),
             pytest.param(
-                *[100, 'OC'],
+                *[100, 'OC', None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance, pytest.mark.polarion_id("OCS-1826")
                 ]
             ),
             pytest.param(
-                *[1000, 'OC'],
+                *[1000, 'OC', None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance, pytest.mark.polarion_id("OCS-1827")
                 ]
             ),
             pytest.param(
-                *[3, 'CLI'],
+                *[3, 'CLI', None],
                 marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1298")]
             ),
             pytest.param(
-                *[100, 'CLI'],
+                *[100, 'CLI', None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance, pytest.mark.polarion_id("OCS-1825")
                 ]
             ),
             pytest.param(
-                *[1000, 'CLI'],
+                *[1000, 'CLI', None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance, pytest.mark.polarion_id("OCS-1828")
                 ]
             ),
+            pytest.param(
+                *[1, 'OC', {
+                    'interface': 'OC',
+                    'backingstore_dict': {
+                        'pv': [(1, 50, 'ocs-storagecluster-ceph-rbd')]
+                    }
+                }]
+            ),
+            pytest.param(
+                *[1, 'CLI', {
+                    'interface': 'CLI',
+                    'backingstore_dict': {
+                        'pv': [(1, 50, 'ocs-storagecluster-ceph-rbd')]
+                    }
+                }]
+            )
         ]
     )
-    def test_bucket_creation(self, bucket_factory, amount, interface):
+    def test_bucket_creation(self, bucket_factory, bucket_class_factory, amount, interface, bucketclass_dict):
         """
         Test bucket creation using the S3 SDK, OC command or MCG CLI.
         The factory checks the bucket's health by default.
         """
-        bucket_factory(amount, interface)
+        if bucketclass_dict:
+            bucketclass = bucket_class_factory(bucketclass_dict)
+            bucket_factory(amount, interface, bucketclass=bucketclass.name)
+        else:
+            bucket_factory(amount, interface)
 
     @pytest.mark.parametrize(
         argnames="amount,interface",

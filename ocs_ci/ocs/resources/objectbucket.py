@@ -241,7 +241,7 @@ class MCGCLIBucket(ObjectBucket):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        bc = f" --bucketclass={kwargs['bucketclass']}" if 'bucketclass' in kwargs else ''
+        bc = f" --bucketclass={kwargs['bucketclass']}" if kwargs.get('bucketclass') else ''
         self.mcg.exec_mcg_cmd(f'obc create --exact {self.name}{bc}')
 
     def internal_delete(self):
@@ -372,7 +372,7 @@ class MCGOCBucket(OCBucket):
         obc_data['spec']['bucketName'] = self.name
         obc_data['spec']['storageClassName'] = self.namespace + '.noobaa.io'
         obc_data['metadata']['namespace'] = self.namespace
-        if 'bucketclass' in kwargs:
+        if kwargs.get('bucketclass'):
             obc_data.setdefault('spec', {}).setdefault('additionalConfig', {}).setdefault(
                 'bucketclass', kwargs['bucketclass']
             )

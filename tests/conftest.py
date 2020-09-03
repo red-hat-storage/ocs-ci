@@ -1853,8 +1853,8 @@ def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
     return _create_buckets
 
 
-@pytest.fixture(scope='class')
-def bucket_class_factory(request, mcg_obj_session, backingstore_factory):
+@pytest.fixture()
+def bucket_class_factory(request, mcg_obj, backingstore_factory):
     """
     Create a bucket class factory. Calling this fixture creates a new custom bucket class.
     For a custom backingstore(s), provide the 'backingstore_dict' parameter.
@@ -1864,39 +1864,56 @@ def bucket_class_factory(request, mcg_obj_session, backingstore_factory):
 
     """
     interfaces = {
-        'OC': mcg_obj_session.oc_create_bucketclass,
-        'CLI': mcg_obj_session.cli_create_bucketclass
+        'oc': mcg_obj.oc_create_bucketclass,
+        'cli': mcg_obj.cli_create_bucketclass
     }
     created_bucket_classes = []
 
     def _create_bucket_class(
-        backingstore_dict='nooba-default-backing-store', interface='OC', placement='Spread'
+        bucket_class_dict
     ):
         """
         Creates and deletes all bucket classes that were created as part of the test
 
         Args:
 
-            interface (str): The interface to use for creation of buckets.
-                OC | CLI
-            backingstore_dict (dict/list/str): Either the default backingstore or existing
-                list of backingstores or A dictionary compatible with the backing store factory
-                requirements.
-            placement (str): The Placement policy for this bucket class.
-                Spread | Mirror
+            bucket_class_dict (dict): Dictionary containing the description of the bucket class.
+                possible keys and values are:
+                - interface (str): The interface to use for creation of buckets.
+                    OC | CLI
+                - backingstore_dict (dict/list): Either existing list of backingstores or
+                    A dictionary compatible with the backing store factory requirements.
+                - placement (str): The Placement policy for this bucket class.
+                    Spread | Mirror
+                if no key is provided default values will apply.
 
         Returns:
             list: A Bucket Class object.
 
         """
-        if interface.lower() not in interfaces.keys():
-            raise RuntimeError(
-                f'Invalid interface type received: {interface}. '
-                f'available types: {", ".join(interfaces)}'
-            )
-        backingstores = backingstore_dict
-        if isinstance(backingstore_dict, dict):
-            backingstores = backingstore_factory(interface, backingstore_dict)
+        if 'interface' in bucket_class_dict:
+            interface = bucket_class_dict['interface']
+            if interface.lower() not in interfaces.keys():
+                raise RuntimeError(
+                    f'Invalid interface type received: {interface}. '
+                    f'available types: {", ".join(interfaces)}'
+                )
+            else:
+                interface = bucket_class_dict['interface']
+        else:
+            interface = 'OC'
+        if 'backingstore_dict' in bucket_class_dict:
+            if isinstance(bucket_class_dict['backingstore_dict'], dict):
+                backingstores = [backingstore.name for backingstore in backingstore_factory(interface, bucket_class_dict['backingstore_dict'])]
+            else:
+                backingstores = [backingstore.name for backingstore in bucket_class_dict['backingstores']]
+        else:
+            backingstores = ['noobaa-default-backing-store']
+
+        if 'placement' in bucket_class_dict:
+            placement = bucket_class_dict['placement']
+        else:
+            placement = 'Spread'
         bucket_class_name = helpers.create_unique_resource_name(
             resource_description='bucketclass', resource_type=interface.lower()
         )
@@ -2009,12 +2026,13 @@ def cloud_uls_factory(request, cld_mgr):
 
 
 @pytest.fixture(scope='class')
-def backingstore_factory(request, cld_mgr, cloud_uls_factory):
+def backingstore_factory(request, mcg_obj_session, cld_mgr, cloud_uls_factory):
     """
         Create a Backing Store factory.
         Calling this fixture creates a new Backing Store(s).
 
         Args:
+            mcg_obj_session (MCG): An MCG object for mcg related operations
             cloud_uls_factory: Factory for underlying storage creation
             cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
 
@@ -2048,11 +2066,11 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
             as value.
             Cloud backing stores form - 'CloudName': [(amount, region), (amount, region)]
             i.e. - 'aws': [(3, us-west-1),(2, eu-west-2)]
-            PV form - 'pv': [(amount, size_in_gb, storageclass), ...]
+            PV form - 'pv': [(amount, size_in_gb, storagecluster), ...]
             i.e. - 'pv': [(3, 32, ocs-storagecluster-ceph-rbd),(2, 100, ocs-storagecluster-ceph-rbd)]
 
         Returns:
-            list: A list of backingstore objects.
+            list: A list of backingstore names.
 
         """
         if method.lower() not in cmdMap:
@@ -2069,15 +2087,19 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
                         f'available types: {", ".join(cmdMap[method.lower()].keys())}'
                     )
                 if cloud == 'pv':
-                    vol_num, size, storage_class = uls_tup
+                    vol_num, size, storagecluster = uls_tup
                     backingstore_name = create_unique_resource_name(
                         resource_description='backingstore', resource_type=cloud.lower()
                     )
                     # removing characters from name (pod name length bellow 64 characters issue)
                     backingstore_name = backingstore_name[:-16]
-                    created_backingstores.append(backingstore_name)
+                    created_backingstores.append(
+                        BackingStore(
+                                name=backingstore_name
+                            )
+                        )
                     cmdMap[method.lower()][cloud.lower()](
-                        backingstore_name, vol_num, size, storage_class
+                        mcg_obj_session, backingstore_name, vol_num, size, storagecluster
                     )
                 else:
                     region = uls_tup[1]

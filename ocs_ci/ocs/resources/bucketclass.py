@@ -5,7 +5,6 @@ from ocs_ci.framework import config
 log = logging.getLogger(__name__)
 
 
-
 class BucketClass():
     """
     A class that represents BucketClass objects
@@ -15,6 +14,8 @@ class BucketClass():
         self.name = name
         self.backingstores = backingstores
         self.placement = placement
+
+    # TODO: verify health of bucketclass
 
     def delete(self):
         log.info(f'Cleaning up bucket class {self.name}')

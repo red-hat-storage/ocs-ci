@@ -549,8 +549,8 @@ class MCG:
             OCS: The bucket class resource
 
         """
-        bc = f" --backingstores={backingstores} --placement={placement}"
-        self.exec_mcg_cmd(f'bucketclass create {name} --exact {self.name}{bc}')
+        bc = f" --backingstores={','.join(backingstores)} --placement={placement}"
+        self.exec_mcg_cmd(f'bucketclass create {name}{bc}')
 
     def check_if_mirroring_is_done(self, bucket_name):
         """
