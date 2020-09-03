@@ -833,7 +833,9 @@ def get_node_az(node):
     return labels.get('topology.kubernetes.io/zone')
 
 
-def delete_and_create_osd_node_vsphere_upi(osd_node_name):
+def delete_and_create_osd_node_vsphere_upi(
+    osd_node_name, use_existing_node=False
+):
     """
     Unschedule, drain and delete osd node, and creating a new osd node.
     At the end of the function there should be the same number of osd nodes as
@@ -842,11 +844,13 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name):
 
     Args:
         osd_node_name (str): the name of the osd node
-
+        use_existing_node (bool): If False, create a new node and label it.
+            If True, use an existing node to replace the deleted node
+            and label it.
     """
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
-    remove_nodes([osd_node])
+    # remove_nodes([osd_node])
 
     log.info(f"name of deleted node = {osd_node_name}")
 
@@ -855,5 +859,33 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name):
     else:
         node_type = constants.RHCOS
 
-    log.info("Preparing to create a new node...")
-    add_new_node_and_label_upi(node_type, 1)
+    if not use_existing_node:
+        log.info("Preparing to create a new node...")
+        add_new_node_and_label_upi(node_type, 1)
+    else:
+        node_not_in_ocs = get_worker_nodes_not_in_ocs()[0]
+        ocs_labeled_nodes([node_not_in_ocs], constants.RHCOS)
+
+
+def ocs_labeled_nodes(nodes, node_type):
+    if node_type == constants.RHEL_OS:
+        set_selinux_permissions(workers=nodes)
+
+    node_obj = ocp.OCP(kind='node')
+    for new_node_to_label in nodes:
+        node_obj.add_label(
+            resource_name=new_node_to_label.name,
+            label=constants.OPERATOR_NODE_LABEL
+        )
+        logging.info(
+            f"Successfully labeled {new_node_to_label.name} "
+            f"with OCS storage label"
+        )
+
+
+def get_worker_nodes_not_in_ocs():
+    ocs_nodes = get_ocs_nodes()
+    ocs_node_names = [n.name for n in ocs_nodes]
+    worker_nodes = get_typed_nodes(constants.WORKER_MACHINE)
+    worker_nodes_not_in_ocs = [n for n in worker_nodes if n.name not in ocs_node_names]
+    return worker_nodes_not_in_ocs

@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 @ignore_leftovers
 class TestNodeReplacement(ManageTest):
     """
-    Knip-894 Node replacement - AWS-IPI-Proactive
+    Knip-894 Node replacement
 
     """
     @pytest.fixture(autouse=True)
@@ -32,6 +32,33 @@ class TestNodeReplacement(ManageTest):
 
         """
         self.sanity_helpers = Sanity()
+
+    def test_nodereplacement(self):
+        """
+        Test Node Replacement(Without running IO in the background)
+
+        """
+        osd_pods_obj = pod.get_osd_pods()
+        osd_node_name = pod.get_pod_node(random.choice(osd_pods_obj)).name
+        log.info(f"Selected OSD is {osd_node_name}")
+
+        if config.ENV_DATA['platform'].lower() == constants.AWS_PLATFORM:
+            if config.ENV_DATA['deployment_type'] == 'ipi':
+                node.delete_and_create_osd_node_aws_ipi(osd_node_name)
+
+            elif config.ENV_DATA['deployment_type'] == 'upi':
+                node.delete_and_create_osd_node_aws_upi(osd_node_name)
+            else:
+                pytest.fail(
+                    f"ocs-ci config 'deployment_type' value '{config.ENV_DATA['deployment_type']}' is not valid, "
+                    f"results of this test run are all invalid.")
+
+        elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
+            node.delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=True)
+
+        # Verify everything running fine
+        log.info("Verifying All resources are Running and matches expected result")
+        self.sanity_helpers.health_check(tries=30)
 
     def test_nodereplacement_proactive(self, pvc_factory, pod_factory, dc_pod_factory):
         """
@@ -82,7 +109,7 @@ class TestNodeReplacement(ManageTest):
                 log.error(msg_invalid)
                 pytest.fail(msg_invalid)
         elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
-            node.delete_and_create_osd_node_vsphere_upi(osd_node_name)
+            node.delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=True)
 
         # Creating Resources
         log.info("Creating Resources using sanity helpers")
