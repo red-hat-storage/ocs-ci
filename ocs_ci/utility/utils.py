@@ -20,11 +20,12 @@ from shutil import which, move, rmtree
 import hcl
 import requests
 import yaml
+import git
 from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
 from paramiko.auth_handler import AuthenticationException, SSHException
 from semantic_version import Version
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, mkdtemp
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
@@ -2574,3 +2575,24 @@ def check_for_rhcos_images(url):
     """
     r = requests.head(url)
     return r.status_code == requests.codes.ok
+
+
+def download_file_from_git_repo(git_repo_url, path_to_file_in_git, filename):
+    """
+    Download a file from a specified git repository
+
+    Args:
+        git_repo_url (str): The git repository url
+        path_to_file_in_git (str): Path to the file to download
+            in git repository
+        filename (str): Name of the file to write the download to
+
+    """
+    log.debug(
+        f"Download file '{path_to_file_in_git}' from "
+        f"git repository {git_repo_url} to local file '{filename}'."
+    )
+    temp_dir = mkdtemp()
+    git.Repo.clone_from(git_repo_url, temp_dir, branch='master', depth=1)
+    move(os.path.join(temp_dir, path_to_file_in_git), filename)
+    rmtree(temp_dir)

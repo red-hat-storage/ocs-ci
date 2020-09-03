@@ -8,7 +8,7 @@ from tests.helpers import get_worker_nodes
 from ocs_ci.framework.pytest_customization.marks import tier4a
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
-    tier4, ManageTest, ignore_leftovers, bugzilla
+    tier4, ManageTest, ignore_leftovers
 )
 from ocs_ci.ocs import constants, node
 
@@ -20,7 +20,6 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4a
 @ignore_leftovers
-@bugzilla('1862981')
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement - AWS-IPI-Proactive
