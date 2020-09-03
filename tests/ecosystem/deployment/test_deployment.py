@@ -3,7 +3,7 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import deployment, polarion_id
 from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
-from ocs_ci.utility.reporting import get_deployment_polarion_id
+from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import is_cluster_running
 from tests.sanity_helpers import Sanity, SanityExternalCluster
 
@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 
 
 @deployment
-@polarion_id(get_deployment_polarion_id())
+@polarion_id(get_polarion_id())
 def test_deployment(pvc_factory, pod_factory):
     deploy = config.RUN['cli_params'].get('deploy')
     teardown = config.RUN['cli_params'].get('teardown')
