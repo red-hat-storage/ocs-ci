@@ -19,18 +19,10 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     get_ocp_version, run_cmd
 )
+from tests.conftest import install_logging
 
 
 logger = logging.getLogger(__name__)
-
-
-@pytest.fixture()
-def setup_fixture(install_logging):
-    """
-    Installs openshift-logging before upgrade
-    """
-
-    logger.info("Upgrade logging")
 
 
 def check_cluster_logging():
@@ -171,9 +163,7 @@ def upgrade_info(channel):
 
 
 @post_ocp_upgrade
-@pytest.mark.usefixtures(
-    setup_fixture.__name__
-)
+@pytest.mark.usefixtures(install_logging.__name__)
 @pytest.mark.polarion_id("OCS-2201")
 class TestUpgradeLogging():
     """
