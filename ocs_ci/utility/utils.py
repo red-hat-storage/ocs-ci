@@ -2610,14 +2610,18 @@ def skipif_upgraded_from(version_list):
         (bool): True if test needs to be skipped else False
 
     """
-    from ocs_ci.ocs.resources.ocs import get_ocs_csv
-    skip_this = False
-    version_list = [version_list] if isinstance(version_list, str) else version_list
-    ocs_csv = get_ocs_csv()
-    csv_info = ocs_csv.get()
-    prev_version = csv_info.get('spec').get('replaces', '')
-    for version in version_list:
-        if f'.v{version}' in prev_version:
-            skip_this = True
-            break
-    return skip_this
+    try:
+        from ocs_ci.ocs.resources.ocs import get_ocs_csv
+        skip_this = False
+        version_list = [version_list] if isinstance(version_list, str) else version_list
+        ocs_csv = get_ocs_csv()
+        csv_info = ocs_csv.get()
+        prev_version = csv_info.get('spec').get('replaces', '')
+        for version in version_list:
+            if f'.v{version}' in prev_version:
+                skip_this = True
+                break
+        return skip_this
+    except Exception as err:
+        log.error(str(err))
+        return False
