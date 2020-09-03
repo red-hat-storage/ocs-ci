@@ -28,7 +28,10 @@ from ocs_ci.ocs import (
     platform_nodes
 )
 from ocs_ci.ocs.bucket_utils import craft_s3_command
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException, ResourceWrongStatusException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed, TimeoutExpiredError,
+    CephHealthException, ResourceWrongStatusException
+)
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import setup_ceph_toolbox
@@ -1628,9 +1631,20 @@ def awscli_pod_fixture(request):
 
     """
     # Create the service-ca configmap to be mounted upon pod creation
-    service_ca_configmap = helpers.create_resource(
-        **templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
-    )
+    try:
+        log.info('Trying to create the AWS CLI service CA')
+        service_ca_configmap = helpers.create_resource(
+            **templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
+        )
+    except CommandFailed as e:
+        if 'already exists' in str(e):
+            log.info('Leftover service CA configmap found. Trying to delete and recreate.')
+            ocp.OCP(
+                namespace=constants.DEFAULT_NAMESPACE, kind='configmap'
+            ).delete(resource_name=constants.AWSCLI_SERVICE_CA_CONFIGMAP_NAME)
+            service_ca_configmap = helpers.create_resource(
+                **templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
+            )
 
     pod_dict_path = constants.AWSCLI_POD_YAML
 
