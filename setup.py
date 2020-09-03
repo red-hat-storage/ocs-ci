@@ -59,7 +59,7 @@ setup(
         'python-cinderclient==7.1.0',
         'keystoneauth1==4.2.0',
         'range-key-dict==1.1.0',
-        'GitPython==3.1.7'
+        'GitPython==3.1.7',
     ],
     entry_points={
         'console_scripts': [

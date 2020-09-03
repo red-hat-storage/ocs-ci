@@ -2592,7 +2592,7 @@ def download_file_from_git_repo(git_repo_url, path_to_file_in_git, filename):
         f"Download file '{path_to_file_in_git}' from "
         f"git repository {git_repo_url} to local file '{filename}'."
     )
-    t = mkdtemp()
-    git.Repo.clone_from(git_repo_url, t, branch='master', depth=1)
-    move(os.path.join(t, path_to_file_in_git), filename)
-    rmtree(t)
+    temp_dir = mkdtemp()
+    git.Repo.clone_from(git_repo_url, temp_dir, branch='master', depth=1)
+    move(os.path.join(temp_dir, path_to_file_in_git), filename)
+    rmtree(temp_dir)
