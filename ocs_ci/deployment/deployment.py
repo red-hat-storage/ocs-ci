@@ -723,7 +723,9 @@ class Deployment(object):
         self.patch_default_sc_to_non_default()
 
         # Modify Noobaa endpoint auto scale values according to the cluster specs
-        if check_nodes_specs(min_cpu=constants.MIN_NODE_CPU, min_memory=constants.MIN_NODE_MEMORY):
+        if check_nodes_specs(min_cpu=constants.MIN_NODE_CPU, min_memory=constants.MIN_NODE_MEMORY) and not (
+            config.DEPLOYMENT['external_mode']
+        ):
             logger.info(
                 "The cluster specs meet the minimum requirements and "
                 "therefore, NooBaa auto scale will be enabled"
