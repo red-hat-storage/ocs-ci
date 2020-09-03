@@ -1474,5 +1474,3 @@ def get_running_state_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
             running_pods_object.append(pod)
 
     return running_pods_object
-
-

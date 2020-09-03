@@ -208,5 +208,3 @@ class RhcosImageNotFound(Exception):
 
 class FipsNotInstalledException(Exception):
     pass
-
-
