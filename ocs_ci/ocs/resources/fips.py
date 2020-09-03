@@ -32,3 +32,4 @@ def check_fips_enabled(fips_location=constants.FIPS_LOCATION):
         else:
             log.info(f"Pod {running_pod.name} is FIPS enabled!")
 
+
