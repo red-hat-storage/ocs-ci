@@ -574,7 +574,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         log.info(f"Downscaling deployment {mgr} to 0")
         oc_deployment.exec_oc_cmd(f"scale --replicas=0 deployment/{mgr}")
 
-        log.info(f"Waiting for mgr pod {pod_mgr_name} to be reach deleted state")
+        log.info(f"Wait for a mgr pod {pod_mgr_name[0]} to be deleted")
         oc_pod = ocp.OCP(kind=constants.POD, namespace='openshift-storage')
         oc_pod.wait_for_delete(resource_name=pod_mgr_name[0])
 
