@@ -111,12 +111,18 @@ class CephCluster(object):
         self.osd_count = 0
         self.noobaa_count = 0
         self.rgw_count = 0
-        self.mcg_obj = MCG()
+        self._mcg_obj = None
         self.scan_cluster()
         logging.info(f"Number of mons = {self.mon_count}")
         logging.info(f"Number of mds = {self.mds_count}")
 
         self.used_space = 0
+
+    @property
+    def mcg_obj(self):
+        if not self._mcg_obj:
+            self._mcg_obj = MCG()
+        return self._mcg_obj
 
     @property
     def cluster_name(self):
