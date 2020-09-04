@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     skipif_ocs_version, ManageTest, tier4, tier4b, ignore_leftover_label,
-    skipif_upgraded_from
+    skipif_upgraded_from, skipif_external_mode
 )
 from ocs_ci.utility.utils import ceph_health_check
 from tests import disruption_helpers
@@ -22,10 +22,10 @@ log = logging.getLogger(__name__)
     argnames='resource_to_delete',
     argvalues=[
         pytest.param(
-            'mgr', marks=pytest.mark.polarion_id('OCS-2224')
+            'mgr', marks=[pytest.mark.polarion_id('OCS-2224'), skipif_external_mode]
         ),
         pytest.param(
-            'osd', marks=pytest.mark.polarion_id('OCS-2225')
+            'osd', marks=[pytest.mark.polarion_id('OCS-2225'), skipif_external_mode]
         ),
         pytest.param(
             'rbdplugin', marks=pytest.mark.polarion_id('OCS-2226')

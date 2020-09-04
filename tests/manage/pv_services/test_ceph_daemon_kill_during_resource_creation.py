@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4, tier4b
+from ocs_ci.framework.testlib import ManageTest, tier4, tier4b, skipif_external_mode
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
@@ -14,6 +14,7 @@ from tests import helpers, disruption_helpers
 log = logging.getLogger(__name__)
 
 
+@skipif_external_mode
 @tier4
 @tier4b
 @pytest.mark.parametrize(

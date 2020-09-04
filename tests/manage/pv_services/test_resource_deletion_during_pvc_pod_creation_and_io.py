@@ -4,7 +4,7 @@ import pytest
 from functools import partial
 
 from ocs_ci.framework.testlib import (
-    ManageTest, tier4, tier4c, ignore_leftover_label
+    ManageTest, tier4, tier4c, ignore_leftover_label, skipif_external_mode
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
@@ -26,31 +26,31 @@ log = logging.getLogger(__name__)
     argvalues=[
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-735")
+            marks=[pytest.mark.polarion_id("OCS-735"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'mon'],
-            marks=pytest.mark.polarion_id("OCS-736")
+            marks=[pytest.mark.polarion_id("OCS-736"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'osd'],
-            marks=pytest.mark.polarion_id("OCS-737")
+            marks=[pytest.mark.polarion_id("OCS-737"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-738")
+            marks=[pytest.mark.polarion_id("OCS-738"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'mon'],
-            marks=pytest.mark.polarion_id("OCS-739")
+            marks=[pytest.mark.polarion_id("OCS-739"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'osd'],
-            marks=pytest.mark.polarion_id("OCS-740")
+            marks=[pytest.mark.polarion_id("OCS-740"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'mds'],
-            marks=pytest.mark.polarion_id("OCS-741")
+            marks=[pytest.mark.polarion_id("OCS-741"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'cephfsplugin'],

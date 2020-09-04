@@ -4,7 +4,7 @@ import pytest
 from functools import partial
 
 from ocs_ci.framework.testlib import (
-    ManageTest, tier4, tier4c, ignore_leftover_label
+    ManageTest, tier4, tier4c, ignore_leftover_label, skipif_external_mode
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -216,59 +216,59 @@ class DisruptionBase(ManageTest):
     argvalues=[
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pvcs', 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-922")
+            marks=[pytest.mark.polarion_id("OCS-922"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pods', 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-923")
+            marks=[pytest.mark.polarion_id("OCS-923"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pvcs', 'mon'],
-            marks=pytest.mark.polarion_id("OCS-914")
+            marks=[pytest.mark.polarion_id("OCS-914"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pods', 'mon'],
-            marks=pytest.mark.polarion_id("OCS-911")
+            marks=[pytest.mark.polarion_id("OCS-911"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pvcs', 'osd'],
-            marks=pytest.mark.polarion_id("OCS-912")
+            marks=[pytest.mark.polarion_id("OCS-912"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pods', 'osd'],
-            marks=pytest.mark.polarion_id("OCS-913")
+            marks=[pytest.mark.polarion_id("OCS-913"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-920")
+            marks=[pytest.mark.polarion_id("OCS-920"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pods', 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-915")
+            marks=[pytest.mark.polarion_id("OCS-915"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'mon'],
-            marks=pytest.mark.polarion_id("OCS-918")
+            marks=[pytest.mark.polarion_id("OCS-918"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pods', 'mon'],
-            marks=pytest.mark.polarion_id("OCS-919")
+            marks=[pytest.mark.polarion_id("OCS-919"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'osd'],
-            marks=pytest.mark.polarion_id("OCS-924")
+            marks=[pytest.mark.polarion_id("OCS-924"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pods', 'osd'],
-            marks=pytest.mark.polarion_id("OCS-917")
+            marks=[pytest.mark.polarion_id("OCS-917"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'mds'],
-            marks=pytest.mark.polarion_id("OCS-916")
+            marks=[pytest.mark.polarion_id("OCS-916"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pods', 'mds'],
-            marks=pytest.mark.polarion_id("OCS-921")
+            marks=[pytest.mark.polarion_id("OCS-921"), skipif_external_mode]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pods', 'rbdplugin'],
