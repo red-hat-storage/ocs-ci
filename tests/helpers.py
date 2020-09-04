@@ -362,7 +362,9 @@ def default_ceph_block_pool():
     Returns:
         default CephBlockPool
     """
-    return constants.DEFAULT_BLOCKPOOL
+    sc_obj = default_storage_class(constants.CEPHBLOCKPOOL)
+    cbp_name = sc_obj.get().get('parameters').get('pool')
+    return cbp_name if cbp_name else constants.DEFAULT_BLOCKPOOL
 
 
 def create_ceph_block_pool(pool_name=None, failure_domain=None, verify=True):
@@ -796,12 +798,9 @@ def get_cephfs_name():
     Returns:
         str: Name of CFS
     """
-    cfs_obj = ocp.OCP(
-        kind=constants.CEPHFILESYSTEM,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
-    )
-    result = cfs_obj.get()
-    return result['items'][0].get('metadata').get('name')
+    ct_pod = pod.get_ceph_tools_pod()
+    result = ct_pod.exec_ceph_cmd('ceph fs ls')
+    return result[0]['name']
 
 
 def pull_images(image_name):
@@ -1447,7 +1446,7 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
             f"subvolume 'csi-vol-{image_uuid}' does not exist"
         ]
         cmd = (
-            f"ceph fs subvolume getpath {defaults.CEPHFILESYSTEM_NAME}"
+            f"ceph fs subvolume getpath {get_cephfs_name()}"
             f" csi-vol-{image_uuid} csi"
         )
 
