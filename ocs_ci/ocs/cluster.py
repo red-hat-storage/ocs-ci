@@ -1254,7 +1254,7 @@ class CephClusterExternal(CephCluster):
 
     @retry((IndexError, AttributeError, TypeError), 100, 3, 1)
     def wait_for_nooba_cr(self):
-        self.mcg_obj = MCG()
+        self._mcg_obj = MCG()
 
     def cluster_health_check(self, timeout=300):
         """
