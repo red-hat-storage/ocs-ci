@@ -192,3 +192,7 @@ gather_metrics_on_fail = pytest.mark.gather_metrics_on_fail
 
 # Marker for skipping tests based on OCS version
 skipif_ocs_version = pytest.mark.skipif_ocs_version
+
+# Marker for skipping tests if the cluster is upgraded from a particular
+# OCS version
+skipif_upgraded_from = pytest.mark.skipif_upgraded_from
