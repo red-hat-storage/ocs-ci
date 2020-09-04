@@ -361,7 +361,7 @@ def storageclass_factory_fixture(
         else:
             secret = secret or secret_factory(interface=interface)
             if interface == constants.CEPHBLOCKPOOL:
-                interface_name = constants.DEFAULT_BLOCKPOOL
+                interface_name = helpers.default_ceph_block_pool()
             elif interface == constants.CEPHFILESYSTEM:
                 interface_name = helpers.get_cephfs_data_pool_name()
 
