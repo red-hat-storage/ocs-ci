@@ -17,6 +17,7 @@ from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.cluster import (
     get_osd_pods_memory_sum, get_percent_used_capacity
 )
+from ocs_ci.framework import config
 
 
 logger = logging.getLogger(__name__)
@@ -71,7 +72,11 @@ class ClusterLoad:
         self.previous_iops = None
         self.current_iops = None
         self.rate = None
-        self.pvc_size = int(get_osd_pods_memory_sum() * 0.5)
+        self.pvc_size = None
+        if not config.DEPLOYMENT['external_mode']:
+            self.pvc_size = int(get_osd_pods_memory_sum() * 0.5)
+        else:
+            self.pvc_size = 10
         self.sleep_time = 45
         self.target_pods_number = None
         if project_factory:
