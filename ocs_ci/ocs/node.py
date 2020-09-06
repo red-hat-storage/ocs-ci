@@ -864,24 +864,20 @@ def delete_and_create_osd_node_vsphere_upi(
         add_new_node_and_label_upi(node_type, 1)
     else:
         node_not_in_ocs = get_worker_nodes_not_in_ocs()[0]
-        label_node_and_set_selinux_permissions([node_not_in_ocs], node_type)
+        if node_type == constants.RHEL_OS:
+            set_selinux_permissions(workers=[node_not_in_ocs])
+        label_nodes([node_not_in_ocs], node_type)
 
 
-def label_node_and_set_selinux_permissions(
-    nodes, node_type, label=constants.OPERATOR_NODE_LABEL
-):
+def label_nodes(nodes, label=constants.OPERATOR_NODE_LABEL):
     """
-    Label nodes, and if needed, set selinux permissions
+    Label nodes
 
     Args:
         nodes (list): list of node objects need to label
-        node_type (str): The type of the node
         label (str): New label to be assigned for these nodes.
             Default value is the OCS label
     """
-    if node_type == constants.RHEL_OS:
-        set_selinux_permissions(workers=nodes)
-
     node_obj = ocp.OCP(kind='node')
     for new_node_to_label in nodes:
         node_obj.add_label(
