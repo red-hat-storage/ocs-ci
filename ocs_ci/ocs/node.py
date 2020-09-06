@@ -850,7 +850,7 @@ def delete_and_create_osd_node_vsphere_upi(
     """
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
-    # remove_nodes([osd_node])
+    remove_nodes([osd_node])
 
     log.info(f"name of deleted node = {osd_node_name}")
 
@@ -864,7 +864,7 @@ def delete_and_create_osd_node_vsphere_upi(
         add_new_node_and_label_upi(node_type, 1)
     else:
         node_not_in_ocs = get_worker_nodes_not_in_ocs()[0]
-        ocs_labeled_nodes([node_not_in_ocs], constants.RHCOS)
+        ocs_labeled_nodes([node_not_in_ocs], node_type)
 
 
 def ocs_labeled_nodes(nodes, node_type):
