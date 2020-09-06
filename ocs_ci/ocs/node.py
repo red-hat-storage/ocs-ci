@@ -864,10 +864,21 @@ def delete_and_create_osd_node_vsphere_upi(
         add_new_node_and_label_upi(node_type, 1)
     else:
         node_not_in_ocs = get_worker_nodes_not_in_ocs()[0]
-        ocs_labeled_nodes([node_not_in_ocs], node_type)
+        label_node_and_set_selinux_permissions([node_not_in_ocs], node_type)
 
 
-def ocs_labeled_nodes(nodes, node_type):
+def label_node_and_set_selinux_permissions(
+    nodes, node_type, label=constants.OPERATOR_NODE_LABEL
+):
+    """
+    Label nodes, and if needed, set selinux permissions
+
+    Args:
+        nodes (list): list of node objects need to label
+        node_type (str): The type of the node
+        label (str): New label to be assigned for these nodes.
+            Default value is the OCS label
+    """
     if node_type == constants.RHEL_OS:
         set_selinux_permissions(workers=nodes)
 
@@ -875,7 +886,7 @@ def ocs_labeled_nodes(nodes, node_type):
     for new_node_to_label in nodes:
         node_obj.add_label(
             resource_name=new_node_to_label.name,
-            label=constants.OPERATOR_NODE_LABEL
+            label=label
         )
         logging.info(
             f"Successfully labeled {new_node_to_label.name} "
@@ -884,8 +895,13 @@ def ocs_labeled_nodes(nodes, node_type):
 
 
 def get_worker_nodes_not_in_ocs():
+    """
+    Get the worker nodes that are not ocs labeled.
+
+    Returns:
+          list: list of worker node objects that are not ocs labeled
+    """
     ocs_nodes = get_ocs_nodes()
     ocs_node_names = [n.name for n in ocs_nodes]
     worker_nodes = get_typed_nodes(constants.WORKER_MACHINE)
-    worker_nodes_not_in_ocs = [n for n in worker_nodes if n.name not in ocs_node_names]
-    return worker_nodes_not_in_ocs
+    return [n for n in worker_nodes if n.name not in ocs_node_names]
