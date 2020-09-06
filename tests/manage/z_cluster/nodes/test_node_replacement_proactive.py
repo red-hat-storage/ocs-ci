@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     tier4, ManageTest, ignore_leftovers
 )
 from ocs_ci.ocs import constants, node
+from ocs_ci.ocs.cluster import CephCluster
 
 from tests.sanity_helpers import Sanity
 
@@ -32,33 +33,6 @@ class TestNodeReplacement(ManageTest):
 
         """
         self.sanity_helpers = Sanity()
-
-    def test_nodereplacement(self):
-        """
-        Test Node Replacement(Without running IO in the background)
-
-        """
-        osd_pods_obj = pod.get_osd_pods()
-        osd_node_name = pod.get_pod_node(random.choice(osd_pods_obj)).name
-        log.info(f"Selected OSD is {osd_node_name}")
-
-        if config.ENV_DATA['platform'].lower() == constants.AWS_PLATFORM:
-            if config.ENV_DATA['deployment_type'] == 'ipi':
-                node.delete_and_create_osd_node_aws_ipi(osd_node_name)
-
-            elif config.ENV_DATA['deployment_type'] == 'upi':
-                node.delete_and_create_osd_node_aws_upi(osd_node_name)
-            else:
-                pytest.fail(
-                    f"ocs-ci config 'deployment_type' value '{config.ENV_DATA['deployment_type']}' is not valid, "
-                    f"results of this test run are all invalid.")
-
-        elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
-            node.delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=True)
-
-        # Verify everything running fine
-        log.info("Verifying All resources are Running and matches expected result")
-        self.sanity_helpers.health_check(tries=30)
 
     def test_nodereplacement_proactive(self, pvc_factory, pod_factory, dc_pod_factory):
         """
@@ -118,4 +92,8 @@ class TestNodeReplacement(ManageTest):
         self.sanity_helpers.delete_resources()
         # Verify everything running fine
         log.info("Verifying All resources are Running and matches expected result")
-        self.sanity_helpers.health_check(tries=30)
+        self.sanity_helpers.health_check(tries=60)
+        ceph_cluster_obj = CephCluster()
+        assert ceph_cluster_obj.wait_for_rebalance(timeout=1800), (
+            "Data re-balance failed to complete"
+        )
