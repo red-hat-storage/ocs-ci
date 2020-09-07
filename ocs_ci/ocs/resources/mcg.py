@@ -139,9 +139,12 @@ class MCG:
             config.ENV_DATA['platform'].lower() in constants.CLOUD_PLATFORMS
             or storagecluster_independent_check()
         ):
-            logger.info('Checking whether RGW pod is not present on AWS platform')
-            pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
-            assert not pods, 'RGW pods should not exist in the current platform/cluster'
+            if not config.ENV_DATA['platform'] == constants.AZURE_PLATFORM and (
+                float(config.ENV_DATA['ocs_version']) > 4.5
+            ):
+                logger.info('Checking whether RGW pod is not present')
+                pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
+                assert not pods, 'RGW pods should not exist in the current platform/cluster'
 
         elif config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS or (
             config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM
