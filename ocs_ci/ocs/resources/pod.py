@@ -1455,3 +1455,22 @@ def check_pods_in_running_state(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
                 logging.error(f"The pod {p.name} is in {status} state. Expected = Running")
                 ret_val = False
     return ret_val
+
+
+def get_running_state_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Checks the running state pods in a given namespace.
+
+        Returns:
+            List: all the pod objects that are in running state only
+
+    """
+    list_of_pods = get_all_pods(namespace)
+    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    running_pods_object = list()
+    for pod in list_of_pods:
+        status = ocp_pod_obj.get_resource(pod.name, 'STATUS')
+        if "Running" in status:
+            running_pods_object.append(pod)
+
+    return running_pods_object
