@@ -123,6 +123,8 @@ class Deployment(object):
         if not config.ENV_DATA['skip_ocs_deployment']:
             try:
                 self.deploy_ocs()
+                if config.REPORTING['gather_on_deploy_success']:
+                    collect_ocs_logs('deployment', ocp=False, status_failure=False)
             except Exception as e:
                 logger.error(e)
                 if config.REPORTING['gather_on_deploy_failure']:
