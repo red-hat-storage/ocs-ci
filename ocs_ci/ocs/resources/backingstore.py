@@ -11,10 +11,12 @@ class BackingStore():
     A class that represents BackingStore objects
 
     """
-    def __init__(self, name, uls_name=None, secret_name=None):
+    def __init__(self, name, uls_name=None, secret_name=None, vol_num=None, vol_size=None):
         self.name = name
         self.uls_name = uls_name
         self.secret_name = secret_name
+        self.vol_num = vol_num
+        self.vol_size = vol_size
 
     def delete(self):
         log.info(f'Cleaning up backingstore {self.name}')

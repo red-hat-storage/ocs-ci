@@ -392,7 +392,7 @@ def check_pv_backingstore_status(backingstore_name, namespace=None):
         '-o=jsonpath=`{.status.mode.modeCode}`'
     )
     res = run_cmd(cmd=cmd)
-    return True if 'OPTIMAL' in res else False
+    return True if res in constants.HEALTHY_PV_BS else False
 
 
 def create_multipart_upload(s3_obj, bucketname, object_key):

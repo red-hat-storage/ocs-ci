@@ -2095,12 +2095,19 @@ def backingstore_factory(request, mcg_obj_session, cld_mgr, cloud_uls_factory):
                     backingstore_name = backingstore_name[:-16]
                     created_backingstores.append(
                         BackingStore(
-                                name=backingstore_name
+                                name=backingstore_name,
+                                vol_num=vol_num,
+                                vol_size=size
                             )
                         )
-                    cmdMap[method.lower()][cloud.lower()](
-                        mcg_obj_session, backingstore_name, vol_num, size, storagecluster
-                    )
+                    if method.lower() == 'cli':
+                        cmdMap[method.lower()][cloud.lower()](
+                            mcg_obj_session, backingstore_name, vol_num, size, storagecluster
+                        )
+                    else:
+                        cmdMap[method.lower()][cloud.lower()](
+                            backingstore_name, vol_num, size, storagecluster
+                        )
                 else:
                     region = uls_tup[1]
                     # Todo: Verify that the given cloud has an initialized client

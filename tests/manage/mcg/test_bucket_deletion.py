@@ -74,7 +74,7 @@ class TestBucketDeletion:
                     'backingstores': {
                         'pv': [(1, 50, 'ocs-storagecluster-ceph-rbd')]
                     }
-                 }],
+                }],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance, pytest.mark.polarion_id("OCS-")
