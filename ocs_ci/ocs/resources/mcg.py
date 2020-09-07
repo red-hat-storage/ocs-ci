@@ -143,10 +143,24 @@ class MCG:
             pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
             assert not pods, 'RGW pods should not exist in the current platform/cluster'
 
-        elif config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+        elif config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS or (
+            config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM
+        ):
             rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 and not (
                 check_if_cluster_was_upgraded()
             ) else 1
+
+            # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
+            if float(
+                config.ENV_DATA['ocs_version']
+            ) == 4.4 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM:
+                rgw_count = 1
+            if float(
+                config.ENV_DATA['ocs_version']
+            ) == 4.5 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM and (
+                check_if_cluster_was_upgraded()
+            ):
+                rgw_count = 1
             logger.info(f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform')
             rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
             assert rgw_pod.wait_for_resource(
