@@ -2625,3 +2625,20 @@ def skipif_upgraded_from(version_list):
     except Exception as err:
         log.error(str(err))
         return False
+
+
+def get_cluster_id(cluster_path):
+    """
+    Get ClusterID from metadata.json in given cluster_path
+
+    Args:
+        cluster_path: path to cluster install directory
+
+    Returns:
+        str: metadata.json['clusterID']
+
+    """
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file) as f:
+        metadata = json.load(f)
+    return metadata["clusterID"]
