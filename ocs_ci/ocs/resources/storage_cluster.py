@@ -131,9 +131,11 @@ def ocs_install_verification(
         ) else 1
 
     # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
+    if float(config.ENV_DATA['ocs_version']) == 4.4 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM:
+        rgw_count = 1
     if float(
         config.ENV_DATA['ocs_version']
-    ) in [4.4, 4.5] and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM:
+    ) == 4.5 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM and post_upgrade_verification:
         rgw_count = 1
 
     # Fetch the min and max Noobaa endpoints from the run config
