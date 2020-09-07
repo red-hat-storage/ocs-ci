@@ -24,6 +24,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3
+from ocs_ci.ocs.defaults import ROOK_CLUSTER_NAMESPACE
 
 log = logging.getLogger(__name__)
 
@@ -566,16 +567,16 @@ class TestMonitoringBackedByOCS(E2ETest):
         )
 
         # Get pod mge name and mgr deployment
-        oc_deployment = ocp.OCP(kind=constants.DEPLOYMENT, namespace='openshift-storage')
+        oc_deployment = ocp.OCP(kind=constants.DEPLOYMENT, namespace=ROOK_CLUSTER_NAMESPACE)
         mgr_deployments = oc_deployment.get(selector=constants.MGR_APP_LABEL)['items']
         mgr = mgr_deployments[0]['metadata']['name']
-        pod_mgr_name = get_pod_name_by_pattern(pattern=mgr, namespace='openshift-storage')
+        pod_mgr_name = get_pod_name_by_pattern(pattern=mgr, namespace=ROOK_CLUSTER_NAMESPACE)
 
         log.info(f"Downscaling deployment {mgr} to 0")
         oc_deployment.exec_oc_cmd(f"scale --replicas=0 deployment/{mgr}")
 
         log.info(f"Wait for a mgr pod {pod_mgr_name[0]} to be deleted")
-        oc_pod = ocp.OCP(kind=constants.POD, namespace='openshift-storage')
+        oc_pod = ocp.OCP(kind=constants.POD, namespace=ROOK_CLUSTER_NAMESPACE)
         oc_pod.wait_for_delete(resource_name=pod_mgr_name[0])
 
         log.info(f"Upscaling deployment {mgr} back to 1")
@@ -583,8 +584,8 @@ class TestMonitoringBackedByOCS(E2ETest):
 
         log.info("Waiting for mgr pod to be reach Running state")
         time.sleep(20)
-        pod_mgr_name = get_pod_name_by_pattern(pattern=mgr, namespace='openshift-storage')
-        pod_mgr_obj = pod.get_pod_obj(name=pod_mgr_name[0], namespace='openshift-storage')
+        pod_mgr_name = get_pod_name_by_pattern(pattern=mgr, namespace=ROOK_CLUSTER_NAMESPACE)
+        pod_mgr_obj = pod.get_pod_obj(name=pod_mgr_name[0], namespace=ROOK_CLUSTER_NAMESPACE)
         wait_for_resource_state(
             resource=pod_mgr_obj, state=constants.STATUS_RUNNING, timeout=180
         )
