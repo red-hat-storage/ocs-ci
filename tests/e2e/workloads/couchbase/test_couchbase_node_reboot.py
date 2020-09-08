@@ -80,8 +80,8 @@ class TestCouchBaseNodeReboot(E2ETest):
             log.info(f"Waiting {waiting_time} seconds...")
             time.sleep(waiting_time)
         else:
-            node_1 = get_node_objs(node_list[random.randint(0, len(node_list) - 1)])
-            nodes.restart_nodes(node_1)
+            restart_node = get_node_objs(node_list[random.randint(0, len(node_list) - 1)])
+            nodes.restart_nodes(restart_node)
 
         # Validate all nodes and services are in READY state and up
 
