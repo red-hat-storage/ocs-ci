@@ -58,7 +58,7 @@ def initialize_data():
     if m and m.group(1) is not None:
         ocs_ver = m.group(1)
     log.info(f'ocs_ver is {ocs_ver_full}')
-    platform = config.ENV_DATA['platform']
+    platform = config.ENV_DATA['platform'].upper()
     if platform.lower() not in ['vsphere', 'baremetal']:
         platform = f'{platform.upper()} {worker_type}'
     data_template['commitid'] = ocs_ver_full
