@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.ocp import get_ocp_version_number
 
 from tests.sanity_helpers import Sanity
 
@@ -83,7 +84,13 @@ class TestNodeReplacement(ManageTest):
                 log.error(msg_invalid)
                 pytest.fail(msg_invalid)
         elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
-            node.delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=True)
+            if get_ocp_version_number() > 4.5:
+                pytest.skip(
+                    "Skipping add node in Vmware platform due to "
+                    "https://bugzilla.redhat.com/show_bug.cgi?id=1844521"
+                )
+            else:
+                node.delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=True)
 
         # Creating Resources
         log.info("Creating Resources using sanity helpers")
