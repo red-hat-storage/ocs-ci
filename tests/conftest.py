@@ -1904,7 +1904,8 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
             interface = 'OC'
         if 'backingstore_dict' in bucket_class_dict:
             if isinstance(bucket_class_dict['backingstore_dict'], dict):
-                backingstores = [backingstore.name for backingstore in backingstore_factory(interface, bucket_class_dict['backingstore_dict'])]
+                backingstores = [backingstore.name for backingstore in backingstore_factory(
+                    interface, bucket_class_dict['backingstore_dict'])]
             else:
                 backingstores = [backingstore.name for backingstore in bucket_class_dict['backingstores']]
         else:
@@ -2095,11 +2096,11 @@ def backingstore_factory(request, mcg_obj_session, cld_mgr, cloud_uls_factory):
                     backingstore_name = backingstore_name[:-16]
                     created_backingstores.append(
                         BackingStore(
-                                name=backingstore_name,
-                                vol_num=vol_num,
-                                vol_size=size
-                            )
+                            name=backingstore_name,
+                            vol_num=vol_num,
+                            vol_size=size
                         )
+                    )
                     if method.lower() == 'cli':
                         cmdMap[method.lower()][cloud.lower()](
                             mcg_obj_session, backingstore_name, vol_num, size, storagecluster
