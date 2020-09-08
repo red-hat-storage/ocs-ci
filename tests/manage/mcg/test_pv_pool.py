@@ -1,9 +1,7 @@
 import logging
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.bucket_utils import sync_object_directory, retrieve_test_objects_to_pod, \
-    verify_s3_object_integrity, craft_s3_command, wait_for_pv_backingstore
+from ocs_ci.ocs.bucket_utils import craft_s3_command, wait_for_pv_backingstore
 from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
@@ -30,18 +28,21 @@ class TestPvPool:
             awscli_pod_session.exec_cmd_on_pod(
                 'dd if=/dev/urandom of=/tmp/testfile bs=1M count=500'
             )
-            awscli_pod_session.exec_cmd_on_pod(
-                craft_s3_command(
-                    f"cp /tmp/testfile s3://{bucket.name}/testfile{i}",
-                    mcg_obj_session
-                ),
-                out_yaml_format=False,
-                secrets=[
-                    mcg_obj_session.access_key_id,
-                    mcg_obj_session.access_key,
-                    mcg_obj_session.s3_endpoint
-                ]
-            )
+            try:
+                awscli_pod_session.exec_cmd_on_pod(
+                    craft_s3_command(
+                        f"cp /tmp/testfile s3://{bucket.name}/testfile{i}",
+                        mcg_obj_session
+                    ),
+                    out_yaml_format=False,
+                    secrets=[
+                        mcg_obj_session.access_key_id,
+                        mcg_obj_session.access_key,
+                        mcg_obj_session.s3_endpoint
+                    ]
+                )
+            except Exception as e:
+                logger.error(e)
             awscli_pod_session.exec_cmd_on_pod(
                 'rm -f /tmp/testfile'
             )
@@ -61,5 +62,6 @@ class TestPvPool:
 
         logger.info('Check if PV Pool scale out was successful')
         backingstore_dict = edit_pv_backingstore.get(pv_backingstore.name)
-        assert backingstore_dict['spec']['pvPool']['numVolumes'] == pv_backingstore.vol_num, 'Scale out PV Pool failed. '
+        assert backingstore_dict['spec']['pvPool']['numVolumes'] == pv_backingstore.vol_num,\
+            'Scale out PV Pool failed. '
         logger.info('Scale out was successful')
