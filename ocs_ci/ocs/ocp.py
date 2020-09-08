@@ -1342,3 +1342,14 @@ def wait_for_cluster_connectivity(tries=200, delay=3):
     return retry(
         CommandFailed, tries=tries, delay=delay, backoff=1
     )(service.get)()
+
+
+def get_ocp_version_number():
+    """
+    Get the ocp version number
+
+    Returns:
+        float: The ocp version number (e.g. 4.3, 4.4, 4.5, etc)
+
+    """
+    return float(get_build()[0:3])
