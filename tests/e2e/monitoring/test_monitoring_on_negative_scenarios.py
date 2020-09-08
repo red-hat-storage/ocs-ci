@@ -583,11 +583,8 @@ class TestMonitoringBackedByOCS(E2ETest):
         oc_deployment.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
 
         log.info("Waiting for mgr pod to be reach Running state")
-        time.sleep(20)
-        pod_mgr_name = get_pod_name_by_pattern(pattern=mgr, namespace=ROOK_CLUSTER_NAMESPACE)
-        pod_mgr_obj = pod.get_pod_obj(name=pod_mgr_name[0], namespace=ROOK_CLUSTER_NAMESPACE)
-        wait_for_resource_state(
-            resource=pod_mgr_obj, state=constants.STATUS_RUNNING, timeout=180
+        oc_pod.wait_for_resource(
+            condition=constants.STATUS_RUNNING, selector=constants.MGR_APP_LABEL
         )
 
         # Check ceph metrics available
