@@ -112,7 +112,7 @@ class PillowFight(object):
                     pf_status = pod_info['status']['containerStatuses'][0]['state']
                     if 'terminated' in pf_status:
                         pf_completion_info = pf_status['terminated']['reason']
-                        if pf_completion_info == 'Completed':
+                        if pf_completion_info == constants.STATUS_COMPLETED:
                             counter += 1
                             pods_info.update({pf_pod: pf_completion_info})
                     elif 'running' in pf_status:
