@@ -111,6 +111,7 @@ JOB = 'job'
 LOCAL_VOLUME = 'localvolume'
 PROXY = 'Proxy'
 MACHINECONFIGPOOL = "MachineConfigPool"
+VOLUMESNAPSHOTCLASS = "VolumeSnapshotClass"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -198,6 +199,12 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS = (
 DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD = (
     f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rbd'
 )
+
+# Default VolumeSnapshotClass
+DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS = (
+    f'{DEFAULT_CLUSTERNAME}-cephfsplugin-snapclass'
+)
+DEFAULT_VOLUMESNAPSHOTCLASS_RBD = f'{DEFAULT_CLUSTERNAME}-rbdplugin-snapclass'
 
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
