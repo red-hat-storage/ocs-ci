@@ -12,7 +12,6 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.cluster import CephCluster
-from ocs_ci.ocs.ocp import get_ocp_version_number
 
 from tests.sanity_helpers import Sanity
 
@@ -84,7 +83,18 @@ class TestNodeReplacement(ManageTest):
                 log.error(msg_invalid)
                 pytest.fail(msg_invalid)
         elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
-            node.delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=True)
+            worker_nodes_not_in_ocs = node.get_worker_nodes_not_in_ocs()
+            if not worker_nodes_not_in_ocs:
+                pytest.skip(
+                    "Skipping add node in Vmware platform due to "
+                    "https://bugzilla.redhat.com/show_bug.cgi?id=1844521"
+                )
+            else:
+                log.info(
+                    "Perform delete and create ocs node in Vmware using one "
+                    "of the existing extra worker nodes that not in ocs"
+                )
+                node.delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=True)
 
         # Creating Resources
         log.info("Creating Resources using sanity helpers")
@@ -93,8 +103,8 @@ class TestNodeReplacement(ManageTest):
         self.sanity_helpers.delete_resources()
         # Verify everything running fine
         log.info("Verifying All resources are Running and matches expected result")
-        self.sanity_helpers.health_check(tries=60)
+        self.sanity_helpers.health_check(tries=100)
         ceph_cluster_obj = CephCluster()
-        assert ceph_cluster_obj.wait_for_rebalance(timeout=1800), (
+        assert ceph_cluster_obj.wait_for_rebalance(timeout=2400), (
             "Data re-balance failed to complete"
         )
