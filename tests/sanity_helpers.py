@@ -3,7 +3,7 @@ import tempfile
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import ignore_leftovers
-from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
+from ocs_ci.ocs.ocp import wait_for_cluster_connectivity, OCP
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs.resources.pvc import delete_pvcs
@@ -148,8 +148,26 @@ class SanityExternalCluster(Sanity):
         self.pvc_objs = list()
         self.pod_objs = list()
         self.ceph_cluster = CephClusterExternal()
+
+    def create_resources(self, pvc_factory, pod_factory):
+        """
+        Create and verify obcs
+
+        Args:
+            pvc_factory (function): A call to pvc_factory function
+            pod_factory (function): A call to pod_factory function
+
+        """
+        super().create_resources(pvc_factory, pod_factory)
         self.create_obc()
         self.verify_obc()
+
+    def delete_resources(self):
+        """
+        cleanup the above created obc
+        """
+        super().delete_resources()
+        self.cleanup()
 
     def create_obc(self):
         """
@@ -168,6 +186,7 @@ class SanityExternalCluster(Sanity):
         )
         logger.info("Creating OBC for rgw")
         run_cmd(f"oc create -f {obc_rgw_data_yaml.name}", timeout=2400)
+        self.obc_rgw = obc_rgw_data_yaml.name
 
         obc_nooba = templating.load_yaml(
             constants.MCG_OBC_YAML
@@ -180,6 +199,7 @@ class SanityExternalCluster(Sanity):
         )
         logger.info("create OBC for mcg")
         run_cmd(f"oc create -f {obc_mcg_data_yaml.name}", timeout=2400)
+        self.obc_mcg = obc_mcg_data_yaml.name
 
     def verify_obc(self):
         """
@@ -193,3 +213,15 @@ class SanityExternalCluster(Sanity):
             self.ceph_cluster.noobaa_health_check
         )
         sample.wait_for_func_status(True)
+
+    def cleanup(self):
+        """
+        Clenaup OBC resources created above
+
+        """
+        logger.info(f"Deleting rgw obc {self.obc_rgw}")
+        obcrgw = OCP(kind='ObjectBucketClaim', resource_name=f'{self.obc_rgw}')
+        obcrgw.wait_for_delete(resource_name=f'{self.obc_rgw}')
+        logger.info(f"Deleting mcg obc {self.obc_mcg}")
+        obcmcg = OCP(kind='ObjectBucketClaim', resource_name=f'{self.obc_mcg}')
+        obcmcg.wait_for_delete(resource_name=f'{self.obc_mcg}')
