@@ -98,7 +98,7 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
-def pytest_collection_modifyitems(session, config, items):
+def pytest_collection_modifyitems(session, items):
     """
     A pytest hook to filter out skipped tests satisfying
     skipif_ocs_version or skipif_upgraded_from
@@ -109,31 +109,34 @@ def pytest_collection_modifyitems(session, config, items):
         items: list of collected tests
 
     """
-    for item in items[:]:
-        skipif_ocs_version_marker = item.get_closest_marker(
-            "skipif_ocs_version"
-        )
-        skipif_upgraded_from_marker = item.get_closest_marker(
-            "skipif_upgraded_from"
-        )
-        if skipif_ocs_version_marker:
-            skip_condition = skipif_ocs_version_marker.args
-            # skip_condition will be a tuple
-            # and condition will be first element in the tuple
-            if skipif_ocs_version(skip_condition[0]):
-                log.info(
-                    f'Test: {item} will be skipped due to {skip_condition}'
-                )
-                items.remove(item)
-                continue
-        if skipif_upgraded_from_marker:
-            skip_args = skipif_upgraded_from_marker.args
-            if skipif_upgraded_from(skip_args[0]):
-                log.info(
-                    f'Test: {item} will be skipped because the OCS cluster is'
-                    f' upgraded from one of these versions: {skip_args[0]}'
-                )
-                items.remove(item)
+    teardown = config.RUN['cli_params'].get('teardown')
+    deploy = config.RUN['cli_params'].get('deploy')
+    if not (teardown or deploy):
+        for item in items[:]:
+            skipif_ocs_version_marker = item.get_closest_marker(
+                "skipif_ocs_version"
+            )
+            skipif_upgraded_from_marker = item.get_closest_marker(
+                "skipif_upgraded_from"
+            )
+            if skipif_ocs_version_marker:
+                skip_condition = skipif_ocs_version_marker.args
+                # skip_condition will be a tuple
+                # and condition will be first element in the tuple
+                if skipif_ocs_version(skip_condition[0]):
+                    log.info(
+                        f'Test: {item} will be skipped due to {skip_condition}'
+                    )
+                    items.remove(item)
+                    continue
+            if skipif_upgraded_from_marker:
+                skip_args = skipif_upgraded_from_marker.args
+                if skipif_upgraded_from(skip_args[0]):
+                    log.info(
+                        f'Test: {item} will be skipped because the OCS cluster is'
+                        f' upgraded from one of these versions: {skip_args[0]}'
+                    )
+                    items.remove(item)
 
 
 @pytest.fixture()
