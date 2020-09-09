@@ -2431,3 +2431,25 @@ def get_cluster_proxies():
     logger.info("Using https_proxy: '%s'", https_proxy)
     logger.info("Using no_proxy: '%s'", no_proxy)
     return http_proxy, https_proxy, no_proxy
+
+
+def default_volumesnapshotclass(interface_type):
+    """
+    Return default VolumeSnapshotClass based on interface_type
+
+    Args:
+        interface_type (str): The type of the interface
+            (e.g. CephBlockPool, CephFileSystem)
+
+    Returns:
+        OCS: VolumeSnapshotClass Instance
+    """
+    if interface_type == constants.CEPHBLOCKPOOL:
+        resource_name = constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+    elif interface_type == constants.CEPHFILESYSTEM:
+        resource_name = constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+    base_snapshot_class = OCP(
+        kind=constants.VOLUMESNAPSHOTCLASS,
+        resource_name=resource_name
+    )
+    return OCS(**base_snapshot_class.data)
