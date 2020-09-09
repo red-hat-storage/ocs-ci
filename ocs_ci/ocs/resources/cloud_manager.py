@@ -12,7 +12,6 @@ from google.cloud import storage
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import TimeoutSampler, load_auth_config
@@ -170,14 +169,16 @@ class S3Client(CloudClient):
         assert self.exec_uls_deletion(name)
         # Todo: rename client to resource (or find an alternative)
         sample = TimeoutSampler(
-            timeout=60, sleep=6, func=self.verify_uls_exists,
+            timeout=180, sleep=15, func=self.verify_uls_exists,
             uls_name=name
         )
         if not sample.wait_for_func_status(result=False):
             logger.error(
                 f'Deletion of Underlying Storage {name} timed out. Unable to delete {name}'
             )
-            raise TimeoutExpiredError
+            logger.warning(
+                f'AWS S3 bucket {name} still found after 3 minutes, and might require manual removal.'
+            )
         else:
             logger.info(f'Underlying Storage {name} deleted successfully.')
 
