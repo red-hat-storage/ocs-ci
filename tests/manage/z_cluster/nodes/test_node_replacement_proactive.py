@@ -84,13 +84,7 @@ class TestNodeReplacement(ManageTest):
                 log.error(msg_invalid)
                 pytest.fail(msg_invalid)
         elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
-            if get_ocp_version_number() > 4.5:
-                pytest.skip(
-                    "Skipping add node in Vmware platform due to "
-                    "https://bugzilla.redhat.com/show_bug.cgi?id=1844521"
-                )
-            else:
-                node.delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=True)
+            node.delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=True)
 
         # Creating Resources
         log.info("Creating Resources using sanity helpers")
