@@ -28,7 +28,10 @@ from ocs_ci.ocs import (
     platform_nodes
 )
 from ocs_ci.ocs.bucket_utils import craft_s3_command
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException, ResourceWrongStatusException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed, TimeoutExpiredError,
+    CephHealthException, ResourceWrongStatusException
+)
 from ocs_ci.ocs.mcg_workload import (
     mcg_job_factory as mcg_job_factory_implementation
 )
@@ -67,6 +70,7 @@ from ocs_ci.utility.utils import (
     ocsci_log_path,
     skipif_ocs_version,
     TimeoutSampler,
+    skipif_upgraded_from
 )
 from tests import helpers
 from tests.helpers import create_unique_resource_name
@@ -100,7 +104,7 @@ def pytest_logger_config(logger_config):
 def pytest_collection_modifyitems(session, config, items):
     """
     A pytest hook to filter out skipped tests satisfying
-    skipif_ocs_version
+    skipif_ocs_version or skipif_upgraded_from
 
     Args:
         session: pytest session
@@ -109,14 +113,28 @@ def pytest_collection_modifyitems(session, config, items):
 
     """
     for item in items[:]:
-        skip_marker = item.get_closest_marker("skipif_ocs_version")
-        if skip_marker:
-            skip_condition = skip_marker.args
+        skipif_ocs_version_marker = item.get_closest_marker(
+            "skipif_ocs_version"
+        )
+        skipif_upgraded_from_marker = item.get_closest_marker(
+            "skipif_upgraded_from"
+        )
+        if skipif_ocs_version_marker:
+            skip_condition = skipif_ocs_version_marker.args
             # skip_condition will be a tuple
             # and condition will be first element in the tuple
             if skipif_ocs_version(skip_condition[0]):
                 log.info(
                     f'Test: {item} will be skipped due to {skip_condition}'
+                )
+                items.remove(item)
+                continue
+        if skipif_upgraded_from_marker:
+            skip_args = skipif_upgraded_from_marker.args
+            if skipif_upgraded_from(skip_args[0]):
+                log.info(
+                    f'Test: {item} will be skipped because the OCS cluster is'
+                    f' upgraded from one of these versions: {skip_args[0]}'
                 )
                 items.remove(item)
 
@@ -364,7 +382,7 @@ def storageclass_factory_fixture(
         else:
             secret = secret or secret_factory(interface=interface)
             if interface == constants.CEPHBLOCKPOOL:
-                interface_name = constants.DEFAULT_BLOCKPOOL
+                interface_name = helpers.default_ceph_block_pool()
             elif interface == constants.CEPHFILESYSTEM:
                 interface_name = helpers.get_cephfs_data_pool_name()
 
@@ -1631,9 +1649,20 @@ def awscli_pod_fixture(request):
 
     """
     # Create the service-ca configmap to be mounted upon pod creation
-    service_ca_configmap = helpers.create_resource(
-        **templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
-    )
+    try:
+        log.info('Trying to create the AWS CLI service CA')
+        service_ca_configmap = helpers.create_resource(
+            **templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
+        )
+    except CommandFailed as e:
+        if 'already exists' in str(e):
+            log.info('Leftover service CA configmap found. Trying to delete and recreate.')
+            ocp.OCP(
+                namespace=constants.DEFAULT_NAMESPACE, kind='configmap'
+            ).delete(resource_name=constants.AWSCLI_SERVICE_CA_CONFIGMAP_NAME)
+            service_ca_configmap = helpers.create_resource(
+                **templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
+            )
 
     pod_dict_path = constants.AWSCLI_POD_YAML
 

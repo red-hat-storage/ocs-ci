@@ -8,7 +8,7 @@ from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants, machine
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import UnavailableResourceException
+from ocs_ci.ocs.exceptions import UnsupportedPlatformError
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +37,11 @@ class ScalePodPGSQL(Postgresql):
         if node_selector is not None:
             pgsql_sset['spec']['template']['spec'][
                 'nodeSelector'] = node_selector
+        if helpers.storagecluster_independent_check():
+            pgsql_sset['spec']['volumeClaimTemplates'][0][
+                'metadata']['annotations'][
+                'volume.beta.kubernetes.io/storage-class'] = \
+                constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         Postgresql.setup_postgresql(self, replicas=replicas)
 
     def _create_pgbench_benchmark(
@@ -70,12 +75,29 @@ class ScalePodPGSQL(Postgresql):
 
 
 def add_worker_node(instance_type=None):
-    # Add worker node to cluster
-    log.info("Adding worker nodes on the current cluster")
     global ms_name
     ms_name = list()
-    dt = config.ENV_DATA['deployment_type']
-    if dt == 'ipi':
+    worker_list = helpers.get_worker_nodes()
+    ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+    scale_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
+    if config.RUN.get('use_ocs_worker_for_scale'):
+        if not scale_worker:
+            helpers.label_worker_node(
+                node_list=worker_list, label_key='scale-label', label_value='app-scale'
+            )
+    else:
+        if not scale_worker:
+            for node_item in ocs_worker_list:
+                worker_list.remove(node_item)
+            if worker_list:
+                helpers.label_worker_node(
+                    node_list=worker_list, label_key='scale-label', label_value='app-scale'
+                )
+    scale_worker_list = machine.get_labeled_nodes(constants.SCALE_LABEL)
+    logging.info(f"Print existing scale worker {scale_worker_list}")
+
+    if config.ENV_DATA['deployment_type'] == 'ipi' and config.ENV_DATA['platform'].lower() == 'aws':
+        log.info("Adding worker nodes on the current cluster")
         # Create machineset for app worker nodes on each zone
         for obj in machine.get_machineset_objs():
             if 'app' in obj.name:
@@ -120,21 +142,21 @@ def add_worker_node(instance_type=None):
                 label_value='app-scale'
             )
         return True
-    else:
-        log.info('Deployment type config is not ipi')
-        raise UnavailableResourceException(
-            "There is no enough worker nodes to continue app pod scaling"
-        )
-    scale_worker_list = machine.get_labeled_nodes(constants.SCALE_LABEL)
-    log.info(f"Scale worker nodes with scale label: {scale_worker_list}")
+    elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'vsphere':
+        log.info('Running pgsql on existing worker nodes')
+    elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'baremetal':
+        log.info('Running pgsql on existing worker nodes')
+    elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'azure':
+        raise UnsupportedPlatformError("Unsupported Platform")
 
 
 def delete_worker_node():
     # Remove scale label from worker nodes
     scale_workers = machine.get_labeled_nodes(constants.SCALE_LABEL)
-    helpers.remove_label_from_worker_node(
-        node_list=scale_workers, label_key='scale-label'
-    )
+    if scale_workers:
+        helpers.remove_label_from_worker_node(
+            node_list=scale_workers, label_key='scale-label'
+        )
     # Delete machineset
     if ms_name:
         for name in ms_name:

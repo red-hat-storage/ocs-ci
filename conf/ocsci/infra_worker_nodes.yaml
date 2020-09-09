@@ -1,0 +1,3 @@
+---
+DEPLOYMENT:
+  infra_nodes: True

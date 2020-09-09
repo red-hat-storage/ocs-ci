@@ -54,7 +54,7 @@ def verify_pv_not_exists(pvc_obj, cbp_name, rbd_image_id):
 
 
 @retry(UnexpectedBehaviour, tries=20, delay=10, backoff=1)
-def fetch_used_size(exp_val=None):
+def fetch_used_size(cbp_name, exp_val=None):
     """
     Fetch used size in the pool
 
@@ -67,7 +67,7 @@ def fetch_used_size(exp_val=None):
 
     ct_pod = pod.get_ceph_tools_pod()
     rados_status = ct_pod.exec_ceph_cmd(
-        ceph_cmd=f"rados df -p {constants.DEFAULT_BLOCKPOOL}"
+        ceph_cmd=f"rados df -p {cbp_name}"
     )
     size_bytes = rados_status['pools'][0]['size_bytes']
 
@@ -97,6 +97,8 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         """
         Test case to verify after delete pvc size returned to backend pools
         """
+        cbp_name = helpers.default_ceph_block_pool()
+
         # TODO: Get exact value of replica size
         replica_size = 3
 
@@ -110,13 +112,13 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         )
         pvc_obj.reload()
 
-        used_before_io = fetch_used_size()
+        used_before_io = fetch_used_size(cbp_name)
         logger.info(f"Used before IO {used_before_io}")
 
         # Write 6Gb
         pod.run_io_and_verify_mount_point(pod_obj, bs='10M', count='600')
         exp_size = used_before_io + (6 * replica_size)
-        used_after_io = fetch_used_size(exp_size)
+        used_after_io = fetch_used_size(cbp_name, exp_size)
         logger.info(f"Used space after IO {used_after_io}")
 
         rbd_image_id = pvc_obj.image_uuid
@@ -126,7 +128,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
 
         verify_pv_not_exists(
-            pvc_obj, constants.DEFAULT_BLOCKPOOL, rbd_image_id
+            pvc_obj, cbp_name, rbd_image_id
         )
-        used_after_deleting_pvc = fetch_used_size(used_before_io)
+        used_after_deleting_pvc = fetch_used_size(cbp_name, used_before_io)
         logger.info(f"Used after deleting PVC {used_after_deleting_pvc}")

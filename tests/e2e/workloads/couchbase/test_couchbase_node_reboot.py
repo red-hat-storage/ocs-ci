@@ -1,18 +1,22 @@
 import logging
 import random
-
+import time
 import pytest
 
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs import ocp
 from tests.sanity_helpers import Sanity
 from ocs_ci.framework.testlib import (
     E2ETest, workloads, ignore_leftovers
 )
 from ocs_ci.ocs.node import (
+    wait_for_nodes_status,
+    get_typed_nodes,
     get_osd_running_nodes,
     get_node_objs,
     get_node_resource_utilization_from_adm_top)
-from tests.helpers import get_master_nodes
+from ocs_ci.ocs import flowtest
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 
 log = logging.getLogger(__name__)
 
@@ -49,20 +53,11 @@ class TestCouchBaseNodeReboot(E2ETest):
             )
         ]
     )
-    def test_run_couchbase_node_reboot(self, cb_setup, nodes, pod_name_of_node):
+    def test_run_couchbase_node_reboot(
+            self, cb_setup, nodes, pod_name_of_node):
         """
         Test couchbase workload with node reboot
         """
-        if pod_name_of_node == 'couchbase':
-            node_list = self.cb.get_couchbase_nodes()
-        elif pod_name_of_node == 'osd':
-            node_list = get_osd_running_nodes()
-        elif pod_name_of_node == 'master':
-            node_list = get_master_nodes()
-
-        node_1 = get_node_objs(
-            node_list[random.randint(0, len(node_list) - 1)])
-
         # Check worker node utilization (adm_top)
         get_node_resource_utilization_from_adm_top(
             node_type='worker', print_table=True
@@ -70,13 +65,44 @@ class TestCouchBaseNodeReboot(E2ETest):
         get_node_resource_utilization_from_adm_top(
             node_type='master', print_table=True
         )
+
+        if pod_name_of_node == 'couchbase':
+            node_list = self.cb.get_couchbase_nodes()
+        elif pod_name_of_node == 'osd':
+            node_list = get_osd_running_nodes()
+        elif pod_name_of_node == 'master':
+            master_node = get_typed_nodes(pod_name_of_node, num_of_nodes=1)
+
         # Restart relevant node
-        nodes.restart_nodes(node_1)
-        for sample in TimeoutSampler(300, 5, self.cb.result.done):
-            if sample:
-                break
-            else:
-                logging.info(
-                    "#### ....Waiting for couchbase threads to complete..."
-                )
+        if pod_name_of_node == 'master':
+            nodes.restart_nodes(master_node, wait=False)
+            waiting_time = 40
+            log.info(f"Waiting {waiting_time} seconds...")
+            time.sleep(waiting_time)
+        else:
+            restart_node = get_node_objs(node_list[random.randint(0, len(node_list) - 1)])
+            nodes.restart_nodes(restart_node)
+
+        # Validate all nodes and services are in READY state and up
+
+        retry(
+            (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
+            tries=60,
+            delay=15)(
+            ocp.wait_for_cluster_connectivity(tries=400)
+        )
+        retry(
+            (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
+            tries=60,
+            delay=15)(
+            wait_for_nodes_status(timeout=1800)
+        )
+        bg_handler = flowtest.BackgroundOps()
+        bg_ops = [self.cb.result]
+        retry(
+            (CommandFailed),
+            tries=60,
+            delay=15)(
+            bg_handler.wait_for_bg_operations(bg_ops, timeout=3600)
+        )
         self.sanity_helpers.health_check()
