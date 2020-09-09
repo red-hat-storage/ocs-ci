@@ -12,8 +12,8 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -24,9 +24,9 @@ class PillowFight(object):
       This class was modelled after the RipSaw class in this directory.
     """
 
-    WAIT_FOR_TIME = 600
-    MIN_ACCEPTABLE_OPS_PER_SEC = 1000
-    MAX_ACCEPTABLE_RESPONSE_TIME = 1000
+    WAIT_FOR_TIME = 1800
+    MIN_ACCEPTABLE_OPS_PER_SEC = 2000
+    MAX_ACCEPTABLE_RESPONSE_TIME = 2000
 
     def __init__(self, **kwargs):
         """
@@ -74,7 +74,8 @@ class PillowFight(object):
         """
         ocp_local = OCP(namespace=self.namespace)
         pf_files = listdir(constants.TEMPLATE_PILLOWFIGHT_DIR)
-        for i in range(replicas):
+        self.replicas = replicas
+        for i in range(self.replicas):
             for pf_yaml in pf_files:
                 pf_fullpath = join(constants.TEMPLATE_PILLOWFIGHT_DIR, pf_yaml)
                 if not pf_fullpath.endswith('.yaml'):
@@ -93,29 +94,31 @@ class PillowFight(object):
                     num_threads) if num_threads else '20'
                 lpillowfight = OCS(**pfight)
                 lpillowfight.create()
-
         pods_info = {}
+
         for pillowfight_pods in TimeoutSampler(
             self.WAIT_FOR_TIME,
-            3,
+            9,
             get_pod_name_by_pattern,
             'pillowfight',
             constants.COUCHBASE_OPERATOR
         ):
             try:
-                if len(pillowfight_pods) == replicas:
-                    counter = 0
-                    for pf_pod in pillowfight_pods:
-                        pod_info = self.up_check.exec_oc_cmd(
-                            f"get pods {pf_pod} -o json"
-                        )
-                        pf_status = pod_info['status']['containerStatuses'][0]['state']
-                        if 'terminated' in pf_status:
-                            pf_completion_info = pf_status['terminated']['reason']
+                counter = 0
+                for pf_pod in pillowfight_pods:
+                    pod_info = self.up_check.exec_oc_cmd(
+                        f"get pods {pf_pod} -o json"
+                    )
+                    pf_status = pod_info['status']['containerStatuses'][0]['state']
+                    if 'terminated' in pf_status:
+                        pf_completion_info = pf_status['terminated']['reason']
+                        if pf_completion_info == constants.STATUS_COMPLETED:
                             counter += 1
                             pods_info.update({pf_pod: pf_completion_info})
-                    if counter == replicas:
-                        break
+                    elif 'running' in pf_status:
+                        pass
+                if counter == self.replicas:
+                    break
             except IndexError:
                 log.info("Pillowfight not yet completed")
 
