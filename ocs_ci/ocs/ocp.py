@@ -926,6 +926,22 @@ def get_ocs_version():
     return ocp_cluster.get()['items'][0]['spec']['version']
 
 
+def get_ocs_parsed_version():
+    """
+    Get ocs version as float
+
+    Returns:
+        float: ocs version number as major.minor (for example: 4.5)
+
+    """
+    ocs_ver = get_ocs_version().split("-")
+    major_minor = ocs_ver[0].split(".")
+    major = major_minor[0]
+    minor = major_minor[1]
+
+    return float(f"{major}.{minor}")
+
+
 def get_build():
     """
     Return the OCP Build Version
