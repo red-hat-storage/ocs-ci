@@ -1,7 +1,9 @@
 import logging
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.bucket_utils import craft_s3_command, wait_for_pv_backingstore
+from ocs_ci.ocs.bucket_utils import craft_s3_command, wait_for_pv_backingstore, \
+    check_pv_backingstore_status
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
@@ -23,10 +25,10 @@ class TestPvPool:
         })
         bucket = bucket_factory(1, 'OC', bucketclass=bucketclass.name)[0]
 
-        for i in range(1, 36):
+        for i in range(1, 18):
             # add some data to the first pod
             awscli_pod_session.exec_cmd_on_pod(
-                'dd if=/dev/urandom of=/tmp/testfile bs=1M count=500'
+                'dd if=/dev/urandom of=/tmp/testfile bs=1M count=1000'
             )
             try:
                 awscli_pod_session.exec_cmd_on_pod(
@@ -41,11 +43,14 @@ class TestPvPool:
                         mcg_obj_session.s3_endpoint
                     ]
                 )
-            except Exception as e:
-                logger.error(e)
+            except CommandFailed:
+                assert not check_pv_backingstore_status(bucketclass.backingstores[0],
+                                                        config.ENV_DATA['cluster_namespace'],
+                                                        '`NO_CAPACITY`'), 'Failed to fill the bucket'
             awscli_pod_session.exec_cmd_on_pod(
                 'rm -f /tmp/testfile'
             )
+            # TODO: read a file, delete a file, write a file again
 
     def test_pv_scale_out(self, backingstore_factory):
         pv_backingstore = backingstore_factory(
@@ -54,14 +59,16 @@ class TestPvPool:
 
         logger.info(f'Scaling out PV Pool {pv_backingstore.name}')
         pv_backingstore.vol_num += 1
-        edit_pv_backingstore = OCP(kind='BackingStore', namespace=config.ENV_DATA['cluster_namespace'])
+        edit_pv_backingstore = OCP(kind='BackingStore',
+                                   namespace=config.ENV_DATA['cluster_namespace'])
         params = f'{{"spec":{{"pvPool":{{"numVolumes":{pv_backingstore.vol_num}}}}}}}'
-        edit_pv_backingstore.patch(resource_name=pv_backingstore.name, params=params, format_type='merge')
+        edit_pv_backingstore.patch(resource_name=pv_backingstore.name, params=params,
+                                   format_type='merge')
         logger.info('Waiting for backingstore to return to OPTIMAL state')
         wait_for_pv_backingstore(pv_backingstore.name, config.ENV_DATA['cluster_namespace'])
 
         logger.info('Check if PV Pool scale out was successful')
         backingstore_dict = edit_pv_backingstore.get(pv_backingstore.name)
-        assert backingstore_dict['spec']['pvPool']['numVolumes'] == pv_backingstore.vol_num,\
+        assert backingstore_dict['spec']['pvPool']['numVolumes'] == pv_backingstore.vol_num, \
             'Scale out PV Pool failed. '
         logger.info('Scale out was successful')
