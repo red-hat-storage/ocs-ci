@@ -4,11 +4,10 @@ import textwrap
 
 import pytest
 
-from ocs_ci.ocs import constants, ocp, fio_artefacts
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
-from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import Pod
 from tests import helpers
 
@@ -217,16 +216,6 @@ def fio_conf_block():
         runtime=24h
         numjobs=10
         """)
-
-
-@pytest.fixture(scope='session')
-def fio_conf_mcg(mcg_obj_session, bucket_factory_session):
-    """
-    Basic fio configuration for upgrade utilization for NooBaa S3 bucket.
-
-    """
-    workload_bucket = bucket_factory_session()
-    return fio_artefacts.get_mcg_conf(mcg_obj_session, workload_bucket)
 
 
 @pytest.fixture(scope='session')
@@ -555,49 +544,9 @@ def pre_upgrade_pods_running_io(
 
 
 @pytest.fixture(scope='session')
-def fio_configmap_dict_mcg(fio_configmap_dict_session, fio_job_dict_mcg):
-    """
-    Fio configmap dictionary with configuration set for MCG workload.
-    """
-    configmap = copy.deepcopy(fio_configmap_dict_session)
-    config_name = f"{fio_job_dict_mcg['metadata']['name']}-config"
-    configmap['metadata']['name'] = config_name
-    return configmap
-
-
-@pytest.fixture(scope='session')
-def fio_job_dict_mcg(fio_job_dict_session):
-    """
-    Fio job dictionary with configuration set for MCG workload.
-    """
-    fio_job_dict_mcg = copy.deepcopy(fio_job_dict_session)
-
-    job_name = 'mcg-workload'
-    config_name = f"{job_name}-config"
-    volume_name = f"{config_name}-vol"
-
-    fio_job_dict_mcg['metadata']['name'] = job_name
-    fio_job_dict_mcg['spec']['template']['metadata']['name'] = job_name
-
-    job_spec = fio_job_dict_mcg['spec']['template']['spec']
-    job_spec['volumes'][1]['name'] = volume_name
-    job_spec['volumes'][1]['configMap']['name'] = config_name
-    job_spec['containers'][0]['volumeMounts'][1]['name'] = volume_name
-
-    job_spec['volumes'].pop(0)
-    job_spec['containers'][0]['volumeMounts'].pop(0)
-
-    return fio_job_dict_mcg
-
-
-@pytest.fixture(scope='session')
 def mcg_workload_job(
-    fio_job_dict_mcg,
-    fio_configmap_dict_mcg,
-    fio_conf_mcg,
     fio_project_mcg,
-    tmp_path,
-    request
+    mcg_job_factory_session,
 ):
     """
     Creates kubernetes job that should utilize MCG during upgrade.
@@ -606,37 +555,10 @@ def mcg_workload_job(
         object: Job object
 
     """
-    fio_configmap_dict_mcg["data"]["workload.fio"] = fio_conf_mcg
-    fio_objs = [fio_configmap_dict_mcg, fio_job_dict_mcg]
-
-    job_name = fio_job_dict_mcg['metadata']['name']
-
-    log.info(f"Creating job {job_name}")
-    job_file = ObjectConfFile(
-        "fio_continuous",
-        fio_objs,
-        fio_project_mcg,
-        tmp_path
+    return mcg_job_factory_session(
+        job_name="mcg-workload",
+        project=fio_project_mcg
     )
-
-    # deploy the Job to the cluster and start it
-    job_file.create()
-    log.info(f"Job {job_name} created")
-
-    # get job object
-    ocp_job_obj = ocp.OCP(kind=constants.JOB, namespace=fio_project_mcg.namespace)
-    job = OCS(**ocp_job_obj.get(resource_name=job_name))
-
-    def teardown():
-        """
-        Delete mcg job
-        """
-        job.delete()
-        job.ocp.wait_for_delete(job.name)
-
-    request.addfinalizer(teardown)
-
-    return job
 
 
 @pytest.fixture(scope='session')
