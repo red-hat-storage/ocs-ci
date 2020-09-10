@@ -259,7 +259,7 @@ class VMWareNodes(NodesBase):
         )
         self.vsphere.start_vms(vms)
 
-    def restart_nodes(self, nodes, force=False, timeout=300, wait=True):
+    def restart_nodes(self, nodes, force=True, timeout=300, wait=True):
         """
         Restart vSphere VMs
 
