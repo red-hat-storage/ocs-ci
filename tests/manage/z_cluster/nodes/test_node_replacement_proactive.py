@@ -86,8 +86,8 @@ class TestNodeReplacement(ManageTest):
             worker_nodes_not_in_ocs = node.get_worker_nodes_not_in_ocs()
             if not worker_nodes_not_in_ocs:
                 pytest.skip(
-                    "Skipping add node in Vmware platform due to "
-                    "https://bugzilla.redhat.com/show_bug.cgi?id=1844521"
+                    "Skipping the test because we don't have an "
+                    "extra worker node that not in ocs"
                 )
             else:
                 log.info(
