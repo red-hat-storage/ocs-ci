@@ -32,6 +32,9 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed, TimeoutExpiredError,
     CephHealthException, ResourceWrongStatusException
 )
+from ocs_ci.ocs.mcg_workload import (
+    mcg_job_factory as mcg_job_factory_implementation
+)
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import setup_ceph_toolbox
@@ -1918,6 +1921,58 @@ def cloud_uls_factory_session(request, cld_mgr):
 
     """
     return cloud_uls_factory_implementation(request, cld_mgr)
+
+
+@pytest.fixture(scope='function')
+def mcg_job_factory(
+    request,
+    bucket_factory,
+    project_factory,
+    mcg_obj,
+    tmp_path
+):
+    """
+    Create a Job factory.
+    Calling this fixture creates a new Job(s) that utilize MCG bucket.
+
+    Returns:
+        func: Factory method - each call to this function creates
+            a job
+
+    """
+    return mcg_job_factory_implementation(
+        request,
+        bucket_factory,
+        project_factory,
+        mcg_obj,
+        tmp_path
+    )
+
+
+@pytest.fixture(scope='session')
+def mcg_job_factory_session(
+    request,
+    bucket_factory_session,
+    project_factory_session,
+    mcg_obj_session,
+    tmp_path
+):
+    """
+    Create a Job factory.
+    Calling this fixture creates a new Job(s) that utilize MCG bucket.
+
+    Returns:
+        func: Factory method - each call to this function creates
+            a job
+
+    """
+    return mcg_job_factory_implementation(
+        request,
+        bucket_factory_session,
+        project_factory_session,
+        mcg_obj_session,
+        tmp_path
+    )
 
 
 @pytest.fixture(scope='class')
