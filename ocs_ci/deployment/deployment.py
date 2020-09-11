@@ -114,7 +114,7 @@ class Deployment(object):
                     self.deploy_ocp(log_cli_level)
                     self.post_ocp_deploy()
                 except Exception as e:
-                    config.ENV_DATA['is_ocp_deployment_failed'] = True
+                    config.RUN['is_ocp_deployment_failed'] = True
                     logger.error(e)
                     if config.REPORTING['gather_on_deploy_failure']:
                         collect_ocs_logs('deployment', ocs=False)
