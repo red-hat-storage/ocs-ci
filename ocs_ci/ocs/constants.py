@@ -799,6 +799,7 @@ LATEST_TAGS = (
     '4.3-rc', 'latest-4.3', 'latest-stable-4.3',
     '4.4-rc', 'latest-4.4', 'latest-stable-4.4',
     '4.5-rc', 'latest-4.5', 'latest-stable-4.5',
+    '4.6-rc', 'latest-4.6', 'latest-stable-4.6',
 )
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
