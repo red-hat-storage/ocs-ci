@@ -259,7 +259,7 @@ class VMWareNodes(NodesBase):
         )
         self.vsphere.start_vms(vms)
 
-    def restart_nodes(self, nodes, force=False, timeout=300, wait=True):
+    def restart_nodes(self, nodes, force=True, timeout=300, wait=True):
         """
         Restart vSphere VMs
 
@@ -289,15 +289,9 @@ class VMWareNodes(NodesBase):
             OCP node reaches status Ready.
             """
             nodes_names = [n.name for n in nodes]
-            logger.info(
-                f"Waiting for nodes: {nodes_names} to reach not ready state"
-            )
             wait_for_nodes_status(
                 node_names=nodes_names, status=constants.NODE_NOT_READY,
                 timeout=timeout
-            )
-            logger.info(
-                f"Waiting for nodes: {nodes_names} to reach ready state"
             )
             wait_for_nodes_status(
                 node_names=nodes_names, status=constants.NODE_READY,
