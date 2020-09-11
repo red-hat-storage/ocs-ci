@@ -18,11 +18,12 @@ class TestDeleteLocalVolume(E2ETest):
     """
     A test case to validate rook-ceph-crashcollector pods
     does not reach CLBO state after delete  sym link
+    on LSO Cluster
 
     """
     def test_delete_local_volume(self):
         """
-        test delete local volume
+        Delete /mnt/local-storage/localblock/nvme1n1 on LSO Cluster
         """
         # Get rook-ceph-crashcollector pod objects
         crashcollector_pods = get_pod_name_by_pattern(
