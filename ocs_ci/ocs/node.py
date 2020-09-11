@@ -609,19 +609,21 @@ def get_both_osd_and_app_pod_running_node(
 
 def get_node_from_machine_name(machine_name):
     """
-    Get node name from a given machine_name
+    Get node name from a given machine_name.
 
-    machine_name (str): Name of Machine
+    Args:
+        machine_name (str): Name of Machine
 
     Returns:
-        str: Name of node
+        str: Name of Node (or None if not found)
+
     """
     machine_objs = get_machine_objs()
     for machine_obj in machine_objs:
         if machine_obj.name == machine_name:
-            return machine_obj.get().get(
-                'status'
-            ).get('addresses')[1].get('address')
+            machine_dict = machine_obj.get()
+            node_name = machine_dict['status']['nodeRef']['name']
+            return node_name
 
 
 def get_provider():
@@ -739,17 +741,19 @@ def check_nodes_specs(min_memory, min_cpu):
     return True
 
 
-def delete_and_create_osd_node_aws_ipi(osd_node_name):
+def delete_and_create_osd_node_ipi(osd_node_name):
     """
     Unschedule, drain and delete osd node, and creating a new osd node.
     At the end of the function there should be the same number of osd nodes as
     it was in the beginning, and also ceph health should be OK.
-    This function is for AWS IPI.
+
+    This function is for any IPI platform.
 
     Args:
         osd_node_name (str): the name of the osd node
 
     """
+    log.info("Going to unschedule, drain and delete %s node", osd_node_name)
     # Unscheduling node
     unschedule_nodes([osd_node_name])
     # Draining Node
