@@ -68,7 +68,7 @@ class TestNodesRestart(ManageTest):
         """
         ocp_nodes = get_node_objs()
         for node in ocp_nodes:
-            nodes.restart_nodes(nodes=[node])
+            nodes.restart_nodes(nodes=[node], wait=False)
             self.sanity_helpers.health_check(cluster_check=False)
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
