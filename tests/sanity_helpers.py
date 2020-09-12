@@ -186,7 +186,7 @@ class SanityExternalCluster(Sanity):
         )
         logger.info("Creating OBC for rgw")
         run_cmd(f"oc create -f {obc_rgw_data_yaml.name}", timeout=2400)
-        self.obc_rgw = obc_rgw_data_yaml.name
+        self.obc_rgw = obc_rgw['metadata']['name']
 
         obc_nooba = templating.load_yaml(
             constants.MCG_OBC_YAML
@@ -199,7 +199,7 @@ class SanityExternalCluster(Sanity):
         )
         logger.info("create OBC for mcg")
         run_cmd(f"oc create -f {obc_mcg_data_yaml.name}", timeout=2400)
-        self.obc_mcg = obc_mcg_data_yaml.name
+        self.obc_mcg = obc_nooba['metadata']['name']
 
     def verify_obc(self):
         """
