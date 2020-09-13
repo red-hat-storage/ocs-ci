@@ -1,4 +1,6 @@
 import logging
+from tests.helpers import wait_for_resource_state
+from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status
 import pytest
 
 from ocs_ci.framework.testlib import (
@@ -95,4 +97,43 @@ class TestMCGResourcesDisruptions(ManageTest):
         rgw_deployment.ocp.exec_oc_cmd(
             f"scale --replicas={str(current_replicas)} deployment/{rgw_deployment.name}"
         )
+        self.cl_obj.wait_for_noobaa_health_ok()
+
+    @pytest.mark.parametrize(
+        argnames=["pod_to_drain"],
+        argvalues=[
+            pytest.param(
+                *['noobaa_core'], marks=pytest.mark.polarion_id("")
+            ),
+            pytest.param(
+                *['noobaa_db'], marks=pytest.mark.polarion_id("")
+            )
+        ]
+    )
+    def test_drain_mcg_pod_node(self, node_drain_teardown, pod_to_drain):
+        """
+        Test drianage of nodes which contain NB resources
+
+        """
+        labels_map = {
+            'noobaa_core': constants.NOOBAA_CORE_POD_LABEL,
+            'noobaa_db': constants.NOOBAA_DB_LABEL
+        }
+
+        # Retrieve the relevant pod object
+        pod_obj = self.resource_obj = pod.Pod(
+            **pod.get_pods_having_label(
+                label=labels_map[pod_to_drain],
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            )[0]
+        )
+        # Retrieve the node name on which the pod resides
+        node_name = pod_obj.get()['spec']['nodeName']
+        # Drain the node
+        drain_nodes([node_name])
+        # Verify the node was drained properly
+        wait_for_nodes_status([node_name], status=constants.NODE_READY_SCHEDULING_DISABLED)
+        # Verify that the relevant pod has reached a 'RUNNNING' status again and recovered successfully
+        wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=120)
+        # Check the NB status to verify the system is healthy
         self.cl_obj.wait_for_noobaa_health_ok()
