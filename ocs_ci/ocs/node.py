@@ -864,9 +864,13 @@ def delete_and_create_osd_node_vsphere_upi(
         add_new_node_and_label_upi(node_type, 1)
     else:
         node_not_in_ocs = get_worker_nodes_not_in_ocs()[0]
+        log.info(
+            f"Preparing to replace the node {osd_node_name} "
+            f"with an existing node {node_not_in_ocs.name}"
+        )
         if node_type == constants.RHEL_OS:
             set_selinux_permissions(workers=[node_not_in_ocs])
-        label_nodes([node_not_in_ocs], node_type)
+        label_nodes([node_not_in_ocs])
 
 
 def label_nodes(nodes, label=constants.OPERATOR_NODE_LABEL):
