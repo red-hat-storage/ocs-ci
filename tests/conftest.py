@@ -1180,8 +1180,11 @@ def cluster_load(
                         if config.RUN['load_status'] == 'running':
                             cl_load_obj.adjust_load_if_needed()
                         elif config.RUN['load_status'] == 'to_be_paused':
-                            cl_load_obj.pause_load()
+                            cl_load_obj.reduce_load(pause=True)
                             config.RUN['load_status'] = 'paused'
+                        elif config.RUN['load_status'] == 'to_be_reduced':
+                            cl_load_obj.reduce_load(pause=False)
+                            config.RUN['load_status'] = 'reduced'
                         elif config.RUN['load_status'] == 'to_be_resumed':
                             cl_load_obj.resume_load()
                             config.RUN['load_status'] = 'running'
@@ -1195,10 +1198,9 @@ def cluster_load(
         thread.start()
 
 
-@pytest.fixture()
-def pause_cluster_load(request):
+def reduce_cluster_load_implementation(request, pause):
     """
-    Pause the background cluster load
+    Pause/reduce the background cluster load
 
     """
     if config.RUN.get('io_in_bg'):
@@ -1210,20 +1212,38 @@ def pause_cluster_load(request):
             """
             config.RUN['load_status'] = 'to_be_resumed'
             try:
-                for load_status in TimeoutSampler(180, 3, config.RUN.get, 'load_status'):
+                for load_status in TimeoutSampler(300, 3, config.RUN.get, 'load_status'):
                     if load_status == 'running':
                         break
             except TimeoutExpiredError:
                 log.error("Cluster load was not resumed successfully")
         request.addfinalizer(finalizer)
 
-        config.RUN['load_status'] = 'to_be_paused'
+        config.RUN['load_status'] = 'to_be_paused' if pause else 'to_be_reduced'
         try:
-            for load_status in TimeoutSampler(180, 3, config.RUN.get, 'load_status'):
-                if load_status == 'paused':
+            for load_status in TimeoutSampler(300, 3, config.RUN.get, 'load_status'):
+                if load_status in ['paused', 'reduced']:
                     break
         except TimeoutExpiredError:
-            log.error("Cluster load was not paused successfully")
+            log.error(f"Cluster load was not {'paused' if pause else 'reduced'} successfully")
+
+
+@pytest.fixture()
+def pause_cluster_load(request):
+    """
+    Pause the background cluster load
+
+    """
+    reduce_cluster_load_implementation(request=request, pause=True)
+
+
+@pytest.fixture()
+def reduce_cluster_load(request):
+    """
+    Reduce the background cluster load to be 50% of what it is
+
+    """
+    reduce_cluster_load_implementation(request=request, pause=False)
 
 
 @pytest.fixture(

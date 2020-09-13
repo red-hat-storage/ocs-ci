@@ -413,13 +413,14 @@ class ClusterLoad:
             logger.info(wrap_msg(msg))
             self.increase_load(rate=self.rate, wait=False)
 
-    def pause_load(self):
+    def reduce_load(self, pause=True):
         """
         Pause the cluster load
 
         """
-        logger.info(wrap_msg("Pausing the cluster load"))
-        while self.dc_objs:
+        pods_to_keep = 0 if pause else int(len(self.dc_objs) / 2)
+        logger.info(wrap_msg(f"{'Pausing' if pods_to_keep == 0 else 'Reducing'} the cluster load"))
+        while len(self.dc_objs) > pods_to_keep:
             self.decrease_load(wait=False)
 
     def resume_load(self):

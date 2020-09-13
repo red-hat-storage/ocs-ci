@@ -57,9 +57,9 @@ def add_capacity_test():
 @skipif_external_mode
 class TestAddCapacity(ManageTest):
     """
-    Automates adding variable capacity to the cluster while IOs running
+    Automates adding variable capacity to the cluster
     """
-    def test_add_capacity(self):
+    def test_add_capacity(self, reduce_cluster_load):
         """
         Test to add variable capacity to the OSD cluster while IOs running
         """
@@ -75,9 +75,9 @@ class TestAddCapacity(ManageTest):
 @skipif_external_mode
 class TestAddCapacityPreUpgrade(ManageTest):
     """
-    Automates adding variable capacity to the cluster while IOs running
+    Automates adding variable capacity to the cluster pre upgrade
     """
-    def test_add_capacity_pre_upgrade(self):
+    def test_add_capacity_pre_upgrade(self, reduce_cluster_load):
         """
         Test to add variable capacity to the OSD cluster while IOs running
         """
