@@ -11,10 +11,11 @@ from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.resources.pod import wait_for_storage_pods, get_pod_obj, get_pod_node
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import ceph_health_check
-
+from ocs_ci.framework.testlib import tier4
 log = logging.getLogger(__name__)
 
 
+@tier4
 @skipif_no_lso
 @pytest.mark.polarion_id("OCS-XXX")
 class TestDeleteLocalVolume(E2ETest):
