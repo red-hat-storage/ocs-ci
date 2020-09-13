@@ -1,13 +1,16 @@
 import logging
 import pytest
 
-from ocs_ci.ocs.resources.pod import get_pod_obj, get_pod_node
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.defaults import ROOK_CLUSTER_NAMESPACE
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.pytest_customization.marks import skipif_no_lso
 from tests.helpers import wait_for_resource_state
+from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
+from ocs_ci.ocs.resources.pod import wait_for_storage_pods, get_pod_obj, get_pod_node
+from ocs_ci.framework import config
+from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +26,7 @@ class TestDeleteLocalVolume(E2ETest):
     """
     def test_delete_local_volume(self):
         """
-        Delete /mnt/local-storage/localblock/nvme1n1 on LSO Cluster
+        Delete sym link on LSO Cluster
         """
         # Get rook-ceph-crashcollector pod objects
         crashcollector_pods = get_pod_name_by_pattern(
@@ -38,9 +41,16 @@ class TestDeleteLocalVolume(E2ETest):
         # Get Node object
         node_obj = get_pod_node(pod_obj=crashcollector_pods_objs[0])
 
-        log.info("Delete sym link /mnt/local-storage/localblock/nvme1n1")
+        # Get Sym link
+        osd_pvcs = get_deviceset_pvcs()
+        pv_name = osd_pvcs[0].data['spec']['volumeName']
+        ocp_obj = ocp.OCP(namespace=ROOK_CLUSTER_NAMESPACE, kind='pv')
+        pv_obj = ocp_obj.get(resource_name=pv_name)
+        path = pv_obj['spec']['local']['path']
+
+        log.info("Delete sym link")
         oc_cmd = ocp.OCP(namespace=ROOK_CLUSTER_NAMESPACE)
-        cmd = 'rm -rfv /mnt/local-storage/localblock/nvme1n1'
+        cmd = f'rm -rfv {path}'
         oc_cmd.exec_oc_debug_cmd(node=node_obj.name, cmd_list=[cmd])
 
         log.info("Waiting for rook-ceph-crashcollector pods to be reach Running state")
@@ -48,3 +58,10 @@ class TestDeleteLocalVolume(E2ETest):
             wait_for_resource_state(
                 resource=crashcollector_pods_obj, state=constants.STATUS_RUNNING
             )
+
+        # Check all OCS pods status, they should be in Running or Completed state
+        wait_for_storage_pods()
+
+        # Check ceph status
+        ceph_health_check(namespace=config.ENV_DATA['cluster_namespace'])
+        log.info("Ceph cluster health is OK")
