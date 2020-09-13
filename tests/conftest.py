@@ -2610,6 +2610,7 @@ def node_drain_teardown(request):
         ]
         if scheduling_disabled_nodes:
             schedule_nodes(scheduling_disabled_nodes)
+        ceph_health_check()
 
     request.addfinalizer(finalizer)
 
