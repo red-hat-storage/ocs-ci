@@ -2,7 +2,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.bucket_utils import craft_s3_command, wait_for_pv_backingstore, \
-    check_pv_backingstore_status
+    check_pv_backingstore_status, s3_get_object, s3_delete_object
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 
@@ -31,17 +31,9 @@ class TestPvPool:
                 'dd if=/dev/urandom of=/tmp/testfile bs=1M count=1000'
             )
             try:
-                awscli_pod_session.exec_cmd_on_pod(
-                    craft_s3_command(
-                        f"cp /tmp/testfile s3://{bucket.name}/testfile{i}",
-                        mcg_obj_session
-                    ),
-                    out_yaml_format=False,
-                    secrets=[
-                        mcg_obj_session.access_key_id,
-                        mcg_obj_session.access_key,
-                        mcg_obj_session.s3_endpoint
-                    ]
+                awscli_pod_session.exec_s3_cmd_on_pod(
+                    f"cp /tmp/testfile s3://{bucket.name}/testfile{i}",
+                    mcg_obj_session
                 )
             except CommandFailed:
                 assert not check_pv_backingstore_status(bucketclass.backingstores[0],
@@ -50,7 +42,36 @@ class TestPvPool:
             awscli_pod_session.exec_cmd_on_pod(
                 'rm -f /tmp/testfile'
             )
-            # TODO: read a file, delete a file, write a file again
+            try:
+                awscli_pod_session.exec_s3_cmd_on_pod(
+                    f"cp s3://{bucket.name}/testfile1 /tmp/testfile",
+                    mcg_obj_session
+                )
+            except CommandFailed as e:
+                logger.error('Failed to retrieve a file from full bucket')
+                raise e
+            try:
+                awscli_pod_session.exec_s3_cmd_on_pod(
+                    f"rm s3://{bucket.name}/testfile1",
+                    mcg_obj_session
+                )
+            except CommandFailed as e:
+                logger.error('Failed to delete a file from full bucket')
+                raise e
+            awscli_pod_session.exec_cmd_on_pod(
+                'dd if=/dev/urandom of=/tmp/testfile bs=1M count=1000'
+            )
+            try:
+                awscli_pod_session.exec_s3_cmd_on_pod(
+                    f"cp /tmp/testfile s3://{bucket.name}/testfile1",
+                    mcg_obj_session
+                )
+            except CommandFailed:
+                assert not \
+                    check_pv_backingstore_status(bucketclass.backingstores[0],
+                                                 config.ENV_DATA['cluster_namespace'],
+                                                 '`NO_CAPACITY`'), \
+                    'Failed to re-upload the removed file file'
 
     def test_pv_scale_out(self, backingstore_factory):
         pv_backingstore = backingstore_factory(
