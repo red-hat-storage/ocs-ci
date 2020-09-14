@@ -40,6 +40,6 @@ fips: {{ fips }}
 {% endif %}
 platform:
   gcp:
-    projectID: ocs4-283313
+    projectID: {{ gcp_project_id }}
     region: {{ region }}
 pullSecret: ''
