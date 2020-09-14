@@ -1,6 +1,5 @@
 import logging
 import pytest
-import os
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
