@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources import pod as Pod
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.framework.testlib import E2ETest, scale
@@ -47,7 +47,7 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
 
         """
         # Setting the io_size_gb to 40% of the total PVC capacity
-        ceph_pod = pod.get_ceph_tools_pod()
+        ceph_pod = Pod.get_ceph_tools_pod()
         external = config.DEPLOYMENT['external_mode']
         if external:
             ocp_obj = ocp.OCP()
