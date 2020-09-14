@@ -103,10 +103,10 @@ class TestMCGResourcesDisruptions(ManageTest):
         argnames=["pod_to_drain"],
         argvalues=[
             pytest.param(
-                *['noobaa_core'], marks=pytest.mark.polarion_id("")
+                *['noobaa_core'], marks=pytest.mark.polarion_id("OCS-2286")
             ),
             pytest.param(
-                *['noobaa_db'], marks=pytest.mark.polarion_id("")
+                *['noobaa_db'], marks=pytest.mark.polarion_id("OCS-2287")
             )
         ]
     )
