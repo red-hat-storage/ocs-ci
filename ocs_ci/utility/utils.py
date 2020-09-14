@@ -1479,7 +1479,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
     for tag in tags:
         if not upgrade:
             if (
-                tag['name'] not in constants.LATEST_TAGS
+                not any(t in tag['name'] for t in constants.LATEST_TAGS)
                 and tag['manifest_digest'] == latest_image
             ):
                 return tag['name']
@@ -1490,7 +1490,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
             if not latest_tag_found:
                 continue
             if (
-                tag['name'] not in constants.LATEST_TAGS
+                not any(t in tag['name'] for t in constants.LATEST_TAGS)
                 and tag['manifest_digest'] != latest_image
                 and ocs_version in tag['name']
             ):
@@ -1520,7 +1520,7 @@ def get_next_version_available_for_upgrade(current_tag):
 
     """
     tags = get_ocs_olm_operator_tags()
-    if current_tag in constants.LATEST_TAGS:
+    if any(t in current_tag for t in constants.LATEST_TAGS):
         return current_tag
     current_tag_index = None
     for index, tag in enumerate(tags):
@@ -1534,7 +1534,7 @@ def get_next_version_available_for_upgrade(current_tag):
     ocs_version = config.ENV_DATA['ocs_version']
     for tag in sliced_reversed_tags:
         if (
-            tag['name'] not in constants.LATEST_TAGS
+            not any(t in tag['name'] for t in constants.LATEST_TAGS)
             and ocs_version in tag['name']
         ):
             if config.UPGRADE.get("use_rc_build") and "rc" not in tag['name']:
