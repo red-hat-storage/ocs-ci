@@ -9,7 +9,7 @@ from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs.resources.pvc import delete_pvcs
 from tests import helpers
 from ocs_ci.ocs.bucket_utils import s3_delete_object, s3_get_object, s3_put_object
-from tests.manage.z_cluster.pvc_ops import create_pvcs
+from tests.z_cluster import create_pvcs
 from ocs_ci.utility.utils import ceph_health_check, run_cmd, TimeoutSampler
 from ocs_ci.utility import templating
 from ocs_ci.ocs.cluster import CephCluster, CephClusterExternal

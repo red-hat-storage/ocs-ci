@@ -434,7 +434,7 @@ def pytest_runtest_makereport(item, call):
     if rep.failed and ocsci_config.RUN.get('cli_params').get('collect-logs'):
         test_case_name = item.name
         ocp_logs_collection = True if rep.when == "call" else False
-        mcg = True if any(x in item.location[0] for x in ['mcg', 'ecosystem']) else False
+        mcg = True if any(x in item.location[0] for x in ['mcg', 'deployment', 'upgrade']) else False
         try:
             collect_ocs_logs(dir_name=test_case_name, ocp=ocp_logs_collection, mcg=mcg)
         except Exception:

@@ -1,5 +1,10 @@
 # -*- coding: utf8 -*-
-
+"""
+This is a demonstration how to start k8s Job in one test, let it running, and
+then revisit it and stop in another one. Original simple draft was created by
+mbukatov based on discussion with fbalak, who is expected to tweak it further
+to fit into the upgrade scenario (as well as error checking adn logging).
+"""
 
 import logging
 import textwrap
@@ -14,14 +19,6 @@ from ocs_ci.utility.utils import run_cmd
 
 logger = logging.getLogger(__name__)
 TEST_NS = "namespace-test-fio-continuous-workload"
-
-
-"""
-This is a demonstration how to start k8s Job in one test, let it running, and
-then revisit it and stop in another one. Original simple draft was created by
-mbukatov based on discussion with fbalak, who is expected to tweak it further
-to fit into the upgrade scenario (as well as error checking adn logging).
-"""
 
 
 @pytest.mark.libtest
