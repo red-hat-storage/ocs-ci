@@ -871,7 +871,6 @@ def delete_and_create_osd_node_vsphere_upi(
         if node_type == constants.RHEL_OS:
             set_selinux_permissions(workers=[node_not_in_ocs])
         label_nodes([node_not_in_ocs])
-        wait_for_nodes_status(node_names=[node_not_in_ocs.name])
 
 
 def label_nodes(nodes, label=constants.OPERATOR_NODE_LABEL):
