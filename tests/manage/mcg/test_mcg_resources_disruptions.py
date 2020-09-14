@@ -29,6 +29,13 @@ class TestMCGResourcesDisruptions(ManageTest):
 
     """
 
+    labels_map = {
+        'noobaa_core': constants.NOOBAA_CORE_POD_LABEL,
+        'noobaa_db': constants.NOOBAA_DB_LABEL,
+        'noobaa_endpoint': constants.NOOBAA_ENDPOINT_POD_LABEL,
+        'noobaa_operator': constants.NOOBAA_OPERATOR_POD_LABEL
+    }
+
     @pytest.mark.parametrize(
         argnames=["resource_to_delete"],
         argvalues=[
@@ -45,13 +52,9 @@ class TestMCGResourcesDisruptions(ManageTest):
         Test Noobaa resources delete and check Noobaa health
 
         """
-        labels_map = {
-            'noobaa_core': constants.NOOBAA_CORE_POD_LABEL,
-            'noobaa_db': constants.NOOBAA_DB_LABEL
-        }
-        pod_obj = self.resource_obj = pod.Pod(
+        pod_obj = pod.Pod(
             **pod.get_pods_having_label(
-                label=labels_map[resource_to_delete],
+                label=self.labels_map[resource_to_delete],
                 namespace=defaults.ROOK_CLUSTER_NAMESPACE
             )[0]
         )
@@ -59,7 +62,7 @@ class TestMCGResourcesDisruptions(ManageTest):
         pod_obj.delete(force=True)
         assert pod_obj.ocp.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            selector=labels_map[resource_to_delete],
+            selector=self.labels_map[resource_to_delete],
             resource_count=1, timeout=300
         )
         self.cl_obj.wait_for_noobaa_health_ok()
@@ -107,6 +110,12 @@ class TestMCGResourcesDisruptions(ManageTest):
             ),
             pytest.param(
                 *['noobaa_db'], marks=pytest.mark.polarion_id("OCS-2287")
+            ),
+            pytest.param(
+                *['noobaa_endpoint'], marks=pytest.mark.polarion_id("OCS-2288")
+            ),
+            pytest.param(
+                *['noobaa_operator'], marks=pytest.mark.polarion_id("OCS-2285")
             )
         ]
     )
@@ -115,15 +124,11 @@ class TestMCGResourcesDisruptions(ManageTest):
         Test drianage of nodes which contain NB resources
 
         """
-        labels_map = {
-            'noobaa_core': constants.NOOBAA_CORE_POD_LABEL,
-            'noobaa_db': constants.NOOBAA_DB_LABEL
-        }
 
         # Retrieve the relevant pod object
-        pod_obj = self.resource_obj = pod.Pod(
+        pod_obj = pod.Pod(
             **pod.get_pods_having_label(
-                label=labels_map[pod_to_drain],
+                label=self.labels_map[pod_to_drain],
                 namespace=defaults.ROOK_CLUSTER_NAMESPACE
             )[0]
         )
@@ -133,7 +138,14 @@ class TestMCGResourcesDisruptions(ManageTest):
         drain_nodes([node_name])
         # Verify the node was drained properly
         wait_for_nodes_status([node_name], status=constants.NODE_READY_SCHEDULING_DISABLED)
-        # Verify that the relevant pod has reached a 'RUNNNING' status again and recovered successfully
+        # Retrieve the new pod that should've been created post-drainage
+        pod_obj = pod.Pod(
+            **pod.get_pods_having_label(
+                label=self.labels_map[pod_to_drain],
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            )[0]
+        )
+        # Verify that the new pod has reached a 'RUNNNING' status again and recovered successfully
         wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=120)
         # Check the NB status to verify the system is healthy
         self.cl_obj.wait_for_noobaa_health_ok()
