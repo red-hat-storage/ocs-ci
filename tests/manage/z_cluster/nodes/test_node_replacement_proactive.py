@@ -101,10 +101,11 @@ class TestNodeReplacement(ManageTest):
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
         # Deleting Resources
         self.sanity_helpers.delete_resources()
+
         # Verify everything running fine
         log.info("Verifying All resources are Running and matches expected result")
-        self.sanity_helpers.health_check(tries=100)
+        self.sanity_helpers.health_check(tries=150)
         ceph_cluster_obj = CephCluster()
-        assert ceph_cluster_obj.wait_for_rebalance(timeout=2400), (
+        assert ceph_cluster_obj.wait_for_rebalance(timeout=1800), (
             "Data re-balance failed to complete"
         )
