@@ -166,8 +166,8 @@ class SanityExternalCluster(Sanity):
         """
         cleanup the above created obc
         """
-        super().delete_resources()
         self.cleanup()
+        super().delete_resources()
 
     def create_obc(self):
         """
