@@ -44,7 +44,7 @@ def delete_and_create_osd_node(osd_node_name):
     if config.ENV_DATA['platform'].lower() == constants.AWS_PLATFORM:
         if config.ENV_DATA['deployment_type'] == 'ipi':
             log.info("Perform delete and create osd node in AWS IPI")
-            node.delete_and_create_osd_node_aws_ipi(osd_node_name)
+            node.delete_and_create_osd_node_ipi(osd_node_name)
 
         elif config.ENV_DATA['deployment_type'] == 'upi':
             log.info("Perform delete and create osd node in AWS UPI")
