@@ -847,6 +847,7 @@ def delete_and_create_osd_node_vsphere_upi(
         use_existing_node (bool): If False, create a new node and label it.
             If True, use an existing node to replace the deleted node
             and label it.
+
     """
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
@@ -881,6 +882,7 @@ def label_nodes(nodes, label=constants.OPERATOR_NODE_LABEL):
         nodes (list): list of node objects need to label
         label (str): New label to be assigned for these nodes.
             Default value is the OCS label
+
     """
     node_obj = ocp.OCP(kind='node')
     for new_node_to_label in nodes:
@@ -900,6 +902,7 @@ def get_worker_nodes_not_in_ocs():
 
     Returns:
           list: list of worker node objects that are not ocs labeled
+
     """
     ocs_nodes = get_ocs_nodes()
     ocs_node_names = [n.name for n in ocs_nodes]

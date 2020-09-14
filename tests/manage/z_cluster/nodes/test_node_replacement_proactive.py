@@ -41,19 +41,28 @@ def delete_and_create_osd_node(osd_node_name):
         osd_node_name (str): The osd node name to delete
 
     """
+    # error message for invalid deployment configuration
+    msg_invalid = (
+        "ocs-ci config 'deployment_type' value "
+        f"'{config.ENV_DATA['deployment_type']}' is not valid, "
+        f"results of this test run are all invalid."
+    )
+    # TODO: refactor this so that AWS is not a "special" platform
     if config.ENV_DATA['platform'].lower() == constants.AWS_PLATFORM:
         if config.ENV_DATA['deployment_type'] == 'ipi':
-            log.info("Perform delete and create osd node in AWS IPI")
             node.delete_and_create_osd_node_ipi(osd_node_name)
 
         elif config.ENV_DATA['deployment_type'] == 'upi':
-            log.info("Perform delete and create osd node in AWS UPI")
             node.delete_and_create_osd_node_aws_upi(osd_node_name)
         else:
-            pytest.fail(
-                f"ocs-ci config 'deployment_type' value '{config.ENV_DATA['deployment_type']}' is not valid, "
-                f"results of this test run are all invalid.")
-
+            log.error(msg_invalid)
+            pytest.fail(msg_invalid)
+    elif config.ENV_DATA['platform'].lower() in constants.CLOUD_PLATFORMS:
+        if config.ENV_DATA['deployment_type'] == 'ipi':
+            node.delete_and_create_osd_node_ipi(osd_node_name)
+        else:
+            log.error(msg_invalid)
+            pytest.fail(msg_invalid)
     elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
         worker_nodes_not_in_ocs = node.get_worker_nodes_not_in_ocs()
         if not worker_nodes_not_in_ocs:
@@ -66,7 +75,9 @@ def delete_and_create_osd_node(osd_node_name):
                 "Perform delete and create ocs node in Vmware using one "
                 "of the existing extra worker nodes that not in ocs"
             )
-            node.delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=True)
+            node.delete_and_create_osd_node_vsphere_upi(
+                osd_node_name, use_existing_node=True
+            )
 
 
 @tier4
@@ -113,42 +124,6 @@ class TestNodeReplacementWithIO(ManageTest):
             if worker_node != osd_node_name:
                 cephfs_dc_pod = dc_pod_factory(interface=constants.CEPHFILESYSTEM, node_name=worker_node, size=20)
                 pod.run_io_in_bg(cephfs_dc_pod, expect_to_fail=False, fedora_dc=True)
-
-        # error message for invalid deployment configuration
-        msg_invalid = (
-            "ocs-ci config 'deployment_type' value "
-            f"'{config.ENV_DATA['deployment_type']}' is not valid, "
-            f"results of this test run are all invalid."
-        )
-        # TODO: refactor this so that AWS is not a "special" platform
-        if config.ENV_DATA['platform'].lower() == constants.AWS_PLATFORM:
-            if config.ENV_DATA['deployment_type'] == 'ipi':
-                node.delete_and_create_osd_node_ipi(osd_node_name)
-
-            elif config.ENV_DATA['deployment_type'] == 'upi':
-                node.delete_and_create_osd_node_aws_upi(osd_node_name)
-            else:
-                log.error(msg_invalid)
-                pytest.fail(msg_invalid)
-        elif config.ENV_DATA['platform'].lower() in constants.CLOUD_PLATFORMS:
-            if config.ENV_DATA['deployment_type'] == 'ipi':
-                node.delete_and_create_osd_node_ipi(osd_node_name)
-            else:
-                log.error(msg_invalid)
-                pytest.fail(msg_invalid)
-        elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
-            worker_nodes_not_in_ocs = node.get_worker_nodes_not_in_ocs()
-            if not worker_nodes_not_in_ocs:
-                pytest.skip(
-                    "Skipping the test because we don't have an "
-                    "extra worker node that not in ocs"
-                )
-            else:
-                log.info(
-                    "Perform delete and create ocs node in Vmware using one "
-                    "of the existing extra worker nodes that not in ocs"
-                )
-                node.delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=True)
 
         delete_and_create_osd_node(osd_node_name)
 
