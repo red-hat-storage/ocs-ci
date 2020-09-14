@@ -70,6 +70,7 @@ class TestPVCCreationPerformance(E2ETest):
         logging.info(
             f"Creating Pod with pvc {pvc_obj.name} on node {node_one}"
         )
+
         helpers.pull_images('nginx')
         pod_obj1 = helpers.create_pod(
             interface_type=constants.CEPHFILESYSTEM, pvc_name=pvc_obj.name,
@@ -88,6 +89,12 @@ class TestPVCCreationPerformance(E2ETest):
         pod_path = '/var/lib/www/html'
 
         _ocp = OCP(namespace=pvc_obj.namespace)
+
+        rsh_cmd = f"exec {pod_name} -- apt-get update"
+        _ocp.exec_oc_cmd(rsh_cmd)
+        rsh_cmd = f"exec {pod_name} -- apt-get install -y rsync"
+        _ocp.exec_oc_cmd(rsh_cmd, ignore_error=True, out_yaml_format=False)
+
         rsh_cmd = f"rsync {dir_path} {pod_name}:{pod_path}"
         _ocp.exec_oc_cmd(rsh_cmd)
 
