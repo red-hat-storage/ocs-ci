@@ -570,7 +570,7 @@ class VSPHEREUPI(VSPHEREBASE):
         )
         if datastore_type != constants.VMFS:
             configure_chrony_and_wait_for_machineconfig_status(
-                node_type="all", timeout=1200
+                node_type="all", timeout=1800
             )
 
     def destroy_cluster(self, log_level="DEBUG"):

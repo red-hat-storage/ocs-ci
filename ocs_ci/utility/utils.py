@@ -2508,6 +2508,7 @@ def configure_chrony_and_wait_for_machineconfig_status(
     Args:
         node_type (str): The node type to configure chrony
             e.g: worker, master and all if we want to configure on all nodes
+         timeout (int): Time in seconds to wait
 
     """
     # importing here to avoid dependencies
