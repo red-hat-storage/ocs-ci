@@ -221,7 +221,7 @@ class SanityExternalCluster(Sanity):
         """
         logger.info(f"Deleting rgw obc {self.obc_rgw}")
         obcrgw = OCP(kind='ObjectBucketClaim', resource_name=f'{self.obc_rgw}')
-        obcrgw.wait_for_delete(resource_name=f'{self.obc_rgw}')
+        obcrgw.wait_for_delete(resource_name=f'{self.obc_rgw}', timeout=300)
         logger.info(f"Deleting mcg obc {self.obc_mcg}")
         obcmcg = OCP(kind='ObjectBucketClaim', resource_name=f'{self.obc_mcg}')
-        obcmcg.wait_for_delete(resource_name=f'{self.obc_mcg}')
+        obcmcg.wait_for_delete(resource_name=f'{self.obc_mcg}', timeout=300)
