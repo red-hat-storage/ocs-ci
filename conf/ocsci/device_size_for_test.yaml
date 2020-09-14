@@ -1,4 +1,0 @@
----
-#This config file holds the disk size in GB for test environments.
-ENV_DATA:
-  device_size: '250'
