@@ -4,7 +4,7 @@ import tempfile
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import ignore_leftovers
 from ocs_ci.ocs.ocp import wait_for_cluster_connectivity, OCP
-from ocs_ci.ocs import constants, node
+from ocs_ci.ocs import constants, node, defaults
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs.resources.pvc import delete_pvcs
 from tests import helpers
@@ -225,5 +225,8 @@ class SanityExternalCluster(Sanity):
         obcrgw.wait_for_delete(resource_name=f'{self.obc_rgw}', timeout=300)
         logger.info(f"Deleting mcg obc {self.obc_mcg}")
         obcmcg = OCP(kind='ObjectBucketClaim', resource_name=f'{self.obc_mcg}')
-        run_cmd(f"oc delete obc/{self.obc_mcg}")
+        run_cmd(
+            f"oc delete obc/{self.obc_mcg} -n "
+            f"{defaults.ROOK_CLUSTER_NAMESPACE}"
+        )
         obcmcg.wait_for_delete(resource_name=f'{self.obc_mcg}', timeout=300)
