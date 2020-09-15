@@ -17,8 +17,11 @@ def pytest_collection_modifyitems(items):
     """
     if (
         config.ENV_DATA['platform'].lower() not in ON_PREM_PLATFORMS
-        or skipif_ocs_version('<4.5')
-        or skipif_upgraded_from('4.4')
+        or skipif_ocs_version('<4.5', reason='RGW not supported on OCS <4.5')
+        or skipif_upgraded_from(
+            ['4.2', '4.3', '4.4'],
+            reason='RGW functionality blocked when upgrading to 4.5, BZ1873580'
+        )
     ):
         for item in items.copy():
             if 'manage/rgw' in str(item.fspath):

@@ -1907,7 +1907,7 @@ def get_cluster_name(cluster_path):
     return metadata["clusterName"]
 
 
-def skipif_ocs_version(expressions):
+def skipif_ocs_version(expressions, reason=None):
     """
     This function evaluates the condition for test skip
     based on expression
@@ -1926,6 +1926,8 @@ def skipif_ocs_version(expressions):
         comparision_str = config.ENV_DATA['ocs_version'] + expr
         skip_this = skip_this and eval(comparision_str)
     # skip_this will be either True or False after eval
+    if skip_this and reason:
+        log.info(f'OCS version skip match. Skip reason: {reason}')
     return skip_this
 
 
@@ -2598,7 +2600,7 @@ def download_file_from_git_repo(git_repo_url, path_to_file_in_git, filename):
     rmtree(temp_dir)
 
 
-def skipif_upgraded_from(version_list):
+def skipif_upgraded_from(version_list, reason=None):
     """
     This function evaluates the condition to skip a test if the cluster
     is upgraded from a particular OCS version
@@ -2621,6 +2623,8 @@ def skipif_upgraded_from(version_list):
             if f'.v{version}' in prev_version:
                 skip_this = True
                 break
+        if skip_this and reason:
+            log.info(f'OCS upgrade skip match. Skip reason: {reason}')
         return skip_this
     except Exception as err:
         log.error(str(err))
