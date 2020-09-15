@@ -1625,11 +1625,6 @@ class BaremetalNodes(NodesBase):
             "Wait for volume attach functionality is not implemented"
         )
 
-    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
-        raise NotImplementedError(
-            "attach nodes to cluster functionality is not implemented"
-        )
-
     def create_nodes(self, node_conf, node_type, num_nodes):
         raise NotImplementedError(
             "attach nodes to cluster functionality is not implemented"

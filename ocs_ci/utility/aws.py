@@ -1124,7 +1124,7 @@ class AWS(object):
             ttl (int): Default set to 60 sec
 
         """
-        if "*" in record_name:
+        if "apps" in record_name:
             trim_record_name = record_name.strip('*.')
         else:
             trim_record_name = record_name
@@ -1142,7 +1142,6 @@ class AWS(object):
             old_resource_record_list.remove({
                     'Value': data
                 })
-        logger.info(old_resource_record_list)
         response = self.route53_client.change_resource_record_sets(
             HostedZoneId=zone_id,
             ChangeBatch={
