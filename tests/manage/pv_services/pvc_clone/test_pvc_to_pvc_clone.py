@@ -1,6 +1,5 @@
 import logging
 import pytest
-import os
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
@@ -19,10 +18,10 @@ logger = logging.getLogger(__name__)
     argnames=["interface_type"],
     argvalues=[
         pytest.param(
-            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("")
+            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id('OCS-2284')
         ),
         pytest.param(
-            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("")
+            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id('OCS-256')
         )
     ]
 )
@@ -58,21 +57,27 @@ class TestClone(ManageTest):
         Create a clone from an existing pvc,
         verify data is preserved in the cloning.
         """
-        mountPath = self.pod_obj.get_storage_path()
-        file_name = "test_clone"
-        test_file = os.path.join(mountPath, file_name)
-
         logger.info(f"Running IO on pod {self.pod_obj.name}")
-        self.pod_obj.exec_cmd_on_pod(command=f"touch {test_file}")
+        file_name = self.pod_obj.name
+        logger.info(f"File created during IO {file_name}")
+        self.pod_obj.run_io(
+            storage_type='fs', size='500M', fio_filename=file_name
+        )
 
-        # Verify presence of the file.
-        assert pod.check_file_existence(self.pod_obj, test_file), (
-            f"File {file_name} doesn't exist"
+        # Wait for fio to finish
+        self.pod_obj.get_fio_results()
+        logger.info(f"Io completed on pod {self.pod_obj.name}.")
+
+        # Verify presence of the file
+        file_path = pod.get_file_path(self.pod_obj, file_name)
+        logger.info(f"Actual file path on the pod {file_path}")
+        assert pod.check_file_existence(self.pod_obj, file_path), (
+            f"File {file_name} does not exist"
         )
         logger.info(f"File {file_name} exists in {self.pod_obj.name}")
 
         # Calculate md5sum of the file.
-        orig_md5_sum = pod.cal_md5sum(self.pod_obj, test_file)
+        orig_md5_sum = pod.cal_md5sum(self.pod_obj, file_name)
 
         # Create a clone of the existing pvc.
         sc_name = self.pvc_obj.backed_sc
@@ -100,9 +105,12 @@ class TestClone(ManageTest):
         teardown_factory(clone_pod_obj)
 
         # Verify file's presence on the new pod
-        logger.info(f"Checking the existence of {file_name} on cloned pod {clone_pod_obj.name}")
-        assert pod.check_file_existence(clone_pod_obj, test_file), (
-            f"File {file_name} doesn't exist"
+        logger.info(
+            f"Checking the existence of {file_name} on cloned pod "
+            f"{clone_pod_obj.name}"
+        )
+        assert pod.check_file_existence(clone_pod_obj, file_path), (
+            f"File {file_path} does not exist"
         )
         logger.info(f"File {file_name} exists in {clone_pod_obj.name}")
 
@@ -115,7 +123,7 @@ class TestClone(ManageTest):
         )
         assert pod.verify_data_integrity(
             clone_pod_obj,
-            test_file,
+            file_name,
             orig_md5_sum
         ), 'Data integrity check failed'
         logger.info("Data integrity check passed, md5sum are same")
