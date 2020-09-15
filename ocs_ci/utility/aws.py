@@ -1094,6 +1094,74 @@ class AWS(object):
 
         return stack_name
 
+    def get_hosted_zone_id(self, cluster_name):
+        """
+        Get Zone if from given cluster_name
+        Args:
+            cluster_name (str): Name of cluster
+
+        Returns:
+            str: Zone id
+        """
+        hosted_zones_output = self.route53_client.list_hosted_zones_by_name(
+            DNSName=cluster_name
+        )
+        full_hosted_zone_id=hosted_zones_output['HostedZones'][0]['Id']
+        return full_hosted_zone_id.strip('/hostedzone/')
+
+    def update_hosted_zone_record(self, zone_id, record_name, data, type, operation_type, ttl=60):
+        """
+        Update Route53 DNS record
+
+        Args:
+            zone_id (str): Zone id of DNS record
+            record_name (str): Record Name (
+                eg:- *.apps.ocp-baremetal-auto.qe.rh-ocs.com, api-int.ocp-baremetal-auto.qe.rh-ocs.com
+            )
+            data (str): Data to be added for DNS Record
+            type (str): DNS record type
+            operation_type (str): Operation Type (Allowed Values:- Add, Delete)
+            ttl (int): Default set to 60 sec
+
+        """
+        if "*" in record_name:
+            trim_record_name = record_name.strip('*.')
+        else:
+            trim_record_name = record_name
+
+        res = self.route53_client.list_resource_record_sets(HostedZoneId=zone_id)
+        for records in res['ResourceRecordSets']:
+            if trim_record_name in records['Name']:
+                old_resource_record_list = records['ResourceRecords']
+
+        if operation_type == "Add":
+            old_resource_record_list.append({
+                    'Value': data
+                })
+        elif operation_type == "Delete":
+            old_resource_record_list.remove({
+                    'Value': data
+                })
+        logger.info(old_resource_record_list)
+        response = self.route53_client.change_resource_record_sets(
+            HostedZoneId=zone_id,
+            ChangeBatch={
+                'Changes': [
+                    {
+                        'Action': 'UPSERT',
+                        'ResourceRecordSet': {
+                            'Name': record_name,
+                            'Type': type,
+                            'TTL': ttl,
+                            'ResourceRecords': old_resource_record_list
+                        }
+                    }
+                ],
+            }
+        )
+        waiter = self.route53_client.get_waiter('resource_record_sets_changed')
+        waiter.wait(Id=response['ChangeInfo']['Id'], WaiterConfig={'MaxAttempts': 5})
+
 
 def get_instances_ids_and_names(instances):
     """

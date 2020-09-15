@@ -14,7 +14,7 @@ from ocs_ci.deployment.vmware import (
     clone_openshift_installer,
     update_machine_conf,
 )
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnsupportedPlatformError, InSufficientResourceException
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
 from ocs_ci.utility.retry import retry
@@ -32,7 +32,7 @@ from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
     replace_content_in_file,
     get_ocp_version, TimeoutSampler,
-    delete_file, AZInfo, download_file_from_git_repo,
+    delete_file, AZInfo, download_file_from_git_repo, load_auth_config, run_cmd,
 )
 from ocs_ci.ocs.node import wait_for_nodes_status
 
@@ -70,7 +70,7 @@ class NodesBase(object):
         self.platform = config.ENV_DATA['platform']
         self.deployment_type = config.ENV_DATA['deployment_type']
         self.nodes_map = {
-            'AWSUPINode': AWSUPINode, 'VSPHEREUPINode': VSPHEREUPINode
+            'AWSUPINode': AWSUPINode, 'VSPHEREUPINode': VSPHEREUPINode, 'BAREMETALUPINode': BAREMETALUPINode
         }
         self.wait_time = 120
 
@@ -1660,6 +1660,24 @@ class BaremetalNodes(NodesBase):
 
         return default_config_dict
 
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        """
+        Create nodes and attach them to cluster
+        Use this function if you want to do both creation/attachment in
+        a single call
+
+        Args:
+            node_conf (dict): of node configuration
+            node_type (str): type of node to be created RHCOS/RHEL
+            num_nodes (int): Number of node to be added
+
+        """
+        node_cls = self.nodes_map[
+            f'{self.platform.upper()}{self.deployment_type.upper()}Node'
+        ]
+        node_cls_obj = node_cls(node_conf, node_type, num_nodes)
+        node_cls_obj.add_node()
+
 
 class AZURENodes(NodesBase):
     """
@@ -1816,3 +1834,114 @@ class AZURENodes(NodesBase):
         raise NotImplementedError(
             "attach nodes to cluster functionality is not implemented"
         )
+
+
+class BAREMETALUPINode(BaremetalNodes):
+    """
+    Node object representing Bare Metal upi nodes
+
+    """
+    def __init__(self, node_conf, node_type, worker_count):
+        """
+        Initialize necessary variables
+
+        Args:
+            node_conf (dict): of node configuration
+            node_type (str): type of node to be created RHCOS/RHEL
+            worker_count (int): number of nodes to add to existing cluster
+        """
+        super(BAREMETALUPINode, self).__init__()
+        self.aws = aws.AWS()
+        self.node_conf = node_conf
+        self.node_type = node_type
+        self.worker_count = worker_count
+        self.nodes_for_expansion = list()
+        self.current_worker_count = len(get_typed_nodes())
+        self.target_worker_count = (
+            self.current_worker_count + self.worker_count
+        )
+        if self.node_type.upper() == 'RHEL':
+            raise UnsupportedPlatformError(
+                f"Platform {self.node_type.upper()} is not supported"
+            )
+
+        if constants.BM_MAX_WORKER_COUNT < self.target_worker_count:
+            raise InSufficientResourceException(
+                "No Sufficient BM present",
+                f"Current Worker count:- {self.current_worker_count}",
+                f"Overall Worker count:- {self.target_worker_count}",
+                f"Total Allowed Worker count:- {constants.BM_MAX_WORKER_COUNT}"
+            )
+
+        nodes_obj = get_typed_nodes()
+        nodes_name = list()
+        for node in nodes_obj:
+            nodes_name.append(node.name)
+        self.mgmt_details = load_auth_config()['ipmi']
+
+        for machine in self.mgmt_details:
+            if self.mgmt_details[machine].get('extra_node'):
+                if machine not in nodes_name:
+                    self.nodes_for_expansion.append(machine)
+
+    def add_node(self):
+        """
+       Add nodes to the current cluster
+        """
+        logger.info(f"Adding Nodes of type {self.node_type}")
+        logger.info(
+            f"Existing worker nodes: {self.current_worker_count}, "
+            f"New nodes to add: {self.worker_count}"
+        )
+        self._pxe_boot_nodes(self.nodes_for_expansion[:self.worker_count])
+        # Adding Ips to DNS record
+        zone_id = self.aws.get_hosted_zone_id(cluster_name=f"{constants.BM_DEFAULT_CLUSTER_NAME}.qe.rh-ocs.com")
+        for node in self.nodes_for_expansion:
+            logger.info(f"Updating *.apps DNS record with {self.mgmt_details[node]['ip']}")
+            self.aws.update_hosted_zone_record(
+                zone_id=zone_id, record_name=f'*.apps.{constants.BM_DEFAULT_CLUSTER_NAME}.qe.rh-ocs.com',
+                data=self.mgmt_details[node]['ip'], type='A', operation_type='Add'
+            )
+        # Gets the existing CSR data
+        existing_csr_data = get_nodes_csr()
+        pre_count_csr = len(existing_csr_data)
+        logger.debug(f"Existing CSR count before adding nodes: {pre_count_csr}")
+        if constants.CSR_BOOTSTRAPPER_NODE in existing_csr_data:
+            nodes_approve_csr_num = pre_count_csr + self.worker_count
+        else:
+            nodes_approve_csr_num = pre_count_csr + self.worker_count + 1
+
+        wait_for_all_nodes_csr_and_approve(
+            timeout=1200, expected_node_num=nodes_approve_csr_num
+        )
+
+    def _pxe_boot_nodes(self, node_names):
+        """
+        Pxe Boot Bare Metal Nodes
+
+        Args:
+            node_names (list): Bare Metal nodes for pxe boot
+
+        """
+        for machine in node_names:
+            secrets = [
+                self.mgmt_details[machine]['mgmt_username'],
+                self.mgmt_details[machine]['mgmt_password']
+            ]
+            cmd = (
+                f"ipmitool -I lanplus -U {self.mgmt_details[machine]['mgmt_username']} "
+                f"-P {self.mgmt_details[machine]['mgmt_password']} "
+                f"-H {self.mgmt_details[machine]['mgmt_console']} chassis bootdev pxe"
+            )
+            run_cmd(cmd=cmd, secrets=secrets)
+            time.sleep(2)
+            # Power On Machine
+            cmd = (
+                f"ipmitool -I lanplus -U {self.mgmt_details[machine]['mgmt_username']} "
+                f"-P {self.mgmt_details[machine]['mgmt_password']} "
+                f"-H {self.mgmt_details[machine]['mgmt_console']} chassis power cycle || "
+                f"ipmitool -I lanplus -U {self.mgmt_details[machine]['mgmt_username']} "
+                f"-P {self.mgmt_details[machine]['mgmt_password']} "
+                f"-H {self.mgmt_details[machine]['mgmt_console']} chassis power on"
+            )
+            run_cmd(cmd=cmd, secrets=secrets)

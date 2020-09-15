@@ -224,3 +224,7 @@ class MemoryNotSufficientException(Exception):
 
 class CPUNotSufficientException(Exception):
     pass
+
+
+class InSufficientResourceException(Exception):
+    pass
