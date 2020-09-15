@@ -1115,16 +1115,14 @@ class AWS(object):
 
         Args:
             zone_id (str): Zone id of DNS record
-            record_name (str): Record Name (
-                eg:- *.apps.ocp-baremetal-auto.qe.rh-ocs.com, api-int.ocp-baremetal-auto.qe.rh-ocs.com
-            )
+            record_name (str): Record Name eg:- api.apps.ocp-baremetal-auto.qe.rh-ocs.com
             data (str): Data to be added for DNS Record
             type (str): DNS record type
             operation_type (str): Operation Type (Allowed Values:- Add, Delete)
             ttl (int): Default set to 60 sec
 
         """
-        if "apps" in record_name:
+        if "*" in record_name:
             trim_record_name = record_name.strip('*.')
         else:
             trim_record_name = record_name
