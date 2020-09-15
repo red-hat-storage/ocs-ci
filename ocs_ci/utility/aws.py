@@ -1106,7 +1106,7 @@ class AWS(object):
         hosted_zones_output = self.route53_client.list_hosted_zones_by_name(
             DNSName=cluster_name
         )
-        full_hosted_zone_id=hosted_zones_output['HostedZones'][0]['Id']
+        full_hosted_zone_id = hosted_zones_output['HostedZones'][0]['Id']
         return full_hosted_zone_id.strip('/hostedzone/')
 
     def update_hosted_zone_record(self, zone_id, record_name, data, type, operation_type, ttl=60):
@@ -1136,12 +1136,12 @@ class AWS(object):
 
         if operation_type == "Add":
             old_resource_record_list.append({
-                    'Value': data
-                })
+                'Value': data
+            })
         elif operation_type == "Delete":
             old_resource_record_list.remove({
-                    'Value': data
-                })
+                'Value': data
+            })
         response = self.route53_client.change_resource_record_sets(
             HostedZoneId=zone_id,
             ChangeBatch={
