@@ -397,7 +397,7 @@ def process_cluster_cli_params(config):
     ocp_installer_version = get_cli_param(config, '--ocp-installer-version')
     if ocp_installer_version:
         ocsci_config.DEPLOYMENT['installer_version'] = ocp_installer_version
-        ocsci_config.RUN['client_verison'] = ocp_installer_version
+        ocsci_config.RUN['client_version'] = ocp_installer_version
     csv_change = get_cli_param(config, '--csv-change')
     if csv_change:
         csv_change = csv_change.split("::")
