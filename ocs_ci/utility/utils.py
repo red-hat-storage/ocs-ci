@@ -2326,7 +2326,7 @@ def mirror_image(image):
             f"oc image mirror --insecure --registry-config"
             f" {authfile_fo.name} {orig_image_full} {mirrored_image}"
         )
-    return mirrored_image
+    return mirrored_image, authfile_fo.name
 
 
 def update_container_with_mirrored_image(job_pod_dict):
