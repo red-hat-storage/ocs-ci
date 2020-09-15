@@ -204,3 +204,7 @@ class CredReqSecretNotFound(Exception):
 
 class RhcosImageNotFound(Exception):
     pass
+
+
+class FipsNotInstalledException(Exception):
+    pass

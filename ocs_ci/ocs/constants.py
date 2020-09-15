@@ -111,6 +111,7 @@ JOB = 'job'
 LOCAL_VOLUME = 'localvolume'
 PROXY = 'Proxy'
 MACHINECONFIGPOOL = "MachineConfigPool"
+VOLUMESNAPSHOTCLASS = "VolumeSnapshotClass"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -198,6 +199,12 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS = (
 DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD = (
     f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rbd'
 )
+
+# Default VolumeSnapshotClass
+DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS = (
+    f'{DEFAULT_CLUSTERNAME}-cephfsplugin-snapclass'
+)
+DEFAULT_VOLUMESNAPSHOTCLASS_RBD = f'{DEFAULT_CLUSTERNAME}-rbdplugin-snapclass'
 
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
@@ -319,18 +326,6 @@ PV_BACKINGSTORE_YAML = os.path.join(
 
 MCG_BUCKETCLASS_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "BucketClass.yaml"
-)
-
-MCGCLI_SERVICEACCOUNT_YAML = os.path.join(
-    TEMPLATE_MCG_DIR, "mcgcli-serviceaccount.yaml"
-)
-
-MCGCLI_SERVICEACCOUNT_CLUSTERROLEBINDING = os.path.join(
-    TEMPLATE_MCG_DIR, "mcgcli-sa-clusterrolebinding.yaml"
-)
-
-MCGCLI_POD = os.path.join(
-    TEMPLATE_MCG_DIR, "mcgcli-pod.yaml"
 )
 
 CSI_RBD_POD_YAML = os.path.join(
@@ -681,6 +676,8 @@ ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
+INFRA_NODE_LABEL = "node-role.kubernetes.io/infra=''"
+NODE_SELECTOR_ANNOTATION = "openshift.io/node-selector="
 TOPOLOGY_ROOK_LABEL = "topology.rook.io/rack"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
 OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
@@ -731,6 +728,7 @@ VSPHERE_NODE_USER = "core"
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
 VSPHERE_SCALEUP_REPO = "https://code.engineering.redhat.com/gerrit/openshift-misc"
+VSPHERE_CLUSTER_LAUNCHER = "https://gitlab.cee.redhat.com/aosqe/cluster-launcher.git"
 VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
 INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
 VM_IFCFG = os.path.join(VSPHERE_DIR, "vm/ifcfg.tmpl")
@@ -751,6 +749,14 @@ SCALEUP_VSPHERE_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "variables.tf")
 SCALEUP_VSPHERE_ROUTE53 = os.path.join(SCALEUP_VSPHERE_DIR, "route53/vsphere-rhel-dns.tf")
 SCALEUP_VSPHERE_ROUTE53_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "route53/variables.tf")
 SCALEUP_VSPHERE_MACHINE_CONF = os.path.join(SCALEUP_VSPHERE_DIR, "machines/vsphere-rhel-machine.tf")
+
+# cluster-launcher
+CLUSTER_LAUNCHER_VSPHERE_DIR = os.path.join(
+    EXTERNAL_DIR,
+    "cluster-launcher/v4-scaleup/ocp4-rhel-scaleup/"
+)
+CLUSTER_LAUNCHER_MACHINE_CONF = "vsphere/machines/vsphere-rhel-machine.tf"
+
 TERRAFORM_VARS = "terraform.tfvars"
 VM_DISK_TYPE = "thin"
 VM_DISK_MODE = "persistent"
@@ -776,6 +782,7 @@ RHEL_POD_PACKAGES = ["openssh-clients", "openshift-ansible", "openshift-clients"
 POD_UPLOADPATH = RHEL_TMP_PATH = "/tmp/"
 YUM_REPOS_PATH = "/etc/yum.repos.d/"
 PEM_PATH = "/etc/pki/ca-trust/source/anchors/"
+FIPS_LOCATION = "/proc/sys/crypto/fips_enabled"
 
 # Upgrade related constants, keeping some space between, so we can add
 # additional order.
@@ -792,12 +799,7 @@ ORDER_AFTER_UPGRADE = 80
 OCS_CSV_PREFIX = 'ocs-operator'
 LOCAL_STORAGE_CSV_PREFIX = 'local-storage-operator'
 LATEST_TAGS = (
-    'latest', 'latest-stable',
-    '4.2-rc', 'latest-4.2', 'latest-stable-4.2',
-    '4.3-rc', 'latest-4.3', 'latest-stable-4.3',
-    '4.4-rc', 'latest-4.4', 'latest-stable-4.4',
-    '4.5-rc', 'latest-4.5', 'latest-stable-4.5',
-    '4.6-rc', 'latest-4.6',
+    'latest', 'latest-stable', '-rc',
 )
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
@@ -813,6 +815,9 @@ SUPPORTED_BROWSERS = (CHROME_BROWSER)
 # Inventory
 INVENTORY_TEMPLATE = "inventory.yaml.j2"
 INVENTORY_FILE = "inventory.yaml"
+
+INVENTORY_TEMPLATE_HAPROXY = "inventory_haproxy.yaml.j2"
+INVENTORY_FILE_HAPROXY = "inventory_haproxy.yaml"
 
 # users
 VM_RHEL_USER = "test"
@@ -973,19 +978,17 @@ AWS_WORKER_LOGICAL_RESOURCE_ID = "Worker0"
 RHEL_WORKERS_CONF = os.path.join(CONF_DIR, 'ocsci/aws_upi_rhel_workers.yaml')
 
 # Users
-MCGCLI_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:mcgcli"
+NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
 
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
-NOOBAA_OPERATOR_MCGCLI_POD_PATH = "/mcg"
 DEFAULT_INGRESS_CRT = "router-ca.crt"
 DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
 SERVICE_CA_CRT = "service-ca.crt"
 SERVICE_CA_CRT_AWSCLI_PATH = f"/cert/{SERVICE_CA_CRT}"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
-MCGCLI_POD_NAME = 'mcgcli-pod'
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [
@@ -1085,6 +1088,7 @@ FILE_PATH = '/tmp/ceph.tar.gz'
 BOOTSTRAP_MODULE = "module.ipam_bootstrap"
 LOAD_BALANCER_MODULE = "module.ipam_lb"
 COMPUTE_MODULE = "module.ipam_compute"
+CONTROL_PLANE = "module.ipam_control_plane"
 
 # proxy location
 HAPROXY_LOCATION = "/etc/haproxy/haproxy.conf"
@@ -1134,6 +1138,9 @@ PXE_FILE = os.path.join(
 )
 coreos_url_prefix = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos"
 BM_DEFAULT_CLUSTER_NAME = "ocp-baremetal-auto"
+BM_STATUS_ABSENT = "ABSENT"
+BM_STATUS_PRESENT = "PRESENT"
+BM_STATUS_RESPONSE_UPDATED = "UPDATED"
 
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = 'https://s3.amazonaws.com'

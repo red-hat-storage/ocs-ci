@@ -1,6 +1,6 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import aws_platform_required, ManageTest, tier1
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     verify_s3_object_integrity
@@ -18,6 +18,9 @@ class TestNamespace(ManageTest):
     MCG_NS_RESULT_DIR = '/result'
     MCG_NS_ORIGINAL_DIR = '/original'
 
+    # Test is skipped for other platforms due to
+    # https://github.com/red-hat-storage/ocs-ci/issues/2774
+    @aws_platform_required
     @pytest.mark.polarion_id("OCS-2255")
     @tier1
     def test_namespace_resource_creation(self, ns_resource_factory):
@@ -27,6 +30,9 @@ class TestNamespace(ManageTest):
         # Create the namespace resource and verify health
         ns_resource_factory()
 
+    # Test is skipped for other platforms due to
+    # https://github.com/red-hat-storage/ocs-ci/issues/2774
+    @aws_platform_required
     @pytest.mark.polarion_id("OCS-2256")
     @tier1
     def test_namespace_bucket_creation(self, ns_resource_factory, bucket_factory):
@@ -40,6 +46,9 @@ class TestNamespace(ManageTest):
         bucket_factory(amount=1, interface='mcg-namespace', write_ns_resource=ns_resource_name, read_ns_resources=[
             ns_resource_name])
 
+    # Test is skipped for other platforms due to
+    # https://github.com/red-hat-storage/ocs-ci/issues/2774
+    @aws_platform_required
     @pytest.mark.polarion_id("OCS-2257")
     @tier1
     def test_write_to_aws_read_from_ns(self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory):
@@ -66,6 +75,9 @@ class TestNamespace(ManageTest):
         # Compare between uploaded files and downloaded files
         self.compare_dirs(awscli_pod, amount=3)
 
+    # Test is skipped for other platforms due to
+    # https://github.com/red-hat-storage/ocs-ci/issues/2774
+    @aws_platform_required
     @pytest.mark.polarion_id("OCS-2258")
     @tier1
     def test_write_to_ns_read_from_aws(self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory):

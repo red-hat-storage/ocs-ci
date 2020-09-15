@@ -23,7 +23,7 @@ class CouchBase(PillowFight):
     """
     CouchBase workload operation
     """
-    WAIT_FOR_TIME = 900
+    WAIT_FOR_TIME = 1800
     admission_parts = [
         constants.COUCHBASE_ADMISSION_SERVICE_ACCOUNT_YAML,
         constants.COUCHBASE_ADMISSION_CLUSTER_ROLE_YAML,

@@ -114,6 +114,7 @@ class Deployment(object):
                     self.deploy_ocp(log_cli_level)
                     self.post_ocp_deploy()
                 except Exception as e:
+                    config.RUN['is_ocp_deployment_failed'] = True
                     logger.error(e)
                     if config.REPORTING['gather_on_deploy_failure']:
                         collect_ocs_logs('deployment', ocs=False)
@@ -200,18 +201,32 @@ class Deployment(object):
                 f"{to_label} or taint: {to_taint}!"
             )
 
+        _ocp = ocp.OCP(kind='node')
         workers_to_label = " ".join(distributed_worker_nodes[:to_label])
         if workers_to_label:
-            _ocp = ocp.OCP(kind='node')
+
             logger.info(
                 f"Label nodes: {workers_to_label} with label: "
                 f"{constants.OPERATOR_NODE_LABEL}"
             )
-            label_cmd = (
-                f"label nodes {workers_to_label} "
-                f"{constants.OPERATOR_NODE_LABEL} --overwrite"
-            )
-            _ocp.exec_oc_cmd(command=label_cmd)
+            label_cmds = [
+                (
+                    f"label nodes {workers_to_label} "
+                    f"{constants.OPERATOR_NODE_LABEL} --overwrite"
+                )
+            ]
+            if config.DEPLOYMENT["infra_nodes"]:
+                logger.info(
+                    f"Label nodes: {workers_to_label} with label: "
+                    f"{constants.INFRA_NODE_LABEL}"
+                )
+                label_cmds.append(
+                    f"label nodes {workers_to_label} "
+                    f"{constants.INFRA_NODE_LABEL} --overwrite"
+                )
+
+            for cmd in label_cmds:
+                _ocp.exec_oc_cmd(command=cmd)
 
         workers_to_taint = " ".join(distributed_worker_nodes[:to_taint])
         if workers_to_taint:
@@ -536,6 +551,12 @@ class Deployment(object):
             cluster_data, cluster_data_yaml.name
         )
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+        if config.DEPLOYMENT["infra_nodes"]:
+            _ocp = ocp.OCP(kind='node')
+            _ocp.exec_oc_cmd(
+                command=f"annotate namespace {defaults.ROOK_CLUSTER_NAMESPACE} "
+                f"{constants.NODE_SELECTOR_ANNOTATION}"
+            )
 
     def deployment_with_ui(self):
         """

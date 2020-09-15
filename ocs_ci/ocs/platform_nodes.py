@@ -32,7 +32,7 @@ from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
     replace_content_in_file,
     get_ocp_version, TimeoutSampler,
-    download_file, delete_file, AZInfo
+    delete_file, AZInfo, download_file_from_git_repo,
 )
 from ocs_ci.ocs.node import wait_for_nodes_status
 
@@ -259,7 +259,7 @@ class VMWareNodes(NodesBase):
         )
         self.vsphere.start_vms(vms)
 
-    def restart_nodes(self, nodes, force=False, timeout=300, wait=True):
+    def restart_nodes(self, nodes, force=True, timeout=300, wait=True):
         """
         Restart vSphere VMs
 
@@ -289,15 +289,9 @@ class VMWareNodes(NodesBase):
             OCP node reaches status Ready.
             """
             nodes_names = [n.name for n in nodes]
-            logger.info(
-                f"Waiting for nodes: {nodes_names} to reach not ready state"
-            )
             wait_for_nodes_status(
                 node_names=nodes_names, status=constants.NODE_NOT_READY,
                 timeout=timeout
-            )
-            logger.info(
-                f"Waiting for nodes: {nodes_names} to reach ready state"
             )
             wait_for_nodes_status(
                 node_names=nodes_names, status=constants.NODE_READY,
@@ -1286,25 +1280,26 @@ class AWSUPINode(AWSNodes):
             path (str): local path to template file
 
         """
-        common_base = 'v3-launch-templates/functionality-testing'
+        common_base = 'functionality-testing'
         ocp_version = get_ocp_version('_')
         relative_template_path = os.path.join(
             f'aos-{ocp_version}',
             'hosts/upi_on_aws-cloudformation-templates'
         )
 
-        template_url = os.path.join(
-            f'{constants.OCP_QE_MISC_REPO}',
-            'plain',
+        path_to_file = os.path.join(
             f'{common_base}',
             f'{relative_template_path}',
             f'{constants.AWS_WORKER_NODE_TEMPLATE}'
         )
-        logger.info(f"Getting template from url {template_url}")
+        logger.info(
+            f"Getting file '{path_to_file}' from "
+            f"git repository {constants.OCP_QE_MISC_REPO}"
+        )
         tmp_file = os.path.join(
             '/tmp', constants.AWS_WORKER_NODE_TEMPLATE
         )
-        download_file(template_url, tmp_file)
+        download_file_from_git_repo(constants.OCP_QE_MISC_REPO, path_to_file, tmp_file)
         return tmp_file
 
     def _prepare_rhel_node_conf(self):

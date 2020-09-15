@@ -233,3 +233,14 @@ def get_ocs_csv():
     log.info(f"Check if OCS operator: {ocs_csv_name} is in Succeeded phase.")
     ocs_csv.wait_for_phase(phase="Succeeded", timeout=600)
     return ocs_csv
+
+
+def check_if_cluster_was_upgraded():
+    """
+    Check whether the OCS cluster went through upgrade
+
+    Returns:
+        bool: True if the OCS cluster went through upgrade, False otherwise
+
+    """
+    return True if 'replaces' in get_ocs_csv().get().get('spec') else False
