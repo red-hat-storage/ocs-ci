@@ -831,3 +831,80 @@ def get_node_az(node):
     """
     labels = node.get().get('metadata', {}).get('labels', {})
     return labels.get('topology.kubernetes.io/zone')
+
+
+def delete_and_create_osd_node_vsphere_upi(
+    osd_node_name, use_existing_node=False
+):
+    """
+    Unschedule, drain and delete osd node, and creating a new osd node.
+    At the end of the function there should be the same number of osd nodes as
+    it was in the beginning, and also ceph health should be OK.
+    This function is for vSphere UPI.
+
+    Args:
+        osd_node_name (str): the name of the osd node
+        use_existing_node (bool): If False, create a new node and label it.
+            If True, use an existing node to replace the deleted node
+            and label it.
+
+    """
+
+    osd_node = get_node_objs(node_names=[osd_node_name])[0]
+    remove_nodes([osd_node])
+
+    log.info(f"name of deleted node = {osd_node_name}")
+
+    if config.ENV_DATA.get('rhel_workers'):
+        node_type = constants.RHEL_OS
+    else:
+        node_type = constants.RHCOS
+
+    if not use_existing_node:
+        log.info("Preparing to create a new node...")
+        add_new_node_and_label_upi(node_type, 1)
+    else:
+        node_not_in_ocs = get_worker_nodes_not_in_ocs()[0]
+        log.info(
+            f"Preparing to replace the node {osd_node_name} "
+            f"with an existing node {node_not_in_ocs.name}"
+        )
+        if node_type == constants.RHEL_OS:
+            set_selinux_permissions(workers=[node_not_in_ocs])
+        label_nodes([node_not_in_ocs])
+
+
+def label_nodes(nodes, label=constants.OPERATOR_NODE_LABEL):
+    """
+    Label nodes
+
+    Args:
+        nodes (list): list of node objects need to label
+        label (str): New label to be assigned for these nodes.
+            Default value is the OCS label
+
+    """
+    node_obj = ocp.OCP(kind='node')
+    for new_node_to_label in nodes:
+        node_obj.add_label(
+            resource_name=new_node_to_label.name,
+            label=label
+        )
+        logging.info(
+            f"Successfully labeled {new_node_to_label.name} "
+            f"with OCS storage label"
+        )
+
+
+def get_worker_nodes_not_in_ocs():
+    """
+    Get the worker nodes that are not ocs labeled.
+
+    Returns:
+          list: list of worker node objects that are not ocs labeled
+
+    """
+    ocs_nodes = get_ocs_nodes()
+    ocs_node_names = [n.name for n in ocs_nodes]
+    worker_nodes = get_typed_nodes(constants.WORKER_MACHINE)
+    return [n for n in worker_nodes if n.name not in ocs_node_names]
