@@ -590,10 +590,10 @@ def create_pvc(
 
 def create_multiple_pvcs(
     sc_name, namespace, number_of_pvc=1, size=None, do_reload=False,
-    access_mode=constants.ACCESS_MODE_RWO
+    access_mode=constants.ACCESS_MODE_RWO, burst=False
 ):
     """
-    Create one or more PVC
+    Create one or more PVC as a bulk or one by one
 
     Args:
         sc_name (str): The name of the storage class to provision the PVCs from
@@ -607,16 +607,54 @@ def create_multiple_pvcs(
     Returns:
          list: List of PVC objects
     """
+    if not burst:
+        if access_mode == 'ReadWriteMany' and 'rbd' in sc_name:
+            volume_mode = 'Block'
+        else:
+            volume_mode = None
+        return [
+            create_pvc(
+                sc_name=sc_name, size=size, namespace=namespace,
+                do_reload=do_reload, access_mode=access_mode, volume_mode=volume_mode
+            ) for _ in range(number_of_pvc)
+        ]
+
+    pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
+    pvc_data['metadata']['namespace'] = namespace
+    pvc_data['spec']['accessModes'] = [access_mode]
+    pvc_data['spec']['storageClassName'] = sc_name
+    if size:
+        pvc_data['spec']['resources']['requests']['storage'] = size
     if access_mode == 'ReadWriteMany' and 'rbd' in sc_name:
-        volume_mode = 'Block'
+        pvc_data['spec']['volumeMode'] = 'Block'
     else:
-        volume_mode = None
-    return [
-        create_pvc(
-            sc_name=sc_name, size=size, namespace=namespace,
-            do_reload=do_reload, access_mode=access_mode, volume_mode=volume_mode
-        ) for _ in range(number_of_pvc)
-    ]
+        pvc_data['spec']['volumeMode'] = None
+
+    # Creating tem directory to hold the files for the PVC creation
+    tmpdir = tempfile.mkdtemp()
+    logger.info('Creating the PVC yaml files for creation in bulk')
+    ocs_objs = []
+    for _ in range(number_of_pvc):
+        name = create_unique_resource_name('test', 'pvc')
+        logger.info(f"Adding PVC with name {name}")
+        pvc_data['metadata']['name'] = name
+        templating.dump_data_to_temp_yaml(pvc_data, f'{tmpdir}/{name}.yaml')
+        ocs_objs.append(pvc.PVC(**pvc_data))
+
+    logger.info('Creating all PVCs as bulk')
+    oc = OCP(kind='pod', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cmd = f"create -f {tmpdir}/"
+    oc.exec_oc_cmd(command=cmd, out_yaml_format=False)
+
+    # Letting the system 1 sec for each PVC to create.
+    # this will prevent any other command from running in the system in this
+    # period of time.
+    logger.info(
+        f"Going to sleep for {number_of_pvc} sec. "
+        "until starting verify that PVCs was created.")
+    time.sleep(number_of_pvc)
+
+    return ocs_objs
 
 
 def verify_block_pool_exists(pool_name):
