@@ -589,11 +589,11 @@ def create_pvc(
 
 
 def create_multiple_pvcs(
-    sc_name, namespace, number_of_pvc=1, size=None,
-    access_mode=constants.ACCESS_MODE_RWO
+    sc_name, namespace, number_of_pvc=1, size=None, do_reload=False,
+    access_mode=constants.ACCESS_MODE_RWO, burst=False
 ):
     """
-    Create one or more PVC
+    Create one or more PVC as a bulk or one by one
 
     Args:
         sc_name (str): The name of the storage class to provision the PVCs from
@@ -607,6 +607,18 @@ def create_multiple_pvcs(
     Returns:
          list: List of PVC objects
     """
+    if not burst:
+        if access_mode == 'ReadWriteMany' and 'rbd' in sc_name:
+            volume_mode = 'Block'
+        else:
+            volume_mode = None
+        return [
+            create_pvc(
+                sc_name=sc_name, size=size, namespace=namespace,
+                do_reload=do_reload, access_mode=access_mode, volume_mode=volume_mode
+            ) for _ in range(number_of_pvc)
+        ]
+
     pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
     pvc_data['metadata']['namespace'] = namespace
     pvc_data['spec']['accessModes'] = [access_mode]
