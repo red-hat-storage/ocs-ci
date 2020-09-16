@@ -1142,3 +1142,20 @@ MCG_NS_AWS_ENDPOINT = 'https://s3.amazonaws.com'
 MCG_NS_RESOURCE = 'ns_resource'
 MCG_NS_BUCKET = 'ns-bucket'
 MCG_NS_AWS_CONNECTION = 'aws_connection'
+
+# Create your own squads.
+# Squads are separated by Python packages in your project so it is important to
+# put the squad name in '.' --> ".squad_name." For example: In case this test
+# fails - tests.e2e.registry.test_pod_from_registry.TestRegistryImage.test_run_pod_local_image
+# the squad is ".registry." as can be seen in the Magenta squad below
+SQUADS = {
+    'Brown': ["/nodes/"],
+    'Green': ["/pv_services/", "/storageclass/"],
+    'Blue': ["/monitoring/"],
+    'Red': ["/mcg/"],
+    'Yellow': ["/cluster_expansion/"],
+    'Purple': ["/test_must_gather", "/upgrade/"],
+    'Magenta': ["/workloads/", "/registry/", "/logging/"],
+    'Grey': ["/performance/"],
+    'Orange': ["/scale/"],
+}

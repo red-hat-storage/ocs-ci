@@ -934,7 +934,119 @@ def parse_html_for_email(soup):
     main_header.string.replace_with('OCS-CI RESULTS')
 
 
-def email_reports():
+def add_squad_analysis_to_email(session, soup):
+    """
+
+    Args:
+        session (obj): Pytest session object
+        soup (obj): BeautifulSoup object
+
+    """
+    failed = {}
+    skipped = {}
+    # sort out failed and skipped test cases to failed and skipped dicts
+    for result in session.results.values():
+        if result.failed or result.skipped:
+            for squad, res in constants.SQUADS.items():
+                log.info(f'{squad}: {res}')
+                for item in res:
+                    if item in result.nodeid:
+                        if result.failed:
+                            if squad not in failed:
+                                failed[squad] = []
+                            failed[squad].append(f"{result.nodeid}")
+
+                        if result.skipped:
+                            if squad not in skipped:
+                                skipped[squad] = []
+                            skipped_message = result.longrepr[2]
+                            skipped[squad].append((result.nodeid, skipped_message))
+
+    # add CSS for the Squad Analysis report
+    style = soup.find('style')
+    # use colors for squad names from squad names
+    style.string += "\n".join(
+        [
+            f".squad-{color.lower()} {{\n    color: {color.lower()};\n}}"
+            for color in constants.SQUADS
+        ]
+    )
+    # few additional styles
+    style.string += """
+    .squad-analysis {
+        color: black;
+        font-family: monospace;
+        background-color: #eee;
+        padding: 5px;
+    }
+    .squad-analysis h2 {
+        margin: 0px;
+    }
+    .squad-analysis h3 {
+        margin: 0px;
+        margin-top: 10px;
+    }
+    .squad-analysis h4 {
+        margin: 0px;
+    }
+    .squad-analysis ul {
+        margin: 0px;
+    }
+    .squad-analysis ul li em {
+        margin-left: 1em;
+    }
+    """
+    # prepare place for the Squad Analysis in the email
+    squad_analysis_div = soup.new_tag("div")
+    squad_analysis_div["class"] = "squad-analysis"
+    main_header = soup.find('h1')
+    main_header.insert_after(squad_analysis_div)
+    failed_h2_tag = soup.new_tag("h2")
+    failed_h2_tag.string = "Squad Analysis - please analyze:"
+    squad_analysis_div.append(failed_h2_tag)
+    # print failed testcases peer squad
+    failed_div_tag = soup.new_tag("div")
+    squad_analysis_div.append(failed_div_tag)
+    failed_h3_tag = soup.new_tag("h3")
+    failed_h3_tag.string = "Failures:"
+    failed_div_tag.append(failed_h3_tag)
+    for squad in failed:
+        failed_h4_tag = soup.new_tag("h4")
+        failed_h4_tag.string = f"{squad} squad"
+        failed_h4_tag['class'] = f"squad-{squad.lower()}"
+        failed_div_tag.append(failed_h4_tag)
+        failed_ul_tag = soup.new_tag("ul")
+        failed_div_tag.append(failed_ul_tag)
+        for test in failed[squad]:
+            failed_li_tag = soup.new_tag("li")
+            failed_li_tag.string = test
+            failed_ul_tag.append(failed_li_tag)
+    # print skipped testcases with reason peer squad
+    skips_div_tag = soup.new_tag("div")
+    squad_analysis_div.append(skips_div_tag)
+    skips_h3_tag = soup.new_tag("h3")
+    skips_h3_tag.string = "Skips:"
+    skips_div_tag.append(skips_h3_tag)
+    for squad in skipped:
+        skips_h4_tag = soup.new_tag("h4")
+        skips_h4_tag.string = f"{squad} squad"
+        skips_h4_tag['class'] = f"squad-{squad.lower()}"
+        skips_div_tag.append(skips_h4_tag)
+        skips_ul_tag = soup.new_tag("ul")
+        skips_div_tag.append(skips_ul_tag)
+        for test in skipped[squad]:
+            skips_li_tag = soup.new_tag("li")
+            skips_test_span_tag = soup.new_tag("span")
+            skips_test_span_tag.string = test[0]
+            skips_li_tag.append(skips_test_span_tag)
+            skips_li_tag.append(soup.new_tag("br"))
+            skips_reason_em_tag = soup.new_tag("em")
+            skips_reason_em_tag.string = f"Reason: {test[1][8:]}"
+            skips_li_tag.append(skips_reason_em_tag)
+            skips_ul_tag.append(skips_li_tag)
+
+
+def email_reports(session):
     """
     Email results of test run
 
@@ -960,6 +1072,8 @@ def email_reports():
     soup = BeautifulSoup(html_data, "html.parser")
 
     parse_html_for_email(soup)
+    if config.RUN['cli_params'].get('squad_analysis'):
+        add_squad_analysis_to_email(session, soup)
     part1 = MIMEText(soup, 'html')
     msg.attach(part1)
     try:
