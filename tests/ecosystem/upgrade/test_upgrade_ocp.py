@@ -77,7 +77,6 @@ class TestUpgradeOCP(ManageTest):
                     logger.info(f"{ocp_operator} upgrade will not be verified")
                     continue
                 # ############ End of Workaround ###############
-                logger.info(f"Checking upgrade status of {ocp_operator}:")
                 ver = ocp.get_cluster_operator_version(ocp_operator)
                 logger.info(f"current {ocp_operator} version: {ver}")
                 for sampler in TimeoutSampler(
@@ -87,12 +86,11 @@ class TestUpgradeOCP(ManageTest):
                     target_version=target_image,
                     cluster_operator=ocp_operator
                 ):
-                    logger.info(
-                        f"{ocp_operator} upgrade "
-                        f"{'completed!' if sampler else 'did not completed yet!'}"
-                    )
                     if sampler:
+                        logger.info(f"{ocp_operator} upgrade completed!")
                         break
+                    else:
+                        logger.info(f"{ocp_operator} upgrade did not completed yet!")
 
             # post upgrade validation: check cluster operator status
             cluster_operators = ocp.get_all_cluster_operators()
@@ -104,12 +102,10 @@ class TestUpgradeOCP(ManageTest):
                     func=ocp.verify_cluster_operator_status,
                     cluster_operator=ocp_operator
                 ):
-                    logger.info(
-                        f"{ocp_operator} status is  "
-                        f"{'valid' if sampler else 'status is not valid'}"
-                    )
                     if sampler:
                         break
+                    else:
+                        logger.info(f"{ocp_operator} status is not valid")
             # Post upgrade validation: check cluster version status
             logger.info("Checking clusterversion status")
             for sampler in TimeoutSampler(
