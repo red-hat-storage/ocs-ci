@@ -1192,11 +1192,12 @@ def get_provision_time(interface, pvc_name, status='start'):
     logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
 
     logs = logs.split("\n")
-    # Extract the starting time for the PVC provisioning
-    end = [
-        i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)
-    ]
-    end = end[0].split(' ')[1]
+    # Extract the starting time for the one PVC provisioning
+    if isinstance(pvc_name, str):
+        end = [
+            i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)
+        ]
+        end = end[0].split(' ')[1]
     return datetime.datetime.strptime(end, format)
 
 
