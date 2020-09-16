@@ -1869,14 +1869,11 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
     }
     created_bucket_classes = []
 
-    def _create_bucket_class(
-        bucket_class_dict
-    ):
+    def _create_bucket_class(bucket_class_dict):
         """
         Creates and deletes all bucket classes that were created as part of the test
 
         Args:
-
             bucket_class_dict (dict): Dictionary containing the description of the bucket class.
                 possible keys and values are:
                 - interface (str): The interface to use for creation of buckets.

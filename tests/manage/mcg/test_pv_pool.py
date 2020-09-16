@@ -1,8 +1,7 @@
 import logging
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.bucket_utils import craft_s3_command, wait_for_pv_backingstore, \
-    check_pv_backingstore_status, s3_get_object, s3_delete_object
+from ocs_ci.ocs.bucket_utils import wait_for_pv_backingstore, check_pv_backingstore_status
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 
@@ -36,9 +35,10 @@ class TestPvPool:
                     mcg_obj_session
                 )
             except CommandFailed:
-                assert not check_pv_backingstore_status(bucketclass.backingstores[0],
-                                                        config.ENV_DATA['cluster_namespace'],
-                                                        '`NO_CAPACITY`'), 'Failed to fill the bucket'
+                assert not check_pv_backingstore_status(
+                    bucketclass.backingstores[0], config.ENV_DATA['cluster_namespace'],
+                    '`NO_CAPACITY`'
+                ), 'Failed to fill the bucket'
             awscli_pod_session.exec_cmd_on_pod(
                 'rm -f /tmp/testfile'
             )
@@ -67,11 +67,10 @@ class TestPvPool:
                     mcg_obj_session
                 )
             except CommandFailed:
-                assert not \
-                    check_pv_backingstore_status(bucketclass.backingstores[0],
-                                                 config.ENV_DATA['cluster_namespace'],
-                                                 '`NO_CAPACITY`'), \
-                    'Failed to re-upload the removed file file'
+                assert not check_pv_backingstore_status(
+                        bucketclass.backingstores[0], config.ENV_DATA['cluster_namespace'],
+                        '`NO_CAPACITY`'
+                    ), 'Failed to re-upload the removed file file'
 
     def test_pv_scale_out(self, backingstore_factory):
         pv_backingstore = backingstore_factory(
@@ -90,6 +89,7 @@ class TestPvPool:
 
         logger.info('Check if PV Pool scale out was successful')
         backingstore_dict = edit_pv_backingstore.get(pv_backingstore.name)
-        assert backingstore_dict['spec']['pvPool']['numVolumes'] == pv_backingstore.vol_num, \
+        assert backingstore_dict['spec']['pvPool']['numVolumes'] == pv_backingstore.vol_num, (
             'Scale out PV Pool failed. '
+        )
         logger.info('Scale out was successful')

@@ -378,7 +378,7 @@ def check_pv_backingstore_status(backingstore_name, namespace=None, desired_stat
     Args:
         backingstore_name (str): backingstore name
         namespace (str): backing store's namespace
-        desired_status (str): desired state for the backing store, if non is given then desired
+        desired_status (str): desired state for the backing store, if None is given then desired
         is the Healthy status
 
     Returns:
