@@ -1166,6 +1166,40 @@ def get_start_creation_time(interface, pvc_name):
     return datetime.datetime.strptime(start, format)
 
 
+def get_provision_time(interface, pvc_name, status='start'):
+    """
+    Get the starting/ending creation time of a PVC based on provisioner logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pvc_name (str / list): Name of the PVC(s) for creation time
+        status (str): the status that we want to get - Start / End
+
+    Returns:
+        datetime object: Time of PVC(s) creation
+
+    """
+    # Define the status that need to retrieve
+    operation = 'started'
+    if status.lower == 'end':
+        operation = 'succeeded'
+
+    format = '%H:%M:%S.%f'
+    # Get the correct provisioner pod based on the interface
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    # get the logs from the csi-provisioner containers
+    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
+    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+
+    logs = logs.split("\n")
+    # Extract the starting time for the PVC provisioning
+    end = [
+        i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)
+    ]
+    end = end[0].split(' ')[1]
+    return datetime.datetime.strptime(end, format)
+
+
 def get_end_creation_time(interface, pvc_name):
     """
     Get the ending creation time of a PVC based on provisioner logs
