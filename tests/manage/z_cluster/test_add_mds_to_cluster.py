@@ -7,7 +7,7 @@ import pytest
 
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.defaults import ROOK_CLUSTER_NAMESPACE
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.utils import TimeoutSampler
@@ -71,7 +71,8 @@ def get_mds_active_count():
     return new_active_count, pods
 
 
-@tier1
+# @tier1
+# Test case is disabled, as per requirement not to support this scenario
 class TestCephFilesystemCreation(ManageTest):
     """
     Testing creation of Ceph FileSystem
