@@ -3,22 +3,30 @@ import logging
 import textwrap
 import yaml
 
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
     config_to_string,
+    get_system_architecture,
     update_container_with_mirrored_image
 )
 
 log = logging.getLogger(__name__)
 
 
-def get_mcg_conf(mcg_obj, workload_bucket):
+def get_mcg_conf(mcg_obj, workload_bucket, custom_options=None):
     """
     Basic fio configuration for upgrade utilization for NooBaa S3 bucket.
 
     Args:
         mcg_obj (obj): MCG object, it can be found among fixtures
         workload_bucket (obj): MCG bucket
+        custom_options (dict): Dictionary of lists containing tuples with
+            additional configuration for fio in format:
+            {'section': [('option', 'value'),...],...}
+            e.g.
+            {'global':[('name','bucketname')],'create':[('time_based','1'),('runtime','48h')]}
+            Those values can be added to the config or rewrite already existing
+            values
 
     Returns:
         str: updated fio configuration
@@ -44,6 +52,13 @@ def get_mcg_conf(mcg_obj, workload_bucket):
     config.set('global', 'filename', f"/{workload_bucket[0].name}/object")
     config.set('create', 'time_based', '1')
     config.set('create', 'runtime', '24h')
+
+    # add or overwrite custom values
+    if custom_options:
+        for section in custom_options:
+            for configuration in custom_options[section]:
+                config.set(section, configuration[0], configuration[1])
+
     return config_to_string(config)
 
 
@@ -102,13 +117,7 @@ def get_job_dict():
         dict: YAML data for a job object
 
     """
-    node_obj = ocp.OCP(kind=constants.NODE)
-
-    log.info('Checking architecture of system')
-    node = node_obj.get(
-        selector=constants.WORKER_LABEL
-    ).get('items')[0]['metadata']['name']
-    arch = node_obj.exec_oc_debug_cmd(node, ['uname -m'])
+    arch = get_system_architecture()
     if arch.startswith('x86'):
         image = 'quay.io/fbalak/fio-fedora:latest'
     else:

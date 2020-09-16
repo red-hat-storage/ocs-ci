@@ -17,6 +17,7 @@ from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.cluster import (
     get_osd_pods_memory_sum, get_percent_used_capacity
 )
+from ocs_ci.framework import config
 
 
 logger = logging.getLogger(__name__)
@@ -71,7 +72,11 @@ class ClusterLoad:
         self.previous_iops = None
         self.current_iops = None
         self.rate = None
-        self.pvc_size = int(get_osd_pods_memory_sum() * 0.5)
+        self.pvc_size = None
+        if not config.DEPLOYMENT['external_mode']:
+            self.pvc_size = int(get_osd_pods_memory_sum() * 0.5)
+        else:
+            self.pvc_size = 10
         self.sleep_time = 45
         self.target_pods_number = None
         if project_factory:
@@ -408,13 +413,14 @@ class ClusterLoad:
             logger.info(wrap_msg(msg))
             self.increase_load(rate=self.rate, wait=False)
 
-    def pause_load(self):
+    def reduce_load(self, pause=True):
         """
         Pause the cluster load
 
         """
-        logger.info(wrap_msg("Pausing the cluster load"))
-        while self.dc_objs:
+        pods_to_keep = 0 if pause else int(len(self.dc_objs) / 2)
+        logger.info(wrap_msg(f"{'Pausing' if pods_to_keep == 0 else 'Reducing'} the cluster load"))
+        while len(self.dc_objs) > pods_to_keep:
             self.decrease_load(wait=False)
 
     def resume_load(self):

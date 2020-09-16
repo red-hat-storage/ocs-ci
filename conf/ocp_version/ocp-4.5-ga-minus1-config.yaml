@@ -1,0 +1,14 @@
+---
+# Config file for OCP GA 4.5 stable channel minus 1 version
+
+RUN:
+  client_version: '4.5-ga'
+
+DEPLOYMENT:
+  ocp_url_template: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{version}/{file_name}-{os_type}-{version}.tar.gz"
+  installer_version: "4.5-ga"
+  terraform_version: "0.12.26"
+  ocp_channel: "stable"
+  ocp_version_index: -2
+ENV_DATA:
+  vm_template: 'rhcos-4.5.6-x86_64-vmware.x86_64'

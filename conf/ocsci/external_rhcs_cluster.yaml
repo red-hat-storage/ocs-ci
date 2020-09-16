@@ -1,6 +1,8 @@
 DEPLOYMENT:
   external_mode: True
   force_download_client: True
+  # WA for issue: https://github.com/red-hat-storage/ocs-ci/issues/2861
+  min_noobaa_endpoints: 1
 
 ENV_DATA:
   storage_cluster_name: 'ocs-external-storagecluster'

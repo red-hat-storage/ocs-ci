@@ -7,8 +7,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version, ManageTest, tier1
 )
 from ocs_ci.ocs.resources import pod, pvc
-from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.utility import templating
 from tests import helpers
 
 log = logging.getLogger(__name__)
@@ -20,7 +18,10 @@ log = logging.getLogger(__name__)
     argnames=["interface"],
     argvalues=[
         pytest.param(
-            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("")
+            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id('OCS-251')
+        ),
+        pytest.param(
+            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id('OCS-251')
         )
     ]
 )
@@ -49,17 +50,6 @@ class TestPvcSnapshot(ManageTest):
             pvc=self.pvc_obj,
             status=constants.STATUS_RUNNING
         )
-        # Create snapshot class object
-        snap_class_yaml = constants.CSI_RBD_SNAPSHOTCLASS_YAML
-        log.info("Creating a snapshot storage class")
-        self.snapshot_sc_data = templating.load_yaml(snap_class_yaml)
-        self.snapshot_sc_data['metadata']['name'] = helpers.create_unique_resource_name(
-            'test', 'csi-snapclass'
-        )
-        self.snapshot_sc_obj = OCS(**self.snapshot_sc_data)
-        assert self.snapshot_sc_obj.create()
-        log.info(f"Snapshot class: {self.snapshot_sc_obj.name}"
-                 " created successfully")
 
     def test_pvc_snapshot(self, interface, teardown_factory):
         """
@@ -106,6 +96,9 @@ class TestPvcSnapshot(ManageTest):
         orig_md5_sum = pod.cal_md5sum(self.pod_obj, file_name)
         # Take a snapshot
         snap_yaml = constants.CSI_RBD_SNAPSHOT_YAML
+        if interface == constants.CEPHFILESYSTEM:
+            snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
+
         snap_name = helpers.create_unique_resource_name(
             'test', 'snapshot'
         )
@@ -113,7 +106,7 @@ class TestPvcSnapshot(ManageTest):
             self.pvc_obj.name,
             snap_yaml,
             snap_name,
-            self.snapshot_sc_obj.name,
+            helpers.default_volumesnapshotclass(interface).name,
         )
         snap_obj.ocp.wait_for_resource(
             condition='true', resource_name=snap_obj.name,
@@ -132,10 +125,15 @@ class TestPvcSnapshot(ManageTest):
         restore_pvc_name = helpers.create_unique_resource_name(
             'test', 'restore-pvc'
         )
+        restore_pvc_yaml = constants.CSI_RBD_PVC_RESTORE_YAML
+        if interface == constants.CEPHFILESYSTEM:
+            restore_pvc_yaml = constants.CSI_CEPHFS_PVC_RESTORE_YAML
+
         restore_pvc_obj = pvc.create_restore_pvc(
             sc_name=sc_name, snap_name=snap_obj.name,
             namespace=snap_obj.namespace, size=pvc_size,
-            pvc_name=restore_pvc_name
+            pvc_name=restore_pvc_name,
+            restore_pvc_yaml=restore_pvc_yaml
         )
         helpers.wait_for_resource_state(
             restore_pvc_obj,

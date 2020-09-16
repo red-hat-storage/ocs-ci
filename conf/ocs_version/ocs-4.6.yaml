@@ -1,7 +1,7 @@
 ---
 DEPLOYMENT:
-  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-4.6"
-  default_latest_tag: 'latest-4.6'
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-stable-4.6"
+  default_latest_tag: 'latest-stable-4.6'
   ocs_csv_channel: "stable-4.6"
   default_ocp_version: '4.6'
 ENV_DATA:

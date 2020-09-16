@@ -114,6 +114,7 @@ class Deployment(object):
                     self.deploy_ocp(log_cli_level)
                     self.post_ocp_deploy()
                 except Exception as e:
+                    config.RUN['is_ocp_deployment_failed'] = True
                     logger.error(e)
                     if config.REPORTING['gather_on_deploy_failure']:
                         collect_ocs_logs('deployment', ocs=False)
@@ -200,18 +201,32 @@ class Deployment(object):
                 f"{to_label} or taint: {to_taint}!"
             )
 
+        _ocp = ocp.OCP(kind='node')
         workers_to_label = " ".join(distributed_worker_nodes[:to_label])
         if workers_to_label:
-            _ocp = ocp.OCP(kind='node')
+
             logger.info(
                 f"Label nodes: {workers_to_label} with label: "
                 f"{constants.OPERATOR_NODE_LABEL}"
             )
-            label_cmd = (
-                f"label nodes {workers_to_label} "
-                f"{constants.OPERATOR_NODE_LABEL} --overwrite"
-            )
-            _ocp.exec_oc_cmd(command=label_cmd)
+            label_cmds = [
+                (
+                    f"label nodes {workers_to_label} "
+                    f"{constants.OPERATOR_NODE_LABEL} --overwrite"
+                )
+            ]
+            if config.DEPLOYMENT["infra_nodes"]:
+                logger.info(
+                    f"Label nodes: {workers_to_label} with label: "
+                    f"{constants.INFRA_NODE_LABEL}"
+                )
+                label_cmds.append(
+                    f"label nodes {workers_to_label} "
+                    f"{constants.INFRA_NODE_LABEL} --overwrite"
+                )
+
+            for cmd in label_cmds:
+                _ocp.exec_oc_cmd(command=cmd)
 
         workers_to_taint = " ".join(distributed_worker_nodes[:to_taint])
         if workers_to_taint:
@@ -491,6 +506,12 @@ class Deployment(object):
             cluster_data, cluster_data_yaml.name
         )
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+        if config.DEPLOYMENT["infra_nodes"]:
+            _ocp = ocp.OCP(kind='node')
+            _ocp.exec_oc_cmd(
+                command=f"annotate namespace {defaults.ROOK_CLUSTER_NAMESPACE} "
+                f"{constants.NODE_SELECTOR_ANNOTATION}"
+            )
 
     def deployment_with_ui(self):
         """
@@ -721,6 +742,8 @@ class Deployment(object):
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
+
+        # Modify Noobaa endpoint auto scale values according to the cluster specs
         if check_nodes_specs(min_cpu=constants.MIN_NODE_CPU, min_memory=constants.MIN_NODE_MEMORY):
             logger.info(
                 "The cluster specs meet the minimum requirements and "
@@ -731,10 +754,14 @@ class Deployment(object):
             change_noobaa_endpoints_count(min_nb_eps=min_nb_eps, max_nb_eps=max_nb_eps)
         else:
             logger.warning(
-                "The cluster specs do not meet the minimum requirements"
-                " and therefore, NooBaa auto scale will remain disabled"
+                "The cluster specs do not meet the minimum requirements and "
+                "therefore, NooBaa auto scale will remain with its default values"
             )
-            change_noobaa_endpoints_count(min_nb_eps=1, max_nb_eps=1)
+            min_eps = 1
+            max_eps = 1 if float(config.ENV_DATA['ocs_version']) < 4.6 else 2
+            logger.info(
+                f"The Noobaa endpoint auto scale values: min: {min_eps}, max: {max_eps}"
+            )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """

@@ -228,6 +228,9 @@ def create_instance_in_clusterlogging():
     nodes_in_cluster = len(get_all_nodes())
     inst_data = templating.load_yaml(constants.CL_INSTANCE_YAML)
     es_node_count = inst_data['spec']['logStore']['elasticsearch']['nodeCount']
+    if helpers.storagecluster_independent_check():
+        inst_data['spec']['logStore']['elasticsearch']['storage'][
+            'storageClassName'] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
     helpers.create_resource(wait=False, **inst_data)
     oc = ocp.OCP('v1', 'ClusterLogging', 'openshift-logging')
     logging_instance = oc.get(resource_name='instance', out_yaml_format='True')

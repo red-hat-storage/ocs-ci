@@ -2,9 +2,9 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
-from ocs_ci.utility.utils import TimeoutSampler
 from tests.disruption_helpers import Disruptions
-from ocs_ci.utility import utils
+from ocs_ci.ocs import flowtest
+from tests.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ class TestCouchBasePodRespin(E2ETest):
         self.cb = couchbase_factory_fixture(
             replicas=3, run_in_bg=True, skip_analyze=True
         )
+        self.sanity_helpers = Sanity()
 
     @pytest.mark.parametrize(
         argnames=["pod_name"],
@@ -50,11 +51,7 @@ class TestCouchBasePodRespin(E2ETest):
             disruption.set_resource(resource=f'{pod_name}')
             disruption.delete_resource()
 
-        for sample in TimeoutSampler(300, 5, self.cb.result.done):
-            if sample:
-                break
-            else:
-                logging.info(
-                    "#### ....Waiting for couchbase threads to complete..."
-                )
-        utils.ceph_health_check()
+        bg_handler = flowtest.BackgroundOps()
+        bg_ops = [self.cb.result]
+        bg_handler.wait_for_bg_operations(bg_ops, timeout=3600)
+        self.sanity_helpers.health_check()

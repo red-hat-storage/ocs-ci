@@ -15,7 +15,7 @@ import shutil
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
-    get_ocp_version, clone_repo, run_cmd
+    get_ocp_version, clone_repo, run_cmd, expose_ocp_version
 )
 from ocs_ci.ocs import exceptions
 
@@ -88,7 +88,27 @@ class FlexyBase(object):
             self.clone_and_unlock_ocs_private_conf()
             config.FLEXY['VARIABLES_LOCATION'] = self.template_file
         config.FLEXY['INSTANCE_NAME_PREFIX'] = self.cluster_name
+        config.FLEXY['LAUNCHER_VARS'].update(
+            self.get_installer_payload()
+        )
         self.merge_flexy_env()
+
+    def get_installer_payload(self, version=None):
+        """
+        A proper installer payload url required for flexy
+        based on DEPLOYMENT['installer_version'].
+        If 'nigtly' is present then we will use registry.svc to get latest
+        nightly else if '-ga' is present then we will look for
+        ENV_DATA['installer_payload_image']
+
+        """
+        payload_img = {"installer_payload_image": None}
+        vers = version or config.DEPLOYMENT['installer_version']
+        installer_version = expose_ocp_version(vers)
+        payload_img['installer_payload_image'] = (
+            ":".join([constants.REGISTRY_SVC, installer_version])
+        )
+        return payload_img
 
     def run_container(self, cmd_string):
         """

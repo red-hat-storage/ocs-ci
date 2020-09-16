@@ -12,72 +12,13 @@ from ocs_ci.ocs.bucket_utils import (
     retrieve_test_objects_to_pod, sync_object_directory,
     verify_s3_object_integrity
 )
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.ocs.resources import pod
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.mcg_workload import wait_for_active_pods
 
 logger = logging.getLogger(__name__)
 
 LOCAL_TESTOBJS_DIR_PATH = '/aws/original'
 LOCAL_TEMP_PATH = '/aws/temp'
 DOWNLOADED_OBJS = []
-
-
-# TODO: move this to ocs_ci/ocs/resources/job.py when the file is created
-def wait_for_active_pods(job, desired_count, timeout=3):
-    """
-    Wait for job to load desired number of active pods in time specified
-    in timeout.
-
-    Args:
-        job (obj): OCS job object
-        desired_count (str): Number of desired active pods for provided job
-        timeout (int): Number of seconds to wait for the job to get into state
-
-    Returns:
-        bool: If job has desired number of active pods
-
-    """
-    job_name = job.name
-    logger.info(f"Checking number of active pods for job {job_name}")
-
-    def _retrieve_job_state():
-        job_obj = job.ocp.get(resource_name=job_name, out_yaml_format=True)
-        return job_obj['status']['active']
-
-    try:
-        for state in TimeoutSampler(
-            timeout=timeout,
-            sleep=3,
-            func=_retrieve_job_state
-        ):
-            if state == desired_count:
-                return True
-            else:
-                logger.debug(
-                    f"Number of active pods for job {job_name}: {state}"
-                )
-    except TimeoutExpiredError:
-        logger.error(
-            f"Job {job_name} doesn't have correct number of active pods ({desired_count})"
-        )
-        job_pods = pod.get_pods_having_label(
-            f"job-name={job_name}",
-            job.namespace
-        )
-        for job_pod in job_pods:
-            logger.info(
-                f"Description of job pod {job_pod['metadata']['name']}: {job_pod}"
-            )
-            pod_logs = pod.get_pod_logs(
-                job_pod['metadata']['name'],
-                namespace=job_pod['metadata']['namespace']
-            )
-            logger.info(
-                f"Logs from job pod {job_pod['metadata']['name']}: {pod_logs}"
-            )
-
-        return False
 
 
 @skipif_aws_creds_are_missing
@@ -95,9 +36,9 @@ def test_fill_bucket(
 
     (
         bucket,
-        backingstore1,
-        backingstore2
+        created_backingstores
     ) = multiregion_mirror_setup_session
+
     mcg_bucket_path = f's3://{bucket.name}'
 
     # Download test objects from the public bucket
@@ -158,9 +99,10 @@ def test_noobaa_postupgrade(
 
     (
         bucket,
-        backingstore1,
-        backingstore2
+        created_backingstores
     ) = multiregion_mirror_setup_session
+    backingstore1 = created_backingstores[0]
+    backingstore2 = created_backingstores[1]
     mcg_bucket_path = f's3://{bucket.name}'
 
     # Checksum is compared between original and result object

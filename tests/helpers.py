@@ -362,7 +362,9 @@ def default_ceph_block_pool():
     Returns:
         default CephBlockPool
     """
-    return constants.DEFAULT_BLOCKPOOL
+    sc_obj = default_storage_class(constants.CEPHBLOCKPOOL)
+    cbp_name = sc_obj.get().get('parameters').get('pool')
+    return cbp_name if cbp_name else constants.DEFAULT_BLOCKPOOL
 
 
 def create_ceph_block_pool(pool_name=None, failure_domain=None, verify=True):
@@ -588,10 +590,10 @@ def create_pvc(
 
 def create_multiple_pvcs(
     sc_name, namespace, number_of_pvc=1, size=None, do_reload=False,
-    access_mode=constants.ACCESS_MODE_RWO
+    access_mode=constants.ACCESS_MODE_RWO, burst=False
 ):
     """
-    Create one or more PVC
+    Create one or more PVC as a bulk or one by one
 
     Args:
         sc_name (str): The name of the storage class to provision the PVCs from
@@ -605,16 +607,54 @@ def create_multiple_pvcs(
     Returns:
          list: List of PVC objects
     """
+    if not burst:
+        if access_mode == 'ReadWriteMany' and 'rbd' in sc_name:
+            volume_mode = 'Block'
+        else:
+            volume_mode = None
+        return [
+            create_pvc(
+                sc_name=sc_name, size=size, namespace=namespace,
+                do_reload=do_reload, access_mode=access_mode, volume_mode=volume_mode
+            ) for _ in range(number_of_pvc)
+        ]
+
+    pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
+    pvc_data['metadata']['namespace'] = namespace
+    pvc_data['spec']['accessModes'] = [access_mode]
+    pvc_data['spec']['storageClassName'] = sc_name
+    if size:
+        pvc_data['spec']['resources']['requests']['storage'] = size
     if access_mode == 'ReadWriteMany' and 'rbd' in sc_name:
-        volume_mode = 'Block'
+        pvc_data['spec']['volumeMode'] = 'Block'
     else:
-        volume_mode = None
-    return [
-        create_pvc(
-            sc_name=sc_name, size=size, namespace=namespace,
-            do_reload=do_reload, access_mode=access_mode, volume_mode=volume_mode
-        ) for _ in range(number_of_pvc)
-    ]
+        pvc_data['spec']['volumeMode'] = None
+
+    # Creating tem directory to hold the files for the PVC creation
+    tmpdir = tempfile.mkdtemp()
+    logger.info('Creating the PVC yaml files for creation in bulk')
+    ocs_objs = []
+    for _ in range(number_of_pvc):
+        name = create_unique_resource_name('test', 'pvc')
+        logger.info(f"Adding PVC with name {name}")
+        pvc_data['metadata']['name'] = name
+        templating.dump_data_to_temp_yaml(pvc_data, f'{tmpdir}/{name}.yaml')
+        ocs_objs.append(pvc.PVC(**pvc_data))
+
+    logger.info('Creating all PVCs as bulk')
+    oc = OCP(kind='pod', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cmd = f"create -f {tmpdir}/"
+    oc.exec_oc_cmd(command=cmd, out_yaml_format=False)
+
+    # Letting the system 1 sec for each PVC to create.
+    # this will prevent any other command from running in the system in this
+    # period of time.
+    logger.info(
+        f"Going to sleep for {number_of_pvc} sec. "
+        "until starting verify that PVCs was created.")
+    time.sleep(number_of_pvc)
+
+    return ocs_objs
 
 
 def verify_block_pool_exists(pool_name):
@@ -796,12 +836,9 @@ def get_cephfs_name():
     Returns:
         str: Name of CFS
     """
-    cfs_obj = ocp.OCP(
-        kind=constants.CEPHFILESYSTEM,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
-    )
-    result = cfs_obj.get()
-    return result['items'][0].get('metadata').get('name')
+    ct_pod = pod.get_ceph_tools_pod()
+    result = ct_pod.exec_ceph_cmd('ceph fs ls')
+    return result[0]['name']
 
 
 def pull_images(image_name):
@@ -1447,7 +1484,7 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
             f"subvolume 'csi-vol-{image_uuid}' does not exist"
         ]
         cmd = (
-            f"ceph fs subvolume getpath {defaults.CEPHFILESYSTEM_NAME}"
+            f"ceph fs subvolume getpath {get_cephfs_name()}"
             f" csi-vol-{image_uuid} csi"
         )
 
@@ -2432,3 +2469,25 @@ def get_cluster_proxies():
     logger.info("Using https_proxy: '%s'", https_proxy)
     logger.info("Using no_proxy: '%s'", no_proxy)
     return http_proxy, https_proxy, no_proxy
+
+
+def default_volumesnapshotclass(interface_type):
+    """
+    Return default VolumeSnapshotClass based on interface_type
+
+    Args:
+        interface_type (str): The type of the interface
+            (e.g. CephBlockPool, CephFileSystem)
+
+    Returns:
+        OCS: VolumeSnapshotClass Instance
+    """
+    if interface_type == constants.CEPHBLOCKPOOL:
+        resource_name = constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+    elif interface_type == constants.CEPHFILESYSTEM:
+        resource_name = constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+    base_snapshot_class = OCP(
+        kind=constants.VOLUMESNAPSHOTCLASS,
+        resource_name=resource_name
+    )
+    return OCS(**base_snapshot_class.data)

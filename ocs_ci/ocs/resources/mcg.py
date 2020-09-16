@@ -16,6 +16,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
+from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 from tests.helpers import (
@@ -138,12 +139,31 @@ class MCG:
             config.ENV_DATA['platform'].lower() in constants.CLOUD_PLATFORMS
             or storagecluster_independent_check()
         ):
-            logger.info('Checking whether RGW pod is not present on AWS platform')
-            pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
-            assert not pods, 'RGW pods should not exist in the current platform/cluster'
+            if not config.ENV_DATA['platform'] == constants.AZURE_PLATFORM and (
+                float(config.ENV_DATA['ocs_version']) > 4.5
+            ):
+                logger.info('Checking whether RGW pod is not present')
+                pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
+                assert not pods, 'RGW pods should not exist in the current platform/cluster'
 
-        elif config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
-            rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
+        elif config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS or (
+            config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM
+        ):
+            rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 and not (
+                check_if_cluster_was_upgraded()
+            ) else 1
+
+            # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
+            if float(
+                config.ENV_DATA['ocs_version']
+            ) == 4.4 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM:
+                rgw_count = 1
+            if float(
+                config.ENV_DATA['ocs_version']
+            ) == 4.5 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM and (
+                check_if_cluster_was_upgraded()
+            ):
+                rgw_count = 1
             logger.info(f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform')
             rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
             assert rgw_pod.wait_for_resource(
