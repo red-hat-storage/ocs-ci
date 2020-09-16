@@ -147,6 +147,10 @@ def ocs_install_verification(
         min_eps = 1
         max_eps = 1 if float(config.ENV_DATA['ocs_version']) < 4.6 else 2
 
+    if config.ENV_DATA.get('platform') == constants.IBM_POWER_PLATFORM:
+        min_eps = 1
+        max_eps = 1
+
     resources_dict = {
         constants.OCS_OPERATOR_LABEL: 1,
         constants.OPERATOR_LABEL: 1,
