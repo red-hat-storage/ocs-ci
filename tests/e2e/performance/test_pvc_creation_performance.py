@@ -155,6 +155,7 @@ class TestPVCCreationPerformance(E2ETest):
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             number_of_pvc=number_of_pvcs,
             size=self.pvc_size,
+            burst=True
         )
         for pvc_obj in pvc_objs:
             pvc_obj.reload()
@@ -209,6 +210,7 @@ class TestPVCCreationPerformance(E2ETest):
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             number_of_pvc=initial_number_of_pvcs,
             size=self.pvc_size,
+            burst=True
         )
         for pvc_obj in pvc_objs:
             teardown_factory(pvc_obj)
@@ -230,6 +232,7 @@ class TestPVCCreationPerformance(E2ETest):
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             number_of_pvc=number_of_pvcs,
             size=self.pvc_size,
+            burst=True
         )
         start_time = helpers.get_start_creation_time(
             self.interface, pvc_objs[0].name
