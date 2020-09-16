@@ -657,6 +657,17 @@ class VSPHEREUPI(VSPHEREBASE):
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
         if Version.coerce(ocp_version) >= Version.coerce('4.6'):
+            # Download terraform ignition provider. For OCP upgrade clusters,
+            # ignition provider doesn't exist, so downloading in destroy job
+            # as well
+            terraform_plugins_path = ".terraform/plugins/linux_amd64/"
+            terraform_ignition_provider_path = os.path.join(
+                terraform_data_dir,
+                terraform_plugins_path,
+                "terraform-provider-ignition"
+            )
+            if not os.path.exists(terraform_ignition_provider_path):
+                get_terraform_ignition_provider(terraform_data_dir)
             terraform.initialize()
         else:
             terraform.initialize(upgrade=True)
