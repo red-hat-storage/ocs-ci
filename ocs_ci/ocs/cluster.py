@@ -1209,6 +1209,37 @@ def check_osd_tree_1az_aws(osd_tree, number_of_osds):
     return check_osds_in_hosts_osd_tree(all_hosts_flatten, osd_tree)
 
 
+def check_ceph_osd_tree():
+    """
+    Checks whether an OSD tree is created/modified correctly.
+    It is a summary of the previous functions: 'check_osd_tree_1az_vmware',
+    'check_osd_tree_3az_aws', 'check_osd_tree_1az_aws'.
+
+    Returns:
+         Boolean: True, if the ceph osd tree is formed correctly. Else False
+
+    """
+    osd_pods = pod.get_osd_pods()
+    # 'ceph osd tree' should show the new osds under right nodes/hosts
+    #  Verification is different for 3 AZ and 1 AZ configs
+    ct_pod = pod.get_ceph_tools_pod()
+    tree_output = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree')
+    if config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
+        return check_osd_tree_1az_vmware(tree_output, len(osd_pods))
+
+    aws_number_of_zones = 3
+    if config.ENV_DATA['platform'].lower() == constants.AWS_PLATFORM:
+        # parse the osd tree. if it contains a node 'rack' then it's a
+        # AWS_1AZ cluster. Else, 3 AWS_3AZ cluster
+        for i in range(len(tree_output['nodes'])):
+            if tree_output['nodes'][i]['name'] in "rack0":
+                aws_number_of_zones = 1
+        if aws_number_of_zones == 1:
+            return check_osd_tree_1az_aws(tree_output, len(osd_pods))
+        else:
+            return check_osd_tree_3az_aws(tree_output, len(osd_pods))
+
+
 class CephClusterExternal(CephCluster):
     """
     Handle all external ceph cluster related functionalities

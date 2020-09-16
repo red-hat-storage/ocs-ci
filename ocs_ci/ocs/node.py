@@ -268,7 +268,7 @@ def add_new_node_and_label_it(
     eg: add_new_node_and_label_it("new-tdesala-zlqzn-worker-us-east-2a")
 
     Returns:
-        list: new spun nodes
+        list: new spun node names
 
     """
     # Get the initial nodes list
@@ -325,8 +325,8 @@ def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True, no
         mark_for_ocs_label (bool): True if label the new node
         node_conf (dict): The node configurations.
 
-    Retuns:
-        bool: True if node addition has done successfully
+    Returns:
+        list: new spun node names
 
     """
     node_conf = node_conf or {}
@@ -348,6 +348,7 @@ def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True, no
     )
 
     new_spun_nodes = list(set(nodes_after_exp) - set(initial_nodes))
+    log.info(f"New spun nodes: {new_spun_nodes}")
     if node_type == constants.RHEL_OS:
         set_selinux_permissions(workers=new_spun_nodes)
 
@@ -361,7 +362,7 @@ def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True, no
             logging.info(
                 f"Successfully labeled {new_spun_node} with OCS storage label"
             )
-    return new_spun_node
+    return new_spun_nodes
 
 
 def get_node_logs(node_name):
@@ -758,6 +759,9 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     Args:
         osd_node_name (str): the name of the osd node
 
+    Returns:
+        str: The new node name
+
     """
     log.info("Going to unschedule, drain and delete %s node", osd_node_name)
     # Unscheduling node
@@ -790,6 +794,8 @@ def delete_and_create_osd_node_ipi(osd_node_name):
         f"Successfully labeled {new_node_name} with OCS storage label"
     )
 
+    return new_node_name
+
 
 def delete_and_create_osd_node_aws_upi(osd_node_name):
     """
@@ -800,6 +806,9 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
 
     Args:
         osd_node_name (str): the name of the osd node
+
+    Returns:
+        str: The new node name
 
     """
 
@@ -822,10 +831,11 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
 
     log.info("Preparing to create a new node...")
     node_conf = {'stack_name': stack_name_of_deleted_node}
-    new_nodes = add_new_node_and_label_upi(node_type, 1, node_conf=node_conf)
+    new_node_names = add_new_node_and_label_upi(
+        node_type, 1, node_conf=node_conf
+    )
 
-    if verify_steps_after_node_replacement(osd_node, new_nodes[0]):
-        log.info("Finished verifying new node created successfully")
+    return new_node_names[0]
 
 
 def get_node_az(node):
@@ -837,6 +847,7 @@ def get_node_az(node):
 
     Returns:
         str: The name of the node availability zone
+
     """
     labels = node.get().get('metadata', {}).get('labels', {})
     return labels.get('topology.kubernetes.io/zone')
@@ -857,6 +868,9 @@ def delete_and_create_osd_node_vsphere_upi(
             If True, use an existing node to replace the deleted node
             and label it.
 
+    Returns:
+        str: The new node name
+
     """
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
@@ -871,7 +885,8 @@ def delete_and_create_osd_node_vsphere_upi(
 
     if not use_existing_node:
         log.info("Preparing to create a new node...")
-        add_new_node_and_label_upi(node_type, 1)
+        new_node_names = add_new_node_and_label_upi(node_type, 1)
+        new_node_name = new_node_names[0]
     else:
         node_not_in_ocs = get_worker_nodes_not_in_ocs()[0]
         log.info(
@@ -881,6 +896,9 @@ def delete_and_create_osd_node_vsphere_upi(
         if node_type == constants.RHEL_OS:
             set_selinux_permissions(workers=[node_not_in_ocs])
         label_nodes([node_not_in_ocs])
+        new_node_name = node_not_in_ocs.name
+
+    return new_node_name
 
 
 def label_nodes(nodes, label=constants.OPERATOR_NODE_LABEL):
@@ -919,34 +937,84 @@ def get_worker_nodes_not_in_ocs():
     return [n for n in worker_nodes if n.name not in ocs_node_names]
 
 
-def verify_steps_after_node_replacement(old_node, new_node):
-    result = True
+def node_replacement_verification_steps_user_side(old_node_name, new_node_name):
+    """
+    Check the verification steps that the user should perform after the process
+    of node replacement as described in the docs
 
-    old_mgr_pod = pod.get_mgr_pods()[0]
-    old_mgr_pod.delete()
-    new_mgr_pod = pod.get_mgr_pods()[0]
-    if new_mgr_pod.name == old_mgr_pod.name:
-        log.warning("mgr pod name didn't change")
-        result = False
+    Args:
+        old_node_name (str): The name of the old node that has been deleted
+        new_node_name (str): The name of the new node that has been created
 
+    Returns:
+        bool: True if all the verification steps passed. False otherwise
+
+    """
     ocs_nodes = get_ocs_nodes()
     ocs_node_names = [n.name for n in ocs_nodes]
-    if new_node.name not in ocs_node_names:
-        log.warning("The new node is not in ocs nodes")
+    if new_node_name not in ocs_node_names:
+        log.warning("The new node not found in ocs nodes")
+        return False
+    if old_node_name in ocs_node_names:
+        log.warning("The old node name found in ocs nodes")
+        return False
 
     csi_cephfsplugin_pods = pod.get_plugin_pods(interface=constants.CEPHFILESYSTEM)
     csi_rbdplugin_pods = pod.get_plugin_pods(interface=constants.CEPHBLOCKPOOL)
     csi_plugin_pods = csi_cephfsplugin_pods + csi_rbdplugin_pods
     if not all([p.status == constants.STATUS_RUNNING for p in csi_plugin_pods]):
         log.warning("Not all csi rbd and cephfs plugin pods in status running")
-        result = False
+        return False
 
     if not pod.check_pods_in_running_state():
         log.warning("Not all pods in running state")
-        result = False
+        return False
 
-    if old_node.name == new_node.name:
+    log.info("Verification steps from the user side finish successfully")
+    return True
+
+
+def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
+    """
+    Check the verification steps from the Ceph side, after the process
+    of node replacement as described in the docs
+
+    Args:
+        old_node_name (str): The name of the old node that has been deleted
+        new_node_name (str): The name of the new node that has been created
+
+    Returns:
+        bool: True if all the verification steps passed. False otherwise
+
+    """
+    if old_node_name == new_node_name:
         log.warning("Hostname didn't change")
-        result = False
+        return False
 
-    return result
+    wait_for_nodes_status([new_node_name])
+    pod.wait_for_storage_pods()
+
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_osd_status = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd status')
+    if new_node_name not in ceph_osd_status:
+        log.warning("new node name not found in 'ceph osd status' output")
+        return False
+    if old_node_name in ceph_osd_status:
+        log.warning("old node name found in 'ceph osd status' output")
+        return False
+
+    from ocs_ci.ocs.cluster import check_ceph_osd_tree
+    if not check_ceph_osd_tree():
+        log.warning("Incorrect ceph osd tree formation found")
+
+    osd_pods_obj = pod.get_osd_pods()
+    osd_node_names = [pod.get_pod_node(p).name for p in osd_pods_obj]
+    if new_node_name not in osd_node_names:
+        log.warning("the new hostname not found in osd node names")
+        return False
+    if old_node_name in osd_node_names:
+        log.warning("the old hostname found in osd node names")
+        return False
+
+    log.info("Verification steps from the ceph side finish successfully")
+    return True
