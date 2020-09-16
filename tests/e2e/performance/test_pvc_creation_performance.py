@@ -168,11 +168,11 @@ class TestPVCCreationPerformance(E2ETest):
                 )
 
                 executor.submit(pvc_obj.reload)
-        start_time = helpers.get_start_creation_time(
-            self.interface, pvc_objs[0].name
+        start_time = helpers.get_provision_time(
+            self.interface, pvc_objs, status='start'
         )
-        end_time = helpers.get_end_creation_time(
-            self.interface, pvc_objs[number_of_pvcs - 1].name,
+        end_time = helpers.get_provision_time(
+            self.interface, pvc_objs, status='end'
         )
         total = end_time - start_time
         total_time = total.total_seconds()
@@ -234,11 +234,11 @@ class TestPVCCreationPerformance(E2ETest):
             size=self.pvc_size,
             burst=True
         )
-        start_time = helpers.get_start_creation_time(
-            self.interface, pvc_objs[0].name
+        start_time = helpers.get_provision_time(
+            self.interface, pvc_objs, status='start'
         )
-        end_time = helpers.get_end_creation_time(
-            self.interface, pvc_objs[number_of_pvcs - 1].name,
+        end_time = helpers.get_provision_time(
+            self.interface, pvc_objs, status='end'
         )
         total = end_time - start_time
         total_time = total.total_seconds()
