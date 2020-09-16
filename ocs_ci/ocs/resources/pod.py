@@ -171,17 +171,17 @@ class Pod(OCS):
             Munch Obj: This object represents a returned yaml file
         """
         return self.exec_cmd_on_pod(
-                craft_s3_command(
-                    command,
-                    mcg_obj
-                ),
-                out_yaml_format=False,
-                secrets=[
-                    mcg_obj.access_key_id,
-                    mcg_obj.access_key,
-                    mcg_obj.s3_endpoint
-                ]
-            )
+            craft_s3_command(
+                command,
+                mcg_obj
+            ),
+            out_yaml_format=False,
+            secrets=[
+                mcg_obj.access_key_id,
+                mcg_obj.access_key,
+                mcg_obj.s3_endpoint
+            ]
+        )
 
     def exec_sh_cmd_on_pod(self, command, sh="bash"):
         """

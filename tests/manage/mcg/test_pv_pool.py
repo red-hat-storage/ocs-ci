@@ -68,9 +68,9 @@ class TestPvPool:
                 )
             except CommandFailed:
                 assert not check_pv_backingstore_status(
-                        bucketclass.backingstores[0], config.ENV_DATA['cluster_namespace'],
-                        '`NO_CAPACITY`'
-                    ), 'Failed to re-upload the removed file file'
+                    bucketclass.backingstores[0], config.ENV_DATA['cluster_namespace'],
+                    '`NO_CAPACITY`'
+                ), 'Failed to re-upload the removed file file'
 
     def test_pv_scale_out(self, backingstore_factory):
         pv_backingstore = backingstore_factory(
