@@ -19,7 +19,7 @@ RUN:
   cli_params: {}  # this will be filled with CLI parameters data
   # If the client version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version
-  client_version: '4.5.0-0.nightly'
+  client_version: '4.6.0-0.nightly'
   bin_dir: './bin'
   google_api_secret: '~/.ocs-ci/google_api_secret.json'
   # Following chrome params are for openshift console UI testing
@@ -42,17 +42,17 @@ DEPLOYMENT:
   # if the installer version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version. You can also use the
   # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
-  installer_version: "4.5.0-0.nightly"
+  installer_version: "4.6.0-0.nightly"
   force_download_installer: True
   force_download_client: True
-  default_latest_tag: 'latest-4.5'
+  default_latest_tag: 'latest-4.6'
   # define if ceph is setup as external mode, default is false
   external_mode: False
   # You can overwrite csv channel version by following parameter
-  ocs_csv_channel: "stable-4.5"
+  ocs_csv_channel: "stable-4.6"
   # you can overwrite the image for ocs operator catalog source by following parameter:
   # ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:4.2-32.9b6c93e.master"
-  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:latest-4.5"
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:latest-4.6"
   ocs_operator_nodes_to_label: 3
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator
@@ -89,7 +89,7 @@ REPORTING:
   us_ds: 'DS'
   ocp_must_gather_image: "quay.io/openshift/origin-must-gather"
   ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
-  default_ocs_must_gather_latest_tag: 'latest-4.5'
+  default_ocs_must_gather_latest_tag: 'latest-4.6'
   gather_on_deploy_failure: true
 
 # This is the default information about environment.
@@ -110,12 +110,12 @@ ENV_DATA:
   worker_replicas: 3
   skip_ocp_deployment: false
   skip_ocs_deployment: false
-  ocs_version: '4.5'
+  ocs_version: '4.6'
   # uncomment to use custom directory for storing measurement data related to
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
   # Default RHCOS image to be used for VmWare deployment
-  vm_template: 'rhcos-4.5.2-x86_64-vmware.x86_64'
+  vm_template: 'rhcos-46.82.202008260918-0-vmware.x86_64'
   # minimal write speed of fio as used in workload_fio_storageutilization
   # fixtures, which is used to compute timeout of the write job (so that
   # when actual write speed of the operation is smaller than this value, the
@@ -134,10 +134,10 @@ ENV_DATA:
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
-  ocp_channel: "candidate-4.5"
+  ocp_channel: "candidate-4.6"
   ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
   ocp_arch: "x86_64"
-  upgrade_logging_channel: "4.5"
+  upgrade_logging_channel: "4.6"
 
 # This section stores secret and uploaded from home dir or s3
 # for entry into this section, please email ecosystem team
