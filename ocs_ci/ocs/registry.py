@@ -2,6 +2,7 @@ import logging
 import base64
 import os
 import re
+import time
 
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pod
@@ -364,9 +365,7 @@ def image_pull_and_push(
     ocp_obj = ocp.OCP()
     ocp_obj.new_project(project_name=project_name)
     if config.DEPLOYMENT.get('disconnected'):
-        mirrored_image, authfile_name = mirror_image(image=image)
-        cmd = f"podman pull {mirrored_image} --authfile {authfile_name}"
-        ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
+        mirror_image(image=image)
     else:
         cmd = f"new-app --template={template} -n {project_name}"
         ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
@@ -375,6 +374,7 @@ def image_pull_and_push(
         if wait:
             wait_time = 300
             logger.info(f"Wait for {wait_time} seconds for build to come up")
+            time.sleep(300)
             build_list = get_build_name_by_pattern(pattern=pattern, namespace=project_name)
             assert build_list is not None, "Build is not created"
             build_obj = ocp.OCP(kind='Build', namespace=project_name)
@@ -397,7 +397,7 @@ def get_build_name_by_pattern(
         Returns:
             build_list (list): List of build names matching the pattern
 
-        """
+    """
     namespace = namespace if namespace else config.ENV_DATA['cluster_namespace']
     ocp_obj = ocp.OCP(kind='Build', namespace=namespace)
     build_names = ocp_obj.exec_oc_cmd('get builds -o name', out_yaml_format=False)
@@ -405,7 +405,7 @@ def get_build_name_by_pattern(
     build_list = []
     for name in build_names:
         if re.search(pattern, name):
-            (_, name) = name.split('/')
+            _, name = name.split('/')
             logger.info(f'pod name match found appending {name}')
             build_list.append(name)
     return build_list
