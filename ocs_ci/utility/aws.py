@@ -1097,6 +1097,7 @@ class AWS(object):
     def get_hosted_zone_id(self, cluster_name):
         """
         Get Zone if from given cluster_name
+
         Args:
             cluster_name (str): Name of cluster
 

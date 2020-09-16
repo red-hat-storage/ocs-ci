@@ -1881,7 +1881,7 @@ class BAREMETALUPINode(BaremetalNodes):
 
     def add_node(self):
         """
-       Add nodes to the current cluster
+        Add nodes to the current cluster
         """
         logger.info(f"Adding Nodes of type {self.node_type}")
         logger.info(
