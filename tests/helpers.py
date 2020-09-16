@@ -1138,6 +1138,57 @@ def get_master_nodes():
     return master_nodes_list
 
 
+def get_provision_time(interface, pvc_name, status='start'):
+    """
+    Get the starting/ending creation time of a PVC based on provisioner logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pvc_name (str / list): Name of the PVC(s) for creation time
+                               the list will be list of pvc objects
+        status (str): the status that we want to get - Start / End
+
+    Returns:
+        datetime object: Time of PVC(s) creation
+
+    """
+    # Define the status that need to retrieve
+    operation = 'started'
+    if status.lower() == 'end':
+        operation = 'succeeded'
+
+    format = '%H:%M:%S.%f'
+    # Get the correct provisioner pod based on the interface
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    # get the logs from the csi-provisioner containers
+    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
+    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+
+    logs = logs.split("\n")
+    # Extract the time for the one PVC provisioning
+    if isinstance(pvc_name, str):
+        stat = [
+            i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)
+        ]
+        stat = stat[0].split(' ')[1]
+    # Extract the time for the list of PVCs provisioning
+    if isinstance(pvc_name, list):
+        all_stats = []
+        for pv_name in pvc_name:
+            name = pv_name.name
+            stat = [
+                i for i in logs if re.search(f"provision.*{name}.*{operation}", i)
+            ]
+            stat = stat[0].split(' ')[1]
+            all_stats.append(stat)
+        all_stats = sorted(all_stats)
+        if status.lower() == 'end':
+            stat = all_stats[-1]  # return the highest time
+        elif status.lower() == 'start':
+            stat = all_stats[0]  # return the lowest time
+    return datetime.datetime.strptime(stat, format)
+
+
 def get_start_creation_time(interface, pvc_name):
     """
     Get the starting creation time of a PVC based on provisioner logs
