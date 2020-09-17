@@ -2654,6 +2654,7 @@ def get_ocp_upgrade_history():
             beginning of the list
 
     """
+    # importing here to avoid circular imports
     from ocs_ci.ocs.ocp import OCP
     ocp = OCP(kind="clusterversion")
     cluster_version_info = ocp.get("version")
