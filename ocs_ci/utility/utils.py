@@ -2643,3 +2643,22 @@ def get_cluster_id(cluster_path):
     with open(metadata_file) as f:
         metadata = json.load(f)
     return metadata["clusterID"]
+
+
+def get_ocp_upgrade_history():
+    """
+    Gets the OCP upgrade history for the cluster
+
+    Returns:
+        list: List of OCP upgrade paths. Latest version in the
+            beginning of the list
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+    ocp = OCP(kind="clusterversion")
+    cluster_version_info = ocp.get("version")
+    upgrade_history_info = cluster_version_info['status']['history']
+    upgrade_history = [
+        each_upgrade['version'] for each_upgrade in upgrade_history_info
+    ]
+    return upgrade_history
