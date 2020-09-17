@@ -936,6 +936,7 @@ def parse_html_for_email(soup):
 
 def add_squad_analysis_to_email(session, soup):
     """
+    Add squad analysis to the html test results used in email reporting
 
     Args:
         session (obj): Pytest session object
