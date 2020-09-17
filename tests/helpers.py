@@ -2554,3 +2554,21 @@ def default_volumesnapshotclass(interface_type):
         resource_name=resource_name
     )
     return OCS(**base_snapshot_class.data)
+
+
+def get_node_running_pod(namespace, pod_name):
+    """
+    To get the node name on which the pods are running
+
+    Args:
+        namespace (str): Namespace of the pod
+        pod_name (str): Name of the pod
+
+    Returns:
+        nodename (str): The node name on which the pod is running
+
+    """
+    ocp_obj = ocp.OCP(kind=constants.POD, namespace=namespace)
+    pod_obj = ocp_obj.get(resource_name=pod_name)
+    nodename = pod_obj.get('spec').get('nodeName')
+    return nodename
