@@ -1,14 +1,15 @@
 import logging
-from tests.helpers import wait_for_resource_state
-from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status
 import pytest
 
 from ocs_ci.framework.testlib import (
     ManageTest, tier4, tier4a, ignore_leftovers, skipif_ocs_version, on_prem_platform_required
 )
+from ocs_ci.ocs.mcg_workload import wait_for_active_pods
+from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, defaults, cluster
+from tests.helpers import wait_for_resource_state
 
 
 log = logging.getLogger(__name__)
@@ -119,11 +120,17 @@ class TestMCGResourcesDisruptions(ManageTest):
             )
         ]
     )
-    def test_drain_mcg_pod_node(self, node_drain_teardown, reduce_cluster_load, pod_to_drain):
+    def test_drain_mcg_pod_node(
+        self, node_drain_teardown, reduce_cluster_load,
+        mcg_job_factory, pod_to_drain
+    ):
         """
         Test drianage of nodes which contain NB resources
 
         """
+        # Start MCG IO in the background
+        mcg_io_job = mcg_job_factory()
+        wait_for_active_pods(mcg_io_job, 1)
 
         # Retrieve the relevant pod object
         pod_obj = pod.Pod(
