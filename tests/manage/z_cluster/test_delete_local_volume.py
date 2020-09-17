@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 @tier4
 @skipif_no_lso
-@pytest.mark.polarion_id("OCS-XXX")
+@pytest.mark.polarion_id("OCS-2316")
 class TestDeleteLocalVolume(E2ETest):
     """
     A test case to validate rook-ceph-crashcollector pods
