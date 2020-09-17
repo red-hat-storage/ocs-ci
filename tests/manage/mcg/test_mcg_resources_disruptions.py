@@ -119,7 +119,7 @@ class TestMCGResourcesDisruptions(ManageTest):
             )
         ]
     )
-    def test_drain_mcg_pod_node(self, node_drain_teardown, pod_to_drain):
+    def test_drain_mcg_pod_node(self, node_drain_teardown, reduce_cluster_load, pod_to_drain):
         """
         Test drianage of nodes which contain NB resources
 
