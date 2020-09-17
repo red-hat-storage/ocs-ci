@@ -1,9 +1,13 @@
+import logging
 import os
 import random
 import string
+from tempfile import NamedTemporaryFile
 
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility.utils import exec_cmd
+
+log = logging.getLogger(__name__)
 
 
 def add_htpasswd_user(username, password, htpasswd_path):
@@ -22,7 +26,7 @@ def add_htpasswd_user(username, password, htpasswd_path):
         cmd = ['htpasswd', '-B', '-b', htpasswd_path, username, password]
     else:
         cmd = ['htpasswd', '-c', '-B', '-b', htpasswd_path, username, password]
-    exec_cmd(cmd)
+    exec_cmd(cmd, secrets=[password])
 
 
 def create_htpasswd_secret(htpasswd_path, replace=False):
@@ -35,19 +39,20 @@ def create_htpasswd_secret(htpasswd_path, replace=False):
 
     """
     kubeconfig = os.getenv('KUBECONFIG')
-    if replace:
-        replace = (
-            f" --dry-run -o yaml | oc replace --kubeconfig {kubeconfig} -f -"
-        )
-    else:
-        replace = ''
 
     cmd = (
         f"oc create secret generic htpass-secret "
         f"--from-file=htpasswd={htpasswd_path} -n openshift-config "
-        f"--kubeconfig {kubeconfig}{replace}"
+        f"--kubeconfig {kubeconfig}"
     )
-    exec_cmd(cmd)
+    if replace:
+        secret_data = exec_cmd(f"{cmd} --dry-run -o yaml").stdout
+        with NamedTemporaryFile(prefix='htpasswd_secret_') as secret_file:
+            secret_file.write(secret_data)
+            secret_file.flush()
+            exec_cmd(f'oc apply --kubeconfig {kubeconfig} -f {secret_file.name}')
+    else:
+        exec_cmd(cmd)
 
 
 def delete_htpasswd_secret():
@@ -119,7 +124,15 @@ def user_factory(request, htpasswd_path):
             )
         add_htpasswd_user(username, password, htpasswd_path)
         if not _users:
-            create_htpasswd_secret(htpasswd_path)
+            ocp_obj = ocp.OCP(
+                kind=constants.SECRET,
+                namespace=constants.OPENSHIFT_CONFIG_NAMESPACE
+            )
+            secret = ocp_obj.get(resource_name='htpass-secret') or None
+            if secret:
+                create_htpasswd_secret(htpasswd_path, replace=True)
+            else:
+                create_htpasswd_secret(htpasswd_path)
         else:
             create_htpasswd_secret(htpasswd_path, replace=True)
 
@@ -137,7 +150,7 @@ def user_factory(request, htpasswd_path):
         with open(htpasswd_path) as f:
             htpasswd = f.readlines()
         new_htpasswd = [
-            line for line in htpasswd if line.startswith(tuple(_users))
+            line for line in htpasswd if not line.startswith(tuple(_users))
         ]
         with open(htpasswd_path, 'w+') as f:
             for line in new_htpasswd:

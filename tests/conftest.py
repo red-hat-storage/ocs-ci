@@ -2642,7 +2642,7 @@ def htpasswd_identity_provider(request):
         #     resource_name='cluster',
         #     params=f'[{ "op": "remove", "path": "/spec/identityProviders" }]'
         # )
-        users.delete_htpasswd_secret()
+        # users.delete_htpasswd_secret()
 
     request.addfinalizer(finalizer)
     return cluster
