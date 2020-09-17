@@ -940,7 +940,7 @@ def add_squad_analysis_to_email(session, soup):
 
     Args:
         session (obj): Pytest session object
-        soup (obj): BeautifulSoup object
+        soup (obj): BeautifulSoup object of HTML Report data
 
     """
     failed = {}
