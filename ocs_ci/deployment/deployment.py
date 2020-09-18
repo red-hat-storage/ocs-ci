@@ -2,13 +2,15 @@
 This module provides base class for different deployment
 platforms like AWS, VMWare, Baremetal etc.
 """
+
+from copy import deepcopy
+import json
 import logging
 import tempfile
 import time
 
-import json
 import requests
-from copy import deepcopy
+import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 
@@ -83,6 +85,15 @@ class Deployment(object):
     # independent default value (based on OCS Installation guide), and it's
     # redefinition is not necessary in normal cases.
     DEFAULT_STORAGECLASS_LSO = 'localblock'
+
+    CUSTOM_STORAGE_CLASS_PATH = None
+    """str: filepath of yaml file with custom storage class if necessary
+
+    For some platforms, one have to create custom storage class for OCS to make
+    sure ceph uses disks of expected type and parameters (eg. OCS requires
+    ssd). This variable is either None (meaning that such custom storage class
+    is not needed), or point to a yaml file with custom storage class.
+    """
 
     def __init__(self):
         self.platform = config.ENV_DATA['platform']
@@ -405,6 +416,14 @@ class Deployment(object):
                 replace_from=config.DEPLOYMENT['csv_change_from'],
                 replace_to=config.DEPLOYMENT['csv_change_to']
             )
+
+        # create custom storage class for StorageCluster CR if necessary
+        if self.CUSTOM_STORAGE_CLASS_PATH is not None:
+            with open(self.CUSTOM_STORAGE_CLASS_PATH, "r") as custom_sc_fo:
+                custom_sc = yaml.load(custom_sc_fo, Loader=yaml.SafeLoader)
+            # set value of DEFAULT_STORAGECLASS to mach the custom storage cls
+            self.DEFAULT_STORAGECLASS = custom_sc['metadata']['name']
+            run_cmd(f"oc create -f {self.CUSTOM_STORAGE_CLASS_PATH}")
 
         # creating StorageCluster
         cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)

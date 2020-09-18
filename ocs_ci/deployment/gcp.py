@@ -5,10 +5,14 @@ on Google Cloud Platform (aka GCP).
 """
 
 import logging
+import os
+
+from libcloud.compute.types import NodeState
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.cloud import IPIOCPDeployment
-# TODO: import GCP util
+from ocs_ci.ocs.constants import TEMPLATE_DEPLOYMENT_DIR
+from ocs_ci.utility.gcp import GoogleCloudUtil
 
 
 logger = logging.getLogger(__name__)
@@ -28,7 +32,7 @@ class GCPBase(CloudDeploymentBase):
 
     def __init__(self):
         super(GCPBase, self).__init__()
-        # TODO: self.gcp_util = GCPUtil()
+        self.util = GoogleCloudUtil()
 
     def add_node(self):
         # TODO: implement later
@@ -43,7 +47,20 @@ class GCPBase(CloudDeploymentBase):
                 False otherwise
 
         """
-        # TODO: actual check is happening here
+        logger.info(
+            "checking existence of GCP cluster with prefix %s",
+            cluster_name_prefix
+        )
+        non_term_cluster_nodes = []
+        for node in self.util.compute_driver.list_nodes():
+            if node.name.startswith(cluster_name_prefix) and node.state != NodeState.TERMINATED:
+                non_term_cluster_nodes.append(node)
+        if len(non_term_cluster_nodes) > 0:
+            logger.warning(
+                "Non terminated nodes with the same name prefix were found: %s",
+                non_term_cluster_nodes
+            )
+            return True
         return False
 
 
@@ -52,8 +69,13 @@ class GCPIPI(GCPBase):
     A class to handle GCP IPI specific deployment
     """
 
-    # default storage class for StorageCluster CRD on Google Cloud platform
-    DEFAULT_STORAGECLASS = "managed-premium"
+    # storage class for StorageCluster CRD on Google Cloud platform
+    # uses a custom storageclass, which is created prior creating
+    # StorageCluster CR during OCS installation
+    CUSTOM_STORAGE_CLASS_PATH = os.path.join(
+        TEMPLATE_DEPLOYMENT_DIR,
+        "storageclass.gcp.yaml"
+    )
 
     OCPDeployment = IPIOCPDeployment
 
