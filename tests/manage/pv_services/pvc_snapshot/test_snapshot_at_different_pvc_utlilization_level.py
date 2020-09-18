@@ -3,9 +3,8 @@ import pytest
 from copy import deepcopy
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources import pod, pvc
+from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, tier1
-from tests import helpers
 
 log = logging.getLogger(__name__)
 
