@@ -81,6 +81,7 @@ from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.amq import AMQ
+from ocs_ci.ocs.resources import pvc
 
 log = logging.getLogger(__name__)
 
@@ -2767,3 +2768,87 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
     request.addfinalizer(ns_resources_and_connections_cleanup)
 
     return _create_ns_resources
+
+
+@pytest.fixture()
+def snapshot_restore_factory(request):
+    """
+    Snapshot restore factory. Calling this fixture creates new PVC out of the
+    specified VolumeSnapshot.
+
+    """
+    instances = []
+
+    def factory(
+        snapshot_obj,
+        storageclass=None,
+        size=None,
+        volume_mode=None,
+        restore_pvc_yaml=None,
+        access_mode=constants.ACCESS_MODE_RWO,
+        status=constants.STATUS_BOUND
+    ):
+        """
+        Args:
+            snapshot_obj (OCS): OCS instance of kind VolumeSnapshot which has
+                to be restored to new PVC
+            storageclass (str): Name of storageclass
+            size (str): Size of PVC being created. eg: 5Gi. Ideally, this
+                should be same as the restore size of snapshot. Adding this
+                parameter to consider negative test scenarios.
+            volume_mode (str): Volume mode for PVC. This should match the
+                volume mode of parent PVC.
+            restore_pvc_yaml (str): The location of pvc-restore.yaml
+            access_mode (str): This decides the access mode to be used for the
+                PVC. ReadWriteOnce is default.
+            status (str): If provided then factory waits for the PVC to reach
+                desired state.
+
+        Returns:
+            OCS: OCS instance of kind VolumeSnapshot
+
+        """
+        snapshot_info = snapshot_obj.get()
+        size = size or snapshot_info['status']['restoreSize']
+        restore_pvc_name = helpers.create_unique_resource_name(
+            snapshot_obj.name, 'snapshot'
+        )
+
+        if snapshot_info['spec']['volumeSnapshotClassName'] == (
+            constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+        ):
+            storageclass = storageclass or helpers.default_storage_class(
+                constants.CEPHBLOCKPOOL
+            )
+            restore_pvc_yaml = restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
+        elif snapshot_info['spec']['volumeSnapshotClassName'] == (
+            constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+        ):
+            storageclass = storageclass or helpers.default_storage_class(
+                constants.CEPHFILESYSTEM
+            )
+            restore_pvc_yaml = restore_pvc_yaml or constants.CSI_CEPHFS_PVC_RESTORE_YAML
+        restored_pvc = pvc.create_restore_pvc(
+            sc_name=storageclass, snap_name=snapshot_obj.name,
+            namespace=snapshot_obj.namespace, size=size,
+            pvc_name=restore_pvc_name, volume_mode=volume_mode,
+            restore_pvc_yaml=restore_pvc_yaml, access_mode=access_mode
+        )
+        instances.append(restored_pvc)
+        restored_pvc.snapshot = snapshot_obj
+        if status:
+            helpers.wait_for_resource_state(restored_pvc, status)
+        return restored_pvc
+
+    def finalizer():
+        """
+        Delete the VolumeSnapShot
+
+        """
+        for instance in instances:
+            if not instance.is_deleted:
+                instance.delete()
+                instance.ocp.wait_for_delete(instance.name)
+
+    request.addfinalizer(finalizer)
+    return factory

@@ -208,10 +208,14 @@ class PVC(OCS):
         elif self.provisioner == 'openshift-storage.cephfs.csi.ceph.com':
             snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
         snapshot_name = snapshot_name or f"{self.name}-snapshot-{uuid4().hex}"
-        return create_pvc_snapshot(
+        snapshot_obj = create_pvc_snapshot(
             pvc_name=self.name, snap_yaml=snap_yaml, snap_name=snapshot_name,
             wait=wait
         )
+        snapshot_obj.parent_access_mode = self.get_pvc_access_mode
+        snapshot_obj.parent_sc = self.backed_sc
+        snapshot_obj.parent_volume_mode = self.get()['spec']['volumeMode']
+        return snapshot_obj
 
 
 def delete_pvcs(pvc_objs, concurrent=False):
@@ -372,7 +376,8 @@ def create_pvc_snapshot(
 def create_restore_pvc(
     sc_name, snap_name, namespace, size,
     pvc_name, volume_mode=None,
-    restore_pvc_yaml=constants.CSI_RBD_PVC_RESTORE_YAML
+    restore_pvc_yaml=constants.CSI_RBD_PVC_RESTORE_YAML,
+    access_mode=constants.ACCESS_MODE_RWO
 ):
     """
     Create PVC from snapshot
@@ -386,6 +391,7 @@ def create_restore_pvc(
         pvc_name (str): The name of the PVC being created
         volume_mode (str): Volume mode for rbd RWX pvc i.e. 'Block'
         restore_pvc_yaml (str): The location of pvc-restore.yaml
+        access_mode (str): The access mode to be used for the PVC
 
     Returns:
         PVC: PVC instance
@@ -398,6 +404,8 @@ def create_restore_pvc(
     if volume_mode:
         pvc_data['spec']['volumeMode'] = volume_mode
     pvc_data['spec']['dataSource']['name'] = snap_name
+    if access_mode:
+        pvc_data['spec']['accessModes'] = [access_mode]
     pvc_obj = PVC(**pvc_data)
     created_pvc = pvc_obj.create(do_reload=True)
     assert created_pvc, f"Failed to create resource {pvc_name}"

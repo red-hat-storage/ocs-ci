@@ -31,11 +31,11 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
         )
 
     def test_snapshot_at_different_usage_level(
-        self, pod_factory, teardown_factory
+        self, pod_factory, teardown_factory, snapshot_restore_factory
     ):
         """
         Test to take multiple snapshots of same PVC when the PVC usage is at
-        0% 20% 40% 60% and 80%, delete the parent PVC and restore the
+        0%, 20%, 40%, 60%, and 80%, then delete the parent PVC and restore the
         snapshots to create new PVCs
 
         """
@@ -79,11 +79,6 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                     snap_obj, 'md5_sum',
                     deepcopy(getattr(pvc_obj, 'md5_sum', {}))
                 )
-                if constants.CEPHFS_INTERFACE in pvc_obj.storageclass.name:
-                    snap_obj.interface = constants.CEPHFILESYSTEM
-                else:
-                    snap_obj.interface = constants.CEPHBLOCKPOOL
-                snap_obj.volume_mode = pvc_obj.volume_mode
                 snapshots.append(snap_obj)
                 log.info(f"Created snapshot of PVC {pvc_obj.name} at {usage}%")
             log.info(f"Created snapshot of all PVCs at {usage}%")
@@ -115,31 +110,25 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
         log.info("Creating new PVCs from snapshots")
         for snapshot in snapshots:
             log.info(f"Creating a PVC from snapshot {snapshot.name}")
-            if snapshot.interface == constants.CEPHFILESYSTEM:
-                restore_pvc_yaml = constants.CSI_CEPHFS_PVC_RESTORE_YAML
-            else:
-                restore_pvc_yaml = constants.CSI_RBD_PVC_RESTORE_YAML
-            storageclass = helpers.default_storage_class(snapshot.interface)
-            restore_pvc_obj = pvc.create_restore_pvc(
-                sc_name=storageclass.name, snap_name=snapshot.name,
-                namespace=snapshot.namespace, size=f'{self.pvc_size}Gi',
-                pvc_name=f'{snapshot.name}-restore',
-                volume_mode=snapshot.volume_mode,
-                restore_pvc_yaml=restore_pvc_yaml
+            restore_pvc_obj = snapshot_restore_factory(
+                snapshot_obj=snapshot,
+                size=f'{self.pvc_size}Gi',
+                volume_mode=snapshot.parent_volume_mode,
+                access_mode=snapshot.parent_access_mode,
+                status=constants.STATUS_BOUND
             )
-            teardown_factory(restore_pvc_obj)
-            helpers.wait_for_resource_state(
-                restore_pvc_obj, constants.STATUS_BOUND
-            )
-            restore_pvc_obj.reload()
+
             log.info(
                 f"Created PVC {restore_pvc_obj.name} from snapshot "
                 f"{snapshot.name}"
             )
 
             # Attach the restored PVC to a pod
+            interface = constants.CEPHFILESYSTEM if (
+                constants.CEPHFS_INTERFACE in snapshot.parent_sc
+            ) else constants.CEPHBLOCKPOOL
             restore_pod_obj = pod_factory(
-                interface=snapshot.interface, pvc=restore_pvc_obj,
+                interface=interface, pvc=restore_pvc_obj,
                 status=constants.STATUS_RUNNING
             )
             log.info(
