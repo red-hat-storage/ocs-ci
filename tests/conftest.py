@@ -81,7 +81,6 @@ from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.amq import AMQ
-from ocs_ci.ocs.resources import pvc
 
 log = logging.getLogger(__name__)
 
@@ -2808,6 +2807,7 @@ def snapshot_restore_factory(request):
             OCS: OCS instance of kind VolumeSnapshot
 
         """
+        from ocs_ci.ocs.resources import pvc
         snapshot_info = snapshot_obj.get()
         size = size or snapshot_info['status']['restoreSize']
         restore_pvc_name = helpers.create_unique_resource_name(
