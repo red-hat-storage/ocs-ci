@@ -33,7 +33,7 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
         *. Run IO on each app pod
         """
 
-        # Create 3 storageclasses, each with different pool name
+        # Create 2 storageclasses, each with different pool name
         cbp_list = []
         sc_list = []
         for i in range(2):
