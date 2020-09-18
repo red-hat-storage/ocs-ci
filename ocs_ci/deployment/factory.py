@@ -2,6 +2,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import exceptions
+from ocs_ci.deployment.ibm import IBMDeployment
 from .aws import AWSIPI, AWSUPI
 from .azure import AZUREIPI
 from .gcp import GCPIPI
@@ -26,6 +27,7 @@ class DeploymentFactory(object):
             'baremetalpsi_upi': BaremetalPSIUPI,
             'baremetal_upi': BAREMETALUPI,
             'gcp_ipi': GCPIPI,
+            'powervs_upi': IBMDeployment,
         }
 
     def get_deployment(self):
