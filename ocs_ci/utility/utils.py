@@ -373,7 +373,8 @@ def mask_secrets(plaintext, secrets):
     Replace secrets in plaintext with asterisks
 
     Args:
-        plaintext (str): The plaintext to remove the secrets from
+        plaintext (str or list): The plaintext to remove the secrets from or
+            list of strings to remove secrets from
         secrets (list): List of secret strings to replace in the plaintext
 
     Returns:
@@ -382,7 +383,12 @@ def mask_secrets(plaintext, secrets):
     """
     if secrets:
         for secret in secrets:
-            plaintext = plaintext.replace(secret, '*' * 5)
+            if isinstance(plaintext, list):
+                plaintext = [
+                    string.replace(secret, '*' * 5) for string in plaintext
+                ]
+            else:
+                plaintext = plaintext.replace(secret, '*' * 5)
     return plaintext
 
 

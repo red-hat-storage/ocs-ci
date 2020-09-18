@@ -56,6 +56,7 @@ TEMPLATE_DEPLOYMENT_EO = os.path.join(
 TEMPLATE_DEPLOYMENT_CLO = os.path.join(
     TEMPLATE_DEPLOYMENT_LOGGING, "clusterlogging_operator"
 )
+TEMPLATE_AUTHENTICATION_DIR = os.path.join(TEMPLATE_DIR, 'authentication')
 DATA_DIR = os.path.join(TOP_DIR, 'data')
 ROOK_REPO_DIR = os.path.join(DATA_DIR, 'rook')
 ROOK_EXAMPLES_DIR = os.path.join(
@@ -108,6 +109,7 @@ CLUSTER_OPERATOR = 'ClusterOperator'
 MONITORING = 'monitoring'
 CLUSTER_SERVICE_VERSION = 'csv'
 JOB = 'job'
+OAUTH = 'OAuth'
 LOCAL_VOLUME = 'localvolume'
 PROXY = 'Proxy'
 MACHINECONFIGPOOL = "MachineConfigPool"
@@ -575,6 +577,11 @@ OPERATOR_SOURCE_SECRET_YAML = os.path.join(
 OPERATOR_SOURCE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "operator-source.yaml"
 )
+
+HTPASSWD_IDP_YAML = os.path.join(
+    TEMPLATE_AUTHENTICATION_DIR, 'htpasswd_provider.yaml'
+)
+
 
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
