@@ -2811,7 +2811,7 @@ def snapshot_restore_factory(request):
         snapshot_info = snapshot_obj.get()
         size = size or snapshot_info['status']['restoreSize']
         restore_pvc_name = helpers.create_unique_resource_name(
-            snapshot_obj.name, 'snapshot'
+            snapshot_obj.name, 'restore'
         )
 
         if snapshot_info['spec']['volumeSnapshotClassName'] == (
@@ -2829,7 +2829,7 @@ def snapshot_restore_factory(request):
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_CEPHFS_PVC_RESTORE_YAML
         restored_pvc = pvc.create_restore_pvc(
-            sc_name=storageclass, snap_name=snapshot_obj.name,
+            sc_name=storageclass.name, snap_name=snapshot_obj.name,
             namespace=snapshot_obj.namespace, size=size,
             pvc_name=restore_pvc_name, volume_mode=volume_mode,
             restore_pvc_yaml=restore_pvc_yaml, access_mode=access_mode
