@@ -5,23 +5,22 @@ from concurrent.futures import ThreadPoolExecutor
 from time import sleep
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import (
-    skipif_aws_i3,
-    skipif_bm,
-    skipif_ibm_cloud,
-    skipif_lso,
-)
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
+    skipif_aws_i3,
+    skipif_bm,
+    skipif_external_mode,
+    skipif_ibm_cloud,
+    skipif_lso,
     tier4,
     tier4a,
     tier4b,
     tier4c,
 )
 from ocs_ci.ocs import constants, machine, node, ocp
-from ocs_ci.ocs.cluster import CephCluster
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException, UnexpectedBehaviour
+from ocs_ci.ocs.cluster import CephCluster, CephClusterExternal
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check, get_az_count
@@ -86,25 +85,33 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 node_list=test_nodes, label_key="nodetype"
             )
 
+            # Check ceph health
+            ceph_health_check(tries=40)
+
         request.addfinalizer(finalizer)
 
-        ceph_cluster = CephCluster()
         project = project_factory()
 
-        # Wait for mon pods to reach expected count
-        # Bug 1778273 - [RFE]: Configure 5 MONs for OCS cluster with 5 or more nodes
-        # This wait is required for some of the previous OCS versions (< 4.5)
-        current_mon_count = int(
-            ceph_cluster.CEPHCLUSTER.get_resource(resource_name="", column="MONCOUNT")
-        )
-        assert ceph_cluster.POD.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            selector=constants.MON_APP_LABEL,
-            resource_count=current_mon_count,
-            timeout=900,
-        )
-        ceph_cluster.mons = []
-        ceph_cluster.scan_cluster()
+        if helpers.storagecluster_independent_check():
+            ceph_cluster = CephClusterExternal()
+        else:
+            ceph_cluster = CephCluster()
+            # Wait for mon pods to reach expected count
+            # Bug 1778273 - [RFE]: Configure 5 MONs for OCS cluster with 5 or more nodes
+            # This wait is required for some of the previous OCS versions (< 4.5)
+            current_mon_count = int(
+                ceph_cluster.CEPHCLUSTER.get_resource(
+                    resource_name="", column="MONCOUNT"
+                )
+            )
+            assert ceph_cluster.POD.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector=constants.MON_APP_LABEL,
+                resource_count=current_mon_count,
+                timeout=900,
+            )
+            ceph_cluster.mons = []
+            ceph_cluster.scan_cluster()
 
         # Select nodes for running app pods and inducing network failure later
         app_pod_nodes = self.select_nodes_for_app_pods(
@@ -193,40 +200,6 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
         return ceph_cluster, dc_pods, ceph_pods, app_pod_nodes, test_nodes, disruptor
 
-    @pytest.fixture()
-    def teardown(self, request, nodes):
-        """
-        Make sure all nodes are up again
-        Make sure that all cluster's nodes are in 'Ready' state and if not,
-        change them back to 'Ready' state by restarting the nodes
-
-        """
-
-        def finalizer():
-            # Start the powered off nodes
-            nodes.restart_nodes_by_stop_and_start_teardown()
-            try:
-                node.wait_for_nodes_status(status=constants.NODE_READY)
-            except ResourceWrongStatusException:
-                # Restart the nodes if in NotReady state
-                not_ready_nodes = [
-                    n
-                    for n in node.get_node_objs()
-                    if n.ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
-                ]
-                if not_ready_nodes:
-                    logger.info(
-                        f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
-                    )
-                    nodes.restart_nodes_by_stop_and_start(not_ready_nodes)
-                    node.wait_for_nodes_status(status=constants.NODE_READY)
-
-            # Check ceph health
-            assert ceph_health_check(), "Ceph cluster health is not OK"
-            logger.info("Ceph cluster health is OK")
-
-        request.addfinalizer(finalizer)
-
     def identify_and_add_nodes(self, scenario, num_of_nodes):
         """
         Fetches info about the worker nodes and add nodes (if required)
@@ -257,24 +230,13 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             logger.info(f"{nodes_to_add} extra workers nodes needed")
 
             if config.ENV_DATA["deployment_type"] == "ipi":
-                machine_name = machine.get_machine_from_node_name(
-                    random.choice(initial_worker_nodes)
+                machineset_name = random.choice(machine.get_machinesets())
+                node.add_new_node_and_label_it(
+                    machineset_name=machineset_name,
+                    num_nodes=nodes_to_add,
+                    mark_for_ocs_label=False,
                 )
-                machineset_name = machine.get_machineset_from_machine_name(machine_name)
-                machineset_replica_count = machine.get_replica_count(machineset_name)
-                machine.add_node(
-                    machineset_name, count=machineset_replica_count + nodes_to_add
-                )
-                logger.info("Waiting for the new node(s) to be in ready state")
-                machine.wait_for_new_node_to_be_ready(machineset_name)
             else:
-                if (
-                    config.ENV_DATA.get("platform").lower()
-                    == constants.VSPHERE_PLATFORM
-                ):
-                    pytest.skip(
-                        "Skipping add node in VSPHERE due to https://bugzilla.redhat.com/show_bug.cgi?id=1844521"
-                    )
                 is_rhel = config.ENV_DATA.get("rhel_workers") or config.ENV_DATA.get(
                     "rhel_user"
                 )
@@ -436,7 +398,8 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 executor.submit(
                     pod_obj.run_io,
                     storage_type="fs",
-                    size="1G",
+                    size="2G",
+                    io_direction="write",
                     runtime=30,
                     fio_filename=fio_filename,
                 )
@@ -571,7 +534,11 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         argvalues=[
             pytest.param(
                 *["colocated", 3, 1, False],
-                marks=[pytest.mark.polarion_id("OCS-1423"), skipif_aws_i3],
+                marks=[
+                    pytest.mark.polarion_id("OCS-1423"),
+                    skipif_aws_i3,
+                    skipif_external_mode,
+                ],
             ),
             pytest.param(
                 *["dedicated", 2, 1, False], marks=pytest.mark.polarion_id("OCS-1428")
@@ -581,15 +548,25 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             ),
             pytest.param(
                 *["colocated", 4, 1, False],
-                marks=[pytest.mark.polarion_id("OCS-1426"), skipif_aws_i3],
+                marks=[
+                    pytest.mark.polarion_id("OCS-1426"),
+                    skipif_aws_i3,
+                    skipif_external_mode,
+                ],
             ),
             pytest.param(
                 *["colocated", 5, 3, True],
-                marks=[pytest.mark.polarion_id("OCS-1424"), skipif_aws_i3],
+                marks=[
+                    pytest.mark.polarion_id("OCS-1424"),
+                    skipif_aws_i3,
+                    skipif_external_mode,
+                ],
             ),
         ],
     )
-    def test_rwo_pvc_fencing_node_short_network_failure(self, nodes, setup, teardown):
+    def test_rwo_pvc_fencing_node_short_network_failure(
+        self, nodes, setup, node_restart_teardown
+    ):
         """
         OCS-1423/OCS-1428/OCS-1426:
         - Start DeploymentConfig based app pods on 1 OCS/Non-OCS node
@@ -667,22 +644,23 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 sleep=30,
             ), (f"App pod with name {pod_obj.name} did not reach Running state")
 
-        # Wait for mon and osd pods to reach Running state
-        selectors_to_check = {
-            constants.MON_APP_LABEL: ceph_cluster.mon_count,
-            constants.OSD_APP_LABEL: ceph_cluster.osd_count,
-        }
-        for selector, count in selectors_to_check.items():
-            assert ceph_cluster.POD.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                selector=selector,
-                resource_count=count,
-                timeout=1800,
-                sleep=60,
-            ), f"{count} expected pods with selector {selector} are not in Running state"
+        if not helpers.storagecluster_independent_check():
+            # Wait for mon and osd pods to reach Running state
+            selectors_to_check = {
+                constants.MON_APP_LABEL: ceph_cluster.mon_count,
+                constants.OSD_APP_LABEL: ceph_cluster.osd_count,
+            }
+            for selector, count in selectors_to_check.items():
+                assert ceph_cluster.POD.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=selector,
+                    resource_count=count,
+                    timeout=1800,
+                    sleep=60,
+                ), f"{count} expected pods with selector {selector} are not in Running state"
 
-        assert ceph_health_check(), "Ceph cluster health is not OK"
-        logger.info("Ceph cluster health is OK")
+            assert ceph_health_check(), "Ceph cluster health is not OK"
+            logger.info("Ceph cluster health is OK")
 
         # Verify data integrity from new pods
         for num, pod_obj in enumerate(new_dc_pods):
@@ -714,16 +692,24 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             ),
             pytest.param(
                 *["colocated", 4, 1, False],
-                marks=[pytest.mark.polarion_id("OCS-1427"), skipif_lso],
+                marks=[
+                    pytest.mark.polarion_id("OCS-1427"),
+                    skipif_lso,
+                    skipif_external_mode,
+                ],
             ),
             pytest.param(
                 *["colocated", 6, 3, True],
-                marks=[pytest.mark.polarion_id("OCS-1430"), skipif_lso],
+                marks=[
+                    pytest.mark.polarion_id("OCS-1430"),
+                    skipif_lso,
+                    skipif_external_mode,
+                ],
             ),
         ],
     )
     def test_rwo_pvc_fencing_node_prolonged_network_failure(
-        self, nodes, setup, teardown
+        self, nodes, setup, node_restart_teardown
     ):
         """
         OCS-1427/OCS-1429:
@@ -758,6 +744,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         """
         ceph_cluster, dc_pods, ceph_pods, app_pod_nodes, test_nodes, disruptor = setup
 
+        external_mode = helpers.storagecluster_independent_check()
         # Run IO on pods
         md5sum_data = self.run_and_verify_io(
             pod_list=dc_pods, fio_filename="io_file1", run_io_in_bg=True
@@ -795,7 +782,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         nodes.stop_nodes(node.get_node_objs(app_pod_nodes))
 
         # Force delete the app pods and/or mon,osd pods on the unresponsive node
-        if ceph_cluster.mon_count == 5 and float(config.ENV_DATA["ocs_version"]) < 4.4:
+        if float(config.ENV_DATA["ocs_version"]) < 4.4 and ceph_cluster.mon_count == 5:
             for pod_obj in ceph_cluster.mons:
                 if pod.get_pod_node(pod_obj).name in app_pod_nodes:
                     ceph_pods.append(pod_obj)
@@ -812,27 +799,31 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 sleep=30,
             ), (f"App pod with name {pod_obj.name} did not reach Running state")
 
-        # Wait for mon and osd pods to reach Running state
-        selectors_to_check = [constants.MON_APP_LABEL, constants.OSD_APP_LABEL]
-        for selector in selectors_to_check:
-            assert ceph_cluster.POD.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                selector=selector,
-                resource_count=3,
-                timeout=1800,
-                sleep=60,
-            ), f"3 expected pods with selector {selector} are not in Running state"
+        if not external_mode:
+            # Wait for mon and osd pods to reach Running state
+            selectors_to_check = {
+                constants.MON_APP_LABEL: 3,
+                constants.OSD_APP_LABEL: ceph_cluster.osd_count,
+            }
+            for selector, count in selectors_to_check.items():
+                assert ceph_cluster.POD.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=selector,
+                    resource_count=count,
+                    timeout=1800,
+                    sleep=60,
+                ), f"{count} expected pods with selector {selector} are not in Running state"
 
-        if ceph_cluster.mon_count == 3:
-            # Check ceph health
-            toolbox_status = ceph_cluster.POD.get_resource_status(
-                ceph_cluster.toolbox.name
-            )
-            if toolbox_status == constants.STATUS_TERMINATING:
-                ceph_cluster.toolbox.delete(force=True)
+            if ceph_cluster.mon_count == 3:
+                # Check ceph health
+                toolbox_status = ceph_cluster.POD.get_resource_status(
+                    ceph_cluster.toolbox.name
+                )
+                if toolbox_status == constants.STATUS_TERMINATING:
+                    ceph_cluster.toolbox.delete(force=True)
 
-            assert ceph_health_check(), "Ceph cluster health is not OK"
-            logger.info("Ceph cluster health is OK")
+                assert ceph_health_check(), "Ceph cluster health is not OK"
+                logger.info("Ceph cluster health is OK")
 
         # Verify data integrity from new pods
         for num, pod_obj in enumerate(new_dc_pods):
@@ -861,12 +852,16 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             ),
             pytest.param(
                 *["colocated", 4, 1, True],
-                marks=[pytest.mark.polarion_id("OCS-1431"), skipif_lso],
+                marks=[
+                    pytest.mark.polarion_id("OCS-1431"),
+                    skipif_lso,
+                    skipif_external_mode,
+                ],
             ),
         ],
     )
     def test_rwo_pvc_fencing_node_prolonged_and_short_network_failure(
-        self, nodes, setup, teardown
+        self, nodes, setup, node_restart_teardown
     ):
         """
         OCS-1431/OCS-1436:
@@ -892,6 +887,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         """
         ceph_cluster, dc_pods, ceph_pods, app_pod_nodes, test_nodes, disruptor = setup
 
+        external_mode = helpers.storagecluster_independent_check()
         extra_nodes = list(set(test_nodes) - set(app_pod_nodes))
         helpers.remove_label_from_worker_node(
             node_list=extra_nodes[:-1], label_key="nodetype"
@@ -946,27 +942,31 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 sleep=30,
             ), (f"App pod with name {pod_obj.name} did not reach Running state")
 
-        # Wait for mon and osd pods to reach Running state
-        selectors_to_check = [constants.MON_APP_LABEL, constants.OSD_APP_LABEL]
-        for selector in selectors_to_check:
-            assert ceph_cluster.POD.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                selector=selector,
-                resource_count=3,
-                timeout=1800,
-                sleep=60,
-            ), f"3 expected pods with selector {selector} are not in Running state"
+        if not external_mode:
+            # Wait for mon and osd pods to reach Running state
+            selectors_to_check = {
+                constants.MON_APP_LABEL: 3,
+                constants.OSD_APP_LABEL: ceph_cluster.osd_count,
+            }
+            for selector, count in selectors_to_check.items():
+                assert ceph_cluster.POD.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=selector,
+                    resource_count=count,
+                    timeout=1800,
+                    sleep=60,
+                ), f"{count} expected pods with selector {selector} are not in Running state"
 
-        if ceph_cluster.mon_count == 3:
-            # Check ceph health
-            toolbox_status = ceph_cluster.POD.get_resource_status(
-                ceph_cluster.toolbox.name
-            )
-            if toolbox_status == constants.STATUS_TERMINATING:
-                ceph_cluster.toolbox.delete(force=True)
+            if ceph_cluster.mon_count == 3:
+                # Check ceph health
+                toolbox_status = ceph_cluster.POD.get_resource_status(
+                    ceph_cluster.toolbox.name
+                )
+                if toolbox_status == constants.STATUS_TERMINATING:
+                    ceph_cluster.toolbox.delete(force=True)
 
-            assert ceph_health_check(), "Ceph cluster health is not OK"
-            logger.info("Ceph cluster health is OK")
+                assert ceph_health_check(), "Ceph cluster health is not OK"
+                logger.info("Ceph cluster health is OK")
 
         # Verify data integrity from new pods
         for num, pod_obj in enumerate(new_dc_pods):
@@ -1018,20 +1018,21 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 sleep=30,
             ), (f"App pod with name {pod_obj.name} did not reach Running state")
 
-        # Wait for mon and osd pods to reach Running state
-        for selector in selectors_to_check:
-            assert ceph_cluster.POD.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                selector=selector,
-                resource_count=3,
-                timeout=1800,
-                sleep=60,
-            ), f"3 expected pods with selector {selector} are not in Running state"
+        if not external_mode:
+            # Wait for mon and osd pods to reach Running state
+            for selector, count in selectors_to_check.items():
+                assert ceph_cluster.POD.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=selector,
+                    resource_count=count,
+                    timeout=1800,
+                    sleep=60,
+                ), f"{count} expected pods with selector {selector} are not in Running state"
 
-        if ceph_cluster.mon_count == 3:
-            # Check ceph health
-            assert ceph_health_check(), "Ceph cluster health is not OK"
-            logger.info("Ceph cluster health is OK")
+            if ceph_cluster.mon_count == 3:
+                # Check ceph health
+                assert ceph_health_check(), "Ceph cluster health is not OK"
+                logger.info("Ceph cluster health is OK")
 
         # Verify data integrity from new pods
         for num, pod_obj in enumerate(new_dc_pods2):

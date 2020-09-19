@@ -2900,6 +2900,7 @@ def node_restart_teardown(request, nodes):
     Make sure all nodes are up again
     Make sure that all cluster's nodes are in 'Ready' state and if not,
     change them back to 'Ready' state by restarting the nodes
+
     """
 
     def finalizer():
@@ -2918,7 +2919,7 @@ def node_restart_teardown(request, nodes):
                 log.info(
                     f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
                 )
-                nodes.restart_nodes(not_ready_nodes)
+                nodes.restart_nodes_by_stop_and_start(not_ready_nodes)
                 node.wait_for_nodes_status(status=constants.NODE_READY)
 
     request.addfinalizer(finalizer)
