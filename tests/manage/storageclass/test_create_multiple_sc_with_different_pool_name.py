@@ -33,10 +33,10 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
         *. Run IO on each app pod
         """
 
-        # Create 3 storageclasses, each with different pool name
+        # Create 2 storageclasses, each with different pool name
         cbp_list = []
         sc_list = []
-        for i in range(3):
+        for i in range(2):
             log.info("Creating cephblockpool")
             cbp_obj = helpers.create_ceph_block_pool()
             log.info(
@@ -62,7 +62,7 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
 
         # Create PVCs using each SC
         pvc_list = []
-        for i in range(3):
+        for i in range(2):
             log.info(f"Creating a PVC using {sc_list[i].name}")
             pvc_obj = helpers.create_pvc(sc_list[i].name)
             log.info(
@@ -76,7 +76,7 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
 
         # Create app pod and mount each PVC
         pod_list = []
-        for i in range(3):
+        for i in range(2):
             log.info(f"Creating an app pod and mount {pvc_list[i].name}")
             pod_obj = helpers.create_pod(
                 interface_type=constants.CEPHBLOCKPOOL,
