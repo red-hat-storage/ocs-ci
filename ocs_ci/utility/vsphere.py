@@ -542,12 +542,12 @@ class VSPHERE(object):
         """
         return True if self.get_pool(pool, dc, cluster) else False
 
-    def check_resource_pool_existence(self, pool_prefix, dc, cluster):
+    def is_resource_pool_prefix_exist(self, pool_prefix, dc, cluster):
         """
         Check whether or not resource pool with the provided prefix exist
 
         Args:
-             pool_prefix (str): The prefix to look for
+            pool_prefix (str): The prefix to look for
             dc (str): Datacenter name
             cluster (str): Cluster name
 

@@ -328,7 +328,7 @@ class VSPHEREBASE(Deployment):
 
         """
         cluster_name_pattern = cluster_name_prefix
-        rp_exist = self.vsphere.check_resource_pool_existence(
+        rp_exist = self.vsphere.is_resource_pool_prefix_exist(
             cluster_name_pattern, self.datacenter, self.cluster
         )
         if rp_exist:
