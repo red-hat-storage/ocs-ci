@@ -117,7 +117,7 @@ class TestMustGather(ManageTest):
                     f"Found must_gather_commands directory - {dir_root}"
                 )
                 assert 'json_output' in dirs, (
-                    "json_output directory is not present in "
+                    "reduce_cluster_load "
                     "must_gather_commands directory."
                 )
                 assert files, (
@@ -130,23 +130,31 @@ class TestMustGather(ManageTest):
                 break
 
         # Verify that command output files are present as expected
-        assert set(constants.MUST_GATHER_COMMANDS).issubset(files), (
+        current_ocs_version = ocp.get_ocs_parsed_version()
+        logger.info(f"Current OCS version: {current_ocs_version}")
+        must_gather_commands = constants.BASE_MUST_GATHER_COMMANDS
+        must_gather_commands_json = constants.BASE_MUST_GATHER_COMMANDS_JSON
+        if current_ocs_version > 4.4:
+            must_gather_commands = constants.EXT_MUST_GATHER_COMMANDS
+            must_gather_commands_json = constants.EXT_MUST_GATHER_COMMANDS_JSON
+
+        assert set(must_gather_commands).issubset(files), (
             f"Actual and expected commands output files are not matching.\n"
-            f"Actual: {files}\nExpected: {constants.MUST_GATHER_COMMANDS}"
+            f"Actual: {files}\nExpected: {must_gather_commands}"
         )
-        if sorted(constants.MUST_GATHER_COMMANDS_JSON) != sorted(files):
+        if sorted(must_gather_commands) != sorted(files):
             logger.warning(
                 "There are more actual must gather commands than expected"
             )
 
         # Verify that files for command output in json are present as expected
         commands_json = os.listdir(json_output_dir)
-        assert set(constants.MUST_GATHER_COMMANDS_JSON).issubset(commands_json), (
+        assert set(must_gather_commands_json).issubset(commands_json), (
             f"Actual and expected json output commands files are not "
             f"matching.\nActual: {commands_json}\n"
-            f"Expected: {constants.MUST_GATHER_COMMANDS_JSON}"
+            f"Expected: {must_gather_commands_json}"
         )
-        if sorted(constants.MUST_GATHER_COMMANDS_JSON) != sorted(commands_json):
+        if sorted(must_gather_commands_json) != sorted(commands_json):
             logger.warning(
                 "There are more actual must gather commands than expected"
             )
