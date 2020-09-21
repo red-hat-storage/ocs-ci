@@ -49,18 +49,20 @@ from ocs_ci.ocs.utils import (
     setup_ceph_toolbox, collect_ocs_logs
 )
 from ocs_ci.utility import templating
+from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.localstorage import get_lso_channel
 from ocs_ci.utility.openshift_console import OpenshiftConsole
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_latest_ds_olm_tag,
+    get_ocp_version,
     is_cluster_running,
     run_cmd,
     set_selinux_permissions,
     set_registry_to_managed_state,
     add_stage_cert,
-    modify_csv
+    modify_csv, wait_for_machineconfigpool_status
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from tests import helpers
@@ -876,6 +878,31 @@ def setup_local_storage(storageclass):
         f"{constants.OPERATOR_NODE_LABEL}"
     )
 
+    ocp_version = get_ocp_version()
+    ocp_ga_version = get_ocp_ga_version(ocp_version)
+    if not ocp_ga_version:
+        optional_operators_data = templating.load_yaml(
+            constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
+        )
+        logger.info(
+            "Creating temp yaml file with optional operators data:\n %s",
+            optional_operators_data
+        )
+        optional_operators_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='optional_operators', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            optional_operators_data, optional_operators_yaml.name
+        )
+        with open(optional_operators_yaml.name, 'r') as f:
+            logger.info(f.read())
+        logger.info(
+            "Creating optional operators CatalogSource and ImageContentSourcePolicy"
+        )
+        run_cmd(f"oc create -f {optional_operators_yaml.name}")
+
+        wait_for_machineconfigpool_status('all')
+
     logger.info("Retrieving local-storage-operator data from yaml")
     lso_data = list(templating.load_yaml(
         constants.LOCAL_STORAGE_OPERATOR, multi_document=True
@@ -884,6 +911,9 @@ def setup_local_storage(storageclass):
     for data in lso_data:
         if data['kind'] == 'Subscription':
             data['spec']['channel'] = get_lso_channel()
+        if not ocp_ga_version:
+            if data['kind'] == 'Subscription':
+                data['spec']['source'] = 'optional-operators'
 
     # Create temp yaml file and create local storage operator
     logger.info(
@@ -902,7 +932,7 @@ def setup_local_storage(storageclass):
     run_cmd(f"oc create -f {lso_data_yaml.name}")
 
     local_storage_operator = ocp.OCP(
-        kind=constants.POD, namespace='local-storage'
+        kind=constants.POD, namespace=constants.LOCAL_STORAGE_NAMESPACE
     )
     assert local_storage_operator.wait_for_resource(
         condition=constants.STATUS_RUNNING,
@@ -915,7 +945,7 @@ def setup_local_storage(storageclass):
     lso_type = config.DEPLOYMENT.get('type')
     if platform == constants.VSPHERE_PLATFORM:
         # Types of LSO Deployment
-        # Importing here to avoid circular dependancy
+        # Importing here to avoid circular dependency
         from ocs_ci.deployment.vmware import VSPHEREBASE
         vsphere_base = VSPHEREBASE()
 

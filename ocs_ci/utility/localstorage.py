@@ -164,6 +164,7 @@ def get_local_volume_cr():
     return ocp_obj
 
 
+@retry(CommandFailed, 5, 30, 1)
 def get_lso_channel():
     """
     Get the channel to use for installing the local storage operator
