@@ -2316,12 +2316,20 @@ def collect_performance_stats(dir_name):
         logger.info(f'Creating directory {log_dir_path}')
         os.makedirs(log_dir_path)
 
-    ceph_obj = CephCluster()
     performance_stats = {}
+    external = config.DEPLOYMENT['external_mode']
+    if external:
+        # Skip collecting performance_stats for external mode RHCS cluster
+        logging.info("Skipping status collection for external mode")
+    else:
+        ceph_obj = CephCluster()
 
-    # Get iops and throughput percentage of cluster
-    iops_percentage = ceph_obj.get_iops_percentage()
-    throughput_percentage = ceph_obj.get_throughput_percentage()
+        # Get iops and throughput percentage of cluster
+        iops_percentage = ceph_obj.get_iops_percentage()
+        throughput_percentage = ceph_obj.get_throughput_percentage()
+
+        performance_stats['iops_percentage'] = iops_percentage
+        performance_stats['throughput_percentage'] = throughput_percentage
 
     # ToDo: Get iops and throughput percentage of each nodes
 
@@ -2337,8 +2345,6 @@ def collect_performance_stats(dir_name):
     worker_node_utilization_from_oc_describe = \
         node.get_node_resource_utilization_from_oc_describe(node_type='worker')
 
-    performance_stats['iops_percentage'] = iops_percentage
-    performance_stats['throughput_percentage'] = throughput_percentage
     performance_stats['master_node_utilization'] = master_node_utilization_from_adm_top
     performance_stats['worker_node_utilization'] = worker_node_utilization_from_adm_top
     performance_stats['master_node_utilization_from_oc_describe'] = master_node_utilization_from_oc_describe
