@@ -568,12 +568,13 @@ class VSPHEREUPI(VSPHEREBASE):
         """
         cluster_name_parts = config.ENV_DATA.get("cluster_name").split("-")
         prefix = cluster_name_parts[0]
-        if self.check_cluster_existence(prefix):
-            raise exceptions.SameNamePrefixClusterAlreadyExistsException(
-                f"Cluster with name prefix {prefix} already exists. "
-                f"Please destroy the existing cluster for a new cluster "
-                f"deployment"
-            )
+        if not prefix.startswith('jnk'):
+            if self.check_cluster_existence(prefix):
+                raise exceptions.SameNamePrefixClusterAlreadyExistsException(
+                    f"Cluster with name prefix {prefix} already exists. "
+                    f"Please destroy the existing cluster for a new cluster "
+                    f"deployment"
+                )
         super(VSPHEREUPI, self).deploy_ocp(log_cli_level)
         if config.ENV_DATA.get('scale_up'):
             logger.info("Adding extra nodes to cluster")
