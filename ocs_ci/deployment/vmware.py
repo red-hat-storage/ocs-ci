@@ -15,7 +15,7 @@ from ocs_ci.deployment.install_ocp_on_rhel import OCPINSTALLRHEL
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.exceptions import CommandFailed, RDMDiskNotFound
 from ocs_ci.ocs.node import (
     get_node_ips, get_typed_worker_nodes, remove_nodes, wait_for_nodes_status
@@ -315,6 +315,28 @@ class VSPHEREBASE(Deployment):
         # destroy the folder in templates
         self.vsphere.destroy_folder(pool, self.cluster, self.datacenter)
 
+    def check_cluster_existence(self, cluster_name_prefix):
+        """
+        Check cluster existence according to cluster name prefix
+
+        Args:
+            cluster_name_prefix (str): The cluster name prefix to look for
+
+        Returns:
+            bool: True if a cluster with the same name prefix already exists,
+                False otherwise
+
+        """
+        cluster_name_pattern = cluster_name_prefix + "*"
+        rp_exist = self.vsphere.check_resource_pool_existence(
+            cluster_name_pattern, self.datacenter, self.cluster
+        )
+        if rp_exist:
+            logger.error(f"Resource pool with the prefix of {cluster_name_prefix} was found")
+            return True
+        else:
+            return False
+
 
 class VSPHEREUPI(VSPHEREBASE):
     """
@@ -544,6 +566,14 @@ class VSPHEREUPI(VSPHEREBASE):
                 (default: "DEBUG")
 
         """
+        cluster_name_parts = config.ENV_DATA.get("cluster_name").split("-")
+        prefix = cluster_name_parts[0]
+        if self.check_cluster_existence(prefix):
+            raise exceptions.SameNamePrefixClusterAlreadyExistsException(
+                f"Cluster with name prefix {prefix} already exists. "
+                f"Please destroy the existing cluster for a new cluster "
+                f"deployment"
+            )
         super(VSPHEREUPI, self).deploy_ocp(log_cli_level)
         if config.ENV_DATA.get('scale_up'):
             logger.info("Adding extra nodes to cluster")

@@ -542,6 +542,25 @@ class VSPHERE(object):
         """
         return True if self.get_pool(pool, dc, cluster) else False
 
+    def check_resource_pool_existence(self, pool_prefix, dc, cluster):
+        """
+        Check whether or not resource pool with the provided prefix exist
+
+        Args:
+             pool_prefix (str): The prefix to look for
+            dc (str): Datacenter name
+            cluster (str): Cluster name
+
+        Returns:
+            bool: True if a resource pool with the same name prefix exists, False otherwise
+
+        """
+        cluster_obj = self.get_cluster(cluster, dc)
+        for rp in cluster_obj.resourcePool.resourcePool:
+            if pool_prefix in rp.name:
+                return True
+        return False
+
     def poweroff_vms(self, vms):
         """
         Powers off the VM and wait for operation to complete
