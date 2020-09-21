@@ -1154,3 +1154,21 @@ MCG_NS_AWS_ENDPOINT = 'https://s3.amazonaws.com'
 MCG_NS_RESOURCE = 'ns_resource'
 MCG_NS_BUCKET = 'ns-bucket'
 MCG_NS_AWS_CONNECTION = 'aws_connection'
+
+# Squads assignment
+# Tests are assigned to Squads based on patterns matching test path.
+# For example: In case following test fails:
+# tests/e2e/registry/test_pod_from_registry.py::TestRegistryImage::test_run_pod_local_image
+# the pattern "/registry/" match the test path and so the test belongs to
+# Magenta squad.
+SQUADS = {
+    'Brown': ["/nodes/"],
+    'Green': ["/pv_services/", "/storageclass/"],
+    'Blue': ["/monitoring/"],
+    'Red': ["/mcg/", "/rgw/"],
+    'Yellow': ["/cluster_expansion/"],
+    'Purple': ["/test_must_gather", "/upgrade/"],
+    'Magenta': ["/workloads/", "/registry/", "/logging/"],
+    'Grey': ["/performance/"],
+    'Orange': ["/scale/"],
+}
