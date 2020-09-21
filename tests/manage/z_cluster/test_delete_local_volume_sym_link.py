@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.defaults import ROOK_CLUSTER_NAMESPACE
-from ocs_ci.framework.testlib import E2ETest
+from ocs_ci.framework.testlib import E2ETest, tier4, tier4a, tier4b, tier4c
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.pytest_customization.marks import skipif_no_lso
 from tests.helpers import wait_for_resource_state
@@ -11,21 +11,24 @@ from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.resources.pod import wait_for_storage_pods, get_pod_obj, get_pod_node
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.framework.testlib import tier4
+
 log = logging.getLogger(__name__)
 
 
 @tier4
+@tier4a
+@tier4b
+@tier4c
 @skipif_no_lso
 @pytest.mark.polarion_id("OCS-2316")
-class TestDeleteLocalVolume(E2ETest):
+class TestDeleteLocalVolumeSymLink(E2ETest):
     """
     A test case to validate rook-ceph-crashcollector pods
     does not reach CLBO state after delete  sym link
     on LSO Cluster
 
     """
-    def test_delete_local_volume(self):
+    def test_delete_local_volume_sym_link(self):
         """
         Delete sym link on LSO Cluster
         """
@@ -45,7 +48,7 @@ class TestDeleteLocalVolume(E2ETest):
         # Get Sym link
         osd_pvcs = get_deviceset_pvcs()
         pv_name = osd_pvcs[0].data['spec']['volumeName']
-        ocp_obj = ocp.OCP(namespace=ROOK_CLUSTER_NAMESPACE, kind='pv')
+        ocp_obj = ocp.OCP(namespace=ROOK_CLUSTER_NAMESPACE, kind=constants.PV)
         pv_obj = ocp_obj.get(resource_name=pv_name)
         path = pv_obj['spec']['local']['path']
 
@@ -65,4 +68,3 @@ class TestDeleteLocalVolume(E2ETest):
 
         # Check ceph status
         ceph_health_check(namespace=config.ENV_DATA['cluster_namespace'])
-        log.info("Ceph cluster health is OK")
