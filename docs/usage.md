@@ -87,6 +87,8 @@ to the pytest.
    necessary styles and scripts
 * `--email` - to send the email reports of the test run which was generated
    by --html option. MUST specify --html to send email reports.
+* `--squad-analysis` - Include Squad Analysis to email report. Applicable only
+    in combination with --email option.
 * `--bugzilla` - allows you to skip tests with unresolved bug (test case
   needs to be properly decorated as you can see in
   [documentation](./writing_tests.md)). You will also need to
