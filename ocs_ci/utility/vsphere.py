@@ -557,7 +557,7 @@ class VSPHERE(object):
         """
         cluster_obj = self.get_cluster(cluster, dc)
         for rp in cluster_obj.resourcePool.resourcePool:
-            if pool_prefix in rp.name:
+            if rp.name.startswith(pool_prefix):
                 return True
         return False
 
