@@ -46,6 +46,8 @@ def pytest_runtest_makereport(item, call):
         item.session.results[item] = report
     if report.skipped:
         item.session.results[item] = report
+    if report.when in ('setup', 'teardown') and report.failed:
+        item.session.results[item] = report
 
 
 def pytest_sessionstart(session):
