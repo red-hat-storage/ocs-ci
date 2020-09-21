@@ -568,7 +568,7 @@ class VSPHEREUPI(VSPHEREBASE):
         """
         cluster_name_parts = config.ENV_DATA.get("cluster_name").split("-")
         prefix = cluster_name_parts[0]
-        if not prefix.startswith('jnk'):
+        if not prefix.startswith(tuple(constants.PRODUCTION_JOBS_PREFIX)):
             if self.check_cluster_existence(prefix):
                 raise exceptions.SameNamePrefixClusterAlreadyExistsException(
                     f"Cluster with name prefix {prefix} already exists. "
