@@ -6,6 +6,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_latest_ocp_version,
     expose_ocp_version,
+    ceph_health_check
 )
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
@@ -25,7 +26,7 @@ class TestUpgradeOCP(ManageTest):
     5. monitor cluster health
     """
 
-    def test_upgrade_ocp(self):
+    def test_upgrade_ocp(self, reduce_cluster_load):
         """
         Tests OCS stability when upgrading OCP
 
@@ -116,3 +117,7 @@ class TestUpgradeOCP(ManageTest):
                 if sampler:
                     logger.info("Upgrade Completed Successfully!")
                     break
+
+        new_ceph_cluster = CephCluster()
+        new_ceph_cluster.wait_for_rebalance(timeout=1800)
+        ceph_health_check(tries=90, delay=30)
