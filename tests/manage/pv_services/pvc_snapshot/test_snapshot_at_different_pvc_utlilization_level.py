@@ -18,7 +18,9 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
     Tests to take snapshot when PVC usage is at different levels
     """
     @pytest.fixture(autouse=True)
-    def setup(self, create_pvcs_and_pods):
+    def setup(
+        self, project_factory, snapshot_restore_factory, create_pvcs_and_pods
+    ):
         """
         Create PVCs and pods
 
@@ -31,13 +33,13 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
         )
 
     def test_snapshot_at_different_usage_level(
-        self, snapshot_factory, pod_factory, snapshot_restore_factory
+        self, snapshot_factory, snapshot_restore_factory, pod_factory
     ):
         """
         Test to take multiple snapshots of same PVC when the PVC usage is at
         0%, 20%, 40%, 60%, and 80%, then delete the parent PVC and restore the
         snapshots to create new PVCs. Delete snapshots and attach the restored
-        to pods to verify the data.
+        PVCs to pods to verify the data.
 
         """
         snapshots = []
@@ -175,6 +177,7 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 f"Attached the PVC {restore_pvc_obj.name} to pod "
                 f"{restore_pod_obj.name}"
             )
+            restore_pod_objs.append(restore_pod_obj)
 
         # Verify the new pods are running
         log.info("Verify the new pods are running")
@@ -187,7 +190,8 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
         for restore_pod_obj in restore_pod_objs:
             log.info(
                 f"Verifying md5sum of these files on pod "
-                f"{restore_pod_obj.name}:{restore_pod_obj.pvc.snapshot.md5_sum}"
+                f"{restore_pod_obj.name}:"
+                f"{restore_pod_obj.pvc.snapshot.md5_sum}"
             )
             for file_name, actual_md5_sum in (
                 restore_pod_obj.pvc.snapshot.md5_sum.items()
@@ -219,6 +223,7 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 )
             log.info(
                 f"Verified md5sum of these files on pod "
-                f"{restore_pod_obj.name}:{restore_pod_obj.pvc.snapshot.md5_sum}"
+                f"{restore_pod_obj.name}:"
+                f"{restore_pod_obj.pvc.snapshot.md5_sum}"
             )
         log.info("md5sum verified")
