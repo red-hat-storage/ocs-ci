@@ -172,6 +172,11 @@ skipif_lso = pytest.mark.skipif(
     reason="Test will not run on LSO deployed cluster"
 )
 
+skipif_no_lso = pytest.mark.skipif(
+    config.DEPLOYMENT.get('local_storage') is False,
+    reason="Test run only on LSO deployed cluster"
+)
+
 metrics_for_external_mode_required = pytest.mark.skipif(
     float(config.ENV_DATA['ocs_version']) < 4.6
     and config.DEPLOYMENT.get('external_mode') is True,
