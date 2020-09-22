@@ -30,7 +30,7 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
         )
 
     def test_snapshot_at_different_usage_level(
-        self, pod_factory, teardown_factory, snapshot_restore_factory
+        self, snapshot_factory, pod_factory, snapshot_restore_factory
     ):
         """
         Test to take multiple snapshots of same PVC when the PVC usage is at
@@ -71,8 +71,7 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 log.info(
                     f"Creating snapshot of PVC {pvc_obj.name} at {usage}%"
                 )
-                snap_obj = pvc_obj.create_snapshot(wait=True)
-                teardown_factory(snap_obj)
+                snap_obj = snapshot_factory(pvc_obj)
                 # Set a dict containing filename:md5sum for later verification
                 setattr(
                     snap_obj, 'md5_sum',
@@ -81,6 +80,7 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 snapshots.append(snap_obj)
                 log.info(f"Created snapshot of PVC {pvc_obj.name} at {usage}%")
             log.info(f"Created snapshot of all PVCs at {usage}%")
+        log.info("Snapshots creation completed.")
 
         # Delete pods
         log.info("Deleting the pods")
@@ -107,6 +107,8 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
             "PVs are also deleted."
         )
 
+        restore_pvc_objs = []
+
         # Create PVCs out of the snapshots and attach to pods
         log.info("Creating new PVCs from snapshots")
         for snapshot in snapshots:
@@ -123,10 +125,15 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 f"Created PVC {restore_pvc_obj.name} from snapshot "
                 f"{snapshot.name}"
             )
+            restore_pvc_objs.append(restore_pvc_obj)
+        log.info("Created new PVCs from all the snapshots")
 
-            # Attach the restored PVC to a pod
+        # Attach the restored PVCs to pods
+        log.info("Attach the restored PVCs to pods")
+        restore_pod_objs = []
+        for restore_pvc_obj in restore_pvc_objs:
             interface = constants.CEPHFILESYSTEM if (
-                constants.CEPHFS_INTERFACE in snapshot.parent_sc
+                constants.CEPHFS_INTERFACE in restore_pvc_obj.snapshot.parent_sc
             ) else constants.CEPHBLOCKPOOL
             restore_pod_obj = pod_factory(
                 interface=interface, pvc=restore_pvc_obj,
@@ -137,12 +144,16 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 f"{restore_pod_obj.name}"
             )
 
-            # Verify md5sum of files on the new pod
+        # Verify md5sum of files
+        log.info("Verifying md5sum of files on all the pods")
+        for restore_pod_obj in restore_pod_objs:
             log.info(
                 f"Verifying md5sum of these files on pod "
-                f"{restore_pod_obj.name}:{snapshot.md5_sum}"
+                f"{restore_pod_obj.name}:{restore_pod_obj.pvc.snapshot.md5_sum}"
             )
-            for file_name, actual_md5_sum in snapshot.md5_sum.items():
+            for file_name, actual_md5_sum in (
+                restore_pod_obj.pvc.snapshot.md5_sum.items()
+            ):
                 file_path = pod.get_file_path(restore_pod_obj, file_name)
                 log.info(
                     f"Checking the existence of file {file_name} on pod "
@@ -170,5 +181,6 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 )
             log.info(
                 f"Verified md5sum of these files on pod "
-                f"{restore_pod_obj.name}:{snapshot.md5_sum}"
+                f"{restore_pod_obj.name}:{restore_pod_obj.pvc.snapshot.md5_sum}"
             )
+        log.info("md5sum verified")

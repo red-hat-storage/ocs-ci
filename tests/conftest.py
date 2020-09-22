@@ -81,6 +81,7 @@ from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.amq import AMQ
+from ocs_ci.ocs.resources import pvc
 
 log = logging.getLogger(__name__)
 
@@ -2770,6 +2771,47 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
 
 
 @pytest.fixture()
+def snapshot_factory(request):
+    """
+    Snapshot factory. Calling this fixture creates a volume snapshot from the
+    specified PVC
+
+    """
+    instances = []
+
+    def factory(
+        pvc_obj,
+        wait=True,
+        snapshot_name=None
+    ):
+        """
+        Args:
+            pvc_obj (PVC): PVC object from which snapshot has to be created
+            wait (bool): True to wait for snapshot to be ready, False otherwise
+            snapshot_name (str): Name to be provided for snapshot
+
+        Returns:
+            OCS: OCS instance of kind VolumeSnapshot
+
+        """
+        snap_obj = pvc_obj.create_snapshot(snapshot_name=snapshot_name, wait=wait)
+        return snap_obj
+
+    def finalizer():
+        """
+        Delete the snapshots
+
+        """
+        for instance in instances:
+            if not instance.is_deleted:
+                instance.delete()
+                instance.ocp.wait_for_delete(instance.name)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
 def snapshot_restore_factory(request):
     """
     Snapshot restore factory. Calling this fixture creates new PVC out of the
@@ -2804,10 +2846,9 @@ def snapshot_restore_factory(request):
                 desired state.
 
         Returns:
-            OCS: OCS instance of kind VolumeSnapshot
+            PVC: Restored PVC object
 
         """
-        from ocs_ci.ocs.resources import pvc
         snapshot_info = snapshot_obj.get()
         size = size or snapshot_info['status']['restoreSize']
         restore_pvc_name = helpers.create_unique_resource_name(
@@ -2842,7 +2883,7 @@ def snapshot_restore_factory(request):
 
     def finalizer():
         """
-        Delete the VolumeSnapShot
+        Delete the PVCs
 
         """
         for instance in instances:
