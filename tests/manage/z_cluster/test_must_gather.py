@@ -117,7 +117,7 @@ class TestMustGather(ManageTest):
                     f"Found must_gather_commands directory - {dir_root}"
                 )
                 assert 'json_output' in dirs, (
-                    "reduce_cluster_load "
+                    "json_output directory is not present in "
                     "must_gather_commands directory."
                 )
                 assert files, (
