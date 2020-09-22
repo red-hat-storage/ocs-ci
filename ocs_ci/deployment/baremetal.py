@@ -194,7 +194,7 @@ class BAREMETALUPI(Deployment):
 
             if ocp_version == "4.6":
                 # Download metal_bios
-                rootfs_image_path = constants.coreos_url_prefix + image_data['live_rootfs_url']
+                rootfs_image_path = os.path.join(constants.coreos_url_prefix, image_data['live_rootfs_url'])
                 if check_for_rhcos_images(rootfs_image_path):
                     cmd = (
                         "wget -O "
@@ -437,9 +437,10 @@ class BAREMETALUPI(Deployment):
 
             """
             extra_data = ""
+            bm_install_files_loc = self.helper_node_details['bm_install_files']
+            extra_data_pxe = "rhcos-live-rootfs.x86_64.img coreos.inst.insecure"
             if ocp_version == "4.6":
-                extra_data = f"coreos.live.rootfs_url={self.helper_node_details['bm_install_files']}" \
-                             f"rhcos-live-rootfs.x86_64.img coreos.inst.insecure"
+                extra_data = f"coreos.live.rootfs_url={bm_install_files_loc} {extra_data_pxe}"
             default_pxe_file = f"""DEFAULT menu.c32
 TIMEOUT 20
 PROMPT 0
@@ -448,8 +449,8 @@ LABEL pxeboot
     MENU DEFAULT
     KERNEL rhcos-installer-kernel-x86_64
     APPEND ip=dhcp rd.neednet=1 initrd=rhcos-installer-initramfs.x86_64.img console=ttyS0 console=tty0 coreos.inst=yes \
-coreos.inst.install_dev=sda coreos.inst.image_url={self.helper_node_details['bm_install_files']}\
-rhcos-metal.x86_64.raw.gz coreos.inst.ignition_url={self.helper_node_details['bm_install_files']}{role}.ign \
+coreos.inst.install_dev=sda coreos.inst.image_url={bm_install_files_loc}\
+rhcos-metal.x86_64.raw.gz coreos.inst.ignition_url={bm_install_files_loc}{role}.ign \
 {extra_data}
 LABEL disk0
   MENU LABEL Boot disk (0x80)
