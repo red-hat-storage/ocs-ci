@@ -50,7 +50,7 @@ from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods
-from ocs_ci.ocs.resources.pvc import PVC
+from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import aws
@@ -81,7 +81,6 @@ from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.amq import AMQ
-from ocs_ci.ocs.resources import pvc
 
 log = logging.getLogger(__name__)
 
@@ -2564,18 +2563,18 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
         dc_pods_res = []
         sa_obj = service_account_factory(project=project)
         with ThreadPoolExecutor() as p:
-            for pvc_obj in pvc_objs:
+            for pvc in pvc_objs:
                 if create_rbd_block_rwx_pod:
                     dc_pods_res.append(
                         p.submit(
                             dc_pod_factory, interface=constants.CEPHBLOCKPOOL,
-                            pvc=pvc_obj, raw_block_pv=True, sa_obj=sa_obj
+                            pvc=pvc, raw_block_pv=True, sa_obj=sa_obj
                         ))
                 else:
                     dc_pods_res.append(
                         p.submit(
                             dc_pod_factory, interface=dict_types[pool_type],
-                            pvc=pvc_obj, sa_obj=sa_obj
+                            pvc=pvc, sa_obj=sa_obj
                         ))
 
         for dc in dc_pods_res:
@@ -2869,7 +2868,7 @@ def snapshot_restore_factory(request):
                 constants.CEPHFILESYSTEM
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_CEPHFS_PVC_RESTORE_YAML
-        restored_pvc = pvc.create_restore_pvc(
+        restored_pvc = create_restore_pvc(
             sc_name=storageclass.name, snap_name=snapshot_obj.name,
             namespace=snapshot_obj.namespace, size=size,
             pvc_name=restore_pvc_name, volume_mode=volume_mode,
