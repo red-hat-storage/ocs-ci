@@ -1020,6 +1020,11 @@ def add_squad_analysis_to_email(session, soup):
     .squad-unassigned {
         background-color: #FFBA88;
     }
+    h4.squad-yellow {
+        color: black;
+        background-color: yellow;
+        display: inline;
+    }
     """
     # prepare place for the Squad Analysis in the email
     squad_analysis_div = soup.new_tag("div")
