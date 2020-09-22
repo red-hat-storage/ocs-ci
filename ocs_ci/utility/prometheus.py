@@ -276,7 +276,11 @@ def check_query_range_result_limits(
 
 class PrometheusAPI(object):
     """
-    This is wrapper class for Prometheus API.
+    This is wrapper class for Prometheus API. It is advised to use pre-created
+    user with access to Prometheus API (e.g. use prometheus_user fixture) so
+    that all tests can run on platforms that don't have access to
+    kubeadmin-password file.
+
     """
 
     _token = None
@@ -291,6 +295,7 @@ class PrometheusAPI(object):
 
         Args:
             user (str): OpenShift username used to connect to API
+
         """
         self._user = user or config.RUN['username']
         if not password:
@@ -307,13 +312,20 @@ class PrometheusAPI(object):
     def refresh_connection(self):
         """
         Login into OCP, refresh endpoint and token.
+
         """
+        kubeconfig = os.getenv('KUBECONFIG')
+        kube_data = ""
+        with open(kubeconfig, 'r') as kube_file:
+            kube_data = kube_file.readlines()
         ocp = OCP(
             kind=constants.ROUTE,
             namespace=defaults.OCS_MONITORING_NAMESPACE
         )
         assert ocp.login(self._user, self._password), 'Login to OCP failed'
         self._token = ocp.get_user_token()
+        with open(kubeconfig, 'w') as kube_file:
+            kube_file.writelines(kube_data)
         route_obj = ocp.get(
             resource_name=defaults.PROMETHEUS_ROUTE
         )
@@ -324,6 +336,7 @@ class PrometheusAPI(object):
         Generate CA certificate from kubeconfig for API.
 
         TODO: find proper way how to generate/load cert files.
+
         """
         kubeconfig_path = os.path.join(
             config.ENV_DATA['cluster_path'],
@@ -354,6 +367,7 @@ class PrometheusAPI(object):
 
         Returns:
             dict: Response from Prometheus alerts api
+
         """
         pattern = f"/api/v1/{resource}"
         headers = {'Authorization': f"Bearer {self._token}"}
@@ -391,6 +405,7 @@ class PrometheusAPI(object):
             list: Result of the query (value(s) for a single timestamp)
 
         .. _`instant query`: https://prometheus.io/docs/prometheus/latest/querying/api/#instant-queries
+
         """
         query_payload = {'query': query}
         log_msg = f"Performing prometheus instant query '{query}'"
@@ -433,6 +448,7 @@ class PrometheusAPI(object):
             list: result of the query
 
         .. _`range query`: https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
+
         """
         query_payload = {
             'query': query,
@@ -492,6 +508,7 @@ class PrometheusAPI(object):
 
         Returns:
             list: List of alert records
+
         """
         while timeout > 0:
             alerts_response = self.get(
@@ -541,6 +558,7 @@ class PrometheusAPI(object):
             measure_end_time (int): Timestamp of measurement end
             time_min (int): Number of seconds to wait for alert to be cleared
                 since measurement end
+
         """
         time_actual = time.time()
         time_wait = int(

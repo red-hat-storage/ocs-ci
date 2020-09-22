@@ -66,6 +66,7 @@ from ocs_ci.utility.utils import (
     ceph_health_check,
     ceph_health_check_base,
     get_running_ocp_version,
+    exec_cmd,
     get_openshift_client,
     get_system_architecture,
     get_testrun_name,
@@ -2707,6 +2708,26 @@ def user_factory_session(
         request,
         htpasswd_path
     )
+
+
+@pytest.fixture(scope='session')
+def prometheus_user(user_factory_session):
+    """
+    User and password used in Prometheus API communication. The user has
+    'cluster-monitoring-view' cluster-role.
+
+    Returns:
+        tuple: username and password
+
+    """
+    username, password = user_factory_session()
+    exec_cmd(
+        [
+            'oc', 'adm', 'policy', 'add-cluster-role-to-user',
+            'cluster-monitoring-view', username
+        ]
+    )
+    return (username, password)
 
 
 @pytest.fixture(scope="session", autouse=True)

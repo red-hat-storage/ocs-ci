@@ -21,7 +21,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.utility.utils import run_cmd, update_container_with_mirrored_image
+from ocs_ci.utility.utils import exec_cmd, run_cmd, update_container_with_mirrored_image
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
 from ocs_ci.ocs import defaults, constants
 from ocs_ci.framework import config
@@ -421,9 +421,22 @@ class OCP(object):
 
         Returns:
             str: output of login command
+
         """
-        command = f"oc login -u {user} -p {password}"
-        status = run_cmd(command)
+        command = ['oc', 'login', '-u', user, '-p', password]
+        status = exec_cmd(command, secrets=[password])
+        return status
+
+    def logout(self):
+        """
+        Logs user out
+
+        Returns:
+            str: output of logout command
+
+        """
+        command = ['oc', 'logout']
+        status = exec_cmd(command)
         return status
 
     def login_as_sa(self):

@@ -3,8 +3,10 @@ import os
 import random
 import string
 from tempfile import NamedTemporaryFile
+from time import sleep
 
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import exec_cmd
 
 log = logging.getLogger(__name__)
@@ -87,10 +89,12 @@ def user_factory(request, htpasswd_path):
 
     """
     _users = []
+    users_obj = ocp.OCP(kind=constants.USER)
 
     def _factory(
         username=None,
         password=None,
+        wait_present=True
     ):
         """
         Create a new user.
@@ -100,6 +104,7 @@ def user_factory(request, htpasswd_path):
                 set it to random string
             password (str): Password of a new user. If not provided then
                 set it to random string
+            wait_present (bool): Wait for new user to appear in system
 
         Returns:
             tuple: username and password of a new user
@@ -128,7 +133,13 @@ def user_factory(request, htpasswd_path):
                 kind=constants.SECRET,
                 namespace=constants.OPENSHIFT_CONFIG_NAMESPACE
             )
-            secret = ocp_obj.get(resource_name='htpass-secret') or None
+            secret = None
+            try:
+                secret = ocp_obj.get(resource_name='htpass-secret')
+            except CommandFailed:
+                log.info(
+                    'Secret htpass-secret was not found. It will be created.'
+                )
             if secret:
                 create_htpasswd_secret(htpasswd_path, replace=True)
             else:
@@ -139,6 +150,25 @@ def user_factory(request, htpasswd_path):
         # : is a delimiter in htpasswd file and it will ensure that only full
         # usernames are deleted
         _users.append(f"{username}:")
+
+        if wait_present:
+            # TODO(fbalak): make the sleep dynamic
+            wait_time = 30
+            log.info(f"Waiting for {wait_time} seconds to load new user")
+            sleep(wait_time)
+            kubeconfig = os.getenv('KUBECONFIG')
+            kube_data = ""
+            with open(kubeconfig, 'r') as kube_file:
+                kube_data = kube_file.readlines()
+            # user resource will appear after first login
+            try:
+                users_obj.login(username, password)
+                users_obj.logout()
+            except CommandFailed:
+                pass
+            with open(kubeconfig, 'w') as kube_file:
+                kube_file.writelines(kube_data)
+            users_obj.get_resource(resource_name=username, column='NAME', retry=5)
 
         return (username, password)
 
@@ -156,6 +186,8 @@ def user_factory(request, htpasswd_path):
             for line in new_htpasswd:
                 f.write(line)
         create_htpasswd_secret(htpasswd_path, replace=True)
+        for user in _users:
+            users_obj.delete(resource_name=user[0:-1])
 
     request.addfinalizer(_finalizer)
     return _factory
