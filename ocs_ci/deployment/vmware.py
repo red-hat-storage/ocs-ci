@@ -36,7 +36,7 @@ from ocs_ci.utility.utils import (
     replace_content_in_file, run_cmd, upload_file, wait_for_co,
     get_ocp_version, get_terraform, set_aws_region,
     configure_chrony_and_wait_for_machineconfig_status,
-    get_terraform_ignition_provider,
+    get_terraform_ignition_provider, get_ocp_upgrade_history,
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from semantic_version import Version
@@ -688,6 +688,42 @@ class VSPHEREUPI(VSPHEREBASE):
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
         if Version.coerce(ocp_version) >= Version.coerce('4.6'):
+            # Download terraform ignition provider. For OCP upgrade clusters,
+            # ignition provider doesn't exist, so downloading in destroy job
+            # as well
+            terraform_plugins_path = ".terraform/plugins/linux_amd64/"
+            terraform_ignition_provider_path = os.path.join(
+                terraform_data_dir,
+                terraform_plugins_path,
+                "terraform-provider-ignition"
+            )
+
+            # check the upgrade history of cluster and checkout to the
+            # original installer release. This is due to the issue of not
+            # supporting terraform state of OCP 4.5 in installer
+            # release of 4.6 branch. More details in
+            # https://github.com/red-hat-storage/ocs-ci/issues/2941
+            is_cluster_upgraded = False
+            try:
+                upgrade_history = get_ocp_upgrade_history()
+                if len(upgrade_history) > 1:
+                    is_cluster_upgraded = True
+                    original_installed_ocp_version = upgrade_history[-1]
+                    installer_release_branch = (
+                        f"release-{original_installed_ocp_version[0:3]}"
+                    )
+                    clone_repo(
+                        constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
+                        installer_release_branch
+                    )
+            except Exception as ex:
+                logger.error(ex)
+
+            if not (
+                os.path.exists(terraform_ignition_provider_path)
+                or is_cluster_upgraded
+            ):
+                get_terraform_ignition_provider(terraform_data_dir)
             terraform.initialize()
         else:
             terraform.initialize(upgrade=True)
