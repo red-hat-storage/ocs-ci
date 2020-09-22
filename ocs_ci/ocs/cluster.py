@@ -1209,6 +1209,26 @@ def check_osd_tree_1az_aws(osd_tree, number_of_osds):
     return check_osds_in_hosts_osd_tree(all_hosts_flatten, osd_tree)
 
 
+def check_osds_in_hosts_are_up(osd_tree):
+    """
+    Check if all the OSD's in status 'up'
+
+    Args:
+        osd_tree (dict): The ceph osd tree
+
+    Returns:
+        bool: True if all the OSD's in status 'up'. Else False
+
+    """
+    for n in osd_tree['nodes']:
+        if n['type'] == 'osd':
+            if n['status'] != 'up':
+                logger.warning(f"osd with name {n['name']} is not up")
+                return False
+
+    return True
+
+
 def check_ceph_osd_tree():
     """
     Checks whether an OSD tree is created/modified correctly.
@@ -1216,7 +1236,7 @@ def check_ceph_osd_tree():
     'check_osd_tree_3az_aws', 'check_osd_tree_1az_aws'.
 
     Returns:
-         Boolean: True, if the ceph osd tree is formed correctly. Else False
+         bool: True, if the ceph osd tree is formed correctly. Else False
 
     """
     osd_pods = pod.get_osd_pods()
@@ -1238,6 +1258,27 @@ def check_ceph_osd_tree():
             return check_osd_tree_1az_aws(tree_output, len(osd_pods))
         else:
             return check_osd_tree_3az_aws(tree_output, len(osd_pods))
+
+
+def check_ceph_osd_tree_after_node_replacement():
+    """
+    Check the ceph osd tree after the process of node replacement.
+
+    Returns:
+        bool: True if the ceph osd tree formation is correct,
+        and all the OSD's are up. Else False
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree')
+    if not check_ceph_osd_tree():
+        logger.warning("Incorrect ceph osd tree formation found")
+        return False
+    if not check_osds_in_hosts_are_up(osd_tree):
+        logger.warning("Not all the osd's are in status 'up'")
+        return False
+
+    return True
 
 
 class CephClusterExternal(CephCluster):
