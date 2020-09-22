@@ -962,12 +962,14 @@ def node_replacement_verification_steps_user_side(old_node_name, new_node_name):
     csi_cephfsplugin_pods = pod.get_plugin_pods(interface=constants.CEPHFILESYSTEM)
     csi_rbdplugin_pods = pod.get_plugin_pods(interface=constants.CEPHBLOCKPOOL)
     csi_plugin_pods = csi_cephfsplugin_pods + csi_rbdplugin_pods
-    if not all([p.status == constants.STATUS_RUNNING for p in csi_plugin_pods]):
+    if not all([p.status() == constants.STATUS_RUNNING for p in csi_plugin_pods]):
         log.warning("Not all csi rbd and cephfs plugin pods in status running")
         return False
 
-    if not pod.check_pods_in_running_state():
-        log.warning("Not all pods in running state")
+    # It can take some time until all the ocs pods are up and running
+    # after the process of node replacement
+    if not pod.wait_for_pods_to_be_running():
+        log.warning("Not all the pods in running state")
         return False
 
     log.info("Verification steps from the user side finish successfully")
@@ -992,7 +994,11 @@ def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
         return False
 
     wait_for_nodes_status([new_node_name])
-    pod.wait_for_storage_pods()
+    # It can take some time until all the ocs pods are up and running
+    # after the process of node replacement
+    if not pod.wait_for_pods_to_be_running():
+        log.warning("Not all the pods in running state")
+        return False
 
     ct_pod = pod.get_ceph_tools_pod()
     ceph_osd_status = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd status')
@@ -1003,10 +1009,6 @@ def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
         log.warning("old node name found in 'ceph osd status' output")
         return False
 
-    from ocs_ci.ocs.cluster import check_ceph_osd_tree
-    if not check_ceph_osd_tree():
-        log.warning("Incorrect ceph osd tree formation found")
-
     osd_pods_obj = pod.get_osd_pods()
     osd_node_names = [pod.get_pod_node(p).name for p in osd_pods_obj]
     if new_node_name not in osd_node_names:
@@ -1014,6 +1016,10 @@ def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
         return False
     if old_node_name in osd_node_names:
         log.warning("the old hostname found in osd node names")
+        return False
+
+    from ocs_ci.ocs.cluster import check_ceph_osd_tree_after_node_replacement
+    if not check_ceph_osd_tree_after_node_replacement():
         return False
 
     log.info("Verification steps from the ceph side finish successfully")
