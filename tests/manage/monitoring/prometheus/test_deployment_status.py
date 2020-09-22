@@ -13,13 +13,14 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4a
 @pytest.mark.polarion_id("OCS-1052")
-def test_ceph_manager_stopped(measure_stop_ceph_mgr):
+def test_ceph_manager_stopped(measure_stop_ceph_mgr, prometheus_user):
     """
     Test that there is appropriate alert when ceph manager
     is unavailable and that this alert is cleared when the manager
     is back online.
     """
-    api = prometheus.PrometheusAPI()
+    user, password = prometheus_user
+    api = prometheus.PrometheusAPI(user, password)
 
     # get alerts from time when manager deployment was scaled down
     alerts = measure_stop_ceph_mgr.get('prometheus_alerts')
@@ -43,13 +44,14 @@ def test_ceph_manager_stopped(measure_stop_ceph_mgr):
 @tier4
 @tier4a
 @pytest.mark.polarion_id("OCS-904")
-def test_ceph_monitor_stopped(measure_stop_ceph_mon):
+def test_ceph_monitor_stopped(measure_stop_ceph_mon, prometheus_user):
     """
     Test that there is appropriate alert related to ceph monitor quorum
     when there is even number of ceph monitors and that this alert
     is cleared when monitors are back online.
     """
-    api = prometheus.PrometheusAPI()
+    user, password = prometheus_user
+    api = prometheus.PrometheusAPI(user, password)
 
     # get alerts from time when manager deployment was scaled down
     alerts = measure_stop_ceph_mon.get('prometheus_alerts')
@@ -83,12 +85,13 @@ def test_ceph_monitor_stopped(measure_stop_ceph_mon):
 @tier4
 @tier4a
 @pytest.mark.polarion_id("OCS-900")
-def test_ceph_osd_stopped(measure_stop_ceph_osd):
+def test_ceph_osd_stopped(measure_stop_ceph_osd, prometheus_user):
     """
     Test that there is appropriate alert related to situation when ceph osd
     is down. Alert is cleared when osd disk is back online.
     """
-    api = prometheus.PrometheusAPI()
+    user, password = prometheus_user
+    api = prometheus.PrometheusAPI(user, password)
 
     # get alerts from time when manager deployment was scaled down
     alerts = measure_stop_ceph_osd.get('prometheus_alerts')

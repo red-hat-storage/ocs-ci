@@ -13,11 +13,12 @@ log = logging.getLogger(__name__)
 @tier4a
 @polarion_id("OCS-1254")
 @bugzilla("1835290")
-def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
+def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota, prometheus_user):
     """
     Test that there are appropriate alerts when NooBaa Bucket Quota is reached.
     """
-    api = prometheus.PrometheusAPI()
+    user, password = prometheus_user
+    api = prometheus.PrometheusAPI(user, password)
 
     alerts = measure_noobaa_exceed_bucket_quota.get('prometheus_alerts')
 

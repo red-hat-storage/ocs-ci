@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 
 
 @retry(AssertionError, tries=30, delay=3, backoff=1)
-def wait_to_update_mgrpod_info_prometheus_pod():
+def wait_to_update_mgrpod_info_prometheus_pod(prometheus_user):
     """
     Validates the ceph health metrics is updated on prometheus pod
 
@@ -43,14 +43,15 @@ def wait_to_update_mgrpod_info_prometheus_pod():
     mgr_pod = (
         ocp_obj.get(selector=constants.MGR_APP_LABEL).get('items')[0].get('metadata').get('name')
     )
-    assert check_ceph_health_status_metrics_on_prometheus(mgr_pod=mgr_pod), (
+    user, password = prometheus_user
+    assert check_ceph_health_status_metrics_on_prometheus(mgr_pod=mgr_pod, username=user, password=password), (
         "Ceph health status metrics are not updated after the rebooting node where the mgr running"
     )
     log.info("Ceph health status metrics is updated")
 
 
 @retry((CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException), tries=60, delay=15, backoff=1)
-def wait_for_nodes_status_and_prometheus_health_check(pods):
+def wait_for_nodes_status_and_prometheus_health_check(pods, prometheus_user):
     """
     Waits for the all the nodes to be in running state
     and also check prometheus health
@@ -62,8 +63,9 @@ def wait_for_nodes_status_and_prometheus_health_check(pods):
     wait_for_nodes_status(timeout=1800)
 
     # Check for the created pvc metrics after rebooting the master nodes
+    user, password = prometheus_user
     for pod_obj in pods:
-        assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
+        assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name, user, password), (
             f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
         )
 
@@ -126,7 +128,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         request.addfinalizer(finalizer)
 
     @pytest.fixture()
-    def pods(self, multi_pvc_factory, dc_pod_factory):
+    def pods(self, multi_pvc_factory, dc_pod_factory, prometheus_user):
         """
         Prepare multiple dc pods for the test
 
@@ -145,15 +147,16 @@ class TestMonitoringBackedByOCS(E2ETest):
         for pvc_obj in pvc_objs:
             pod_objs.append(dc_pod_factory(pvc=pvc_obj))
 
+        user, password = prometheus_user
         # Check for the created pvc metrics on prometheus pod
         for pod_obj in pod_objs:
-            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
+            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name, user, password), (
                 f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
             )
         return pod_objs
 
     @pytest.mark.polarion_id("OCS-576")
-    def test_monitoring_after_restarting_prometheus_pod(self, pods):
+    def test_monitoring_after_restarting_prometheus_pod(self, pods, prometheus_user):
         """
         Test case to validate prometheus pod restart
         should not have any functional impact
@@ -183,13 +186,14 @@ class TestMonitoringBackedByOCS(E2ETest):
                 f"Old pvc not found after restarting the prometheus pod {pod_object.name}"
             )
 
+        user, password = prometheus_user
         for pod_obj in pods:
-            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
+            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name, user, password), (
                 f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
             )
 
     @pytest.mark.polarion_id("OCS-579")
-    def test_monitoring_after_draining_node_where_prometheus_hosted(self, pods):
+    def test_monitoring_after_draining_node_where_prometheus_hosted(self, pods, prometheus_user):
         """
         Test case to validate when node is drained where prometheus
         is hosted, prometheus pod should re-spin on new healthy node
@@ -265,13 +269,14 @@ class TestMonitoringBackedByOCS(E2ETest):
         self.sanity_helpers.health_check()
 
         # Check for the created pvc metrics after rebooting the master nodes
+        user, password = prometheus_user
         for pod_obj in pods:
-            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
+            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name, user, password), (
                 f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
             )
 
     @pytest.mark.polarion_id("OCS-580")
-    def test_monitoring_after_respinning_ceph_pods(self, pods):
+    def test_monitoring_after_respinning_ceph_pods(self, pods, prometheus_user):
         """
         Test case to validate respinning the ceph pods and
         its interaction with prometheus pod
@@ -286,13 +291,14 @@ class TestMonitoringBackedByOCS(E2ETest):
             disruption.delete_resource()
 
         # Check for the created pvc metrics on prometheus pod
+        user, password = prometheus_user
         for pod_obj in pods:
-            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
+            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name, user, password), (
                 f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
             )
 
     @pytest.mark.polarion_id("OCS-605")
-    def test_monitoring_when_osd_down(self, pods):
+    def test_monitoring_when_osd_down(self, pods, prometheus_user):
         """
         Test case to validate monitoring when osd is down
 
@@ -312,8 +318,9 @@ class TestMonitoringBackedByOCS(E2ETest):
         )
 
         # Check for the created pvc metrics when osd is down
+        user, password = prometheus_user
         for pod_obj in pods:
-            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
+            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name, user, password), (
                 f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
             )
 
@@ -324,7 +331,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         self.sanity_helpers.health_check()
 
     @pytest.mark.polarion_id("OCS-606")
-    def test_monitoring_when_one_of_the_prometheus_node_down(self, nodes, pods):
+    def test_monitoring_when_one_of_the_prometheus_node_down(self, nodes, pods, prometheus_user):
         """
         Test case to validate when the prometheus pod is down and its
         interaction with prometheus
@@ -361,8 +368,9 @@ class TestMonitoringBackedByOCS(E2ETest):
             )
 
         # Check for the created pvc metrics after restarting node where prometheus pod is hosted
+        user, password = prometheus_user
         for pod_obj in pods:
-            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
+            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name, user, password), (
                 f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
             )
             log.info(f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is collected")
@@ -393,7 +401,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         self.sanity_helpers.health_check()
 
     @pytest.mark.polarion_id("OCS-710")
-    def test_monitoring_after_rebooting_node_where_mgr_is_running(self, nodes, pods):
+    def test_monitoring_after_rebooting_node_where_mgr_is_running(self, nodes, pods, prometheus_user):
         """
         Test case to validate rebooting a node where mgr is running
         should not delete the data collected on prometheus pod
@@ -441,14 +449,15 @@ class TestMonitoringBackedByOCS(E2ETest):
         wait_to_update_mgrpod_info_prometheus_pod()
 
         # Check for the created pvc metrics after rebooting the node where mgr pod was running
+        user, password = prometheus_user
         for pod_obj in pods:
-            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
+            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name, user, password), (
                 f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
             )
 
     @pytest.mark.polarion_id("OCS-711")
     @skipif_aws_i3
-    def test_monitoring_shutdown_and_recovery_prometheus_node(self, nodes, pods):
+    def test_monitoring_shutdown_and_recovery_prometheus_node(self, nodes, pods, prometheus_user):
         """
         Test case to validate whether shutdown and recovery of a
         node where monitoring pods running has no functional impact
@@ -490,8 +499,9 @@ class TestMonitoringBackedByOCS(E2ETest):
         self.sanity_helpers.health_check(tries=40)
 
         # Check for the created pvc metrics after shutdown and recovery of prometheus nodes
+        user, password = prometheus_user
         for pod_obj in pods:
-            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
+            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name, user, password), (
                 f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
             )
 
@@ -556,13 +566,14 @@ class TestMonitoringBackedByOCS(E2ETest):
         )
 
     @pytest.mark.polarion_id("OCS-1535")
-    def test_monitoring_shutdown_mgr_pod(self, pods):
+    def test_monitoring_shutdown_mgr_pod(self, pods, prometheus_user):
         """
         Montoring backed by OCS, bring mgr down(replica: 0) for some time
         and check ceph related metrics
         """
         # Check ceph metrics available
-        assert check_ceph_metrics_available(), (
+        user, password = prometheus_user
+        assert check_ceph_metrics_available(user, password), (
             "failed to get results for some metrics before Downscaling deployment mgr to 0"
         )
 
@@ -588,6 +599,6 @@ class TestMonitoringBackedByOCS(E2ETest):
         )
 
         # Check ceph metrics available
-        assert check_ceph_metrics_available(), (
+        assert check_ceph_metrics_available(user, password), (
             "failed to get results for some metrics after Downscaling and Upscaling deployment mgr"
         )

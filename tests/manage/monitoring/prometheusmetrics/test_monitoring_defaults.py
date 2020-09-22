@@ -25,13 +25,14 @@ logger = logging.getLogger(__name__)
 @pytest.mark.post_ocp_upgrade
 @pytest.mark.first
 @pytest.mark.polarion_id("OCS-1261")
-def test_monitoring_enabled():
+def test_monitoring_enabled(prometheus_user):
     """
     OCS Monitoring is enabled after OCS installation (which is why this test
     has a post deployment marker) by asking for values of one ceph and one
     noobaa related metrics.
     """
-    prometheus = PrometheusAPI()
+    user, password = prometheus_user
+    prometheus = PrometheusAPI(user, password)
 
     if (
         storagecluster_independent_check()
@@ -107,12 +108,13 @@ def test_ceph_mgr_dashboard_not_deployed():
 @tier1
 @pytest.mark.bugzilla("1779336")
 @pytest.mark.polarion_id("OCS-1267")
-def test_ceph_rbd_metrics_available():
+def test_ceph_rbd_metrics_available(prometheus_user):
     """
     Ceph RBD metrics should be provided via OCP Prometheus as well.
     See also: https://ceph.com/rbd/new-in-nautilus-rbd-performance-monitoring/
     """
-    prometheus = PrometheusAPI()
+    user, password = prometheus_user
+    prometheus = PrometheusAPI(user, password)
     list_of_metrics_without_results = metrics.get_missing_metrics(
         prometheus, metrics.ceph_rbd_metrics)
     msg = (
@@ -124,7 +126,7 @@ def test_ceph_rbd_metrics_available():
 @tier1
 @metrics_for_external_mode_required
 @pytest.mark.polarion_id("OCS-1268")
-def test_ceph_metrics_available():
+def test_ceph_metrics_available(prometheus_user):
     """
     Ceph metrics as listed in KNIP-634 should be provided via OCP Prometheus.
 
@@ -133,7 +135,8 @@ def test_ceph_metrics_available():
     so this test case ignores failures for ceph_rgw_* and ceph_objecter_*
     metrics when running on cloud platforms (such as AWS).
     """
-    prometheus = PrometheusAPI()
+    user, password = prometheus_user
+    prometheus = PrometheusAPI(user, password)
     list_of_metrics_without_results = metrics.get_missing_metrics(
         prometheus,
         metrics.ceph_metrics,
@@ -148,14 +151,15 @@ def test_ceph_metrics_available():
 @metrics_for_external_mode_required
 @pytest.mark.post_ocp_upgrade
 @pytest.mark.polarion_id("OCS-1302")
-def test_monitoring_reporting_ok_when_idle(workload_idle):
+def test_monitoring_reporting_ok_when_idle(workload_idle, prometheus_user):
     """
     When nothing is happening, OCP Prometheus reports OCS status as OK.
 
     If this test case fails, the status is either reported wrong or the
     cluster is in a broken state. Either way, a failure here is not good.
     """
-    prometheus = PrometheusAPI()
+    user, password = prometheus_user
+    prometheus = PrometheusAPI(user, password)
 
     health_result = prometheus.query_range(
         query='ceph_health_status',

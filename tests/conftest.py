@@ -1146,7 +1146,8 @@ def log_cli_level(pytestconfig):
 @pytest.fixture(scope="session", autouse=True)
 def cluster_load(
     request, project_factory_session, pvc_factory_session,
-    service_account_factory_session, pod_factory_session
+    service_account_factory_session, pod_factory_session,
+    prometheus_user
 ):
     """
     Run IO during the test execution
@@ -1166,18 +1167,22 @@ def cluster_load(
             "will be written is going to be determined by the cluster "
             "capabilities according to its limit"
         )
+        user, password = prometheus_user
         cl_load_obj = ClusterLoad(
             project_factory=project_factory_session,
             sa_factory=service_account_factory_session,
             pvc_factory=pvc_factory_session,
             pod_factory=pod_factory_session,
-            target_percentage=io_load
+            target_percentage=io_load,
+            username=user,
+            password=password
         )
         cl_load_obj.reach_cluster_load_percentage()
 
     if (log_utilization or io_in_bg) and not deployment_test:
         if not cl_load_obj:
-            cl_load_obj = ClusterLoad()
+            user, password = prometheus_user
+            cl_load_obj = ClusterLoad(username=user, password=password)
 
         config.RUN['load_status'] = 'running'
 

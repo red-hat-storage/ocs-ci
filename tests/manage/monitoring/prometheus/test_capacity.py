@@ -18,12 +18,16 @@ log = logging.getLogger(__name__)
 @gather_metrics_on_fail(
     'ceph_cluster_total_used_bytes', 'cluster:memory_usage_bytes:sum'
 )
-def test_rbd_capacity_workload_alerts(workload_storageutilization_95p_rbd):
+def test_rbd_capacity_workload_alerts(
+    workload_storageutilization_95p_rbd,
+    prometheus_user
+):
     """
     Test that there are appropriate alerts when ceph cluster is utilized
     via RBD interface.
     """
-    api = prometheus.PrometheusAPI()
+    user, password = prometheus_user
+    api = prometheus.PrometheusAPI(user, password)
     measure_end_time = workload_storageutilization_95p_rbd.get('stop')
 
     # Check utilization on 95%
@@ -85,11 +89,15 @@ def test_rbd_capacity_workload_alerts(workload_storageutilization_95p_rbd):
 @gather_metrics_on_fail(
     'ceph_cluster_total_used_bytes', 'cluster:memory_usage_bytes:sum'
 )
-def test_cephfs_capacity_workload_alerts(workload_storageutilization_95p_cephfs):
+def test_cephfs_capacity_workload_alerts(
+    workload_storageutilization_95p_cephfs,
+    prometheus_user
+):
     """
     Test that there are appropriate alerts when ceph cluster is utilized.
     """
-    api = prometheus.PrometheusAPI()
+    user, password = prometheus_user
+    api = prometheus.PrometheusAPI(user, password)
     measure_end_time = workload_storageutilization_95p_cephfs.get('stop')
 
     # Check utilization on 95%

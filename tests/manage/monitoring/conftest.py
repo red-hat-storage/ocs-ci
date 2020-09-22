@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture
-def measure_stop_ceph_mgr(measurement_dir):
+def measure_stop_ceph_mgr(measurement_dir, prometheus_user):
     """
     Downscales Ceph Manager deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -61,7 +61,11 @@ def measure_stop_ceph_mgr(measurement_dir):
         return oc.get(mgr)
 
     test_file = os.path.join(measurement_dir, 'measure_stop_ceph_mgr.json')
-    measured_op = measure_operation(stop_mgr, test_file)
+    user, password = prometheus_user
+    measured_op = measure_operation(
+        stop_mgr, test_file,
+        username=user, password=password
+    )
     logger.info(f"Upscaling deployment {mgr} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
 
@@ -73,7 +77,7 @@ def measure_stop_ceph_mgr(measurement_dir):
 
 
 @pytest.fixture
-def measure_stop_ceph_mon(measurement_dir):
+def measure_stop_ceph_mon(measurement_dir, prometheus_user):
     """
     Downscales Ceph Monitor deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -125,7 +129,11 @@ def measure_stop_ceph_mon(measurement_dir):
         return mons_to_stop
 
     test_file = os.path.join(measurement_dir, 'measure_stop_ceph_mon.json')
-    measured_op = measure_operation(stop_mon, test_file)
+    user, password = prometheus_user
+    measured_op = measure_operation(
+        stop_mon, test_file,
+        username=user, password=password
+    )
 
     # expected minimal downtime of a mon inflicted by this fixture
     measured_op['min_downtime'] = run_time - (60 * 2)
@@ -155,7 +163,7 @@ def measure_stop_ceph_mon(measurement_dir):
 
 
 @pytest.fixture
-def measure_stop_ceph_osd(measurement_dir):
+def measure_stop_ceph_osd(measurement_dir, prometheus_user):
     """
     Downscales Ceph osd deployment, measures the time when it was
     downscaled and alerts that were triggered during this event.
@@ -204,7 +212,11 @@ def measure_stop_ceph_osd(measurement_dir):
         return osd_to_stop
 
     test_file = os.path.join(measurement_dir, 'measure_stop_ceph_osd.json')
-    measured_op = measure_operation(stop_osd, test_file)
+    user, password = prometheus_user
+    measured_op = measure_operation(
+        stop_osd, test_file,
+        username=user, password=password
+    )
     logger.info(f"Upscaling deployment {osd_to_stop} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_to_stop}")
 
@@ -216,7 +228,7 @@ def measure_stop_ceph_osd(measurement_dir):
 
 
 @pytest.fixture
-def measure_corrupt_pg(measurement_dir):
+def measure_corrupt_pg(measurement_dir, prometheus_user):
     """
     Create Ceph pool and corrupt Placement Group on one of OSDs, measures the
     time when it was corrupted and records alerts that were triggered during
@@ -288,7 +300,11 @@ def measure_corrupt_pg(measurement_dir):
         return osd_deployment
 
     test_file = os.path.join(measurement_dir, 'measure_corrupt_pg.json')
-    measured_op = measure_operation(corrupt_pg, test_file)
+    user, password = prometheus_user
+    measured_op = measure_operation(
+        corrupt_pg, test_file,
+        username=user, password=password
+    )
     logger.info(f"Deleting pool {pool_name}")
     ct_pod.exec_ceph_cmd(
         f"ceph osd pool delete {pool_name} {pool_name} "
@@ -323,8 +339,11 @@ def workload_storageutilization_05p_rbd(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        prometheus_user
+):
     fixture_name = "workload_storageutilization_05p_rbd"
+    user, password = prometheus_user
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -333,7 +352,10 @@ def workload_storageutilization_05p_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.05)
+        target_percentage=0.05,
+        username=user,
+        password=password
+    )
     return measured_op
 
 
@@ -345,8 +367,11 @@ def workload_storageutilization_50p_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        supported_configuration):
+        supported_configuration,
+        prometheus_user
+):
     fixture_name = "workload_storageutilization_50p_rbd"
+    user, password = prometheus_user
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -355,7 +380,10 @@ def workload_storageutilization_50p_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.5)
+        target_percentage=0.5,
+        username=user,
+        password=password
+    )
     return measured_op
 
 
@@ -366,8 +394,11 @@ def workload_storageutilization_checksum_rbd(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        prometheus_user
+):
     fixture_name = "workload_storageutilization_checksum_rbd"
+    user, password = prometheus_user
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -377,7 +408,10 @@ def workload_storageutilization_checksum_rbd(
         measurement_dir,
         tmp_path,
         target_size=10,
-        with_checksum=True)
+        with_checksum=True,
+        username=user,
+        password=password
+    )
     return measured_op
 
 
@@ -389,8 +423,11 @@ def workload_storageutilization_85p_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        supported_configuration):
+        supported_configuration,
+        prometheus_user
+):
     fixture_name = "workload_storageutilization_85p_rbd"
+    user, password = prometheus_user
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -399,7 +436,10 @@ def workload_storageutilization_85p_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.85)
+        target_percentage=0.85,
+        username=user,
+        password=password
+    )
     return measured_op
 
 
@@ -411,8 +451,11 @@ def workload_storageutilization_95p_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        supported_configuration):
+        supported_configuration,
+        prometheus_user
+):
     fixture_name = "workload_storageutilization_95p_rbd"
+    user, password = prometheus_user
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -421,7 +464,10 @@ def workload_storageutilization_95p_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.95)
+        target_percentage=0.95,
+        username=user,
+        password=password
+    )
     return measured_op
 
 
@@ -432,8 +478,11 @@ def workload_storageutilization_05p_cephfs(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        prometheus_user
+):
     fixture_name = "workload_storageutilization_05p_cephfs"
+    user, password = prometheus_user
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -442,7 +491,10 @@ def workload_storageutilization_05p_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.05)
+        target_percentage=0.05,
+        username=user,
+        password=password
+    )
     return measured_op
 
 
@@ -454,8 +506,11 @@ def workload_storageutilization_50p_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        supported_configuration):
+        supported_configuration,
+        prometheus_user
+):
     fixture_name = "workload_storageutilization_50p_cephfs"
+    user, password = prometheus_user
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -464,7 +519,10 @@ def workload_storageutilization_50p_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.5)
+        target_percentage=0.5,
+        username=user,
+        password=password
+    )
     return measured_op
 
 
@@ -476,8 +534,11 @@ def workload_storageutilization_85p_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        supported_configuration):
+        supported_configuration,
+        prometheus_user
+):
     fixture_name = "workload_storageutilization_85p_cephfs"
+    user, password = prometheus_user
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -486,7 +547,10 @@ def workload_storageutilization_85p_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.85)
+        target_percentage=0.85,
+        username=user,
+        password=password
+    )
     return measured_op
 
 
@@ -498,8 +562,11 @@ def workload_storageutilization_95p_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        supported_configuration):
+        supported_configuration,
+        prometheus_user
+):
     fixture_name = "workload_storageutilization_95p_cephfs"
+    user, password = prometheus_user
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -508,7 +575,10 @@ def workload_storageutilization_95p_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.95)
+        target_percentage=0.95,
+        username=user,
+        password=password
+    )
     return measured_op
 
 
@@ -522,8 +592,11 @@ def workload_storageutilization_10g_rbd(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        prometheus_user
+):
     fixture_name = "workload_storageutilization_10G_rbd"
+    user, password = prometheus_user
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -532,7 +605,10 @@ def workload_storageutilization_10g_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_size=10)
+        target_size=10,
+        username=user,
+        password=password
+    )
     return measured_op
 
 
@@ -543,8 +619,11 @@ def workload_storageutilization_10g_cephfs(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        prometheus_user
+):
     fixture_name = "workload_storageutilization_10G_cephfs"
+    user, password = prometheus_user
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -553,7 +632,10 @@ def workload_storageutilization_10g_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_size=10)
+        target_size=10,
+        username=user,
+        password=password
+    )
     return measured_op
 
 
@@ -562,7 +644,8 @@ def measure_noobaa_exceed_bucket_quota(
     measurement_dir,
     request,
     mcg_obj,
-    awscli_pod
+    awscli_pod,
+    prometheus_user
 ):
     """
     Create NooBaa bucket, set its capacity quota to 2GB and fill it with data.
@@ -639,7 +722,11 @@ def measure_noobaa_exceed_bucket_quota(
         measurement_dir,
         'measure_noobaa_exceed__bucket_quota.json'
     )
-    measured_op = measure_operation(exceed_bucket_quota, test_file)
+    user, password = prometheus_user
+    measured_op = measure_operation(
+        exceed_bucket_quota, test_file,
+        username=user, password=password
+    )
 
     bucket_info = mcg_obj.get_bucket_info(bucket.name)
     logger.info(f"Bucket {bucket.name} storage: {bucket_info['storage']}")
@@ -663,7 +750,7 @@ def measure_noobaa_exceed_bucket_quota(
 
 
 @pytest.fixture
-def workload_idle(measurement_dir):
+def workload_idle(measurement_dir, prometheus_user):
     """
     This workload represents a relative long timeframe when nothing special is
     happening, for test cases checking default status of various components
@@ -710,7 +797,11 @@ def workload_idle(measurement_dir):
         return result
 
     test_file = os.path.join(measurement_dir, 'measure_workload_idle.json')
-    measured_op = measure_operation(do_nothing, test_file)
+    user, password = prometheus_user
+    measured_op = measure_operation(
+        do_nothing, test_file,
+        username=user, password=password
+    )
     return measured_op
 
 

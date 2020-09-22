@@ -301,6 +301,8 @@ def workload_fio_storageutilization(
     with_checksum=False,
     keep_fio_data=False,
     minimal_time=480,
+    username=None,
+    password=None,
 ):
     """
     This function implements core functionality of fio storage utilization
@@ -345,6 +347,8 @@ def workload_fio_storageutilization(
             storage utilization is completed. Else if false, deletes the fio data.
         minimal_time (int): Minimal number of seconds to monitor a system.
             (See more details in the function 'measure_operation')
+        username (str): Username for Prometheus API communication
+        password (str): Password for Prometheus API communication
 
     Returns:
         dict: measurement results with timestamps and other medatada from
@@ -490,7 +494,10 @@ def workload_fio_storageutilization(
             fio_job_file, write_timeout, pvc_size, target_percentage),
         test_file,
         measure_after=True,
-        minimal_time=minimal_time)
+        minimal_time=minimal_time,
+        username=username,
+        password=password
+    )
 
     # we don't need to delete anything if this fixture has been already
     # executed

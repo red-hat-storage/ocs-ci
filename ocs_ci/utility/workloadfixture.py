@@ -25,7 +25,9 @@ def measure_operation(
     result_file,
     minimal_time=None,
     metadata=None,
-    measure_after=False
+    measure_after=False,
+    username=None,
+    password=None
 ):
     """
     Get dictionary with keys 'start', 'stop', 'metadata' and 'result' that
@@ -47,6 +49,8 @@ def measure_operation(
             after the operation returns its state. This can be useful e.g.
             for capacity utilization testing where operation fills capacity
             and utilized data are measured after the utilization is completed
+        username (str): Username for Prometheus API communication
+        password (str): Password for Prometheus API communication
 
     Returns:
         dict: contains information about `start` and `stop` time of given
@@ -62,7 +66,7 @@ def measure_operation(
                 }
 
     """
-    def prometheus_log(info, alert_list):
+    def prometheus_log(info, alert_list, username=None, password=None):
         """
         Log all alerts from Prometheus API every 3 seconds.
 
@@ -70,9 +74,11 @@ def measure_operation(
             info (dict): Contains run key attribute that controls thread.
                 If `info['run'] == False` then thread will stop
             alert_list (list): List to be populated with alerts
+            username (str): Username for Prometheus API communication
+            password (str): Password for Prometheus API communication
 
         """
-        prometheus = PrometheusAPI()
+        prometheus = PrometheusAPI(username, password)
         logger.info('Logging of all prometheus alerts started')
         while info.get('run'):
             alerts_response = prometheus.get(
@@ -124,7 +130,7 @@ def measure_operation(
 
         logging_thread = threading.Thread(
             target=prometheus_log,
-            args=(info, alert_list)
+            args=(info, alert_list, username, password)
         )
         logging_thread.start()
 

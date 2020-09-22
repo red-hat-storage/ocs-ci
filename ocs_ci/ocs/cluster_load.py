@@ -48,7 +48,7 @@ class ClusterLoad:
 
     def __init__(
         self, project_factory=None, pvc_factory=None, sa_factory=None,
-        pod_factory=None, target_percentage=None
+        pod_factory=None, target_percentage=None, username=None, password=None
     ):
         """
         Initializer for ClusterLoad
@@ -60,9 +60,11 @@ class ClusterLoad:
             pod_factory (function): A call to pod_factory function
             target_percentage (float): The percentage of cluster load that is
                 required. The value should be greater than 0.1 and smaller than 0.95
+            username (str): Username for Prometheus API communication
+            password (str): Password for Prometheus API communication
 
         """
-        self.prometheus_api = PrometheusAPI()
+        self.prometheus_api = PrometheusAPI(username, password)
         self.pvc_factory = pvc_factory
         self.sa_factory = sa_factory
         self.pod_factory = pod_factory
