@@ -41,7 +41,8 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
 
         """
         snapshots = []
-        for usage in [0, 20, 40, 60, 80]:
+        usage_percent = [0, 20, 40, 60, 80]
+        for usage in usage_percent:
             if usage != 0:
                 for pod_obj in self.pods:
                     log.info(
@@ -49,8 +50,9 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                     )
                     pod_obj.pvc.filename = f'{pod_obj.name}_{usage}'
                     pod_obj.run_io(
-                        storage_type='fs', size='2G', runtime=20,
-                        fio_filename=pod_obj.pvc.filename
+                        storage_type='fs',
+                        size=f'{int(self.pvc_size/len(usage_percent))}G',
+                        runtime=20, fio_filename=pod_obj.pvc.filename
                     )
                 log.info(f"IO started on all pods to utilize {usage}%")
 
