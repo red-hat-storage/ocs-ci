@@ -5,6 +5,7 @@ from copy import deepcopy
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, tier1
+from tests.helpers import wait_for_resource_state
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +36,8 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
         """
         Test to take multiple snapshots of same PVC when the PVC usage is at
         0%, 20%, 40%, 60%, and 80%, then delete the parent PVC and restore the
-        snapshots to create new PVCs
+        snapshots to create new PVCs. Delete snapshots and attach the restored
+        to pods to verify the data.
 
         """
         snapshots = []
@@ -71,7 +73,7 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 log.info(
                     f"Creating snapshot of PVC {pvc_obj.name} at {usage}%"
                 )
-                snap_obj = snapshot_factory(pvc_obj)
+                snap_obj = snapshot_factory(pvc_obj, wait=False)
                 # Set a dict containing filename:md5sum for later verification
                 setattr(
                     snap_obj, 'md5_sum',
@@ -81,6 +83,14 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 log.info(f"Created snapshot of PVC {pvc_obj.name} at {usage}%")
             log.info(f"Created snapshot of all PVCs at {usage}%")
         log.info("Snapshots creation completed.")
+
+        # Verify snapshots are ready
+        log.info("Verify snapshots are ready")
+        for snapshot in snapshots:
+            snapshot.ocp.wait_for_resource(
+                condition='true', resource_name=snapshot.name,
+                column=constants.STATUS_READYTOUSE, timeout=90
+            )
 
         # Delete pods
         log.info("Deleting the pods")
@@ -109,7 +119,7 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
 
         restore_pvc_objs = []
 
-        # Create PVCs out of the snapshots and attach to pods
+        # Create PVCs out of the snapshots
         log.info("Creating new PVCs from snapshots")
         for snapshot in snapshots:
             log.info(f"Creating a PVC from snapshot {snapshot.name}")
@@ -118,7 +128,7 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 size=f'{self.pvc_size}Gi',
                 volume_mode=snapshot.parent_volume_mode,
                 access_mode=snapshot.parent_access_mode,
-                status=constants.STATUS_BOUND
+                status=''
             )
 
             log.info(
@@ -127,6 +137,26 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
             )
             restore_pvc_objs.append(restore_pvc_obj)
         log.info("Created new PVCs from all the snapshots")
+
+        # Confirm that the restored PVCs are Bound
+        log.info("Verify the restored PVCs are Bound")
+        for pvc_obj in restore_pvc_objs:
+            wait_for_resource_state(
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=90
+            )
+            pvc_obj.reload()
+        log.info("Verified: Restored PVCs are Bound.")
+
+        # Delete volume snapshots
+        log.info("Deleting snapshots")
+        for snapshot in snapshots:
+            snapshot.delete()
+
+        # Verify volume snapshots are deleted
+        log.info("Verify snapshots are deleted")
+        for snapshot in snapshots:
+            snapshot.ocp.wait_for_delete(resource_name=snapshot.name)
+        log.info("Verified: Snapshots are deleted")
 
         # Attach the restored PVCs to pods
         log.info("Attach the restored PVCs to pods")
@@ -137,12 +167,18 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
             ) else constants.CEPHBLOCKPOOL
             restore_pod_obj = pod_factory(
                 interface=interface, pvc=restore_pvc_obj,
-                status=constants.STATUS_RUNNING
+                status=''
             )
             log.info(
                 f"Attached the PVC {restore_pvc_obj.name} to pod "
                 f"{restore_pod_obj.name}"
             )
+
+        # Verify the new pods are running
+        log.info("Verify the new pods are running")
+        for pod_obj in restore_pod_objs:
+            wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+        log.info("Verified: New pods are running")
 
         # Verify md5sum of files
         log.info("Verifying md5sum of files on all the pods")
