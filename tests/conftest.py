@@ -2564,18 +2564,18 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
         dc_pods_res = []
         sa_obj = service_account_factory(project=project)
         with ThreadPoolExecutor() as p:
-            for pvc in pvc_objs:
+            for pvc_obj in pvc_objs:
                 if create_rbd_block_rwx_pod:
                     dc_pods_res.append(
                         p.submit(
                             dc_pod_factory, interface=constants.CEPHBLOCKPOOL,
-                            pvc=pvc, raw_block_pv=True, sa_obj=sa_obj
+                            pvc=pvc_obj, raw_block_pv=True, sa_obj=sa_obj
                         ))
                 else:
                     dc_pods_res.append(
                         p.submit(
                             dc_pod_factory, interface=dict_types[pool_type],
-                            pvc=pvc, sa_obj=sa_obj
+                            pvc=pvc_obj, sa_obj=sa_obj
                         ))
 
         for dc in dc_pods_res:
