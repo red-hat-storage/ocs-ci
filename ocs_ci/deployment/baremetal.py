@@ -194,7 +194,7 @@ class BAREMETALUPI(Deployment):
 
             if ocp_version == "4.6":
                 # Download metal_bios
-                rootfs_image_path = os.path.join(constants.coreos_url_prefix, image_data['live_rootfs_url'])
+                rootfs_image_path = constants.coreos_url_prefix + image_data['live_rootfs_url']
                 if check_for_rhcos_images(rootfs_image_path):
                     cmd = (
                         "wget -O "
