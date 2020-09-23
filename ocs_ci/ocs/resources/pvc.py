@@ -3,6 +3,7 @@ General PVC object
 """
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import UnavailableResourceException
@@ -126,6 +127,12 @@ class PVC(OCS):
             'persistentVolumeReclaimPolicy'
         )
 
+    @property
+    def provisioner(self):
+        return self.get()['metadata']['annotations'][
+            'volume.beta.kubernetes.io/storage-provisioner'
+        ]
+
     def resize_pvc(self, new_size, verify=False):
         """
         Modify the capacity of PVC
@@ -180,6 +187,35 @@ class PVC(OCS):
             if pvc == self.name:
                 attached_pods.append(pod_obj)
         return attached_pods
+
+    def create_snapshot(self, snapshot_name=None, wait=False):
+        """
+        Take snapshot of the PVC
+
+        Args:
+            snapshot_name (str): Name to be provided for snapshot
+            wait (bool): True to wait for snapshot to be ready, False otherwise
+
+        Returns:
+            OCS: Kind Snapshot
+
+        """
+        assert self.provisioner in constants.OCS_PROVISIONERS, (
+            "Unknown provisioner"
+        )
+        if self.provisioner == 'openshift-storage.rbd.csi.ceph.com':
+            snap_yaml = constants.CSI_RBD_SNAPSHOT_YAML
+        elif self.provisioner == 'openshift-storage.cephfs.csi.ceph.com':
+            snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
+        snapshot_name = snapshot_name or f"{self.name}-snapshot-{uuid4().hex}"
+        snapshot_obj = create_pvc_snapshot(
+            pvc_name=self.name, snap_yaml=snap_yaml, snap_name=snapshot_name,
+            wait=wait
+        )
+        snapshot_obj.parent_access_mode = self.get_pvc_access_mode
+        snapshot_obj.parent_sc = self.backed_sc
+        snapshot_obj.parent_volume_mode = self.get()['spec']['volumeMode']
+        return snapshot_obj
 
 
 def delete_pvcs(pvc_objs, concurrent=False):
@@ -305,7 +341,9 @@ def get_deviceset_pvs():
     return [pvc.backed_pv_obj for pvc in deviceset_pvcs]
 
 
-def create_pvc_snapshot(pvc_name, snap_yaml, snap_name, sc_name):
+def create_pvc_snapshot(
+    pvc_name, snap_yaml, snap_name, sc_name=None, wait=False
+):
     """
     Create snapshot of a PVC
 
@@ -314,24 +352,32 @@ def create_pvc_snapshot(pvc_name, snap_yaml, snap_name, sc_name):
         snap_yaml (str): The path of snapshot yaml
         snap_name (str): The name of the snapshot to be created
         sc_name (str): The name of the snapshot class
+        wait (bool): True to wait for snapshot to be ready, False otherwise
 
     Returns:
         OCS object
     """
     snapshot_data = templating.load_yaml(snap_yaml)
     snapshot_data['metadata']['name'] = snap_name
-    snapshot_data['spec']['volumeSnapshotClassName'] = sc_name
+    if sc_name:
+        snapshot_data['spec']['volumeSnapshotClassName'] = sc_name
     snapshot_data['spec']['source']['persistentVolumeClaimName'] = pvc_name
     ocs_obj = OCS(**snapshot_data)
     created_snap = ocs_obj.create(do_reload=True)
     assert created_snap, f"Failed to create snapshot {snap_name}"
+    if wait:
+        ocs_obj.ocp.wait_for_resource(
+            condition='true', resource_name=ocs_obj.name,
+            column=constants.STATUS_READYTOUSE, timeout=60
+        )
     return ocs_obj
 
 
 def create_restore_pvc(
     sc_name, snap_name, namespace, size,
     pvc_name, volume_mode=None,
-    restore_pvc_yaml=constants.CSI_RBD_PVC_RESTORE_YAML
+    restore_pvc_yaml=constants.CSI_RBD_PVC_RESTORE_YAML,
+    access_mode=constants.ACCESS_MODE_RWO
 ):
     """
     Create PVC from snapshot
@@ -345,6 +391,7 @@ def create_restore_pvc(
         pvc_name (str): The name of the PVC being created
         volume_mode (str): Volume mode for rbd RWX pvc i.e. 'Block'
         restore_pvc_yaml (str): The location of pvc-restore.yaml
+        access_mode (str): The access mode to be used for the PVC
 
     Returns:
         PVC: PVC instance
@@ -357,6 +404,8 @@ def create_restore_pvc(
     if volume_mode:
         pvc_data['spec']['volumeMode'] = volume_mode
     pvc_data['spec']['dataSource']['name'] = snap_name
+    if access_mode:
+        pvc_data['spec']['accessModes'] = [access_mode]
     pvc_obj = PVC(**pvc_data)
     created_pvc = pvc_obj.create(do_reload=True)
     assert created_pvc, f"Failed to create resource {pvc_name}"
