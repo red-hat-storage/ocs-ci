@@ -56,6 +56,7 @@ TEMPLATE_DEPLOYMENT_EO = os.path.join(
 TEMPLATE_DEPLOYMENT_CLO = os.path.join(
     TEMPLATE_DEPLOYMENT_LOGGING, "clusterlogging_operator"
 )
+TEMPLATE_AUTHENTICATION_DIR = os.path.join(TEMPLATE_DIR, 'authentication')
 DATA_DIR = os.path.join(TOP_DIR, 'data')
 ROOK_REPO_DIR = os.path.join(DATA_DIR, 'rook')
 ROOK_EXAMPLES_DIR = os.path.join(
@@ -109,6 +110,7 @@ CLUSTER_OPERATOR = 'ClusterOperator'
 MONITORING = 'monitoring'
 CLUSTER_SERVICE_VERSION = 'csv'
 JOB = 'job'
+OAUTH = 'OAuth'
 LOCAL_VOLUME = 'localvolume'
 PROXY = 'Proxy'
 MACHINECONFIGPOOL = "MachineConfigPool"
@@ -561,6 +563,10 @@ STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
 )
 
+IBM_STORAGE_CLUSTER_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "ibm-storage-cluster.yaml"
+)
+
 EXTERNAL_STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "external-storage-cluster.yaml"
 )
@@ -576,6 +582,11 @@ OPERATOR_SOURCE_SECRET_YAML = os.path.join(
 OPERATOR_SOURCE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "operator-source.yaml"
 )
+
+HTPASSWD_IDP_YAML = os.path.join(
+    TEMPLATE_AUTHENTICATION_DIR, 'htpasswd_provider.yaml'
+)
+
 
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
@@ -707,6 +718,7 @@ AZURE_PLATFORM = 'azure'
 GCP_PLATFORM = 'gcp'
 VSPHERE_PLATFORM = 'vsphere'
 BAREMETAL_PLATFORM = 'baremetal'
+IBM_POWER_PLATFORM = "powervs"
 ON_PREM_PLATFORMS = [VSPHERE_PLATFORM, BAREMETAL_PLATFORM]
 CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
 BAREMETALPSI_PLATFORM = 'baremetalpsi'
@@ -1143,3 +1155,23 @@ MCG_NS_AWS_ENDPOINT = 'https://s3.amazonaws.com'
 MCG_NS_RESOURCE = 'ns_resource'
 MCG_NS_BUCKET = 'ns-bucket'
 MCG_NS_AWS_CONNECTION = 'aws_connection'
+
+# Squads assignment
+# Tests are assigned to Squads based on patterns matching test path.
+# For example: In case following test fails:
+# tests/e2e/registry/test_pod_from_registry.py::TestRegistryImage::test_run_pod_local_image
+# the pattern "/registry/" match the test path and so the test belongs to
+# Magenta squad.
+SQUADS = {
+    'Brown': ["/nodes/"],
+    'Green': ["/pv_services/", "/storageclass/"],
+    'Blue': ["/monitoring/"],
+    'Red': ["/mcg/", "/rgw/"],
+    'Yellow': ["/cluster_expansion/"],
+    'Purple': ["/test_must_gather", "/upgrade/"],
+    'Magenta': ["/workloads/", "/registry/", "/logging/"],
+    'Grey': ["/performance/"],
+    'Orange': ["/scale/"],
+}
+
+PRODUCTION_JOBS_PREFIX = ['jnk']

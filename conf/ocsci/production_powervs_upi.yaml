@@ -1,0 +1,16 @@
+RUN:
+  bin_dir: '/usr/local/bin'
+
+DEPLOYMENT:
+  local_storage: True
+  force_download_installer: False
+  force_download_client: False
+ENV_DATA:
+  storage_device_sets_name: "ocs-deviceset"
+  skip_ocp_deployment: true
+  skip_ocs_deployment: false
+  platform: 'powervs'
+  disk_pattern: '/dev/vdc'
+  deployment_type: 'upi'
+  monitoring_enabled: false
+  number_of_storage_nodes: 3

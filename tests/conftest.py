@@ -60,6 +60,7 @@ from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import aws
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility import templating
+from ocs_ci.utility import users
 from ocs_ci.utility.environment_check import (
     get_status_before_execution, get_status_after_execution
 )
@@ -2632,6 +2633,72 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
         return dc_pods
 
     return factory
+
+
+@pytest.fixture(scope='session')
+def htpasswd_path(tmpdir_factory):
+    """
+    Returns:
+        string: Path to HTPasswd file with additional usernames
+
+    """
+    return str(tmpdir_factory.mktemp('idp_data').join('users.htpasswd'))
+
+
+@pytest.fixture(scope='session')
+def htpasswd_identity_provider(request):
+    """
+    Creates HTPasswd Identity provider.
+
+    Returns:
+        object: OCS object representing OCP OAuth object with HTPasswd IdP
+
+    """
+    users.create_htpasswd_idp()
+    cluster = OCS(
+        kind=constants.OAUTH,
+        metadata={'name': 'cluster'}
+    )
+    cluster.reload()
+
+    def finalizer():
+        """
+        Remove HTPasswd IdP
+
+        """
+        # TODO(fbalak): remove HTPasswd identityProvider
+        # cluster.ocp.patch(
+        #     resource_name='cluster',
+        #     params=f'[{ "op": "remove", "path": "/spec/identityProviders" }]'
+        # )
+        # users.delete_htpasswd_secret()
+
+    request.addfinalizer(finalizer)
+    return cluster
+
+
+@pytest.fixture(scope='function')
+def user_factory(
+    request,
+    htpasswd_identity_provider,
+    htpasswd_path
+):
+    return users.user_factory(
+        request,
+        htpasswd_path
+    )
+
+
+@pytest.fixture(scope='session')
+def user_factory_session(
+    request,
+    htpasswd_identity_provider,
+    htpasswd_path
+):
+    return users.user_factory(
+        request,
+        htpasswd_path
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)

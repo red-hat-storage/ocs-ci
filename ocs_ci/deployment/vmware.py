@@ -15,7 +15,7 @@ from ocs_ci.deployment.install_ocp_on_rhel import OCPINSTALLRHEL
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.exceptions import CommandFailed, RDMDiskNotFound
 from ocs_ci.ocs.node import (
     get_node_ips, get_typed_worker_nodes, remove_nodes, wait_for_nodes_status
@@ -36,7 +36,7 @@ from ocs_ci.utility.utils import (
     replace_content_in_file, run_cmd, upload_file, wait_for_co,
     get_ocp_version, get_terraform, set_aws_region,
     configure_chrony_and_wait_for_machineconfig_status,
-    get_terraform_ignition_provider,
+    get_terraform_ignition_provider, get_ocp_upgrade_history,
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from semantic_version import Version
@@ -315,6 +315,28 @@ class VSPHEREBASE(Deployment):
         # destroy the folder in templates
         self.vsphere.destroy_folder(pool, self.cluster, self.datacenter)
 
+    def check_cluster_existence(self, cluster_name_prefix):
+        """
+        Check cluster existence according to cluster name prefix
+
+        Args:
+            cluster_name_prefix (str): The cluster name prefix to look for
+
+        Returns:
+            bool: True if a cluster with the same name prefix already exists,
+                False otherwise
+
+        """
+        cluster_name_pattern = cluster_name_prefix
+        rp_exist = self.vsphere.is_resource_pool_prefix_exist(
+            cluster_name_pattern, self.datacenter, self.cluster
+        )
+        if rp_exist:
+            logger.error(f"Resource pool with the prefix of {cluster_name_prefix} was found")
+            return True
+        else:
+            return False
+
 
 class VSPHEREUPI(VSPHEREBASE):
     """
@@ -544,6 +566,15 @@ class VSPHEREUPI(VSPHEREBASE):
                 (default: "DEBUG")
 
         """
+        cluster_name_parts = config.ENV_DATA.get("cluster_name").split("-")
+        prefix = cluster_name_parts[0]
+        if not prefix.startswith(tuple(constants.PRODUCTION_JOBS_PREFIX)):
+            if self.check_cluster_existence(prefix):
+                raise exceptions.SameNamePrefixClusterAlreadyExistsException(
+                    f"Cluster with name prefix {prefix} already exists. "
+                    f"Please destroy the existing cluster for a new cluster "
+                    f"deployment"
+                )
         super(VSPHEREUPI, self).deploy_ocp(log_cli_level)
         if config.ENV_DATA.get('scale_up'):
             logger.info("Adding extra nodes to cluster")
@@ -657,6 +688,42 @@ class VSPHEREUPI(VSPHEREBASE):
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
         if Version.coerce(ocp_version) >= Version.coerce('4.6'):
+            # Download terraform ignition provider. For OCP upgrade clusters,
+            # ignition provider doesn't exist, so downloading in destroy job
+            # as well
+            terraform_plugins_path = ".terraform/plugins/linux_amd64/"
+            terraform_ignition_provider_path = os.path.join(
+                terraform_data_dir,
+                terraform_plugins_path,
+                "terraform-provider-ignition"
+            )
+
+            # check the upgrade history of cluster and checkout to the
+            # original installer release. This is due to the issue of not
+            # supporting terraform state of OCP 4.5 in installer
+            # release of 4.6 branch. More details in
+            # https://github.com/red-hat-storage/ocs-ci/issues/2941
+            is_cluster_upgraded = False
+            try:
+                upgrade_history = get_ocp_upgrade_history()
+                if len(upgrade_history) > 1:
+                    is_cluster_upgraded = True
+                    original_installed_ocp_version = upgrade_history[-1]
+                    installer_release_branch = (
+                        f"release-{original_installed_ocp_version[0:3]}"
+                    )
+                    clone_repo(
+                        constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
+                        installer_release_branch
+                    )
+            except Exception as ex:
+                logger.error(ex)
+
+            if not (
+                os.path.exists(terraform_ignition_provider_path)
+                or is_cluster_upgraded
+            ):
+                get_terraform_ignition_provider(terraform_data_dir)
             terraform.initialize()
         else:
             terraform.initialize(upgrade=True)

@@ -85,6 +85,13 @@ def pytest_addoption(parser):
         help="Email ID to send results",
     )
     parser.addoption(
+        '--squad-analysis',
+        dest='squad_analysis',
+        action="store_true",
+        default=False,
+        help="Include Squad Analysis to email report.",
+    )
+    parser.addoption(
         '--collect-logs',
         dest='collect-logs',
         action="store_true",
@@ -383,6 +390,7 @@ def process_cluster_cli_params(config):
             raise ClusterNameNotProvidedError()
     if get_cli_param(config, 'email') and not get_cli_param(config, '--html'):
         pytest.exit("--html option must be provided to send email reports")
+    get_cli_param(config, 'squad_analysis')
     get_cli_param(config, '-m')
     osd_size = get_cli_param(config, '--osd-size')
     if osd_size:
