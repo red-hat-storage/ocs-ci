@@ -46,6 +46,9 @@ from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.cloud_uls import (
     cloud_uls_factory as cloud_uls_factory_implementation
 )
+from ocs_ci.ocs.resources.bucketclass import (
+    bucket_class_factory as bucket_class_factory_implementation
+)
 from ocs_ci.ocs.node import check_nodes_specs
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
@@ -1922,88 +1925,29 @@ def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
 @pytest.fixture()
 def bucket_class_factory(request, mcg_obj, backingstore_factory):
     """
-    Create a bucket class factory. Calling this fixture creates a new custom bucket class.
-    For a custom backingstore(s), provide the 'backingstore_dict' parameter.
+    Create an Bucket Class factory.
+    Calling this fixture creates a new bucket class.
 
-    Args:
-        mcg_obj_session (MCG): An MCG object containing the MCG S3 connection credentials
+    Returns:
+       func: Factory method - each call to this function creates
+           an Bucket Class factory
 
     """
-    interfaces = {
-        'oc': mcg_obj.oc_create_bucketclass,
-        'cli': mcg_obj.cli_create_bucketclass
-    }
-    created_bucket_classes = []
+    return bucket_class_factory_implementation(request, mcg_obj, backingstore_factory)
 
-    def _create_bucket_class(bucket_class_dict):
-        """
-        Creates and deletes all bucket classes that were created as part of the test
 
-        Args:
-            bucket_class_dict (dict): Dictionary containing the description of the bucket class.
-                possible keys and values are:
-                - interface (str): The interface to use for creation of buckets.
-                    OC | CLI
-                - backingstore_dict (dict/list): Either existing list of backingstores or
-                    A dictionary compatible with the backing store factory requirements.
-                - placement (str): The Placement policy for this bucket class.
-                    Spread | Mirror
-                if no key is provided default values will apply.
+@pytest.fixture(scope='session')
+def bucket_class_factory_session(request, mcg_obj_session, backingstore_factory_session):
+    """
+    Create an Bucket Class factory.
+    Calling this fixture creates a new bucket class.
 
-        Returns:
-            list: A Bucket Class object.
+    Returns:
+       func: Factory method - each call to this function creates
+           an Bucket Class factory
 
-        """
-        if 'interface' in bucket_class_dict:
-            interface = bucket_class_dict['interface']
-            if interface.lower() not in interfaces.keys():
-                raise RuntimeError(
-                    f'Invalid interface type received: {interface}. '
-                    f'available types: {", ".join(interfaces)}'
-                )
-            else:
-                interface = bucket_class_dict['interface']
-        else:
-            interface = 'OC'
-        if 'backingstore_dict' in bucket_class_dict:
-            if isinstance(bucket_class_dict['backingstore_dict'], dict):
-                backingstores = [backingstore.name for backingstore in backingstore_factory(
-                    interface, bucket_class_dict['backingstore_dict'])]
-            else:
-                backingstores = [backingstore.name for backingstore in bucket_class_dict['backingstores']]
-        else:
-            backingstores = ['noobaa-default-backing-store']
-
-        if 'placement' in bucket_class_dict:
-            placement = bucket_class_dict['placement']
-        else:
-            placement = 'Spread'
-        bucket_class_name = helpers.create_unique_resource_name(
-            resource_description='bucketclass', resource_type=interface.lower()
-        )
-        interfaces[interface.lower()](
-            name=bucket_class_name,
-            backingstores=backingstores,
-            placement=placement
-        )
-        bucket_class_object = BucketClass(bucket_class_name, backingstores, placement)
-        created_bucket_classes.append(bucket_class_object)
-        return bucket_class_object
-
-    def bucket_class_cleanup():
-        for bucket_class in created_bucket_classes:
-            log.info(f'Cleaning up bucket {bucket_class.name}')
-            try:
-                bucket_class.delete()
-            except ClientError as e:
-                if e.response['Error']['Code'] == 'NoSuchBucketClass':
-                    log.warning(f'{bucket_class.name} could not be found in cleanup')
-                else:
-                    raise
-
-    request.addfinalizer(bucket_class_cleanup)
-
-    return _create_bucket_class
+    """
+    return bucket_class_factory_implementation(request, mcg_obj_session, backingstore_factory_session)
 
 
 @pytest.fixture(scope='class')
@@ -2086,7 +2030,7 @@ def mcg_job_factory_session(
     )
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture()
 def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     """
         Create a Backing Store factory.

@@ -1,6 +1,7 @@
 import logging
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import tier2, tier3
 from ocs_ci.ocs.bucket_utils import wait_for_pv_backingstore, check_pv_backingstore_status
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
@@ -13,9 +14,12 @@ class TestPvPool:
     """
     Test pv pool related operations
     """
-
-    def test_write_to_full_bucket(self, bucket_factory, bucket_class_factory, mcg_obj_session,
-                                  awscli_pod_session):
+    @tier3
+    def test_write_to_full_bucket(self, mcg_obj_session, awscli_pod_session,
+                                  bucket_class_factory, bucket_factory):
+        """
+        Test to check the full capacity functionality of a pv based backing store.
+        """
         bucketclass = bucket_class_factory({
             'interface': 'OC',
             'backingstore_dict': {
@@ -35,44 +39,43 @@ class TestPvPool:
                     mcg_obj_session
                 )
             except CommandFailed:
-                assert not check_pv_backingstore_status(
+                assert check_pv_backingstore_status(
                     bucketclass.backingstores[0], config.ENV_DATA['cluster_namespace'],
                     '`NO_CAPACITY`'
                 ), 'Failed to fill the bucket'
             awscli_pod_session.exec_cmd_on_pod(
                 'rm -f /tmp/testfile'
             )
-            try:
-                awscli_pod_session.exec_s3_cmd_on_pod(
-                    f"cp s3://{bucket.name}/testfile1 /tmp/testfile",
-                    mcg_obj_session
-                )
-            except CommandFailed as e:
-                logger.error('Failed to retrieve a file from full bucket')
-                raise e
-            try:
-                awscli_pod_session.exec_s3_cmd_on_pod(
-                    f"rm s3://{bucket.name}/testfile1",
-                    mcg_obj_session
-                )
-            except CommandFailed as e:
-                logger.error('Failed to delete a file from full bucket')
-                raise e
-            awscli_pod_session.exec_cmd_on_pod(
-                'dd if=/dev/urandom of=/tmp/testfile bs=1M count=1000'
+        try:
+            awscli_pod_session.exec_s3_cmd_on_pod(
+                f"cp s3://{bucket.name}/testfile1 /tmp/testfile",
+                mcg_obj_session
             )
-            try:
-                awscli_pod_session.exec_s3_cmd_on_pod(
-                    f"cp /tmp/testfile s3://{bucket.name}/testfile1",
-                    mcg_obj_session
-                )
-            except CommandFailed:
-                assert not check_pv_backingstore_status(
-                    bucketclass.backingstores[0], config.ENV_DATA['cluster_namespace'],
-                    '`NO_CAPACITY`'
-                ), 'Failed to re-upload the removed file file'
+        except CommandFailed as e:
+            raise e
+        try:
+            awscli_pod_session.exec_s3_cmd_on_pod(
+                f"rm s3://{bucket.name}/testfile1",
+                mcg_obj_session
+            )
+        except CommandFailed as e:
+            raise e
+        try:
+            awscli_pod_session.exec_s3_cmd_on_pod(
+                f"cp /tmp/testfile s3://{bucket.name}/testfile1",
+                mcg_obj_session
+            )
+        except CommandFailed:
+            assert not check_pv_backingstore_status(
+                bucketclass.backingstores[0], config.ENV_DATA['cluster_namespace'],
+                '`NO_CAPACITY`'
+            ), 'Failed to re-upload the removed file file'
 
+    @tier2
     def test_pv_scale_out(self, backingstore_factory):
+        """
+        Test to check the scale out functionality of pv pool backing store.
+        """
         pv_backingstore = backingstore_factory(
             'OC', {'pv': [(1, 17, 'ocs-storagecluster-ceph-rbd')]}
         )[0]
