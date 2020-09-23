@@ -928,7 +928,7 @@ def get_ocs_version():
 
 def get_ocs_parsed_version():
     """
-    Get ocs version as float
+    Returns ocs version as float
 
     Returns:
         float: ocs version number as major.minor (for example: 4.5)
