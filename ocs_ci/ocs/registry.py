@@ -6,6 +6,7 @@ import time
 
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
 from tests import helpers
@@ -362,12 +363,11 @@ def image_pull_and_push(
         wait (bool): If true waits till the image pull and push completes.
 
     """
-    ocp_obj = ocp.OCP()
-    ocp_obj.new_project(project_name=project_name)
     if config.DEPLOYMENT.get('disconnected'):
         mirror_image(image=image)
     else:
         cmd = f"new-app --template={template} -n {project_name}"
+        ocp_obj = ocp.OCP()
         ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
 
         # Validate it completed
@@ -376,7 +376,8 @@ def image_pull_and_push(
             logger.info(f"Wait for {wait_time} seconds for build to come up")
             time.sleep(300)
             build_list = get_build_name_by_pattern(pattern=pattern, namespace=project_name)
-            assert build_list is not None, "Build is not created"
+            if build_list is None:
+                raise Exception("Build is not created")
             build_obj = ocp.OCP(kind='Build', namespace=project_name)
             for build in build_list:
                 build_obj.wait_for_resource(condition='Complete', resource_name=build, timeout=900)
@@ -409,3 +410,32 @@ def get_build_name_by_pattern(
             logger.info(f'pod name match found appending {name}')
             build_list.append(name)
     return build_list
+
+
+def validate_image_exists(namespace=None):
+    """
+    Validate image exists on registries path
+
+    Args:
+        namespace (str): Namespace where the images/builds are created
+
+    Returns:
+        image_list (str): Dir/Files/Images are listed in string format
+
+    Raises:
+        Exceptions if dir/folders not found
+
+    """
+
+    if not config.DEPLOYMENT.get('disconnected'):
+        pod_list = get_pod_name_by_pattern(
+            pattern="image-registry", namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+        )
+        for pod_name in pod_list:
+            if "cluster" not in pod_name:
+                pod_obj = pod.get_pod_obj(
+                    name=pod_name, namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+                )
+                return pod_obj.exec_cmd_on_pod(
+                    command=f"find /registry/docker/registry/v2/repositories/{namespace}"
+                )
