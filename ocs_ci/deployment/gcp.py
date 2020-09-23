@@ -9,8 +9,7 @@ import os
 
 from libcloud.compute.types import NodeState
 
-from ocs_ci.deployment.cloud import CloudDeploymentBase
-from ocs_ci.deployment.cloud import IPIOCPDeployment
+from ocs_ci.deployment.cloud import CloudDeploymentBase, IPIOCPDeployment
 from ocs_ci.ocs.constants import TEMPLATE_DEPLOYMENT_DIR
 from ocs_ci.utility.gcp import GoogleCloudUtil
 
