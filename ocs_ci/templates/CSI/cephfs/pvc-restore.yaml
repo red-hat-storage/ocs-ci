@@ -3,7 +3,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: cephfs-pvc-restore
 spec:
-  storageClassName: csi-cephfs-sc
+  storageClassName: ocs-storagecluster-cephfs
   dataSource:
     name: cephfs-pvc-snapshot
     kind: VolumeSnapshot
