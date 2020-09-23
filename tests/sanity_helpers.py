@@ -66,6 +66,65 @@ class Sanity:
                 pod.run_io('fs', '1G', runtime=30)
             for pod in self.pod_objs:
                 get_fio_rw_iops(pod)
+        self.create_obc()
+
+    def create_obc(self):
+        """
+        OBC creation for RGW and Nooba
+        only applicable for external cluster
+
+        """
+        if config.ENV_DATA['platform'] in constants.ON_PREM_PLATFORMS:
+            obc_rgw = templating.load_yaml(
+                constants.RGW_OBC_YAML
+            )
+            obc_rgw_data_yaml = tempfile.NamedTemporaryFile(
+                mode='w+', prefix='obc_rgw_data', delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                obc_rgw, obc_rgw_data_yaml.name
+            )
+            logger.info("Creating OBC for rgw")
+            run_cmd(f"oc create -f {obc_rgw_data_yaml.name}", timeout=2400)
+            self.obc_rgw = obc_rgw['metadata']['name']
+
+        obc_nooba = templating.load_yaml(
+            constants.MCG_OBC_YAML
+        )
+        obc_mcg_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='obc_mcg_data', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            obc_nooba, obc_mcg_data_yaml.name
+        )
+        logger.info("create OBC for mcg")
+        run_cmd(f"oc create -f {obc_mcg_data_yaml.name}", timeout=2400)
+        self.obc_mcg = obc_nooba['metadata']['name']
+
+    def delete_obc(self):
+        """
+        Clenaup OBC resources created above
+
+        """
+        if config.ENV_DATA['platform'] in constants.ON_PREM_PLATFORMS:
+            logger.info(f"Deleting rgw obc {self.obc_rgw}")
+            obcrgw = OCP(
+                kind='ObjectBucketClaim',
+                resource_name=f'{self.obc_rgw}'
+            )
+            run_cmd(f"oc delete obc/{self.obc_rgw}")
+            obcrgw.wait_for_delete(
+                resource_name=f'{self.obc_rgw}',
+                timeout=300
+            )
+
+        logger.info(f"Deleting mcg obc {self.obc_mcg}")
+        obcmcg = OCP(kind='ObjectBucketClaim', resource_name=f'{self.obc_mcg}')
+        run_cmd(
+            f"oc delete obc/{self.obc_mcg} -n "
+            f"{defaults.ROOK_CLUSTER_NAMESPACE}"
+        )
+        obcmcg.wait_for_delete(resource_name=f'{self.obc_mcg}', timeout=300)
 
     def delete_resources(self):
         """
@@ -73,6 +132,8 @@ class Sanity:
 
         """
         logger.info("Deleting resources as a sanity functional validation")
+
+        self.delete_obc()
 
         for pod_obj in self.pod_objs:
             pod_obj.delete()
@@ -149,58 +210,6 @@ class SanityExternalCluster(Sanity):
         self.pod_objs = list()
         self.ceph_cluster = CephClusterExternal()
 
-    def create_resources(self, pvc_factory, pod_factory):
-        """
-        Create and verify obcs
-
-        Args:
-            pvc_factory (function): A call to pvc_factory function
-            pod_factory (function): A call to pod_factory function
-
-        """
-        super().create_resources(pvc_factory, pod_factory)
-        self.create_obc()
-        self.verify_obc()
-
-    def delete_resources(self):
-        """
-        cleanup the above created obc
-        """
-        self.cleanup()
-        super().delete_resources()
-
-    def create_obc(self):
-        """
-        OBC creation for RGW and Nooba
-        only applicable for external cluster
-
-        """
-        obc_rgw = templating.load_yaml(
-            constants.RGW_OBC_YAML
-        )
-        obc_rgw_data_yaml = tempfile.NamedTemporaryFile(
-            mode='w+', prefix='obc_rgw_data', delete=False
-        )
-        templating.dump_data_to_temp_yaml(
-            obc_rgw, obc_rgw_data_yaml.name
-        )
-        logger.info("Creating OBC for rgw")
-        run_cmd(f"oc create -f {obc_rgw_data_yaml.name}", timeout=2400)
-        self.obc_rgw = obc_rgw['metadata']['name']
-
-        obc_nooba = templating.load_yaml(
-            constants.MCG_OBC_YAML
-        )
-        obc_mcg_data_yaml = tempfile.NamedTemporaryFile(
-            mode='w+', prefix='obc_mcg_data', delete=False
-        )
-        templating.dump_data_to_temp_yaml(
-            obc_nooba, obc_mcg_data_yaml.name
-        )
-        logger.info("create OBC for mcg")
-        run_cmd(f"oc create -f {obc_mcg_data_yaml.name}", timeout=2400)
-        self.obc_mcg = obc_nooba['metadata']['name']
-
     def verify_obc(self):
         """
         OBC verification from external cluster perspective,
@@ -213,20 +222,3 @@ class SanityExternalCluster(Sanity):
             self.ceph_cluster.noobaa_health_check
         )
         sample.wait_for_func_status(True)
-
-    def cleanup(self):
-        """
-        Clenaup OBC resources created above
-
-        """
-        logger.info(f"Deleting rgw obc {self.obc_rgw}")
-        obcrgw = OCP(kind='ObjectBucketClaim', resource_name=f'{self.obc_rgw}')
-        run_cmd(f"oc delete obc/{self.obc_rgw}")
-        obcrgw.wait_for_delete(resource_name=f'{self.obc_rgw}', timeout=300)
-        logger.info(f"Deleting mcg obc {self.obc_mcg}")
-        obcmcg = OCP(kind='ObjectBucketClaim', resource_name=f'{self.obc_mcg}')
-        run_cmd(
-            f"oc delete obc/{self.obc_mcg} -n "
-            f"{defaults.ROOK_CLUSTER_NAMESPACE}"
-        )
-        obcmcg.wait_for_delete(resource_name=f'{self.obc_mcg}', timeout=300)
