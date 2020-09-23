@@ -783,7 +783,7 @@ def collect_noobaa_db_dump(log_dir_path):
     )
 
 
-def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
+def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=True):
     """
     Collects OCS logs
 
@@ -793,6 +793,8 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
         ocp (bool): Whether to gather OCP logs
         ocs (bool): Whether to gather OCS logs
         mcg (bool): True for collecting MCG logs (noobaa db dump)
+        status_failure (bool): Whether the collection is after success or failure,
+            allows better naming for folders under logs directory
 
     """
     if not (
@@ -804,12 +806,17 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
             "skipping log collection"
         )
         return
-
-    log_dir_path = os.path.join(
-        os.path.expanduser(ocsci_config.RUN['log_dir']),
-        f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
-        f"{dir_name}_ocs_logs"
-    )
+    if status_failure:
+        log_dir_path = os.path.join(
+            os.path.expanduser(ocsci_config.RUN['log_dir']),
+            f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
+            f"{dir_name}_ocs_logs"
+        )
+    else:
+        log_dir_path = os.path.join(
+            os.path.expanduser(ocsci_config.RUN['log_dir']),
+            f"{dir_name}_{ocsci_config.RUN['run_id']}"
+        )
 
     if ocs:
         latest_tag = ocsci_config.REPORTING.get(

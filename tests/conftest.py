@@ -37,7 +37,7 @@ from ocs_ci.ocs.mcg_workload import (
 )
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.utils import setup_ceph_toolbox
+from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation
 )
@@ -2892,3 +2892,20 @@ def snapshot_restore_factory(request):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture(scope="session", autouse=True)
+def collect_logs_fixture(request):
+    """
+    This fixture collects ocs logs after tier execution and this will allow
+    to see the cluster's status after the execution on all execution status options.
+    """
+    def finalizer():
+        """
+        Tracking both logs separately reduce changes of collision
+        """
+        if not config.RUN['cli_params'].get('deploy') and not config.RUN['cli_params'].get('teardown'):
+            collect_ocs_logs('testcases', ocs=False, status_failure=False)
+            collect_ocs_logs('testcases', ocp=False, status_failure=False)
+
+    request.addfinalizer(finalizer)
