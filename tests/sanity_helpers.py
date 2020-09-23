@@ -67,11 +67,11 @@ class Sanity:
             for pod in self.pod_objs:
                 get_fio_rw_iops(pod)
         self.create_obc()
+        self.verify_obc()
 
     def create_obc(self):
         """
         OBC creation for RGW and Nooba
-        only applicable for external cluster
 
         """
         if config.ENV_DATA['platform'] in constants.ON_PREM_PLATFORMS:
@@ -125,6 +125,19 @@ class Sanity:
             f"{defaults.ROOK_CLUSTER_NAMESPACE}"
         )
         obcmcg.wait_for_delete(resource_name=f'{self.obc_mcg}', timeout=300)
+
+    def verify_obc(self):
+        """
+        OBC verification from external cluster perspective,
+        we will check 2 OBCs
+
+        """
+        sample = TimeoutSampler(
+            300,
+            5,
+            self.ceph_cluster.noobaa_health_check
+        )
+        sample.wait_for_func_status(True)
 
     def delete_resources(self):
         """
@@ -209,16 +222,3 @@ class SanityExternalCluster(Sanity):
         self.pvc_objs = list()
         self.pod_objs = list()
         self.ceph_cluster = CephClusterExternal()
-
-    def verify_obc(self):
-        """
-        OBC verification from external cluster perspective,
-        we will check 2 OBCs
-
-        """
-        sample = TimeoutSampler(
-            300,
-            5,
-            self.ceph_cluster.noobaa_health_check
-        )
-        sample.wait_for_func_status(True)
