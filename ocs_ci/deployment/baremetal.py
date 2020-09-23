@@ -440,7 +440,7 @@ class BAREMETALUPI(Deployment):
             bm_install_files_loc = self.helper_node_details['bm_install_files']
             extra_data_pxe = "rhcos-live-rootfs.x86_64.img coreos.inst.insecure"
             if ocp_version == "4.6":
-                extra_data = f"coreos.live.rootfs_url={bm_install_files_loc} {extra_data_pxe}"
+                extra_data = f"coreos.live.rootfs_url={bm_install_files_loc}{extra_data_pxe}"
             default_pxe_file = f"""DEFAULT menu.c32
 TIMEOUT 20
 PROMPT 0
