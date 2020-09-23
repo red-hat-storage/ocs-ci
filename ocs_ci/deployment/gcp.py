@@ -41,6 +41,9 @@ class GCPBase(CloudDeploymentBase):
         """
         Check cluster existence based on a cluster name prefix.
 
+        Args:
+            cluster_name_prefix (str): name prefix which identifies a cluster
+
         Returns:
             bool: True if a cluster with the same name prefix already exists,
                 False otherwise
