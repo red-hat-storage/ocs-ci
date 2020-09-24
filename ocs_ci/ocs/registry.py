@@ -1,14 +1,18 @@
 import logging
 import base64
 import os
+import re
+import time
 
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
 from tests import helpers
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.framework import config
+from ocs_ci.ocs.utils import mirror_image
 
 
 logger = logging.getLogger(__name__)
@@ -343,3 +347,95 @@ def check_image_exists_in_registry(image_url):
         return_value = True
         logger.info("Image exists in Registry")
     return return_value
+
+
+def image_pull_and_push(
+    project_name, template, image='', pattern='', wait=True
+):
+    """
+    Pull and push images running oc new-app command
+
+    Args:
+        project_name (str): Name of project
+        template (str): Name of the template of the image
+        image (str): Name of the image with tag
+        pattern (str): name of the build with given pattern
+        wait (bool): If true waits till the image pull and push completes.
+
+    """
+    if config.DEPLOYMENT.get('disconnected'):
+        mirror_image(image=image)
+    else:
+        cmd = f"new-app --template={template} -n {project_name}"
+        ocp_obj = ocp.OCP()
+        ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
+
+        # Validate it completed
+        if wait:
+            wait_time = 300
+            logger.info(f"Wait for {wait_time} seconds for build to come up")
+            time.sleep(300)
+            build_list = get_build_name_by_pattern(pattern=pattern, namespace=project_name)
+            if build_list is None:
+                raise Exception("Build is not created")
+            build_obj = ocp.OCP(kind='Build', namespace=project_name)
+            for build in build_list:
+                build_obj.wait_for_resource(condition='Complete', resource_name=build, timeout=900)
+
+
+def get_build_name_by_pattern(
+    pattern='',
+    namespace=None
+):
+    """
+        In a given namespace find names of the builds that match
+        the given pattern
+
+        Args:
+            pattern (str): name of the build with given pattern
+            namespace (str): Namespace value
+
+        Returns:
+            build_list (list): List of build names matching the pattern
+
+    """
+    namespace = namespace if namespace else config.ENV_DATA['cluster_namespace']
+    ocp_obj = ocp.OCP(kind='Build', namespace=namespace)
+    build_names = ocp_obj.exec_oc_cmd('get builds -o name', out_yaml_format=False)
+    build_names = build_names.split('\n')
+    build_list = []
+    for name in build_names:
+        if re.search(pattern, name):
+            _, name = name.split('/')
+            logger.info(f'pod name match found appending {name}')
+            build_list.append(name)
+    return build_list
+
+
+def validate_image_exists(namespace=None):
+    """
+    Validate image exists on registries path
+
+    Args:
+        namespace (str): Namespace where the images/builds are created
+
+    Returns:
+        image_list (str): Dir/Files/Images are listed in string format
+
+    Raises:
+        Exceptions if dir/folders not found
+
+    """
+
+    if not config.DEPLOYMENT.get('disconnected'):
+        pod_list = get_pod_name_by_pattern(
+            pattern="image-registry", namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+        )
+        for pod_name in pod_list:
+            if "cluster" not in pod_name:
+                pod_obj = pod.get_pod_obj(
+                    name=pod_name, namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+                )
+                return pod_obj.exec_cmd_on_pod(
+                    command=f"find /registry/docker/registry/v2/repositories/{namespace}"
+                )

@@ -697,7 +697,11 @@ class OCP(object):
         # https://github.com/red-hat-storage/ocs-ci/issues/2312
         try:
             if self.data['items'][0]['kind'].lower() == 'build':
-                return resource_info[column_index - 1]
+                value = (
+                    resource_info[column_index - 1] if len(titles) % 2 == 0
+                    else resource_info[column_index]
+                )
+                return value
         except Exception:
             pass
 
