@@ -26,7 +26,7 @@ setup(
         'boto3==1.14.7',
         'munch==2.5.0',
         'pytest==5.3.5',
-        'pytest-reportportal==1.10.0',
+        'ocs-reportportal==1.10.3',
         'pytest-logger==0.5.1',
         'dataclasses==0.7;python_version < "3.7"',
         'pytest-html==2.1.1',
