@@ -2,7 +2,10 @@
 ENV_DATA:
   platform: 'gcp'
   deployment_type: 'ipi'
+  region: 'europe-west1'
+  base_domain: 'gcp.qe.rh-ocs.com'
+  gcp_project_id: 'ocs4-283313'
   worker_replicas: 3
   master_replicas: 3
-  master_instance_type: 'n1-standard-16'
-  worker_instance_type: 'n1-standard-16'
+  master_instance_type: 'n2-standard-16'
+  worker_instance_type: 'n2-standard-16'
