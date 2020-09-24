@@ -4,17 +4,19 @@ import re   # This is part of workaround for BZ-1766646, to be removed when fixe
 
 import pytest
 
+from random import randint
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.utility.utils import ocsci_log_path, TimeoutSampler
+from tests.helpers import get_worker_nodes
+from ocs_ci.ocs.node import get_node_objs
 
 logger = logging.getLogger(__name__)
 
 
 @tier1
-@pytest.mark.polarion_id("OCS-1583")
 class TestMustGather(ManageTest):
 
     @pytest.fixture(autouse=True)
@@ -22,10 +24,11 @@ class TestMustGather(ManageTest):
         """
         init OCP() object
         """
+        self.reboot_node = False
         self.ocp_obj = ocp.OCP()
 
     @pytest.fixture(autouse=True)
-    def teardown(self, request):
+    def teardown(self, request, nodes):
         def check_for_must_gather_project():
             projects = ocp.OCP(kind='Namespace').get().get('items')
             namespaces = [each.get('metadata').get('name') for each in projects]
@@ -49,6 +52,10 @@ class TestMustGather(ManageTest):
                 return False
 
         def finalizer():
+            if self.reboot_node:
+                self.reboot_node = False
+                nodes.restart_nodes_by_stop_and_start_teardown()
+
             must_gather_pods = pod.get_all_pods(
                 selector_label='app=must-gather'
             )
@@ -70,9 +77,38 @@ class TestMustGather(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    @pytest.mark.polarion_id("OCS-1583")
     def test_must_gather(self):
         """
         Tests functionality of: oc adm must-gather
+
+        """
+        self.collect_must_gather()
+
+    @pytest.mark.polarion_id("OCS-2328")
+    def test_must_gather_worker_node_down(self, nodes):
+        """
+        Collect must-gather OCS logs when a worker node is down
+
+        """
+        self.reboot_node = True
+
+        logger.info('Get all worker nodes and choose random from worker nodes list')
+        worker_nodes = get_worker_nodes()
+        worker_node = worker_nodes[randint(0, len(worker_nodes) - 1)]
+
+        # Stop one worker node
+        nodes.stop_nodes(get_node_objs([worker_node]))
+
+        # Collect must gather and check content
+        self.collect_must_gather()
+
+        # Start worker node
+        nodes.start_nodes(get_node_objs([worker_node]))
+
+    def collect_must_gather(self):
+        """
+        Collect must gather and check content
 
         """
         # Fetch pod details
