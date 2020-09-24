@@ -376,7 +376,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             log.info(f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is collected")
 
     @pytest.mark.polarion_id("OCS-709")
-    def test_monitoring_after_rebooting_master_node(self, nodes, pods):
+    def test_monitoring_after_rebooting_master_node(self, nodes, pods, prometheus_user):
         """
         Test case to validate rebooting master node shouldn't delete
         the data collected on prometheus pod
@@ -395,7 +395,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             log.info(f"Waiting {waiting_time} seconds...")
             time.sleep(waiting_time)
 
-            wait_for_nodes_status_and_prometheus_health_check(pods)
+            wait_for_nodes_status_and_prometheus_health_check(pods, prometheus_user)
 
         # Check the node are Ready state and check cluster is health ok
         self.sanity_helpers.health_check()
@@ -446,7 +446,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         self.sanity_helpers.health_check(tries=40)
 
         # Check for ceph health check metrics is updated with new mgr pod
-        wait_to_update_mgrpod_info_prometheus_pod()
+        wait_to_update_mgrpod_info_prometheus_pod(prometheus_user)
 
         # Check for the created pvc metrics after rebooting the node where mgr pod was running
         user, password = prometheus_user
