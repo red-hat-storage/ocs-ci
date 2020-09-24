@@ -56,7 +56,7 @@ def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
         list : List containing added device paths
 
     """
-    ocp_obj = OCP(kind='localvolume', namespace=constants.LOCAL_STORAGE_NAMESPACE)
+    ocp_obj = OCP(kind='localvolume', namespace=config.ENV_DATA['local_storage_namespace'])
     workers = get_typed_nodes(node_type="worker")
     worker_names = [worker.name for worker in workers]
     config.ENV_DATA['worker_replicas'] = len(worker_names)
@@ -113,10 +113,10 @@ def check_local_volume():
 
     if csv.get_csvs_start_with_prefix(
         csv_prefix=defaults.LOCAL_STORAGE_OPERATOR_NAME,
-        namespace=constants.LOCAL_STORAGE_NAMESPACE
+        namespace=config.ENV_DATA['local_storage_namespace']
     ):
         ocp_obj = OCP()
-        command = "get localvolume local-block -n local-storage "
+        command = f"get localvolume local-block -n {config.ENV_DATA['local_storage_namespace']} "
         try:
             status = ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
         except CommandFailed as ex:
@@ -160,7 +160,7 @@ def get_local_volume_cr():
         local volume (obj): Local Volume object handler
 
     """
-    ocp_obj = OCP(kind=constants.LOCAL_VOLUME, namespace=constants.LOCAL_STORAGE_NAMESPACE)
+    ocp_obj = OCP(kind=constants.LOCAL_VOLUME, namespace=config.ENV_DATA['local_storage_namespace'])
     return ocp_obj
 
 

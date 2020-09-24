@@ -932,7 +932,7 @@ def setup_local_storage(storageclass):
     run_cmd(f"oc create -f {lso_data_yaml.name}")
 
     local_storage_operator = ocp.OCP(
-        kind=constants.POD, namespace=constants.LOCAL_STORAGE_NAMESPACE
+        kind=constants.POD, namespace=config.ENV_DATA['local_storage_namespace']
     )
     assert local_storage_operator.wait_for_resource(
         condition=constants.STATUS_RUNNING,

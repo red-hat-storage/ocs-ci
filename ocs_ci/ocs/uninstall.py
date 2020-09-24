@@ -86,7 +86,7 @@ def uninstall_lso(lso_sc):
         ocp.OCP(
             kind=constants.STORAGECLASS,
             resource_name=lso_sc,
-            namespace=constants.LOCAL_STORAGE_NAMESPACE
+            namespace=config.ENV_DATA['local_storage_namespace']
         )
     )
 
@@ -95,7 +95,7 @@ def uninstall_lso(lso_sc):
         ocp.OCP(
             kind=constants.LOCAL_VOLUME,
             resource_name=lv_name,
-            namespace=constants.LOCAL_STORAGE_NAMESPACE
+            namespace=config.ENV_DATA['local_storage_namespace']
         )
     )
 
@@ -108,7 +108,7 @@ def uninstall_lso(lso_sc):
         ocp.OCP(
             kind=constants.PV,
             selector=f'storage.openshift.com/local-volume-owner-name={lv_name}',
-            namespace=constants.LOCAL_STORAGE_NAMESPACE
+            namespace=config.ENV_DATA['local_storage_namespace']
         )
     )
 
