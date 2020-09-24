@@ -1,17 +1,15 @@
 import pytest
 import logging
 
-from ocs_ci.ocs.constants import OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.registry import (
-    validate_registry_pod_status,
-    image_pull, image_push, image_list_all, image_rm,
-    check_image_exists_in_registry, validate_pvc_mount_on_registry_pod,
-    modify_registry_pod_count
+    validate_registry_pod_status, image_pull_and_push,
+    validate_image_exists, modify_registry_pod_count,
+    validate_pvc_mount_on_registry_pod
 )
 from ocs_ci.framework.testlib import E2ETest, workloads
 
 log = logging.getLogger(__name__)
-IMAGE_URL = 'docker.io/library/busybox'
 
 
 @workloads
@@ -22,16 +20,22 @@ class TestRegistryByIncreasingNumPods(E2ETest):
     """
 
     @pytest.fixture(autouse=True)
-    def teardown(self, request):
+    def setup(self, request):
         """
-        Remove the image
+        Setup and clean up the namespace
+        """
 
-        """
-        self.image_path = None
+        self.project_name = 'test'
+        ocp_obj = ocp.OCP(kind=constants.NAMESPACES)
+        ocp_obj.new_project(project_name=self.project_name)
 
         def finalizer():
-            log.info("Remove image from registry")
-            image_rm(registry_path=self.image_path, image_url=IMAGE_URL)
+            log.info("Clean up and remove namespace")
+            ocp_obj.exec_oc_cmd(command=f'delete project {self.project_name}')
+
+            # Reset namespace to default
+            ocp.switch_to_default_rook_cluster_project()
+            ocp_obj.wait_for_delete(resource_name=self.project_name)
 
         request.addfinalizer(finalizer)
 
@@ -53,20 +57,19 @@ class TestRegistryByIncreasingNumPods(E2ETest):
         # Validate pvc mounted on image registry pod
         validate_pvc_mount_on_registry_pod()
 
-        # Image pull and push to registry
-        image_pull(image_url=IMAGE_URL)
-        self.image_path = image_push(
-            image_url=IMAGE_URL, namespace=OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+        # Pull and push images to registries
+        log.info("Pull and push images to registries")
+        image_pull_and_push(
+            project_name=self.project_name, template='eap-cd-basic-s2i',
+            image='registry.redhat.io/jboss-eap-7-tech-preview/eap-cd-openshift-rhel8:latest',
+            pattern='eap-app'
         )
 
-        # List the images in registry
-        img_list = image_list_all()
-        log.info(f"Image list {img_list}")
-
-        # Check either image present in registry or not
-        assert check_image_exists_in_registry(image_url=IMAGE_URL), (
-            "Image URL not present in registry"
-        )
+        # Validate image exists in registries path
+        validate_image_exists(namespace=self.project_name)
 
         # Reduce number to 2
         assert modify_registry_pod_count(count=2)
+
+        # Validate image registry pods
+        validate_registry_pod_status()

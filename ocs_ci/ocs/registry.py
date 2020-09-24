@@ -6,7 +6,6 @@ import time
 
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
 from tests import helpers
