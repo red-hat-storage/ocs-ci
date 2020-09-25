@@ -2,7 +2,7 @@ import logging
 import pytest
 import time
 
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     ManageTest, tier4c, ignore_leftovers
 )
@@ -12,8 +12,9 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
-from ocs_ci.ocs.resources.pod import get_all_pods
-from tests.helpers import get_node_running_pod
+from ocs_ci.ocs.resources.pod import (
+    wait_for_storage_pods, list_of_nodes_running_pods
+)
 
 log = logging.getLogger(__name__)
 
@@ -62,32 +63,6 @@ class TestOCSWorkerNodeShutdown(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def list_of_nodes_running_pods(self, selector):
-        """
-        The function returns the list of nodes for the given selector
-
-        Args:
-            selector (str): The resource selector to search with
-
-        Returns:
-            list: Pods_running_nodes
-
-        """
-        pod_obj_list = get_all_pods(
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE, selector=[selector]
-        )
-        pods_running_nodes = []
-        for pod in pod_obj_list:
-            pods_running_nodes.append(
-                get_node_running_pod(
-                    namespace=defaults.ROOK_CLUSTER_NAMESPACE, pod_name=pod.name
-                )
-            )
-
-        log.info(f"{selector} running on nodes {pods_running_nodes}")
-        return pods_running_nodes
-
-    @pytest.mark.polarion_id("OCS-1278")
     @pytest.mark.polarion_id("OCS-2315")
     def test_node_after_shutdown_and_recovery_worker_node(self, nodes):
         """
@@ -99,15 +74,12 @@ class TestOCSWorkerNodeShutdown(ManageTest):
         # Get MDS, rbd, cephfs plugin provisioner pods running nodes
         # before shutdown
 
-        self.list_of_nodes_running_pods(
-            selector='rook-ceph-mds'
-        )
+        log.info("Check pod nodes before nodes shutdown")
+        list_of_nodes_running_pods(selector='rook-ceph-mds')
 
-        self.list_of_nodes_running_pods(
-            selector='csi-rbdplugin-provisioner'
-        )
+        list_of_nodes_running_pods(selector='csi-rbdplugin-provisioner')
 
-        self.list_of_nodes_running_pods(
+        list_of_nodes_running_pods(
             selector='csi-cephfsplugin-provisioner'
         )
 
@@ -133,18 +105,19 @@ class TestOCSWorkerNodeShutdown(ManageTest):
 
         # Check the node are Ready state and check cluster is health ok
         self.sanity_helpers.health_check()
+        wait_for_storage_pods()
 
         # Get MDS, rbd & cephfs plugin provisioner pods running
         # nodes post-recovery
-        mds_running_nodes_after_recovery = self.list_of_nodes_running_pods(
+        mds_running_nodes_after_recovery = list_of_nodes_running_pods(
             selector='rook-ceph-mds'
         )
 
-        rbd_provisioner_running_nodes_after_recovery = self.list_of_nodes_running_pods(
+        rbd_provisioner_running_nodes_after_recovery = list_of_nodes_running_pods(
             selector='csi-rbdplugin-provisioner'
         )
 
-        cephfs_provisioner_running_nodes_after_recovery = self.list_of_nodes_running_pods(
+        cephfs_provisioner_running_nodes_after_recovery = list_of_nodes_running_pods(
             selector='csi-cephfsplugin-provisioner'
         )
 
