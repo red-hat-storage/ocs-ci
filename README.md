@@ -5,12 +5,13 @@ and other supported platforms. The framework is based on pytest.
 
 ## Automatically generated documentation
 
-We have now primary documentation available at
-[readthedocs.io](https://ocs-ci.readthedocs.io/en/latest/)
+The primary documentation is available at
+[ocs-ci.readthedocs.io](https://ocs-ci.readthedocs.io/en/latest/).
 
-Documentation is structured and available under docs directory
-inside this project. You can click [HERE](docs/README.md) to see
-the Table Of Content(TOC) of our documentation.
+Source files of the documentation are maintained as a
+[Sphinx](https://www.sphinx-doc.org/en/master/) project in [`docs`
+directory](docs/).
 
 ## License
+
 This project is open sourced under MIT License.

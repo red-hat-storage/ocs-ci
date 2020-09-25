@@ -1,0 +1,1 @@
+../../conf/ocsci/openshift-console/README.md
