@@ -1,6 +1,5 @@
 import pytest
 import logging
-import time
 
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.registry import (
@@ -69,9 +68,8 @@ class TestRegistryShutdownAndRecoveryNode(E2ETest):
             # Stop node
             nodes.stop_nodes(nodes=[node])
 
-            waiting_time = 20
-            log.info(f"Waiting for {waiting_time} seconds")
-            time.sleep(waiting_time)
+            # Validate node reached NotReady state
+            wait_for_nodes_status(node_names=[node], status=constants.NODE_NOT_READY)
 
             # Pull and push images to registries
             log.info("Pull and push images to registries")
