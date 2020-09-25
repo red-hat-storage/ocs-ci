@@ -5,7 +5,7 @@ import re   # This is part of workaround for BZ-1766646, to be removed when fixe
 import pytest
 
 from random import randint
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, tier4a
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.utils import collect_ocs_logs
@@ -16,7 +16,6 @@ from ocs_ci.ocs.node import get_node_objs
 logger = logging.getLogger(__name__)
 
 
-@tier1
 class TestMustGather(ManageTest):
 
     @pytest.fixture(autouse=True)
@@ -77,6 +76,7 @@ class TestMustGather(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    @tier1
     @pytest.mark.polarion_id("OCS-1583")
     def test_must_gather(self):
         """
@@ -85,6 +85,7 @@ class TestMustGather(ManageTest):
         """
         self.collect_must_gather()
 
+    @tier4a
     @pytest.mark.polarion_id("OCS-2328")
     def test_must_gather_worker_node_down(self, nodes):
         """
@@ -92,7 +93,6 @@ class TestMustGather(ManageTest):
 
         """
         self.reboot_node = True
-
         logger.info('Get all worker nodes and choose random from worker nodes list')
         worker_nodes = get_worker_nodes()
         worker_node = worker_nodes[randint(0, len(worker_nodes) - 1)]
@@ -106,9 +106,9 @@ class TestMustGather(ManageTest):
         # Start worker node
         nodes.start_nodes(get_node_objs([worker_node]))
 
-    def collect_must_gather(self):
+    def validate_must_gather_content(self):
         """
-        Collect must gather and check content
+        Validate must gather content
 
         """
         # Fetch pod details
