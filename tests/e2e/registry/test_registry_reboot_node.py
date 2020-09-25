@@ -2,14 +2,14 @@ import time
 import pytest
 import logging
 
+from ocs_ci.ocs import ocp
 from ocs_ci.ocs.constants import (
     OPENSHIFT_IMAGE_REGISTRY_NAMESPACE, MASTER_MACHINE, WORKER_MACHINE
 )
 from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
 from ocs_ci.ocs.registry import (
-    validate_registry_pod_status,
-    image_pull, image_push, image_list_all, image_rm,
-    check_image_exists_in_registry
+    validate_registry_pod_status, image_pull_and_push,
+    validate_image_exists
 )
 from ocs_ci.ocs.node import (
     wait_for_nodes_status, get_typed_nodes
@@ -17,11 +17,9 @@ from ocs_ci.ocs.node import (
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
-from ocs_ci.utility.svt import svt_setup, svt_cleanup
 from tests.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
-IMAGE_URL = 'docker.io/library/busybox'
 
 
 @workloads
@@ -41,39 +39,54 @@ class TestRegistryRebootNode(E2ETest):
         self.sanity_helpers = Sanity()
 
     @pytest.fixture(autouse=True)
-    def teardown(self, request, nodes):
+    def setup(self, request):
         """
-        Remove images and clean up svt
+        Setup and clean up the namespace
+        """
 
-        """
-        self.image_path = None
+        self.project_name = 'test'
+        ocp_obj = ocp.OCP(kind=OPENSHIFT_IMAGE_REGISTRY_NAMESPACE)
+        ocp_obj.new_project(project_name=self.project_name)
 
         def finalizer():
-            nodes.restart_nodes_by_stop_and_start_teardown()
-            log.info("Remove image from registry")
-            image_rm(registry_path=self.image_path, image_url=IMAGE_URL)
-            log.info("Calling svt cleanup")
-            assert svt_cleanup(), "Failed to cleanup svt"
+            log.info("Clean up and remove namespace")
+            ocp_obj.exec_oc_cmd(command=f'delete project {self.project_name}')
+
+            # Reset namespace to default
+            ocp.switch_to_default_rook_cluster_project()
+            ocp_obj.wait_for_delete(resource_name=self.project_name)
+
         request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
-        argnames=['node_type', 'iterations'],
+        argnames=['node_type'],
         argvalues=[
             pytest.param(
-                *[MASTER_MACHINE, 5], marks=pytest.mark.polarion_id("OCS-1803")
+                *[MASTER_MACHINE], marks=pytest.mark.polarion_id("OCS-1803")
             ),
             pytest.param(
-                *[WORKER_MACHINE, 5], marks=pytest.mark.polarion_id("OCS-1795")
+                *[WORKER_MACHINE], marks=pytest.mark.polarion_id("OCS-1795")
             ),
         ]
     )
-    def test_registry_reboot_node(self, node_type, iterations, nodes):
+    def test_registry_reboot_node(self, node_type, nodes):
         """
         Test registry workload when backed by OCS and reboot node
         """
 
         # Get the node list
         node = get_typed_nodes(node_type, num_of_nodes=1)
+
+        # Pull and push images to registries
+        log.info("Pull and push images to registries")
+        image_pull_and_push(
+            project_name=self.project_name, template='eap-cd-basic-s2i',
+            image='registry.redhat.io/jboss-eap-7-tech-preview/eap-cd-openshift-rhel8:latest',
+            pattern='eap-app'
+        )
+
+        # Validate image exists in registries path
+        validate_image_exists(namespace=self.project_name)
 
         # Reboot one node
         nodes.restart_nodes(node)
@@ -95,45 +108,41 @@ class TestRegistryRebootNode(E2ETest):
         # Validate image registry pods
         validate_registry_pod_status()
 
-        # Start SVT workload for pushing images to registry
-        svt_setup(iterations=iterations)
-
-        # Image pull and push to registry
-        image_pull(image_url=IMAGE_URL)
-        self.image_path = image_push(
-            image_url=IMAGE_URL, namespace=OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
-        )
-
-        # List the images in registry
-        img_list = image_list_all()
-        log.info(f"Image list {img_list}")
-
-        # Check either image present in registry or not
-        assert check_image_exists_in_registry(image_url=IMAGE_URL), (
-            "Image URL not present in registry"
-        )
+        # Validate image exists in registries path
+        validate_image_exists(namespace=self.project_name)
 
         # Validate cluster health ok and all pods are running
         self.sanity_helpers.health_check()
 
     @pytest.mark.parametrize(
-        argnames=['node_type', 'iterations'],
+        argnames=['node_type'],
         argvalues=[
             pytest.param(
-                *[MASTER_MACHINE, 5], marks=pytest.mark.polarion_id("OCS-1802")
+                *[MASTER_MACHINE], marks=pytest.mark.polarion_id("OCS-1802")
             ),
             pytest.param(
-                *[WORKER_MACHINE, 5], marks=pytest.mark.polarion_id("OCS-1804")
+                *[WORKER_MACHINE], marks=pytest.mark.polarion_id("OCS-1804")
             ),
         ]
     )
-    def test_registry_rolling_reboot_node(self, node_type, iterations, nodes):
+    def test_registry_rolling_reboot_node(self, node_type, nodes):
         """
         Test registry workload when backed by OCS and reboot node one by one
         """
 
         # Get the node list
         node_list = get_typed_nodes(node_type)
+
+        # Pull and push images to registries
+        log.info("Pull and push images to registries")
+        image_pull_and_push(
+            project_name=self.project_name, template='eap-cd-basic-s2i',
+            image='registry.redhat.io/jboss-eap-7-tech-preview/eap-cd-openshift-rhel8:latest',
+            pattern='eap-app'
+        )
+
+        # Validate image exists in registries path
+        validate_image_exists(namespace=self.project_name)
 
         for node in node_list:
 
@@ -163,23 +172,8 @@ class TestRegistryRebootNode(E2ETest):
             # Validate image registry pods
             validate_registry_pod_status()
 
-            # Start SVT workload for pushing images to registry
-            svt_setup(iterations=iterations)
-
-            # Image pull and push to registry
-            image_pull(image_url=IMAGE_URL)
-            self.image_path = image_push(
-                image_url=IMAGE_URL, namespace=OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
-            )
-
-            # List the images in registry
-            img_list = image_list_all()
-            log.info(f"Image list {img_list}")
-
-            # Check either image present in registry or not
-            assert check_image_exists_in_registry(image_url=IMAGE_URL), (
-                "Image URL not present in registry"
-            )
+            # Validate image exists in registries path
+            validate_image_exists(namespace=self.project_name)
 
         # Validate cluster health ok and all pods are running
         self.sanity_helpers.health_check()
