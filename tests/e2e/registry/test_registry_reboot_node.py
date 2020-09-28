@@ -4,8 +4,8 @@ import logging
 
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.constants import (
-    OPENSHIFT_IMAGE_REGISTRY_NAMESPACE, MASTER_MACHINE, WORKER_MACHINE,
-    NODE_NOT_READY
+    MASTER_MACHINE, WORKER_MACHINE,
+    NODE_NOT_READY, NAMESPACE
 )
 from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
 from ocs_ci.ocs.registry import (
@@ -46,7 +46,7 @@ class TestRegistryRebootNode(E2ETest):
         """
 
         self.project_name = 'test'
-        ocp_obj = ocp.OCP(kind=OPENSHIFT_IMAGE_REGISTRY_NAMESPACE)
+        ocp_obj = ocp.OCP(kind=NAMESPACE)
         ocp_obj.new_project(project_name=self.project_name)
 
         def finalizer():
