@@ -69,7 +69,7 @@ class TestRegistryShutdownAndRecoveryNode(E2ETest):
             nodes.stop_nodes(nodes=[node])
 
             # Validate node reached NotReady state
-            wait_for_nodes_status(node_names=[node], status=constants.NODE_NOT_READY)
+            wait_for_nodes_status(node_names=[node.name], status=constants.NODE_NOT_READY)
 
             # Pull and push images to registries
             log.info("Pull and push images to registries")
