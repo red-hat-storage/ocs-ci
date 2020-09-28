@@ -7,13 +7,11 @@ import time
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from tests import helpers
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.framework import config
-from ocs_ci.ocs.utils import mirror_image
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.utils import mirror_image, get_pod_name_by_pattern
 
 
 logger = logging.getLogger(__name__)
