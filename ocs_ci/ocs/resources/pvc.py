@@ -423,6 +423,7 @@ def create_pvc_clone(
         parent_pvc (str): Name of the parent pvc, whose clone is to be created.
         pvc_name (str): The name of the PVC being created
         do_reload (bool): True for wait for reloading PVC after its creation, False otherwise
+        storage_size (str): Size of the clone, if not passed will use the default "storage" value from pvc-clone.yaml
 
     Returns:
         PVC: PVC instance
@@ -436,7 +437,7 @@ def create_pvc_clone(
     )
     pvc_data['spec']['storageClassName'] = sc_name
     pvc_data['spec']['dataSource']['name'] = parent_pvc
-    if storage_size is not None:
+    if storage_size:
         pvc_data['spec']['resources']['requests']['storage'] = storage_size
     ocs_obj = PVC(**pvc_data)
     created_pvc = ocs_obj.create(do_reload=do_reload)
