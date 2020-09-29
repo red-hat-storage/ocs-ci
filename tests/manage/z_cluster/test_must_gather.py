@@ -83,7 +83,7 @@ class TestMustGather(ManageTest):
         Tests functionality of: oc adm must-gather
 
         """
-        self.collect_must_gather()
+        self.validate_must_gather_content()
 
     @tier4a
     @pytest.mark.polarion_id("OCS-2328")
