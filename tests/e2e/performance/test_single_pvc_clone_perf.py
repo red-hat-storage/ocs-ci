@@ -3,11 +3,10 @@ Test to verify clone creation and deletion performance
 """
 import logging
 import pytest
-import time
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
-    skipif_ocs_version, tier1
+    skipif_ocs_version
 )
 from ocs_ci.framework.testlib import (
     performance, E2ETest
@@ -18,12 +17,13 @@ from tests import helpers
 
 logger = logging.getLogger(__name__)
 
+
 @skipif_ocs_version('<4.6')
 @pytest.mark.parametrize(
     argnames=["interface_type", "pvc_size", "file_size"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL,'1','600M'], marks=pytest.mark.polarion_id('OCS-2340')
+            *[constants.CEPHBLOCKPOOL, '1', '600M'], marks=pytest.mark.polarion_id('OCS-2340')
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, '25', '15GB'], marks=pytest.mark.polarion_id('OCS-2340')
@@ -35,16 +35,16 @@ logger = logging.getLogger(__name__)
             *[constants.CEPHBLOCKPOOL, '100', '60GB'], marks=pytest.mark.polarion_id('OCS-2340')
         ),
         pytest.param(
-           *[constants.CEPHFILESYSTEM,'1','600M'], marks=pytest.mark.polarion_id('2341')
+            *[constants.CEPHFILESYSTEM, '1', '600M'], marks=pytest.mark.polarion_id('2341')
         ),
         pytest.param(
-           *[constants.CEPHFILESYSTEM,'25','15GB'], marks=pytest.mark.polarion_id('2341')
+            *[constants.CEPHFILESYSTEM, '25', '15GB'], marks=pytest.mark.polarion_id('2341')
         ),
         pytest.param(
-           *[constants.CEPHFILESYSTEM,'50','30GB'], marks=pytest.mark.polarion_id('2341')
+            *[constants.CEPHFILESYSTEM, '50', '30GB'], marks=pytest.mark.polarion_id('2341')
         ),
         pytest.param(
-           *[constants.CEPHFILESYSTEM,'100','60GB'], marks=pytest.mark.polarion_id('2341')
+            *[constants.CEPHFILESYSTEM, '100', '60GB'], marks=pytest.mark.polarion_id('2341')
         )
     ]
 )
@@ -131,18 +131,20 @@ class TestPVCSingleClonePerformance(E2ETest):
 
         logger.info(f"Finished creating {max_num_of_clones} clones on {interface_type} PVC of size {pvc_size}GB.")
 
-        logger.info(f"Printing clone creation times for {max_num_of_clones} clones on {interface_type} PVC of size {pvc_size}GB:")
+        logger.info(f"Printing clone creation times for {max_num_of_clones} clones "
+                    f"on {interface_type} PVC of size {pvc_size}GB:")
 
         for i in range(max_num_of_clones):
             logger.info(f"Clone number {i+1} creation time is {clone_creation_time_measures[i]} secs")
 
-        logger.info(f"Finished printing {max_num_of_clones} clone creation times for {interface_type} PVC of size {pvc_size}GB.")
+        logger.info(f"Finished printing {max_num_of_clones} clone creation times "
+                    f"for {pvc_size}GB {interface_type} PVC.")
 
         # deleting one by one and measuring deletion times for each one of the clones create above
         # in case of single clone will run one time
         clone_deletion_time_measures = []
 
-        logger.info(f"Start deleting one by one {max_num_of_clones} clones on {interface_type} PVC of size {pvc_size}GB.")
+        logger.info(f"Start deleting {max_num_of_clones} clones on {interface_type} PVC of size {pvc_size}GB.")
 
         for i in range(max_num_of_clones):
             cloned_pvc_obj = clones_list[i]
@@ -157,7 +159,7 @@ class TestPVCSingleClonePerformance(E2ETest):
             logger.info(f"Clone number {i + 1} deletion time is {delete_time} secs.")
             clone_deletion_time_measures.append(delete_time)
 
-        logger.info(f"Finished deleting one by one {max_num_of_clones} clones on {interface_type} PVC of size {pvc_size}GB.")
+        logger.info(f"Finished deleting {max_num_of_clones} clones on {interface_type} PVC of size {pvc_size}GB.")
 
         logger.info(f"Clone deletion times for {interface_type} PVC of size {pvc_size}GB are:")
         for i in range(max_num_of_clones):
@@ -165,4 +167,4 @@ class TestPVCSingleClonePerformance(E2ETest):
 
         logger.info(f"Finished printing clone deletion times for {interface_type} PVC of size {pvc_size}GB.")
 
-        logger.info("test_clones_creation_performance finished successfully.") 
+        logger.info("test_clones_creation_performance finished successfully.")
