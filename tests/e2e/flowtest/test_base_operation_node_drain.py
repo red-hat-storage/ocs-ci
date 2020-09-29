@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.framework.pytest_customization.marks import skipif_bm, skipif_aws_i3
 from ocs_ci.ocs import node, constants
-from ocs_ci.framework.testlib import E2ETest, tier2, config, ignore_leftovers
+from ocs_ci.framework.testlib import E2ETest, flowtests, config, ignore_leftovers
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs import flowtest
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 @ignore_leftovers
-@tier2
+@flowtests
 @pytest.mark.bugzilla('1869303')
 class TestBaseOperationNodeDrain(E2ETest):
     """
