@@ -41,6 +41,7 @@ def delete_and_create_osd_node(osd_node_name):
         osd_node_name (str): The osd node name to delete
 
     """
+    new_node_name = None
     # error message for invalid deployment configuration
     msg_invalid = (
         "ocs-ci config 'deployment_type' value "
@@ -50,16 +51,16 @@ def delete_and_create_osd_node(osd_node_name):
     # TODO: refactor this so that AWS is not a "special" platform
     if config.ENV_DATA['platform'].lower() == constants.AWS_PLATFORM:
         if config.ENV_DATA['deployment_type'] == 'ipi':
-            node.delete_and_create_osd_node_ipi(osd_node_name)
+            new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
 
         elif config.ENV_DATA['deployment_type'] == 'upi':
-            node.delete_and_create_osd_node_aws_upi(osd_node_name)
+            new_node_name = node.delete_and_create_osd_node_aws_upi(osd_node_name)
         else:
             log.error(msg_invalid)
             pytest.fail(msg_invalid)
     elif config.ENV_DATA['platform'].lower() in constants.CLOUD_PLATFORMS:
         if config.ENV_DATA['deployment_type'] == 'ipi':
-            node.delete_and_create_osd_node_ipi(osd_node_name)
+            new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
         else:
             log.error(msg_invalid)
             pytest.fail(msg_invalid)
@@ -75,9 +76,16 @@ def delete_and_create_osd_node(osd_node_name):
                 "Perform delete and create ocs node in Vmware using one "
                 "of the existing extra worker nodes that not in ocs"
             )
-            node.delete_and_create_osd_node_vsphere_upi(
+            new_node_name = node.delete_and_create_osd_node_vsphere_upi(
                 osd_node_name, use_existing_node=True
             )
+
+    assert node.node_replacement_verification_steps_ceph_side(
+        osd_node_name, new_node_name
+    )
+    assert node.node_replacement_verification_steps_user_side(
+        osd_node_name, new_node_name
+    )
 
 
 @tier4
