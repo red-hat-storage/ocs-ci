@@ -57,6 +57,7 @@ ui = pytest.mark.ui
 csi = pytest.mark.csi
 monitoring = pytest.mark.monitoring
 workloads = pytest.mark.workloads
+flowtests = pytest.mark.flowtests
 performance = pytest.mark.performance
 scale = pytest.mark.scale
 deployment = pytest.mark.deployment
