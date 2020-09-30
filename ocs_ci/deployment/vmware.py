@@ -26,6 +26,7 @@ from ocs_ci.utility.csr import (
     approve_pending_csr, wait_for_all_nodes_csr_and_approve
 )
 from ocs_ci.utility.load_balancer import LoadBalancer
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.templating import (
     dump_data_to_json,
     Templating,
@@ -457,6 +458,7 @@ class VSPHEREUPI(VSPHEREBASE):
                 f"--dir {self.cluster_path} "
             )
 
+        @retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
         def configure_storage_for_image_registry(self, kubeconfig):
             """
             Configures storage for the image registry
