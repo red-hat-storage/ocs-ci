@@ -2,10 +2,8 @@ import time
 import pytest
 import logging
 
-from ocs_ci.ocs import ocp
 from ocs_ci.ocs.constants import (
     MASTER_MACHINE, WORKER_MACHINE,
-    NODE_NOT_READY, NAMESPACE
 )
 from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
 from ocs_ci.ocs.registry import (
@@ -13,7 +11,7 @@ from ocs_ci.ocs.registry import (
     validate_image_exists
 )
 from ocs_ci.ocs.node import (
-    wait_for_nodes_status, get_typed_nodes, get_node_objs
+    wait_for_nodes_status, get_typed_nodes
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
@@ -40,37 +38,17 @@ class TestRegistryRebootNode(E2ETest):
         self.sanity_helpers = Sanity()
 
     @pytest.fixture(autouse=True)
-    def setup(self, request, nodes):
+    def setup(self, request, project_factory_class, nodes):
         """
         Setup and clean up the namespace
         """
 
         self.project_name = 'test'
-        ocp_obj = ocp.OCP(kind=NAMESPACE)
-        ocp_obj.new_project(project_name=self.project_name)
+        project_factory_class(project_name=self.project_name)
 
         def finalizer():
-
-            # Validate all nodes are in READY state
-            not_ready_nodes = [
-                n for n in get_node_objs() if n
-                .ocp.get_resource_status(n.name) == NODE_NOT_READY
-            ]
-            log.warning(
-                f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
-            )
-            if not_ready_nodes:
-                nodes.restart_nodes_by_stop_and_start(not_ready_nodes)
-                wait_for_nodes_status()
-            log.info("All nodes are in Ready status")
-
-            # Clean up and remove namespace
-            log.info("Clean up and remove namespace")
-            ocp_obj.exec_oc_cmd(command=f'delete project {self.project_name}')
-
-            # Reset namespace to default
-            ocp.switch_to_default_rook_cluster_project()
-            ocp_obj.wait_for_delete(resource_name=self.project_name)
+            log.info("Validate all nodes are in Ready state, if not restart nodes")
+            nodes.restart_nodes_by_stop_and_start_teardown()
 
         request.addfinalizer(finalizer)
 
@@ -163,7 +141,7 @@ class TestRegistryRebootNode(E2ETest):
         for node in node_list:
 
             # Reboot node
-            log.info(node)
+            log.info(node.name)
             nodes.restart_nodes([node], wait=False)
 
             # Wait some time after rebooting node
