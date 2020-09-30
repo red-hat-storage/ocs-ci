@@ -5,6 +5,7 @@ import botocore.exceptions as boto3exception
 import json
 import uuid
 
+from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import NoBucketPolicyResponse, InvalidStatusCode, UnexpectedBehaviour
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2, tier3, skipif_ocs_version
 from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount, HttpResponseParser, gen_bucket_policy
@@ -264,6 +265,11 @@ class TestS3BucketPolicy(ManageTest):
         get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
+        # Put object using OBC account(as an Admin)
+        if float(config.ENV_DATA['ocs_version']) >= 4.6:
+            logger.info(f'Putting an object on bucket: {obc_obj.bucket_name} using user: {obc_obj.obc_account}')
+            assert s3_put_object(obc_obj, obc_obj.bucket_name, object_key, data), "Failed: Put Object"
+            
         # Verifying whether Get, Delete object is allowed
         logger.info(f'Getting object on bucket: {obc_obj.bucket_name} with user: {user.email_id}')
         assert s3_get_object(user, obc_obj.bucket_name, object_key), "Failed: Get Object"
