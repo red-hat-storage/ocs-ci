@@ -39,12 +39,12 @@ class TestCloneWhenFull(ManageTest):
     def test_clone_when_full(self, pvc_clone_factory, pod_factory):
         """
         Create a clone from an existing PVC when the PVC is 100% utilized.
-        Verify utilization alert in cloned PVC.
-        Expand cloned PVC and ensure utilization alerts are stopped firing.
         Verify data integrity.
+        Verify utilization alert in cloned PVC.
+        Expand cloned PVC and ensure utilization alerts are stopped.
 
         """
-        pvc_size_expanded = 3
+        pvc_size_expanded = 6
         file_name = 'fio_full'
         prometheus_api = PrometheusAPI()
 
@@ -81,8 +81,47 @@ class TestCloneWhenFull(ManageTest):
         cloned_pvcs = [pvc_clone_factory(pvc_obj) for pvc_obj in self.pvcs]
         log.info("Created clone of the PVCs. Cloned PVCs are Bound")
 
+        # Attach the cloned PVCs to pods
+        log.info("Attach the cloned PVCs to pods")
+        clone_pod_objs = []
+        for clone_pvc_obj in cloned_pvcs:
+            interface = constants.CEPHFILESYSTEM if (
+                constants.CEPHFS_INTERFACE in clone_pvc_obj.backed_sc
+            ) else constants.CEPHBLOCKPOOL
+            clone_pod_obj = pod_factory(
+                interface=interface, pvc=clone_pvc_obj,
+                status=''
+            )
+            log.info(
+                f"Attached the PVC {clone_pvc_obj.name} to pod "
+                f"{clone_pvc_obj.name}"
+            )
+            clone_pod_objs.append(clone_pod_obj)
+
+        # Verify the new pods are running
+        log.info("Verify the new pods are running")
+        for pod_obj in clone_pod_objs:
+            wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+        log.info("Verified: New pods are running")
+
+        # Verify that the md5sum matches
+        for pod_obj in clone_pod_objs:
+            log.info(
+                f"Verifying md5sum of {file_name} "
+                f"on pod {pod_obj.name}"
+            )
+            pod.verify_data_integrity(
+                pod_obj,
+                file_name,
+                pod_obj.pvc.parent.md5sum
+            )
+            log.info(
+                f"Verified: md5sum of {file_name} on pod {pod_obj} "
+                f"matches with the original md5sum"
+            )
+
         # Wait till utilization alerts starts
-        for response in TimeoutSampler(140, 5, prometheus_api.get, 'alerts'):
+        for response in TimeoutSampler(180, 5, prometheus_api.get, 'alerts'):
             alerts = response.json()['data']['alerts']
             for pvc_obj in cloned_pvcs:
                 alerts_pvc = [
@@ -167,52 +206,13 @@ class TestCloneWhenFull(ManageTest):
                 f"Expanding size of PVC {pvc_obj.name} to "
                 f"{pvc_size_expanded}Gi"
             )
-            # Resize PVC. Skip verification
-            pvc_obj.resize_pvc(pvc_size_expanded, False)
-
-        # Attach the cloned PVCs to pods
-        log.info("Attach the cloned PVCs to pods")
-        clone_pod_objs = []
-        for clone_pvc_obj in cloned_pvcs:
-            interface = constants.CEPHFILESYSTEM if (
-                constants.CEPHFS_INTERFACE in clone_pvc_obj.backed_sc
-            ) else constants.CEPHBLOCKPOOL
-            clone_pod_obj = pod_factory(
-                interface=interface, pvc=clone_pvc_obj,
-                status=''
-            )
-            log.info(
-                f"Attached the PVC {clone_pvc_obj.name} to pod "
-                f"{clone_pvc_obj.name}"
-            )
-            clone_pod_objs.append(clone_pod_obj)
-
-        # Verify the new pods are running
-        log.info("Verify the new pods are running")
-        for pod_obj in clone_pod_objs:
-            wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
-        log.info("Verified: New pods are running")
-
-        # Verify that the md5sum matches
-        for pod_obj in clone_pod_objs:
-            log.info(
-                f"Verifying md5sum of {file_name} "
-                f"on pod {pod_obj.name}"
-            )
-            pod.verify_data_integrity(
-                pod_obj,
-                file_name,
-                pod_obj.pvc.parent.md5sum
-            )
-            log.info(
-                f"Verified: md5sum of {file_name} on pod {pod_obj} "
-                f"matches with the original md5sum"
-            )
+            # Expand PVC
+            pvc_obj.resize_pvc(pvc_size_expanded, True)
 
         # Verify utilization alerts are stopped
-        for response in TimeoutSampler(140, 5, prometheus_api.get, 'alerts'):
+        for response in TimeoutSampler(180, 5, prometheus_api.get, 'alerts'):
             alerts = response.json()['data']['alerts']
-            for pvc_obj in clone_pod_objs:
+            for pvc_obj in cloned_pvcs:
                 alerts_pvc = [
                     alert for alert in alerts if alert.get('labels', {}).get(
                         'persistentvolumeclaim'
@@ -279,12 +279,12 @@ class TestCloneWhenFull(ManageTest):
 
             # Collect list of PVCs for which alerts are still firing
             near_full_pvcs = [
-                pvc_ob.name for pvc_ob in clone_pod_objs if getattr(
+                pvc_ob.name for pvc_ob in cloned_pvcs if getattr(
                     pvc_ob, 'near_full_alert'
                 )
             ]
             critical_pvcs = [
-                pvc_ob.name for pvc_ob in clone_pod_objs if getattr(
+                pvc_ob.name for pvc_ob in cloned_pvcs if getattr(
                     pvc_ob, 'critical_alert'
                 )
             ]

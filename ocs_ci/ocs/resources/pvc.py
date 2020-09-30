@@ -452,4 +452,5 @@ def create_pvc_clone(
     ocs_obj = PVC(**pvc_data)
     created_pvc = ocs_obj.create(do_reload=do_reload)
     assert created_pvc, f"Failed to create resource {pvc_name}"
+    ocs_obj.reload()
     return ocs_obj
