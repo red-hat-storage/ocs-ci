@@ -7,7 +7,7 @@ from ocs_ci.framework.testlib import (
 )
 
 log = logging.getLogger(__name__)
-import time
+
 
 @pytest.fixture(scope='function')
 def hsbenchs3(request):
@@ -43,7 +43,6 @@ class TestHsBench(E2ETest):
 
         # Install hsbench
         hsbenchs3.install_hsbench()
-        # time.sleep(2400)
 
         # Running hsbench
         hsbenchs3.run_hsbench(num_obj=50000, timeout=1800)
