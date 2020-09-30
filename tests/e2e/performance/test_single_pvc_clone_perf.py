@@ -88,7 +88,7 @@ class TestPVCSingleClonePerformance(E2ETest):
         file_name = self.pod_obj.name
         logger.info(f"File {file_name} of {file_size} size was created during IO.")
         self.pod_obj.run_io(
-            storage_type='fs', size=file_size, fio_filename=file_name
+            storage_type='fs', size=file_size, fio_filename=file_name, io_direction='wo', runtime=180, bs='1024K'
         )
 
         # Wait for fio to finish
@@ -106,6 +106,7 @@ class TestPVCSingleClonePerformance(E2ETest):
         max_num_of_clones = 1
         clone_creation_time_measures = []
         clones_list = []
+        timeout=3600
         sc_name = self.pvc_obj.backed_sc
         parent_pvc = self.pvc_obj.name
         clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
@@ -119,7 +120,7 @@ class TestPVCSingleClonePerformance(E2ETest):
             logger.info(f'Start creation of clone number {i + 1}.')
             cloned_pvc_obj = pvc.create_pvc_clone(sc_name, parent_pvc, clone_yaml, storage_size=pvc_size + "Gi")
             teardown_factory(cloned_pvc_obj)
-            helpers.wait_for_resource_state(cloned_pvc_obj, constants.STATUS_BOUND)
+            helpers.wait_for_resource_state(cloned_pvc_obj, constants.STATUS_BOUND, timeout)
             cloned_pvc_obj.reload()
             logger.info(f"Clone with name {cloned_pvc_obj.name} for pvc {parent_pvc} was created.")
             clones_list.append(cloned_pvc_obj)
@@ -151,7 +152,7 @@ class TestPVCSingleClonePerformance(E2ETest):
             pvc_reclaim_policy = cloned_pvc_obj.reclaim_policy
             cloned_pvc_obj.delete()
             logger.info(f'Deletion of clone number {i + 1} , the clone name is {cloned_pvc_obj.name}')
-            cloned_pvc_obj.ocp.wait_for_delete(cloned_pvc_obj.name)
+            cloned_pvc_obj.ocp.wait_for_delete(cloned_pvc_obj.name, timeout)
             if pvc_reclaim_policy == constants.RECLAIM_POLICY_DELETE:
                 helpers.validate_pv_delete(cloned_pvc_obj.backed_pv)
             delete_time = helpers.measure_pvc_deletion_time(
