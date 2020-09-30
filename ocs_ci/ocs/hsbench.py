@@ -37,7 +37,6 @@ class HsBench(object):
             * Create service account
             * Create PVC
             * Create Fedora DC pod
-
         :return:
         None
 
