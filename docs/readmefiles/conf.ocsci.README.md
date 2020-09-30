@@ -1,1 +1,0 @@
-../../conf/ocsci/README.md

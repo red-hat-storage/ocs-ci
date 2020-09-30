@@ -14,14 +14,6 @@ and functionality using AWS and other supported platforms.
 
 .. toctree::
    :maxdepth: 2
-   :caption: README files
-   :glob:
-
-   readmefiles/*
-
-
-.. toctree::
-   :maxdepth: 2
    :caption: Contents:
 
    code_review.md
@@ -31,6 +23,7 @@ and functionality using AWS and other supported platforms.
    upgrade.md
    results.md
    writing_tests.md
+   readmefiles/conf.README.md
    fixture_usage.md
    debugging.md
    unit_tests.md

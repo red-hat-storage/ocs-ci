@@ -1,1 +1,0 @@
-../../ocs_ci/templates/workloads/fio/README.md

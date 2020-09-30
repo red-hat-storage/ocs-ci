@@ -1,1 +1,0 @@
-../../ocs_ci/framework/pytest_customization/README.md
