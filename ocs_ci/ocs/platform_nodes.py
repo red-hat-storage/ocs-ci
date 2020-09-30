@@ -266,16 +266,28 @@ class VMWareNodes(NodesBase):
         Args:
             nodes (list): The OCS objects of the nodes
             force (bool): True for Hard reboot, False for Soft reboot
-            timeout (int): time in seconds to wait for node to reach 'not ready' state,
-                and 'ready' state.
+            timeout (int): time in seconds to wait for node to reach READY state
             wait (bool): True if need to wait till the restarted OCP node
                 reaches READY state. False otherwise
 
         """
+        num_events_pre_reboot, num_events_post_reboot = [], []
         vms = self.get_vms(nodes)
+        node = nodes[0]
         assert vms, (
             f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
         )
+
+        reboot_events_cmd = (
+            f"get events -A --field-selector involvedObject.name="
+            f"{node.name},reason=Rebooted -o yaml"
+        )
+
+        for node in nodes:
+            num_events_pre_reboot.append(
+                len(node.ocp.exec_oc_cmd(reboot_events_cmd)['items'])
+            )
+
         self.vsphere.restart_vms(vms, force=force)
 
         if wait:
@@ -283,20 +295,22 @@ class VMWareNodes(NodesBase):
             When reboot is initiated on a VM from the VMware, the VM
             stays at "Running" state throughout the reboot operation.
 
-            Once the OCP node detects that the node is not reachable then the
-            node reaches status NotReady.
             When the reboot operation is completed and the VM is reachable the
-            OCP node reaches status Ready.
+            OCP node reaches status Ready and a Reboot event is logged.
             """
             nodes_names = [n.name for n in nodes]
-            wait_for_nodes_status(
-                node_names=nodes_names, status=constants.NODE_NOT_READY,
-                timeout=timeout
-            )
+
             wait_for_nodes_status(
                 node_names=nodes_names, status=constants.NODE_READY,
                 timeout=timeout
             )
+            for node in nodes:
+                num_events_post_reboot.append(
+                    len(node.ocp.exec_oc_cmd(reboot_events_cmd)['items'])
+                )
+
+            for l1, l2 in zip(num_events_pre_reboot, num_events_post_reboot):
+                assert l1 < l2, ("Reboot event not found.")
 
     def restart_nodes_by_stop_and_start(self, nodes, force=True):
         """
@@ -494,30 +508,33 @@ class AWSNodes(NodesBase):
                 and 'ready' state.
 
         """
+        num_events_pre_reboot, num_events_post_reboot = [], []
         instances = self.get_ec2_instances(nodes)
+        node = nodes[0]
         assert instances, (
             f"Failed to get the EC2 instances for "
             f"nodes {[n.name for n in nodes]}"
         )
+
+        reboot_events_cmd = (
+            f"get events -A --field-selector involvedObject.name="
+            f"{node.name},reason=Rebooted -o yaml"
+        )
+        for node in nodes:
+            num_events_pre_reboot.append(
+                len(node.ocp.exec_oc_cmd(reboot_events_cmd)['items'])
+            )
+
         self.aws.restart_ec2_instances(instances=instances)
         if wait:
             """
             When reboot is initiated on an instance from the AWS, the
             instance stays at "Running" state throughout the reboot operation.
 
-            Once the OCP node detects that the node is not reachable then the
-            node reaches status NotReady.
-            When the reboot operation is completed and the instance is
-            reachable the OCP node reaches status Ready.
+            When the reboot operation is complete and the instance is reachable
+            the OCP node reaches status Ready and a Reboot event is logged.
             """
             nodes_names = [n.name for n in nodes]
-            logger.info(
-                f"Waiting for nodes: {nodes_names} to reach not ready state"
-            )
-            wait_for_nodes_status(
-                node_names=nodes_names, status=constants.NODE_NOT_READY,
-                timeout=timeout
-            )
             logger.info(
                 f"Waiting for nodes: {nodes_names} to reach ready state"
             )
@@ -525,6 +542,13 @@ class AWSNodes(NodesBase):
                 node_names=nodes_names, status=constants.NODE_READY,
                 timeout=timeout
             )
+            for node in nodes:
+                num_events_post_reboot.append(
+                    len(node.ocp.exec_oc_cmd(reboot_events_cmd)['items'])
+                )
+
+            for l1, l2 in zip(num_events_pre_reboot, num_events_post_reboot):
+                assert l1 < l2, ("Reboot event not found.")
 
     def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=True):
         """
