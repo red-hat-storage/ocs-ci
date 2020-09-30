@@ -82,7 +82,8 @@ class TestBucketCreation:
                     'backingstore_dict': {
                         'pv': [(1, 50, 'ocs-storagecluster-ceph-rbd')]
                     }
-                }]
+                }],
+                marks=[tier1, pytest.mark.polarion_id("OCS-2331")]
             ),
             pytest.param(
                 *[1, 'CLI', {
@@ -90,7 +91,8 @@ class TestBucketCreation:
                     'backingstore_dict': {
                         'pv': [(1, 50, 'ocs-storagecluster-ceph-rbd')]
                     }
-                }]
+                }],
+                marks=[tier1, pytest.mark.polarion_id("OCS-2331")]
             )
         ]
     )

@@ -1,8 +1,11 @@
 import logging
 
+import pytest
+
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier2, tier3
 from ocs_ci.ocs.bucket_utils import wait_for_pv_backingstore, check_pv_backingstore_status
+from ocs_ci.ocs.constants import MIN_PV_BACKINGSTORE_SIZE
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 
@@ -14,6 +17,7 @@ class TestPvPool:
     """
     Test pv pool related operations
     """
+    @pytest.mark.polarion_id("OCS-2332")
     @tier3
     def test_write_to_full_bucket(self, mcg_obj_session, awscli_pod_session,
                                   bucket_class_factory, bucket_factory):
@@ -23,7 +27,7 @@ class TestPvPool:
         bucketclass = bucket_class_factory({
             'interface': 'OC',
             'backingstore_dict': {
-                'pv': [(1, 17, 'ocs-storagecluster-ceph-rbd')]
+                'pv': [(1, MIN_PV_BACKINGSTORE_SIZE, 'ocs-storagecluster-ceph-rbd')]
             }
         })
         bucket = bucket_factory(1, 'OC', bucketclass=bucketclass.name)[0]
@@ -71,13 +75,14 @@ class TestPvPool:
                 '`NO_CAPACITY`'
             ), 'Failed to re-upload the removed file file'
 
+    @pytest.mark.polarion_id("OCS-2333")
     @tier2
     def test_pv_scale_out(self, backingstore_factory):
         """
         Test to check the scale out functionality of pv pool backing store.
         """
         pv_backingstore = backingstore_factory(
-            'OC', {'pv': [(1, 17, 'ocs-storagecluster-ceph-rbd')]}
+            'OC', {'pv': [(1, MIN_PV_BACKINGSTORE_SIZE, 'ocs-storagecluster-ceph-rbd')]}
         )[0]
 
         logger.info(f'Scaling out PV Pool {pv_backingstore.name}')
