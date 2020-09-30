@@ -83,7 +83,7 @@ class TestRegistryRebootNode(E2ETest):
         validate_image_exists(namespace=self.project_name)
 
         # Reboot one node
-        nodes.restart_nodes(node)
+        nodes.restart_nodes(node, wait=False)
 
         # Validate all nodes and services are in READY state and up
         retry(
