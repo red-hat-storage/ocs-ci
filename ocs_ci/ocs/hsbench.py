@@ -31,7 +31,6 @@ class HsBench(object):
         self.namespace = config.ENV_DATA['cluster_namespace']
         self.hsbench_cr = templating.load_yaml(constants.HSBENCH_OBJ_YAML)
 
-
     def create_resource_hsbench(self):
         """
         Create resource for hsbench mark test:
@@ -207,8 +206,7 @@ class HsBench(object):
 
     def cleanup(self):
         """
-        Clean up deploymentconfig, pvc, pod and test user.
-
+        Clean up deployment config, pvc, pod and test user
         :return:
         None
 
