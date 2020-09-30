@@ -75,7 +75,7 @@ class TestCloneWhenFull(ManageTest):
             log.info(f"Verified: Used space on pod {pod_obj.name} is 100%")
 
             # Calculate md5sum of the file
-            pod_obj.pvc.md5sum = pod.cal_md5sum(self.pod_obj, file_name)
+            pod_obj.pvc.md5sum = pod.cal_md5sum(pod_obj, file_name)
 
         log.info("Creating clone of the PVCs")
         cloned_pvcs = [pvc_clone_factory(pvc_obj) for pvc_obj in self.pvcs]
