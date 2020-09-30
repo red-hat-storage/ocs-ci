@@ -133,10 +133,6 @@ class PVC(OCS):
             'volume.beta.kubernetes.io/storage-provisioner'
         ]
 
-    @property
-    def volume_mode(self):
-        return self.get()['spec']['volumeMode']
-
     def resize_pvc(self, new_size, verify=False):
         """
         Modify the capacity of PVC
