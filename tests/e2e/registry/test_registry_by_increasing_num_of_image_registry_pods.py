@@ -4,30 +4,20 @@ import logging
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.registry import (
     validate_registry_pod_status, image_pull_and_push,
-    validate_image_exists
+    validate_image_exists, modify_registry_pod_count,
+    validate_pvc_mount_on_registry_pod
 )
 from ocs_ci.framework.testlib import E2ETest, workloads
-from tests import disruption_helpers
-from tests.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
-IMAGE_URL = 'docker.io/library/busybox'
 
 
 @workloads
-class TestRegistryPodRespin(E2ETest):
+class TestRegistryByIncreasingNumPods(E2ETest):
     """
-    Test to run svt workload for pushing
-    images to registry and with Ceph pods respin
+    Test to increase number of registry pods
+    and validate the registry pod increased
     """
-
-    @pytest.fixture(autouse=True)
-    def init_sanity(self):
-        """
-        Initialize Sanity instance
-
-        """
-        self.sanity_helpers = Sanity()
 
     @pytest.fixture(autouse=True)
     def setup(self, request):
@@ -49,35 +39,23 @@ class TestRegistryPodRespin(E2ETest):
 
         request.addfinalizer(finalizer)
 
-    @pytest.mark.parametrize(
-        argnames=[
-            "pod_name"
-        ],
-        argvalues=[
-            pytest.param(
-                *['mon'], marks=pytest.mark.polarion_id("OCS-1797")
-            ),
-            pytest.param(
-                *['osd'], marks=pytest.mark.polarion_id("OCS-1798")
-            ),
-            pytest.param(
-                *['mgr'], marks=pytest.mark.polarion_id("OCS-1799")
-            ),
-            pytest.param(
-                *['mds'], marks=pytest.mark.polarion_id("OCS-1790")
-            )
-        ]
-    )
-    def test_registry_respin_pod(self, pod_name):
+    @pytest.mark.polarion_id("OCS-1900")
+    def test_registry_by_increasing_num_of_registry_pods(self, count=3):
         """
-        Test registry workload when backed by OCS respin of ceph pods
-        """
+        Test registry by increasing number of registry pods and
+        validate all the image-registry pod should have the same PVC backend.
 
-        # Respin relevant pod
-        log.info(f"Respin Ceph pod {pod_name}")
-        disruption = disruption_helpers.Disruptions()
-        disruption.set_resource(resource=f'{pod_name}')
-        disruption.delete_resource()
+        """
+        # Increase the replica count to 3
+        assert modify_registry_pod_count(count), (
+            "Number of registry pod doesn't match the count"
+        )
+
+        # Validate image registry pods
+        validate_registry_pod_status()
+
+        # Validate pvc mounted on image registry pod
+        validate_pvc_mount_on_registry_pod()
 
         # Pull and push images to registries
         log.info("Pull and push images to registries")
@@ -90,8 +68,8 @@ class TestRegistryPodRespin(E2ETest):
         # Validate image exists in registries path
         validate_image_exists(namespace=self.project_name)
 
+        # Reduce number to 2
+        assert modify_registry_pod_count(count=2)
+
         # Validate image registry pods
         validate_registry_pod_status()
-
-        # Validate cluster health ok and all pods are running
-        self.sanity_helpers.health_check()

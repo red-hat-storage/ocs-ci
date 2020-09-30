@@ -182,7 +182,6 @@ JENKINS_BUILD_COMPLETE = "Complete"
 RIPSAW_CRD = "resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml"
 RIPSAW_DROP_CACHE = os.path.join(TEMPLATE_FIO_DIR, "drop_cache_pod.yaml")
 OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
-LOCAL_STORAGE_NAMESPACE = 'local-storage'
 
 
 # Default StorageClass
@@ -976,6 +975,9 @@ LOCAL_STORAGE_OPERATOR = os.path.join(
 )
 LOCAL_VOLUME_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "local-volume.yaml"
+)
+LOCAL_STORAGE_OPTIONAL_OPERATORS = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-storage-optional-operators.yaml"
 )
 
 # All worker default config files

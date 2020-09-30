@@ -57,6 +57,7 @@ ui = pytest.mark.ui
 csi = pytest.mark.csi
 monitoring = pytest.mark.monitoring
 workloads = pytest.mark.workloads
+flowtests = pytest.mark.flowtests
 performance = pytest.mark.performance
 scale = pytest.mark.scale
 deployment = pytest.mark.deployment
@@ -121,6 +122,11 @@ aws_platform_required = pytest.mark.skipif(
 azure_platform_required = pytest.mark.skipif(
     config.ENV_DATA['platform'].lower() != 'azure',
     reason="Test runs ONLY on Azure deployed cluster"
+)
+
+gcp_platform_required = pytest.mark.skipif(
+    config.ENV_DATA['platform'].lower() != 'gcp',
+    reason="Test runs ONLY on GCP deployed cluster"
 )
 
 cloud_platform_required = pytest.mark.skipif(

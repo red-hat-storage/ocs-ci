@@ -401,7 +401,7 @@ def add_capacity(osd_size_capacity_requested):
     new_storage_devices_sets_count = int(device_sets_required + old_storage_devices_sets_count)
     lvpresent = localstorage.check_local_volume()
     if lvpresent:
-        ocp_obj = OCP(kind='localvolume', namespace=constants.LOCAL_STORAGE_NAMESPACE)
+        ocp_obj = OCP(kind='localvolume', namespace=config.ENV_DATA['local_storage_namespace'])
         localvolume_data = ocp_obj.get(resource_name='local-block')
         device_list = localvolume_data['spec']['storageClassDevices'][0]['devicePaths']
         final_device_list = localstorage.get_new_device_paths(device_sets_required, osd_size_capacity_requested)

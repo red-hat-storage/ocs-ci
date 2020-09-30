@@ -91,6 +91,7 @@ REPORTING:
   ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
   default_ocs_must_gather_latest_tag: 'latest-4.6'
   gather_on_deploy_failure: true
+  gather_on_deploy_success: true
 
 # This is the default information about environment.
 ENV_DATA:
@@ -98,6 +99,7 @@ ENV_DATA:
   storage_cluster_name: 'ocs-storagecluster'
   storage_device_sets_name: "storageDeviceSets"
   cluster_namespace: 'openshift-storage'
+  local_storage_namespace: 'openshift-local-storage'
   monitoring_enabled: true
   persistent-monitoring: true
   platform: 'AWS'

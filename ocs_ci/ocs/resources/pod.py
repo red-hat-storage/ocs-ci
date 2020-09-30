@@ -1499,3 +1499,33 @@ def get_running_state_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
             running_pods_object.append(pod)
 
     return running_pods_object
+
+
+def wait_for_pods_to_be_running(
+    timeout=200, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+):
+    """
+    Wait for all the pods in a specific namespace to be running.
+
+    Args:
+        timeout (int): time to wait for pods to be running
+        namespace (str): the namespace ot the pods
+
+    Returns:
+         bool: True, if all pods in Running state. False, otherwise
+
+    """
+    try:
+        for pods_running in TimeoutSampler(
+            timeout=timeout, sleep=10, func=check_pods_in_running_state, namespace=namespace
+        ):
+            # Check if all the pods in running state
+            if pods_running:
+                logging.info("All the pods reached status running!")
+                return True
+    except TimeoutExpiredError:
+        logging.warning(
+            f"Not all the pods reached status running "
+            f"after {timeout} seconds"
+        )
+        return False

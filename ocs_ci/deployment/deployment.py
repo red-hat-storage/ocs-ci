@@ -2,13 +2,15 @@
 This module provides base class for different deployment
 platforms like AWS, VMWare, Baremetal etc.
 """
+
+from copy import deepcopy
+import json
 import logging
 import tempfile
 import time
 
-import json
 import requests
-from copy import deepcopy
+import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 
@@ -49,18 +51,20 @@ from ocs_ci.ocs.utils import (
     setup_ceph_toolbox, collect_ocs_logs
 )
 from ocs_ci.utility import templating
+from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.localstorage import get_lso_channel
 from ocs_ci.utility.openshift_console import OpenshiftConsole
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_latest_ds_olm_tag,
+    get_ocp_version,
     is_cluster_running,
     run_cmd,
     set_selinux_permissions,
     set_registry_to_managed_state,
     add_stage_cert,
-    modify_csv
+    modify_csv, wait_for_machineconfigpool_status
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from tests import helpers
@@ -83,6 +87,15 @@ class Deployment(object):
     # independent default value (based on OCS Installation guide), and it's
     # redefinition is not necessary in normal cases.
     DEFAULT_STORAGECLASS_LSO = 'localblock'
+
+    CUSTOM_STORAGE_CLASS_PATH = None
+    """str: filepath of yaml file with custom storage class if necessary
+
+    For some platforms, one have to create custom storage class for OCS to make
+    sure ceph uses disks of expected type and parameters (eg. OCS requires
+    ssd). This variable is either None (meaning that such custom storage class
+    is not needed), or point to a yaml file with custom storage class.
+    """
 
     def __init__(self):
         self.platform = config.ENV_DATA['platform']
@@ -123,6 +136,8 @@ class Deployment(object):
         if not config.ENV_DATA['skip_ocs_deployment']:
             try:
                 self.deploy_ocs()
+                if config.REPORTING['gather_on_deploy_success']:
+                    collect_ocs_logs('deployment', ocp=False, status_failure=False)
             except Exception as e:
                 logger.error(e)
                 if config.REPORTING['gather_on_deploy_failure']:
@@ -406,6 +421,14 @@ class Deployment(object):
                 replace_from=config.DEPLOYMENT['csv_change_from'],
                 replace_to=config.DEPLOYMENT['csv_change_to']
             )
+
+        # create custom storage class for StorageCluster CR if necessary
+        if self.CUSTOM_STORAGE_CLASS_PATH is not None:
+            with open(self.CUSTOM_STORAGE_CLASS_PATH, "r") as custom_sc_fo:
+                custom_sc = yaml.load(custom_sc_fo, Loader=yaml.SafeLoader)
+            # set value of DEFAULT_STORAGECLASS to mach the custom storage cls
+            self.DEFAULT_STORAGECLASS = custom_sc['metadata']['name']
+            run_cmd(f"oc create -f {self.CUSTOM_STORAGE_CLASS_PATH}")
 
         # creating StorageCluster
         if self.platform == constants.IBM_POWER_PLATFORM:
@@ -939,6 +962,31 @@ def setup_local_storage(storageclass):
         f"{constants.OPERATOR_NODE_LABEL}"
     )
 
+    ocp_version = get_ocp_version()
+    ocp_ga_version = get_ocp_ga_version(ocp_version)
+    if not ocp_ga_version:
+        optional_operators_data = templating.load_yaml(
+            constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
+        )
+        logger.info(
+            "Creating temp yaml file with optional operators data:\n %s",
+            optional_operators_data
+        )
+        optional_operators_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='optional_operators', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            optional_operators_data, optional_operators_yaml.name
+        )
+        with open(optional_operators_yaml.name, 'r') as f:
+            logger.info(f.read())
+        logger.info(
+            "Creating optional operators CatalogSource and ImageContentSourcePolicy"
+        )
+        run_cmd(f"oc create -f {optional_operators_yaml.name}")
+
+        wait_for_machineconfigpool_status('all')
+
     logger.info("Retrieving local-storage-operator data from yaml")
     lso_data = list(templating.load_yaml(
         constants.LOCAL_STORAGE_OPERATOR, multi_document=True
@@ -947,6 +995,9 @@ def setup_local_storage(storageclass):
     for data in lso_data:
         if data['kind'] == 'Subscription':
             data['spec']['channel'] = get_lso_channel()
+        if not ocp_ga_version:
+            if data['kind'] == 'Subscription':
+                data['spec']['source'] = 'optional-operators'
 
     # Create temp yaml file and create local storage operator
     logger.info(
@@ -965,7 +1016,7 @@ def setup_local_storage(storageclass):
     run_cmd(f"oc create -f {lso_data_yaml.name}")
 
     local_storage_operator = ocp.OCP(
-        kind=constants.POD, namespace='local-storage'
+        kind=constants.POD, namespace=config.ENV_DATA['local_storage_namespace']
     )
     assert local_storage_operator.wait_for_resource(
         condition=constants.STATUS_RUNNING,
@@ -978,7 +1029,7 @@ def setup_local_storage(storageclass):
     lso_type = config.DEPLOYMENT.get('type')
     if platform == constants.VSPHERE_PLATFORM:
         # Types of LSO Deployment
-        # Importing here to avoid circular dependancy
+        # Importing here to avoid circular dependency
         from ocs_ci.deployment.vmware import VSPHEREBASE
         vsphere_base = VSPHEREBASE()
 

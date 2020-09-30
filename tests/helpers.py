@@ -19,6 +19,7 @@ from uuid import uuid4
 import yaml
 
 from ocs_ci.framework import config
+from ocs_ci.ocs.utils import mirror_image
 from ocs_ci.ocs import constants, defaults, node, ocp
 from ocs_ci.ocs.exceptions import (
     CommandFailed, ResourceWrongStatusException,
@@ -1032,6 +1033,10 @@ def create_build_from_docker_image(
 
     """
     base_image = source_image + ':' + source_image_label
+
+    if config.DEPLOYMENT.get('disconnected'):
+        base_image = mirror_image(image=base_image)
+
     cmd = f'yum install -y {install_package}'
     http_proxy, https_proxy, no_proxy = get_cluster_proxies()
     if http_proxy:
@@ -1039,6 +1044,7 @@ def create_build_from_docker_image(
             f"http_proxy={http_proxy} https_proxy={https_proxy} "
             f"no_proxy='{no_proxy}' {cmd}"
         )
+
     docker_file = (
         f"FROM {base_image}\n "
         f" RUN {cmd}\n"

@@ -37,8 +37,7 @@ from ocs_ci.ocs.mcg_workload import (
 )
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.bucketclass import BucketClass
-from ocs_ci.ocs.utils import setup_ceph_toolbox
+from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation
 )
@@ -46,15 +45,12 @@ from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.cloud_uls import (
     cloud_uls_factory as cloud_uls_factory_implementation
 )
-from ocs_ci.ocs.resources.bucketclass import (
-    bucket_class_factory as bucket_class_factory_implementation
-)
 from ocs_ci.ocs.node import check_nodes_specs
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods
-from ocs_ci.ocs.resources.pvc import PVC
+from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import aws
@@ -1923,34 +1919,6 @@ def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
     return _create_buckets
 
 
-@pytest.fixture()
-def bucket_class_factory(request, mcg_obj, backingstore_factory):
-    """
-    Create an Bucket Class factory.
-    Calling this fixture creates a new bucket class.
-
-    Returns:
-       func: Factory method - each call to this function creates
-           an Bucket Class factory
-
-    """
-    return bucket_class_factory_implementation(request, mcg_obj, backingstore_factory)
-
-
-@pytest.fixture(scope='session')
-def bucket_class_factory_session(request, mcg_obj_session, backingstore_factory_session):
-    """
-    Create an Bucket Class factory.
-    Calling this fixture creates a new bucket class.
-
-    Returns:
-       func: Factory method - each call to this function creates
-           an Bucket Class factory
-
-    """
-    return bucket_class_factory_implementation(request, mcg_obj_session, backingstore_factory_session)
-
-
 @pytest.fixture(scope='class')
 def cloud_uls_factory(request, cld_mgr):
     """
@@ -2031,8 +1999,8 @@ def mcg_job_factory_session(
     )
 
 
-@pytest.fixture()
-def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
+@pytest.fixture(scope='class')
+def backingstore_factory(request, cld_mgr, cloud_uls_factory):
     """
         Create a Backing Store factory.
         Calling this fixture creates a new Backing Store(s).
@@ -2045,13 +2013,12 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     return backingstore_factory_implementation(
         request,
         cld_mgr,
-        mcg_obj,
         cloud_uls_factory
     )
 
 
 @pytest.fixture(scope='session')
-def backingstore_factory_session(request, cld_mgr, mcg_obj_session, cloud_uls_factory_session):
+def backingstore_factory_session(request, cld_mgr, cloud_uls_factory_session):
     """
         Create a Backing Store factory.
         Calling this fixture creates a new Backing Store(s).
@@ -2064,7 +2031,6 @@ def backingstore_factory_session(request, cld_mgr, mcg_obj_session, cloud_uls_fa
     return backingstore_factory_implementation(
         request,
         cld_mgr,
-        mcg_obj_session,
         cloud_uls_factory_session
     )
 
@@ -2801,3 +2767,145 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
     request.addfinalizer(ns_resources_and_connections_cleanup)
 
     return _create_ns_resources
+
+
+@pytest.fixture()
+def snapshot_factory(request):
+    """
+    Snapshot factory. Calling this fixture creates a volume snapshot from the
+    specified PVC
+
+    """
+    instances = []
+
+    def factory(
+        pvc_obj,
+        wait=True,
+        snapshot_name=None
+    ):
+        """
+        Args:
+            pvc_obj (PVC): PVC object from which snapshot has to be created
+            wait (bool): True to wait for snapshot to be ready, False otherwise
+            snapshot_name (str): Name to be provided for snapshot
+
+        Returns:
+            OCS: OCS instance of kind VolumeSnapshot
+
+        """
+        snap_obj = pvc_obj.create_snapshot(snapshot_name=snapshot_name, wait=wait)
+        return snap_obj
+
+    def finalizer():
+        """
+        Delete the snapshots
+
+        """
+        for instance in instances:
+            if not instance.is_deleted:
+                instance.delete()
+                instance.ocp.wait_for_delete(instance.name)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def snapshot_restore_factory(request):
+    """
+    Snapshot restore factory. Calling this fixture creates new PVC out of the
+    specified VolumeSnapshot.
+
+    """
+    instances = []
+
+    def factory(
+        snapshot_obj,
+        storageclass=None,
+        size=None,
+        volume_mode=None,
+        restore_pvc_yaml=None,
+        access_mode=constants.ACCESS_MODE_RWO,
+        status=constants.STATUS_BOUND
+    ):
+        """
+        Args:
+            snapshot_obj (OCS): OCS instance of kind VolumeSnapshot which has
+                to be restored to new PVC
+            storageclass (str): Name of storageclass
+            size (str): Size of PVC being created. eg: 5Gi. Ideally, this
+                should be same as the restore size of snapshot. Adding this
+                parameter to consider negative test scenarios.
+            volume_mode (str): Volume mode for PVC. This should match the
+                volume mode of parent PVC.
+            restore_pvc_yaml (str): The location of pvc-restore.yaml
+            access_mode (str): This decides the access mode to be used for the
+                PVC. ReadWriteOnce is default.
+            status (str): If provided then factory waits for the PVC to reach
+                desired state.
+
+        Returns:
+            PVC: Restored PVC object
+
+        """
+        snapshot_info = snapshot_obj.get()
+        size = size or snapshot_info['status']['restoreSize']
+        restore_pvc_name = helpers.create_unique_resource_name(
+            snapshot_obj.name, 'restore'
+        )
+
+        if snapshot_info['spec']['volumeSnapshotClassName'] == (
+            constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+        ):
+            storageclass = storageclass or helpers.default_storage_class(
+                constants.CEPHBLOCKPOOL
+            )
+            restore_pvc_yaml = restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
+        elif snapshot_info['spec']['volumeSnapshotClassName'] == (
+            constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+        ):
+            storageclass = storageclass or helpers.default_storage_class(
+                constants.CEPHFILESYSTEM
+            )
+            restore_pvc_yaml = restore_pvc_yaml or constants.CSI_CEPHFS_PVC_RESTORE_YAML
+        restored_pvc = create_restore_pvc(
+            sc_name=storageclass.name, snap_name=snapshot_obj.name,
+            namespace=snapshot_obj.namespace, size=size,
+            pvc_name=restore_pvc_name, volume_mode=volume_mode,
+            restore_pvc_yaml=restore_pvc_yaml, access_mode=access_mode
+        )
+        instances.append(restored_pvc)
+        restored_pvc.snapshot = snapshot_obj
+        if status:
+            helpers.wait_for_resource_state(restored_pvc, status)
+        return restored_pvc
+
+    def finalizer():
+        """
+        Delete the PVCs
+
+        """
+        for instance in instances:
+            if not instance.is_deleted:
+                instance.delete()
+                instance.ocp.wait_for_delete(instance.name)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="session", autouse=True)
+def collect_logs_fixture(request):
+    """
+    This fixture collects ocs logs after tier execution and this will allow
+    to see the cluster's status after the execution on all execution status options.
+    """
+    def finalizer():
+        """
+        Tracking both logs separately reduce changes of collision
+        """
+        if not config.RUN['cli_params'].get('deploy') and not config.RUN['cli_params'].get('teardown'):
+            collect_ocs_logs('testcases', ocs=False, status_failure=False)
+            collect_ocs_logs('testcases', ocp=False, status_failure=False)
+
+    request.addfinalizer(finalizer)
