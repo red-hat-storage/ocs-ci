@@ -106,7 +106,7 @@ class TestPVCSingleClonePerformance(E2ETest):
         max_num_of_clones = 1
         clone_creation_time_measures = []
         clones_list = []
-        timeout=3600
+        timeout = 3600
         sc_name = self.pvc_obj.backed_sc
         parent_pvc = self.pvc_obj.name
         clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
