@@ -1166,3 +1166,18 @@ class VSPHERE(object):
             datacenter_name
         )
         return self.get_datastore_type(datastore)
+
+    def get_datastore_free_capacity(self, datastore_name, datacenter_name):
+        """
+        Gets the Datastore capacity
+
+        Args:
+            datastore_name (str): Name of the Datastore
+            datacenter_name (str): Name of the Datacenter
+
+        Returns:
+            int: Datastore capacity in bytes
+
+        """
+        ds_obj = self.find_datastore_by_name(datastore_name, datacenter_name)
+        return ds_obj.summary.freeSpace
