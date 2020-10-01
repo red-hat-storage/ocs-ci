@@ -110,6 +110,8 @@ to the pytest.
 * `--csv-change` - Allows changes in the OCS CSV. For example, usage of custom image,
    like MCG or RHCS. The format should be:
    <pattern_to_replace_from::pattern_to_replace_to>, while '::' is the delimiter
+* `--collect-logs-on-success-run` - Allows to have the option of gathering logs even,
+   when the cluster deployment executed successfully
 
 ## Examples
 
