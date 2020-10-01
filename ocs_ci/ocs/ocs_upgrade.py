@@ -73,13 +73,14 @@ def get_upgrade_image_info(old_csv_images, new_csv_images):
     )
 
 
-def verify_image_versions(old_images, upgrade_version):
+def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     """
     Verify if all the images of OCS objects got upgraded
 
     Args:
         old_images (set): set with old images
         upgrade_version (packaging.version.Version): version of OCS
+        version_before_upgrade (float): version of OCS before upgrade
 
     """
     number_of_worker_nodes = len(get_typed_nodes())
@@ -118,19 +119,20 @@ def verify_image_versions(old_images, upgrade_version):
         timeout=750 * osd_count,
     )
     verify_pods_upgraded(old_images, selector=constants.MDS_APP_LABEL, count=2)
-    if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS or (
-        config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM
-    ):
-        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1857802 - RGW count is 1
-        # post upgrade to OCS 4.5. Tracked with
-        # https://github.com/red-hat-storage/ocs-ci/issues/2532
-        # TODO: uncomment the below 1 line:
-        # rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 else 1
-        # TODO: Delete the below 1 line
-        rgw_count = 1
+    if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+        # RGW count is 1 if the cluster was upgraded from <= 4.4
+        # Related bug - https://bugzilla.redhat.com/show_bug.cgi?id=1857802
+        rgw_count = 2 if float(version_before_upgrade) >= 4.5 else 1
         verify_pods_upgraded(old_images, selector=constants.RGW_APP_LABEL, count=rgw_count)
 
     # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
+    if config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM:
+        if float(config.ENV_DATA['ocs_version']) == 4.4 or (
+            float(config.ENV_DATA['ocs_version']) == 4.5 and float(
+                version_before_upgrade) < 4.5
+        ):
+            rgw_count = 1
+            verify_pods_upgraded(old_images, selector=constants.RGW_APP_LABEL, count=rgw_count)
 
 
 class OCSUpgrade(object):
@@ -450,9 +452,9 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         old_image = upgrade_ocs.get_images_post_upgrade(
             channel, pre_upgrade_images, upgrade_version
         )
-    verify_image_versions(old_image, upgrade_ocs.get_parsed_versions()[1])
+    verify_image_versions(old_image, upgrade_ocs.get_parsed_versions()[1], upgrade_ocs.version_before_upgrade)
     ocs_install_verification(
         timeout=600, skip_osd_distribution_check=True,
         ocs_registry_image=upgrade_ocs.ocs_registry_image,
-        post_upgrade_verification=True,
+        post_upgrade_verification=True, version_before_upgrade=upgrade_ocs.version_before_upgrade
     )

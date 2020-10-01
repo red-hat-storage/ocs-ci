@@ -40,7 +40,7 @@ class StorageCluster(OCP):
 
 def ocs_install_verification(
     timeout=600, skip_osd_distribution_check=False, ocs_registry_image=None,
-    post_upgrade_verification=False,
+    post_upgrade_verification=False, version_before_upgrade=None
 ):
     """
     Perform steps necessary to verify a successful OCS installation
@@ -54,6 +54,7 @@ def ocs_install_verification(
             properly.
         post_upgrade_verification (bool): Set to True if this function is
             called after upgrade.
+        version_before_upgrade (float): Set to OCS version before upgrade
 
     """
     from ocs_ci.ocs.node import get_typed_nodes
@@ -124,20 +125,25 @@ def ocs_install_verification(
         )
     rgw_count = None
     if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
-        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1857802 - RGW count is 1
-        # post upgrade to OCS 4.5. Tracked with
-        # https://github.com/red-hat-storage/ocs-ci/issues/2532
-        rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 and not (
-            post_upgrade_verification
-        ) else 1
+        #  RGW count is 1 if OCS version < 4.5 or the cluster was upgraded from version <= 4.4
+        if float(config.ENV_DATA['ocs_version']) < 4.5 or float(
+            config.ENV_DATA['ocs_version']
+        ) == 4.5 and (post_upgrade_verification and float(version_before_upgrade) < 4.5):
+            rgw_count = 1
+        else:
+            rgw_count = 2
 
-    # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
-    if float(config.ENV_DATA['ocs_version']) == 4.4 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM:
-        rgw_count = 1
-    if float(
-        config.ENV_DATA['ocs_version']
-    ) == 4.5 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM and post_upgrade_verification:
-        rgw_count = 1
+    # # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
+    # if float(config.ENV_DATA['ocs_version']) == 4.4 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM:
+    #     rgw_count = 1
+
+    if config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM:
+        if float(config.ENV_DATA['ocs_version']) == 4.4 or (
+            float(config.ENV_DATA['ocs_version']) == 4.5 and (
+                post_upgrade_verification and float(version_before_upgrade) < 4.5
+            )
+        ):
+            rgw_count = 1
 
     # Fetch the min and max Noobaa endpoints from the run config
     if check_nodes_specs(min_cpu=constants.MIN_NODE_CPU, min_memory=constants.MIN_NODE_MEMORY):
