@@ -187,7 +187,7 @@ def pytest_addoption(parser):
         dest='collect_logs_on_success_run',
         action="store_true",
         default=False,
-        help="Collect OCS logs on successful test cases as well"
+        help="Collect OCS logs on successful cluster deployment case as well"
     )
 
 
