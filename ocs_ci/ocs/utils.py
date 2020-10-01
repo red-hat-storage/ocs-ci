@@ -813,10 +813,11 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
             f"{dir_name}_ocs_logs"
         )
     else:
-        log_dir_path = os.path.join(
-            os.path.expanduser(ocsci_config.RUN['log_dir']),
-            f"{dir_name}_{ocsci_config.RUN['run_id']}"
-        )
+        if ocsci_config.RUN['collect_logs_on_success_run']:
+            log_dir_path = os.path.join(
+                os.path.expanduser(ocsci_config.RUN['log_dir']),
+                f"{dir_name}_{ocsci_config.RUN['run_id']}"
+            )
 
     if ocs:
         latest_tag = ocsci_config.REPORTING.get(
