@@ -422,6 +422,7 @@ def process_cluster_cli_params(config):
     if collect_logs_on_success_run:
         ocsci_config.REPORTING['collect_logs_on_success_run'] = True
 
+
 def pytest_collection_modifyitems(session, config, items):
     """
     Add Polarion ID property to test cases that are marked with one.
