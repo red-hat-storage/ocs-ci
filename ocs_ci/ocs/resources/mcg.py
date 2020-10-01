@@ -539,7 +539,7 @@ class MCG:
 
     def oc_create_bucketclass(self, name, backingstores, placement):
         """
-        Creates a new NooBaa bucket class using a yaml
+        Creates a new NooBaa bucket class using a template YAML
         Args:
             name (str): The name to be given to the bucket class
             backingstores (list): The backing stores to use as part of the policy
@@ -561,9 +561,9 @@ class MCG:
         """
         Creates a new NooBaa bucket class using the noobaa cli
         Args:
-            name: The name to be given to the bucket class
-            backingstores: The backing stores to use as part of the policy
-            placement: The placement policy to be used - Mirror | Spread
+            name (str): The name to be given to the bucket class
+            backingstores (list): The backing stores to use as part of the policy
+            placement (str): The placement policy to be used - Mirror | Spread
 
         Returns:
             OCS: The bucket class resource

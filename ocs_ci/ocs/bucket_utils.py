@@ -371,7 +371,7 @@ def wait_for_pv_backingstore(backingstore_name, namespace=None):
         logger.info(f'Backing Store {backingstore_name} created successfully')
 
 
-def check_pv_backingstore_status(backingstore_name, namespace=None, desired_status=None):
+def check_pv_backingstore_status(backingstore_name, namespace=None, desired_status=constants.HEALTHY_PV_BS):
     """
     check if existing pv backing store is in OPTIMAL state
 
@@ -385,8 +385,6 @@ def check_pv_backingstore_status(backingstore_name, namespace=None, desired_stat
         bool: True if backing store is in the desired state
 
     """
-    if not desired_status:
-        desired_status = constants.HEALTHY_PV_BS
     kubeconfig = os.getenv('KUBECONFIG')
     kubeconfig = f'--kubeconfig {kubeconfig}' if kubeconfig else ''
     namespace = namespace or config.ENV_DATA['cluster_namespace']

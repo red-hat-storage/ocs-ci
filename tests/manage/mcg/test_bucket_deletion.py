@@ -7,6 +7,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     tier1, tier3, acceptance, performance
 )
+from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket, BUCKET_MAP
@@ -72,29 +73,24 @@ class TestBucketDeletion:
                 *[1, 'OC', {
                     'interface': 'OC',
                     'backingstores': {
-                        'pv': [(1, 50, 'ocs-storagecluster-ceph-rbd')]
+                        'pv': [(1, 50, DEFAULT_STORAGECLASS_RBD)]
                     }
                 }],
-                marks=[
-                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
-                    performance, pytest.mark.polarion_id("OCS-")
-                ]
+                marks=[tier1, pytest.mark.polarion_id("OCS-2354")]
             ),
             pytest.param(
                 *[1, 'CLI', {
                     'interface': 'CLI',
                     'backingstores': {
-                        'pv': [(1, 50, 'ocs-storagecluster-ceph-rbd')]
+                        'pv': [(1, 50, DEFAULT_STORAGECLASS_RBD)]
                     }
                 }],
-                marks=[
-                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
-                    performance, pytest.mark.polarion_id("OCS-")
-                ]
+                marks=[tier1, pytest.mark.polarion_id("OCS-2354")]
             )
         ]
     )
-    def test_bucket_delete(self, mcg_obj, bucket_factory, bucket_class_factory, amount, interface, bucketclass_dict):
+    def test_bucket_delete(self, verify_rgw_restart_count, mcg_obj, bucket_class_factory,
+                           bucket_factory, amount, interface, bucketclass_dict):
         """
         Test deletion of bucket using the S3 SDK, MCG CLI and OC
         """

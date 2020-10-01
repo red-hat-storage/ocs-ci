@@ -159,7 +159,7 @@ class Pod(OCS):
             rsh_cmd, out_yaml_format, secrets=secrets, timeout=timeout, **kwargs
         )
 
-    def exec_s3_cmd_on_pod(self, command, mcg_obj):
+    def exec_s3_cmd_on_pod(self, command, mcg_obj=None):
         """
         Execute an S3 command on a pod
 
@@ -180,7 +180,7 @@ class Pod(OCS):
                 mcg_obj.access_key_id,
                 mcg_obj.access_key,
                 mcg_obj.s3_endpoint
-            ]
+            ] if mcg_obj else None
         )
 
     def exec_sh_cmd_on_pod(self, command, sh="bash"):

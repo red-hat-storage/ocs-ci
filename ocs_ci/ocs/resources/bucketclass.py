@@ -1,8 +1,9 @@
+import logging
+
 from botocore.exceptions import ClientError
 
-from ocs_ci.ocs.ocp import OCP
-import logging
 from ocs_ci.framework import config
+from ocs_ci.ocs.ocp import OCP
 from tests import helpers
 
 log = logging.getLogger(__name__)
@@ -13,10 +14,10 @@ class BucketClass():
     A class that represents BucketClass objects
 
     """
-    def __init__(self, name, backingstores, placement):
+    def __init__(self, name, backingstores, placement_policy):
         self.name = name
         self.backingstores = backingstores
-        self.placement = placement
+        self.placement_policy = placement_policy
 
     # TODO: verify health of bucketclass
 
@@ -62,14 +63,14 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
                 possible keys and values are:
                 - interface (str): The interface to use for creation of buckets.
                     OC | CLI
-                - backingstore_dict (dict/list): Either existing list of backingstores or
-                    A dictionary compatible with the backing store factory requirements.
-                - placement (str): The Placement policy for this bucket class.
+                - backingstore_dict (dict): A dictionary compatible with the backing store factory
+                                            requirements.
+                - placement_policy (str): The Placement policy for this bucket class.
                     Spread | Mirror
                 if no key is provided default values will apply.
 
         Returns:
-            list: A Bucket Class object.
+            BucketClass: A Bucket Class object.
 
         """
         if 'interface' in bucket_class_dict:
@@ -79,32 +80,27 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
                     f'Invalid interface type received: {interface}. '
                     f'available types: {", ".join(interfaces)}'
                 )
-            else:
-                interface = bucket_class_dict['interface']
         else:
             interface = 'OC'
         if 'backingstore_dict' in bucket_class_dict:
-            if isinstance(bucket_class_dict['backingstore_dict'], dict):
-                backingstores = [backingstore.name for backingstore in backingstore_factory(
-                    interface, bucket_class_dict['backingstore_dict'])]
-            else:
-                backingstores = [backingstore.name for backingstore in bucket_class_dict['backingstores']]
+            backingstores = [backingstore.name for backingstore in backingstore_factory(
+                interface, bucket_class_dict['backingstore_dict'])]
         else:
             backingstores = ['noobaa-default-backing-store']
 
-        if 'placement' in bucket_class_dict:
-            placement = bucket_class_dict['placement']
+        if 'placement_policy' in bucket_class_dict:
+            placement_policy = bucket_class_dict['placement']
         else:
-            placement = 'Spread'
+            placement_policy = 'Spread'
         bucket_class_name = helpers.create_unique_resource_name(
             resource_description='bucketclass', resource_type=interface.lower()
         )
         interfaces[interface.lower()](
             name=bucket_class_name,
             backingstores=backingstores,
-            placement=placement
+            placement=placement_policy
         )
-        bucket_class_object = BucketClass(bucket_class_name, backingstores, placement)
+        bucket_class_object = BucketClass(bucket_class_name, backingstores, placement_policy)
         created_bucket_classes.append(bucket_class_object)
         return bucket_class_object
 

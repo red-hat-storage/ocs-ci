@@ -7,6 +7,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     tier1, tier3, acceptance, performance
 )
+from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 
@@ -80,7 +81,7 @@ class TestBucketCreation:
                 *[1, 'OC', {
                     'interface': 'OC',
                     'backingstore_dict': {
-                        'pv': [(1, 50, 'ocs-storagecluster-ceph-rbd')]
+                        'pv': [(1, 50, DEFAULT_STORAGECLASS_RBD)]
                     }
                 }],
                 marks=[tier1, pytest.mark.polarion_id("OCS-2331")]
@@ -89,14 +90,14 @@ class TestBucketCreation:
                 *[1, 'CLI', {
                     'interface': 'CLI',
                     'backingstore_dict': {
-                        'pv': [(1, 50, 'ocs-storagecluster-ceph-rbd')]
+                        'pv': [(1, 50, DEFAULT_STORAGECLASS_RBD)]
                     }
                 }],
                 marks=[tier1, pytest.mark.polarion_id("OCS-2331")]
             )
         ]
     )
-    def test_bucket_creation(self, bucket_factory, bucket_class_factory, amount, interface, bucketclass_dict):
+    def test_bucket_creation(self, bucket_class_factory, bucket_factory, amount, interface, bucketclass_dict):
         """
         Test bucket creation using the S3 SDK, OC command or MCG CLI.
         The factory checks the bucket's health by default.
