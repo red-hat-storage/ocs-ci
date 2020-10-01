@@ -32,7 +32,6 @@ RUN:
   # This config file disables scale app pods to use OCS workers
   use_ocs_worker_for_scale: False
   load_status: None
-  collect_logs_on_success_run: False
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
@@ -93,6 +92,7 @@ REPORTING:
   default_ocs_must_gather_latest_tag: 'latest-4.6'
   gather_on_deploy_failure: true
   gather_on_deploy_success: true
+  collect_logs_on_success_run: False
 
 # This is the default information about environment.
 ENV_DATA:
