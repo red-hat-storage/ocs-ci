@@ -16,11 +16,13 @@ log = logging.getLogger(__name__)
 class HsBench(object):
     """
     Hotsauce S3 benchmark
+
     """
 
     def __init__(self):
         """
         Initializer to treate pvc and rgw pod to running hsbench benchmark
+
         Args:
             kind (str): Kind of service POD or DeploymentConfig
             pod_dict_path (yaml): Pod yaml
@@ -34,12 +36,9 @@ class HsBench(object):
     def create_resource_hsbench(self):
         """
         Create resource for hsbench mark test:
-            * Create service account
-            * Create PVC
-            * Create Fedora DC pod
-
-        :return:
-        None
+            Create service account
+            Create PVC
+            Create Fedora DC pod
 
         """
         # Check for existing rgw pods on cluster
@@ -74,9 +73,6 @@ class HsBench(object):
         Install HotSauce S3 benchmark:
         https://github.com/markhpc/hsbench
 
-        :return:
-        None
-
         """
         # Install hsbench
         log.info(f"Installing hsbench S3 benchmark on testing pod {self.pod_obj.name}")
@@ -90,9 +86,6 @@ class HsBench(object):
     def create_test_user(self):
         """
         Create a radosgw test user for S3 access
-
-        :return:
-        None
 
         """
         # Create RWG test user
@@ -115,20 +108,10 @@ class HsBench(object):
         """
          Running Hotsauce S3 benchmark
          Usage detail can be found at: https://github.com/markhpc/hsbench
-        Args:
-            access_key (str): User access key
-            secret_key (str): User secret key
-            object_size (int): Size of objects in bytes with postfix K, M, and G
-            duration (int): Maximum test duration in seconds
-            num_threads (int): Number of threads to run
-            num_bucket (int): Number of buckets to distribute IOs across
-            num_obj (int): Maximum number of objects
-            run_mode (str): Run modes in order
-            bucket_prefix (str): Prefix for buckets
-            timeout (int): timeout in seconds
 
-        :return:
-            None
+        Args:
+            num_obj (int): Maximum number of objects
+            timeout (int): timeout in seconds
 
         """
         # Create hsbench S3 benchmark
@@ -159,9 +142,6 @@ class HsBench(object):
         """
         Validate S3 objects created by hsbench on single bucket
 
-        :return:
-        None
-
         """
         self.bucket_name = self.bucket_prefix + '000000000000'
         num_objects = self.toolbox.exec_sh_cmd_on_pod(
@@ -177,7 +157,6 @@ class HsBench(object):
         """
         Validate reshard process
 
-        :return:
         Raises:
             CommandFailed: If reshard process fails
 
@@ -197,9 +176,6 @@ class HsBench(object):
         """
         Delete RGW test user and bucket belong to test user
 
-        :return:
-        None
-
         """
         log.info(f"Deleting RGW test user: {self.uid}")
         self.toolbox.exec_cmd_on_pod(f"radosgw-admin user rm --uid={self.uid} --purge-data", timeout=timeout)
@@ -207,8 +183,6 @@ class HsBench(object):
     def cleanup(self):
         """
         Clean up deployment config, pvc, pod and test user
-        :return:
-        None
 
         """
         log.info("Deleting pods and deployment config")
