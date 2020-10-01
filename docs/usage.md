@@ -102,6 +102,8 @@ to the pytest.
   bugzilla_password = yourPassword
   ```
 * `--collect-logs` - to collect OCS logs for failed test cases.
+* `--collect-logs-on-success-run` - Collect must gather logs at the end of the 
+   execution (also when no failure in the tests)
 * `--io-in-bg` - If passed, IO will be running in the test background.
 * `--io-load` - IOs throughput target percentage. The value should be
    between 0 to 100. If not provided, the default is 30 (30%)
@@ -110,8 +112,6 @@ to the pytest.
 * `--csv-change` - Allows changes in the OCS CSV. For example, usage of custom image,
    like MCG or RHCS. The format should be:
    <pattern_to_replace_from::pattern_to_replace_to>, while '::' is the delimiter
-* `--collect-logs-on-success-run` - Allows to have the option of gathering logs even,
-   when the cluster deployment executed successfully
 
 ## Examples
 
