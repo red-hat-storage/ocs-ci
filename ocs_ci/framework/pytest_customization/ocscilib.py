@@ -182,6 +182,13 @@ def pytest_addoption(parser):
             "from and the value to replace to, separated by '::'"
         )
     )
+    parser.addoption(
+        '--collect-logs-on-success-run',
+        dest='collect_logs_on_success_run',
+        action="store_true",
+        default=False,
+        help="Collect OCS logs on successful test cases as well"
+    )
 
 
 def pytest_configure(config):
@@ -411,7 +418,9 @@ def process_cluster_cli_params(config):
         csv_change = csv_change.split("::")
         ocsci_config.DEPLOYMENT['csv_change_from'] = csv_change[0]
         ocsci_config.DEPLOYMENT['csv_change_to'] = csv_change[1]
-
+    collect_logs_on_success_run = get_cli_param(config, 'collect_logs_on_success_run')
+    if collect_logs_on_success_run:
+        ocsci_config.RUN['collect_logs_on_success_run'] = True
 
 def pytest_collection_modifyitems(session, config, items):
     """
