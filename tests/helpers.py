@@ -1009,7 +1009,7 @@ def create_build_from_docker_image(
     image_name,
     install_package,
     namespace,
-    source_image='centos',
+    source_image='fedora',
     source_image_label='latest'
 ):
     """
