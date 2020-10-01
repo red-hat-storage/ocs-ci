@@ -213,8 +213,10 @@ class FipsNotInstalledException(Exception):
 class StorageNotSufficientException(Exception):
     pass
 
+
 class MemoryNotSufficientException(Exception):
     pass
+
 
 class CPUNotSufficientException(Exception):
     pass
