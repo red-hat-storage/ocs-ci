@@ -4,7 +4,7 @@ OCS-CI project documentation
 ============================
 
 Official html version of ocs-ci documentation maintained in this
-direcotory is publised on `ocs-ci.readthedocs.io`_.
+directory is published on `ocs-ci.readthedocs.io`_.
 
 This directory contains a Sphinx_ project with source files of ``ocs-ci``
 documentation in markdown_ or rst_ formats.

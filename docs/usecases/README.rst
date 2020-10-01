@@ -4,10 +4,10 @@
  Common Usecases and FAQ
 =========================
 
-This directory contains doc files with description of common usecases or
+This directory contains doc files with description of common use cases or
 answers for frequently asked questions about ``ocs-ci`` usage.
 
-To add new usecase/faq entry, just commit new markdown_ or rst_ file in this
+To add new use case/faq entry, just commit new markdown_ or rst_ file in this
 directory, Sphinx_ will then include it in table of contents automatically
 (this is done via ``glob`` option of `sphinx toctree directive`_ used in
 `index.rst <index.rst>`_ file).

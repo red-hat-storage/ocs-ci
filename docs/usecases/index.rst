@@ -1,8 +1,8 @@
 =========================
- Common Usecases and FAQ
+ Common Use cases and FAQ
 =========================
 
-Here you can find descriptions of common usecases and answers for frequently
+Here you can find descriptions of common use cases and answers for frequently
 asked questions about using ``ocs-ci``.
 
 .. toctree::
