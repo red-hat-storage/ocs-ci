@@ -69,7 +69,6 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from tests import helpers
-from tests.helpers import get_worker_nodes
 
 logger = logging.getLogger(__name__)
 
@@ -1069,7 +1068,7 @@ def setup_local_storage(storageclass):
         lvd_data = templating.load_yaml(
             constants.LOCAL_VOLUME_DISCOVERY_YAML
         )
-        worker_nodes = get_worker_nodes()
+        worker_nodes = helpers.get_worker_nodes()
 
         # Update local volume discovery data with Worker node Names
         logger.info(
