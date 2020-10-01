@@ -34,7 +34,6 @@ class TestHsBench(E2ETest):
         * Create test pod
         * Install hs S3 benchmark
         * Run hs S3 benchmark to create 1M objects
-        
         """
         # Create RGW user
         hsbenchs3.create_test_user()
