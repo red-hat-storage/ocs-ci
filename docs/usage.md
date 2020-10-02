@@ -139,6 +139,13 @@ repository](https://github.com/red-hat-storage/ocs-ci/tree/master/bin). These to
 code because `run-ci` wrapper includes the `bin` directory into `PATH`
 environment variable.
 
+##### Deployment configurations
+
+- *encryption at REST* - to enable encryption at REST use this configuration file:
+    conf/ocsci/encryption_at_rest.yaml
+- *FIPS* - to enable FIPS, use this configuration file:
+    conf/ocsci/fips.yaml
+
 #### Deployment of cluster on vSphere Platform
 
 terraform and jq is needed for deployment of OCS on vSphere platform.

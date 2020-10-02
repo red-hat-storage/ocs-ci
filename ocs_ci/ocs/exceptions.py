@@ -150,6 +150,10 @@ class UnsupportedPlatformError(Exception):
     pass
 
 
+class UnsupportedFeatureError(Exception):
+    pass
+
+
 class UnsupportedBrowser(Exception):
     pass
 
