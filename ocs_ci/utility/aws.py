@@ -39,6 +39,7 @@ class AWS(object):
     _region_name = None
     _s3_client = None
     _route53_client = None
+    _elb_client = None
 
     def __init__(self, region_name=None):
         """
@@ -108,6 +109,22 @@ class AWS(object):
                 region_name=self._region_name,
             )
         return self._route53_client
+
+    @property
+    def elb_client(self):
+        """
+        Property for elb client
+
+        Returns:
+            boto3.client: instance of elb client
+
+        """
+        if not self._elb_client:
+            self._elb_client = boto3.client(
+                'elb',
+                region_name=self._region_name,
+            )
+        return self._elb_client
 
     def get_ec2_instance(self, instance_id):
         """
@@ -1093,6 +1110,225 @@ class AWS(object):
                 stack_name = get_stack_name_from_instance_dict(instance_dict)
 
         return stack_name
+
+    @retry(StackStatusError, tries=3, delay=10, backoff=2)
+    def delete_cf_stack_including_dependencies(self, cfs_name):
+        """
+        Delete cloudformation stack including dependencies.
+
+        Some of the depending resources are not deletable, so related errors
+        are ignored and only logged.
+        Thsi method is mainly used as a WORKAROUND for folowing Flexy issue:
+        https://issues.redhat.com/browse/OCPQE-1521
+
+        Args:
+            cfs_name (str): CloudFormation stack name to cleanup
+
+        """
+        # get all VPCs related to the CloudFormation Stack
+        vpcs = self.ec2_client.describe_vpcs(
+            Filters=[{
+                'Name': 'tag:aws:cloudformation:stack-name',
+                'Values': [f"{cfs_name}"],
+            }]
+        )['Vpcs']
+
+        for vpc in vpcs:
+            # get all NetworkInterfaces related to the particular VPC
+            nis = self.ec2_client.describe_network_interfaces(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['NetworkInterfaces']
+            for ni in nis:
+                # delete LoadBalancer related to the NetworkInterface
+                if ni['Description'].split(' ')[0] == 'ELB':
+                    elb = ni['Description'].split(' ')[1]
+                    logger.info(f"Deleting LoadBalancer: {elb}")
+                    try:
+                        self.elb_client.delete_load_balancer(
+                            LoadBalancerName=elb
+                        )
+                    except ClientError as err:
+                        logger.warning(err)
+
+                logger.info(f"Deleting NetworkInterface: {ni['NetworkInterfaceId']}")
+                try:
+                    self.ec2_client.delete_network_interface(
+                        NetworkInterfaceId=ni['NetworkInterfaceId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all InternetGateways related to the particular VPC
+            igs = self.ec2_client.describe_internet_gateways(
+                Filters=[{
+                    'Name': 'attachment.vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['InternetGateways']
+            for ig in igs:
+                logger.info(f"Deleting InternetGateway: {ig['InternetGatewayId']}")
+                try:
+                    self.ec2_client.delete_internet_gateway(
+                        InternetGatewayId=ig['InternetGatewayId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all Subnets related to the particular VPC
+            subnets = self.ec2_client.describe_subnets(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['Subnets']
+            for subnet in subnets:
+                logger.info(f"Deleting Subnet: {subnet['SubnetId']}")
+                try:
+                    self.ec2_client.delete_subnet(
+                        SubnetId=subnet['SubnetId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all RouteTables related to the particular VPC
+            rts = self.ec2_client.describe_route_tables(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['RouteTables']
+            for rt in rts:
+                logger.info(f"Deleting RouteTable: {rt['RouteTableId']}")
+                try:
+                    self.ec2_client.delete_route_table(
+                        RouteTableId=rt['RouteTableId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all NetworkAcls related to the particular VPC
+            nas = self.ec2_client.describe_network_acls(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['NetworkAcls']
+            for na in nas:
+                logger.info(f"Deleting NetworkAcl: {na['NetworkAclId']}")
+                try:
+                    self.ec2_client.delete_network_acl(
+                        NetworkAclId=na['NetworkAclId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all VpcPeeringConnections related to the particular VPC
+            vpc_pcs = self.ec2_client.describe_vpc_peering_connections(
+                Filters=[{
+                    'Name': 'requester-vpc-info.vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['VpcPeeringConnections']
+            for vpc_pc in vpc_pcs:
+                logger.info(f"Deleting VpcPeeringConnection: {vpc_pc['VpcPeeringConnectionId']}")
+                try:
+                    self.ec2_client.delete_vpc_peering_connections(
+                        VpcPeeringConnectionId=vpc_pc['VpcPeeringConnectionId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all VpcEndpoints related to the particular VPC
+            vpc_es = self.ec2_client.describe_vpc_endpoints(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['VpcEndpoints']
+            for vpc_e in vpc_es:
+                logger.info(f"Deleting VpcEndpoint: {vpc_e['VpcEndpointId']}")
+                try:
+                    self.ec2_client.delete_vpc_endpoints(
+                        VpcEndpointIds=[vpc_e['VpcEndpointId']]
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all NatGateways related to the particular VPC
+            ngs = self.ec2_client.describe_nat_gateways(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['NatGateways']
+            for ng in ngs:
+                logger.info(f"Deleting NatGateway: {ng['NatGatewayId']}")
+                try:
+                    self.ec2_client.delete_nat_gateways(
+                        NatGatewayId=ng['NatGatewayId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all VpnConnections related to the particular VPC
+            vcs = self.ec2_client.describe_vpn_connections(
+                Filters=[{
+                    'Name': 'attachment.vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['VpnConnections']
+            for vc in vcs:
+                logger.info(f"Deleting VpnConnection: {vc['VpnConnectionId']}")
+                try:
+                    self.ec2_client.delete_vpn_connection(
+                        VpnConnectionId=vc['VpnConnectionId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all VpnGateways related to the particular VPC
+            vgs = self.ec2_client.describe_vpn_gateways(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['VpnGateways']
+            for vg in vgs:
+                logger.info(f"Deleting VpnGateway: {vg['VpnGatewayId']}")
+                try:
+                    self.ec2_client.delete_vpn_gateway(
+                        VpnGatewayId=vg['VpnGatewayId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all SecurityGroups related to the particular VPC
+            sgs = self.ec2_client.describe_security_groups(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['SecurityGroups']
+            for sg in sgs:
+                logger.info(f"Deleting SecurityGroup: {sg['GroupId']}")
+                try:
+                    self.ec2_client.delete_security_group(
+                        GroupId=sg['GroupId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            logger.info(f"Deleting VPC: {vpc['VpcId']}")
+            try:
+                self.ec2_client.delete_vpc(VpcId=vpc['VpcId'], DryRun=False)
+            except ClientError as err:
+                logger.warning(err)
+
+        logger.info(f"Deleting CloudFormation Stack: {cfs_name}")
+        self.delete_cloudformation_stacks([cfs_name])
 
 
 def get_instances_ids_and_names(instances):

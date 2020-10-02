@@ -400,3 +400,12 @@ class FlexyBaremetalPSI(FlexyBase):
     def __init__(self):
         self.default_flexy_template = constants.FLEXY_BAREMETAL_UPI_TEMPLATE
         super().__init__()
+
+
+class FlexyAWSUPI(FlexyBase):
+    """
+    A specific implementation of AWS UPI installation using flexy
+    """
+    def __init__(self):
+        self.default_flexy_template = constants.FLEXY_AWS_UPI_TEMPLATE
+        super().__init__()

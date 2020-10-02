@@ -3,7 +3,7 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs import exceptions
 from ocs_ci.deployment.ibm import IBMDeployment
-from .aws import AWSIPI, AWSUPI
+from .aws import AWSIPI, AWSUPI, AWSUPIFlexy
 from .azure import AZUREIPI
 from .gcp import GCPIPI
 from .vmware import VSPHEREUPI
@@ -22,6 +22,7 @@ class DeploymentFactory(object):
         self.cls_map = {
             'aws_ipi': AWSIPI,
             'aws_upi': AWSUPI,
+            'aws_upi_flexy': AWSUPIFlexy,
             'azure_ipi': AZUREIPI,
             'vsphere_upi': VSPHEREUPI,
             'baremetalpsi_upi_flexy': BaremetalPSIUPI,
