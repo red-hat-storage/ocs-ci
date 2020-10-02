@@ -34,6 +34,9 @@ class FlexyBase(object):
         self.flexy_host_dir = os.path.expanduser(
             constants.FLEXY_HOST_DIR_PATH
         )
+        if not os.path.exists(self.flexy_host_dir):
+            os.mkdir(self.flexy_host_dir)
+            os.chmod(self.flexy_host_dir, mode=0o777)
 
         # Path inside container where flexy_host_dir will be mounted
         self.flexy_mnt_container_dir = config.ENV_DATA.get(
@@ -88,9 +91,6 @@ class FlexyBase(object):
           values
 
           """
-        if not os.path.exists(self.flexy_host_dir):
-            os.mkdir(self.flexy_host_dir)
-            os.chmod(self.flexy_host_dir, mode=0o777)
         # If user has provided absolute path for env file (through
         # '--flexy-env-file <path>' CLI option)
         # then no need of clone else continue with default
@@ -163,6 +163,18 @@ class FlexyBase(object):
         Build flexy command line for 'destroy' operation
 
         """
+        # if ocs-ci/data were cleaned up (e.g. on Jenkins), copy
+        # Flexy env file from cluster dir to the data directory
+        if not os.path.exists(constants.FLEXY_ENV_FILE_UPDATED):
+            cluster_dir_flexy_env_file_updated = os.path.join(
+                constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
+                constants.FLEXY_HOST_DIR,
+                constants.FLEXY_ENV_FILE_UPDATED_NAME,
+            )
+            shutil.copyfile(
+                cluster_dir_flexy_env_file_updated,
+                constants.FLEXY_ENV_FILE_UPDATED
+            )
         cmd = shlex.split("sudo podman run --rm=true")
         flexy_container_args = self.build_container_args('destroy')
         return cmd + flexy_container_args + ['destroy']

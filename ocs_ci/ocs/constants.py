@@ -1052,8 +1052,9 @@ FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
 FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
 FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/aosqe/flexy:poc"
+FLEXY_ENV_FILE_UPDATED_NAME = 'ocs-flexy-env-file-updated.env'
 FLEXY_ENV_FILE_UPDATED = os.path.join(
-    FLEXY_HOST_DIR_PATH, 'ocs-flexy-env-file-updated.env'
+    FLEXY_HOST_DIR_PATH, FLEXY_ENV_FILE_UPDATED_NAME
 )
 REGISTRY_SVC = "registry.svc.ci.openshift.org/ocp/release"
 
