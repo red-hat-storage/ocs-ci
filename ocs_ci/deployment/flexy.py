@@ -69,6 +69,18 @@ class FlexyBase(object):
         else:
             self.flexy_env_file = config.ENV_DATA['flexy_env_file']
 
+        if not config.ENV_DATA.get('flexy_env_file'):
+            self.template_file = config.FLEXY.get(
+                'VARIABLES_LOCATION',
+                os.path.join(
+                    constants.OPENSHIFT_MISC_BASE,
+                    f"aos-{get_ocp_version('_')}",
+                    config.ENV_DATA.get(
+                        'flexy_template', self.default_flexy_template
+                    )
+                )
+            )
+
     def deploy_prereq(self):
         """
           Common flexy prerequisites like cloning the private-conf
@@ -356,26 +368,6 @@ class FlexyBase(object):
             and os.path.ismount(constants.JENKINS_NFS_CURRENT_CLUSTER_DIR)
         )
 
-
-class FlexyBaremetalPSI(FlexyBase):
-    """
-    A specific implementation of Baremetal with PSI using flexy
-    """
-    def __init__(self):
-        super().__init__()
-        if not config.ENV_DATA.get('flexy_env_file'):
-            if not config.ENV_DATA.get('template_file_path'):
-                self.template_file = os.path.join(
-                    constants.OPENSHIFT_MISC_BASE,
-                    f"aos-{get_ocp_version('_')}",
-                    constants.FLEXY_BAREMETAL_UPI_TEMPLATE
-                )
-            else:
-                self.template_file = config.ENV_DATA.get('template_file_path')
-
-    def deploy_prereq(self):
-        super().deploy_prereq()
-
     def deploy(self, log_level=''):
         """
         build and invoke flexy deployer here
@@ -390,7 +382,7 @@ class FlexyBaremetalPSI(FlexyBase):
             pass
         cmd = self.build_install_cmd()
         self.run_container(cmd)
-        super().flexy_post_processing()
+        self.flexy_post_processing()
 
     def destroy(self):
         """
@@ -399,3 +391,12 @@ class FlexyBaremetalPSI(FlexyBase):
         """
         cmd = self.build_destroy_cmd()
         self.run_container(cmd)
+
+
+class FlexyBaremetalPSI(FlexyBase):
+    """
+    A specific implementation of Baremetal with PSI using flexy
+    """
+    def __init__(self):
+        self.default_flexy_template = constants.FLEXY_BAREMETAL_UPI_TEMPLATE
+        super().__init__()

@@ -24,7 +24,7 @@ class DeploymentFactory(object):
             'aws_upi': AWSUPI,
             'azure_ipi': AZUREIPI,
             'vsphere_upi': VSPHEREUPI,
-            'baremetalpsi_upi': BaremetalPSIUPI,
+            'baremetalpsi_upi_flexy': BaremetalPSIUPI,
             'baremetal_upi': BAREMETALUPI,
             'gcp_ipi': GCPIPI,
             'powervs_upi': IBMDeployment,
@@ -39,16 +39,20 @@ class DeploymentFactory(object):
         """
         deployment_platform = config.ENV_DATA['platform']
         deployment_type = config.ENV_DATA['deployment_type']
+        flexy_deployment = config.ENV_DATA['flexy_deployment']
         deployment_cls_key = (
             f"{deployment_platform.lower()}"
             f"_"
             f"{deployment_type.lower()}"
         )
+        if flexy_deployment:
+            deployment_cls_key = f"{deployment_cls_key}_flexy"
         logger.info(f"Deployment key = {deployment_cls_key}")
         logger.info(
             f"Current deployment platform: "
-            f"{deployment_platform},"
-            f"deployment type: {deployment_type}"
+            f"{deployment_platform}, "
+            f"deployment type: {deployment_type}, "
+            f"flexy_deployment: {flexy_deployment}"
         )
         try:
             return self.cls_map[deployment_cls_key]()
