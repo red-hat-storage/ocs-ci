@@ -1537,10 +1537,12 @@ def delete_cluster_buckets(cluster_name):
     bucket_names = [bucket['Name'] for bucket in buckets]
     logger.debug("Found buckets: %s", bucket_names)
 
-    # patterns for mcg target bucket and image-registry buckets
+    # patterns for mcg target bucket, image-registry buckets and bucket created
+    # durring installation via Flexy (for installation files)
     patterns = [
         f"nb.(\\d+).apps.{cluster_name}.{base_domain}",
-        f"{cluster_name}-(\\w+)-image-registry-{region}-(\\w+)"
+        f"{cluster_name}-(\\w+)-image-registry-{region}-(\\w+)",
+        f"{cluster_name}-(\\d{{4}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})",
     ]
     for pattern in patterns:
         r = re.compile(pattern)
