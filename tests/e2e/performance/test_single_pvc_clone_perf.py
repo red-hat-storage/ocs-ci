@@ -14,9 +14,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources import pod
 from tests import helpers
-from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla
-)
+
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +50,6 @@ logger = logging.getLogger(__name__)
     ]
 )
 @performance
-@bugzilla('1882504')
 class TestPVCSingleClonePerformance(E2ETest):
     """
     Test to verify single PVC clone creation and deletion performance
