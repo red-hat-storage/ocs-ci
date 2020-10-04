@@ -11,8 +11,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework.testlib import (
     performance, E2ETest
 )
-from ocs_ci.ocs.resources import pvc
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources import pvc, pod
 from tests import helpers
 
 
@@ -65,6 +64,7 @@ class TestPVCSingleClonePerformance(E2ETest):
             pvc_size: Size of the created PVC
             pvc_factory: A fixture to create new pvc
             pod_factory: A fixture to create new pod
+
         """
         self.pvc_obj = pvc_factory(
             interface=interface_type,
@@ -107,7 +107,7 @@ class TestPVCSingleClonePerformance(E2ETest):
         max_num_of_clones = 1
         clone_creation_time_measures = []
         clones_list = []
-        timeout = 3600
+        timeout = 18000
         sc_name = self.pvc_obj.backed_sc
         parent_pvc = self.pvc_obj.name
         clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
