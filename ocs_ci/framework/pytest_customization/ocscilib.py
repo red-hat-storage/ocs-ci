@@ -99,6 +99,13 @@ def pytest_addoption(parser):
         help="Collect OCS logs when test case failed",
     )
     parser.addoption(
+        '--collect-logs-on-success-run',
+        dest='collect_logs_on_success_run',
+        action="store_true",
+        default=False,
+        help="Collect must gather logs at the end of the execution (also when no failure in the tests)"
+    )
+    parser.addoption(
         '--io-in-bg',
         dest='io_in_bg',
         action="store_true",
@@ -411,6 +418,9 @@ def process_cluster_cli_params(config):
         csv_change = csv_change.split("::")
         ocsci_config.DEPLOYMENT['csv_change_from'] = csv_change[0]
         ocsci_config.DEPLOYMENT['csv_change_to'] = csv_change[1]
+    collect_logs_on_success_run = get_cli_param(config, 'collect_logs_on_success_run')
+    if collect_logs_on_success_run:
+        ocsci_config.REPORTING['collect_logs_on_success_run'] = True
 
 
 def pytest_collection_modifyitems(session, config, items):
