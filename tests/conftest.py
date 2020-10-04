@@ -2905,7 +2905,8 @@ def collect_logs_fixture(request):
         Tracking both logs separately reduce changes of collision
         """
         if not config.RUN['cli_params'].get('deploy') and not config.RUN['cli_params'].get('teardown'):
-            collect_ocs_logs('testcases', ocs=False, status_failure=False)
-            collect_ocs_logs('testcases', ocp=False, status_failure=False)
+            if config.REPORTING['collect_logs_on_success_run']:
+                collect_ocs_logs('testcases', ocs=False, status_failure=False)
+                collect_ocs_logs('testcases', ocp=False, status_failure=False)
 
     request.addfinalizer(finalizer)
