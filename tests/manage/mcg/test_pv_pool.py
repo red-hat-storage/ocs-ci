@@ -5,7 +5,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier2, tier3
 from ocs_ci.ocs.bucket_utils import wait_for_pv_backingstore, check_pv_backingstore_status
-from ocs_ci.ocs.constants import MIN_PV_BACKINGSTORE_SIZE
+from ocs_ci.ocs.constants import MIN_PV_BACKINGSTORE_SIZE_IN_GB
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 
@@ -27,7 +27,7 @@ class TestPvPool:
         bucketclass = bucket_class_factory({
             'interface': 'OC',
             'backingstore_dict': {
-                'pv': [(1, MIN_PV_BACKINGSTORE_SIZE, 'ocs-storagecluster-ceph-rbd')]
+                'pv': [(1, MIN_PV_BACKINGSTORE_SIZE_IN_GB, 'ocs-storagecluster-ceph-rbd')]
             }
         })
         bucket = bucket_factory(1, 'OC', bucketclass=bucketclass.name)[0]
@@ -82,7 +82,7 @@ class TestPvPool:
         Test to check the scale out functionality of pv pool backing store.
         """
         pv_backingstore = backingstore_factory(
-            'OC', {'pv': [(1, MIN_PV_BACKINGSTORE_SIZE, 'ocs-storagecluster-ceph-rbd')]}
+            'OC', {'pv': [(1, MIN_PV_BACKINGSTORE_SIZE_IN_GB, 'ocs-storagecluster-ceph-rbd')]}
         )[0]
 
         logger.info(f'Scaling out PV Pool {pv_backingstore.name}')
