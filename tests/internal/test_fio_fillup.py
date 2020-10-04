@@ -59,4 +59,4 @@ class TestPVCFillup(BaseTest):
         fio_result = self.pod_obj.get_fio_results()
         writes = int(fio_result.get('jobs')[0].get('write').get('io_kbytes') / 1024)
         logging.info(f"Total Write: {writes} MB")
-        assert (filesize <= writes), "Not all required data was written"
+        assert filesize <= writes, "Not all required data was written"
