@@ -6,10 +6,9 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
-    skipif_ocs_version
-)
-from ocs_ci.framework.testlib import (
-    performance, E2ETest
+    skipif_ocs_version,
+    performance,
+    E2ETest
 )
 from ocs_ci.ocs.resources import pvc, pod
 from tests import helpers
