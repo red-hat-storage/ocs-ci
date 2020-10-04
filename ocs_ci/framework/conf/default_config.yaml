@@ -92,6 +92,7 @@ REPORTING:
   default_ocs_must_gather_latest_tag: 'latest-4.6'
   gather_on_deploy_failure: true
   gather_on_deploy_success: true
+  collect_logs_on_success_run: False
 
 # This is the default information about environment.
 ENV_DATA:

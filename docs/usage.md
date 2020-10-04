@@ -102,6 +102,8 @@ to the pytest.
   bugzilla_password = yourPassword
   ```
 * `--collect-logs` - to collect OCS logs for failed test cases.
+* `--collect-logs-on-success-run` - Collect must gather logs at the end of the 
+   execution (also when no failure in the tests)
 * `--io-in-bg` - If passed, IO will be running in the test background.
 * `--io-load` - IOs throughput target percentage. The value should be
    between 0 to 100. If not provided, the default is 30 (30%)
