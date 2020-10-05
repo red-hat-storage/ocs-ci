@@ -1,0 +1,10 @@
+name: fio-fillup
+filename: fio-fill-up
+rw: write
+bs: 1m
+direct: 1
+numjobs: 1
+time_based: 0
+runtime: 36000
+size: 100M
+ioengine: libaio
