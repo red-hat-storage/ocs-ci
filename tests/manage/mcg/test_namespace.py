@@ -6,10 +6,12 @@ from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity
 )
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
 from ocs_ci.ocs import constants
 logger = logging.getLogger(__name__)
 
 
+@skipif_aws_creds_are_missing
 class TestNamespace(ManageTest):
     """
     Test creation of a namespace resource
