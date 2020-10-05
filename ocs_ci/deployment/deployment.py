@@ -35,7 +35,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods
 )
-from ocs_ci.ocs.node import get_typed_nodes, check_nodes_specs
+from ocs_ci.ocs.node import get_typed_nodes, check_nodes_specs, get_compute_node_names
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -1068,7 +1068,7 @@ def setup_local_storage(storageclass):
         lvd_data = templating.load_yaml(
             constants.LOCAL_VOLUME_DISCOVERY_YAML
         )
-        worker_nodes = helpers.get_worker_nodes()
+        worker_nodes = get_compute_node_names()
 
         # Update local volume discovery data with Worker node Names
         logger.info(
