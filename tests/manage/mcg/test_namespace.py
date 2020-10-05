@@ -8,6 +8,7 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources import pod
 logger = logging.getLogger(__name__)
 
 
@@ -106,6 +107,123 @@ class TestNamespace(MCGTest):
 
         # Compare between uploaded files and downloaded files
         self.compare_dirs(awscli_pod, amount=3)
+
+    @tier4
+    @pytest.mark.parametrize(
+        argnames=["mcg_pod"],
+        argvalues=[
+            pytest.param(*['noobaa-db'], marks=pytest.mark.polarion_id("OCS-2291"),
+            pytest.param(*['noobaa-core'], marks=pytest.mark.polarion_id("OCS-2319"),
+            pytest.param(*['noobaa-operator'], marks=pytest.mark.polarion_id("OCS-2320"),
+        ]
+    )
+    def test_respin_mcg_pod_and_check_data_integrity(
+        self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory
+    ):
+        """
+        Test Write to ns bucket using MCG RPC and read directly from AWS.
+        Respin one of mcg pods when data are uploaded.
+
+        """
+
+        # Create the namespace resource and verify health
+        result = ns_resource_factory()
+        target_bucket_name = result[0]
+        ns_resource_name = result[1]
+
+        # Create the namespace bucket on top of the namespace resource
+        rand_ns_bucket = bucket_factory(amount=1, interface='mcg-namespace', write_ns_resource=ns_resource_name,
+                                        read_ns_resources=[ns_resource_name])[0].name
+
+        s3_creds = {'access_key_id': cld_mgr.aws_client.access_key, 'access_key': cld_mgr.aws_client.secret_key,
+                    'endpoint': constants.MCG_NS_AWS_ENDPOINT, 'region': config.ENV_DATA['region']}
+        # Upload files to NS bucket
+        self.write_files_to_pod_and_upload(mcg_obj, awscli_pod,
+                                           bucket_to_write=rand_ns_bucket, amount=3)
+
+        # Respin mcg resource
+        pod_obj = [
+            pod for pod in pod.get_noobaa_pods() if pod.name.startswith(mcg_pod)
+        ][0]
+        pod_obj.delete(force=True)
+        assert pod_obj.wait_for_resource(
+            condition='Running',
+            selector=self.selector,
+            timeout=300
+        )
+
+        # Read files directly from AWS
+        self.download_files(mcg_obj, awscli_pod, bucket_to_read=target_bucket_name, s3_creds=s3_creds)
+
+        # Compare between uploaded files and downloaded files
+        self.compare_dirs(awscli_pod, amount=3)
+
+
+    @pytest.mark.polarion_id("OCS-2293")
+    @tier4
+    def test_namespace_bucket_creation_with_many_resources(
+        self, ns_resource_factory, bucket_factory
+    ):
+        """
+        Test namespace bucket creation using the MCG RPC.
+        Use 100+ read resources.
+
+        """
+        # Create namespace resources and verify health
+        ns_resources = [ns_resource_factory()[1] for _ in range(0, 100)]
+
+        # Create the namespace bucket with many namespace resources
+        bucket_factory(
+            amount=1,
+            interface='mcg-namespace',
+            write_ns_resource=ns_resources[0],
+            read_ns_resources=ns_resources
+        )
+
+
+    @pytest.mark.polarion_id("OCS-2325")
+    @tier4
+    def test_block_read_resource_in_namespace_bucket(
+        self, ns_resource_factory, bucket_factory, cld_mgr
+    ):
+        """
+        Test blocking namespace resource in namespace bucket.
+        Check data availability.
+
+        """
+        aws_client = cld_mgr.aws_client
+
+        # Create namespace resources and verify health
+        resource1 = ns_resource_factory()
+        resource2 = ns_resource_factory()
+
+        # Upload files to NS resources
+        self.write_files_to_pod_and_upload(mcg_obj, awscli_pod,
+                                           bucket_to_write=resource1[0], amount=3)
+        self.write_files_to_pod_and_upload(mcg_obj, awscli_pod,
+                                           bucket_to_write=resource2[0], amount=2)
+
+        # Create the namespace bucket with many namespace resources
+        bucket_factory(
+            amount=1,
+            interface='mcg-namespace',
+            write_ns_resource=resource1[1],
+            read_ns_resources=[resource1[1], resource2[1]]
+        )
+
+        # Bring resource1 down
+        aws_client.toggle_aws_bucket_readwrite(resource1[0])
+
+        # Read files directly from AWS
+        self.download_files(mcg_obj, awscli_pod, bucket_to_read=target_bucket_name, s3_creds=s3_creds)
+
+        # Bring resource1 up
+        aws_client.toggle_aws_bucket_readwrite(resource1[0], block=False)
+
+        # Compare between uploaded files and downloaded files
+        self.compare_dirs(awscli_pod, amount=3)
+
+
 
     def write_files_to_pod_and_upload(self, mcg_obj, awscli_pod, bucket_to_write, amount=1, s3_creds=None):
         """
