@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+import tempfile
 from time import sleep
 
 import yaml
@@ -190,6 +191,21 @@ class BAREMETALUPI(Deployment):
                 assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
             else:
                 raise RhcosImageNotFound
+
+            if ocp_version == "4.6":
+                # Download metal_bios
+                rootfs_image_path = constants.coreos_url_prefix + image_data['live_rootfs_url']
+                if check_for_rhcos_images(rootfs_image_path):
+                    cmd = (
+                        "wget -O "
+                        f"{self.helper_node_details['bm_path_to_upload']}"
+                        "/rhcos-live-rootfs.x86_64.img "
+                        f"{rootfs_image_path}"
+                    )
+                    assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Download required File"
+                else:
+                    raise RhcosImageNotFound
+
             # Create pxelinux.cfg directory
             cmd = f"mkdir -m 755 {self.helper_node_details['bm_tftp_dir']}/pxelinux.cfg"
             assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to create required folder"
@@ -214,34 +230,19 @@ class BAREMETALUPI(Deployment):
                 key_file=self.private_key
             )
             logger.info("Uploading PXE files")
+            ocp_version = get_ocp_version()
             for machine in self.mgmt_details:
-                if self.mgmt_details[machine].get('role') == "bootstrap":
-                    upload_file(
-                        server=self.host,
-                        localpath=constants.BOOTSTRAP_PXE_FILE,
-                        remotepath=f"{self.helper_node_details['bm_tftp_dir']}"
-                                   f"/pxelinux.cfg/01-{self.mgmt_details[machine]['mac'].replace(':', '-')}",
-                        user=self.user,
-                        key_file=self.private_key
-                    )
-                elif self.mgmt_details[machine].get('role') == "master":
-                    upload_file(
-                        server=self.host,
-                        localpath=constants.MASTER_PXE_FILE,
-                        remotepath=f"{self.helper_node_details['bm_tftp_dir']}"
-                                   f"/pxelinux.cfg/01-{self.mgmt_details[machine]['mac'].replace(':', '-')}",
-                        user=self.user,
-                        key_file=self.private_key
-                    )
-                elif self.mgmt_details[machine].get('role') == "worker":
-                    upload_file(
-                        server=self.host,
-                        localpath=constants.WORKER_PXE_FILE,
-                        remotepath=f"{self.helper_node_details['bm_tftp_dir']}"
-                                   f"/pxelinux.cfg/01-{self.mgmt_details[machine]['mac'].replace(':', '-')}",
-                        user=self.user,
-                        key_file=self.private_key
-                    )
+                pxe_file_path = self.create_pxe_files(
+                    ocp_version=ocp_version, role=self.mgmt_details[machine].get('role')
+                )
+                upload_file(
+                    server=self.host,
+                    localpath=pxe_file_path,
+                    remotepath=f"{self.helper_node_details['bm_tftp_dir']}"
+                               f"/pxelinux.cfg/01-{self.mgmt_details[machine]['mac'].replace(':', '-')}",
+                    user=self.user,
+                    key_file=self.private_key
+                )
             # Applying Permission
             cmd = f"chmod 755 -R {self.helper_node_details['bm_tftp_dir']}"
             self.helper_node_handler.exec_cmd(cmd=cmd)
@@ -422,6 +423,44 @@ class BAREMETALUPI(Deployment):
                 headers=headers
             )
             return response.json()['message']
+
+        def create_pxe_files(self, ocp_version, role):
+            """
+            Create pxe file for giver role
+
+            Args:
+                ocp_version (str): OCP version
+                role (str): Role of node eg:- bootstrap,master,worker
+
+            Returns:
+                str: temp file path
+
+            """
+            extra_data = ""
+            bm_install_files_loc = self.helper_node_details['bm_install_files']
+            extra_data_pxe = "rhcos-live-rootfs.x86_64.img coreos.inst.insecure"
+            if ocp_version == "4.6":
+                extra_data = f"coreos.live.rootfs_url={bm_install_files_loc}{extra_data_pxe}"
+            default_pxe_file = f"""DEFAULT menu.c32
+TIMEOUT 20
+PROMPT 0
+LABEL pxeboot
+    MENU LABEL PXE Boot
+    MENU DEFAULT
+    KERNEL rhcos-installer-kernel-x86_64
+    APPEND ip=dhcp rd.neednet=1 initrd=rhcos-installer-initramfs.x86_64.img console=ttyS0 console=tty0 coreos.inst=yes \
+coreos.inst.install_dev=sda coreos.inst.image_url={bm_install_files_loc}\
+rhcos-metal.x86_64.raw.gz coreos.inst.ignition_url={bm_install_files_loc}{role}.ign \
+{extra_data}
+LABEL disk0
+  MENU LABEL Boot disk (0x80)
+  LOCALBOOT 0"""
+            temp_file = tempfile.NamedTemporaryFile(
+                mode='w+', prefix=f'pxe_file_{role}', delete=False
+            )
+            with open(temp_file.name, 'w') as t_file:
+                t_file.writelines(default_pxe_file)
+            return temp_file.name
 
 
 def clean_disk():

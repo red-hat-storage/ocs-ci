@@ -1129,15 +1129,6 @@ MIN_NODE_MEMORY = 64 * 10 ** 9
 AWS_CLOUDFORMATION_TAG = 'aws:cloudformation:stack-name'
 
 # Bare Metal constants
-BOOTSTRAP_PXE_FILE = os.path.join(
-    TEMPLATE_DIR, "baremetal-pxefile", "bootstrap"
-)
-MASTER_PXE_FILE = os.path.join(
-    TEMPLATE_DIR, "baremetal-pxefile", "master"
-)
-WORKER_PXE_FILE = os.path.join(
-    TEMPLATE_DIR, "baremetal-pxefile", "worker"
-)
 PXE_CONF_FILE = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "dnsmasq.pxe.conf"
 )
