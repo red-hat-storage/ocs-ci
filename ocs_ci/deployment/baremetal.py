@@ -8,7 +8,7 @@ import yaml
 import requests
 
 from .flexy import FlexyBaremetalPSI
-from ocs_ci.utility import psiutils
+from ocs_ci.utility import psiutils, aws
 
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.framework import config
@@ -44,6 +44,7 @@ class BAREMETALUPI(Deployment):
             super().__init__()
             self.helper_node_details = load_auth_config()['baremetal']
             self.mgmt_details = load_auth_config()['ipmi']
+            self.aws = aws.AWS()
 
         def deploy_prereq(self):
             """
@@ -388,8 +389,26 @@ class BAREMETALUPI(Deployment):
             """
             Destroy OCP cluster specific to BM UPI
             """
+
+            cluster_name = f"{constants.BM_DEFAULT_CLUSTER_NAME}.{config.ENV_DATA['base_domain']}"
+            zone_id = self.aws.get_hosted_zone_id(cluster_name=cluster_name)
+            result = self.aws.route53_client.list_resource_record_sets(HostedZoneId=zone_id)
+            logger.info("Checking if extra ip's are present in DNS record")
+            for node in self.mgmt_details:
+                if self.mgmt_details[node].get('extra_node'):
+                    for res in result['ResourceRecordSets']:
+                        if "apps" in res['Name']:
+                            for data in res['ResourceRecords']:
+                                if data['Value'] == self.mgmt_details[node]['ip']:
+                                    logger.info(
+                                        f"Found extra ip {self.mgmt_details[node]['ip']} Removing it from DNS record")
+                                    self.aws.update_hosted_zone_record(
+                                        zone_id=zone_id, record_name=f'*.apps.{cluster_name}',
+                                        data=self.mgmt_details[node]['ip'], type='A', operation_type='Delete'
+                                    )
             logger.info("Updating BM status")
             result = self.update_bm_status(constants.BM_STATUS_ABSENT)
+
             assert result == constants.BM_STATUS_RESPONSE_UPDATED, "Failed to update request"
 
         def check_bm_status_exist(self):

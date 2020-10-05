@@ -1844,6 +1844,7 @@ class BAREMETALUPINode(BaremetalNodes):
             node_conf (dict): of node configuration
             node_type (str): type of node to be created RHCOS/RHEL
             worker_count (int): number of nodes to add to existing cluster
+
         """
         super(BAREMETALUPINode, self).__init__()
         self.aws = aws.AWS()
@@ -1890,11 +1891,12 @@ class BAREMETALUPINode(BaremetalNodes):
         )
         self._pxe_boot_nodes(self.nodes_for_expansion[:self.worker_count])
         # Adding Ips to DNS record
-        zone_id = self.aws.get_hosted_zone_id(cluster_name=f"{constants.BM_DEFAULT_CLUSTER_NAME}.qe.rh-ocs.com")
+        cluster_name = f"{constants.BM_DEFAULT_CLUSTER_NAME}.{config.ENV_DATA['base_domain']}"
+        zone_id = self.aws.get_hosted_zone_id(cluster_name=cluster_name)
         for node in self.nodes_for_expansion:
             logger.info(f"Updating *.apps DNS record with {self.mgmt_details[node]['ip']}")
             self.aws.update_hosted_zone_record(
-                zone_id=zone_id, record_name=f'*.apps.{constants.BM_DEFAULT_CLUSTER_NAME}.qe.rh-ocs.com',
+                zone_id=zone_id, record_name=f'*.apps.{cluster_name}',
                 data=self.mgmt_details[node]['ip'], type='A', operation_type='Add'
             )
         # Gets the existing CSR data
