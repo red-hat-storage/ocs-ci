@@ -923,7 +923,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         )
         logger.info("Sleeping for 60 sec to start update machineconfigpool status")
         time.sleep(60)
-        wait_for_machineconfigpool_status('all')
+        wait_for_machineconfigpool_status('all', timeout=1800)
     if not ignore_upgrade:
         upgrade = config.UPGRADE.get('upgrade', False)
     else:
