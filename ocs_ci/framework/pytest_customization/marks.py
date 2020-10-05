@@ -179,7 +179,7 @@ skipif_lso = pytest.mark.skipif(
 )
 
 skipif_no_lso = pytest.mark.skipif(
-    config.DEPLOYMENT.get('local_storage') is False,
+    not config.DEPLOYMENT.get('local_storage'),
     reason="Test run only on LSO deployed cluster"
 )
 
