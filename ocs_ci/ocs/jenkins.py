@@ -296,7 +296,7 @@ class Jenkins(object):
         tmp_dict['labels']['app'] = 'jenkins-persistent-ocs'
         tmp_dict['labels']['template'] = 'jenkins-persistent-ocs-template'
         tmp_dict['metadata']['name'] = 'jenkins-persistent-ocs'
-        # Find pvc in objects list
+        # Find Kind: 'PersistentVolumeClaim' position in the objects list, differs in OCP 4.5 and OCP 4.6.
         for i in range(len(tmp_dict['objects'])):
             if tmp_dict['objects'][i]['kind'] == 'PersistentVolumeClaim':
                 tmp_dict['objects'][i]['metadata']['annotations'] = {
