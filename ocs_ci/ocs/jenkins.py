@@ -296,11 +296,13 @@ class Jenkins(object):
         tmp_dict['labels']['app'] = 'jenkins-persistent-ocs'
         tmp_dict['labels']['template'] = 'jenkins-persistent-ocs-template'
         tmp_dict['metadata']['name'] = 'jenkins-persistent-ocs'
-        tmp_dict['objects'][1]['metadata']['annotations'] = {
-            'volume.beta.kubernetes.io/storage-class': 'ocs-storagecluster-ceph-rbd'
-        }
-        tmp_dict['objects'][2]['spec']['template']['spec']['containers'][0]['env'].append(
-            {'name': 'JAVA_OPTS', 'value': '${JAVA_OPTS}'})
+        # Find pvc in objects list
+        for i in range(len(tmp_dict['objects'])):
+            if tmp_dict['objects'][i]['kind'] == 'PersistentVolumeClaim':
+                tmp_dict['objects'][i]['metadata']['annotations'] = {
+                    'volume.beta.kubernetes.io/storage-class': 'ocs-storagecluster-ceph-rbd'
+                }
+
         tmp_dict['parameters'][4]['value'] = '10Gi'
         tmp_dict['parameters'].append({
             'description': "Override jenkins options to speed up slave spawning",
