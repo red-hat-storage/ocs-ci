@@ -25,11 +25,71 @@ import sys
 
 from ocs_ci import framework
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants, node, ocp
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import utils
 
 
 logger = logging.getLogger(__name__)
+
+
+def get_environment_info():
+    """
+    Getting the environment information, Information that will be collected
+
+    Versions:
+        OCP - version / build / channel
+        OCS - version / build
+        Ceph - version
+        Rook - version
+
+    Platform:
+        BM / VmWare / Cloud provider etc.
+        Instance type / architecture
+        Cluster name
+        User name that run the test
+
+    Return:
+      dict: dictionary that contain the environment information
+
+    """
+    results = {}
+    # getting the name and email  of the user that running the test.
+    try:
+        user = utils.run_cmd('git config --get user.name').strip()
+        email = utils.run_cmd('git config --get user.email').strip()
+        results['user'] = f'{user} <{email}>'
+    except CommandFailed:
+        # if no git user define, the default user is none
+        results['user'] = ''
+
+    results['clustername'] = ocp.get_clustername()
+    results['platform'] = node.get_provider()
+    if results['platform'].lower() not in constants.ON_PREM_PLATFORMS:
+        results['platform'] = results['platform'].upper()
+
+    results['ocp_build'] = ocp.get_build()
+    results['ocp_channel'] = ocp.get_ocp_channel()
+    results['ocp_version'] = utils.get_ocp_version()
+
+    results['ceph_version'] = utils.get_ceph_version()
+    results['rook_version'] = utils.get_rook_version()
+
+    results['ocs_build'] = ocp.get_ocs_version()
+    # Extracting the version number x.y.z from full build name
+    m = re.match(r"(\d.\d).(\d)", results['ocs_build'])
+    if m and m.group(1) is not None:
+        results['ocs_version'] = m.group(1)
+
+    # Getting the instance type for cloud or Arch type for None cloud
+    worker_lbl = node.get_typed_nodes(num_of_nodes=1)[0].data['metadata']['labels']
+    if 'beta.kubernetes.io/instance-type' in worker_lbl:
+        results['worker_type'] = worker_lbl['beta.kubernetes.io/instance-type']
+    else:
+        results['worker_type'] = worker_lbl['kubernetes.io/arch']
+
+    return results
 
 
 def get_ocs_version():
@@ -110,15 +170,20 @@ def report_ocs_version(cluster_version, image_dict, file_obj):
         file_obj (object):  file object to log information
 
     """
+    # For some reason in IBM cloud the channel is not defined.
+    channel = cluster_version["spec"].get("channel", "unknown")
+    version = cluster_version["status"]["desired"].get("version", "unknown")
+    image = cluster_version["status"]["desired"].get("image", "unknown")
+
     # log the version
-    logger.info("ClusterVersion .spec.channel: %s", cluster_version["spec"]["channel"])
-    logger.info("ClusterVersion .status.desired.version: %s", cluster_version["status"]["desired"]["version"])
-    logger.info("ClusterVersion .status.desired.image: %s", cluster_version["status"]["desired"]["image"])
+    logger.info("ClusterVersion .spec.channel: %s", channel)
+    logger.info("ClusterVersion .status.desired.version: %s", version)
+    logger.info("ClusterVersion .status.desired.image: %s", image)
 
     # write human readable version of the above
-    print(f'cluster channel: {cluster_version["spec"]["channel"]}', file=file_obj)
-    print(f'cluster version: {cluster_version["status"]["desired"]["version"]}', file=file_obj)
-    print(f'cluster image: {cluster_version["status"]["desired"]["image"]}', file=file_obj)
+    print(f'cluster channel: {channel}', file=file_obj)
+    print(f'cluster version: {version}', file=file_obj)
+    print(f'cluster image: {image}', file=file_obj)
 
     for ns, ns_dict in image_dict.items():
         logger.info("storage namespace %s", ns)

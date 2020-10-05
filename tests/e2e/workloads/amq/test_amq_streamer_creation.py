@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import E2ETest, workloads
+from ocs_ci.framework.testlib import E2ETest, workloads, google_api_required
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.utility import templating
@@ -22,6 +22,7 @@ def test_fixture_amq(request):
     return amq
 
 
+@google_api_required
 @workloads
 class TestAMQBasics(E2ETest):
     @pytest.mark.parametrize(
@@ -32,7 +33,7 @@ class TestAMQBasics(E2ETest):
             )
         ]
     )
-    def test_install_and_run_amq_benchmark(self, interface, test_fixture_amq):
+    def test_install_and_run_amq_benchmark(self, interface, test_fixture_amq,):
         """
         Create amq cluster and run open messages on it
 
@@ -48,6 +49,8 @@ class TestAMQBasics(E2ETest):
         amq_workload_dict['producersPerTopic'] = 3
         amq_workload_dict['consumerPerSubscription'] = 3
         result = test_fixture_amq.run_amq_benchmark(amq_workload_yaml=amq_workload_dict)
-        assert test_fixture_amq.validate_amq_benchmark(result, amq_workload_dict) is not None, (
-            "Benchmark did not completely run or might failed in between"
+        amq_output = test_fixture_amq.validate_amq_benchmark(result, amq_workload_dict)
+        # Export pgdata to google  google spreadsheet
+        test_fixture_amq.export_amq_output_to_gsheet(
+            amq_output=amq_output, sheet_name='E2E Workloads', sheet_index=1
         )

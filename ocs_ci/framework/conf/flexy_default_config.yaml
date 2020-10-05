@@ -1,0 +1,9 @@
+ENV_DATA:
+  platform: 'baremetalpsi'
+  deployment_type: 'upi'
+
+# Override flexy params here
+FLEXY:
+  # Volume which will be attached to instance,
+  # which will be consumed for osd. (size in GB)
+  volume_size: 600

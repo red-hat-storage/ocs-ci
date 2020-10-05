@@ -1,0 +1,6 @@
+---
+# This is the basic config for IBM cloud usage
+# TODO: The deployment part is not covered yet!
+ENV_DATA:
+  platform: 'IBM_cloud'
+  deployment_type: 'upi'

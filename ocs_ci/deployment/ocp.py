@@ -26,7 +26,10 @@ class OCPDeployment:
         self.metadata = {}
         self.deployment_platform = config.ENV_DATA['platform'].lower()
         self.deployment_type = config.ENV_DATA['deployment_type'].lower()
-        self.installer = self.download_installer()
+        if not hasattr(self, 'flexy_deployment'):
+            self.flexy_deployment = False
+        if not self.flexy_deployment:
+            self.installer = self.download_installer()
         self.cluster_path = config.ENV_DATA['cluster_path']
 
     def download_installer(self):
@@ -112,11 +115,12 @@ class OCPDeployment:
                 "stored at: %s",
                 self.cluster_path
             )
-        self.create_config()
+        if not self.flexy_deployment:
+            self.create_config()
 
     def create_config(self):
         """
-        Create the OCP deploy config, if something needs to be changed fro
+        Create the OCP deploy config, if something needs to be changed for
         specific platform you can overload this method in child class.
         """
         # Generate install-config from template

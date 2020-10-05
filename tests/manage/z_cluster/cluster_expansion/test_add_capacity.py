@@ -1,7 +1,9 @@
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import polarion_id, pre_upgrade
+from ocs_ci.framework.pytest_customization.marks import (
+    polarion_id, pre_upgrade, skipif_aws_i3, skipif_bm, skipif_external_mode
+)
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
@@ -12,6 +14,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs.cluster import CephCluster
 
 
 def add_capacity_test():
@@ -39,17 +42,24 @@ def add_capacity_test():
     ceph_health_check(
         namespace=config.ENV_DATA['cluster_namespace'], tries=80
     )
+    ceph_cluster_obj = CephCluster()
+    assert ceph_cluster_obj.wait_for_rebalance(timeout=5400), (
+        "Data re-balance failed to complete"
+    )
 
 
 @ignore_leftovers
 @tier1
 @polarion_id('OCS-1191')
 @pytest.mark.last
+@skipif_aws_i3
+@skipif_bm
+@skipif_external_mode
 class TestAddCapacity(ManageTest):
     """
-    Automates adding variable capacity to the cluster while IOs running
+    Automates adding variable capacity to the cluster
     """
-    def test_add_capacity(self):
+    def test_add_capacity(self, reduce_cluster_load):
         """
         Test to add variable capacity to the OSD cluster while IOs running
         """
@@ -60,11 +70,14 @@ class TestAddCapacity(ManageTest):
 @pre_upgrade
 @ignore_leftovers
 @polarion_id('OCS-1191')
+@skipif_aws_i3
+@skipif_bm
+@skipif_external_mode
 class TestAddCapacityPreUpgrade(ManageTest):
     """
-    Automates adding variable capacity to the cluster while IOs running
+    Automates adding variable capacity to the cluster pre upgrade
     """
-    def test_add_capacity_pre_upgrade(self):
+    def test_add_capacity_pre_upgrade(self, reduce_cluster_load):
         """
         Test to add variable capacity to the OSD cluster while IOs running
         """

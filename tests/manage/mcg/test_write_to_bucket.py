@@ -7,12 +7,13 @@ from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required
 )
 from ocs_ci.framework.testlib import (
-    ManageTest, tier1, tier2, tier3, acceptance, performance
+    ManageTest, tier1, tier2, tier3, acceptance
 )
 from ocs_ci.ocs import constants
-from tests.manage.mcg import helpers
-from tests.manage.mcg.helpers import retrieve_anon_s3_resource
-from tests.helpers import craft_s3_command
+from ocs_ci.ocs.bucket_utils import (
+    sync_object_directory, retrieve_test_objects_to_pod,
+    retrieve_anon_s3_resource, craft_s3_command
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,11 +52,11 @@ class TestBucketIO(ManageTest):
         data_dir = '/data'
         bucketname = bucket_factory(1)[0].name
         full_object_path = f"s3://{bucketname}"
-        downloaded_files = helpers.retrieve_test_objects_to_pod(
+        downloaded_files = retrieve_test_objects_to_pod(
             awscli_pod, data_dir
         )
         # Write all downloaded objects to the new bucket
-        helpers.sync_object_directory(
+        sync_object_directory(
             awscli_pod, data_dir, full_object_path, mcg_obj
         )
 
@@ -69,82 +70,22 @@ class TestBucketIO(ManageTest):
     @pytest.mark.polarion_id("OCS-1949")
     @tier1
     @acceptance
-    def test_data_deduplication(self, mcg_obj, awscli_pod, bucket_factory):
-        """
-        Test data deduplication mechanics
-        Args:
-            mcg_obj (obj): An object representing the current state of the MCG in the cluster
-            awscli_pod (pod): A pod running the AWSCLI tools
-            bucket_factory: Calling this fixture creates a new bucket(s)
-
-        """
-        download_dir = '/aws/deduplication/'
-        for i in range(1, 3):
-            awscli_pod.exec_cmd_on_pod(
-                command=helpers.craft_s3_command(
-                    f'cp s3://{constants.TEST_FILES_BUCKET}/danny.webm {download_dir}danny{i}.webm'
-                ),
-                out_yaml_format=False
-            )
-        bucket = bucket_factory(amount=1)[0]
-        bucketname = bucket.name
-        full_object_path = f"s3://{bucketname}"
-        helpers.sync_object_directory(
-            awscli_pod, download_dir, full_object_path, mcg_obj
-        )
-        # TODO: new function to test any reduction at all
-        assert mcg_obj.check_data_reduction(bucketname, 43 * 1024 * 1024), (
-            'Data deduplication did not work as anticipated.'
-        )
-
-    @pytest.mark.polarion_id("OCS-1949")
-    @tier1
-    @acceptance
-    def test_data_reduction_functionality(self, mcg_obj, awscli_pod, bucket_factory):
+    def test_data_reduction(self, mcg_obj, awscli_pod, bucket_factory):
         """
         Test data reduction mechanics
-        Args:
-            mcg_obj (obj): An object representing the current state of the MCG in the cluster
-            awscli_pod (pod): A pod running the AWSCLI tools
-            bucket_factory: Calling this fixture creates a new bucket(s)
-
-        """
-        download_dir = '/aws/reduction/'
-        awscli_pod.exec_cmd_on_pod(
-            command=helpers.craft_s3_command(
-                f'cp s3://{constants.TEST_FILES_BUCKET}/enwik8 {download_dir}'
-            ),
-            out_yaml_format=False
-        )
-        bucket = bucket_factory(amount=1)[0]
-        bucketname = bucket.name
-        full_object_path = f"s3://{bucketname}"
-        helpers.sync_object_directory(
-            awscli_pod, download_dir, full_object_path, mcg_obj
-        )
-        assert mcg_obj.check_data_reduction(bucketname, 35 * 1024 * 1024), (
-            'Data reduction did not work as anticipated.'
-        )
-
-    @pytest.mark.polarion_id("OCS-1949")
-    @tier2
-    @performance
-    def test_data_reduction_performance(self, mcg_obj, awscli_pod, bucket_factory):
-        """
-        Test data reduction performance
 
         """
         # TODO: Privatize test bucket
         download_dir = '/aws/downloaded'
-        helpers.retrieve_test_objects_to_pod(awscli_pod, download_dir)
-        bucket = bucket_factory(amount=1)[0]
+        retrieve_test_objects_to_pod(awscli_pod, download_dir)
+        bucket = bucket_factory(1)[0]
         bucketname = bucket.name
         full_object_path = f"s3://{bucketname}"
-        helpers.sync_object_directory(
+        sync_object_directory(
             awscli_pod, download_dir, full_object_path, mcg_obj
         )
 
-        assert mcg_obj.check_data_reduction(bucketname, 100 * 1024 * 1024), (
+        assert mcg_obj.check_data_reduction(bucketname), (
             'Data reduction did not work as anticipated.'
         )
 
@@ -217,7 +158,7 @@ class TestBucketIO(ManageTest):
         base_path = f"s3://{bucketname}"
         for i in range(amount):
             full_object_path = base_path + f"/{i}/"
-            helpers.sync_object_directory(
+            sync_object_directory(
                 awscli_pod, data_dir, full_object_path, mcg_obj
             )
 
@@ -258,7 +199,7 @@ class TestBucketIO(ManageTest):
             sh='sh'
         )
         # Write all empty objects to the new bucket
-        helpers.sync_object_directory(
+        sync_object_directory(
             awscli_pod, data_dir, full_object_path, mcg_obj
         )
 
@@ -310,7 +251,7 @@ class TestBucketIO(ManageTest):
         bucketname = bucket_factory(1)[0].name
         full_object_path = f"s3://{bucketname}"
         target_dir = '/data/'
-        helpers.retrieve_test_objects_to_pod(awscli_pod, target_dir)
+        retrieve_test_objects_to_pod(awscli_pod, target_dir)
         with ThreadPoolExecutor() as p:
             p.submit(pod_io, setup_rbd_cephfs_pods)
-            p.submit(helpers.sync_object_directory(awscli_pod, target_dir, full_object_path, mcg_obj))
+            p.submit(sync_object_directory(awscli_pod, target_dir, full_object_path, mcg_obj))

@@ -87,6 +87,8 @@ to the pytest.
    necessary styles and scripts
 * `--email` - to send the email reports of the test run which was generated
    by --html option. MUST specify --html to send email reports.
+* `--squad-analysis` - Include Squad Analysis to email report. Applicable only
+    in combination with --email option.
 * `--bugzilla` - allows you to skip tests with unresolved bug (test case
   needs to be properly decorated as you can see in
   [documentation](./writing_tests.md)). You will also need to
@@ -100,14 +102,16 @@ to the pytest.
   bugzilla_password = yourPassword
   ```
 * `--collect-logs` - to collect OCS logs for failed test cases.
+* `--collect-logs-on-success-run` - Collect must gather logs at the end of the 
+   execution (also when no failure in the tests)
 * `--io-in-bg` - If passed, IO will be running in the test background.
-   The amount of IO load will be determined by the `--io-load` argument, if
-   provided. In case `--io-load` is not provided, IO load is set to 30% of
-   the cluster throughput limit.
 * `--io-load` - IOs throughput target percentage. The value should be
-   between 0 to 100. The default is 50 (50%)
+   between 0 to 100. If not provided, the default is 30 (30%)
 * `--log-cluster-utilization` - If passed, metrics of the cluster utilization will be
-   printed every 10 seconds
+   printed every 20 seconds
+* `--csv-change` - Allows changes in the OCS CSV. For example, usage of custom image,
+   like MCG or RHCS. The format should be:
+   <pattern_to_replace_from::pattern_to_replace_to>, while '::' is the delimiter
 
 ## Examples
 
@@ -136,6 +140,13 @@ Note that during deployment, openshift command line tools like `oc` and
 repository](https://github.com/red-hat-storage/ocs-ci/tree/master/bin). These tools are then available to both deployment and test
 code because `run-ci` wrapper includes the `bin` directory into `PATH`
 environment variable.
+
+##### Deployment configurations
+
+- *encryption at REST* - to enable encryption at REST use this configuration file:
+    conf/ocsci/encryption_at_rest.yaml
+- *FIPS* - to enable FIPS, use this configuration file:
+    conf/ocsci/fips.yaml
 
 #### Deployment of cluster on vSphere Platform
 

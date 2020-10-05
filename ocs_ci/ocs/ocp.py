@@ -21,7 +21,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, update_container_with_mirrored_image
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
 from ocs_ci.ocs import defaults, constants
 from ocs_ci.framework import config
@@ -511,6 +511,10 @@ class OCP(object):
                         resource_name, column, retry=retry, wait=sleep,
                     )
                     if status == condition:
+                        log.info(
+                            f"status of {resource_name} at {column}"
+                            " reached condition!"
+                        )
                         return True
                     log.info((
                         f"status of {resource_name} at column {column} was {status},"
@@ -689,6 +693,17 @@ class OCP(object):
                 not i.isupper() or i in ('RWO', 'RWX', 'ROX')
             )
         ]
+        # WA, Failed to parse "oc get build" command
+        # https://github.com/red-hat-storage/ocs-ci/issues/2312
+        try:
+            if self.data['items'][0]['kind'].lower() == 'build':
+                value = (
+                    resource_info[column_index - 1] if len(titles) % 2 == 0
+                    else resource_info[column_index]
+                )
+                return value
+        except Exception:
+            pass
 
         return resource_info[column_index]
 
@@ -996,6 +1011,7 @@ def rsync(src, dst, node, dst_node=True, extra_params=""):
     pod_data = load_yaml(constants.RSYNC_POD_YAML)
     pod_data['metadata']['name'] = pod_name
     pod_data['spec']['nodeName'] = node
+    update_container_with_mirrored_image(pod_data)
     pod = OCP(kind='pod', namespace=constants.DEFAULT_NAMESPACE)
     src = src if dst_node else f"{pod_name}:/host{src}"
     dst = f"{pod_name}:/host{dst}" if dst_node else dst

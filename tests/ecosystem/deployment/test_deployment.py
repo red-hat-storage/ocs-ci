@@ -2,16 +2,16 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import deployment, polarion_id
-from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification, change_noobaa_endpoints_count
-from ocs_ci.utility.reporting import get_deployment_polarion_id
+from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
+from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import is_cluster_running
-from tests.sanity_helpers import Sanity
+from tests.sanity_helpers import Sanity, SanityExternalCluster
 
 log = logging.getLogger(__name__)
 
 
 @deployment
-@polarion_id(get_deployment_polarion_id())
+@polarion_id(get_polarion_id())
 def test_deployment(pvc_factory, pod_factory):
     deploy = config.RUN['cli_params'].get('deploy')
     teardown = config.RUN['cli_params'].get('teardown')
@@ -24,14 +24,13 @@ def test_deployment(pvc_factory, pod_factory):
             )
             ocs_install_verification(ocs_registry_image=ocs_registry_image)
 
-            nb_eps = config.DEPLOYMENT.get('noobaa_endpoints')
-            if nb_eps > 1:
-                change_noobaa_endpoints_count(nb_eps)
-
             # Check basic cluster functionality by creating resources
             # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
             # run IO and delete the resources
-            sanity_helpers = Sanity()
+            if config.DEPLOYMENT['external_mode']:
+                sanity_helpers = SanityExternalCluster()
+            else:
+                sanity_helpers = Sanity()
             sanity_helpers.health_check()
             sanity_helpers.create_resources(pvc_factory, pod_factory)
             sanity_helpers.delete_resources()

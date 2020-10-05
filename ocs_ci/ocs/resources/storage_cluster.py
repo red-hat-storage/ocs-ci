@@ -1,16 +1,18 @@
 """
 StorageCluster related functionalities
 """
-from ocs_ci.ocs.ocp import OCP, get_images
-from jsonschema import validate
-from ocs_ci.framework import config
 import logging
-from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.resources.csv import CSV
-from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator, PackageManifest
-from ocs_ci.ocs.node import get_compute_node_names
-from ocs_ci.utility import utils, localstorage
 
+from jsonschema import validate
+
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs.exceptions import ResourceNotFoundError
+from ocs_ci.ocs.node import get_compute_node_names, check_nodes_specs
+from ocs_ci.ocs.ocp import get_images, OCP
+from ocs_ci.ocs.resources.ocs import get_ocs_csv
+from ocs_ci.ocs.resources.pod import get_pods_having_label
+from ocs_ci.utility import localstorage, utils
 
 log = logging.getLogger(__name__)
 
@@ -58,23 +60,14 @@ def ocs_install_verification(
     from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_all_pods
     from ocs_ci.ocs.cluster import validate_cluster_on_pvc
+    from ocs_ci.ocs.resources.fips import check_fips_enabled
     number_of_worker_nodes = len(get_typed_nodes())
     namespace = config.ENV_DATA['cluster_namespace']
     log.info("Verifying OCS installation")
 
     # Verify OCS CSV is in Succeeded phase
     log.info("verifying ocs csv")
-    operator_selector = get_selector_for_ocs_operator()
-    ocs_package_manifest = PackageManifest(
-        resource_name=defaults.OCS_OPERATOR_NAME, selector=operator_selector,
-    )
-    channel = config.DEPLOYMENT.get('ocs_csv_channel')
-    ocs_csv_name = ocs_package_manifest.get_current_csv(channel=channel)
-    ocs_csv = CSV(
-        resource_name=ocs_csv_name, namespace=namespace
-    )
-    log.info(f"Check if OCS operator: {ocs_csv_name} is in Succeeded phase.")
-    ocs_csv.wait_for_phase(phase="Succeeded", timeout=timeout)
+    ocs_csv = get_ocs_csv()
     # Verify if OCS CSV has proper version.
     csv_version = ocs_csv.data['spec']['version']
     ocs_version = config.ENV_DATA['ocs_version']
@@ -124,93 +117,81 @@ def ocs_install_verification(
     pod = OCP(
         kind=constants.POD, namespace=namespace
     )
-    # ocs-operator
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.OCS_OPERATOR_LABEL,
-        timeout=timeout
-    )
-    # rook-ceph-operator
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.OPERATOR_LABEL,
-        timeout=timeout
-    )
-    # noobaa
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.NOOBAA_APP_LABEL,
-        resource_count=2,
-        timeout=timeout
-    )
-    # mons
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.MON_APP_LABEL,
-        resource_count=3,
-        timeout=timeout
-    )
-    # csi-cephfsplugin
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_CEPHFSPLUGIN_LABEL,
-        resource_count=number_of_worker_nodes,
-        timeout=timeout
-    )
-    # csi-cephfsplugin-provisioner
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-        resource_count=2,
-        timeout=timeout
-    )
-    # csi-rbdplugin
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_RBDPLUGIN_LABEL,
-        resource_count=number_of_worker_nodes,
-        timeout=timeout
-    )
-    # csi-rbdplugin-provisioner
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
-        resource_count=2,
-        timeout=timeout
-    )
-    # osds
-    osd_count = (
-        int(storage_cluster.data['spec']['storageDeviceSets'][0]['count'])
-        * int(storage_cluster.data['spec']['storageDeviceSets'][0]['replica'])
-    )
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.OSD_APP_LABEL,
-        resource_count=osd_count,
-        timeout=timeout
-    )
-    # mgr
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.MGR_APP_LABEL,
-        timeout=timeout
-    )
-    # mds
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.MDS_APP_LABEL,
-        resource_count=2,
-        timeout=timeout
-    )
+    if not config.DEPLOYMENT['external_mode']:
+        osd_count = (
+            int(storage_cluster.data['spec']['storageDeviceSets'][0]['count'])
+            * int(storage_cluster.data['spec']['storageDeviceSets'][0]['replica'])
+        )
+    rgw_count = None
+    if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1857802 - RGW count is 1
+        # post upgrade to OCS 4.5. Tracked with
+        # https://github.com/red-hat-storage/ocs-ci/issues/2532
+        rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 and not (
+            post_upgrade_verification
+        ) else 1
 
-    # rgw check only for VmWare
-    if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
+    # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
+    if float(config.ENV_DATA['ocs_version']) == 4.4 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM:
+        rgw_count = 1
+    if float(
+        config.ENV_DATA['ocs_version']
+    ) == 4.5 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM and post_upgrade_verification:
+        rgw_count = 1
+
+    # Fetch the min and max Noobaa endpoints from the run config
+    if check_nodes_specs(min_cpu=constants.MIN_NODE_CPU, min_memory=constants.MIN_NODE_MEMORY):
+        min_eps = config.DEPLOYMENT.get('min_noobaa_endpoints')
+        max_eps = config.DEPLOYMENT.get('max_noobaa_endpoints')
+    else:
+        min_eps = 1
+        max_eps = 1 if float(config.ENV_DATA['ocs_version']) < 4.6 else 2
+
+    if config.ENV_DATA.get('platform') == constants.IBM_POWER_PLATFORM:
+        min_eps = 1
+        max_eps = 1
+
+    resources_dict = {
+        constants.OCS_OPERATOR_LABEL: 1,
+        constants.OPERATOR_LABEL: 1,
+        constants.NOOBAA_DB_LABEL: 1,
+        constants.NOOBAA_OPERATOR_POD_LABEL: 1,
+        constants.NOOBAA_CORE_POD_LABEL: 1,
+        constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps
+    }
+    if not config.DEPLOYMENT['external_mode']:
+        resources_dict.update(
+            {
+                constants.MON_APP_LABEL: 3,
+                constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
+                constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL: 2,
+                constants.CSI_RBDPLUGIN_LABEL: number_of_worker_nodes,
+                constants.CSI_RBDPLUGIN_PROVISIONER_LABEL: 2,
+                constants.OSD_APP_LABEL: osd_count,
+                constants.MGR_APP_LABEL: 1,
+                constants.MDS_APP_LABEL: 2,
+                constants.RGW_APP_LABEL: rgw_count
+            }
+        )
+
+    for label, count in resources_dict.items():
+        if label == constants.RGW_APP_LABEL:
+            if not config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
+                continue
         assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            selector=constants.RGW_APP_LABEL,
-            resource_count=1,
+            selector=label,
+            resource_count=count,
             timeout=timeout
         )
+
+    nb_ep_pods = get_pods_having_label(
+        label=constants.NOOBAA_ENDPOINT_POD_LABEL, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    assert len(nb_ep_pods) <= max_eps, (
+        f"The number of running NooBaa endpoint pods ({len(nb_ep_pods)}) "
+        f"is greater than the maximum defined in the NooBaa CR ({max_eps})"
+    )
 
     # Verify StorageClasses (1 ceph-fs, 1 ceph-rbd)
     log.info("Verifying storage classes")
@@ -222,6 +203,13 @@ def ocs_install_verification(
         f'{storage_cluster_name}-cephfs',
         f'{storage_cluster_name}-ceph-rbd'
     }
+    if config.DEPLOYMENT['external_mode']:
+        required_storage_classes.update(
+            {
+                f'{storage_cluster_name}-ceph-rgw',
+                f'{config.ENV_DATA["cluster_namespace"]}.noobaa.io'
+            }
+        )
     storage_classes = storage_class.get()
     storage_class_names = {
         item['metadata']['name'] for item in storage_classes['items']
@@ -229,32 +217,44 @@ def ocs_install_verification(
     assert required_storage_classes.issubset(storage_class_names)
 
     # Verify OSDs are distributed
-    if not skip_osd_distribution_check:
-        log.info("Verifying OSDs are distributed evenly across worker nodes")
-        ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
-        osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)['items']
-        deviceset_count = get_deviceset_count()
-        node_names = [osd['spec']['nodeName'] for osd in osds]
-        for node in node_names:
-            assert not node_names.count(node) > deviceset_count, (
-                "OSD's are not distributed evenly across worker nodes"
-            )
+    if not config.DEPLOYMENT['external_mode']:
+        if not skip_osd_distribution_check:
+            log.info("Verifying OSDs are distributed evenly across worker nodes")
+            ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+            osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)['items']
+            deviceset_count = get_deviceset_count()
+            node_names = [osd['spec']['nodeName'] for osd in osds]
+            for node in node_names:
+                assert not node_names.count(node) > deviceset_count, (
+                    "OSD's are not distributed evenly across worker nodes"
+                )
 
     # Verify that CSI driver object contains provisioner names
     log.info("Verifying CSI driver object contains provisioner names.")
     csi_driver = OCP(kind="CSIDriver")
-    assert {defaults.CEPHFS_PROVISIONER, defaults.RBD_PROVISIONER} == (
+    csi_drivers = (
         {item['metadata']['name'] for item in csi_driver.get()['items']}
     )
+    assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
-    sc_rbd = storage_class.get(
-        resource_name=constants.DEFAULT_STORAGECLASS_RBD
-    )
-    sc_cephfs = storage_class.get(
-        resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
-    )
+    if config.DEPLOYMENT['external_mode']:
+        sc_rbd = storage_class.get(
+            resource_name=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+        )
+        sc_cephfs = storage_class.get(
+            resource_name=(
+                constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+            )
+        )
+    else:
+        sc_rbd = storage_class.get(
+            resource_name=constants.DEFAULT_STORAGECLASS_RBD
+        )
+        sc_cephfs = storage_class.get(
+            resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
+        )
     assert sc_rbd['parameters']['csi.storage.k8s.io/node-stage-secret-name'] == constants.RBD_NODE_SECRET
     assert sc_rbd['parameters']['csi.storage.k8s.io/provisioner-secret-name'] == constants.RBD_PROVISIONER_SECRET
     assert sc_cephfs['parameters']['csi.storage.k8s.io/node-stage-secret-name'] == constants.CEPHFS_NODE_SECRET
@@ -262,67 +262,70 @@ def ocs_install_verification(
     log.info("Verified node and provisioner secret names in storage class.")
 
     # Verify ceph osd tree output
-    log.info(
-        "Verifying ceph osd tree output and checking for device set PVC names "
-        "in the output."
-    )
+    if not config.DEPLOYMENT['external_mode']:
+        log.info(
+            "Verifying ceph osd tree output and checking for device set PVC names "
+            "in the output."
+        )
 
-    if config.DEPLOYMENT.get('local_storage'):
-        deviceset_pvcs = get_compute_node_names()
-    else:
-        deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
+        if (config.DEPLOYMENT.get('local_storage')):
+            deviceset_pvcs = get_compute_node_names()
+        else:
+            deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
 
-    ct_pod = get_ceph_tools_pod()
-    osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree', format='json')
-    schemas = {
-        'root': constants.OSD_TREE_ROOT,
-        'rack': constants.OSD_TREE_RACK,
-        'host': constants.OSD_TREE_HOST,
-        'osd': constants.OSD_TREE_OSD,
-        'region': constants.OSD_TREE_REGION,
-        'zone': constants.OSD_TREE_ZONE
-    }
-    schemas['host']['properties']['name'] = {'enum': deviceset_pvcs}
-    for item in osd_tree['nodes']:
-        validate(instance=item, schema=schemas[item['type']])
-        if item['type'] == 'host':
-            deviceset_pvcs.remove(item['name'])
-    assert not deviceset_pvcs, (
-        f"These device set PVCs are not given in ceph osd tree output "
-        f"- {deviceset_pvcs}"
-    )
-    log.info(
-        "Verified ceph osd tree output. Device set PVC names are given in the "
-        "output."
-    )
+        ct_pod = get_ceph_tools_pod()
+        osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree', format='json')
+        schemas = {
+            'root': constants.OSD_TREE_ROOT,
+            'rack': constants.OSD_TREE_RACK,
+            'host': constants.OSD_TREE_HOST,
+            'osd': constants.OSD_TREE_OSD,
+            'region': constants.OSD_TREE_REGION,
+            'zone': constants.OSD_TREE_ZONE
+        }
+        schemas['host']['properties']['name'] = {'enum': deviceset_pvcs}
+        for item in osd_tree['nodes']:
+            validate(instance=item, schema=schemas[item['type']])
+            if item['type'] == 'host':
+                deviceset_pvcs.remove(item['name'])
+        assert not deviceset_pvcs, (
+            f"These device set PVCs are not given in ceph osd tree output "
+            f"- {deviceset_pvcs}"
+        )
+        log.info(
+            "Verified ceph osd tree output. Device set PVC names are given in the "
+            "output."
+        )
 
     # TODO: Verify ceph osd tree output have osd listed as ssd
     # TODO: Verify ceph osd tree output have zone or rack based on AZ
 
     # Verify CSI snapshotter sidecar container is not present
-    log.info("Verifying CSI snapshotter is not present.")
-    provisioner_pods = get_all_pods(
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-        selector=[
-            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+    # if the OCS version is < 4.6
+    if float(config.ENV_DATA['ocs_version']) < 4.6:
+        log.info("Verifying CSI snapshotter is not present.")
+        provisioner_pods = get_all_pods(
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            selector=[
+                constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+                constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+            ]
+        )
+        for pod_obj in provisioner_pods:
+            pod_info = pod_obj.get()
+            for container, image in get_images(data=pod_info).items():
+                assert ('snapshot' not in container) and ('snapshot' not in image), (
+                    f"Snapshot container is present in {pod_obj.name} pod. "
+                    f"Container {container}. Image {image}"
+                )
+        deployments = ocs_csv.get()['spec']['install']['spec']['deployments']
+        rook_ceph_operator_deployment = [
+            deployment_val for deployment_val in deployments if deployment_val['name'] == 'rook-ceph-operator'
         ]
-    )
-    for pod_obj in provisioner_pods:
-        pod_info = pod_obj.get()
-        for container, image in get_images(data=pod_info).items():
-            assert ('snapshot' not in container) and ('snapshot' not in image), (
-                f"Snapshot container is present in {pod_obj.name} pod. "
-                f"Container {container}. Image {image}"
-            )
-    deployments = ocs_csv.get()['spec']['install']['spec']['deployments']
-    rook_ceph_operator_deployment = [
-        deployment_val for deployment_val in deployments if deployment_val['name'] == 'rook-ceph-operator'
-    ]
-    assert {'name': 'CSI_ENABLE_SNAPSHOTTER', 'value': 'false'} in (
-        rook_ceph_operator_deployment[0]['spec']['template']['spec']['containers'][0]['env']
-    ), "CSI_ENABLE_SNAPSHOTTER value is not set to 'false'."
-    log.info("Verified: CSI snapshotter is not present.")
+        assert {'name': 'CSI_ENABLE_SNAPSHOTTER', 'value': 'false'} in (
+            rook_ceph_operator_deployment[0]['spec']['template']['spec']['containers'][0]['env']
+        ), "CSI_ENABLE_SNAPSHOTTER value is not set to 'false'."
+        log.info("Verified: CSI snapshotter is not present.")
 
     # Verify pool crush rule is with "type": "zone"
     if utils.get_az_count() == 3:
@@ -355,6 +358,11 @@ def ocs_install_verification(
     assert utils.ceph_health_check(
         namespace, health_check_tries, health_check_delay
     )
+    if config.ENV_DATA.get('fips'):
+        # In case that fips is enabled when deploying,
+        # a verification of the installation of it will run
+        # on all running state pods
+        check_fips_enabled()
 
 
 def add_capacity(osd_size_capacity_requested):
@@ -393,7 +401,14 @@ def add_capacity(osd_size_capacity_requested):
     new_storage_devices_sets_count = int(device_sets_required + old_storage_devices_sets_count)
     lvpresent = localstorage.check_local_volume()
     if lvpresent:
+        ocp_obj = OCP(kind='localvolume', namespace=config.ENV_DATA['local_storage_namespace'])
+        localvolume_data = ocp_obj.get(resource_name='local-block')
+        device_list = localvolume_data['spec']['storageClassDevices'][0]['devicePaths']
         final_device_list = localstorage.get_new_device_paths(device_sets_required, osd_size_capacity_requested)
+        device_list.sort()
+        final_device_list.sort()
+        if device_list == final_device_list:
+            raise ResourceNotFoundError("No Extra device found")
         param = f"""[{{ "op": "replace", "path": "/spec/storageClassDevices/0/devicePaths",
                                                  "value": {final_device_list}}}]"""
         log.info(f"Final device list : {final_device_list}")
@@ -500,15 +515,40 @@ def get_all_storageclass():
     return storageclass
 
 
-def change_noobaa_endpoints_count(nb_eps):
+def change_noobaa_endpoints_count(min_nb_eps=None, max_nb_eps=None):
     """
     Scale up or down the number of maximum NooBaa emdpoints
 
     Args:
-        nb_eps (int): The number of required Noobaa endpoints
+        min_nb_eps (int): The number of required minimum Noobaa endpoints
+        max_nb_eps (int): The number of required maximum Noobaa endpoints
 
     """
-    log.info(f"Scaling up Noobaa endpoints to a maximum of {nb_eps}")
-    params = f'{{"spec":{{"endpoints":{{"maxCount":{nb_eps},"minCount":1}}}}}}'
-    noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+    if float(config.ENV_DATA['ocs_version']) < 4.6:
+        noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        if min_nb_eps:
+            log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
+            params = f'{{"spec":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}'
+            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+        if max_nb_eps:
+            log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
+            params = f'{{"spec":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}'
+            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+    else:
+        sc = get_storage_cluster()
+        if min_nb_eps:
+            log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
+            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}}}'
+            sc.patch(
+                resource_name=sc.get()['items'][0]['metadata']['name'],
+                params=params,
+                format_type='merge'
+            )
+        if max_nb_eps:
+            log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
+            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}}}'
+            sc.patch(
+                resource_name=sc.get()['items'][0]['metadata']['name'],
+                params=params,
+                format_type='merge'
+            )

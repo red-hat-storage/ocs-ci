@@ -3,15 +3,16 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    pre_upgrade, post_upgrade, aws_platform_required, bugzilla
+    pre_upgrade, post_upgrade, aws_platform_required, bugzilla,
+    skipif_aws_creds_are_missing
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_OPTIMAL
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from tests.manage.mcg.helpers import (
-    retrieve_test_objects_to_pod, sync_object_directory
+from ocs_ci.ocs.bucket_utils import (
+    retrieve_test_objects_to_pod, sync_object_directory,
+    verify_s3_object_integrity
 )
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.mcg_workload import wait_for_active_pods
 
 logger = logging.getLogger(__name__)
 
@@ -20,47 +21,7 @@ LOCAL_TEMP_PATH = '/aws/temp'
 DOWNLOADED_OBJS = []
 
 
-# TODO: move this to ocs_ci/ocs/resources/job.py when the file is created
-def wait_for_active_pods(job, desired_count, timeout=3):
-    """
-    Wait for job to load desired number of active pods in time specified
-    in timeout.
-
-    Args:
-        job (obj): OCS job object
-        desired_count (str): Number of desired active pods for provided job
-        timeout (int): Number of seconds to wait for the job to get into state
-
-    Returns:
-        bool: If job has desired number of active pods
-
-    """
-    job_name = job.ocp.resource_name
-    logger.info(f"Checking number of active pods for job {job_name}")
-
-    def _retrieve_job_state():
-        job_obj = job.ocp.get(resource_name=job_name, out_yaml_format=True)
-        return job_obj.get('items').get(0).get('status').get('active')
-
-    try:
-        for state in TimeoutSampler(
-            timeout=timeout,
-            sleep=3,
-            func=_retrieve_job_state
-        ):
-            if state == desired_count:
-                return True
-            else:
-                logger.debug(
-                    f"Number of active pods for job {job_name}: {state}"
-                )
-    except TimeoutExpiredError:
-        logger.error(
-            f"Job {job_name} doesn't have correct number of active pods ({desired_count})"
-        )
-        return False
-
-
+@skipif_aws_creds_are_missing
 @aws_platform_required
 @pre_upgrade
 def test_fill_bucket(
@@ -75,9 +36,9 @@ def test_fill_bucket(
 
     (
         bucket,
-        backingstore1,
-        backingstore2
+        created_backingstores
     ) = multiregion_mirror_setup_session
+
     mcg_bucket_path = f's3://{bucket.name}'
 
     # Download test objects from the public bucket
@@ -115,7 +76,7 @@ def test_fill_bucket(
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
         for i in range(3):
-            assert mcg_obj_session.verify_s3_object_integrity(
+            assert verify_s3_object_integrity(
                 original_object_path=f'{LOCAL_TESTOBJS_DIR_PATH}/{obj}',
                 result_object_path=f'{LOCAL_TEMP_PATH}/{i}/{obj}',
                 awscli_pod=awscli_pod_session
@@ -123,6 +84,7 @@ def test_fill_bucket(
     assert bucket.status == constants.STATUS_BOUND
 
 
+@skipif_aws_creds_are_missing
 @aws_platform_required
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2038")
@@ -137,14 +99,15 @@ def test_noobaa_postupgrade(
 
     (
         bucket,
-        backingstore1,
-        backingstore2
+        created_backingstores
     ) = multiregion_mirror_setup_session
+    backingstore1 = created_backingstores[0]
+    backingstore2 = created_backingstores[1]
     mcg_bucket_path = f's3://{bucket.name}'
 
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
-        assert mcg_obj_session.verify_s3_object_integrity(
+        assert verify_s3_object_integrity(
             original_object_path=f'{LOCAL_TESTOBJS_DIR_PATH}/{obj}',
             result_object_path=f'{LOCAL_TEMP_PATH}/{obj}',
             awscli_pod=awscli_pod_session
@@ -210,7 +173,9 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
     Confirm that there is MCG workload job running before upgrade.
     """
     # wait a few seconds for fio job to start
-    assert wait_for_active_pods(mcg_workload_job, 1, timeout=20)
+    assert wait_for_active_pods(mcg_workload_job, 1, timeout=20), (
+        f"Job {mcg_workload_job.name} doesn't have any running pod"
+    )
 
 
 @post_upgrade
@@ -219,4 +184,6 @@ def test_upgrade_mcg_io(mcg_workload_job):
     """
     Confirm that there is MCG workload job running after upgrade.
     """
-    assert wait_for_active_pods(mcg_workload_job, 1)
+    assert wait_for_active_pods(mcg_workload_job, 1), (
+        f"Job {mcg_workload_job.name} doesn't have any running pod"
+    )

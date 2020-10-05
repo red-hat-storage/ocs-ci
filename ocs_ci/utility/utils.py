@@ -15,15 +15,17 @@ from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from scipy.stats import tmean, scoreatpercentile
-from shutil import which
+from shutil import which, move, rmtree
 
 import hcl
 import requests
 import yaml
+import git
 from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
+from paramiko.auth_handler import AuthenticationException, SSHException
 from semantic_version import Version
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, mkdtemp
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
@@ -371,7 +373,8 @@ def mask_secrets(plaintext, secrets):
     Replace secrets in plaintext with asterisks
 
     Args:
-        plaintext (str): The plaintext to remove the secrets from
+        plaintext (str or list): The plaintext to remove the secrets from or
+            list of strings to remove secrets from
         secrets (list): List of secret strings to replace in the plaintext
 
     Returns:
@@ -380,7 +383,12 @@ def mask_secrets(plaintext, secrets):
     """
     if secrets:
         for secret in secrets:
-            plaintext = plaintext.replace(secret, '*' * 5)
+            if isinstance(plaintext, list):
+                plaintext = [
+                    string.replace(secret, '*' * 5) for string in plaintext
+                ]
+            else:
+                plaintext = plaintext.replace(secret, '*' * 5)
     return plaintext
 
 
@@ -722,6 +730,22 @@ def delete_file(file_name):
     os.remove(file_name)
 
 
+def delete_dir(dir_name):
+    """
+    Deletes the directory
+
+    Args:
+        dir_name (str): Directory path to delete
+
+    """
+    try:
+        rmtree(dir_name)
+    except OSError as e:
+        log.error(
+            f"Failed to delete the directory {dir_name}. Error: {e.strerror}"
+        )
+
+
 class TimeoutSampler(object):
     """
     Samples the function output.
@@ -916,7 +940,147 @@ def parse_html_for_email(soup):
     main_header.string.replace_with('OCS-CI RESULTS')
 
 
-def email_reports():
+def add_squad_analysis_to_email(session, soup):
+    """
+    Add squad analysis to the html test results used in email reporting
+
+    Args:
+        session (obj): Pytest session object
+        soup (obj): BeautifulSoup object of HTML Report data
+
+    """
+    failed = {}
+    skipped = {}
+    # sort out failed and skipped test cases to failed and skipped dicts
+    for result in session.results.values():
+        if result.failed or result.skipped:
+            unassigned = True
+            for squad, res in constants.SQUADS.items():
+                for item in res:
+                    if item in result.nodeid:
+                        if result.failed:
+                            if squad not in failed:
+                                failed[squad] = []
+                            failed[squad].append(result.nodeid)
+                            unassigned = False
+
+                        if result.skipped:
+                            if squad not in skipped:
+                                skipped[squad] = []
+                            skipped_message = result.longrepr[2]
+                            skipped[squad].append((result.nodeid, skipped_message))
+                            unassigned = False
+            if unassigned:
+                if result.failed:
+                    if 'UNASSIGNED' not in failed:
+                        failed['UNASSIGNED'] = []
+                    failed['UNASSIGNED'].append(result.nodeid)
+                if result.skipped:
+                    if 'UNASSIGNED' not in skipped:
+                        skipped['UNASSIGNED'] = []
+                    skipped['UNASSIGNED'].append((result.nodeid, skipped_message))
+
+    # no failed or skipped tests - exist the function
+    if not failed and not skipped:
+        return
+
+    # add CSS for the Squad Analysis report
+    style = soup.find('style')
+    # use colors for squad names from squad names
+    style.string += "\n".join(
+        [
+            f"h4.squad-{color.lower()} {{\n    color: {color.lower()};\n}}"
+            for color in constants.SQUADS
+        ]
+    )
+    # few additional styles
+    style.string += """
+    .squad-analysis {
+        color: black;
+        font-family: monospace;
+        background-color: #eee;
+        padding: 5px;
+    }
+    .squad-analysis h2 {
+        margin: 0px;
+    }
+    .squad-analysis h3 {
+        margin: 0px;
+        margin-top: 10px;
+    }
+    .squad-analysis h4 {
+        margin: 0px;
+    }
+    .squad-analysis ul {
+        margin: 0px;
+    }
+    .squad-analysis ul li em {
+        margin-left: 1em;
+    }
+    .squad-unassigned {
+        background-color: #FFBA88;
+    }
+    h4.squad-yellow {
+        color: black;
+        background-color: yellow;
+        display: inline;
+    }
+    """
+    # prepare place for the Squad Analysis in the email
+    squad_analysis_div = soup.new_tag("div")
+    squad_analysis_div["class"] = "squad-analysis"
+    main_header = soup.find('h1')
+    main_header.insert_after(squad_analysis_div)
+    failed_h2_tag = soup.new_tag("h2")
+    failed_h2_tag.string = "Squad Analysis - please analyze:"
+    squad_analysis_div.append(failed_h2_tag)
+    if failed:
+        # print failed testcases peer squad
+        failed_div_tag = soup.new_tag("div")
+        squad_analysis_div.append(failed_div_tag)
+        failed_h3_tag = soup.new_tag("h3")
+        failed_h3_tag.string = "Failures:"
+        failed_div_tag.append(failed_h3_tag)
+        for squad in failed:
+            failed_h4_tag = soup.new_tag("h4")
+            failed_h4_tag.string = f"{squad} squad"
+            failed_h4_tag['class'] = f"squad-{squad.lower()}"
+            failed_div_tag.append(failed_h4_tag)
+            failed_ul_tag = soup.new_tag("ul")
+            failed_ul_tag['class'] = f"squad-{squad.lower()}"
+            failed_div_tag.append(failed_ul_tag)
+            for test in failed[squad]:
+                failed_li_tag = soup.new_tag("li")
+                failed_li_tag.string = test
+                failed_ul_tag.append(failed_li_tag)
+    if skipped:
+        # print skipped testcases with reason peer squad
+        skips_div_tag = soup.new_tag("div")
+        squad_analysis_div.append(skips_div_tag)
+        skips_h3_tag = soup.new_tag("h3")
+        skips_h3_tag.string = "Skips:"
+        skips_div_tag.append(skips_h3_tag)
+        for squad in skipped:
+            skips_h4_tag = soup.new_tag("h4")
+            skips_h4_tag.string = f"{squad} squad"
+            skips_h4_tag['class'] = f"squad-{squad.lower()}"
+            skips_div_tag.append(skips_h4_tag)
+            skips_ul_tag = soup.new_tag("ul")
+            skips_ul_tag['class'] = f"squad-{squad.lower()}"
+            skips_div_tag.append(skips_ul_tag)
+            for test in skipped[squad]:
+                skips_li_tag = soup.new_tag("li")
+                skips_test_span_tag = soup.new_tag("span")
+                skips_test_span_tag.string = test[0]
+                skips_li_tag.append(skips_test_span_tag)
+                skips_li_tag.append(soup.new_tag("br"))
+                skips_reason_em_tag = soup.new_tag("em")
+                skips_reason_em_tag.string = f"Reason: {test[1][8:]}"
+                skips_li_tag.append(skips_reason_em_tag)
+                skips_ul_tag.append(skips_li_tag)
+
+
+def email_reports(session):
     """
     Email results of test run
 
@@ -942,6 +1106,8 @@ def email_reports():
     soup = BeautifulSoup(html_data, "html.parser")
 
     parse_html_for_email(soup)
+    if config.RUN['cli_params'].get('squad_analysis'):
+        add_squad_analysis_to_email(session, soup)
     part1 = MIMEText(soup, 'html')
     msg.attach(part1)
     try:
@@ -1350,7 +1516,7 @@ def ceph_health_check_base(namespace=None):
         f"oc -n {namespace} get pod -l 'app=rook-ceph-tools' "
         f"-o jsonpath='{{.items[0].metadata.name}}'"
     )
-    health = run_cmd(f"oc -n {namespace} exec {tools_pod} ceph health")
+    health = run_cmd(f"oc -n {namespace} exec {tools_pod} -- ceph health")
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
@@ -1461,7 +1627,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
     for tag in tags:
         if not upgrade:
             if (
-                tag['name'] not in constants.LATEST_TAGS
+                not any(t in tag['name'] for t in constants.LATEST_TAGS)
                 and tag['manifest_digest'] == latest_image
             ):
                 return tag['name']
@@ -1472,7 +1638,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
             if not latest_tag_found:
                 continue
             if (
-                tag['name'] not in constants.LATEST_TAGS
+                not any(t in tag['name'] for t in constants.LATEST_TAGS)
                 and tag['manifest_digest'] != latest_image
                 and ocs_version in tag['name']
             ):
@@ -1502,7 +1668,7 @@ def get_next_version_available_for_upgrade(current_tag):
 
     """
     tags = get_ocs_olm_operator_tags()
-    if current_tag in constants.LATEST_TAGS:
+    if any(t in current_tag for t in constants.LATEST_TAGS):
         return current_tag
     current_tag_index = None
     for index, tag in enumerate(tags):
@@ -1516,7 +1682,7 @@ def get_next_version_available_for_upgrade(current_tag):
     ocs_version = config.ENV_DATA['ocs_version']
     for tag in sliced_reversed_tags:
         if (
-            tag['name'] not in constants.LATEST_TAGS
+            not any(t in tag['name'] for t in constants.LATEST_TAGS)
             and ocs_version in tag['name']
         ):
             if config.UPGRADE.get("use_rc_build") and "rc" not in tag['name']:
@@ -1537,16 +1703,16 @@ def load_auth_config():
 
     """
     log.info("Retrieving the authentication config dictionary")
-    auth_file = os.path.join(constants.TOP_DIR, 'data', 'auth.yaml')
+    auth_file = os.path.join(constants.TOP_DIR, 'data', constants.AUTHYAML)
     try:
         with open(auth_file) as f:
             return yaml.safe_load(f)
     except FileNotFoundError:
-        log.error(
+        log.warn(
             f'Unable to find the authentication configuration at {auth_file}, '
             f'please refer to the getting started guide ({constants.AUTH_CONFIG_DOCS})'
         )
-        raise
+        return {}
 
 
 def get_ocs_olm_operator_tags(limit=100):
@@ -1567,7 +1733,7 @@ def get_ocs_olm_operator_tags(limit=100):
     log.info(f"Retrieving OCS OLM Operator tags (limit {limit})")
     try:
         quay_access_token = load_auth_config()['quay']['access_token']
-    except KeyError:
+    except (KeyError, TypeError):
         log.error(
             'Unable to retrieve the access token for quay, please refer to '
             f'the getting started guide ({constants.AUTH_CONFIG_DOCS}) '
@@ -1575,8 +1741,19 @@ def get_ocs_olm_operator_tags(limit=100):
         )
         raise
     headers = {'Authorization': f'Bearer {quay_access_token}'}
+    image = "ocs-registry"
+    try:
+        ocs_version = float(config.ENV_DATA.get('ocs_version'))
+        if ocs_version < 4.5:
+            image = "ocs-olm-operator"
+    except (ValueError, TypeError):
+        log.warning("Invalid ocs_version given, defaulting to ocs-registry image")
+        pass
     resp = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=limit),
+        constants.OPERATOR_CS_QUAY_API_QUERY.format(
+            tag_limit=limit,
+            image=image,
+        ),
         headers=headers
     )
     if not resp.ok:
@@ -1599,7 +1776,7 @@ def check_if_executable_in_path(exec_name):
     return which(exec_name) is not None
 
 
-def upload_file(server, localpath, remotepath, user=None, password=None):
+def upload_file(server, localpath, remotepath, user=None, password=None, key_file=None):
     """
     Upload a file to remote server
 
@@ -1612,16 +1789,25 @@ def upload_file(server, localpath, remotepath, user=None, password=None):
     """
     if not user:
         user = 'root'
-
-    ssh = SSHClient()
-    ssh.set_missing_host_key_policy(
-        AutoAddPolicy())
-    ssh.connect(hostname=server, username=user, password=password)
-    sftp = ssh.open_sftp()
-    log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
-    sftp.put(localpath, remotepath)
-    sftp.close()
-    ssh.close()
+    try:
+        ssh = SSHClient()
+        ssh.set_missing_host_key_policy(AutoAddPolicy())
+        if password:
+            ssh.connect(hostname=server, username=user, password=password)
+        else:
+            log.info(key_file)
+            ssh.connect(hostname=server, username=user, key_filename=key_file)
+        sftp = ssh.open_sftp()
+        log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
+        sftp.put(localpath, remotepath)
+        sftp.close()
+        ssh.close()
+    except AuthenticationException as authException:
+        log.error(f"Authentication failed: {authException}")
+        raise authException
+    except SSHException as sshException:
+        log.error(f"SSH connection failed: {sshException}")
+        raise sshException
 
 
 def read_file_as_str(filepath):
@@ -1778,6 +1964,7 @@ def convert_yaml2tfvars(yaml):
     from ocs_ci.utility.templating import load_yaml
     data = load_yaml(yaml)
     tfvars_file = os.path.splitext(yaml)[0]
+    log.debug(f"Converting {yaml} to {tfvars_file}")
     with open(tfvars_file, "w+") as fd:
         for key, val in data.items():
             if key == "control_plane_ignition":
@@ -1790,6 +1977,10 @@ def convert_yaml2tfvars(yaml):
                 fd.write("compute_ignition = <<END_OF_WORKER_IGNITION\n")
                 fd.write(f"{val}\n")
                 fd.write("END_OF_WORKER_IGNITION\n")
+                continue
+
+            if key == "vm_dns_addresses":
+                fd.write(f'vm_dns_addresses = ["{val}"]\n')
                 continue
 
             fd.write(key)
@@ -1901,7 +2092,7 @@ def get_ocs_version_from_image(image):
 
     """
     try:
-        version = image.split(':')[1].lstrip("latest-")
+        version = image.split(':')[1].lstrip("latest-").lstrip("stable-")
         version = Version.coerce(version)
         return "{major}.{minor}".format(
             major=version.major, minor=version.minor
@@ -2013,7 +2204,7 @@ def config_to_string(config):
 
     """
     strio = io.StringIO()
-    config.write(strio)
+    config.write(strio, space_around_delimiters=False)
     return strio.getvalue()
 
 
@@ -2051,29 +2242,15 @@ def convert_device_size(unformatted_size, units_to_covert_to):
 
     """
     units = unformatted_size[-2:]
-    absolute_size = int(unformatted_size[:-2])
-
-    if units_to_covert_to == 'TB':
-        if units == 'Ti':
-            return absolute_size
-        elif units == 'Gi':
-            return absolute_size * 1024
-        elif units == 'Mi':
-            return absolute_size * 1024 * 1024
-    elif units_to_covert_to == 'GB':
-        if units == 'Ti':
-            return absolute_size / 1024
-        elif units == 'Gi':
-            return absolute_size
-        elif units == 'Mi':
-            return absolute_size * 1024
-    elif units_to_covert_to == 'MB':
-        if units == 'Ti':
-            return absolute_size / 1024 / 1024
-        elif units == 'Gi':
-            return absolute_size / 1024
-        elif units == 'Mi':
-            return absolute_size
+    abso = int(unformatted_size[:-2])
+    conversion = {
+        'TB': {'Ti': abso, 'Gi': abso / 1000, 'Mi': abso / 1e+6, 'Ki': abso / 1e+9},
+        'GB': {'Ti': abso * 1000, 'Gi': abso, 'Mi': abso / 1000, 'Ki': abso / 1e+6},
+        'MB': {'Ti': abso * 1e+6, 'Gi': abso * 1000, 'Mi': abso, 'Ki': abso / 1000},
+        'KB': {'Ti': abso * 1e+9, 'Gi': abso * 1e+6, 'Mi': abso * 1000, 'Ki': abso},
+        'B': {'Ti': abso * 1e+12, 'Gi': abso * 1e+9, 'Mi': abso * 1e+6, 'Ki': abso * 1000}
+    }
+    return conversion[units_to_covert_to][units]
 
 
 def mirror_image(image):
@@ -2280,3 +2457,357 @@ def add_stage_cert():
         f"oc patch image.config.openshift.io cluster --type=merge"
         f" -p '{additional_trusted_ca_patch}'"
     )
+
+
+def get_terraform(version=None, bin_dir=None):
+    """
+    Downloads the terraform binary
+
+    Args:
+        version (str): Version of the terraform to download
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+
+    Returns:
+        str: Path to the terraform binary
+
+    """
+    if platform.system() == "Darwin":
+        os_type = "darwin"
+    elif platform.system() == "Linux":
+        os_type = "linux"
+    else:
+        raise UnsupportedOSType
+
+    version = version or config.DEPLOYMENT['terraform_version']
+    bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
+    terraform_zip_file = f"terraform_{version}_{os_type}_amd64.zip"
+    terraform_filename = "terraform"
+    terraform_binary_path = os.path.join(bin_dir, terraform_filename)
+    log.info(f"Downloading terraform version {version}")
+    previous_dir = os.getcwd()
+    os.chdir(bin_dir)
+    url = (
+        f"https://releases.hashicorp.com/terraform/{version}/"
+        f"{terraform_zip_file}"
+    )
+    download_file(url, terraform_zip_file)
+    run_cmd(f"unzip -o {terraform_zip_file}")
+    delete_file(terraform_zip_file)
+    # return to the previous working directory
+    os.chdir(previous_dir)
+
+    return terraform_binary_path
+
+
+def get_terraform_ignition_provider(terraform_dir, version=None):
+    """
+    Downloads the terraform ignition provider
+
+    Args:
+        terraform_dir (str): Path to terraform working directory
+        version (str): Version of the terraform ignition provider to download
+
+    """
+    version = version or constants.TERRAFORM_IGNITION_PROVIDER_VERSION
+    terraform_ignition_provider_zip_file = (
+        f"terraform-provider-ignition-{version}-linux-amd64.tar.gz"
+    )
+    terraform_ignition_provider_dir = (
+        f"terraform-provider-ignition-{version}-linux-amd64"
+    )
+    terraform_plugins_path = ".terraform/plugins/linux_amd64/"
+    log.info(f"Downloading terraform ignition proivider version {version}")
+    previous_dir = os.getcwd()
+    os.chdir(terraform_dir)
+    url = (
+        "https://github.com/community-terraform-providers/"
+        f"terraform-provider-ignition/releases/download/{version}/"
+        f"{terraform_ignition_provider_zip_file}"
+    )
+
+    # Download and untar
+    download_file(url, terraform_ignition_provider_zip_file)
+    run_cmd(f"tar xzf {terraform_ignition_provider_zip_file}")
+
+    # move the ignition provider binary to plugins path
+    create_directory_path(terraform_plugins_path)
+    move(
+        f"{terraform_ignition_provider_dir}/terraform-provider-ignition",
+        terraform_plugins_path
+    )
+
+    # delete the downloaded files
+    delete_file(terraform_ignition_provider_zip_file)
+    delete_dir(terraform_ignition_provider_dir)
+
+    # return to the previous working directory
+    os.chdir(previous_dir)
+
+
+def get_module_ip(terraform_state_file, module):
+    """
+    Gets the node IP from terraform.tfstate file
+
+    Args:
+        terraform_state_file (str): Path to terraform state file
+        module (str): Module name in terraform.tfstate file
+            e.g: constants.LOAD_BALANCER_MODULE
+
+    Returns:
+        list: IP of the node
+
+    """
+    ips = []
+    with open(terraform_state_file) as fd:
+        obj = hcl.load(fd)
+
+        if config.ENV_DATA.get('folder_structure'):
+            resources = obj['resources']
+            log.debug(f"Extracting module information for {module}")
+            log.debug(f"Resource in {terraform_state_file}: {resources}")
+            for resource in resources:
+                if (
+                    resource.get('module') == module
+                    and resource.get('mode') == "data"
+                ):
+                    for each_resource in resource['instances']:
+                        resource_body = each_resource['attributes']['body']
+                        ips.append(resource_body.split("\"")[3])
+        else:
+            modules = obj['modules']
+            target_module = module.split("_")[1]
+            log.debug(f"Extracting module information for {module}")
+            log.debug(f"Modules in {terraform_state_file}: {modules}")
+            for each_module in modules:
+                if target_module in each_module['path']:
+                    return each_module['outputs']['ip_addresses']['value']
+
+        return ips
+
+
+def set_aws_region(region=None):
+    """
+    Exports environment variable AWS_REGION
+
+    Args:
+        region (str): AWS region to export
+
+    """
+    log.debug("Exporting environment variable AWS_REGION")
+    region = region or config.ENV_DATA['region']
+    os.environ['AWS_REGION'] = region
+
+
+def get_system_architecture():
+    """
+    Get output from 'uname -m' command run on first worker node.
+
+    Returns:
+        str: Architecture of system
+
+    """
+    from ocs_ci.ocs.node import get_typed_nodes
+
+    log.info('Checking architecture of system')
+    node = get_typed_nodes(node_type=constants.WORKER_MACHINE)[0]
+    return node.ocp.exec_oc_debug_cmd(node.data['metadata']['name'], ['uname -m'])
+
+
+def wait_for_machineconfigpool_status(node_type, timeout=900):
+    """
+    Check for Machineconfigpool status
+
+    Args:
+        node_type (str): The node type to check machineconfigpool
+            status is updated.
+            e.g: worker, master and all if we want to check for all nodes
+        timeout (int): Time in seconds to wait
+
+    """
+    # importing here to avoid dependencies
+    from ocs_ci.ocs import ocp
+    node_types = [node_type]
+    if node_type == "all":
+        node_types = [
+            f"{constants.WORKER_MACHINE}", f"{constants.MASTER_MACHINE}"
+        ]
+
+    for role in node_types:
+        log.info(f"Checking machineconfigpool status for {role} nodes")
+        ocp_obj = ocp.OCP(
+            kind=constants.MACHINECONFIGPOOL, resource_name=role
+        )
+        machine_count = ocp_obj.get()['status']['machineCount']
+
+        assert ocp_obj.wait_for_resource(
+            condition=str(machine_count),
+            column="READYMACHINECOUNT",
+            timeout=timeout,
+            sleep=5,
+        )
+
+
+def configure_chrony_and_wait_for_machineconfig_status(
+    node_type=constants.WORKER_MACHINE, timeout=900
+):
+    """
+    Configure chrony on the nodes
+
+    Args:
+        node_type (str): The node type to configure chrony
+            e.g: worker, master and all if we want to configure on all nodes
+        timeout (int): Time in seconds to wait
+
+    """
+    # importing here to avoid dependencies
+    from ocs_ci.utility.templating import load_yaml
+    from ocs_ci.ocs.resources.ocs import OCS
+    chrony_data = load_yaml(constants.NTP_CHRONY_CONF)
+
+    node_types = [node_type]
+    if node_type == "all":
+        node_types = [
+            f"{constants.WORKER_MACHINE}", f"{constants.MASTER_MACHINE}"
+        ]
+
+    for role in node_types:
+        log.info(f"Creating chrony for {role} nodes")
+        chrony_data['metadata']['labels']['machineconfiguration.openshift.io/role'] = role
+        chrony_data['metadata']['name'] = f"{role}-chrony-configuration"
+        chrony_obj = OCS(**chrony_data)
+        chrony_obj.create()
+
+        # sleep here to start update machineconfigpool status
+        time.sleep(60)
+        wait_for_machineconfigpool_status(role, timeout=timeout)
+
+
+def modify_csv(csv, replace_from, replace_to):
+    """
+    Modify the CSV
+
+    Args:
+        csv (str): The CSV name
+        replace_from (str): The pattern to replace from in the CSV
+        replace_to (str): The pattern to replace to in the CSV
+
+    """
+    data = (
+        f"oc -n openshift-storage get csv {csv} -o yaml | sed"
+        f" 's,{replace_from},{replace_to},g' | oc replace -f -"
+    )
+    log.info(
+        f"CSV {csv} will be modified: {replace_from} will be replaced "
+        f"with {replace_to}.\nThe command that will be used for that is:\n{data}"
+    )
+
+    temp_file = NamedTemporaryFile(
+        mode='w+', prefix='csv_modification', suffix='.sh'
+    )
+
+    with open(temp_file.name, 'w') as t_file:
+        t_file.writelines(data)
+
+    run_cmd(f"chmod 777 {temp_file.name}")
+    run_cmd(f"sh {temp_file.name}")
+
+
+def check_for_rhcos_images(url):
+    """
+    Check for rhcos images are present in given location
+
+    Args:
+        url (str): rhcos_images url
+    Returns:
+        (bool): True if images present if not false
+
+    """
+    r = requests.head(url)
+    return r.status_code == requests.codes.ok
+
+
+def download_file_from_git_repo(git_repo_url, path_to_file_in_git, filename):
+    """
+    Download a file from a specified git repository
+
+    Args:
+        git_repo_url (str): The git repository url
+        path_to_file_in_git (str): Path to the file to download
+            in git repository
+        filename (str): Name of the file to write the download to
+
+    """
+    log.debug(
+        f"Download file '{path_to_file_in_git}' from "
+        f"git repository {git_repo_url} to local file '{filename}'."
+    )
+    temp_dir = mkdtemp()
+    git.Repo.clone_from(git_repo_url, temp_dir, branch='master', depth=1)
+    move(os.path.join(temp_dir, path_to_file_in_git), filename)
+    rmtree(temp_dir)
+
+
+def skipif_upgraded_from(version_list):
+    """
+    This function evaluates the condition to skip a test if the cluster
+    is upgraded from a particular OCS version
+
+    Args:
+        version_list (list): List of versions to check
+
+    Return:
+        (bool): True if test needs to be skipped else False
+
+    """
+    try:
+        from ocs_ci.ocs.resources.ocs import get_ocs_csv
+        skip_this = False
+        version_list = [version_list] if isinstance(version_list, str) else version_list
+        ocs_csv = get_ocs_csv()
+        csv_info = ocs_csv.get()
+        prev_version = csv_info.get('spec').get('replaces', '')
+        for version in version_list:
+            if f'.v{version}' in prev_version:
+                skip_this = True
+                break
+        return skip_this
+    except Exception as err:
+        log.error(str(err))
+        return False
+
+
+def get_cluster_id(cluster_path):
+    """
+    Get ClusterID from metadata.json in given cluster_path
+
+    Args:
+        cluster_path: path to cluster install directory
+
+    Returns:
+        str: metadata.json['clusterID']
+
+    """
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file) as f:
+        metadata = json.load(f)
+    return metadata["clusterID"]
+
+
+def get_ocp_upgrade_history():
+    """
+    Gets the OCP upgrade history for the cluster
+
+    Returns:
+        list: List of OCP upgrade paths. Latest version in the
+            beginning of the list
+
+    """
+    # importing here to avoid circular imports
+    from ocs_ci.ocs.ocp import OCP
+    ocp = OCP(kind="clusterversion")
+    cluster_version_info = ocp.get("version")
+    upgrade_history_info = cluster_version_info['status']['history']
+    upgrade_history = [
+        each_upgrade['version'] for each_upgrade in upgrade_history_info
+    ]
+    return upgrade_history

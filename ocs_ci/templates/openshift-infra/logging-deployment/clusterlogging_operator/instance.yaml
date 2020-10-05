@@ -29,4 +29,9 @@ spec:
   collection:
     logs:
       type: "fluentd"
-      fluentd: {}
+      fluentd:
+        tolerations:
+          - key: node.ocs.openshift.io/storage
+            operator: Equal
+            effect: NoSchedule
+            value: "true"

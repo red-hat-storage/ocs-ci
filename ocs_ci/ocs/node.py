@@ -12,7 +12,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.ocs import machine
 import tests.helpers
 from ocs_ci.ocs.resources import pod
@@ -112,13 +112,15 @@ def wait_for_nodes_status(
         for sample in TimeoutSampler(timeout, 3, get_node_objs, nodes_not_in_state):
             for node in sample:
                 if node.ocp.get_resource_status(node.name) == status:
+                    log.info(f"Node {node.name} reached status {status}")
                     nodes_not_in_state.remove(node.name)
             if not nodes_not_in_state:
                 break
-
+        log.info(f"The following nodes reached status {status}: {node_names}")
     except TimeoutExpiredError:
         log.error(
-            f"The following nodes haven't reached status {status}: {node_names}"
+            f"The following nodes haven't reached status {status}: "
+            f"{nodes_not_in_state}"
         )
         raise exceptions.ResourceWrongStatusException(
             node_names, [n.describe() for n in get_node_objs(node_names)]
@@ -253,13 +255,21 @@ def get_node_ips(node_type='worker'):
         raise NotImplementedError
 
 
-def add_new_node_and_label_it(machineset_name):
+def add_new_node_and_label_it(
+    machineset_name, num_nodes=1, mark_for_ocs_label=True
+):
     """
-    Add a new node and label it
+    Add a new node for ipi and label it
 
     Args:
         machineset_name (str): Name of the machine set
+        num_nodes (int): number of nodes to add
+        mark_for_ocs_label (bool): True if label the new node
     eg: add_new_node_and_label_it("new-tdesala-zlqzn-worker-us-east-2a")
+
+    Returns:
+        list: new spun node names
+
     """
     # Get the initial nodes list
     initial_nodes = tests.helpers.get_worker_nodes()
@@ -272,11 +282,11 @@ def add_new_node_and_label_it(machineset_name):
     )
 
     # Increase its replica count
-    log.info("Increasing the replica count by 1")
-    machine.add_node(machineset_name, count=machineset_replica_count + 1)
+    log.info(f"Increasing the replica count by {num_nodes}")
+    machine.add_node(machineset_name, count=machineset_replica_count + num_nodes)
     log.info(
         f"{machineset_name} now has replica "
-        f"count: {machineset_replica_count + 1}"
+        f"count: {machineset_replica_count + num_nodes}"
     )
 
     # wait for the new node to come to ready state
@@ -285,42 +295,46 @@ def add_new_node_and_label_it(machineset_name):
 
     # Get the node name of new spun node
     nodes_after_new_spun_node = tests.helpers.get_worker_nodes()
-    new_spun_node = list(
+    new_spun_nodes = list(
         set(nodes_after_new_spun_node) - set(initial_nodes)
     )
-    log.info(f"New spun node is {new_spun_node}")
+    log.info(f"New spun nodes: {new_spun_nodes}")
 
     # Label it
-    node_obj = ocp.OCP(kind='node')
-    node_obj.add_label(
-        resource_name=new_spun_node[0],
-        label=constants.OPERATOR_NODE_LABEL
-    )
-    log.info(
-        f"Successfully labeled {new_spun_node} with OCS storage label"
-    )
-    return new_spun_node[0]
+    if mark_for_ocs_label:
+        node_obj = ocp.OCP(kind='node')
+        for new_spun_node in new_spun_nodes:
+            node_obj.add_label(
+                resource_name=new_spun_node,
+                label=constants.OPERATOR_NODE_LABEL
+            )
+            logging.info(
+                f"Successfully labeled {new_spun_node} with OCS storage label"
+            )
+
+    return new_spun_nodes
 
 
-def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True):
+def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True, node_conf=None):
     """
-    Add a new node for aws upi platform and label it
+    Add a new node for aws/vmware upi platform and label it
 
     Args:
         node_type (str): Type of node, RHEL or RHCOS
         num_nodes (int): number of nodes to add
         mark_for_ocs_label (bool): True if label the new node
+        node_conf (dict): The node configurations.
 
-    Retuns:
-        bool: True if node addition has done successfully
+    Returns:
+        list: new spun node names
 
     """
-
+    node_conf = node_conf or {}
     initial_nodes = tests.helpers.get_worker_nodes()
     from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
     plt = PlatformNodesFactory()
     node_util = plt.get_nodes_platform()
-    node_util.create_and_attach_nodes_to_cluster({}, node_type, num_nodes)
+    node_util.create_and_attach_nodes_to_cluster(node_conf, node_type, num_nodes)
     for sample in TimeoutSampler(
         timeout=600, sleep=6, func=tests.helpers.get_worker_nodes
     ):
@@ -334,6 +348,7 @@ def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True):
     )
 
     new_spun_nodes = list(set(nodes_after_exp) - set(initial_nodes))
+    log.info(f"New spun nodes: {new_spun_nodes}")
     if node_type == constants.RHEL_OS:
         set_selinux_permissions(workers=new_spun_nodes)
 
@@ -347,7 +362,7 @@ def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True):
             logging.info(
                 f"Successfully labeled {new_spun_node} with OCS storage label"
             )
-    return True
+    return new_spun_nodes
 
 
 def get_node_logs(node_name):
@@ -465,6 +480,39 @@ def get_node_resource_utilization_from_oc_describe(
     return utilization_dict
 
 
+def get_running_pod_count_from_node(
+    nodename=None, node_type=constants.WORKER_MACHINE
+):
+    """
+    Gets the node running pod count using oc describe node
+
+    Args:
+        nodename (str) : The node name
+        node_type (str) : The node type (e.g. master, worker)
+
+    Returns:
+        dict : Node name and its pod_count
+
+    """
+
+    node_names = [nodename] if nodename else [
+        node.name for node in get_typed_nodes(node_type=node_type)
+    ]
+    obj = ocp.OCP()
+    pod_count_dict = {}
+    for node in node_names:
+        output = obj.exec_oc_cmd(
+            command=f"describe node {node}", out_yaml_format=False
+        ).split("\n")
+        for line in output:
+            if 'Non-terminated Pods:  ' in line:
+                count_line = line.split(' ')
+                pod_count = re.findall(r'\d+', [i for i in count_line if i][2])
+        pod_count_dict[node] = int(pod_count[0])
+
+    return pod_count_dict
+
+
 def print_table_node_resource_utilization(utilization_dict, field_names):
     """
     Print table of node utilization
@@ -562,19 +610,21 @@ def get_both_osd_and_app_pod_running_node(
 
 def get_node_from_machine_name(machine_name):
     """
-    Get node name from a given machine_name
+    Get node name from a given machine_name.
 
-    machine_name (str): Name of Machine
+    Args:
+        machine_name (str): Name of Machine
 
     Returns:
-        str: Name of node
+        str: Name of Node (or None if not found)
+
     """
     machine_objs = get_machine_objs()
     for machine_obj in machine_objs:
         if machine_obj.name == machine_name:
-            return machine_obj.get().get(
-                'status'
-            ).get('addresses')[1].get('address')
+            machine_dict = machine_obj.get()
+            node_name = machine_dict['status']['nodeRef']['name']
+            return node_name
 
 
 def get_provider():
@@ -612,6 +662,21 @@ def get_compute_node_names():
             compute_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL]
             for compute_obj in compute_node_objs
         ]
+    elif (
+        platform == constants.BAREMETAL_PLATFORM
+        or platform == constants.BAREMETALPSI_PLATFORM
+    ):
+        compute_node_objs = get_typed_nodes()
+        return [
+            compute_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL].replace('.', '-')
+            for compute_obj in compute_node_objs
+        ]
+    elif platform == constants.IBM_POWER_PLATFORM:
+        compute_node_objs = get_typed_nodes()
+        return [
+            compute_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL].replace('.', '-')
+            for compute_obj in compute_node_objs
+        ]
     else:
         raise NotImplementedError
 
@@ -633,3 +698,332 @@ def get_ocs_nodes(num_of_nodes=None):
     num_of_nodes = num_of_nodes or len(ocs_nodes)
 
     return ocs_nodes[:num_of_nodes]
+
+
+def get_node_name(node_obj):
+    """
+    Get oc node's name
+
+    Args:
+        node_obj (node_obj): oc node object
+
+    Returns:
+        str: node's name
+
+    """
+    node_items = node_obj.get('items')
+    return node_items['metadata']['name']
+
+
+def check_nodes_specs(min_memory, min_cpu):
+    """
+    Check that the cluster worker nodes meet the required minimum CPU and memory
+
+    Args:
+        min_memory (int): The required minimum memory in bytes
+        min_cpu (int): The required minimum number of vCPUs
+
+    Returns:
+        bool: True if all nodes meet the required minimum specs, False otherwise
+
+    """
+    nodes = get_typed_nodes()
+    log.info(
+        f"Checking following nodes with worker selector (assuming that "
+        f"this is ran in CI and there are no worker nodes without OCS):\n"
+        f"{[node.get().get('metadata').get('name') for node in nodes]}"
+    )
+    for node in nodes:
+        real_cpu = int(node.get()['status']['capacity']['cpu'])
+        real_memory = convert_device_size(node.get()['status']['capacity']['memory'], 'B')
+        if real_cpu < min_cpu or real_memory < min_memory:
+            log.warning(
+                f"Node {node.get().get('metadata').get('name')} specs don't meet "
+                f" the minimum required specs.\n The requirements are: "
+                f"{min_cpu} CPUs and {min_memory} Memory\nThe node has: {real_cpu} "
+                f"CPUs and {real_memory} Memory"
+            )
+            return False
+    log.info(
+        f"Cluster worker nodes meet the minimum requirements of "
+        f"{min_cpu} CPUs and {min_memory} Memory"
+    )
+    return True
+
+
+def delete_and_create_osd_node_ipi(osd_node_name):
+    """
+    Unschedule, drain and delete osd node, and creating a new osd node.
+    At the end of the function there should be the same number of osd nodes as
+    it was in the beginning, and also ceph health should be OK.
+
+    This function is for any IPI platform.
+
+    Args:
+        osd_node_name (str): the name of the osd node
+
+    Returns:
+        str: The new node name
+
+    """
+    log.info("Going to unschedule, drain and delete %s node", osd_node_name)
+    # Unscheduling node
+    unschedule_nodes([osd_node_name])
+    # Draining Node
+    drain_nodes([osd_node_name])
+    log.info("Getting machine name from specified node name")
+    machine_name = machine.get_machine_from_node_name(osd_node_name)
+    log.info(f"Node {osd_node_name} associated machine is {machine_name}")
+    log.info(f"Deleting machine {machine_name} and waiting for new machine to come up")
+    machine.delete_machine_and_check_state_of_new_spinned_machine(machine_name)
+    new_machine_list = machine.get_machines()
+    for machines in new_machine_list:
+        # Trimming is done to get just machine name
+        # eg:- machine_name:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b-nlgkr
+        # After trimming:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b
+        if re.match(machines.name[:-6], machine_name):
+            new_machine_name = machines.name
+    machineset_name = machine.get_machineset_from_machine_name(new_machine_name)
+    log.info("Waiting for new worker node to be in ready state")
+    machine.wait_for_new_node_to_be_ready(machineset_name)
+    new_node_name = get_node_from_machine_name(new_machine_name)
+    log.info("Adding ocs label to newly created worker node")
+    node_obj = ocp.OCP(kind='node')
+    node_obj.add_label(
+        resource_name=new_node_name,
+        label=constants.OPERATOR_NODE_LABEL
+    )
+    log.info(
+        f"Successfully labeled {new_node_name} with OCS storage label"
+    )
+
+    return new_node_name
+
+
+def delete_and_create_osd_node_aws_upi(osd_node_name):
+    """
+    Unschedule, drain and delete osd node, and creating a new osd node.
+    At the end of the function there should be the same number of osd nodes as
+    it was in the beginning, and also ceph health should be OK.
+    This function is for AWS UPI.
+
+    Args:
+        osd_node_name (str): the name of the osd node
+
+    Returns:
+        str: The new node name
+
+    """
+
+    osd_node = get_node_objs(node_names=[osd_node_name])[0]
+    az = get_node_az(osd_node)
+    from ocs_ci.ocs.platform_nodes import AWSNodes
+    aws_nodes = AWSNodes()
+    stack_name_of_deleted_node = aws_nodes.get_stack_name_of_node(osd_node_name)
+
+    remove_nodes([osd_node])
+
+    log.info(f"name of deleted node = {osd_node_name}")
+    log.info(f"availability zone of deleted node = {az}")
+    log.info(f"stack name of deleted node = {stack_name_of_deleted_node}")
+
+    if config.ENV_DATA.get('rhel_workers'):
+        node_type = constants.RHEL_OS
+    else:
+        node_type = constants.RHCOS
+
+    log.info("Preparing to create a new node...")
+    node_conf = {'stack_name': stack_name_of_deleted_node}
+    new_node_names = add_new_node_and_label_upi(
+        node_type, 1, node_conf=node_conf
+    )
+
+    return new_node_names[0]
+
+
+def get_node_az(node):
+    """
+    Get the node availability zone
+
+    Args:
+        node (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        str: The name of the node availability zone
+
+    """
+    labels = node.get().get('metadata', {}).get('labels', {})
+    return labels.get('topology.kubernetes.io/zone')
+
+
+def delete_and_create_osd_node_vsphere_upi(
+    osd_node_name, use_existing_node=False
+):
+    """
+    Unschedule, drain and delete osd node, and creating a new osd node.
+    At the end of the function there should be the same number of osd nodes as
+    it was in the beginning, and also ceph health should be OK.
+    This function is for vSphere UPI.
+
+    Args:
+        osd_node_name (str): the name of the osd node
+        use_existing_node (bool): If False, create a new node and label it.
+            If True, use an existing node to replace the deleted node
+            and label it.
+
+    Returns:
+        str: The new node name
+
+    """
+
+    osd_node = get_node_objs(node_names=[osd_node_name])[0]
+    remove_nodes([osd_node])
+
+    log.info(f"name of deleted node = {osd_node_name}")
+
+    if config.ENV_DATA.get('rhel_workers'):
+        node_type = constants.RHEL_OS
+    else:
+        node_type = constants.RHCOS
+
+    if not use_existing_node:
+        log.info("Preparing to create a new node...")
+        new_node_names = add_new_node_and_label_upi(node_type, 1)
+        new_node_name = new_node_names[0]
+    else:
+        node_not_in_ocs = get_worker_nodes_not_in_ocs()[0]
+        log.info(
+            f"Preparing to replace the node {osd_node_name} "
+            f"with an existing node {node_not_in_ocs.name}"
+        )
+        if node_type == constants.RHEL_OS:
+            set_selinux_permissions(workers=[node_not_in_ocs])
+        label_nodes([node_not_in_ocs])
+        new_node_name = node_not_in_ocs.name
+
+    return new_node_name
+
+
+def label_nodes(nodes, label=constants.OPERATOR_NODE_LABEL):
+    """
+    Label nodes
+
+    Args:
+        nodes (list): list of node objects need to label
+        label (str): New label to be assigned for these nodes.
+            Default value is the OCS label
+
+    """
+    node_obj = ocp.OCP(kind='node')
+    for new_node_to_label in nodes:
+        node_obj.add_label(
+            resource_name=new_node_to_label.name,
+            label=label
+        )
+        logging.info(
+            f"Successfully labeled {new_node_to_label.name} "
+            f"with OCS storage label"
+        )
+
+
+def get_worker_nodes_not_in_ocs():
+    """
+    Get the worker nodes that are not ocs labeled.
+
+    Returns:
+          list: list of worker node objects that are not ocs labeled
+
+    """
+    ocs_nodes = get_ocs_nodes()
+    ocs_node_names = [n.name for n in ocs_nodes]
+    worker_nodes = get_typed_nodes(constants.WORKER_MACHINE)
+    return [n for n in worker_nodes if n.name not in ocs_node_names]
+
+
+def node_replacement_verification_steps_user_side(old_node_name, new_node_name):
+    """
+    Check the verification steps that the user should perform after the process
+    of node replacement as described in the docs
+
+    Args:
+        old_node_name (str): The name of the old node that has been deleted
+        new_node_name (str): The name of the new node that has been created
+
+    Returns:
+        bool: True if all the verification steps passed. False otherwise
+
+    """
+    ocs_nodes = get_ocs_nodes()
+    ocs_node_names = [n.name for n in ocs_nodes]
+    if new_node_name not in ocs_node_names:
+        log.warning("The new node not found in ocs nodes")
+        return False
+    if old_node_name in ocs_node_names:
+        log.warning("The old node name found in ocs nodes")
+        return False
+
+    csi_cephfsplugin_pods = pod.get_plugin_pods(interface=constants.CEPHFILESYSTEM)
+    csi_rbdplugin_pods = pod.get_plugin_pods(interface=constants.CEPHBLOCKPOOL)
+    csi_plugin_pods = csi_cephfsplugin_pods + csi_rbdplugin_pods
+    if not all([p.status() == constants.STATUS_RUNNING for p in csi_plugin_pods]):
+        log.warning("Not all csi rbd and cephfs plugin pods in status running")
+        return False
+
+    # It can take some time until all the ocs pods are up and running
+    # after the process of node replacement
+    if not pod.wait_for_pods_to_be_running():
+        log.warning("Not all the pods in running state")
+        return False
+
+    log.info("Verification steps from the user side finish successfully")
+    return True
+
+
+def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
+    """
+    Check the verification steps from the Ceph side, after the process
+    of node replacement as described in the docs
+
+    Args:
+        old_node_name (str): The name of the old node that has been deleted
+        new_node_name (str): The name of the new node that has been created
+
+    Returns:
+        bool: True if all the verification steps passed. False otherwise
+
+    """
+    if old_node_name == new_node_name:
+        log.warning("Hostname didn't change")
+        return False
+
+    wait_for_nodes_status([new_node_name])
+    # It can take some time until all the ocs pods are up and running
+    # after the process of node replacement
+    if not pod.wait_for_pods_to_be_running():
+        log.warning("Not all the pods in running state")
+        return False
+
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_osd_status = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd status')
+    if new_node_name not in ceph_osd_status:
+        log.warning("new node name not found in 'ceph osd status' output")
+        return False
+    if old_node_name in ceph_osd_status:
+        log.warning("old node name found in 'ceph osd status' output")
+        return False
+
+    osd_pods_obj = pod.get_osd_pods()
+    osd_node_names = [pod.get_pod_node(p).name for p in osd_pods_obj]
+    if new_node_name not in osd_node_names:
+        log.warning("the new hostname not found in osd node names")
+        return False
+    if old_node_name in osd_node_names:
+        log.warning("the old hostname found in osd node names")
+        return False
+
+    from ocs_ci.ocs.cluster import check_ceph_osd_tree_after_node_replacement
+    if not check_ceph_osd_tree_after_node_replacement():
+        return False
+
+    log.info("Verification steps from the ceph side finish successfully")
+    return True

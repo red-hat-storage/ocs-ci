@@ -18,8 +18,8 @@ from tests import helpers
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, NonUpgradedImagesFoundError, UnavailableResourceException,
-    TimeoutExpiredError
+    CommandFailed, NonUpgradedImagesFoundError, ResourceWrongStatusException,
+    TimeoutExpiredError, UnavailableResourceException
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
@@ -304,6 +304,33 @@ class Pod(OCS):
         self.io_params['bs'] = bs
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
+    def fillup_fs(self, size, fio_filename=None):
+        """
+        Execute FIO on a pod to fillup a file
+        This will run sequantial IO of 1MB block size to fill up the fill with data
+        This operation will run in background and will store the results in
+        'self.thread.result()'.
+        In order to wait for the output and not continue with the test until
+        FIO is done, call self.thread.result() right after calling run_io.
+        See tests/manage/test_pvc_deletion_during_io.py::test_run_io
+        for usage of FIO
+
+        Args:
+            size (str): Size in MB, e.g. '200M'
+            fio_filename(str): Name of fio file created on app pod's mount point
+
+        """
+
+        if not self.wl_setup_done:
+            self.workload_setup(storage_type='fs', jobs=1)
+
+        self.io_params = templating.load_yaml(constants.FIO_IO_FILLUP_PARAMS_YAML)
+        size = size if isinstance(size, str) else f"{size}M"
+        self.io_params['size'] = size
+        if fio_filename:
+            self.io_params['filename'] = fio_filename
+        self.fio_thread = self.wl_obj.run(**self.io_params)
+
     def run_git_clone(self):
         """
         Execute git clone on a pod to simulate a Jenkins user
@@ -498,7 +525,7 @@ def get_csi_provisioner_pod(interface):
     return provisioner_pod
 
 
-def get_rgw_pod(rgw_label=constants.RGW_APP_LABEL, namespace=None):
+def get_rgw_pods(rgw_label=constants.RGW_APP_LABEL, namespace=None):
     """
     Fetches info about rgw pods in the cluster
 
@@ -509,12 +536,31 @@ def get_rgw_pod(rgw_label=constants.RGW_APP_LABEL, namespace=None):
             (default: none)
 
     Returns:
-        Pod object: rgw pod object
+        list: Pod objects of rgw pods
+
     """
     namespace = namespace or config.ENV_DATA['cluster_namespace']
     rgws = get_pods_having_label(rgw_label, namespace)
-    rgw_pod = Pod(**rgws[0])
-    return rgw_pod
+    return [Pod(**rgw) for rgw in rgws]
+
+
+def get_ocs_operator_pod(ocs_label=constants.OCS_OPERATOR_LABEL, namespace=None):
+    """
+    Fetches info about rgw pods in the cluster
+
+    Args:
+        ocs_label (str): label associated with ocs_operator pod
+            (default: defaults.OCS_OPERATOR_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: none)
+
+    Returns:
+        Pod object: ocs_operator pod object
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    ocs_operator = get_pods_having_label(ocs_label, namespace)
+    ocs_operator_pod = Pod(**ocs_operator[0])
+    return ocs_operator_pod
 
 
 def list_ceph_images(pool_name='rbd'):
@@ -1155,46 +1201,22 @@ def plugin_provisioner_leader(interface, namespace=None):
     Returns:
         Pod: csi-cephfsplugin-provisioner or csi-rbdplugin-provisioner leader
             pod
+
     """
-    non_leader_msg = 'failed to acquire lease'
-    lease_acq_msg = 'successfully acquired lease'
-    lease_renew_msg = 'successfully renewed lease'
-    leader_pod = ''
-
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
     if interface == constants.CEPHBLOCKPOOL:
-        pods = get_rbdfsplugin_provisioner_pods(namespace=namespace)
+        lease_cmd = "get leases openshift-storage-rbd-csi-ceph-com -o yaml"
     if interface == constants.CEPHFILESYSTEM:
-        pods = get_cephfsplugin_provisioner_pods(namespace=namespace)
+        lease_cmd = "get leases openshift-storage-cephfs-csi-ceph-com -o yaml"
 
-    pods_log = {}
-    for pod in pods:
-        pods_log[pod] = get_pod_logs(
-            pod_name=pod.name, container='csi-provisioner'
-        ).split('\n')
+    ocp_obj = ocp.OCP(kind=constants.POD, namespace=namespace)
+    lease = ocp_obj.exec_oc_cmd(command=lease_cmd)
+    leader = lease.get('spec').get('holderIdentity').strip()
+    assert leader, "Couldn't identify plugin provisioner leader pod."
+    logger.info(f"Plugin provisioner leader pod is {leader}")
 
-    for pod, log_list in pods_log.items():
-        # Reverse the list to find last occurrence of message without
-        # iterating over all elements
-        log_list.reverse()
-        for log_msg in log_list:
-            # Check for last occurrence of leader messages.
-            # This will be the first occurrence in reversed list.
-            if (lease_renew_msg in log_msg) or (lease_acq_msg in log_msg):
-                curr_index = log_list.index(log_msg)
-                # Ensure that there is no non leader message logged after
-                # the last occurrence of leader message
-                if not any(
-                    non_leader_msg in msg for msg in log_list[:curr_index]
-                ):
-                    assert not leader_pod, (
-                        "Couldn't identify plugin provisioner leader pod by "
-                        "analysing the logs. Found more than one match."
-                    )
-                    leader_pod = pod
-                break
-
-    assert leader_pod, "Couldn't identify plugin provisioner leader pod."
-    logger.info(f"Plugin provisioner leader pod is {leader_pod.name}")
+    ocp_obj._resource_name = leader
+    leader_pod = Pod(**ocp_obj.get())
     return leader_pod
 
 
@@ -1244,6 +1266,48 @@ def download_file_from_pod(pod_name, remotepath, localpath, namespace=None):
     namespace = namespace or constants.DEFAULT_NAMESPACE
     cmd = f"oc -n {namespace} cp {pod_name}:{remotepath} {os.path.expanduser(localpath)}"
     run_cmd(cmd)
+
+
+def wait_for_storage_pods(timeout=200):
+    """
+    Check all OCS pods status, they should be in Running or Completed state
+
+    Args:
+        timeout (int): Number of seconds to wait for pods to get into correct
+            state
+
+    """
+    all_pod_obj = get_all_pods(
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    for pod_obj in all_pod_obj:
+        state = constants.STATUS_RUNNING
+        if any(i in pod_obj.name for i in ['-1-deploy', 'ocs-deviceset']):
+            state = constants.STATUS_COMPLETED
+
+        try:
+            helpers.wait_for_resource_state(
+                resource=pod_obj,
+                state=state,
+                timeout=timeout
+            )
+        except ResourceWrongStatusException:
+            # 'rook-ceph-crashcollector' on the failed node stucks at
+            # pending state. BZ 1810014 tracks it.
+            # Ignoring 'rook-ceph-crashcollector' pod health check as
+            # WA and deleting its deployment so that the pod
+            # disappears. Will revert this WA once the BZ is fixed
+            if 'rook-ceph-crashcollector' in pod_obj.name:
+                ocp_obj = ocp.OCP(
+                    namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                )
+                pod_name = pod_obj.name
+                deployment_name = '-'.join(pod_name.split("-")[:-2])
+                command = f"delete deployment {deployment_name}"
+                ocp_obj.exec_oc_cmd(command=command)
+                logger.info(f"Deleted deployment for pod {pod_obj.name}")
+            else:
+                raise
 
 
 def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
@@ -1378,3 +1442,92 @@ def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
         logging.warning(
             "None of the new osd pods reached the desired status"
         )
+
+
+def get_pod_restarts_count(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Gets the dictionary of pod and its restart count for all the pods in a given namespace
+
+    Returns:
+        dict: dictionary of pod name and its corresponding restart count
+
+    """
+    list_of_pods = get_all_pods(namespace)
+    restart_dict = {}
+    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    for p in list_of_pods:
+        # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
+        if "rook-ceph-osd-prepare" not in p.name and "rook-ceph-drain-canary" not in p.name:
+            restart_dict[p.name] = int(ocp_pod_obj.get_resource(p.name, 'RESTARTS'))
+    logging.info(f"get_pod_restarts_count: restarts dict = {restart_dict}")
+    return restart_dict
+
+
+def check_pods_in_running_state(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    checks whether all the pods in a given namespace are in Running state or not
+
+    Returns:
+        Boolean: True, if all pods in Running state. False, otherwise
+
+    """
+    ret_val = True
+    list_of_pods = get_all_pods(namespace)
+    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    for p in list_of_pods:
+        # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
+        if "rook-ceph-osd-prepare" not in p.name and "rook-ceph-drain-canary" not in p.name:
+            status = ocp_pod_obj.get_resource(p.name, 'STATUS')
+            if status not in "Running":
+                logging.error(f"The pod {p.name} is in {status} state. Expected = Running")
+                ret_val = False
+    return ret_val
+
+
+def get_running_state_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Checks the running state pods in a given namespace.
+
+        Returns:
+            List: all the pod objects that are in running state only
+
+    """
+    list_of_pods = get_all_pods(namespace)
+    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    running_pods_object = list()
+    for pod in list_of_pods:
+        status = ocp_pod_obj.get_resource(pod.name, 'STATUS')
+        if "Running" in status:
+            running_pods_object.append(pod)
+
+    return running_pods_object
+
+
+def wait_for_pods_to_be_running(
+    timeout=200, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+):
+    """
+    Wait for all the pods in a specific namespace to be running.
+
+    Args:
+        timeout (int): time to wait for pods to be running
+        namespace (str): the namespace ot the pods
+
+    Returns:
+         bool: True, if all pods in Running state. False, otherwise
+
+    """
+    try:
+        for pods_running in TimeoutSampler(
+            timeout=timeout, sleep=10, func=check_pods_in_running_state, namespace=namespace
+        ):
+            # Check if all the pods in running state
+            if pods_running:
+                logging.info("All the pods reached status running!")
+                return True
+    except TimeoutExpiredError:
+        logging.warning(
+            f"Not all the pods reached status running "
+            f"after {timeout} seconds"
+        )
+        return False

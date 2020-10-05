@@ -1,0 +1,29 @@
+---
+apiVersion: operator.openshift.io/v1alpha1
+kind: ImageContentSourcePolicy
+metadata:
+  name: olmcontentsourcepolicy
+spec:
+  repositoryDigestMirrors:
+  - mirrors:
+    - quay.io/openshift-qe-optional-operators
+    source: registry.redhat.io/openshift4
+  - mirrors:
+    - quay.io/openshift-qe-optional-operators
+    source: registry-proxy.engineering.redhat.com/rh-osbs
+
+
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: optional-operators
+  namespace: openshift-marketplace
+spec:
+  displayName: Optional operators
+  icon:
+    base64data: ""
+    mediatype: ""
+  image: quay.io/openshift-qe-optional-operators/ocp4-index:latest
+  publisher: Red Hat
+  sourceType: grpc

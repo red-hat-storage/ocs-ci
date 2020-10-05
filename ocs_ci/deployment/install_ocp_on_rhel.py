@@ -9,7 +9,8 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import upload
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.utils import (
-    create_rhelpod, get_ocp_repo
+    create_rhelpod, get_ocp_repo, get_module_ip, get_ocp_version,
+    run_cmd,
 )
 
 
@@ -32,6 +33,17 @@ class OCPINSTALLRHEL(object):
                      'rhel1-2.vavuthu.qe.rh-ocs.com']
 
         """
+        self.terraform_state_file = os.path.join(
+            config.ENV_DATA['cluster_path'],
+            "terraform_data",
+            "terraform.tfstate"
+        )
+        self.haproxy_playbook = os.path.join(
+            constants.CLUSTER_LAUNCHER_VSPHERE_DIR,
+            f"aos-{get_ocp_version('_')}",
+            "ansible_haproxy_configure",
+            "main.yml"
+        )
         self.rhel_worker_nodes = rhel_worker_nodes
         self.ssh_key_pem = config.DEPLOYMENT['ssh_key_private']
         self.pod_ssh_key_pem = os.path.join(
@@ -96,8 +108,24 @@ class OCPINSTALLRHEL(object):
         upload(self.pod_name, self.ops_mirror_pem, constants.PEM_PATH)
         upload(self.pod_name, self.kubeconfig, constants.POD_UPLOADPATH)
         upload(self.pod_name, self.pull_secret_path, constants.POD_UPLOADPATH)
+        if config.ENV_DATA['folder_structure']:
+            inventory_yaml_haproxy = self.create_inventory_for_haproxy()
+            upload(
+                self.pod_name,
+                inventory_yaml_haproxy,
+                constants.POD_UPLOADPATH
+            )
+            cmd = (
+                f"ansible-playbook -i {inventory_yaml_haproxy} "
+                f"{self.haproxy_playbook} --private-key={self.ssh_key_pem} -v"
+            )
+            run_cmd(cmd)
         self.inventory_yaml = self.create_inventory()
-        upload(self.pod_name, self.inventory_yaml, constants.POD_UPLOADPATH)
+        upload(
+            self.pod_name,
+            self.inventory_yaml,
+            constants.POD_UPLOADPATH
+        )
 
     def create_inventory(self):
         """
@@ -125,12 +153,60 @@ class OCPINSTALLRHEL(object):
             constants.TERRAFORM_DATA_DIR,
             constants.INVENTORY_FILE
         )
-        logger.info(f"inventory_config_str: {inventory_config_str}")
-        logger.info(f"inventory_yaml: {inventory_yaml}")
+        logger.debug(f"inventory_config_str: {inventory_config_str}")
+        logger.debug(f"inventory_yaml: {inventory_yaml}")
         with open(inventory_yaml, "w") as f:
             f.write(inventory_config_str)
 
         return inventory_yaml
+
+    def create_inventory_for_haproxy(self):
+        """
+        Creates the inventory file for haproxy
+
+        Returns:
+            str: Path to inventory file for haproxy
+
+        """
+        inventory_data_haproxy = {}
+        inventory_data_haproxy['ssh_key_private'] = self.ssh_key_pem
+        inventory_data_haproxy['platform'] = config.ENV_DATA['platform']
+        inventory_data_haproxy['rhel_worker_nodes'] = self.rhel_worker_nodes
+        lb_address = get_module_ip(
+            self.terraform_state_file,
+            constants.LOAD_BALANCER_MODULE
+        )
+        control_plane_address = get_module_ip(
+            self.terraform_state_file,
+            constants.CONTROL_PLANE
+        )
+        compute_address = get_module_ip(
+            self.terraform_state_file,
+            constants.COMPUTE_MODULE
+        )
+        inventory_data_haproxy['lb'] = lb_address
+        inventory_data_haproxy['masters'] = control_plane_address
+        inventory_data_haproxy['workers'] = compute_address
+
+        logger.info("Generating inventory file for haproxy")
+        _templating = Templating()
+        inventory_template_path_haproxy = os.path.join(
+            "ocp-deployment", constants.INVENTORY_TEMPLATE_HAPROXY
+        )
+        inventory_config_haproxy_str = _templating.render_template(
+            inventory_template_path_haproxy, inventory_data_haproxy
+        )
+        inventory_yaml_haproxy = os.path.join(
+            self.cluster_path,
+            constants.TERRAFORM_DATA_DIR,
+            constants.INVENTORY_FILE_HAPROXY
+        )
+        logger.debug(f"inventory contents for haproxy: {inventory_config_haproxy_str}")
+        logger.debug(f"inventory yaml: {inventory_yaml_haproxy}")
+        with open(inventory_yaml_haproxy, "w") as f:
+            f.write(inventory_config_haproxy_str)
+
+        return inventory_yaml_haproxy
 
     def prepare_rhel_nodes(self):
         """
@@ -138,13 +214,14 @@ class OCPINSTALLRHEL(object):
         """
         for node in self.rhel_worker_nodes:
             # set the hostname
-            cmd = f"sudo hostnamectl set-hostname {node}"
-            self.rhelpod.exec_cmd_on_node(
-                node,
-                self.pod_ssh_key_pem,
-                cmd,
-                user=constants.VM_RHEL_USER
-            )
+            if not config.ENV_DATA['folder_structure']:
+                cmd = f"sudo hostnamectl set-hostname {node}"
+                self.rhelpod.exec_cmd_on_node(
+                    node,
+                    self.pod_ssh_key_pem,
+                    cmd,
+                    user=constants.VM_RHEL_USER
+                )
 
             # upload ocp repo to node
             # considering normal user doesn't have permissions

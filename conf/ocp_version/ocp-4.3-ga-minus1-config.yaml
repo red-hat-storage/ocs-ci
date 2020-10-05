@@ -7,6 +7,7 @@ RUN:
 DEPLOYMENT:
   ocp_url_template: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{version}/{file_name}-{os_type}-{version}.tar.gz"
   installer_version: "4.3-ga"
+  terraform_version: "0.11.14"
   ocp_channel: "stable"
   ocp_version_index: -2
 ENV_DATA:

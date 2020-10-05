@@ -102,6 +102,11 @@ def assign_get_values(
         if app_label in exclude_labels:
             log.debug("ignoring item with app label %s: %s", app_label, item)
             continue
+        if item.get('kind') == constants.NAMESPACE:
+            name = item.get('metadata').get('generateName')
+            if name == 'openshift-must-gather-':
+                log.debug(f"ignoring item: {constants.NAMESPACE} with name {name}")
+                continue
         items_filtered.append(item)
 
     ignored = len(items) - len(items_filtered)

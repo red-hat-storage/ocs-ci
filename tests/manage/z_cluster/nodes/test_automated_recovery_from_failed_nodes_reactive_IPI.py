@@ -18,7 +18,6 @@ from ocs_ci.ocs.node import (
     get_both_osd_and_app_pod_running_node, get_node_objs,
     add_new_node_and_label_it
 )
-from tests.manage.z_cluster.nodes import helpers as nodes_helpers
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
 log = logging.getLogger(__name__)
@@ -63,7 +62,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 *['rbd', 'shutdown'],
                 marks=[
                     pytest.mark.polarion_id("OCS-2102"),
-                    pytest.mark.bugzilla("1830015")
+                    pytest.mark.bugzilla("1845666")
                 ]
             ),
             pytest.param(
@@ -74,7 +73,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 *['cephfs', 'shutdown'],
                 marks=[
                     pytest.mark.polarion_id("OCS-2104"),
-                    pytest.mark.bugzilla("1830015")
+                    pytest.mark.bugzilla("1845666")
                 ]
             ),
             pytest.param(
@@ -162,7 +161,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 dc_pod_obj, timeout=720
             )
             log.info("All the dc pods reached running state")
-            nodes_helpers.wait_for_all_pods()
+            pod.wait_for_storage_pods()
 
         except ResourceWrongStatusException:
             if failure == "shutdown":

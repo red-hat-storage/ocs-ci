@@ -271,7 +271,7 @@ class PrometheusAPI(object):
         )
         return response
 
-    def query(self, query, timestamp=None, timeout=None, validate=True):
+    def query(self, query, timestamp=None, timeout=None, validate=True, mute_logs=False):
         """
         Perform Prometheus `instant query`_. This is a simple wrapper over
         ``get()`` method with plumbing code for instant queries, additional
@@ -285,6 +285,7 @@ class PrometheusAPI(object):
             validate (bool): Perform basic validation on the response.
                 Optional, ``True`` is the default. Use ``False`` when you
                 expect query to fail eg. during negative testing.
+            mute_logs (bool): True for muting the logs, False otherwise
 
         Returns:
             list: Result of the query (value(s) for a single timestamp)
@@ -299,7 +300,8 @@ class PrometheusAPI(object):
         if timeout is not None:
             query_payload['timeout'] = timeout
         # Log human readable summary of the query
-        logger.info(log_msg)
+        if not mute_logs:
+            logger.info(log_msg)
         resp = self.get('query', payload=query_payload)
         content = yaml.safe_load(resp.content)
         if validate:

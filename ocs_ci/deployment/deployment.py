@@ -2,29 +2,40 @@
 This module provides base class for different deployment
 platforms like AWS, VMWare, Baremetal etc.
 """
+
+from copy import deepcopy
+import json
 import logging
 import tempfile
 import time
 
-import json
 import requests
-from copy import deepcopy
+import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
-from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
+from ocs_ci.ocs.cluster import (
+    validate_cluster_on_pvc,
+    validate_pdb_creation,
+    CephClusterExternal
+)
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, UnavailableResourceException, UnsupportedPlatformError,
+    CephHealthException,
+    CommandFailed,
     ResourceWrongStatusException,
+    UnavailableResourceException,
+    UnsupportedPlatformError,
+    ExternalClusterDetailsException,
+    UnsupportedFeatureError,
 )
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods
 )
-from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.node import get_typed_nodes, check_nodes_specs
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -32,6 +43,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
 )
+from ocs_ci.ocs.resources.storage_cluster import change_noobaa_endpoints_count
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state
@@ -40,6 +52,8 @@ from ocs_ci.ocs.utils import (
     setup_ceph_toolbox, collect_ocs_logs
 )
 from ocs_ci.utility import templating
+from ocs_ci.utility.deployment import get_ocp_ga_version
+from ocs_ci.utility.localstorage import get_lso_channel
 from ocs_ci.utility.openshift_console import OpenshiftConsole
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -50,8 +64,10 @@ from ocs_ci.utility.utils import (
     run_cmd,
     set_selinux_permissions,
     set_registry_to_managed_state,
-    add_stage_cert
+    add_stage_cert,
+    modify_csv, wait_for_machineconfigpool_status
 )
+from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from tests import helpers
 
 logger = logging.getLogger(__name__)
@@ -61,6 +77,27 @@ class Deployment(object):
     """
     Base for all deployment platforms
     """
+
+    # Default storage class for StorageCluster CRD,
+    # every platform specific class which extending this base class should
+    # define it
+    DEFAULT_STORAGECLASS = None
+
+    # Default storage class for LSO deployments. While each platform specific
+    # subclass can redefine it, there is a well established platform
+    # independent default value (based on OCS Installation guide), and it's
+    # redefinition is not necessary in normal cases.
+    DEFAULT_STORAGECLASS_LSO = 'localblock'
+
+    CUSTOM_STORAGE_CLASS_PATH = None
+    """str: filepath of yaml file with custom storage class if necessary
+
+    For some platforms, one have to create custom storage class for OCS to make
+    sure ceph uses disks of expected type and parameters (eg. OCS requires
+    ssd). This variable is either None (meaning that such custom storage class
+    is not needed), or point to a yaml file with custom storage class.
+    """
+
     def __init__(self):
         self.platform = config.ENV_DATA['platform']
         self.ocp_deployment_type = config.ENV_DATA['deployment_type']
@@ -73,13 +110,6 @@ class Deployment(object):
         methods for platform specific config.
         """
         pass
-
-    def add_volume(self):
-        """
-        Implement add_volume in child class which is specific to
-        platform
-        """
-        raise NotImplementedError("add_volume functionality not implemented")
 
     def deploy_cluster(self, log_cli_level='DEBUG'):
         """
@@ -98,6 +128,7 @@ class Deployment(object):
                     self.deploy_ocp(log_cli_level)
                     self.post_ocp_deploy()
                 except Exception as e:
+                    config.RUN['is_ocp_deployment_failed'] = True
                     logger.error(e)
                     if config.REPORTING['gather_on_deploy_failure']:
                         collect_ocs_logs('deployment', ocs=False)
@@ -106,6 +137,8 @@ class Deployment(object):
         if not config.ENV_DATA['skip_ocs_deployment']:
             try:
                 self.deploy_ocs()
+                if config.REPORTING['gather_on_deploy_success']:
+                    collect_ocs_logs('deployment', ocp=False, status_failure=False)
             except Exception as e:
                 logger.error(e)
                 if config.REPORTING['gather_on_deploy_failure']:
@@ -184,18 +217,32 @@ class Deployment(object):
                 f"{to_label} or taint: {to_taint}!"
             )
 
+        _ocp = ocp.OCP(kind='node')
         workers_to_label = " ".join(distributed_worker_nodes[:to_label])
         if workers_to_label:
-            _ocp = ocp.OCP(kind='node')
+
             logger.info(
                 f"Label nodes: {workers_to_label} with label: "
                 f"{constants.OPERATOR_NODE_LABEL}"
             )
-            label_cmd = (
-                f"label nodes {workers_to_label} "
-                f"{constants.OPERATOR_NODE_LABEL} --overwrite"
-            )
-            _ocp.exec_oc_cmd(command=label_cmd)
+            label_cmds = [
+                (
+                    f"label nodes {workers_to_label} "
+                    f"{constants.OPERATOR_NODE_LABEL} --overwrite"
+                )
+            ]
+            if config.DEPLOYMENT["infra_nodes"]:
+                logger.info(
+                    f"Label nodes: {workers_to_label} with label: "
+                    f"{constants.INFRA_NODE_LABEL}"
+                )
+                label_cmds.append(
+                    f"label nodes {workers_to_label} "
+                    f"{constants.INFRA_NODE_LABEL} --overwrite"
+                )
+
+            for cmd in label_cmds:
+                _ocp.exec_oc_cmd(command=cmd)
 
         workers_to_taint = " ".join(distributed_worker_nodes[:to_taint])
         if workers_to_taint:
@@ -341,7 +388,7 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get('live_deployment')
 
         if config.DEPLOYMENT.get('local_storage'):
-            setup_local_storage()
+            setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
 
         if ui_deployment:
             if not live_deployment:
@@ -367,48 +414,173 @@ class Deployment(object):
         csv_name = package_manifest.get_current_csv(channel=channel)
         csv = CSV(resource_name=csv_name, namespace=self.namespace)
         csv.wait_for_phase("Succeeded", timeout=720)
-        cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
+
+        # Modify the CSV with custom values if required
+        if all(key in config.DEPLOYMENT for key in ('csv_change_from', 'csv_change_to')):
+            modify_csv(
+                csv=csv_name,
+                replace_from=config.DEPLOYMENT['csv_change_from'],
+                replace_to=config.DEPLOYMENT['csv_change_to']
+            )
+
+        # create custom storage class for StorageCluster CR if necessary
+        if self.CUSTOM_STORAGE_CLASS_PATH is not None:
+            with open(self.CUSTOM_STORAGE_CLASS_PATH, "r") as custom_sc_fo:
+                custom_sc = yaml.load(custom_sc_fo, Loader=yaml.SafeLoader)
+            # set value of DEFAULT_STORAGECLASS to mach the custom storage cls
+            self.DEFAULT_STORAGECLASS = custom_sc['metadata']['name']
+            run_cmd(f"oc create -f {self.CUSTOM_STORAGE_CLASS_PATH}")
+
+        # creating StorageCluster
+        if self.platform == constants.IBM_POWER_PLATFORM:
+            cluster_data = templating.load_yaml(constants.IBM_STORAGE_CLUSTER_YAML)
+        else:
+            cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
+
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
         ]
-        deviceset_data = cluster_data['spec']['storageDeviceSets'][0]
-        device_size = int(
-            config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
-        )
-        deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
-            'storage'
-        ] = f"{device_size}Gi"
 
-        if self.platform.lower() == constants.VSPHERE_PLATFORM:
-            deviceset_data['dataPVCTemplate']['spec'][
-                'storageClassName'
-            ] = constants.DEFAULT_SC_VSPHERE
+        if self.platform == constants.IBM_POWER_PLATFORM:
+            numberofstoragenodes = config.ENV_DATA['number_of_storage_nodes']
+            deviceset = [None] * numberofstoragenodes
 
-        if config.DEPLOYMENT.get('local_storage'):
-            cluster_data['spec']['manageNodes'] = False
-            cluster_data['spec']['monDataDirHostPath'] = '/var/lib/rook'
-            deviceset_data['portable'] = False
-            deviceset_data['dataPVCTemplate']['spec'][
-                'storageClassName'
-            ] = 'local-block'
+            for i in range(numberofstoragenodes):
+                deviceset_data = cluster_data['spec']['storageDeviceSets'][i]
+                device_size = int(
+                    config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
+                )
 
-        # Allow lower instance requests and limits for OCS deployment
-        if config.DEPLOYMENT.get('allow_lower_instance_requirements'):
-            none_resources = {'Requests': None, 'Limits': None}
-            deviceset_data["resources"] = deepcopy(none_resources)
-            cluster_data['spec']['resources'] = {
-                resource: deepcopy(none_resources) for resource
-                in [
+                # set size of request for storage
+                if self.platform.lower() == "powervs":
+                    pv_size_list = helpers.get_pv_size(storageclass=self.DEFAULT_STORAGECLASS_LSO)
+                    pv_size_list.sort()
+                    deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
+                        'storage'
+                    ] = f"{pv_size_list[0]}"
+                else:
+                    deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
+                        'storage'
+                    ] = f"{device_size}Gi"
+
+                # set storage class to OCS default on current platform
+                if self.DEFAULT_STORAGECLASS_LSO:
+                    deviceset_data['dataPVCTemplate']['spec'][
+                        'storageClassName'
+                    ] = self.DEFAULT_STORAGECLASS_LSO
+
+                # StorageCluster tweaks for LSO
+                if config.DEPLOYMENT.get('local_storage'):
+                    cluster_data['spec']['manageNodes'] = False
+                    cluster_data['spec']['monDataDirHostPath'] = '/var/lib/rook'
+                    deviceset_data['portable'] = False
+                    deviceset_data['dataPVCTemplate']['spec']['storageClassName'] = (
+                        self.DEFAULT_STORAGECLASS_LSO
+                    )
+
+                deviceset[i] = deviceset_data
+        else:
+            deviceset_data = cluster_data['spec']['storageDeviceSets'][0]
+            device_size = int(
+                config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
+            )
+
+            # set size of request for storage
+            if self.platform.lower() == constants.BAREMETAL_PLATFORM:
+                pv_size_list = helpers.get_pv_size(storageclass=self.DEFAULT_STORAGECLASS_LSO)
+                pv_size_list.sort()
+                deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
+                    'storage'
+                ] = f"{pv_size_list[0]}"
+            else:
+                deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
+                    'storage'
+                ] = f"{device_size}Gi"
+
+            # set storage class to OCS default on current platform
+            if self.DEFAULT_STORAGECLASS:
+                deviceset_data['dataPVCTemplate']['spec'][
+                    'storageClassName'
+                ] = self.DEFAULT_STORAGECLASS
+
+            ocs_version = float(config.ENV_DATA['ocs_version'])
+
+            # StorageCluster tweaks for LSO
+            if config.DEPLOYMENT.get('local_storage'):
+                cluster_data['spec']['manageNodes'] = False
+                cluster_data['spec']['monDataDirHostPath'] = '/var/lib/rook'
+                deviceset_data['portable'] = False
+                deviceset_data['dataPVCTemplate']['spec']['storageClassName'] = \
+                    self.DEFAULT_STORAGECLASS_LSO
+                if self.platform.lower() == constants.AWS_PLATFORM:
+                    deviceset_data['count'] = 2
+                if ocs_version >= 4.5:
+                    deviceset_data['resources'] = {
+                        'limits': {
+                            'cpu': 2,
+                            'memory': '5Gi'
+                        },
+                        'requests': {
+                            'cpu': 1,
+                            'memory': '5Gi'
+                        }
+                    }
+
+            # Allow lower instance requests and limits for OCS deployment
+            # The resources we need to change can be found here:
+            # https://github.com/openshift/ocs-operator/blob/release-4.5/pkg/deploy-manager/storagecluster.go#L88-L116
+            if config.DEPLOYMENT.get('allow_lower_instance_requirements'):
+                none_resources = {'Requests': None, 'Limits': None}
+                deviceset_data["resources"] = deepcopy(none_resources)
+                resources = [
                     'mon', 'mds', 'rgw', 'mgr', 'noobaa-core', 'noobaa-db',
                 ]
-            }
+                if ocs_version >= 4.5:
+                    resources.append('noobaa-endpoint')
+                cluster_data['spec']['resources'] = {
+                    resource: deepcopy(none_resources) for resource in resources
+                }
+            else:
+                local_storage = config.DEPLOYMENT.get('local_storage')
+                platform = config.ENV_DATA.get('platform', '').lower()
+                if local_storage and platform == 'aws':
+                    resources = {
+                        'mds': {
+                            'limits': {'cpu': 3, 'memory': '8Gi'},
+                            'requests': {'cpu': 1, 'memory': '8Gi'}
+                        }
+                    }
+                    if ocs_version < 4.5:
+                        resources['noobaa-core'] = {
+                            'limits': {'cpu': 2, 'memory': '8Gi'},
+                            'requests': {'cpu': 1, 'memory': '8Gi'}
+                        }
+                        resources['noobaa-db'] = {
+                            'limits': {'cpu': 2, 'memory': '8Gi'},
+                            'requests': {'cpu': 1, 'memory': '8Gi'}
+                        }
+                    cluster_data['spec']['resources'] = resources
 
         # Enable host network if enabled in config (this require all the
         # rules to be enabled on underlaying platform).
         if config.DEPLOYMENT.get('host_network'):
             cluster_data['spec']['hostNetwork'] = True
 
-        cluster_data['spec']['storageDeviceSets'] = [deviceset_data]
+        if self.platform == constants.IBM_POWER_PLATFORM:
+            cluster_data['spec']['storageDeviceSets'] = deviceset
+        else:
+            cluster_data['spec']['storageDeviceSets'] = [deviceset_data]
+
+        if config.ENV_DATA.get("encryption_at_rest"):
+            if ocs_version < 4.6:
+                error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"
+                logger.error(error_message)
+                raise UnsupportedFeatureError(error_message)
+            logger.info("Enabling encryption at REST!")
+            cluster_data['spec']['encryption'] = {
+                'enable': True,
+            }
+
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode='w+', prefix='cluster_storage', delete=False
         )
@@ -416,6 +588,12 @@ class Deployment(object):
             cluster_data, cluster_data_yaml.name
         )
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+        if config.DEPLOYMENT["infra_nodes"]:
+            _ocp = ocp.OCP(kind='node')
+            _ocp.exec_oc_cmd(
+                command=f"annotate namespace {defaults.ROOK_CLUSTER_NAMESPACE} "
+                f"{constants.NODE_SELECTOR_ANNOTATION}"
+            )
 
     def deployment_with_ui(self):
         """
@@ -436,6 +614,80 @@ class Deployment(object):
             log_suffix="ui-deployment"
         )
 
+    def deploy_with_external_mode(self):
+        """
+        This function handles the deployment of OCS on
+        external/indpendent RHCS cluster
+
+        """
+        live_deployment = config.DEPLOYMENT.get('live_deployment')
+        logger.info("Deploying OCS with external mode RHCS")
+        logger.info("Creating namespace and operator group")
+        run_cmd(f"oc create -f {constants.OLM_YAML}")
+        if not live_deployment:
+            self.create_ocs_operator_source()
+        self.subscribe_ocs()
+        operator_selector = get_selector_for_ocs_operator()
+        package_manifest = PackageManifest(
+            resource_name=defaults.OCS_OPERATOR_NAME,
+            selector=operator_selector,
+        )
+        package_manifest.wait_for_resource(timeout=300)
+        channel = config.DEPLOYMENT.get('ocs_csv_channel')
+        csv_name = package_manifest.get_current_csv(channel=channel)
+        csv = CSV(resource_name=csv_name, namespace=self.namespace)
+        csv.wait_for_phase("Succeeded", timeout=720)
+
+        # Create secret for external cluster
+        secret_data = templating.load_yaml(
+            constants.EXTERNAL_CLUSTER_SECRET_YAML
+        )
+        external_cluster_details = config.EXTERNAL_MODE.get(
+            'external_cluster_details',
+            ''
+        )
+        if not external_cluster_details:
+            raise ExternalClusterDetailsException(
+                "No external cluster data found"
+            )
+        secret_data['data']['external_cluster_details'] = (
+            external_cluster_details
+        )
+        secret_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='external_cluster_secret', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            secret_data, secret_data_yaml.name
+        )
+        logger.info("Creating external cluster secret")
+        run_cmd(f"oc create -f {secret_data_yaml.name}")
+
+        cluster_data = templating.load_yaml(
+            constants.EXTERNAL_STORAGE_CLUSTER_YAML
+        )
+        cluster_data['metadata']['name'] = config.ENV_DATA[
+            'storage_cluster_name'
+        ]
+        cluster_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='external_cluster_storage', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            cluster_data, cluster_data_yaml.name
+        )
+        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+        self.external_post_deploy_validation()
+        setup_ceph_toolbox()
+
+    def external_post_deploy_validation(self):
+        """
+        This function validates successful deployment of OCS
+        in external mode, some of the steps overlaps with
+        converged mode
+
+        """
+        cephcluster = CephClusterExternal()
+        cephcluster.cluster_health_check(timeout=300)
+
     def deploy_ocs(self):
         """
         Handle OCS deployment, since OCS deployment steps are common to any
@@ -450,6 +702,11 @@ class Deployment(object):
             return
         except (IndexError, CommandFailed):
             logger.info("Running OCS basic installation")
+
+        if config.DEPLOYMENT['external_mode']:
+            logger.info("Deploying OCS on external mode RHCS")
+            return self.deploy_with_external_mode()
+
         self.deploy_ocs_via_operator()
         pod = ocp.OCP(
             kind=constants.POD, namespace=self.namespace
@@ -550,11 +807,46 @@ class Deployment(object):
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
-        assert ceph_health_check(
-            namespace=self.namespace
-        )
+        try:
+            ceph_health_check(namespace=self.namespace, tries=30, delay=10)
+        except CephHealthException as ex:
+            err = str(ex)
+            logger.warning(f"Ceph health check failed with {err}")
+            if "clock skew detected" in err:
+                logger.info(
+                    f"Changing NTP on compute nodes to"
+                    f" {constants.RH_NTP_CLOCK}"
+                )
+                update_ntp_compute_nodes()
+                assert ceph_health_check(
+                    namespace=self.namespace, tries=60, delay=10
+                )
+
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
+
+        if self.platform == constants.IBM_POWER_PLATFORM:
+            logger.info("Noobaa endpoints ignored for IBM Power")
+        else:
+            # Modify Noobaa endpoint auto scale values according to the cluster specs
+            if check_nodes_specs(min_cpu=constants.MIN_NODE_CPU, min_memory=constants.MIN_NODE_MEMORY):
+                logger.info(
+                    "The cluster specs meet the minimum requirements and "
+                    "therefore, NooBaa auto scale will be enabled"
+                )
+                min_nb_eps = config.DEPLOYMENT.get('min_noobaa_endpoints')
+                max_nb_eps = config.DEPLOYMENT.get('max_noobaa_endpoints')
+                change_noobaa_endpoints_count(min_nb_eps=min_nb_eps, max_nb_eps=max_nb_eps)
+            else:
+                logger.warning(
+                    "The cluster specs do not meet the minimum requirements and "
+                    "therefore, NooBaa auto scale will remain with its default values"
+                )
+                min_eps = 1
+                max_eps = 1 if float(config.ENV_DATA['ocs_version']) < 4.6 else 2
+                logger.info(
+                    f"The Noobaa endpoint auto scale values: min: {min_eps}, max: {max_eps}"
+                )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -564,8 +856,15 @@ class Deployment(object):
         Args:
             log_level (str): log level for installer (default: DEBUG)
         """
-        self.ocp_deployment = self.OCPDeployment()
-        self.ocp_deployment.destroy(log_level)
+        if self.platform == constants.IBM_POWER_PLATFORM:
+            if not config.ENV_DATA['skip_ocs_deployment']:
+                self.destroy_ocs()
+
+            if not config.ENV_DATA['skip_ocp_deployment']:
+                logger.info("Destroy of OCP not implemented yet.")
+        else:
+            self.ocp_deployment = self.OCPDeployment()
+            self.ocp_deployment.destroy(log_level)
 
     def add_node(self):
         """
@@ -577,21 +876,19 @@ class Deployment(object):
         """
         Patch storage class which comes as default with installation to non-default
         """
-        sc_to_patch = None
-        if self.platform.lower() == constants.AWS_PLATFORM:
-            sc_to_patch = constants.DEFAULT_SC_AWS
-        elif self.platform.lower() == constants.VSPHERE_PLATFORM:
-            sc_to_patch = constants.DEFAULT_SC_VSPHERE
-        else:
-            logger.info(f"Unsupported platform {self.platform} to patch")
-        if sc_to_patch:
-            logger.info(f"Patch {sc_to_patch} storageclass as non-default")
-            patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
-            run_cmd(
-                f"oc patch storageclass {sc_to_patch} "
-                f"-p {patch} "
-                f"--request-timeout=120s"
+        if not self.DEFAULT_STORAGECLASS:
+            logger.info(
+                "Default StorageClass is not set for this class: "
+                f"{self.__class__.__name__}"
             )
+            return
+        logger.info(f"Patch {self.DEFAULT_STORAGECLASS} storageclass as non-default")
+        patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
+        run_cmd(
+            f"oc patch storageclass {self.DEFAULT_STORAGECLASS} "
+            f"-p {patch} "
+            f"--request-timeout=120s"
+        )
 
 
 def create_catalog_source(image=None, ignore_upgrade=False):
@@ -620,6 +917,11 @@ def create_catalog_source(image=None, ignore_upgrade=False):
                 'default_latest_tag', 'latest'
             )
         )
+
+    platform = config.ENV_DATA.get('platform').lower()
+    if platform == constants.IBM_POWER_PLATFORM:
+        # TEMP Hack... latest-stable-4.6 does not have ppc64le bits.
+        image_tag = 'latest-4.6'
     catalog_source_data = templating.load_yaml(
         constants.CATALOG_SOURCE_YAML
     )
@@ -649,9 +951,13 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     catalog_source.wait_for_state("READY")
 
 
-def setup_local_storage():
+def setup_local_storage(storageclass):
     """
     Setup the necessary resources for enabling local storage.
+
+    Args:
+        storageclass (string): storageClassName value to be used in LocalVolume CR
+            based on LOCAL_VOLUME_YAML
 
     """
     # Get the worker nodes
@@ -667,6 +973,31 @@ def setup_local_storage():
         f"{constants.OPERATOR_NODE_LABEL}"
     )
 
+    ocp_version = get_ocp_version()
+    ocp_ga_version = get_ocp_ga_version(ocp_version)
+    if not ocp_ga_version:
+        optional_operators_data = templating.load_yaml(
+            constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
+        )
+        logger.info(
+            "Creating temp yaml file with optional operators data:\n %s",
+            optional_operators_data
+        )
+        optional_operators_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='optional_operators', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            optional_operators_data, optional_operators_yaml.name
+        )
+        with open(optional_operators_yaml.name, 'r') as f:
+            logger.info(f.read())
+        logger.info(
+            "Creating optional operators CatalogSource and ImageContentSourcePolicy"
+        )
+        run_cmd(f"oc create -f {optional_operators_yaml.name}")
+
+        wait_for_machineconfigpool_status('all')
+
     logger.info("Retrieving local-storage-operator data from yaml")
     lso_data = list(templating.load_yaml(
         constants.LOCAL_STORAGE_OPERATOR, multi_document=True
@@ -674,7 +1005,10 @@ def setup_local_storage():
     # Update local-storage-operator subscription data with channel
     for data in lso_data:
         if data['kind'] == 'Subscription':
-            data['spec']['channel'] = get_ocp_version()
+            data['spec']['channel'] = get_lso_channel()
+        if not ocp_ga_version:
+            if data['kind'] == 'Subscription':
+                data['spec']['source'] = 'optional-operators'
 
     # Create temp yaml file and create local storage operator
     logger.info(
@@ -687,11 +1021,13 @@ def setup_local_storage():
     templating.dump_data_to_temp_yaml(
         lso_data, lso_data_yaml.name
     )
+    with open(lso_data_yaml.name, 'r') as f:
+        logger.info(f.read())
     logger.info("Creating local-storage-operator")
     run_cmd(f"oc create -f {lso_data_yaml.name}")
 
     local_storage_operator = ocp.OCP(
-        kind=constants.POD, namespace='local-storage'
+        kind=constants.POD, namespace=config.ENV_DATA['local_storage_namespace']
     )
     assert local_storage_operator.wait_for_resource(
         condition=constants.STATUS_RUNNING,
@@ -704,16 +1040,19 @@ def setup_local_storage():
     lso_type = config.DEPLOYMENT.get('type')
     if platform == constants.VSPHERE_PLATFORM:
         # Types of LSO Deployment
-        # Importing here to avoid circular dependancy
+        # Importing here to avoid circular dependency
         from ocs_ci.deployment.vmware import VSPHEREBASE
+        vsphere_base = VSPHEREBASE()
+
         if lso_type == constants.RDM:
             logger.info(f"LSO Deployment type: {constants.RDM}")
-            vsphere_base = VSPHEREBASE()
             vsphere_base.add_rdm_disks()
 
         if lso_type == constants.VMDK:
-            raise NotImplementedError(
-                "LSO Deployment for VMDk is not implemented"
+            logger.info(f"LSO Deployment type: {constants.VMDK}")
+            vsphere_base.attach_disk(
+                config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE),
+                config.DEPLOYMENT.get('provision_type', constants.VM_DISK_TYPE)
             )
 
         if lso_type == constants.DIRECTPATH:
@@ -729,6 +1068,12 @@ def setup_local_storage():
     lv_data = templating.load_yaml(
         constants.LOCAL_VOLUME_YAML
     )
+
+    # Set storage class
+    logger.info(
+        "Updating LocalVolume CR data with LSO storageclass: %s", storageclass)
+    for scd in lv_data['spec']['storageClassDevices']:
+        scd['storageClassName'] = storageclass
 
     # Update local volume data with NVME IDs
     logger.info(
@@ -749,10 +1094,13 @@ def setup_local_storage():
     logger.info("Creating LocalVolume CR")
     run_cmd(f"oc create -f {lv_data_yaml.name}")
     logger.info("Waiting 30 seconds for PVs to create")
-    verify_pvs_created(len(worker_names))
+    storage_class_device_count = 1
+    if platform == constants.AWS_PLATFORM:
+        storage_class_device_count = 2
+    verify_pvs_created(len(worker_names) * storage_class_device_count)
 
 
-@retry(AssertionError, 12, 10, 1)
+@retry(AssertionError, 120, 10, 1)
 def verify_pvs_created(expected_pvs):
     """
     Verify that PVs were created and are in the Available state
@@ -802,10 +1150,18 @@ def get_device_paths(worker_names):
     """
     device_paths = []
     platform = config.ENV_DATA.get('platform').lower()
+
+    if platform == constants.IBM_POWER_PLATFORM:
+        device_paths = config.ENV_DATA.get('disk_pattern').lower()
+        return [device_paths]
     if platform == 'aws':
         pattern = 'nvme-Amazon_EC2_NVMe_Instance_Storage'
     elif platform == 'vsphere':
         pattern = 'wwn'
+    elif platform == 'baremetal':
+        pattern = config.ENV_DATA.get('disk_pattern')
+    elif platform == 'baremetalpsi':
+        pattern = 'virtio'
     # TODO: add patterns bare metal
     else:
         raise UnsupportedPlatformError(
@@ -813,11 +1169,7 @@ def get_device_paths(worker_names):
         )
     for worker in worker_names:
         logger.info("Retrieving device path for node: %s", worker)
-        cmd = (
-            f"oc debug nodes/{worker} "
-            f"-- chroot /host ls -la /dev/disk/by-id/"
-        )
-        out = run_cmd(cmd)
+        out = _get_disk_by_id(worker)
         out_lines = out.split('\n')
         nvme_lines = [
             line for line in out_lines if (
@@ -832,3 +1184,22 @@ def get_device_paths(worker_names):
             device_paths.append(f'/dev/disk/by-id/{device_path}')
 
     return device_paths
+
+
+@retry(CommandFailed)
+def _get_disk_by_id(worker):
+    """
+    Retrieve disk by-id on a worker node using the debug pod
+
+    Args:
+        worker: worker node to get disks by-id for
+
+    Returns:
+        str: stdout of disk by-id command
+
+    """
+    cmd = (
+        f"oc debug nodes/{worker} "
+        f"-- chroot /host ls -la /dev/disk/by-id/"
+    )
+    return run_cmd(cmd)

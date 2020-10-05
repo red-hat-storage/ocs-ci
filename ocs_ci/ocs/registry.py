@@ -1,14 +1,17 @@
 import logging
 import base64
 import os
+import re
+import time
 
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from tests import helpers
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.framework import config
+from ocs_ci.ocs.utils import mirror_image, get_pod_name_by_pattern
 
 
 logger = logging.getLogger(__name__)
@@ -89,22 +92,32 @@ def get_registry_pod_obj():
     return pod_objs
 
 
-def get_oc_podman_login_cmd():
+def get_oc_podman_login_cmd(skip_tls_verify=True):
     """
     Function to get oc and podman login commands on node
+
+    Args:
+        skip_tls_verify (bool): If true, the server's certificate will not be checked for validity
 
     Returns:
         cmd_list (list): List of cmd for oc/podman login
 
     """
     user = config.RUN['username']
-    helpers.refresh_oc_login_connection()
-    ocp_obj = ocp.OCP()
-    token = ocp_obj.get_user_token()
-    route = get_default_route_name()
+    filename = os.path.join(
+        config.ENV_DATA['cluster_path'],
+        config.RUN['password_location']
+    )
+    with open(filename) as f:
+        password = f.read().strip()
+    cluster_name = config.ENV_DATA['cluster_name']
+    base_domain = config.ENV_DATA['base_domain']
     cmd_list = [
         'export KUBECONFIG=/home/core/auth/kubeconfig',
-        f"podman login {route} -u {user} -p {token}"
+        f"oc login -u {user} -p {password} "
+        f"https://api-int.{cluster_name}.{base_domain}:6443"
+        f" --insecure-skip-tls-verify={skip_tls_verify}",
+        f"podman login -u {user} -p $(oc whoami -t) image-registry.openshift-image-registry.svc:5000"
     ]
     master_list = helpers.get_master_nodes()
     helpers.rsync_kubeconf_to_node(node=master_list[0])
@@ -266,19 +279,18 @@ def image_push(image_url, namespace):
         registry_path (str): Uploaded image path
 
     """
+    image_path = f"image-registry.openshift-image-registry.svc:5000/{namespace}/image"
+    tag_cmd = f"podman tag {image_url} {image_path}"
+    push_cmd = f"podman push image-registry.openshift-image-registry.svc:5000/{namespace}/image"
     cmd_list = get_oc_podman_login_cmd()
-    route = get_default_route_name()
-    split_image_url = image_url.split("/")
-    tag_name = split_image_url[-1]
-    img_path = f"{route}/{namespace}/{tag_name}"
-    cmd_list.append(f"podman tag {image_url} {img_path}")
-    cmd_list.append(f"podman push {img_path}")
+    cmd_list.append(tag_cmd)
+    cmd_list.append(push_cmd)
     master_list = helpers.get_master_nodes()
     ocp_obj = ocp.OCP()
     ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=cmd_list)
-    logger.info(f"Pushed {img_path} to registry")
+    logger.info(f"Pushed {image_path} to registry")
     image_list_all()
-    return img_path
+    return image_path
 
 
 def image_list_all():
@@ -296,16 +308,18 @@ def image_list_all():
     return ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=cmd_list)
 
 
-def image_rm(registry_path):
+def image_rm(registry_path, image_url):
     """
     Function to remove images from registry
 
     Args:
         registry_path (str): Image registry path
+        image_url (str): Image url container image repo link
 
     """
     cmd_list = get_oc_podman_login_cmd()
-    cmd_list.append(f"podman rm {registry_path}")
+    cmd_list.append(f"podman rmi {registry_path}")
+    cmd_list.append(f"podman rmi {image_url}")
     master_list = helpers.get_master_nodes()
     ocp_obj = ocp.OCP()
     ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=cmd_list)
@@ -332,3 +346,131 @@ def check_image_exists_in_registry(image_url):
         return_value = True
         logger.info("Image exists in Registry")
     return return_value
+
+
+def image_pull_and_push(
+    project_name, template, image='', pattern='', wait=True
+):
+    """
+    Pull and push images running oc new-app command
+
+    Args:
+        project_name (str): Name of project
+        template (str): Name of the template of the image
+        image (str): Name of the image with tag
+        pattern (str): name of the build with given pattern
+        wait (bool): If true waits till the image pull and push completes.
+
+    """
+    if config.DEPLOYMENT.get('disconnected'):
+        mirror_image(image=image)
+    else:
+        cmd = f"new-app --template={template} -n {project_name}"
+        ocp_obj = ocp.OCP()
+        ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
+
+        # Validate it completed
+        if wait:
+            wait_time = 300
+            logger.info(f"Wait for {wait_time} seconds for build to come up")
+            time.sleep(300)
+            build_list = get_build_name_by_pattern(pattern=pattern, namespace=project_name)
+            if build_list is None:
+                raise Exception("Build is not created")
+            build_obj = ocp.OCP(kind='Build', namespace=project_name)
+            for build in build_list:
+                build_obj.wait_for_resource(condition='Complete', resource_name=build, timeout=900)
+
+
+def get_build_name_by_pattern(
+    pattern='',
+    namespace=None
+):
+    """
+        In a given namespace find names of the builds that match
+        the given pattern
+
+        Args:
+            pattern (str): name of the build with given pattern
+            namespace (str): Namespace value
+
+        Returns:
+            build_list (list): List of build names matching the pattern
+
+    """
+    namespace = namespace if namespace else config.ENV_DATA['cluster_namespace']
+    ocp_obj = ocp.OCP(kind='Build', namespace=namespace)
+    build_names = ocp_obj.exec_oc_cmd('get builds -o name', out_yaml_format=False)
+    build_names = build_names.split('\n')
+    build_list = []
+    for name in build_names:
+        if re.search(pattern, name):
+            _, name = name.split('/')
+            logger.info(f'pod name match found appending {name}')
+            build_list.append(name)
+    return build_list
+
+
+def validate_image_exists(namespace=None):
+    """
+    Validate image exists on registries path
+
+    Args:
+        namespace (str): Namespace where the images/builds are created
+
+    Returns:
+        image_list (str): Dir/Files/Images are listed in string format
+
+    Raises:
+        Exceptions if dir/folders not found
+
+    """
+
+    if not config.DEPLOYMENT.get('disconnected'):
+        pod_list = get_pod_name_by_pattern(
+            pattern="image-registry", namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+        )
+        for pod_name in pod_list:
+            if "cluster" not in pod_name:
+                pod_obj = pod.get_pod_obj(
+                    name=pod_name, namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+                )
+                return pod_obj.exec_cmd_on_pod(
+                    command=f"find /registry/docker/registry/v2/repositories/{namespace}"
+                )
+
+
+def modify_registry_pod_count(count):
+    """
+    Function to modify registry replica count(increase/decrease pod count)
+
+    Args:
+        count (int): registry replica count to be changed to
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    Raises:
+        TimeoutExpiredError: When number of image registry pods doesn't match the count
+
+    """
+    params = ('{\"spec\":{\"replicas\":%d}}' % count)
+    ocp_obj = ocp.OCP(
+        kind=constants.IMAGE_REGISTRY_CONFIG,
+        namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+    )
+    ocp_obj.patch(params=params, format_type='merge'), (
+        "Failed to run patch command to increase number of image registry pod"
+    )
+
+    # Validate number of image registry pod should match the count
+    for pod_list in TimeoutSampler(
+        300, 10, get_pod_name_by_pattern,
+        'image-registry', constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+    ):
+        try:
+            if pod_list is not None and len(pod_list) == count + 1:
+                return True
+        except IndexError as ie:
+            logger.error(f"Number of image registry pod doesn't match the count. Error: {ie}")
+            return False

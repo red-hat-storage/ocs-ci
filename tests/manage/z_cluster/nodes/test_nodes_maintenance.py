@@ -17,9 +17,8 @@ from ocs_ci.ocs.node import (
 from ocs_ci.framework.testlib import (
     tier1, tier2, tier3, tier4, tier4b,
     ManageTest, aws_platform_required, ignore_leftovers,
-    ipi_deployment_required
+    ipi_deployment_required, skipif_bm
 )
-
 from tests.sanity_helpers import Sanity
 from ocs_ci.ocs.resources import pod
 from tests.helpers import (
@@ -97,7 +96,7 @@ class TestNodesMaintenance(ManageTest):
             pytest.param(*['master'], marks=pytest.mark.polarion_id("OCS-1272"))
         ]
     )
-    def test_node_maintenance(self, node_type, pvc_factory, pod_factory):
+    def test_node_maintenance(self, reduce_cluster_load, node_type, pvc_factory, pod_factory):
         """
         OCS-1269/OCS-1272:
         - Maintenance (mark as unscheduable and drain) 1 worker/master node
@@ -125,11 +124,11 @@ class TestNodesMaintenance(ManageTest):
         schedule_nodes([typed_node_name])
 
         # Perform cluster and Ceph health checks
-        self.sanity_helpers.health_check(tries=30)
+        self.sanity_helpers.health_check(tries=90)
 
     @tier4
     @tier4b
-    @aws_platform_required
+    @skipif_bm
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
@@ -155,21 +154,44 @@ class TestNodesMaintenance(ManageTest):
         assert typed_nodes, f"Failed to find a {node_type} node for the test"
         typed_node_name = typed_nodes[0].name
 
+        reboot_events_cmd = (
+            f"get events -A --field-selector involvedObject.name="
+            f"{typed_node_name},reason=Rebooted -o yaml"
+        )
+
+        # Find the number of reboot events in 'typed_node_name'
+        num_events = len(
+            typed_nodes[0].ocp.exec_oc_cmd(reboot_events_cmd)['items']
+        )
+
         # Maintenance the node (unschedule and drain). The function contains logging
         drain_nodes([typed_node_name])
 
         # Restarting the node
         nodes.restart_nodes(nodes=typed_nodes, wait=False)
 
-        wait_for_nodes_status(
-            node_names=[typed_node_name],
-            status=constants.NODE_NOT_READY_SCHEDULING_DISABLED
-        )
+        try:
+            wait_for_nodes_status(
+                node_names=[typed_node_name],
+                status=constants.NODE_NOT_READY_SCHEDULING_DISABLED
+            )
+        except ResourceWrongStatusException:
+            # Sometimes, the node will be back to running state quickly so
+            # that the status change won't be detected. Verify the node was
+            # actually restarted by checking the reboot events count
+            new_num_events = len(
+                typed_nodes[0].ocp.exec_oc_cmd(reboot_events_cmd)['items']
+            )
+            assert new_num_events > num_events, (
+                f"Reboot event not found."
+                f"Node {typed_node_name} did not restart."
+            )
 
         wait_for_nodes_status(
             node_names=[typed_node_name],
             status=constants.NODE_READY_SCHEDULING_DISABLED
         )
+
         # Mark the node back to schedulable
         schedule_nodes([typed_node_name])
 

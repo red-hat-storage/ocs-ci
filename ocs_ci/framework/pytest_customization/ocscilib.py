@@ -12,23 +12,23 @@ import os
 import pytest
 
 from ocs_ci.framework import config as ocsci_config
-from ocs_ci.framework.exceptions import ClusterPathNotProvidedError, ClusterNameNotProvidedError, ClusterNameLengthError
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
-from ocs_ci.utility.utils import (
-    dump_config_to_file,
-    get_cluster_version,
-    get_ceph_version,
-    get_csi_versions,
-    get_testrun_name,
-    get_ocs_build_number,
-    load_config_file,
+from ocs_ci.framework.exceptions import (
+    ClusterNameLengthError,
+    ClusterNameNotProvidedError,
+    ClusterPathNotProvidedError
 )
-from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
-from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
     OCP_VERSION_CONF_DIR,
+)
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError, ChannelNotFound
+from ocs_ci.ocs.resources.ocs import get_ocs_csv, get_version_info
+from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
+from ocs_ci.utility.utils import (
+    dump_config_to_file, get_ceph_version, get_cluster_name,
+    get_cluster_version, get_csi_versions, get_ocp_version,
+    get_ocs_build_number, get_testrun_name, load_config_file
 )
 
 __all__ = [
@@ -85,11 +85,25 @@ def pytest_addoption(parser):
         help="Email ID to send results",
     )
     parser.addoption(
+        '--squad-analysis',
+        dest='squad_analysis',
+        action="store_true",
+        default=False,
+        help="Include Squad Analysis to email report.",
+    )
+    parser.addoption(
         '--collect-logs',
         dest='collect-logs',
         action="store_true",
         default=False,
         help="Collect OCS logs when test case failed",
+    )
+    parser.addoption(
+        '--collect-logs-on-success-run',
+        dest='collect_logs_on_success_run',
+        action="store_true",
+        default=False,
+        help="Collect must gather logs at the end of the execution (also when no failure in the tests)"
     )
     parser.addoption(
         '--io-in-bg',
@@ -132,6 +146,15 @@ def pytest_addoption(parser):
         """
     )
     parser.addoption(
+        '--ocp-installer-version',
+        dest='ocp_installer_version',
+        help="""
+        Specific OCP installer version to be used for deployment. This option
+        will generally be used for non-GA or nightly builds. (e.g. 4.5.5).
+        This option will overwrite any values set via --ocp-version.
+        """
+    )
+    parser.addoption(
         '--ocs-registry-image',
         dest='ocs_registry_image',
         help=(
@@ -153,6 +176,19 @@ def pytest_addoption(parser):
         type=int,
         help="OSD size in GB - for 2TB pass 2048, for 0.5TB pass 512 and so on."
     )
+    parser.addoption(
+        '--flexy-env-file',
+        dest='flexy_env_file',
+        help="Path to flexy environment file"
+    )
+    parser.addoption(
+        '--csv-change',
+        dest='csv_change',
+        help=(
+            "Pattern or string to change in the CSV. Should contain the value to replace "
+            "from and the value to replace to, separated by '::'"
+        )
+    )
 
 
 def pytest_configure(config):
@@ -163,6 +199,11 @@ def pytest_configure(config):
         config (pytest.config): Pytest config object
 
     """
+    # Somewhat hacky but this lets us differentiate between run-ci executions
+    # and plain pytest unit test executions
+    ocscilib_module = 'ocs_ci.framework.pytest_customization.ocscilib'
+    if ocscilib_module not in config.getoption('-p'):
+        return
     if not (config.getoption("--help") or config.getoption("collectonly")):
         process_cluster_cli_params(config)
         config_file = os.path.expanduser(
@@ -176,6 +217,7 @@ def pytest_configure(config):
             f"Dump of the consolidated config file is located here: "
             f"{config_file}"
         )
+        set_report_portal_tags(config)
         # Add OCS related versions to the html report and remove
         # extraneous metadata
         markers_arg = config.getoption('-m')
@@ -203,6 +245,16 @@ def pytest_configure(config):
 
         config._metadata['Test Run Name'] = get_testrun_name()
         gather_version_info_for_report(config)
+
+        try:
+            ocs_csv = get_ocs_csv()
+            ocs_csv_version = ocs_csv.data['spec']['version']
+            config.addinivalue_line(
+                "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
+            )
+        except (ResourceNotFoundError, ChannelNotFound):
+            # might be using exisitng cluster path using GUI installation
+            log.warning("Unable to get CSV version for Reporting")
 
 
 def gather_version_info_for_report(config):
@@ -241,17 +293,14 @@ def gather_version_info_for_report(config):
             if key not in skip_list:
                 config._metadata[key] = val.rsplit('/')[-1]
         gather_version_completed = True
-    except ResourceNotFoundError as ex:
-        log.error(
-            "Problem ocurred when looking for some resource! Error: %s",
-            ex
-        )
-    except FileNotFoundError as ex:
-        log.error("File not found! Error: %s", ex)
-    except CommandFailed as ex:
-        log.error("Failed to execute command! Error: %s", ex)
-    except Exception as ex:
-        log.error("Failed to gather version info! Error: %s", ex)
+    except ResourceNotFoundError:
+        log.exception("Problem occurred when looking for some resource!")
+    except FileNotFoundError:
+        log.exception("File not found!")
+    except CommandFailed:
+        log.exception("Failed to execute command!")
+    except Exception:
+        log.exception("Failed to gather version info!")
     finally:
         if not gather_version_completed:
             log.warning(
@@ -339,8 +388,16 @@ def process_cluster_cli_params(config):
             or len(cluster_name) > CLUSTER_NAME_MAX_CHARACTERS
         ):
             raise ClusterNameLengthError(cluster_name)
+    elif not cluster_name:
+        try:
+            ocsci_config.ENV_DATA['cluster_name'] = get_cluster_name(
+                cluster_path
+            )
+        except FileNotFoundError:
+            raise ClusterNameNotProvidedError()
     if get_cli_param(config, 'email') and not get_cli_param(config, '--html'):
         pytest.exit("--html option must be provided to send email reports")
+    get_cli_param(config, 'squad_analysis')
     get_cli_param(config, '-m')
     osd_size = get_cli_param(config, '--osd-size')
     if osd_size:
@@ -352,6 +409,18 @@ def process_cluster_cli_params(config):
             OCP_VERSION_CONF_DIR, version_config_file
         )
         load_config_file(version_config_file_path)
+    ocp_installer_version = get_cli_param(config, '--ocp-installer-version')
+    if ocp_installer_version:
+        ocsci_config.DEPLOYMENT['installer_version'] = ocp_installer_version
+        ocsci_config.RUN['client_version'] = ocp_installer_version
+    csv_change = get_cli_param(config, '--csv-change')
+    if csv_change:
+        csv_change = csv_change.split("::")
+        ocsci_config.DEPLOYMENT['csv_change_from'] = csv_change[0]
+        ocsci_config.DEPLOYMENT['csv_change_to'] = csv_change[1]
+    collect_logs_on_success_run = get_cli_param(config, 'collect_logs_on_success_run')
+    if collect_logs_on_success_run:
+        ocsci_config.REPORTING['collect_logs_on_success_run'] = True
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -380,14 +449,17 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     rep = outcome.get_result()
     # we only look at actual failing test calls, not setup/teardown
-    if (
-        rep.when == "call"
-        and rep.failed
-        and ocsci_config.RUN.get('cli_params').get('collect-logs')
-    ):
+    if rep.failed and ocsci_config.RUN.get('cli_params').get('collect-logs'):
         test_case_name = item.name
+        ocp_logs_collection = True if rep.when == "call" else False
         mcg = True if any(x in item.location[0] for x in ['mcg', 'ecosystem']) else False
-        collect_ocs_logs(dir_name=test_case_name, mcg=mcg)
+        try:
+            if not ocsci_config.RUN.get('is_ocp_deployment_failed'):
+                collect_ocs_logs(
+                    dir_name=test_case_name, ocp=ocp_logs_collection, mcg=mcg
+                )
+        except Exception:
+            log.exception("Failed to collect OCS logs")
 
     # Collect Prometheus metrics if specified in gather_metrics_on_fail marker
     if (
@@ -396,12 +468,15 @@ def pytest_runtest_makereport(item, call):
         and item.get_closest_marker('gather_metrics_on_fail')
     ):
         metrics = item.get_closest_marker('gather_metrics_on_fail').args
-        collect_prometheus_metrics(
-            metrics,
-            f'{item.name}-{call.when}',
-            call.start,
-            call.stop
-        )
+        try:
+            collect_prometheus_metrics(
+                metrics,
+                f'{item.name}-{call.when}',
+                call.start,
+                call.stop
+            )
+        except Exception:
+            log.exception("Failed to collect prometheus metrics")
 
     # Get the performance metrics when tests fails for scale or performance tag
     from tests.helpers import collect_performance_stats
@@ -411,4 +486,41 @@ def pytest_runtest_makereport(item, call):
         and (item.get_closest_marker('scale') or item.get_closest_marker('performance'))
     ):
         test_case_name = item.name
-        collect_performance_stats(test_case_name)
+        try:
+            collect_performance_stats(test_case_name)
+        except Exception:
+            log.exception("Failed to collect performance stats")
+
+
+def set_report_portal_tags(config):
+    rp_tags = list()
+    rp_tags.append(ocsci_config.ENV_DATA.get('platform'))
+    rp_tags.append(ocsci_config.ENV_DATA.get('deployment_type'))
+    if ocsci_config.REPORTING.get('us_ds') == 'us':
+        rp_tags.append('upstream')
+    else:
+        rp_tags.append('downstream')
+    worker_instance_type = ocsci_config.ENV_DATA.get('worker_instance_type')
+    rp_tags.append(f"worker_instance_type:{worker_instance_type}")
+    rp_tags.append(f"ocp_version:{get_ocp_version()}")
+    rp_tags.append(
+        f"ocs_version:{ocsci_config.ENV_DATA.get('ocs_version')}"
+    )
+    if ocsci_config.DEPLOYMENT.get('ocs_registry_image'):
+        ocs_registry_image = ocsci_config.DEPLOYMENT.get('ocs_registry_image')
+        rp_tags.append(f"ocs_registry_image:{ocs_registry_image}")
+        rp_tags.append(f"ocs_registry_tag:{ocs_registry_image.split(':')[1]}")
+    if ocsci_config.DEPLOYMENT.get('ui_deployment'):
+        rp_tags.append('ui_deployment')
+    if ocsci_config.DEPLOYMENT.get('live_deployment'):
+        rp_tags.append('live_deployment')
+    if ocsci_config.DEPLOYMENT.get('stage'):
+        rp_tags.append('stage_deployment')
+    if not ocsci_config.DEPLOYMENT.get('allow_lower_instance_requirements'):
+        rp_tags.append("production")
+    if ocsci_config.ENV_DATA.get('fips'):
+        rp_tags.append("fips")
+
+    for tag in rp_tags:
+        if tag:
+            config.addinivalue_line("rp_launch_tags", tag.lower())

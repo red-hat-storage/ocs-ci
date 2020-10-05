@@ -103,18 +103,26 @@ class CephCluster(object):
         self.mgrs = []
         self.osds = []
         self.noobaas = []
+        self.rgws = []
         self.toolbox = None
         self.mds_count = 0
         self.mon_count = 0
         self.mgr_count = 0
         self.osd_count = 0
         self.noobaa_count = 0
-        self.mcg_obj = MCG()
+        self.rgw_count = 0
+        self._mcg_obj = None
         self.scan_cluster()
         logging.info(f"Number of mons = {self.mon_count}")
         logging.info(f"Number of mds = {self.mds_count}")
 
         self.used_space = 0
+
+    @property
+    def mcg_obj(self):
+        if not self._mcg_obj:
+            self._mcg_obj = MCG()
+        return self._mcg_obj
 
     @property
     def cluster_name(self):
@@ -143,6 +151,7 @@ class CephCluster(object):
         self.mgrs = pod.get_mgr_pods(self.mgr_selector, self.namespace)
         self.osds = pod.get_osd_pods(self.osd_selector, self.namespace)
         self.noobaas = pod.get_noobaa_pods(self.noobaa_selector, self.namespace)
+        self.rgws = pod.get_rgw_pods()
         self.toolbox = pod.get_ceph_tools_pod()
 
         # set port attrib on mon pods
@@ -164,6 +173,7 @@ class CephCluster(object):
         self.mgr_count = len(self.mgrs)
         self.osd_count = len(self.osds)
         self.noobaa_count = len(self.noobaas)
+        self.rgw_count = len(self.rgws)
 
     @staticmethod
     def set_port(pod):
@@ -242,17 +252,32 @@ class CephCluster(object):
             logger.error(e)
             raise exceptions.CephHealthException("Cluster health is NOT OK")
 
-        # check noobaa health
-        if not self.mcg_obj.status:
-            raise exceptions.NoobaaHealthException("Cluster health is NOT OK")
-
         # TODO: OSD and MGR health check
         logger.info("Cluster HEALTH_OK")
         # This scan is for reconcilation on *.count
         # because during first scan in this function some of the
         # pods may not be up and would have set count to lesser number
         self.scan_cluster()
-        return True
+
+        # Check Noobaa health
+        self.wait_for_noobaa_health_ok()
+
+    def noobaa_health_check(self):
+        """
+        Check Noobaa health
+
+        """
+        if not self.mcg_obj.status:
+            raise exceptions.NoobaaHealthException("Cluster health is NOT OK")
+
+    def wait_for_noobaa_health_ok(self, tries=60, delay=5):
+        """
+        Wait for Noobaa health to be OK
+        """
+        return retry(
+            exceptions.NoobaaHealthException,
+            tries=tries, delay=delay, backoff=1
+        )(self.noobaa_health_check)()
 
     def mon_change_count(self, new_count):
         """
@@ -614,7 +639,7 @@ class CephCluster(object):
 
         ceph_pod = pod.get_ceph_tools_pod()
         ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph status")
-        ceph_health = ceph_status['health']['status']
+        ceph_health = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph health")
         total_pg_count = ceph_status['pgmap']['num_pgs']
         pg_states = ceph_status['pgmap']['pgs_by_state']
         logger.info(ceph_health)
@@ -624,6 +649,31 @@ class CephCluster(object):
                 states['state_name'] == 'active+clean'
                 and states['count'] == total_pg_count
             )
+
+    def wait_for_rebalance(self, timeout=600):
+        """
+        Wait for re-balance to complete
+
+        Args:
+            timeout (int): Time to wait for the completion of re-balance
+
+        Returns:
+            bool: True if rebalance completed, False otherwise
+
+        """
+        try:
+            for rebalance in TimeoutSampler(
+                timeout=timeout, sleep=10, func=self.get_rebalance_status
+            ):
+                if rebalance:
+                    logging.info("Re-balance is completed")
+                    return True
+        except exceptions.TimeoutExpiredError:
+            logger.error(
+                f"Data re-balance failed to complete within the given "
+                f"timeout of {timeout} seconds"
+            )
+            return False
 
     def time_taken_to_complete_rebalance(self, timeout=600):
         """
@@ -638,13 +688,12 @@ class CephCluster(object):
 
         """
         start_time = time.time()
-        for rebalance in TimeoutSampler(
-            timeout=timeout, sleep=10, func=self.get_rebalance_status
-        ):
-            if rebalance:
-                logging.info("Rebalance is completed")
-                time_taken = time.time() - start_time
-                return (time_taken / 60)
+        assert self.wait_for_rebalance(timeout=timeout), (
+            f"Data re-balance failed to complete within the given "
+            f"timeout of {timeout} seconds"
+        )
+        time_taken = time.time() - start_time
+        return time_taken / 60
 
 
 class CephHealthMonitor(threading.Thread):
@@ -948,28 +997,34 @@ def validate_pg_balancer():
     Validate either data is equally distributed to OSDs
 
     Returns:
-        bool: True if osd data consumption difference is <= 2% else False
+        bool: True if avg PG's per osd difference is <=10 else False
 
     """
     # Check OSD utilization either pg balancer is active
+    # TODO: Revisit this if pg difference value needs change
+    # TODO: Revisit eval value if pg balancer mode changes from 'upmap'
     if get_pg_balancer_status():
         eval = get_balancer_eval()
         osd_dict = get_pgs_per_osd()
-        osd_min_pg_value = min(osd_dict.values())
-        osd_max_pg_value = max(osd_dict.values())
-        diff = osd_max_pg_value - osd_min_pg_value
-        # TODO: Revisit this if pg difference value needs change
-        # TODO: Revisit eval value if pg balancer mode changes from 'upmap'
-        if diff <= 5 and eval <= 0.02:
+        osd_avg_pg_value = round(sum(osd_dict.values()) / len(osd_dict))
+        osd_pg_value_flag = True
+        for key, value in osd_dict.items():
+            diff = abs(value - osd_avg_pg_value)
+            if diff <= 10:
+                logging.info(f"{key} PG difference {diff} is acceptable")
+            else:
+                logging.error(f"{key} PG difference {diff} is not acceptable")
+                osd_pg_value_flag = False
+        if osd_pg_value_flag and eval <= 0.025:
             logging.info(
                 f"Eval value is {eval} and pg distribution "
-                f"difference is {diff} between high and low pgs per OSD"
+                f"average difference is <=10 which is acceptable"
             )
             return True
         else:
             logging.error(
                 f"Eval value is {eval} and pg distribution "
-                f"difference is {diff} between high and low pgs per OSD"
+                f"average difference is >=10 which is high and not acceptable"
             )
             return False
     else:
@@ -1007,3 +1062,298 @@ def get_osd_pods_memory_sum():
         unformatted_size=osd_pod_mem_size_str, units_to_covert_to='GB'
     )
     return num_of_osd_pods * osd_pod_mem_size
+
+
+def get_child_nodes_osd_tree(node_id, osd_tree):
+    """
+    This function finds the children of a node from the 'ceph osd tree' and returns them as list
+
+    Args:
+        node_id (int): the id of the node for which the children to be retrieved
+        osd_tree (dict): dictionary containing the output of 'ceph osd tree'
+
+    Returns:
+        list: of 'children' of a given node_id
+
+    """
+    for i in range(len(osd_tree['nodes'])):
+        if osd_tree['nodes'][i]['id'] == node_id:
+            return osd_tree['nodes'][i]['children']
+
+
+def check_osds_in_hosts_osd_tree(hosts, osd_tree):
+    """
+    Checks if osds are formed correctly after cluster expansion
+
+    Args:
+        hosts (list) : List of hosts
+        osd_tree (str) : 'ceph osd tree' command output
+
+    Returns:
+        bool : True if osd tree formatted correctly
+
+    """
+    for each_host in hosts:
+        osd_in_each_host = get_child_nodes_osd_tree(each_host, osd_tree)
+        if len(osd_in_each_host) > 1 or len(osd_in_each_host) <= 0:
+            logger.error("Error. ceph osd tree is NOT formed correctly after cluster expansion")
+            return False
+
+    logger.info("osd tree verification Passed")
+    return True
+
+
+def check_osd_tree_1az_vmware(osd_tree, number_of_osds):
+    """
+    Checks whether an OSD tree is created/modified correctly. This can be used as a verification step for
+    deployment and cluster expansion tests.
+    This function is specifically for ocs cluster created on 1 AZ VMWare setup
+
+    Args:
+        osd_tree (dict): Dictionary of the values which represent 'osd tree'.
+        number_of_osds (int): total number of osds in the cluster
+
+    Returns:
+        bool: True, if the ceph osd tree is formed correctly. Else False
+
+    """
+    # in case of vmware, there will be only one zone as of now. The OSDs are arranged as follows:
+    # ID  CLASS WEIGHT  TYPE NAME                            STATUS REWEIGHT PRI-AFF
+    # -1       0.99326 root default
+    # -8       0.33109     rack rack0
+    # -7       0.33109         host ocs-deviceset-0-0-dktqc
+    #  1   hdd 0.33109             osd.1                        up  1.00000 1.00000
+    # There will be 3 racks - rack0, rack1, rack2.
+    # When cluster expansion is successfully done, a host and an osd are added in each rack.
+    # The number of hosts will be equal to the number osds the cluster has. Each rack can
+    # have multiple hosts but each host will have only one osd under it.
+    number_of_hosts_expected = int(number_of_osds / 3)
+    all_hosts = []
+    racks = osd_tree['nodes'][0]['children']
+
+    for rack in racks:
+        hosts = get_child_nodes_osd_tree(rack, osd_tree)
+        if len(hosts) != number_of_hosts_expected:
+            logging.error(f"Number of hosts under rack {rack} "
+                          f"is not matching the expected ={number_of_hosts_expected} ")
+            return False
+        else:
+            all_hosts.append(hosts)
+
+    all_hosts_flatten = [item for sublist in all_hosts for item in sublist]
+    return check_osds_in_hosts_osd_tree(all_hosts_flatten, osd_tree)
+
+
+def check_osd_tree_3az_aws(osd_tree, number_of_osds):
+    """
+    Checks whether an OSD tree is created/modified correctly. This can be used as a verification step for
+    deployment and cluster expansion tests.
+    This function is specifically for ocs cluster created on 3 AZ AWS config
+
+    Args:
+        osd_tree (dict): Dictionary of the values which represent 'osd tree'.
+        number_of_osds (int): total number of osds in the cluster
+
+    Returns:
+        Boolean: True, if the ceph osd tree is formed correctly. Else False
+
+    """
+    all_hosts = []
+    region = osd_tree['nodes'][0]['children']
+
+    zones = get_child_nodes_osd_tree(region[0], osd_tree)
+    for each_zone in zones:
+        hosts_in_each_zone = get_child_nodes_osd_tree(each_zone, osd_tree)
+        if len(hosts_in_each_zone) != number_of_osds / 3:  # 3 is replica_factor
+            logger.error("number of hosts in zone is incorrect")
+            return False
+        else:
+            all_hosts.append(hosts_in_each_zone)
+
+    all_hosts_flatten = [item for sublist in all_hosts for item in sublist]
+
+    return check_osds_in_hosts_osd_tree(all_hosts_flatten, osd_tree)
+
+
+def check_osd_tree_1az_aws(osd_tree, number_of_osds):
+    """
+    Checks whether an OSD tree is created/modified correctly. This can be used as a verification step for
+    deployment and cluster expansion tests.
+    This function is specifically for ocs cluster created on 1 AZ AWS config
+
+    Args:
+        osd_tree (dict): Dictionary of the values which represent 'osd tree'.
+        number_of_osds (int): total number of osds in the cluster
+
+    Returns:
+        Boolean: True, if the ceph osd tree is formed correctly. Else False
+
+    """
+    all_hosts = []
+    region = osd_tree['nodes'][0]['children']
+    zones = get_child_nodes_osd_tree(region[0], osd_tree)
+    racks = get_child_nodes_osd_tree(zones[0], osd_tree)
+    logging.info(f"racks = {racks}")
+    if len(racks) != 3:
+        logging.error(f"Expected 3 racks but got {len(racks)}")
+    for each_rack in racks:
+        hosts_in_each_rack = get_child_nodes_osd_tree(each_rack, osd_tree)
+        if len(hosts_in_each_rack) != number_of_osds / 3:  # 3 is replica_factor
+            logging.error("number of hosts in rack is incorrect")
+            return False
+        else:
+            logging.info(f"adding host...{hosts_in_each_rack}")
+            all_hosts.append(hosts_in_each_rack)
+    all_hosts_flatten = [item for sublist in all_hosts for item in sublist]
+
+    return check_osds_in_hosts_osd_tree(all_hosts_flatten, osd_tree)
+
+
+def check_osds_in_hosts_are_up(osd_tree):
+    """
+    Check if all the OSD's in status 'up'
+
+    Args:
+        osd_tree (dict): The ceph osd tree
+
+    Returns:
+        bool: True if all the OSD's in status 'up'. Else False
+
+    """
+    for n in osd_tree['nodes']:
+        if n['type'] == 'osd':
+            if n['status'] != 'up':
+                logger.warning(f"osd with name {n['name']} is not up")
+                return False
+
+    return True
+
+
+def check_ceph_osd_tree():
+    """
+    Checks whether an OSD tree is created/modified correctly.
+    It is a summary of the previous functions: 'check_osd_tree_1az_vmware',
+    'check_osd_tree_3az_aws', 'check_osd_tree_1az_aws'.
+
+    Returns:
+         bool: True, if the ceph osd tree is formed correctly. Else False
+
+    """
+    osd_pods = pod.get_osd_pods()
+    # 'ceph osd tree' should show the new osds under right nodes/hosts
+    #  Verification is different for 3 AZ and 1 AZ configs
+    ct_pod = pod.get_ceph_tools_pod()
+    tree_output = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree')
+    if config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
+        return check_osd_tree_1az_vmware(tree_output, len(osd_pods))
+
+    aws_number_of_zones = 3
+    if config.ENV_DATA['platform'].lower() == constants.AWS_PLATFORM:
+        # parse the osd tree. if it contains a node 'rack' then it's a
+        # AWS_1AZ cluster. Else, 3 AWS_3AZ cluster
+        for i in range(len(tree_output['nodes'])):
+            if tree_output['nodes'][i]['name'] in "rack0":
+                aws_number_of_zones = 1
+        if aws_number_of_zones == 1:
+            return check_osd_tree_1az_aws(tree_output, len(osd_pods))
+        else:
+            return check_osd_tree_3az_aws(tree_output, len(osd_pods))
+
+
+def check_ceph_osd_tree_after_node_replacement():
+    """
+    Check the ceph osd tree after the process of node replacement.
+
+    Returns:
+        bool: True if the ceph osd tree formation is correct,
+        and all the OSD's are up. Else False
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree')
+    if not check_ceph_osd_tree():
+        logger.warning("Incorrect ceph osd tree formation found")
+        return False
+    if not check_osds_in_hosts_are_up(osd_tree):
+        logger.warning("Not all the osd's are in status 'up'")
+        return False
+
+    return True
+
+
+class CephClusterExternal(CephCluster):
+    """
+    Handle all external ceph cluster related functionalities
+    Assumption: Cephcluster Kind resource exists
+
+    """
+
+    def __init__(self):
+        self.POD = ocp.OCP(
+            kind='Pod', namespace=config.ENV_DATA['cluster_namespace']
+        )
+        self.CEPHCLUSTER = ocp.OCP(
+            kind='CephCluster', namespace=config.ENV_DATA['cluster_namespace']
+        )
+
+        self.wait_for_cluster_cr()
+        self._cluster_name = (
+            self.cluster_resource.get('metadata').get('name')
+        )
+        self._namespace = (
+            self.cluster_resource.get('metadata').get('namespace')
+        )
+        self.cluster = ocs.OCS(**self.cluster_resource)
+        self.wait_for_nooba_cr()
+
+    @property
+    def cluster_name(self):
+        return self._cluster_name
+
+    @property
+    def namespace(self):
+        return self._namespace
+
+    @retry(IndexError, 10, 3, 1)
+    def wait_for_cluster_cr(self):
+        """
+        we have to wait for cluster cr to appear else
+        it leads to list index out of range error
+
+        """
+        cluster_cr = self.CEPHCLUSTER.get()
+        self.cluster_resource = cluster_cr.get('items')[0]
+
+    @retry((IndexError, AttributeError, TypeError), 100, 3, 1)
+    def wait_for_nooba_cr(self):
+        self._mcg_obj = MCG()
+
+    def cluster_health_check(self, timeout=300):
+        """
+        This would be a comprehensive cluster health check
+        which includes checking pods, external ceph cluster health.
+        raise exceptions.CephHealthException("Cluster health is NOT OK")
+        """
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=3,
+            func=self.is_health_ok
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise exceptions.CephHealthException("Cluster health is NOT OK")
+
+        self.wait_for_noobaa_health_ok()
+        self.validate_pvc()
+
+    def validate_pvc(self):
+        """
+        Check whether all PVCs are in bound state
+
+        """
+        ocs_pvc_obj = get_all_pvc_objs(namespace=self.namespace)
+
+        for pvc_obj in ocs_pvc_obj:
+            assert pvc_obj.status == constants.STATUS_BOUND, {
+                f"PVC {pvc_obj.name} is not Bound"
+            }
+            logger.info(f"PVC {pvc_obj.name} is in Bound state")

@@ -17,7 +17,6 @@ from ocs_ci.ocs.node import (
     get_both_osd_and_app_pod_running_node,
     add_new_node_and_label_it
 )
-from tests.manage.z_cluster.nodes import helpers as nodes_helpers
 
 
 log = logging.getLogger(__name__)
@@ -128,7 +127,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj)
         log.info("All the dc pods reached running state")
 
-        nodes_helpers.wait_for_all_pods()
+        pod.wait_for_storage_pods()
 
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),

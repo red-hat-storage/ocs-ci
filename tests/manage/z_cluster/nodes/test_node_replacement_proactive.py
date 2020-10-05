@@ -1,20 +1,91 @@
 import logging
-import re
 
 import pytest
 import random
+
+from ocs_ci.framework import config
 from tests.helpers import get_worker_nodes
 from ocs_ci.framework.pytest_customization.marks import tier4a
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
-    tier4, ManageTest, aws_platform_required, ignore_leftovers, ipi_deployment_required
+    tier4, ManageTest, ignore_leftovers, aws_platform_required,
+    ipi_deployment_required
 )
-from ocs_ci.ocs import (
-    machine, constants, ocp, node
-)
+from ocs_ci.ocs import constants, node
+from ocs_ci.ocs.cluster import CephCluster
+
 from tests.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
+
+
+def select_osd_node_name():
+    """
+    select randomly one of the osd nodes
+
+    Returns:
+        str: the selected osd node name
+
+    """
+    osd_pods_obj = pod.get_osd_pods()
+    osd_node_name = pod.get_pod_node(random.choice(osd_pods_obj)).name
+    log.info(f"Selected OSD is {osd_node_name}")
+    return osd_node_name
+
+
+def delete_and_create_osd_node(osd_node_name):
+    """
+    Delete an osd node, and create a new one to replace it
+
+    Args:
+        osd_node_name (str): The osd node name to delete
+
+    """
+    new_node_name = None
+    # error message for invalid deployment configuration
+    msg_invalid = (
+        "ocs-ci config 'deployment_type' value "
+        f"'{config.ENV_DATA['deployment_type']}' is not valid, "
+        f"results of this test run are all invalid."
+    )
+    # TODO: refactor this so that AWS is not a "special" platform
+    if config.ENV_DATA['platform'].lower() == constants.AWS_PLATFORM:
+        if config.ENV_DATA['deployment_type'] == 'ipi':
+            new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
+
+        elif config.ENV_DATA['deployment_type'] == 'upi':
+            new_node_name = node.delete_and_create_osd_node_aws_upi(osd_node_name)
+        else:
+            log.error(msg_invalid)
+            pytest.fail(msg_invalid)
+    elif config.ENV_DATA['platform'].lower() in constants.CLOUD_PLATFORMS:
+        if config.ENV_DATA['deployment_type'] == 'ipi':
+            new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
+        else:
+            log.error(msg_invalid)
+            pytest.fail(msg_invalid)
+    elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
+        worker_nodes_not_in_ocs = node.get_worker_nodes_not_in_ocs()
+        if not worker_nodes_not_in_ocs:
+            pytest.skip(
+                "Skipping the test because we don't have an "
+                "extra worker node that not in ocs"
+            )
+        else:
+            log.info(
+                "Perform delete and create ocs node in Vmware using one "
+                "of the existing extra worker nodes that not in ocs"
+            )
+            new_node_name = node.delete_and_create_osd_node_vsphere_upi(
+                osd_node_name, use_existing_node=True
+            )
+
+    assert node.node_replacement_verification_steps_ceph_side(
+        osd_node_name, new_node_name
+    )
+    assert node.node_replacement_verification_steps_user_side(
+        osd_node_name, new_node_name
+    )
 
 
 @tier4
@@ -22,11 +93,12 @@ log = logging.getLogger(__name__)
 @ignore_leftovers
 @aws_platform_required
 @ipi_deployment_required
-class TestNodeReplacement(ManageTest):
+class TestNodeReplacementWithIO(ManageTest):
     """
-    Knip-894 Node replacement - AWS-IPI-Proactive
+    Knip-894 Node replacement proactive with IO
 
     """
+
     @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
@@ -35,9 +107,11 @@ class TestNodeReplacement(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
-    def test_nodereplacement_proactive(self, pvc_factory, pod_factory, dc_pod_factory):
+    def test_nodereplacement_proactive_with_io_running(
+        self, pvc_factory, pod_factory, dc_pod_factory
+    ):
         """
-        Knip-894 Node Replacement proactive
+        Knip-894 Node Replacement proactive when IO running in the background
 
         """
 
@@ -45,9 +119,7 @@ class TestNodeReplacement(ManageTest):
         worker_node_list = get_worker_nodes()
         log.info(f"Current available worker nodes are {worker_node_list}")
 
-        osd_pods_obj = pod.get_osd_pods()
-        osd_node_name = pod.get_pod_node(random.choice(osd_pods_obj)).name
-        log.info(f"Selected OSD is {osd_node_name}")
+        osd_node_name = select_osd_node_name()
 
         log.info("Creating dc pod backed with rbd pvc and running io in bg")
         for worker_node in worker_node_list:
@@ -61,40 +133,48 @@ class TestNodeReplacement(ManageTest):
                 cephfs_dc_pod = dc_pod_factory(interface=constants.CEPHFILESYSTEM, node_name=worker_node, size=20)
                 pod.run_io_in_bg(cephfs_dc_pod, expect_to_fail=False, fedora_dc=True)
 
-        # Unscheduling node
-        node.unschedule_nodes([osd_node_name])
-        # Draining Node
-        node.drain_nodes([osd_node_name])
-        log.info("Getting machine name from specified node name")
-        machine_name = machine.get_machine_from_node_name(osd_node_name)
-        log.info(f"Node {osd_node_name} associated machine is {machine_name}")
-        log.info(f"Deleting machine {machine_name} and waiting for new machine to come up")
-        machine.delete_machine_and_check_state_of_new_spinned_machine(machine_name)
-        new_machine_list = machine.get_machines()
-        for machines in new_machine_list:
-            # Trimming is done to get just machine name
-            # eg:- machine_name:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b-nlgkr
-            # After trimming:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b
-            if re.match(machines.name[:-6], machine_name):
-                new_machine_name = machines.name
-        machineset_name = machine.get_machineset_from_machine_name(new_machine_name)
-        log.info("Waiting for new worker node to be in ready state")
-        machine.wait_for_new_node_to_be_ready(machineset_name)
-        new_node_name = node.get_node_from_machine_name(new_machine_name)
-        log.info("Adding ocs label to newly created worker node")
-        node_obj = ocp.OCP(kind='node')
-        node_obj.add_label(
-            resource_name=new_node_name,
-            label=constants.OPERATOR_NODE_LABEL
-        )
-        log.info(
-            f"Successfully labeled {new_node_name} with OCS storage label"
-        )
+        delete_and_create_osd_node(osd_node_name)
+
         # Creating Resources
         log.info("Creating Resources using sanity helpers")
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
         # Deleting Resources
         self.sanity_helpers.delete_resources()
+
         # Verify everything running fine
         log.info("Verifying All resources are Running and matches expected result")
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=120)
+
+
+@tier4
+@tier4a
+@ignore_leftovers
+class TestNodeReplacement(ManageTest):
+    """
+    Knip-894 Node replacement proactive
+
+    """
+
+    @pytest.fixture(autouse=True)
+    def init_sanity(self):
+        """
+        Initialize Sanity instance
+
+        """
+        self.sanity_helpers = Sanity()
+
+    def test_nodereplacement_proactive(self):
+        """
+        Knip-894 Node Replacement proactive(without IO running)
+
+        """
+        osd_node_name = select_osd_node_name()
+        delete_and_create_osd_node(osd_node_name)
+
+        # Verify everything running fine
+        log.info("Verifying All resources are Running and matches expected result")
+        self.sanity_helpers.health_check(tries=90)
+        ceph_cluster_obj = CephCluster()
+        assert ceph_cluster_obj.wait_for_rebalance(timeout=1800), (
+            "Data re-balance failed to complete"
+        )

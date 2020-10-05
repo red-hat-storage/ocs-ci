@@ -29,6 +29,7 @@ from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import create_directory_path, mirror_image, run_cmd
 
+
 log = logging.getLogger(__name__)
 
 
@@ -647,12 +648,16 @@ def setup_ceph_toolbox(force_setup=False):
     """
     namespace = ocsci_config.ENV_DATA['cluster_namespace']
     ceph_toolbox = get_pod_name_by_pattern('rook-ceph-tools', namespace)
+    # setup toolbox for external mode
+    # Refer bz: 1856982 - invalid admin secret
     if len(ceph_toolbox) == 1:
         log.info("Ceph toolbox already exists, skipping")
         if force_setup:
             log.info("Running force setup for Ceph toolbox!")
         else:
             return
+    external_mode = ocsci_config.DEPLOYMENT.get("external_mode")
+
     if ocsci_config.ENV_DATA.get("ocs_version") == '4.2':
         rook_operator = get_pod_name_by_pattern(
             'rook-ceph-operator', namespace
@@ -669,6 +674,13 @@ def setup_ceph_toolbox(force_setup=False):
         rook_toolbox = OCS(**tool_box_data)
         rook_toolbox.create()
     else:
+        if external_mode:
+            toolbox = templating.load_yaml(constants.TOOL_POD_YAML)
+            keyring_dict = ocsci_config.EXTERNAL_MODE.get("admin_keyring")
+            env = [{'name': 'ROOK_ADMIN_SECRET', 'value': keyring_dict['key']}]
+            toolbox['spec']['template']['spec']['containers'][0]['env'] = env
+            rook_toolbox = OCS(**toolbox)
+            rook_toolbox.create()
         # for OCS >= 4.3 there is new toolbox pod deployment done here:
         # https://github.com/openshift/ocs-operator/pull/207/
         log.info("starting ceph toolbox pod")
@@ -771,7 +783,7 @@ def collect_noobaa_db_dump(log_dir_path):
     )
 
 
-def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
+def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=True):
     """
     Collects OCS logs
 
@@ -781,6 +793,8 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
         ocp (bool): Whether to gather OCP logs
         ocs (bool): Whether to gather OCS logs
         mcg (bool): True for collecting MCG logs (noobaa db dump)
+        status_failure (bool): Whether the collection is after success or failure,
+            allows better naming for folders under logs directory
 
     """
     if not (
@@ -792,17 +806,27 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
             "skipping log collection"
         )
         return
-
-    log_dir_path = os.path.join(
-        os.path.expanduser(ocsci_config.RUN['log_dir']),
-        f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
-        f"{dir_name}_ocs_logs"
-    )
+    if status_failure:
+        log_dir_path = os.path.join(
+            os.path.expanduser(ocsci_config.RUN['log_dir']),
+            f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
+            f"{dir_name}_ocs_logs"
+        )
+    else:
+        if ocsci_config.REPORTING['collect_logs_on_success_run']:
+            log_dir_path = os.path.join(
+                os.path.expanduser(ocsci_config.RUN['log_dir']),
+                f"{dir_name}_{ocsci_config.RUN['run_id']}"
+            )
 
     if ocs:
         latest_tag = ocsci_config.REPORTING.get(
-            'default_ocs_must_gather_latest_tag',
-            ocsci_config.DEPLOYMENT['default_latest_tag']
+            'ocs_must_gather_latest_tag',
+            ocsci_config.REPORTING.get(
+                'default_ocs_must_gather_latest_tag', ocsci_config.DEPLOYMENT[
+                    'default_latest_tag'
+                ]
+            )
         )
         ocs_log_dir_path = os.path.join(log_dir_path, 'ocs_must_gather')
         ocs_must_gather_image = ocsci_config.REPORTING['ocs_must_gather_image']
@@ -826,7 +850,15 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
             '/usr/bin/gather_service_logs worker'
         )
     if mcg:
-        collect_noobaa_db_dump(log_dir_path)
+        counter = 0
+        while counter < 5:
+            counter += 1
+            try:
+                collect_noobaa_db_dump(log_dir_path)
+                break
+            except CommandFailed as ex:
+                log.error(f"Failed to dump noobaa DB! Error: {ex}")
+                sleep(30)
 
 
 def collect_prometheus_metrics(
@@ -874,3 +906,17 @@ def collect_prometheus_metrics(
         log.info(f'Saving {metric} data into {file_name}')
         with open(file_name, 'w') as outfile:
             json.dump(datapoints.json(), outfile)
+
+
+def oc_get_all_obc_names():
+    """
+    Returns:
+        set: A set of all OBC names
+
+    """
+    all_obcs_in_namespace = OCP(
+        namespace=ocsci_config.ENV_DATA['cluster_namespace'], kind='obc'
+    ).get().get('items')
+    return {
+        obc.get('spec').get('bucketName') for obc in all_obcs_in_namespace
+    }

@@ -32,6 +32,11 @@ class TestPVCCreationPerformance(E2ETest):
                 storageclass
         """
         self.interface = interface_iterate
+
+        if self.interface.lower() == 'cephfs':
+            self.interface = constants.CEPHFILESYSTEM
+        if self.interface.lower() == 'rbd':
+            self.interface = constants.CEPHBLOCKPOOL
         self.sc_obj = storageclass_factory(self.interface)
 
     @pytest.mark.usefixtures(base_setup.__name__)
@@ -41,6 +46,7 @@ class TestPVCCreationPerformance(E2ETest):
         Performance in test_multiple_pvc_creation_measurement_performance
         Each kernel (unzipped) is 892M and 61694 files
         """
+
         kernel_url = 'https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.5.tar.gz'
         download_path = 'tmp'
         # Number of times we copy the kernel
@@ -59,9 +65,12 @@ class TestPVCCreationPerformance(E2ETest):
         node_one = worker_nodes_list[0]
         node_two = worker_nodes_list[1]
 
-        # Create a RWX PVC
+        # Create a PVC
+        accessmode = constants.ACCESS_MODE_RWX
+        if self.interface == constants.CEPHBLOCKPOOL:
+            accessmode = constants.ACCESS_MODE_RWO
         pvc_obj = pvc_factory(
-            interface=constants.CEPHFILESYSTEM, access_mode=constants.ACCESS_MODE_RWX,
+            interface=self.interface, access_mode=accessmode,
             status=constants.STATUS_BOUND,
             size='15',
         )
@@ -70,9 +79,10 @@ class TestPVCCreationPerformance(E2ETest):
         logging.info(
             f"Creating Pod with pvc {pvc_obj.name} on node {node_one}"
         )
+
         helpers.pull_images('nginx')
         pod_obj1 = helpers.create_pod(
-            interface_type=constants.CEPHFILESYSTEM, pvc_name=pvc_obj.name,
+            interface_type=self.interface, pvc_name=pvc_obj.name,
             namespace=pvc_obj.namespace, node_name=node_one,
             pod_dict_path=constants.NGINX_POD_YAML
         )
@@ -88,6 +98,12 @@ class TestPVCCreationPerformance(E2ETest):
         pod_path = '/var/lib/www/html'
 
         _ocp = OCP(namespace=pvc_obj.namespace)
+
+        rsh_cmd = f"exec {pod_name} -- apt-get update"
+        _ocp.exec_oc_cmd(rsh_cmd)
+        rsh_cmd = f"exec {pod_name} -- apt-get install -y rsync"
+        _ocp.exec_oc_cmd(rsh_cmd, ignore_error=True, out_yaml_format=False)
+
         rsh_cmd = f"rsync {dir_path} {pod_name}:{pod_path}"
         _ocp.exec_oc_cmd(rsh_cmd)
 
@@ -108,7 +124,7 @@ class TestPVCCreationPerformance(E2ETest):
         )
 
         pod_obj2 = helpers.create_pod(
-            interface_type=constants.CEPHFILESYSTEM, pvc_name=pvc_obj.name,
+            interface_type=self.interface, pvc_name=pvc_obj.name,
             namespace=pvc_obj.namespace, node_name=node_two,
             pod_dict_path=constants.NGINX_POD_YAML
         )

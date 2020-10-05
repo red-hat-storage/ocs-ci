@@ -16,7 +16,7 @@ from ocs_ci.deployment.vmware import (
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
-from ocs_ci.utility import aws, vsphere, templating, baremetal
+from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.ocs import constants, ocp, exceptions
@@ -32,7 +32,7 @@ from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
     replace_content_in_file,
     get_ocp_version, TimeoutSampler,
-    download_file, delete_file, AZInfo
+    delete_file, AZInfo, download_file_from_git_repo,
 )
 from ocs_ci.ocs.node import wait_for_nodes_status
 
@@ -48,9 +48,10 @@ class PlatformNodesFactory:
         self.cls_map = {
             'AWS': AWSNodes,
             'vsphere': VMWareNodes,
-            'azure': NodesBase,
             'aws': AWSNodes,
-            'baremetal': BaremetalNodes
+            'baremetal': BaremetalNodes,
+            'azure': AZURENodes,
+            'gcp': NodesBase
         }
 
     def get_nodes_platform(self):
@@ -258,7 +259,7 @@ class VMWareNodes(NodesBase):
         )
         self.vsphere.start_vms(vms)
 
-    def restart_nodes(self, nodes, force=False, timeout=300, wait=True):
+    def restart_nodes(self, nodes, force=True, timeout=300, wait=True):
         """
         Restart vSphere VMs
 
@@ -288,15 +289,9 @@ class VMWareNodes(NodesBase):
             OCP node reaches status Ready.
             """
             nodes_names = [n.name for n in nodes]
-            logger.info(
-                f"Waiting for nodes: {nodes_names} to reach not ready state"
-            )
             wait_for_nodes_status(
                 node_names=nodes_names, status=constants.NODE_NOT_READY,
                 timeout=timeout
-            )
-            logger.info(
-                f"Waiting for nodes: {nodes_names} to reach ready state"
             )
             wait_for_nodes_status(
                 node_names=nodes_names, status=constants.NODE_READY,
@@ -1050,6 +1045,20 @@ class AWSNodes(NodesBase):
             host, pem_dst_path, cmd, user=constants.EC2_USER
         )
 
+    def get_stack_name_of_node(self, node_name):
+        """
+        Get the stack name of a given node
+
+        Args:
+            node_name (str): the name of the node
+
+        Returns:
+            str: The stack name of the given node
+        """
+        instance_id = self.aws.get_instance_id_from_private_dns_name(node_name)
+        stack_name = self.aws.get_stack_name_by_instance_id(instance_id)
+        return stack_name
+
 
 class AWSUPINode(AWSNodes):
     """
@@ -1125,7 +1134,14 @@ class AWSUPINode(AWSNodes):
             boto3.Instance: instance of ec2 instance resource
 
         """
-        self.gather_worker_data(f"no{conf.get('zone')}")
+        logger.info(f"new rhcos node conf = {conf}")
+        stack_name = conf.get('stack_name')
+        if conf.get('stack_name'):
+            suffix = stack_name.split('-')[-1]
+        else:
+            suffix = f"no{conf.get('zone')}"
+
+        self.gather_worker_data(suffix)
         worker_template_path = self.get_rhcos_worker_template()
         self.bucket_name = constants.AWS_S3_UPI_BUCKET
         self.template_obj_key = f'{self.cluster_name}-workertemplate'
@@ -1264,25 +1280,26 @@ class AWSUPINode(AWSNodes):
             path (str): local path to template file
 
         """
-        common_base = 'v3-launch-templates/functionality-testing'
+        common_base = 'functionality-testing'
         ocp_version = get_ocp_version('_')
         relative_template_path = os.path.join(
             f'aos-{ocp_version}',
             'hosts/upi_on_aws-cloudformation-templates'
         )
 
-        template_url = os.path.join(
-            f'{constants.OCP_QE_MISC_REPO}',
-            'plain',
+        path_to_file = os.path.join(
             f'{common_base}',
             f'{relative_template_path}',
             f'{constants.AWS_WORKER_NODE_TEMPLATE}'
         )
-        logger.info(f"Getting template from url {template_url}")
+        logger.info(
+            f"Getting file '{path_to_file}' from "
+            f"git repository {constants.OCP_QE_MISC_REPO}"
+        )
         tmp_file = os.path.join(
             '/tmp', constants.AWS_WORKER_NODE_TEMPLATE
         )
-        download_file(template_url, tmp_file)
+        download_file_from_git_repo(constants.OCP_QE_MISC_REPO, path_to_file, tmp_file)
         return tmp_file
 
     def _prepare_rhel_node_conf(self):
@@ -1642,3 +1659,160 @@ class BaremetalNodes(NodesBase):
             default_config_dict = yaml.safe_load(f)
 
         return default_config_dict
+
+
+class AZURENodes(NodesBase):
+    """
+    Azure Nodes class
+    """
+    def __init__(self):
+        super(AZURENodes, self).__init__()
+        self.azure = azure_utils.AZURE()
+
+    def stop_nodes(self, nodes):
+        raise NotImplementedError(
+            "Stop nodes functionality is not implemented"
+        )
+
+    def start_nodes(self, nodes):
+        raise NotImplementedError(
+            "Start nodes functionality is not implemented"
+        )
+
+    def restart_nodes(self, nodes, timeout=540, wait=True):
+        """
+        Restart Azure vm instances
+
+        Args:
+            nodes (list): The OCS objects of the nodes / Azure Vm instance
+            wait (bool): True if need to wait till the restarted node reaches
+                READY state. False otherwise
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+
+        """
+        if not nodes:
+            logger.error("No nodes found for restarting")
+            raise ValueError
+        node_names = [n.name for n in nodes]
+        for node_name in node_names:
+            self.azure.restart_az_vm_instance(node_name)
+
+        if wait:
+            """
+            When reboot is initiated on an instance from the Azure, the
+            instance stays at "Running" state throughout the reboot operation.
+
+            Once the OCP node detects that the node is not reachable then the
+            node reaches status NotReady.
+            When the reboot operation is completed and the instance is
+            reachable the OCP node reaches status Ready.
+            """
+            logger.info(
+                f"Waiting for nodes: {node_names} to reach not ready state"
+            )
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_NOT_READY,
+                timeout=timeout
+            )
+            logger.info(
+                f"Waiting for nodes: {node_names} to reach ready state"
+            )
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY,
+                timeout=timeout
+            )
+
+    def get_data_volumes(self):
+        """
+        Get the data Azure disk objects
+
+        Returns:
+            list: azure disk objects
+
+        """
+        pvs = get_deviceset_pvs()
+        return self.azure.get_data_volumes(pvs)
+
+    def get_node_by_attached_volume(self, volume):
+        """
+        Get node OCS object of the Azure vm instance that has the volume attached to
+
+        Args:
+            volume (Disk): The disk object to get the Azure Vm according to
+
+        Returns:
+            OCS: The OCS object of the Azure Vm instance
+
+        """
+        vm = self.azure.get_node_by_attached_volume(volume)
+        all_nodes = get_node_objs()
+        nodes = [
+            n for n in all_nodes if n.name == vm.name
+        ]
+        assert nodes, (
+            f"Failed to find the OCS object for Azure Vm instance {vm.name}"
+        )
+        return nodes[0]
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        """
+        Detach a volume from an Azure Vm instance
+
+        Args:
+            volume (Disk): The disk object required to delete a volume
+            node (OCS): The OCS object representing the node
+            delete_from_backend (bool): True for deleting the disk from the
+                storage backend, False otherwise
+
+        """
+        self.azure.detach_volume(volume, node)
+
+    def attach_volume(self, volume, node):
+        raise NotImplementedError(
+            "Attach volume functionality is not implemented"
+        )
+
+    def wait_for_volume_attach(self, volume):
+        """
+        Wait for a Disk to be attached to an Azure Vm instance.
+        This is used as when detaching the Disk from the Azure Vm instance,
+        re-attach should take place automatically
+
+        Args:
+            volume (Disk): The Disk to wait for to be attached
+
+        Returns:
+            bool: True if the volume has been attached to the
+                instance, False otherwise
+
+        """
+        try:
+            for sample in TimeoutSampler(
+                300, 3, self.azure.get_disk_state, volume.name
+            ):
+                logger.info(
+                    f"Volume id: {volume.name} has status: {sample}"
+                )
+                if sample == "Attached":
+                    return True
+        except TimeoutExpiredError:
+            logger.error(
+                f"Volume {volume.name} failed to be attached to an Azure Vm instance"
+            )
+            return False
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def attach_nodes_to_cluster(self, node_list):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )

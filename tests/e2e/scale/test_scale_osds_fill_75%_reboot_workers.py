@@ -17,6 +17,9 @@ from ocs_ci.ocs.resources.pod import wait_for_dc_app_pods_to_reach_running_state
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_external_mode, skipif_aws_i3
+)
 
 
 logger = logging.getLogger(__name__)
@@ -24,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 @scale
 @ignore_leftovers
+@skipif_external_mode
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[
@@ -35,6 +39,7 @@ logger = logging.getLogger(__name__)
         )
     ]
 )
+@skipif_aws_i3
 class TestScaleOSDsRebootNodes(E2ETest):
     """
     Add first set of OSD to a minimum cluster with 50%
@@ -52,7 +57,7 @@ class TestScaleOSDsRebootNodes(E2ETest):
         current_osd_count = count_cluster_osd()
         proj_obj = project_factory()
         if current_osd_count == 3:
-            while not validate_osd_utilization(osd_used=50):
+            while not validate_osd_utilization(osd_used=10):
                 # Create pvc
                 pvc_objs = multi_pvc_factory(
                     project=proj_obj,
@@ -86,7 +91,7 @@ class TestScaleOSDsRebootNodes(E2ETest):
             selector='app=rook-ceph-osd',
             resource_count=count * 3
         )
-        assert ceph_health_check(), "New OSDs failed to reach running state"
+        assert ceph_health_check(delay=120, tries=50), "New OSDs failed to reach running state"
 
         cluster = CephCluster()
 

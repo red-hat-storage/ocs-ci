@@ -1,10 +1,12 @@
 import logging
 import pytest
+from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
-    skipif_ocs_version, ManageTest, tier1, acceptance
+    skipif_ocs_version, ManageTest, tier1, acceptance, skipif_upgraded_from
 )
 from tests import helpers
 
@@ -13,6 +15,14 @@ log = logging.getLogger(__name__)
 
 @tier1
 @skipif_ocs_version('<4.5')
+@skipif_upgraded_from(['4.4'])
+@pytest.mark.skipif(
+    config.ENV_DATA['platform'].lower() == 'ibm_cloud',
+    reason=(
+        "Skipping tests on IBM Cloud due to bug 1871314 "
+        "https://bugzilla.redhat.com/show_bug.cgi?id=1871314"
+    )
+)
 class TestPvcExpand(ManageTest):
     """
     Tests to verify PVC expansion
@@ -46,10 +56,12 @@ class TestPvcExpand(ManageTest):
         )
 
         pods_cephfs = helpers.create_pods(
-            self.pvcs_cephfs, pod_factory, constants.CEPHFILESYSTEM, 2
+            self.pvcs_cephfs, pod_factory, constants.CEPHFILESYSTEM, 2,
+            constants.STATUS_RUNNING
         )
         pods_rbd = helpers.create_pods(
-            self.pvcs_rbd, pod_factory, constants.CEPHBLOCKPOOL, 2
+            self.pvcs_rbd, pod_factory, constants.CEPHBLOCKPOOL, 2,
+            constants.STATUS_RUNNING
         )
 
         self.pods = pods_cephfs + pods_rbd
@@ -113,6 +125,48 @@ class TestPvcExpand(ManageTest):
             f"on all pods."
         )
 
+    def run_io_and_verify(self, file_size, io_phase, verify=True):
+        """
+        Run fio on all pods and verify results
+
+        Args:
+            file_size (int): Size of fio file
+            io_phase (str): pre_expand or post_expand
+            verify (bool): True to verify fio, False otherwise
+
+        """
+        for pod_obj in self.pods:
+            storage_type = (
+                'block' if pod_obj.pvc.volume_mode == 'Block' else 'fs'
+            )
+
+            # Split file size and write from two pods if access mode is RWX
+            size = (
+                f'{int(file_size/2)}G' if (
+                    pod_obj.pvc.access_mode == constants.ACCESS_MODE_RWX
+                ) else f'{file_size}G'
+            )
+            log.info(f"Starting {io_phase} IO on pod {pod_obj.name}.")
+            pod_obj.run_io(
+                storage_type=storage_type, size=size, io_direction='write',
+                runtime=60, fio_filename=f'{pod_obj.name}_{io_phase}'
+            )
+            log.info(f"{io_phase} IO started on pod {pod_obj.name}.")
+        log.info(f"{io_phase} IO started on pods.")
+
+        if not verify:
+            return
+
+        log.info(f"Verifying {io_phase} IO on pods.")
+        for pod_obj in self.pods:
+            fio_result = pod_obj.get_fio_results()
+            err_count = fio_result.get('jobs')[0].get('error')
+            assert err_count == 0, (
+                f"{io_phase} IO error on pod {pod_obj.name}. "
+                f"FIO result: {fio_result}"
+            )
+            log.info(f"Verified {io_phase} IO on pod {pod_obj.name}.")
+
     @acceptance
     @pytest.mark.polarion_id('OCS-2219')
     def test_pvc_expansion(self):
@@ -125,3 +179,60 @@ class TestPvcExpand(ManageTest):
         # Modify size of PVCs and verify the change
         log.info(f"Expanding PVCs to {pvc_size_new}G")
         self.expand_and_verify(pvc_size_new)
+
+    @pytest.mark.polarion_id('OCS-302')
+    def test_pvc_expand_expanded_pvc(self):
+        """
+        Verify PVC expand of already expanded PVC
+
+        """
+        pvc_size_expanded_1 = 20
+        pvc_size_expanded_2 = 25
+        executor = ThreadPoolExecutor(max_workers=len(self.pods))
+
+        # Do setup on pods for running IO
+        log.info("Setting up pods for running IO.")
+        for pod_obj in self.pods:
+            log.info(f"Setting up pod {pod_obj.name} for running IO")
+            if pod_obj.pvc.volume_mode == 'Block':
+                storage_type = 'block'
+            else:
+                storage_type = 'fs'
+            executor.submit(pod_obj.workload_setup, storage_type=storage_type)
+
+        # Wait for setup on pods to complete
+        for pod_obj in self.pods:
+            log.info(
+                f"Waiting for IO setup to complete on pod {pod_obj.name}"
+            )
+            for sample in TimeoutSampler(
+                360, 2, getattr, pod_obj, 'wl_setup_done'
+            ):
+                if sample:
+                    log.info(
+                        f"Setup for running IO is completed on pod "
+                        f"{pod_obj.name}."
+                    )
+                    break
+        log.info("Setup for running IO is completed on all pods.")
+
+        # Run IO and verify
+        log.info("Starting pre-expand IO on all pods.")
+        self.run_io_and_verify(9, 'pre_expand')
+        log.info("Verified pre-expand IO result on pods.")
+
+        log.info("Expanding all PVCs.")
+        self.expand_and_verify(pvc_size_expanded_1)
+
+        # Run IO and verify
+        log.info("Starting post-expand IO on all pods.")
+        self.run_io_and_verify(8, 'post_expand')
+        log.info("Verified post-expand IO result on pods.")
+
+        log.info("Expanding all PVCs for the second time.")
+        self.expand_and_verify(pvc_size_expanded_2)
+
+        # Run IO and verify
+        log.info("Starting post-second-expand IO on all pods.")
+        self.run_io_and_verify(6, 'post_expand')
+        log.info("Verified post-second-expand IO result on pods.")

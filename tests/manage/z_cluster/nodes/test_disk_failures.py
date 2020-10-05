@@ -6,7 +6,7 @@ import re
 from ocs_ci.ocs import node, constants, ocp
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
-    tier4, tier4b, ignore_leftovers, ManageTest, aws_platform_required,
+    tier4, tier4b, ignore_leftovers, ManageTest, cloud_platform_required,
     vsphere_platform_required, bugzilla
 )
 from tests.sanity_helpers import Sanity
@@ -107,7 +107,7 @@ class TestDiskFailures(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
-    @aws_platform_required
+    @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1085")
     @bugzilla('1825675')
     def test_detach_attach_worker_volume(self, nodes, pvc_factory, pod_factory):
@@ -148,7 +148,7 @@ class TestDiskFailures(ManageTest):
         # TODO: Remove 'tries=100'
         self.sanity_helpers.health_check(tries=100)
 
-    @aws_platform_required
+    @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1086")
     def test_detach_attach_2_data_volumes(self, nodes, pvc_factory, pod_factory):
         """

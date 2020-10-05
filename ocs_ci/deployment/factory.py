@@ -2,10 +2,12 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import exceptions
+from ocs_ci.deployment.ibm import IBMDeployment
 from .aws import AWSIPI, AWSUPI
 from .azure import AZUREIPI
+from .gcp import GCPIPI
 from .vmware import VSPHEREUPI
-from .baremetal import BAREMETALUPI
+from .baremetal import BAREMETALUPI, BaremetalPSIUPI
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +24,10 @@ class DeploymentFactory(object):
             'aws_upi': AWSUPI,
             'azure_ipi': AZUREIPI,
             'vsphere_upi': VSPHEREUPI,
+            'baremetalpsi_upi': BaremetalPSIUPI,
             'baremetal_upi': BAREMETALUPI,
+            'gcp_ipi': GCPIPI,
+            'powervs_upi': IBMDeployment,
         }
 
     def get_deployment(self):

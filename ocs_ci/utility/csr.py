@@ -76,6 +76,7 @@ def get_csr_resource():
     return ocp.OCP(kind='csr', namespace=constants.DEFAULT_NAMESPACE)
 
 
+@retry(exceptions.CommandFailed, tries=7, delay=5, backoff=3)
 def get_pending_csr():
     """
     Gets the pending CSRs
