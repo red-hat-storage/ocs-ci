@@ -995,7 +995,8 @@ def setup_local_storage(storageclass):
             "Creating optional operators CatalogSource and ImageContentSourcePolicy"
         )
         run_cmd(f"oc create -f {optional_operators_yaml.name}")
-
+        # sleep here to start update machineconfigpool status
+        time.sleep(60)
         wait_for_machineconfigpool_status('all')
 
     logger.info("Retrieving local-storage-operator data from yaml")
