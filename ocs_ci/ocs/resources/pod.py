@@ -304,6 +304,33 @@ class Pod(OCS):
         self.io_params['bs'] = bs
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
+    def fillup_fs(self, size, fio_filename=None):
+        """
+        Execute FIO on a pod to fillup a file
+        This will run sequantial IO of 1MB block size to fill up the fill with data
+        This operation will run in background and will store the results in
+        'self.thread.result()'.
+        In order to wait for the output and not continue with the test until
+        FIO is done, call self.thread.result() right after calling run_io.
+        See tests/manage/test_pvc_deletion_during_io.py::test_run_io
+        for usage of FIO
+
+        Args:
+            size (str): Size in MB, e.g. '200M'
+            fio_filename(str): Name of fio file created on app pod's mount point
+
+        """
+
+        if not self.wl_setup_done:
+            self.workload_setup(storage_type='fs', jobs=1)
+
+        self.io_params = templating.load_yaml(constants.FIO_IO_FILLUP_PARAMS_YAML)
+        size = size if isinstance(size, str) else f"{size}M"
+        self.io_params['size'] = size
+        if fio_filename:
+            self.io_params['filename'] = fio_filename
+        self.fio_thread = self.wl_obj.run(**self.io_params)
+
     def run_git_clone(self):
         """
         Execute git clone on a pod to simulate a Jenkins user
