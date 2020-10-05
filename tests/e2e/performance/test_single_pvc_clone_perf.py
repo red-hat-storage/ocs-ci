@@ -22,28 +22,28 @@ logger = logging.getLogger(__name__)
     argnames=["interface_type", "pvc_size", "file_size"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, '1', '600M'], marks=pytest.mark.polarion_id('OCS-2340')
+            *[constants.CEPHBLOCKPOOL, '1', '600M'], marks=pytest.mark.polarion_id('OCS-2356')
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, '25', '15GB'], marks=pytest.mark.polarion_id('OCS-2340')
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, '50', '30GB'], marks=pytest.mark.polarion_id('OCS-2340')
+            *[constants.CEPHBLOCKPOOL, '50', '30GB'], marks=pytest.mark.polarion_id('OCS-2357')
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, '100', '60GB'], marks=pytest.mark.polarion_id('OCS-2340')
+            *[constants.CEPHBLOCKPOOL, '100', '60GB'], marks=pytest.mark.polarion_id('OCS-2358')
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, '1', '600M'], marks=pytest.mark.polarion_id('2341')
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, '25', '15GB'], marks=pytest.mark.polarion_id('2341')
+            *[constants.CEPHFILESYSTEM, '25', '15GB'], marks=pytest.mark.polarion_id('2355')
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, '50', '30GB'], marks=pytest.mark.polarion_id('2341')
+            *[constants.CEPHFILESYSTEM, '50', '30GB'], marks=pytest.mark.polarion_id('2359')
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, '100', '60GB'], marks=pytest.mark.polarion_id('2341')
+            *[constants.CEPHFILESYSTEM, '100', '60GB'], marks=pytest.mark.polarion_id('2360')
         )
     ]
 )
