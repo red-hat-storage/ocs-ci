@@ -16,7 +16,7 @@ from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 logger = logging.getLogger(__name__)
 
 
-class PRECHECKS(object):
+class PreChecks(object):
     """
     A base class for pre-checks.
     Should be inherited by specific platform classes
@@ -50,7 +50,7 @@ class PRECHECKS(object):
         )
 
 
-class VSPHERE_PRECHECKS(PRECHECKS):
+class VSpherePreChecks(PreChecks):
     """
     Pre-checks for vSphere platform
     """
@@ -58,7 +58,7 @@ class VSPHERE_PRECHECKS(PRECHECKS):
         """
         Initialize required variables
         """
-        super(VSPHERE_PRECHECKS, self).__init__()
+        super(VSpherePreChecks, self).__init__()
         self.server = config.ENV_DATA['vsphere_server']
         self.user = config.ENV_DATA['vsphere_user']
         self.password = config.ENV_DATA['vsphere_password']
@@ -114,12 +114,12 @@ class VSPHERE_PRECHECKS(PRECHECKS):
         self.storage_check()
 
 
-class BM_PRECHECKS(PRECHECKS):
+class BareMetalPreChecks(PreChecks):
     """
     pre-checks for Bare Metal platform
     """
     def __init__(self):
-        super(VSPHERE_PRECHECKS, self).__init__()
+        super(BareMetalPreChecks, self).__init__()
 
     def storage_check(self):
         """
