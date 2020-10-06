@@ -709,3 +709,84 @@ def increase_pods_per_worker_node_count(pods_per_node=500, pods_per_core=10):
     # During manual execution observed each node took 240+ sec for update
     timeout = machine_count * 300
     utils.wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE, timeout=timeout)
+
+
+def construct_pvc_creation_yaml_bulk_for_kube_job(no_of_pvc, access_mode, sc_name):
+    """
+    Function to construct pvc.yaml to create bulk of pvc's using kube_job
+
+    Args:
+        no_of_pvc(int): Bulk PVC count
+        access_mode (str): PVC access_mode
+        sc_name (str): SC name for pvc creation
+
+    Returns:
+         pvc_dict_list (list): List of all PVC.yaml dicts
+
+    """
+    if access_mode == 'ReadWriteMany' and 'rbd' in sc_name:
+        volume_mode_block_flag = 1
+    else:
+        volume_mode_block_flag = 0
+
+    pvc_dict_list = list()
+    for i in range(no_of_pvc):
+        pvc_name = helpers.create_unique_resource_name('test', 'pvc')
+        size = f"{random.randrange(5, 105, 5)}Gi"
+        pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
+        pvc_data['metadata']['name'] = pvc_name
+        del pvc_data['metadata']['namespace']
+        pvc_data['spec']['accessModes'] = [access_mode]
+        pvc_data['spec']['storageClassName'] = sc_name
+        pvc_data['spec']['resources']['requests']['storage'] = size
+        if volume_mode_block_flag:
+            pvc_data['spec']['volumeMode'] = 'Block'
+        else:
+            pvc_data['spec']['volumeMode'] = None
+        pvc_dict_list.append(pvc_data)
+
+    return pvc_dict_list
+
+
+def check_all_pvc_reached_bound_state_in_kube_job(kube_job_obj, namespace, no_of_pvc):
+    """
+    Function to check either bulk created PVCs reached Bound state using kube_job
+
+    Args:
+        kube_job_obj (obj): Kube Job Object
+        namespace (str): Namespace of PVC's created
+        no_of_pvc (int): Bulk PVC count
+
+    Returns:
+        pvc_bound_list (list): List of all PVCs which is in Bound state.
+
+    Asserts:
+        If not all PVC reached to Bound state.
+
+    """
+    # Check all the PVC reached Bound state
+    pvc_bound_list, pvc_not_bound_list = ([] for i in range(2))
+    while_iteration_count = 0
+    while True:
+        job_get_output = kube_job_obj.get(namespace=namespace)
+        for i in range(no_of_pvc):
+            status = job_get_output['items'][i]['status']['phase']
+            logging.info(f"pvc {job_get_output['items'][i]['metadata']['name']} status {status}")
+            if status != 'Bound':
+                pvc_not_bound_list.append(job_get_output['items'][i]['metadata']['name'])
+        if len(pvc_not_bound_list):
+            time.sleep(30)
+            while_iteration_count += 1
+            if while_iteration_count >= 11:
+                assert logging.error(
+                    f" Listed PVCs took more than 600secs to bound {pvc_not_bound_list}"
+                )
+                break
+            pvc_not_bound_list.clear()
+            continue
+        elif not len(pvc_not_bound_list):
+            for i in range(no_of_pvc):
+                pvc_bound_list.append(job_get_output['items'][i]['metadata']['name'])
+            logging.info("All PVCs in Bound state")
+            break
+    return pvc_bound_list
