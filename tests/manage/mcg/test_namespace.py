@@ -9,6 +9,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
+
 logger = logging.getLogger(__name__)
 
 
@@ -158,7 +159,6 @@ class TestNamespace(MCGTest):
         # Compare between uploaded files and downloaded files
         assert self.compare_dirs(awscli_pod, amount=3)
 
-
     @pytest.mark.polarion_id("OCS-2293")
     @tier4
     def test_namespace_bucket_creation_with_many_resources(
@@ -179,7 +179,6 @@ class TestNamespace(MCGTest):
             write_ns_resource=ns_resources[0],
             read_ns_resources=ns_resources
         )
-
 
     @pytest.mark.polarion_id("OCS-2325")
     @tier4
@@ -215,6 +214,9 @@ class TestNamespace(MCGTest):
         aws_client.toggle_aws_bucket_readwrite(resource1[0])
 
         # Read files directly from AWS
+        s3_creds = {'access_key_id': cld_mgr.aws_client.access_key, 'access_key': cld_mgr.aws_client.secret_key,
+                    'endpoint': constants.MCG_NS_AWS_ENDPOINT, 'region': config.ENV_DATA['region']}
+        target_bucket_name = resource1[0]
         self.download_files(mcg_obj, awscli_pod, bucket_to_read=target_bucket_name, s3_creds=s3_creds)
 
         # Bring resource1 up
@@ -223,7 +225,6 @@ class TestNamespace(MCGTest):
         # Compare between uploaded files and downloaded files
         assert self.compare_dirs(awscli_pod, amount=2)
         assert not self.compare_dirs(awscli_pod, amount=3)
-
 
 
     def write_files_to_pod_and_upload(self, mcg_obj, awscli_pod, bucket_to_write, amount=1, s3_creds=None):
@@ -265,17 +266,17 @@ class TestNamespace(MCGTest):
         result = True
         for i in range(amount):
             file_name = f"testfile{i}.txt"
-            original_object_path=f'{self.MCG_NS_ORIGINAL_DIR}/{file_name}'
-            result_object_path=f'{self.MCG_NS_RESULT_DIR}/{file_name}'
+            original_object_path = f'{self.MCG_NS_ORIGINAL_DIR}/{file_name}'
+            result_object_path = f'{self.MCG_NS_RESULT_DIR}/{file_name}'
             if not verify_s3_object_integrity(
                 original_object_path=original_object_path,
                 result_object_path=result_object_path,
                 awscli_pod=awscli_pod
             ):
-                log.warning(
-                        f'Checksum comparision between original object '
-                        f'{original_object_path} and result object '
-                        f'{result_object_path} failed'
+                logger.warning(
+                    f'Checksum comparision between original object '
+                    f'{original_object_path} and result object '
+                    f'{result_object_path} failed'
                 )
                 result = False
         return result
