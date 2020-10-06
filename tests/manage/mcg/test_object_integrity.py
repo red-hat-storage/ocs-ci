@@ -54,7 +54,7 @@ class TestObjectIntegrity(MCGTest):
             assert verify_s3_object_integrity(
                 original_object_path=f'{original_dir}/{obj}',
                 result_object_path=f'{result_dir}/{obj}', awscli_pod=awscli_pod
-            ), 'Checksum comparision between original and result object failed'
+            ), 'Checksum comparison between original and result object failed'
 
     @pytest.mark.parametrize(
         argnames="amount,file_type",
@@ -143,10 +143,7 @@ class TestObjectIntegrity(MCGTest):
                     original_object_path=f'{original_dir}/{obj}',
                     result_object_path=f'{result_dir}/{obj}',
                     awscli_pod=awscli_pod
-                ), (
-                    'Checksum comparision between original and result object '
-                    'failed'
-                )
+                ), 'Checksum comparison between original and result object failed'
 
     @pytest.mark.polarion_id("OCS-1945")
     @tier2
