@@ -1,0 +1,4 @@
+---
+ENV_DATA:
+  master_instance_type: 'm4.2xlarge'
+  worker_instance_type: 'm4.2xlarge'
