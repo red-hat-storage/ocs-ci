@@ -116,7 +116,7 @@ class VSpherePreChecks(PreChecks):
 
 class BareMetalPreChecks(PreChecks):
     """
-    pre-checks for Bare Metal platform
+    pre-checks for Bare Metal platform (PSI environment)
     """
     def __init__(self):
         super(BareMetalPreChecks, self).__init__()
