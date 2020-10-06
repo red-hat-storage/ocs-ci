@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.testlib import tier1, tier2, tier3
+from ocs_ci.framework.testlib import MCGTest, tier1, tier2, tier3
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     retrieve_test_objects_to_pod, sync_object_directory,

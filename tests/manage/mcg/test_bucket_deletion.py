@@ -16,6 +16,7 @@ from ocs_ci.ocs.bucket_utils import (
     rm_object_recursive
 )
 from tests.helpers import create_unique_resource_name
+from ocs_ci.framework.testlib import MCGTest
 
 logger = logging.getLogger(__name__)
 ERRATIC_TIMEOUTS_SKIP_REASON = 'Skipped because of erratic timeouts'

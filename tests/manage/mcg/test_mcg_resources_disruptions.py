@@ -4,7 +4,7 @@ from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status
 import pytest
 
 from ocs_ci.framework.testlib import (
-    tier4, tier4a, ignore_leftovers, skipif_ocs_version, on_prem_platform_required
+    MCGTest, tier4, tier4a, ignore_leftovers, skipif_ocs_version, on_prem_platform_required
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS

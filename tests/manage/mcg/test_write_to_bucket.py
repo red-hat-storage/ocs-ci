@@ -7,7 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required
 )
 from ocs_ci.framework.testlib import (
-    tier1, tier2, tier3, acceptance
+    MCGTest, tier1, tier2, tier3, acceptance
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (

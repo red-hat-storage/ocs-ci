@@ -6,7 +6,7 @@ import json
 import uuid
 
 from ocs_ci.ocs.exceptions import NoBucketPolicyResponse, InvalidStatusCode, UnexpectedBehaviour
-from ocs_ci.framework.testlib import tier1, tier2, tier3, skipif_ocs_version
+from ocs_ci.framework.testlib import MCGTest, tier1, tier2, tier3, skipif_ocs_version
 from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount, HttpResponseParser, gen_bucket_policy
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.bucket_utils import (

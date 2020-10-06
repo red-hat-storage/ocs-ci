@@ -4,7 +4,7 @@ import pytest
 import uuid
 
 from ocs_ci.framework.testlib import (
-    tier1
+    MCGTest, tier1
 )
 from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity, abort_all_multipart_upload,

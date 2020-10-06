@@ -2782,6 +2782,7 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
 
     return _create_ns_resources
 
+
 @pytest.fixture()
 def snapshot_factory(request):
     """
@@ -2924,14 +2925,27 @@ def collect_logs_fixture(request):
 
     request.addfinalizer(finalizer)
 
-@pytest.fixture(scope='function')
+
+def get_ready_noobaa_endpoint_count(namespace):
+    """
+    Get the number of ready nooobaa endpoints
+    """
+    pods_info = get_pods_having_label(label=constants.NOOBAA_ENDPOINT_POD_LABEL, namespace=namespace)
+    ready_count = 0
+    for ep_info in pods_info:
+        if ep_info['status']['containerStatuses'][0]['ready']:
+            ready_count += 1
+    return ready_count
+
+
+@pytest.fixture(scope="function")
 def nb_ensure_endpoint_count(request):
     """
     Validate and ensure the number of running noobaa endpoints
     """
-    cls_inst = request.node.cls
-    min_ep_count = cls_inst.MIN_EP_COUNT
-    max_ep_count = cls_inst.MAX_EP_COUNT
+    cls = request.cls
+    min_ep_count = cls.MIN_ENDPOINT_COUNT
+    max_ep_count = cls.MAX_ENDPOINT_COUNT
 
     assert min_ep_count <= max_ep_count
     namespace = defaults.ROOK_CLUSTER_NAMESPACE
@@ -2942,14 +2956,15 @@ def nb_ensure_endpoint_count(request):
         noobaa = OCP(kind='noobaa', namespace=namespace)
         resource = noobaa.get()['items'][0]
         resource_name = resource['metadata']['name']
+        endpoints = resource.get('spec', {}).get('endpoints', {})
 
-        if resource['spec']['endpoints']['minCount'] != min_ep_count:
+        if endpoints.get('minCount', -1) != min_ep_count:
             log.info(f"Changing minimum Noobaa endpoints to {min_ep_count}")
             params = f'{{"spec":{{"endpoints":{{"minCount":{min_ep_count}}}}}}}'
             noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
             should_wait = True
 
-        if resource['spec']['endpoints']['maxCount'] != max_ep_count:
+        if endpoints.get('maxCount', -1) != max_ep_count:
             log.info(f"Changing minimum Noobaa endpoints to {max_ep_count}")
             params = f'{{"spec":{{"endpoints":{{"minCount":{max_ep_count}}}}}}}'
             noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
@@ -2957,29 +2972,32 @@ def nb_ensure_endpoint_count(request):
 
     else:
         storage_cluster = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
-        resource = sc.get()['items'][0]
+        resource = storage_cluster.get()['items'][0]
         resource_name = resource['metadata']['name']
+        endpoints = resource.get('spec', {}).get('multiCloudGateway', {}).get('endpoints', {})
 
-        if resource['spec']['multiCloudGateway']['endpoints']['minCount'] != min_ep_count:
+        if endpoints.get('minCount', -1) != min_ep_count:
             log.info(f"Changing minimum Noobaa endpoints to {min_ep_count}")
             params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"minCount":{min_ep_count}}}}}}}}}'
             storage_cluster.patch(resource_name=resource_name, params=params, format_type='merge')
             should_wait = True
 
-        if resource['spec']['multiCloudGateway']['endpoints']['maxCount'] != max_ep_count:
+        if endpoints.get('maxCount', -1) != max_ep_count:
             log.info(f"Changing maximum Noobaa endpoints to {max_ep_count}")
             params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"maxCount":{max_ep_count}}}}}}}}}'
             storage_cluster.patch(resource_name=resource_name, params=params, format_type='merge')
             should_wait = True
 
     if should_wait:
-        time.sleep(5 * 60) # 5 min
+        # loggin the ready endpoint count for 5 min in 30sec internvals
+        for i in range(10):
+            ready_count = get_ready_noobaa_endpoint_count(namespace)
+            log.info(
+                f"Elapsed time {i * 30} sec: Waiting for noobaa endpoints to stabilize. "
+                f"Current ready count: {ready_count}"
+            )
+            time.sleep(30)
 
-    pods_info = get_pods_having_label(label=constants.NOOBAA_ENDPOINT_POD_LABEL, namespace=namespace):
-    ready_count = 0;
-    for ep_info in pods_info:
-        if ep_info['pod_info']['containerStatuses'][0]['ready'] == 'true':
-            ready_count += 1
-
+    # Assert that we have the desired number of endpoints
+    ready_count = get_ready_noobaa_endpoint_count(namespace)
     assert min_ep_count <= ready_count and ready_count <= max_ep_count
-

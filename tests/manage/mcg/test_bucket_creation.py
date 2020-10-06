@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
+from ocs_ci.framework.testlib import MCGTest
 
 logger = logging.getLogger(__name__)
 
