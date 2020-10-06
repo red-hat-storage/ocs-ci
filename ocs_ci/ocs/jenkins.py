@@ -298,7 +298,7 @@ class Jenkins(object):
         tmp_dict['metadata']['name'] = 'jenkins-persistent-ocs'
         # Find Kind: 'PersistentVolumeClaim' position in the objects list, differs in OCP 4.5 and OCP 4.6.
         for i in range(len(tmp_dict['objects'])):
-            if tmp_dict['objects'][i]['kind'] == 'PersistentVolumeClaim':
+            if tmp_dict['objects'][i]['kind'] == constants.PVC:
                 tmp_dict['objects'][i]['metadata']['annotations'] = {
                     'volume.beta.kubernetes.io/storage-class': 'ocs-storagecluster-ceph-rbd'
                 }

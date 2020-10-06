@@ -697,7 +697,11 @@ class OCP(object):
         # https://github.com/red-hat-storage/ocs-ci/issues/2312
         try:
             if self.data['items'][0]['kind'].lower() == 'build' and (
-                self.data['items'][0]['metadata']['annotations']['openshift.io/build-config.name'] == 'jax-rs-build'
+                self.data['items'][0].get(
+                    'metadata'
+                ).get(
+                    'annotations'
+                ).get('openshift.io/build-config.name') == 'jax-rs-build'
             ):
                 return resource_info[column_index - 1]
         except Exception:
