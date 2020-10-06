@@ -11,7 +11,7 @@ import hcl
 import yaml
 
 from ocs_ci.deployment.helpers.vsphere_helpers import VSPHEREHELPERS
-from ocs_ci.deployment.helpers.prechecks import VSPHERE_PRECHECKS
+from ocs_ci.deployment.helpers.prechecks import VSpherePreChecks
 from ocs_ci.deployment.install_ocp_on_rhel import OCPINSTALLRHEL
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
@@ -87,7 +87,7 @@ class VSPHEREBASE(Deployment):
         )
 
         # pre-checks for the vSphere environment
-        vsphere_prechecks = VSPHERE_PRECHECKS()
+        vsphere_prechecks = VSpherePreChecks()
         vsphere_prechecks.get_all_checks()
 
         self.ocp_version = get_ocp_version()
