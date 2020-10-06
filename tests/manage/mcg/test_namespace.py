@@ -143,13 +143,15 @@ class TestNamespace(MCGTest):
                                            bucket_to_write=rand_ns_bucket, amount=3)
 
         # Respin mcg resource
+        noobaa_pods = pod.get_noobaa_pods()
         pod_obj = [
-            pod for pod in pod.get_noobaa_pods() if pod.name.startswith(mcg_pod)
+            pod for pod in noobaa_pods if pod.name.startswith(mcg_pod)
         ][0]
         pod_obj.delete(force=True)
-        assert pod_obj.wait_for_resource(
+        assert pod_obj.ocp.wait_for_resource(
             condition='Running',
-            selector=self.selector,
+            selector='app=noobaa',
+            resource_count=len(noobaa_pods),
             timeout=300
         )
 

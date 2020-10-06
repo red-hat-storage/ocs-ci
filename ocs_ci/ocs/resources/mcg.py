@@ -509,11 +509,13 @@ class MCG:
         target_bucket_name = list(uls_dict['aws'])[0]
 
         # Create namespace resource
-        self.send_rpc_query('pool_api', 'create_namespace_resource', {
+        result = self.send_rpc_query('pool_api', 'create_namespace_resource', {
             'name': ns_resource_name,
             'connection': conn_name,
             'target_bucket': target_bucket_name}
         )
+        logger.info(f"result from RPC call: {result}")
+
         return target_bucket_name
 
     def check_ns_resource_validity(self, ns_resource_name, target_bucket_name, endpoint):
