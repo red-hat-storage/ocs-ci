@@ -241,6 +241,8 @@ class TestS3BucketPolicy(ManageTest):
                 logger.info('Get Object action has been denied access')
             else:
                 raise UnexpectedBehaviour(f"{e.response} received invalid error code {response.error['Code']}")
+        else:
+            assert False, "Get object succeeded when it should have failed"
 
         if float(config.ENV_DATA["ocs_version"]) >= 4.6:
             logger.info(
@@ -282,6 +284,8 @@ class TestS3BucketPolicy(ManageTest):
                 logger.info('Delete action has been denied access')
             else:
                 raise UnexpectedBehaviour(f"{e.response} received invalid error code {response.error['Code']}")
+        else:
+            assert False, "Delete object succeeded when it should have failed"
 
         # Admin sets a policy on obc-account bucket with noobaa-account principal (cross account access)
         new_policy_generated = gen_bucket_policy(
