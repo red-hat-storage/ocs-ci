@@ -134,9 +134,6 @@ def ocs_install_verification(
             rgw_count = 2
 
     # # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
-    # if float(config.ENV_DATA['ocs_version']) == 4.4 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM:
-    #     rgw_count = 1
-
     if config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM:
         if float(config.ENV_DATA['ocs_version']) == 4.4 or (
             float(config.ENV_DATA['ocs_version']) == 4.5 and (
