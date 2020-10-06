@@ -232,17 +232,18 @@ class BAREMETALUPI(Deployment):
             logger.info("Uploading PXE files")
             ocp_version = get_ocp_version()
             for machine in self.mgmt_details:
-                pxe_file_path = self.create_pxe_files(
-                    ocp_version=ocp_version, role=self.mgmt_details[machine].get('role')
-                )
-                upload_file(
-                    server=self.host,
-                    localpath=pxe_file_path,
-                    remotepath=f"{self.helper_node_details['bm_tftp_dir']}"
-                               f"/pxelinux.cfg/01-{self.mgmt_details[machine]['mac'].replace(':', '-')}",
-                    user=self.user,
-                    key_file=self.private_key
-                )
+                if self.mgmt_details[machine].get('cluster_name') or self.mgmt_details[machine].get('extra_node'):
+                    pxe_file_path = self.create_pxe_files(
+                        ocp_version=ocp_version, role=self.mgmt_details[machine].get('role')
+                    )
+                    upload_file(
+                        server=self.host,
+                        localpath=pxe_file_path,
+                        remotepath=f"{self.helper_node_details['bm_tftp_dir']}"
+                                   f"/pxelinux.cfg/01-{self.mgmt_details[machine]['mac'].replace(':', '-')}",
+                        user=self.user,
+                        key_file=self.private_key
+                    )
             # Applying Permission
             cmd = f"chmod 755 -R {self.helper_node_details['bm_tftp_dir']}"
             self.helper_node_handler.exec_cmd(cmd=cmd)
