@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class TestRWXMountPoint(ManageTest):
     """
     Automates the following test cases:
-    OCS-965	CEPHFS RWX: While two app pods access same mount,
+    OCS-965 CEPHFS RWX: While two app pods access same mount,
         delete one pod. Confirm second pod is still able to write
     """
 
