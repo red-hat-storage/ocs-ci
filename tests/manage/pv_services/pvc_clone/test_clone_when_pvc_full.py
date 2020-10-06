@@ -5,7 +5,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     skipif_ocs_version, ManageTest, tier2, polarion_id
 )
-from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.prometheus import PrometheusAPI, check_alert_list
 from ocs_ci.utility.utils import TimeoutSampler
@@ -49,10 +48,16 @@ class TestCloneWhenFull(ManageTest):
         prometheus_api = PrometheusAPI()
 
         # Run IO to utilize 100% of volume
-        log.info("Run IO on all to utilise 100% of PVCs")
+        log.info("Run IO on all pods to utilise 100% of PVCs")
         for pod_obj in self.pods:
+            # Get available free space in M
+            df_avail_size = pod_obj.exec_cmd_on_pod(
+                command=f"df {pod_obj.get_storage_path()} -B M --output=avail"
+            )
+            # Get the numeral value of available space. eg: 3070 from '3070M'
+            available_size = int(df_avail_size.strip().split()[1][0:-1])
             pod_obj.run_io(
-                'fs', size=f'{self.pvc_size_gi}G', io_direction='write',
+                'fs', size=f'{available_size-2}M', io_direction='write',
                 runtime=20, rate='100M', fio_filename=file_name
             )
         log.info("Started IO on all pods to utilise 100% of PVCs")
@@ -60,11 +65,7 @@ class TestCloneWhenFull(ManageTest):
         # Wait for IO to finish
         log.info("Wait for IO to finish on pods")
         for pod_obj in self.pods:
-            try:
-                pod_obj.get_fio_results()
-            except CommandFailed as cfe:
-                if "No space left on device" not in str(cfe):
-                    raise
+            pod_obj.get_fio_results()
             log.info(f"IO finished on pod {pod_obj.name}")
             # Verify used space on pod is 100%
             used_space = pod.get_used_space_on_mount_point(pod_obj)
