@@ -192,13 +192,13 @@ class TestRbdBlockPvcSnapshot(ManageTest):
 
         # Run IO on new pods
         log.info("Starting IO on new pods")
-        for pod_obj in self.pod_objs:
+        for pod_obj in restore_pod_objs:
             pod_obj.run_io(
                 storage_type='block', size='500M', runtime=15
             )
 
         # Wait for IO completion on new pods
         log.info("Waiting for IO completion on new pods")
-        for pod_obj in self.pod_objs:
+        for pod_obj in restore_pod_objs:
             pod_obj.get_fio_results()
         log.info("IO completed on new pods.")
