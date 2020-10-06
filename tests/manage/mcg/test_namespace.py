@@ -1,6 +1,6 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import MCGTest, aws_platform_required, tier1
+from ocs_ci.framework.testlib import MCGTest, aws_platform_required, tier1, tier4
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     verify_s3_object_integrity
@@ -76,7 +76,7 @@ class TestNamespace(MCGTest):
         self.download_files(mcg_obj, awscli_pod, bucket_to_read=rand_ns_bucket)
 
         # Compare between uploaded files and downloaded files
-        self.compare_dirs(awscli_pod, amount=3)
+        assert self.compare_dirs(awscli_pod, amount=3)
 
     # Test is skipped for other platforms due to
     # https://github.com/red-hat-storage/ocs-ci/issues/2774
@@ -106,19 +106,19 @@ class TestNamespace(MCGTest):
         self.download_files(mcg_obj, awscli_pod, bucket_to_read=target_bucket_name, s3_creds=s3_creds)
 
         # Compare between uploaded files and downloaded files
-        self.compare_dirs(awscli_pod, amount=3)
+        assert self.compare_dirs(awscli_pod, amount=3)
 
     @tier4
     @pytest.mark.parametrize(
         argnames=["mcg_pod"],
         argvalues=[
-            pytest.param(*['noobaa-db'], marks=pytest.mark.polarion_id("OCS-2291"),
-            pytest.param(*['noobaa-core'], marks=pytest.mark.polarion_id("OCS-2319"),
-            pytest.param(*['noobaa-operator'], marks=pytest.mark.polarion_id("OCS-2320"),
+            pytest.param(*['noobaa-db'], marks=pytest.mark.polarion_id("OCS-2291")),
+            pytest.param(*['noobaa-core'], marks=pytest.mark.polarion_id("OCS-2319")),
+            pytest.param(*['noobaa-operator'], marks=pytest.mark.polarion_id("OCS-2320"))
         ]
     )
     def test_respin_mcg_pod_and_check_data_integrity(
-        self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory
+        self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory, mcg_pod
     ):
         """
         Test Write to ns bucket using MCG RPC and read directly from AWS.
@@ -127,9 +127,9 @@ class TestNamespace(MCGTest):
         """
 
         # Create the namespace resource and verify health
-        result = ns_resource_factory()
-        target_bucket_name = result[0]
-        ns_resource_name = result[1]
+        resource = ns_resource_factory()
+        target_bucket_name = resource[0]
+        ns_resource_name = resource[1]
 
         # Create the namespace bucket on top of the namespace resource
         rand_ns_bucket = bucket_factory(amount=1, interface='mcg-namespace', write_ns_resource=ns_resource_name,
@@ -156,7 +156,7 @@ class TestNamespace(MCGTest):
         self.download_files(mcg_obj, awscli_pod, bucket_to_read=target_bucket_name, s3_creds=s3_creds)
 
         # Compare between uploaded files and downloaded files
-        self.compare_dirs(awscli_pod, amount=3)
+        assert self.compare_dirs(awscli_pod, amount=3)
 
 
     @pytest.mark.polarion_id("OCS-2293")
@@ -184,7 +184,7 @@ class TestNamespace(MCGTest):
     @pytest.mark.polarion_id("OCS-2325")
     @tier4
     def test_block_read_resource_in_namespace_bucket(
-        self, ns_resource_factory, bucket_factory, cld_mgr
+        self, mcg_obj, awscli_pod, ns_resource_factory, bucket_factory, cld_mgr
     ):
         """
         Test blocking namespace resource in namespace bucket.
@@ -221,7 +221,8 @@ class TestNamespace(MCGTest):
         aws_client.toggle_aws_bucket_readwrite(resource1[0], block=False)
 
         # Compare between uploaded files and downloaded files
-        self.compare_dirs(awscli_pod, amount=3)
+        assert self.compare_dirs(awscli_pod, amount=2)
+        assert not self.compare_dirs(awscli_pod, amount=3)
 
 
 
@@ -261,9 +262,20 @@ class TestNamespace(MCGTest):
 
     def compare_dirs(self, awscli_pod, amount=1):
         # Checksum is compared between original and result object
+        result = True
         for i in range(amount):
             file_name = f"testfile{i}.txt"
-            assert verify_s3_object_integrity(
-                original_object_path=f'{self.MCG_NS_ORIGINAL_DIR}/{file_name}',
-                result_object_path=f'{self.MCG_NS_RESULT_DIR}/{file_name}', awscli_pod=awscli_pod
-            ), 'Checksum comparision between original and result object failed'
+            original_object_path=f'{self.MCG_NS_ORIGINAL_DIR}/{file_name}'
+            result_object_path=f'{self.MCG_NS_RESULT_DIR}/{file_name}'
+            if not verify_s3_object_integrity(
+                original_object_path=original_object_path,
+                result_object_path=result_object_path,
+                awscli_pod=awscli_pod
+            ):
+                log.warning(
+                        f'Checksum comparision between original object '
+                        f'{original_object_path} and result object '
+                        f'{result_object_path} failed'
+                )
+                result = False
+        return result

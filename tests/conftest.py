@@ -2859,16 +2859,18 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
     def _create_ns_resources():
         # Create random connection_name and random namespace resource name
         rand_ns_resource = create_unique_resource_name(constants.MCG_NS_RESOURCE, 'aws')
-        rand_connection = create_unique_resource_name(constants.MCG_NS_AWS_CONNECTION, 'aws')
+        if not created_ns_connections:
+            rand_connection = create_unique_resource_name(constants.MCG_NS_AWS_CONNECTION, 'aws')
+            mcg_obj.create_new_aws_connection(cld_mgr, rand_connection)
+            created_ns_connections.append(rand_connection)
 
         # Create the actual namespace resource
-        target_bucket_name = mcg_obj.create_namespace_resource(rand_ns_resource, rand_connection,
+        target_bucket_name = mcg_obj.create_namespace_resource(rand_ns_resource, created_ns_connections[0],
                                                                config.ENV_DATA['region'], cld_mgr, cloud_uls_factory)
         mcg_obj.check_ns_resource_validity(rand_ns_resource,
                                            target_bucket_name, constants.MCG_NS_AWS_ENDPOINT)
 
         created_ns_resources.append(rand_ns_resource)
-        created_ns_connections.append(rand_connection)
         return target_bucket_name, rand_ns_resource
 
     def ns_resources_and_connections_cleanup():
