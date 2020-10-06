@@ -813,11 +813,20 @@ class AWSUPIFlexy(AWSBase):
 
         super(AWSUPIFlexy, self).destroy_cluster(log_level)
 
+        # Delete master, bootstrap, security group, and worker stacks
+        suffixes = ['ma', 'bs', 'sg']
+        stack_names = self.aws.get_worker_stacks()
+        stack_names.sort()
+        stack_names.reverse()
+        stack_names.extend([f'{self.cluster_name}-{s}' for s in suffixes])
+        logger.info(f"Deleteing stacks: {stack_names}")
+        self.aws.delete_cloudformation_stacks(stack_names)
+
         # WORKAROUND for Flexy issue:
         # https://issues.redhat.com/browse/OCPQE-1521
         self.aws.delete_cf_stack_including_dependencies(
             f"{self.cluster_name}-vpc"
         )
-        # TODO: cleanup related S3 buckets?
+        # cleanup related S3 buckets
         # Destroy buckets
         delete_cluster_buckets(self.cluster_name)
