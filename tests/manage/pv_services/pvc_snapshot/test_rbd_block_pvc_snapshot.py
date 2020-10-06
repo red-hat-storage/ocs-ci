@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 @tier1
 @skipif_ocs_version('<4.6')
 @pytest.mark.polarion_id('OCS-2361')
-class TestBbdBlockPvcSnapshot(ManageTest):
+class TestRbdBlockPvcSnapshot(ManageTest):
     """
     Tests to take snapshots of RBD Block VolumeMode PVCs
 
@@ -31,9 +31,9 @@ class TestBbdBlockPvcSnapshot(ManageTest):
             interface=constants.CEPHBLOCKPOOL,
             size=self.pvc_size,
             access_modes=[
-                    f'{constants.ACCESS_MODE_RWX}-Block',
-                    f'{constants.ACCESS_MODE_RWO}-Block'
-                ],
+                f'{constants.ACCESS_MODE_RWX}-Block',
+                f'{constants.ACCESS_MODE_RWO}-Block'
+            ],
             status=constants.STATUS_BOUND,
             num_of_pvc=2,
             wait_each=False
