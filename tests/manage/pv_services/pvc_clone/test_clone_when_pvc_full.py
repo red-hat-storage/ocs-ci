@@ -57,8 +57,8 @@ class TestCloneWhenFull(ManageTest):
             # Get the numeral value of available space. eg: 3070 from '3070M'
             available_size = int(df_avail_size.strip().split()[1][0:-1])
             pod_obj.run_io(
-                'fs', size=f'{available_size-2}M', io_direction='write',
-                runtime=20, rate='100M', fio_filename=file_name
+                'fs', size=f'{available_size-2}M', runtime=20, rate='100M',
+                fio_filename=file_name, end_fsync=1
             )
         log.info("Started IO on all pods to utilise 100% of PVCs")
 
@@ -67,6 +67,7 @@ class TestCloneWhenFull(ManageTest):
         for pod_obj in self.pods:
             pod_obj.get_fio_results()
             log.info(f"IO finished on pod {pod_obj.name}")
+
             # Verify used space on pod is 100%
             used_space = pod.get_used_space_on_mount_point(pod_obj)
             assert used_space == '100%', (
@@ -74,7 +75,6 @@ class TestCloneWhenFull(ManageTest):
                 f"but {used_space}"
             )
             log.info(f"Verified: Used space on pod {pod_obj.name} is 100%")
-
             # Calculate md5sum of the file
             pod_obj.pvc.md5sum = pod.cal_md5sum(pod_obj, file_name)
 
