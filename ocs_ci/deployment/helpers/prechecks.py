@@ -87,31 +87,31 @@ class VSpherePreChecks(PreChecks):
         """
         Memory checks
         """
-        raise NotImplementedError(
-            "memory check functionality is not implemented"
-        )
+        # TODO: Implement memory checks
+        pass
 
     def cpu_check(self):
         """
         CPU checks
         """
-        raise NotImplementedError(
-            "CPU check functionality is not implemented"
-        )
+        # TODO: Implement CPU checks
+        pass
 
     def network_check(self):
         """
         Network related checks
         """
-        raise NotImplementedError(
-            "Network check functionality is not implemented"
-        )
+        # TODO: Implement network checks
+        pass
 
     def get_all_checks(self):
         """
         Aggregate all the checks needed for vSphere platform
         """
         self.storage_check()
+        self.memory_check()
+        self.cpu_check()
+        self.network_check()
 
 
 class BareMetalPreChecks(PreChecks):
@@ -125,38 +125,35 @@ class BareMetalPreChecks(PreChecks):
         """
         Storage checks
         """
-        raise NotImplementedError(
-            "storage check functionality is not implemented"
-        )
+        # TODO: Implement storage checks
+        pass
 
     def memory_check(self):
         """
         Memory checks
         """
-        raise NotImplementedError(
-            "memory check functionality is not implemented"
-        )
+        # TODO: Implement memory checks
+        pass
 
     def cpu_check(self):
         """
         CPU checks
         """
-        raise NotImplementedError(
-            "CPU check functionality is not implemented"
-        )
+        # TODO: Implement CPU checks
+        pass
 
     def network_check(self):
         """
         Network related checks
         """
-        raise NotImplementedError(
-            "Network check functionality is not implemented"
-        )
+        # TODO: Implement network checks
+        pass
 
     def get_all_checks(self):
         """
         Aggregate all the checks needed for BM platform
         """
-        raise NotImplementedError(
-            "All checks functionality is not implemented"
-        )
+        self.storage_check()
+        self.memory_check()
+        self.cpu_check()
+        self.network_check()
