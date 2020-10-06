@@ -1144,6 +1144,104 @@ def get_master_nodes():
     return master_nodes_list
 
 
+def get_snapshot_time(interface, snap_name, status):
+    """
+    Get the starting/ending creation time of a PVC based on provisioner logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pvc_name (str / list): Name of the PVC(s) for creation time
+                               the list will be list of pvc objects
+        status (str): the status that we want to get - Start / End
+
+    Returns:
+        datetime object: Time of PVC(s) creation
+
+    """
+
+    def get_pattern_time(log, snapname, pattern):
+        """
+        Get the time of pattern in the log
+
+        Args:
+            log (list): list of all lines in the log file
+            snapname (str): the name of hte snapshot
+            pattern (str): the pattern that need to be found in the log (start / bound)
+
+        Returns:
+            str: string of the pattern timestamp in the log, if not found None
+
+        """
+        for line in log:
+            if re.search(snapname, line) and re.search(pattern, line):
+                return line.split(' ')[1]
+        return None
+
+    logs = ''
+    format = '%H:%M:%S.%f'
+
+    # the starting and ending time are taken from different logs,
+    # the start creation time is taken from the snapshot controller, while
+    # the end creation time is taken from the csi snapshot driver
+    if status.lower() == 'start':
+        pattern = 'Creating content for snapshot'
+        # Get the snapshoter-controller pod
+        pod_name = pod.get_csi_snapshoter_pod()
+        logs = pod.get_pod_logs(
+            pod_name, namespace='openshift-cluster-storage-operator'
+        )
+    elif status.lower() == 'end':
+        pattern = 'readyToUse true'
+        pod_name = pod.get_csi_provisioner_pod(interface)
+        # get the logs from the csi-provisioner containers
+        for log_pod in pod_name:
+            logs = pod.get_pod_logs(log_pod, 'csi-snapshotter')
+    else:
+        logger.error(f'the status {status} is invalid.')
+        return None
+
+    logs = logs.split("\n")
+
+    stat = None
+    # Extract the time for the one PVC snapshot provisioning
+    if isinstance(snap_name, str):
+        stat = get_pattern_time(logs, snap_name, pattern)
+    # Extract the time for the list of PVCs snapshot provisioning
+    if isinstance(snap_name, list):
+        all_stats = []
+        for snapname in snap_name:
+            all_stats.append(get_pattern_time(logs, snapname.name, pattern))
+        all_stats = sorted(all_stats)
+        if status.lower() == 'end':
+            stat = all_stats[-1]  # return the highest time
+        elif status.lower() == 'start':
+            stat = all_stats[0]  # return the lowest time
+    if stat:
+        return datetime.datetime.strptime(stat, format)
+    else:
+        return None
+
+
+def measure_snapshot_creation_time(interface, snap_name, snap_con_name):
+    """
+    Measure Snapshot creation time based on logs
+
+    Args:
+        snap_name (str): Name of the snapshot for creation time measurement
+
+    Returns:
+        float: Creation time for the snapshot
+
+    """
+    start = get_snapshot_time(interface, snap_name, status='start')
+    end = get_snapshot_time(interface, snap_con_name, status='end')
+    if start and end:
+        total = end - start
+        return total.total_seconds()
+    else:
+        return None
+
+
 def get_provision_time(interface, pvc_name, status='start'):
     """
     Get the starting/ending creation time of a PVC based on provisioner logs
