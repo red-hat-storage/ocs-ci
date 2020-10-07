@@ -41,7 +41,6 @@ def pytest_runtest_makereport(item, call):
             log_file = logging.getLogger().handlers[3].baseFilename
         else:
             log_file = logging.getLogger().handlers[2].baseFilename
-        print(f"log handler filename: {log_file}")
         extra.append(pytest_html.extras.url(log_file, name='Log File'))
         report.extra = extra
         item.session.results[item] = report
