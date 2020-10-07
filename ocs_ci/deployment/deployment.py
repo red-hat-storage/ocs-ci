@@ -65,7 +65,8 @@ from ocs_ci.utility.utils import (
     set_selinux_permissions,
     set_registry_to_managed_state,
     add_stage_cert,
-    modify_csv, wait_for_machineconfigpool_status
+    modify_csv,
+    wait_for_machineconfigpool_status,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from tests import helpers
@@ -904,6 +905,25 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     logger.info("Adding CatalogSource")
     if not image:
         image = config.DEPLOYMENT.get('ocs_registry_image', '')
+    if config.DEPLOYMENT.get('stage_rh_osbs'):
+        image = config.DEPLOYMENT.get(
+            "stage_index_image", constants.OSBS_BOUNDLE_IMAGE
+        )
+        osbs_image_tag = config.DEPLOYMENT.get(
+            "stage_index_image_tag", f"v{get_ocp_version()}"
+        )
+        image += f":{osbs_image_tag}"
+        run_cmd(
+            'oc patch image.config.openshift.io/cluster --type merge -p \''
+            '{"spec": {"registrySources": {"insecureRegistries": '
+            '["registry-proxy.engineering.redhat.com"]}}}\''
+        )
+        run_cmd(
+            f"oc apply -f {constants.STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML}"
+        )
+        logger.info("Sleeping for 60 sec to start update machineconfigpool status")
+        time.sleep(60)
+        wait_for_machineconfigpool_status('all', timeout=1800)
     if not ignore_upgrade:
         upgrade = config.UPGRADE.get('upgrade', False)
     else:
