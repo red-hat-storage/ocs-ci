@@ -51,6 +51,7 @@ class PlatformNodesFactory:
             'aws': AWSNodes,
             'baremetal': BaremetalNodes,
             'azure': AZURENodes,
+            'rhv' : RHVNodes,
             'gcp': NodesBase
         }
 
