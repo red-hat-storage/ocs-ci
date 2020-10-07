@@ -77,6 +77,8 @@ DEPLOYMENT:
   max_noobaa_endpoints: 3
   # Following options are defaults for deployment with infra worker nodes
   infra_nodes: False
+  # How long should ocs-ci wait for `openshift-install create cluster` run?
+  openshift_install_timeout: 3600
 
 # Section for reporting configuration
 REPORTING:
