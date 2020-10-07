@@ -35,7 +35,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods
 )
-from ocs_ci.ocs.node import get_typed_nodes, check_nodes_specs
+from ocs_ci.ocs.node import get_typed_nodes, check_nodes_specs, get_compute_node_names
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -974,6 +974,7 @@ def setup_local_storage(storageclass):
     )
 
     ocp_version = get_ocp_version()
+    ocs_version = config.ENV_DATA.get('ocs_version')
     ocp_ga_version = get_ocp_ga_version(ocp_version)
     if not ocp_ga_version:
         optional_operators_data = templating.load_yaml(
@@ -1061,40 +1062,94 @@ def setup_local_storage(storageclass):
             raise NotImplementedError(
                 "LSO Deployment for VMDirectPath is not implemented"
             )
+    if (ocp_version >= "4.6") and (ocs_version >= "4.6"):
+        # Pull local volume discovery yaml data
+        logger.info("Pulling LocalVolumeDiscovery CR data from yaml")
+        lvd_data = templating.load_yaml(
+            constants.LOCAL_VOLUME_DISCOVERY_YAML
+        )
+        worker_nodes = get_compute_node_names()
 
-    # Retrieve NVME device path ID for each worker node
-    device_paths = get_device_paths(worker_names)
+        # Update local volume discovery data with Worker node Names
+        logger.info(
+            "Updating LocalVolumeDiscovery CR data with worker nodes Name: %s",
+            worker_nodes
+        )
+        lvd_data['spec']['nodeSelector']['nodeSelectorTerms'][0]['matchExpressions'][0][
+            'values'
+        ] = worker_nodes
+        lvd_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='local_volume_discovery', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            lvd_data, lvd_data_yaml.name
+        )
 
-    # Pull local volume yaml data
-    logger.info("Pulling LocalVolume CR data from yaml")
-    lv_data = templating.load_yaml(
-        constants.LOCAL_VOLUME_YAML
-    )
+        logger.info("Creating LocalVolumeDiscovery CR")
+        run_cmd(f"oc create -f {lvd_data_yaml.name}")
 
-    # Set storage class
-    logger.info(
-        "Updating LocalVolume CR data with LSO storageclass: %s", storageclass)
-    for scd in lv_data['spec']['storageClassDevices']:
-        scd['storageClassName'] = storageclass
+        # Pull local volume set yaml data
+        logger.info("Pulling LocalVolumeSet CR data from yaml")
+        lvs_data = templating.load_yaml(
+            constants.LOCAL_VOLUME_SET_YAML
+        )
 
-    # Update local volume data with NVME IDs
-    logger.info(
-        "Updating LocalVolume CR data with device paths: %s",
-        device_paths
-    )
-    lv_data['spec']['storageClassDevices'][0][
-        'devicePaths'
-    ] = device_paths
+        # Update local volume set data with Worker node Names
+        logger.info(
+            "Updating LocalVolumeSet CR data with worker nodes Name: %s",
+            worker_nodes
+        )
+        lvs_data['spec']['nodeSelector']['nodeSelectorTerms'][0]['matchExpressions'][0][
+            'values'
+        ] = worker_nodes
 
-    # Create temp yaml file and create local volume
-    lv_data_yaml = tempfile.NamedTemporaryFile(
-        mode='w+', prefix='local_volume', delete=False
-    )
-    templating.dump_data_to_temp_yaml(
-        lv_data, lv_data_yaml.name
-    )
-    logger.info("Creating LocalVolume CR")
-    run_cmd(f"oc create -f {lv_data_yaml.name}")
+        # Set storage class
+        logger.info(
+            "Updating LocalVolumeSet CR data with LSO storageclass: %s", storageclass)
+        lvs_data['spec']['storageClassName'] = storageclass
+
+        lvs_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='local_volume_set', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            lvs_data, lvs_data_yaml.name
+        )
+        logger.info("Creating LocalVolumeSet CR")
+        run_cmd(f"oc create -f {lvs_data_yaml.name}")
+    else:
+        # Retrieve NVME device path ID for each worker node
+        device_paths = get_device_paths(worker_names)
+
+        # Pull local volume yaml data
+        logger.info("Pulling LocalVolume CR data from yaml")
+        lv_data = templating.load_yaml(
+            constants.LOCAL_VOLUME_YAML
+        )
+
+        # Set storage class
+        logger.info(
+            "Updating LocalVolume CR data with LSO storageclass: %s", storageclass)
+        for scd in lv_data['spec']['storageClassDevices']:
+            scd['storageClassName'] = storageclass
+
+        # Update local volume data with NVME IDs
+        logger.info(
+            "Updating LocalVolume CR data with device paths: %s",
+            device_paths
+        )
+        lv_data['spec']['storageClassDevices'][0][
+            'devicePaths'
+        ] = device_paths
+
+        # Create temp yaml file and create local volume
+        lv_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='local_volume', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            lv_data, lv_data_yaml.name
+        )
+        logger.info("Creating LocalVolume CR")
+        run_cmd(f"oc create -f {lv_data_yaml.name}")
     logger.info("Waiting 30 seconds for PVs to create")
     storage_class_device_count = 1
     if platform == constants.AWS_PLATFORM:
