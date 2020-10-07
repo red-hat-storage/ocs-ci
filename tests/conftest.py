@@ -69,6 +69,7 @@ from ocs_ci.utility.utils import (
     get_system_architecture,
     get_testrun_name,
     ocsci_log_path,
+    skipif_ocp_version,
     skipif_ocs_version,
     TimeoutSampler,
     skipif_upgraded_from
@@ -117,12 +118,25 @@ def pytest_collection_modifyitems(session, items):
     deploy = config.RUN['cli_params'].get('deploy')
     if not (teardown or deploy):
         for item in items[:]:
+            skipif_ocp_version_marker = item.get_closest_marker(
+                "skipif_ocp_version"
+            )
             skipif_ocs_version_marker = item.get_closest_marker(
                 "skipif_ocs_version"
             )
             skipif_upgraded_from_marker = item.get_closest_marker(
                 "skipif_upgraded_from"
             )
+            if skipif_ocp_version_marker:
+                skip_condition = skipif_ocp_version_marker.args
+                # skip_condition will be a tuple
+                # and condition will be first element in the tuple
+                if skipif_ocp_version(skip_condition[0]):
+                    log.info(
+                        f'Test: {item} will be skipped due to OCP {skip_condition}'
+                    )
+                    items.remove(item)
+                    continue
             if skipif_ocs_version_marker:
                 skip_condition = skipif_ocs_version_marker.args
                 # skip_condition will be a tuple
