@@ -88,8 +88,11 @@ class VSPHEREBASE(Deployment):
         )
 
         # pre-checks for the vSphere environment
-        vsphere_prechecks = VSpherePreChecks()
-        vsphere_prechecks.get_all_checks()
+        # skip pre-checks for destroying cluster
+        teardown = config.RUN['cli_params'].get('teardown')
+        if not teardown:
+            vsphere_prechecks = VSpherePreChecks()
+            vsphere_prechecks.get_all_checks()
 
         self.ocp_version = get_ocp_version()
 
