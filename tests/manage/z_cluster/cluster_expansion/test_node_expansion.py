@@ -45,6 +45,14 @@ class TestAddNode(ManageTest):
             pytest.skip("Skipping add node in Vmware platform due to "
                         "https://bugzilla.redhat.com/show_bug.cgi?id=1844521"
                         )
+        elif config.ENV_DATA['platform'].lower() == constants.BAREMETAL_PLATFORM:
+            logger.info(f'The worker nodes number before expansion {len(helpers.get_worker_nodes())}')
+            if config.ENV_DATA.get('rhel_workers'):
+                node_type = constants.RHEL_OS
+            else:
+                node_type = constants.RHCOS
+            assert add_new_node_and_label_upi(node_type, 1), "Add node failed"
+            logger.info(f'The worker nodes number after expansion {len(helpers.get_worker_nodes())}')
             # Issue to remove skip code https://github.com/red-hat-storage/ocs-ci/issues/2403
             # logger.info(f'The worker nodes number before expansion {len(helpers.get_worker_nodes())}')
             # if config.ENV_DATA.get('rhel_user'):
