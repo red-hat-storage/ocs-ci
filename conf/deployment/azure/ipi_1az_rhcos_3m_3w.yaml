@@ -1,4 +1,6 @@
 ---
+DEPLOYMENT:
+  openshift_install_timeout: 4800
 ENV_DATA:
   platform: 'azure'
   deployment_type: 'ipi'
