@@ -1195,7 +1195,7 @@ def get_snapshot_time(interface, snap_name, status):
         pod_name = pod.get_csi_provisioner_pod(interface)
         # get the logs from the csi-provisioner containers
         for log_pod in pod_name:
-            logs = pod.get_pod_logs(log_pod, 'csi-snapshotter')
+            logs += pod.get_pod_logs(log_pod, 'csi-snapshotter')
     else:
         logger.error(f'the status {status} is invalid.')
         return None
