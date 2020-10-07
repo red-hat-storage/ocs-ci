@@ -741,6 +741,9 @@ WORKER_IGN = "worker.ign"
 # terraform provider constants
 TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
 
+# Minimum storage needed for vSphere Datastore in bytes
+MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024 ** 4
+
 # vSphere related constants
 VSPHERE_NODE_USER = "core"
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
