@@ -70,6 +70,7 @@ class TestMustGather(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    @pytest.mark.bugzilla("1885640")
     def test_must_gather(self):
         """
         Tests functionality of: oc adm must-gather

@@ -19,3 +19,8 @@ data/*
 external/
 apidoc/*
 _build/*
+infra-pods.txt
+jq
+report.html
+secret.json
+tests/e2e/logging/test_openshift-logging-forupgrade.py
