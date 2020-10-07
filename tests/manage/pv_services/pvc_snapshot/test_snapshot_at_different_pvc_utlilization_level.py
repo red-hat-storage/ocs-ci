@@ -144,7 +144,7 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
         log.info("Verify the restored PVCs are Bound")
         for pvc_obj in restore_pvc_objs:
             wait_for_resource_state(
-                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=90
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=200
             )
             pvc_obj.reload()
         log.info("Verified: Restored PVCs are Bound.")
