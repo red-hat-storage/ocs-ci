@@ -171,7 +171,7 @@ class TestPvcSnapshotPerformance(E2ETest):
                 test_results['dataset'] / test_results['create']['time']
             )
             log.info(f' Test {test_num} dataset is {test_results["dataset"]} MiB')
-            log.info(f'Snapshot creation time is : {test_results["create"]["time"]}')
+            log.info(f'Snapshot creation time is : {test_results["create"]["time"]} sec.')
             log.info(f'Snapshot speed is : {test_results["create"]["speed"]} MB/sec')
 
             # Step 4. Restore the PVC from the snapshot and measure the time
