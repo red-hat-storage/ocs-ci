@@ -226,5 +226,5 @@ class CPUNotSufficientException(Exception):
     pass
 
 
-class InSufficientResourceException(Exception):
+class InsufficientResourceException(Exception):
     pass

@@ -14,7 +14,7 @@ from ocs_ci.deployment.vmware import (
     clone_openshift_installer,
     update_machine_conf,
 )
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnsupportedPlatformError, InSufficientResourceException
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnsupportedPlatformError, InsufficientResourceException
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
 from ocs_ci.utility.retry import retry
@@ -70,7 +70,7 @@ class NodesBase(object):
         self.platform = config.ENV_DATA['platform']
         self.deployment_type = config.ENV_DATA['deployment_type']
         self.nodes_map = {
-            'AWSUPINode': AWSUPINode, 'VSPHEREUPINode': VSPHEREUPINode, 'BAREMETALUPINode': BAREMETALUPINode
+            'AWSUPINode': AWSUPINode, 'VSPHEREUPINode': VSPHEREUPINode, 'BAREMETALUPINode': BareMetalUPINode
         }
         self.wait_time = 120
 
@@ -1831,7 +1831,7 @@ class AZURENodes(NodesBase):
         )
 
 
-class BAREMETALUPINode(BaremetalNodes):
+class BareMetalUPINode(BaremetalNodes):
     """
     Node object representing Bare Metal upi nodes
 
@@ -1846,7 +1846,7 @@ class BAREMETALUPINode(BaremetalNodes):
             worker_count (int): number of nodes to add to existing cluster
 
         """
-        super(BAREMETALUPINode, self).__init__()
+        super(BareMetalUPINode, self).__init__()
         self.aws = aws.AWS()
         self.node_conf = node_conf
         self.node_type = node_type
@@ -1862,7 +1862,7 @@ class BAREMETALUPINode(BaremetalNodes):
             )
 
         if constants.BM_MAX_WORKER_COUNT < self.target_worker_count:
-            raise InSufficientResourceException(
+            raise InsufficientResourceException(
                 "No Sufficient BM present",
                 f"Current Worker count:- {self.current_worker_count}",
                 f"Overall Worker count:- {self.target_worker_count}",
