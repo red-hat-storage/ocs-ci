@@ -985,6 +985,12 @@ LOCAL_VOLUME_YAML = os.path.join(
 LOCAL_STORAGE_OPTIONAL_OPERATORS = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "local-storage-optional-operators.yaml"
 )
+LOCAL_VOLUME_DISCOVERY_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-volume-discovery.yaml"
+)
+LOCAL_VOLUME_SET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-volume-set.yaml"
+)
 
 # All worker default config files
 RHCOS_WORKER_CONF = os.path.join(CONF_DIR, 'ocsci/aws_upi_rhcos_workers.yaml')
