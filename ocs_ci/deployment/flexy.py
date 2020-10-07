@@ -306,13 +306,6 @@ class FlexyBase(object):
         and do this only if its jenkins run
 
         """
-        auth_file = 'flexy/workdir/install-dir/auth/kubeconfig'
-        secret_cmd = (
-            f"oc set data secret/pull-secret "
-            f"--kubeconfig {self.flexy_host_dir}/{auth_file} "
-            f"-n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
-            f"--from-file=.dockerconfigjson={constants.DATA_DIR}/pull-secret"
-        )
         abs_cluster_path = os.path.abspath(self.cluster_path)
         flexy_cluster_path = os.path.join(
             self.flexy_host_dir, 'flexy/workdir/install-dir'
@@ -346,8 +339,6 @@ class FlexyBase(object):
                     ),
                     abs_cluster_path
                 )
-                # Apply pull secrets on ocp cluster
-                run_cmd(secret_cmd)
         else:
             # recursively change permissions
             # for all the subdirs
@@ -357,7 +348,17 @@ class FlexyBase(object):
                 f"Symlinking {flexy_cluster_path, abs_cluster_path}"
             )
             os.symlink(flexy_cluster_path, abs_cluster_path)
-            run_cmd(secret_cmd)
+
+        # Apply pull secrets on ocp cluster
+        auth_file = 'flexy/workdir/install-dir/auth/kubeconfig'
+        secret_cmd = (
+            f"oc set data secret/pull-secret "
+            f"--kubeconfig {self.flexy_host_dir}/{auth_file} "
+            f"-n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
+            f"--from-file=.dockerconfigjson={constants.DATA_DIR}/pull-secret"
+        )
+        run_cmd(secret_cmd)
+
         if not config.ENV_DATA.get('skip_ntp_configuration', False):
             ntp_cmd = (
                 f"oc --kubeconfig {self.flexy_host_dir}/{auth_file} "
@@ -393,8 +394,16 @@ class FlexyBase(object):
         if log_level:
             pass
         cmd = self.build_install_cmd()
-        self.run_container(cmd)
+        err = None
+        # Ensure that flexy workdir will be copied to cluster dir even when
+        # Flexy itself fails.
+        try:
+            self.run_container(cmd)
+        except Exception as err:
+            logger.error(err)
         self.flexy_post_processing()
+        if err:
+            raise err
 
     def destroy(self):
         """
