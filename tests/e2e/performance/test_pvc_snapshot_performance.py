@@ -5,7 +5,9 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.framework.testlib import (
-    skipif_ocs_version, E2ETest, performance
+    skipif_ocp_version,
+    skipif_ocs_version,
+    E2ETest, performance
 )
 from ocs_ci.ocs.resources import pod, pvc
 from tests import helpers
@@ -14,6 +16,7 @@ log = logging.getLogger(__name__)
 
 
 @performance
+@skipif_ocp_version('<4.6')
 @skipif_ocs_version('<4.6')
 class TestPvcSnapshotPerformance(E2ETest):
     """
