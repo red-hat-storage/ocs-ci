@@ -5,6 +5,8 @@ import os
 from abc import ABC, abstractmethod
 from time import sleep
 
+from azure.storage.blob import BlobServiceClient, ContainerClient
+from azure.core.exceptions import ResourceExistsError
 import boto3
 from botocore.exceptions import ClientError
 from google.auth.exceptions import DefaultCredentialsError
@@ -346,21 +348,34 @@ class AzureClient(CloudClient):
 
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self, account_name=None, credential=None,
+        auth_dict=None, *args, **kwargs
+    ):
         super().__init__(*args, **kwargs)
-        # TODO: Implement
-        raise DefaultCredentialsError
+        if auth_dict:
+            account_name = auth_dict.get('STORAGE_ACCOUNT_NAME')
+            credential = auth_dict.get('STORAGE_ACCOUNT_KEY')
+        if account_name and credential:
+            self.account_name = account_name
+            self.credential = credential
+            self.secret = self.create_azure_secret()
 
-    def internal_create_uls(self, name, region=None):
+            account_url = constants.AZURE_BLOB_ENDPOINT_SUFFIX.format(account_name)
+            self.blob_service_client = BlobServiceClient(
+                account_url=account_url,
+                credential=credential
+            )
+
+    def internal_create_uls(self, name):
         """
         Creates the Underlying Storage using the Azure API
 
         Args:
            name (str): The Underlying Storage name to be created
-           region (str): The region to create the Underlying Storage,
 
         """
-        pass
+        self.blob_service_client.get_container_client(name).create_container()
 
     def internal_delete_uls(self, name):
         """
@@ -370,10 +385,33 @@ class AzureClient(CloudClient):
            name (str): The Underlying Storage name to be deleted
 
         """
-        pass
+        self.blob_service_client.get_container_client(name).delete_container()
 
     def get_all_uls_names(self):
-        pass
+        return [
+            container['name'] for container in self.blob_service_client.list_containers()
+        ]
 
     def verify_uls_exists(self, uls_name):
-        pass
+        try:
+            self.blob_service_client.get_container_client(uls_name).get_container_properties()
+            return True
+        except ResourceExistsError:
+            return False
+
+    def create_azure_secret(self):
+        """
+        Create a Kubernetes secret to allow NooBaa to create Azure-based backingstores
+
+        """
+        bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
+        bs_secret_data['metadata']['name'] = 'cldmgr-azure-secret'
+        bs_secret_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
+        bs_secret_data['data']['AccountKey'] = base64.urlsafe_b64encode(
+            self.credential.encode('UTF-8')
+        ).decode('ascii')
+        bs_secret_data['data']['AccountName'] = base64.urlsafe_b64encode(
+            self.account_name.encode('UTF-8')
+        ).decode('ascii')
+
+        return create_resource(**bs_secret_data)

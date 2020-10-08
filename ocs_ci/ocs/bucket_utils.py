@@ -263,9 +263,16 @@ def oc_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
     bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
     bs_data['metadata']['name'] = backingstore_name
     bs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
-    bs_data['spec']['awsS3']['secret']['name'] = cld_mgr.aws_client.secret.name
-    bs_data['spec']['awsS3']['targetBucket'] = uls_name
-    bs_data['spec']['awsS3']['region'] = region
+    bs_data['spec'] = {
+        'type': 'aws-s3',
+        'awsS3': {
+            'targetBucket': uls_name,
+            'region': region,
+            'secret': {
+                'name': cld_mgr.aws_client.secret.name
+            },
+        }
+    }
     create_resource(**bs_data)
 
 
@@ -280,11 +287,12 @@ def cli_create_aws_backingstore(mcg_obj_session, cld_mgr, backingstore_name, uls
         region (str): which region to create backingstore (should be the same as uls)
 
     """
-    mcg_obj_session.exec_mcg_cmd(f'backingstore create aws-s3 {backingstore_name} '
-                                 f'--access-key {cld_mgr.aws_client.access_key} '
-                                 f'--secret-key {cld_mgr.aws_client.secret_key} '
-                                 f'--target-bucket {uls_name} --region {region}'
-                                 )
+    mcg_obj_session.exec_mcg_cmd(
+        f'backingstore create aws-s3 {backingstore_name} '
+        f'--access-key {cld_mgr.aws_client.access_key} '
+        f'--secret-key {cld_mgr.aws_client.secret_key} '
+        f'--target-bucket {uls_name} --region {region}'
+    )
 
 
 def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
@@ -295,12 +303,38 @@ def cli_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region)
     pass
 
 
-def oc_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
-    pass
+def oc_create_azure_backingstore(cld_mgr, backingstore_name, uls_name):
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data['metadata']['name'] = backingstore_name
+    bs_data['spec'] = {
+        'type': constants.BACKINGSTORE_TYPE_AZURE,
+        'azureBlob': {
+            'targetBlobContainer': uls_name,
+            'secret': {
+                'name': cld_mgr.azure_client.secret.name
+            },
+        }
+    }
+    create_resource(**bs_data)
 
 
-def cli_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
-    pass
+def cli_create_azure_backingstore(mcg_obj_session, cld_mgr, backingstore_name, uls_name):
+    """
+    Create a new backingstore with aws underlying storage using noobaa cli command
+
+    Args:
+        cld_mgr (CloudManager): holds secret for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    mcg_obj_session.exec_mcg_cmd(
+        f'backingstore create azure-blob {backingstore_name} '
+        f'--account-key {cld_mgr.azure_client.credential} '
+        f'--account-name {cld_mgr.azure_client.account_name} '
+        f'--target-blob-container {uls_name}'
+    )
 
 
 def oc_create_s3comp_backingstore(cld_mgr, backingstore_name, uls_name, region):

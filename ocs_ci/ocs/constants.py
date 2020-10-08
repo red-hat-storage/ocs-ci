@@ -1169,6 +1169,15 @@ MCG_NS_RESOURCE = 'ns_resource'
 MCG_NS_BUCKET = 'ns-bucket'
 MCG_NS_AWS_CONNECTION = 'aws_connection'
 
+# Cloud provider default endpoints
+# Upon use, utilize .format() to replace the curly braces where necessary
+AZURE_BLOB_ENDPOINT_SUFFIX = 'https://{}.blob.core.windows.net'
+
+# NooBaa backingstore types
+BACKINGSTORE_TYPE_AWS = 'aws-s3'
+BACKINGSTORE_TYPE_AZURE = 'azure-blob'
+BACKINGSTORE_TYPE_S3_COMP = 's3-compatible'
+
 # Squads assignment
 # Tests are assigned to Squads based on patterns matching test path.
 # For example: In case following test fails:
