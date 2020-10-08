@@ -729,6 +729,8 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(no_of_pvc, access_mode, sc_nam
     else:
         volume_mode_block_flag = 0
 
+    # Construct PVC.yaml for the no_of_required_pvc count
+    # append all the pvc.yaml dict to pvc_dict_list and return the list
     pvc_dict_list = list()
     for i in range(no_of_pvc):
         pvc_name = helpers.create_unique_resource_name('test', 'pvc')
@@ -739,6 +741,7 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(no_of_pvc, access_mode, sc_nam
         pvc_data['spec']['accessModes'] = [access_mode]
         pvc_data['spec']['storageClassName'] = sc_name
         pvc_data['spec']['resources']['requests']['storage'] = size
+        # Check to identify RBD_RWX PVC and add VolumeMode
         if volume_mode_block_flag:
             pvc_data['spec']['volumeMode'] = 'Block'
         else:
@@ -768,16 +771,23 @@ def check_all_pvc_reached_bound_state_in_kube_job(kube_job_obj, namespace, no_of
     pvc_bound_list, pvc_not_bound_list = ([] for i in range(2))
     while_iteration_count = 0
     while True:
+        # Get kube_job obj and fetch either all PVC's are in Bound state
+        # If not bound adding those PVCs to pvc_not_bound_list
         job_get_output = kube_job_obj.get(namespace=namespace)
         for i in range(no_of_pvc):
             status = job_get_output['items'][i]['status']['phase']
             logging.info(f"pvc {job_get_output['items'][i]['metadata']['name']} status {status}")
             if status != 'Bound':
                 pvc_not_bound_list.append(job_get_output['items'][i]['metadata']['name'])
+
+        # Check the length of pvc_not_bound_list to decide either all PVCs reached Bound state
+        # If not then wait for 30secs and re-iterate while loop
         if len(pvc_not_bound_list):
             time.sleep(30)
             while_iteration_count += 1
-            if while_iteration_count >= 11:
+            # Breaking while loop after 10 Iteration i.e. after 30*10 secs of wait_time
+            # And if PVCs still not in bound state then there will be assert.
+            if while_iteration_count >= 10:
                 assert logging.error(
                     f" Listed PVCs took more than 600secs to bound {pvc_not_bound_list}"
                 )

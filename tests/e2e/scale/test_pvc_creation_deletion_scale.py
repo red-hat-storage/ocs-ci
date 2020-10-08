@@ -59,6 +59,7 @@ class TestPVCCreationDeletionScale(E2ETest):
         elif interface == constants.CEPHFS_INTERFACE:
             sc_name = constants.DEFAULT_STORAGECLASS_CEPHFS
 
+        # Get pvc_dict_list, append all the pvc.yaml dict to pvc_dict_list
         pvc_dict_list1 = scale_lib.construct_pvc_creation_yaml_bulk_for_kube_job(
             no_of_pvc=number_of_pvc, access_mode=access_mode, sc_name=sc_name
         )
@@ -77,6 +78,7 @@ class TestPVCCreationDeletionScale(E2ETest):
             project=self.namespace, tmp_path=tmp_path
         )
 
+        # Create kube_job
         job_file1.create(namespace=self.namespace)
         job_file2.create(namespace=self.namespace)
 
@@ -108,7 +110,7 @@ class TestPVCCreationDeletionScale(E2ETest):
             f"Create data present in {log_path}-creation-time.csv file"
         )
 
-        # Get pvc_name, require pvc_name to fetch creation time data from log
+        # Get pv_name, require pv_name to fetch deletion time data from log
         # TODO: Revisit on changing below code without threads, for now it looks good
         # TODO: but run-ci memory growth is increasing ~0.4G with below threads
         pvc_objs = pvc.get_all_pvc_objs(namespace=self.namespace)
@@ -123,6 +125,7 @@ class TestPVCCreationDeletionScale(E2ETest):
         for process in threads:
             process.join()
 
+        # Delete kube_job
         job_file1.delete(namespace=self.namespace)
         job_file2.delete(namespace=self.namespace)
 
@@ -154,6 +157,7 @@ class TestPVCCreationDeletionScale(E2ETest):
         cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
         rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
 
+        # Get pvc_dict_list, append all the pvc.yaml dict to pvc_dict_list
         rbd_pvc_dict_list, cephfs_pvc_dict_list = ([] for i in range(2))
         for mode in [constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]:
             rbd_pvc_dict_list.extend(
@@ -167,6 +171,7 @@ class TestPVCCreationDeletionScale(E2ETest):
                 )
             )
 
+        # There is 2 kube_job for cephfs and rbd PVCs
         job_file_rbd = ObjectConfFile(
             name='rbd_pvc_job', obj_dict_list=rbd_pvc_dict_list,
             project=self.namespace, tmp_path=tmp_path
@@ -176,6 +181,7 @@ class TestPVCCreationDeletionScale(E2ETest):
             project=self.namespace, tmp_path=tmp_path
         )
 
+        # Create kube_job
         job_file_rbd.create(namespace=self.namespace)
         job_file_cephfs.create(namespace=self.namespace)
 
@@ -187,6 +193,7 @@ class TestPVCCreationDeletionScale(E2ETest):
             kube_job_obj=job_file_cephfs, namespace=self.namespace, no_of_pvc=750
         )
 
+        # Get pvc objs from namespace, which is used to identify backend pv
         rbd_pvc_obj, cephfs_pvc_obj = ([] for i in range(2))
         pvc_objs = pvc.get_all_pvc_objs(namespace=self.namespace)
         for pvc_obj in pvc_objs:
@@ -215,7 +222,7 @@ class TestPVCCreationDeletionScale(E2ETest):
             f"Create data present in {log_path}-creation-time.csv file"
         )
 
-        # Get pvc_name, require pvc_name to fetch creation time data from log
+        # Get pv_name, require pv_name to fetch deletion time data from log
         # TODO: Revisit on changing below code without threads, for now it looks good
         # TODO: but run-ci memory growth is increasing ~0.4G with below threads
         fs_pv_list, rbd_pv_list = ([] for i in range(2))
@@ -236,11 +243,11 @@ class TestPVCCreationDeletionScale(E2ETest):
         for process in threads:
             process.join()
 
-        # Delete PVC
+        # Delete kube_job
         job_file_rbd.delete(namespace=self.namespace)
         job_file_cephfs.delete(namespace=self.namespace)
 
-        # Get PVC deletion time
+        # Get PV deletion time
         fs_pvc_deletion_time = helpers. measure_pv_deletion_time_bulk(
             interface=constants.CEPHFS_INTERFACE, pv_name_list=fs_pv_list
         )
