@@ -2,8 +2,8 @@ import logging
 
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.exceptions import ResourceNotFoundError, CommandFailed
-from ocs_ci.ocs.node import get_all_nodes
-from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
+from ocs_ci.ocs.node import get_node_objs
+from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.utility.localstorage import check_local_volume
 from tests.helpers import get_all_pvs
@@ -16,13 +16,13 @@ def test_uninstall():
     Test to validate all OCS resources were removed from cluster
 
     """
-    # uninstall OCS if still exists
+    # uninstall OCS if still exists -V
     csv_obj = ocp.OCP(namespace='openshift-storage', kind='', resource_name='csv')
     if csv_obj.is_exist():
         log.info("OCS will be uninstalled")
         uninstall_ocs()
 
-    # checking for OCS storage classes
+    # checking for OCS storage classes - V
     ocs_sc_list = ['ocs-storagecluster-ceph-rbd',
                    'ocs-storagecluster-cephfs',
                    'ocs-storagecluster-ceph-rgw',
@@ -32,22 +32,26 @@ def test_uninstall():
     for sc in ocs_sc_list:
         assert not sc_obj.is_exist(resource_name=sc), f"storage class {sc} was not deleted"
 
-    # checking for OCS PVCs
-    pvc_list = [pvc for pvc in get_all_pvc_objs() if pvc.backed_sc in ocs_sc_list]
-    assert not pvc_list, f"OCS PVCs {[pvc.name for pvc in pvc_list]} are not deleted"
+    # checking for OCS PVCs -V
+    pvc_list = []
+    for sc in ocs_sc_list:
+        pvc_list.extend(get_all_pvcs_in_storageclass(sc))
+    assert len(pvc_list) == 0, f"OCS PVCs were not deleted {[pvc.name for pvc in pvc_list]}"
 
-    # checking for monitoring map
+    # checking for monitoring map -V
     monitoring_obj = ocp.OCP(
-        namespace=constants.MONITORING_NAMESPACE, kind='ConfigMap',
+        namespace=constants.MONITORING_NAMESPACE,
+        kind='ConfigMap',
+        resource_name='cluster-monitoring-config',
     )
-    assert not monitoring_obj.get().get('data').get('config.yaml') is None, \
+    assert monitoring_obj.get().get('data').get('config.yaml') is not None, \
         "OCS was not removed from monitoring stack"
 
-    # checking for registry map
+    # checking for registry map - V
     image_registry_obj = ocp.OCP(
         kind=constants.IMAGE_REGISTRY_CONFIG, namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
     )
-    assert 'pvc' not in image_registry_obj.get('spec').get('storage'), "OCS was not removed from regitry map"
+    assert 'pvc' not in image_registry_obj.get().get('spec').get('storage'), "OCS was not removed from regitry map"
 
     # checking for cluster logging object
     clusterlogging_obj = ocp.OCP(
@@ -58,10 +62,10 @@ def test_uninstall():
 
     # checking for backing store
 
-    # checking for local volume
+    # checking for local volume - V
     assert not check_local_volume(), "local volume was not deleted"
 
-    # checking for storage cluster
+    # checking for storage cluster - V
     storage_cluster = ocp.OCP(
         kind=constants.STORAGECLUSTER,
         resource_name=constants.DEFAULT_CLUSTERNAME,
@@ -70,7 +74,7 @@ def test_uninstall():
 
     assert not storage_cluster.is_exist(resource_name=constants.DEFAULT_CLUSTERNAME), "storage cluster was not deleted"
 
-    # checking for openshift-storage namespace
+    # checking for openshift-storage namespace -V
     openshift_storage_namespace = ocp.OCP(
         kind=constants.NAMESPACE,
         namespace='openshift-storage'
@@ -87,7 +91,7 @@ def test_uninstall():
 
     # checking for LSO artifacts on nodes
     ocp_obj = ocp.OCP()
-    nodes_list = get_all_nodes()
+    nodes_list = get_node_objs()
     for node in nodes_list:
         try:
             assert not ocp_obj.exec_oc_debug_cmd(
@@ -103,10 +107,11 @@ def test_uninstall():
         except CommandFailed:
             pass
 
-    # checking for labels on nodes
+    # checking for labels on nodes - v
     for node in nodes_list:
-        labels = node.get('metadata').get('labels')
-        assert constants.OPERATOR_NODE_LABEL not in labels, f"OCS labels was not removed from {node} node"
+        labels = node.get().get('metadata').get('labels')
+        print(labels)
+        assert constants.OPERATOR_NODE_LABEL in labels, f"OCS labels was not removed from {node} node"
 
     # checking for CRDs
     crds = ['backingstores.noobaa.io', 'bucketclasses.noobaa.io', 'cephblockpools.ceph.rook.io',
@@ -116,6 +121,6 @@ def test_uninstall():
             'storageclusters.ocs.openshift.io', 'cephclusters.ceph.rook.io']
     for crd in crds:
         try:
-            ocp.OCP.exec_oc_cmd(f'get crd {crd}')
+            ocp_obj.exec_oc_cmd(f'get crd {crd}')
         except ResourceNotFoundError:
             pass
