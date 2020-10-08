@@ -136,7 +136,7 @@ class TestPVCSingleClonePerformance(E2ETest):
             create_time = helpers.measure_pvc_creation_time(
                 interface_type, cloned_pvc_obj.name
             )
-            creation_speed = int( int(file_size) / create_time)
+            creation_speed = int(int(file_size) / create_time)
             logger.info(f"Clone number {i+1} creation time is {create_time} secs.")
             logger.info(f"Clone number {i+1} creation speed is {creation_speed} MB/sec.")
             clone_creation_time_measures.append(create_time)
@@ -173,7 +173,7 @@ class TestPVCSingleClonePerformance(E2ETest):
                 interface_type, cloned_pvc_obj.backed_pv)
             logger.info(f"Clone number {i + 1} deletion time is {delete_time} secs.")
 
-            deletion_speed = int( int(file_size) / delete_time)
+            deletion_speed = int(int(file_size) / delete_time)
             logger.info(f"Clone number {i+1} deletion speed is {deletion_speed} MB/sec.")
             clone_deletion_time_measures.append(delete_time)
 
