@@ -4,7 +4,6 @@ Test to measure pvc scale creation & deletion time. Total pvc count would be 150
 import logging
 import csv
 import pytest
-import threading
 
 from tests import helpers
 from ocs_ci.ocs.resources import pvc
@@ -47,13 +46,15 @@ class TestPVCCreationDeletionScale(E2ETest):
         ]
     )
     @pytest.mark.usefixtures(namespace.__name__)
-    def test_multiple_pvc_creation_deletion_scale(self, namespace, tmp_path, access_mode, interface):
+    def test_multiple_pvc_creation_deletion_scale(
+        self, namespace, tmp_path, access_mode, interface
+    ):
         """
         Measuring PVC creation time while scaling PVC
         Measure PVC deletion time after creation test
         """
-        number_of_pvc = 750
-        log.info(f"Start creating {access_mode}-{interface} {number_of_pvc} PVC")
+        scale_pvc_count = 1500
+        log.info(f"Start creating {access_mode}-{interface} {scale_pvc_count} PVC")
         if interface == constants.CEPHBLOCKPOOL:
             sc_name = constants.DEFAULT_STORAGECLASS_RBD
         elif interface == constants.CEPHFS_INTERFACE:
@@ -61,10 +62,10 @@ class TestPVCCreationDeletionScale(E2ETest):
 
         # Get pvc_dict_list, append all the pvc.yaml dict to pvc_dict_list
         pvc_dict_list1 = scale_lib.construct_pvc_creation_yaml_bulk_for_kube_job(
-            no_of_pvc=number_of_pvc, access_mode=access_mode, sc_name=sc_name
+            no_of_pvc=int(scale_pvc_count / 2), access_mode=access_mode, sc_name=sc_name
         )
         pvc_dict_list2 = scale_lib.construct_pvc_creation_yaml_bulk_for_kube_job(
-            no_of_pvc=number_of_pvc, access_mode=access_mode, sc_name=sc_name
+            no_of_pvc=int(scale_pvc_count / 2), access_mode=access_mode, sc_name=sc_name
         )
 
         # There is 2 kube_job to reduce the load, observed time_out problems
@@ -84,15 +85,17 @@ class TestPVCCreationDeletionScale(E2ETest):
 
         # Check all the PVC reached Bound state
         pvc_bound_list = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
-            kube_job_obj=job_file1, namespace=self.namespace, no_of_pvc=number_of_pvc
+            kube_job_obj=job_file1, namespace=self.namespace,
+            no_of_pvc=int(scale_pvc_count / 2)
         )
         pvc_bound_list.extend(
             scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
-                kube_job_obj=job_file2, namespace=self.namespace, no_of_pvc=number_of_pvc
+                kube_job_obj=job_file2, namespace=self.namespace,
+                no_of_pvc=int(scale_pvc_count / 2)
             )
         )
 
-        logging.info(f"Length of pvc_bound_list {len(pvc_bound_list)}")
+        logging.info(f"Number of PVCs in Bound state {len(pvc_bound_list)}")
 
         # Get PVC creation time
         pvc_create_time = helpers.measure_pvc_creation_time_bulk(
@@ -111,19 +114,14 @@ class TestPVCCreationDeletionScale(E2ETest):
         )
 
         # Get pv_name, require pv_name to fetch deletion time data from log
-        # TODO: Revisit on changing below code without threads, for now it looks good
-        # TODO: but run-ci memory growth is increasing ~0.4G with below threads
-        pvc_objs = pvc.get_all_pvc_objs(namespace=self.namespace)
-        threads, pv_name_list = ([] for i in range(2))
-        for pvc_obj in pvc_objs:
-            process1 = threading.Thread(target=pvc_obj.reload)
-            process2 = threading.Thread(target=pv_name_list.append(pvc_obj.backed_pv))
-            process1.start()
-            process2.start()
-            threads.append(process1)
-            threads.append(process2)
-        for process in threads:
-            process.join()
+        pv_name_list = list()
+        get_kube_job_1 = job_file1.get(namespace=self.namespace)
+        for i in range(int(scale_pvc_count / 2)):
+            pv_name_list.append(get_kube_job_1['items'][i]['spec']['volumeName'])
+
+        get_kube_job_2 = job_file2.get(namespace=self.namespace)
+        for i in range(int(scale_pvc_count / 2)):
+            pv_name_list.append(get_kube_job_2['items'][i]['spec']['volumeName'])
 
         # Delete kube_job
         job_file1.delete(namespace=self.namespace)
@@ -153,7 +151,8 @@ class TestPVCCreationDeletionScale(E2ETest):
         will be created, i.e. 375 each pvc type
         Measure PVC deletion time in scale env
         """
-        log.info("Start creating 1500 PVC of all 4 types")
+        scale_pvc_count = 1500
+        log.info(f"Start creating {scale_pvc_count} PVC of all 4 types")
         cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
         rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
 
@@ -162,12 +161,14 @@ class TestPVCCreationDeletionScale(E2ETest):
         for mode in [constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]:
             rbd_pvc_dict_list.extend(
                 scale_lib.construct_pvc_creation_yaml_bulk_for_kube_job(
-                    no_of_pvc=375, access_mode=mode, sc_name=rbd_sc_obj
+                    no_of_pvc=int(scale_pvc_count / 4), access_mode=mode,
+                    sc_name=rbd_sc_obj
                 )
             )
             cephfs_pvc_dict_list.extend(
                 scale_lib.construct_pvc_creation_yaml_bulk_for_kube_job(
-                    no_of_pvc=375, access_mode=mode, sc_name=cephfs_sc_obj
+                    no_of_pvc=int(scale_pvc_count / 4), access_mode=mode,
+                    sc_name=cephfs_sc_obj
                 )
             )
 
@@ -187,10 +188,12 @@ class TestPVCCreationDeletionScale(E2ETest):
 
         # Check all the PVC reached Bound state
         rbd_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
-            kube_job_obj=job_file_rbd, namespace=self.namespace, no_of_pvc=750
+            kube_job_obj=job_file_rbd, namespace=self.namespace,
+            no_of_pvc=int(scale_pvc_count / 2)
         )
         fs_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
-            kube_job_obj=job_file_cephfs, namespace=self.namespace, no_of_pvc=750
+            kube_job_obj=job_file_cephfs, namespace=self.namespace,
+            no_of_pvc=int(scale_pvc_count / 2)
         )
 
         # Get pvc objs from namespace, which is used to identify backend pv
@@ -223,25 +226,14 @@ class TestPVCCreationDeletionScale(E2ETest):
         )
 
         # Get pv_name, require pv_name to fetch deletion time data from log
-        # TODO: Revisit on changing below code without threads, for now it looks good
-        # TODO: but run-ci memory growth is increasing ~0.4G with below threads
-        fs_pv_list, rbd_pv_list = ([] for i in range(2))
-        threads = list()
-        for fs_obj, rbd_obj in zip(cephfs_pvc_obj, rbd_pvc_obj):
-            process1 = threading.Thread(target=fs_obj.reload)
-            process2 = threading.Thread(target=rbd_obj.reload)
-            process3 = threading.Thread(target=fs_pv_list.append(fs_obj.backed_pv))
-            process4 = threading.Thread(target=rbd_pv_list.append(rbd_obj.backed_pv))
-            process1.start()
-            process2.start()
-            process3.start()
-            process4.start()
-            threads.append(process1)
-            threads.append(process2)
-            threads.append(process3)
-            threads.append(process4)
-        for process in threads:
-            process.join()
+        rbd_pv_list, fs_pv_list = ([] for i in range(2))
+        get_rbd_kube_job = job_file_rbd.get(namespace=self.namespace)
+        for i in range(int(scale_pvc_count / 2)):
+            rbd_pv_list.append(get_rbd_kube_job['items'][i]['spec']['volumeName'])
+
+        get_fs_kube_job = job_file_cephfs.get(namespace=self.namespace)
+        for i in range(int(scale_pvc_count / 2)):
+            fs_pv_list.append(get_fs_kube_job['items'][i]['spec']['volumeName'])
 
         # Delete kube_job
         job_file_rbd.delete(namespace=self.namespace)

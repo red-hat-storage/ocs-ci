@@ -724,10 +724,6 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(no_of_pvc, access_mode, sc_nam
          pvc_dict_list (list): List of all PVC.yaml dicts
 
     """
-    if access_mode == 'ReadWriteMany' and 'rbd' in sc_name:
-        volume_mode_block_flag = 1
-    else:
-        volume_mode_block_flag = 0
 
     # Construct PVC.yaml for the no_of_required_pvc count
     # append all the pvc.yaml dict to pvc_dict_list and return the list
@@ -742,7 +738,7 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(no_of_pvc, access_mode, sc_nam
         pvc_data['spec']['storageClassName'] = sc_name
         pvc_data['spec']['resources']['requests']['storage'] = size
         # Check to identify RBD_RWX PVC and add VolumeMode
-        if volume_mode_block_flag:
+        if access_mode == 'ReadWriteMany' and 'rbd' in sc_name:
             pvc_data['spec']['volumeMode'] = 'Block'
         else:
             pvc_data['spec']['volumeMode'] = None
@@ -789,7 +785,7 @@ def check_all_pvc_reached_bound_state_in_kube_job(kube_job_obj, namespace, no_of
             # And if PVCs still not in bound state then there will be assert.
             if while_iteration_count >= 10:
                 assert logging.error(
-                    f" Listed PVCs took more than 600secs to bound {pvc_not_bound_list}"
+                    f" Listed PVCs took more than 300secs to bound {pvc_not_bound_list}"
                 )
                 break
             pvc_not_bound_list.clear()
