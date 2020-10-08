@@ -25,7 +25,7 @@ class DeploymentFactory(object):
             'aws_upi': AWSUPI,
             'azure_ipi': AZUREIPI,
             'vsphere_upi': VSPHEREUPI,
-            'rhv_ipi': RHVIPI
+            'rhv_ipi': RHVIPI,
             'baremetalpsi_upi': BaremetalPSIUPI,
             'baremetal_upi': BAREMETALUPI,
             'gcp_ipi': GCPIPI,
