@@ -51,13 +51,22 @@ class PlatformNodesFactory:
             'aws': AWSNodes,
             'baremetal': BaremetalNodes,
             'azure': AZURENodes,
-            'rhv' : RHVNodes,
+            'rhv': RHVNodes,
             'gcp': NodesBase
         }
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA['platform']
         return self.cls_map[platform]()
+
+
+class RHVNodes(object):
+    """
+    A base class for nodes related operations
+    for RHV
+    """
+    def __init__(self):
+        logger.info("RHV API")
 
 
 class NodesBase(object):
