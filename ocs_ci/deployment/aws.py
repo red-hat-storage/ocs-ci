@@ -828,5 +828,4 @@ class AWSUPIFlexy(AWSBase):
             f"{self.cluster_name}-vpc"
         )
         # cleanup related S3 buckets
-        # Destroy buckets
         delete_cluster_buckets(self.cluster_name)
