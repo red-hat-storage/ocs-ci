@@ -39,7 +39,7 @@ class BackingStore():
         # Todo: implement deletion assertion
 
 
-def backingstore_factory(request, cld_mgr, cloud_uls_factory):
+def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
     """
     Create a Backing Store factory.
     Calling this fixture creates a new Backing Store(s).
@@ -131,9 +131,14 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
                                 uls_name=uls_name
                             )
                         )
-                        cmdMap[method.lower()][cloud.lower()](
-                            cld_mgr, backingstore_name, uls_name, region
-                        )
+                        if method.lower() == 'cli':
+                            cmdMap[method.lower()][cloud.lower()](
+                                mcg_obj, cld_mgr, backingstore_name, uls_name, region
+                            )
+                        elif method.lower() == 'oc':
+                            cmdMap[method.lower()][cloud.lower()](
+                                cld_mgr, backingstore_name, uls_name, region
+                            )
                         # Todo: Raise an exception in case the BS wasn't created
 
         return created_backingstores

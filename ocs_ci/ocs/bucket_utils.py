@@ -318,7 +318,7 @@ def oc_create_azure_backingstore(cld_mgr, backingstore_name, uls_name):
     create_resource(**bs_data)
 
 
-def cli_create_azure_backingstore(mcg_obj_session, cld_mgr, backingstore_name, uls_name):
+def cli_create_azure_backingstore(mcg_obj_session, cld_mgr, backingstore_name, uls_name, region):
     """
     Create a new backingstore with aws underlying storage using noobaa cli command
 

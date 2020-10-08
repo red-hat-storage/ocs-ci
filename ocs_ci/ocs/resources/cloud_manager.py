@@ -367,7 +367,7 @@ class AzureClient(CloudClient):
                 credential=credential
             )
 
-    def internal_create_uls(self, name):
+    def internal_create_uls(self, name, region):
         """
         Creates the Underlying Storage using the Azure API
 
