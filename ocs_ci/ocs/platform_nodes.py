@@ -271,7 +271,7 @@ class VMWareNodes(NodesBase):
                 reaches READY state. False otherwise
 
         """
-        num_events_pre_reboot, num_events_post_reboot = [], []
+        num_events_pre_reboot, num_events_post_reboot = ([] for i in range(2))
         vms = self.get_vms(nodes)
         node = nodes[0]
         assert vms, (
@@ -310,7 +310,7 @@ class VMWareNodes(NodesBase):
                 )
 
             for l1, l2 in zip(num_events_pre_reboot, num_events_post_reboot):
-                assert l1 < l2, ("Reboot event not found.")
+                assert l1 < l2, "Reboot event not found"
 
     def restart_nodes_by_stop_and_start(self, nodes, force=True):
         """
@@ -508,7 +508,7 @@ class AWSNodes(NodesBase):
                 and 'ready' state.
 
         """
-        num_events_pre_reboot, num_events_post_reboot = [], []
+        num_events_pre_reboot, num_events_post_reboot = ([] for i in range(2))
         instances = self.get_ec2_instances(nodes)
         node = nodes[0]
         assert instances, (
@@ -548,7 +548,7 @@ class AWSNodes(NodesBase):
                 )
 
             for l1, l2 in zip(num_events_pre_reboot, num_events_post_reboot):
-                assert l1 < l2, ("Reboot event not found.")
+                assert l1 < l2, "Reboot event not found"
 
     def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=True):
         """
