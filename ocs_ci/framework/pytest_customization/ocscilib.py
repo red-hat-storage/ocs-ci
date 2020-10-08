@@ -36,8 +36,10 @@ __all__ = [
     "pytest_addoption",
 ]
 
-logging.basicConfig(format=LOG_FORMAT)
 log = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter(LOG_FORMAT))
+log.addHandler(handler)
 
 
 def pytest_addoption(parser):
