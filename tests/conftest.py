@@ -2691,8 +2691,11 @@ def ceph_toolbox(request):
     teardown = config.RUN['cli_params'].get('teardown')
     skip_ocs = config.ENV_DATA['skip_ocs_deployment']
     if not (deploy or teardown or skip_ocs):
-        # Creating toolbox pod
-        setup_ceph_toolbox()
+        try:
+            # Creating toolbox pod
+            setup_ceph_toolbox()
+        except CommandFailed:
+            log.info("Failed to create toolbox")
 
 
 @pytest.fixture(scope='function')
