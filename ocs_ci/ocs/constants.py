@@ -1188,3 +1188,7 @@ SQUADS = {
 }
 
 PRODUCTION_JOBS_PREFIX = ['jnk']
+
+# min and max Noobaa endpoints
+MIN_NB_ENDPOINT_COUNT = 1
+MAX_NB_ENDPOINT_COUNT = 2
