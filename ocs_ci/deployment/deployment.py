@@ -817,7 +817,8 @@ class Deployment(object):
                     f"Changing NTP on compute nodes to"
                     f" {constants.RH_NTP_CLOCK}"
                 )
-                update_ntp_compute_nodes()
+                if self.platform == constants.VSPHERE_PLATFORM:
+                    update_ntp_compute_nodes()
                 assert ceph_health_check(
                     namespace=self.namespace, tries=60, delay=10
                 )
