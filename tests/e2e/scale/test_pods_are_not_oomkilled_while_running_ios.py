@@ -68,8 +68,7 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
         ceph_capacity = int(ceph_status['stats']['total_bytes']) / replica / constants.GB
         pvc_size_gb = int(ceph_capacity * 0.5)
         io_size_gb = int(pvc_size_gb * 0.4)
-        if io_size_gb >= 600:
-            io_size_gb = 400
+        io_size_gb = 400 if io_size_gb >= 400 else io_size_gb
 
         pod_objs = get_all_pods(
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
