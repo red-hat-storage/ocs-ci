@@ -781,6 +781,7 @@ def retrieve_verification_mode():
 def namespace_bucket_update(mcg_obj, bucket_name, read_resource, write_resource):
     """
     Edits MCG namespace bucket resources
+
     Args:
         mcg_obj (obj): An MCG object containing the MCG S3 connection credentials
         bucket_name (str): Name of the bucket

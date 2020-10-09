@@ -26,7 +26,7 @@ MCG_NS_ORIGINAL_DIR = '/original'
 
 def setup_base_objects(awscli_pod, amount=2):
     """
-    Setup function
+    Prepares two directories and populate one of them with objects
 
      Args:
         awscli_pod (Pod): A pod running the AWS CLI tools
@@ -131,7 +131,7 @@ class TestMcgNamespaceLifecycle(E2ETest):
         # Verifying whether Delete object action is denied
         logger.info(
             f'Verifying whether user: {user.email_id} '
-            f'is denied to Put object after updating policy'
+            f'is denied to Delete object after updating policy'
         )
         try:
             s3_delete_object(user, ns_bucket, object_key)
@@ -145,6 +145,8 @@ class TestMcgNamespaceLifecycle(E2ETest):
                     f"{e.response} received invalid error code "
                     f"{response.error['Code']}"
                 )
+        else:
+            assert False, "Delete object operation was granted access, when it should have denied"
 
         logger.info("Setting up test files for upload, to the bucket/resources")
         setup_base_objects(awscli_pod, amount=3)
