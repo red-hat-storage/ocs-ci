@@ -1091,6 +1091,11 @@ def setup_local_storage(storageclass):
             constants.LOCAL_VOLUME_SET_YAML
         )
 
+        # as a workaround we are setting Rotational to deviceMechanicalProperties to detect HDD disk
+        if platform == constants.VSPHERE_PLATFORM:
+            logger.info("Adding Rotational for deviceMechanicalProperties spec")
+            lvd_data['spec']['deviceInclusionSpec']['deviceMechanicalProperties'].append("Rotational")
+
         # Update local volume set data with Worker node Names
         logger.info(
             "Updating LocalVolumeSet CR data with worker nodes Name: %s",
