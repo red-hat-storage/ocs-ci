@@ -2837,6 +2837,7 @@ def snapshot_restore_factory(request):
 
     def factory(
         snapshot_obj,
+        restore_pvc_name=None,
         storageclass=None,
         size=None,
         volume_mode=None,
@@ -2848,6 +2849,7 @@ def snapshot_restore_factory(request):
         Args:
             snapshot_obj (OCS): OCS instance of kind VolumeSnapshot which has
                 to be restored to new PVC
+            restore_pvc_name (str): Name to be provided for restored pvc
             storageclass (str): Name of storageclass
             size (str): Size of PVC being created. eg: 5Gi. Ideally, this
                 should be same as the restore size of snapshot. Adding this
@@ -2866,9 +2868,7 @@ def snapshot_restore_factory(request):
         """
         snapshot_info = snapshot_obj.get()
         size = size or snapshot_info['status']['restoreSize']
-        restore_pvc_name = helpers.create_unique_resource_name(
-            snapshot_obj.name, 'restore'
-        )
+        restore_pvc_name = restore_pvc_name or helpers.create_unique_resource_name(snapshot_obj.name, 'restore')
 
         if snapshot_info['spec']['volumeSnapshotClassName'] == (
             constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD

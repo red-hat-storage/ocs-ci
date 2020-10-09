@@ -14,6 +14,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from subprocess import CalledProcessError
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, get_operator_pods
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from tests.helpers import wait_for_resource_state
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
@@ -150,6 +151,17 @@ class Postgresql(RipSaw):
                     f'but only found {len(pgbench_pods)}'
                 )
         return pg_obj_list
+
+    def get_postgres_pvc(self):
+        """
+        Get all postgres pvc
+
+        Returns:
+             List: postgres pvc objects list
+        """
+        return get_all_pvc_objs(
+            namespace=RIPSAW_NAMESPACE
+        )
 
     def get_postgres_pods(self):
         """

@@ -34,6 +34,7 @@ spec:
           volume.beta.kubernetes.io/storage-class: ocs-storagecluster-ceph-rbd
       spec:
         accessModes: [ "ReadWriteOnce" ]
+        storageClassName: ocs-storagecluster-ceph-rbd
         resources:
           requests:
             storage: 10Gi
