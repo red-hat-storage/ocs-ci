@@ -47,6 +47,7 @@ def setup_base_objects(awscli_pod, amount=2):
 class TestMcgNamespaceLifecycle(E2ETest):
     """
     Test MCG namespace resource/bucket lifecycle
+
     """
 
     @pytest.mark.polarion_id("OCS-2298")
