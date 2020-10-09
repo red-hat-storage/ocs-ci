@@ -7,10 +7,8 @@ import logging
 
 from ocs_ci.deployment.deployment import Deployment
 
-from ocs_ci.ocs import ocp
-from ocs_ci.ocs.exceptions import (
-    CommandFailed
-)
+from ocs_ci.framework import config
+from ocs_ci.ocs import ocp, constants
 from ocs_ci.utility.utils import (
     run_cmd
 )
@@ -29,35 +27,35 @@ class IBMDeployment(Deployment):
         Cluster, Openshift-storage namespace, LocalVolume, unlabel
         worker-storage nodes, delete ocs CRDs, etc.
         """
+        cluster_namespace = config.ENV_DATA['cluster_namespace']
+        local_storage_namespace = config.ENV_DATA['local_storage_namespace']
 
         # STEP 2 & 3 not relevant. There are no PVCs using the storage class
         # provisioners. other than noobaa.
 
         # STEP 1 & 4
-        scopenshiftprovisioner = []
         # Get a list of storage classes
         storage_classes = ocp.OCP(
-            kind='StorageClass')
-        try:
-            sclassess = [(sub['metadata']['name'], sub['provisioner'])
-                         for sub in storage_classes.get().get('items')]
-            scnoprovisioner = [sub[0] for sub in sclassess
-                               if sub[1] == 'kubernetes.io/no-provisioner']
-            scopenshiftprovisioner = [sub[0] for sub in sclassess
-                                      if not sub[1] == 'kubernetes.io/no-provisioner']
-        except (IndexError, CommandFailed):
-            logger.warning("Error")
+            kind='StorageClass').get()
+        scnoprovisioner = []
+        scopenshiftprovisioner = []
+        for storage_class in storage_classes.get('items', []):
+            name = storage_class['metadata']['name']
+            if storage_class['provisioner'] == 'kubernetes.io/no-provisioner':
+                scnoprovisioner.append(name)
+            else:
+                scopenshiftprovisioner.append(name)
 
         storage_clusters = ocp.OCP(
-            kind='StorageCluster')
-        try:
-            scdevicesets = [sub['spec']['storageDeviceSets']
-                            for sub in storage_clusters.get().get('items')]
-            sclassindevicesets = \
-                [[sub1['dataPVCTemplate']['spec']['storageClassName']
-                    for sub1 in sub] for sub in scdevicesets]
-        except (IndexError, CommandFailed):
-            logger.warning("Error")
+            kind='StorageCluster',
+            namespace=cluster_namespace
+        ).get()
+        sclassindevicesets = []
+        for storage_cluster in storage_clusters.get('items', []):
+            device_sets = storage_cluster['spec']['storageDeviceSets']
+            sclassindevicesets.append([
+                i['dataPVCTemplate']['spec']['storageClassName'] for i in device_sets
+            ])
 
         # sclassindevicesets is a list of lists. Each outer list is for
         # a specific storage cluster. All storage classes in the inner
@@ -91,22 +89,23 @@ class IBMDeployment(Deployment):
         alldevicepaths = []
         for lv in scandlvlist:
             # Get localvolume and corresponding devices
-            localvolume = ocp.OCP(kind='LocalVolume',
-                                  namespace='local-storage',
-                                  resource_name=lv[1]).get().get('spec')
+            localvolume = ocp.OCP(
+                kind='LocalVolume',
+                namespace=local_storage_namespace,
+                resource_name=lv[1]).get().get('spec')
             scdevices = localvolume['storageClassDevices']
             devicepaths = [sub['devicePaths'] for sub in scdevices]
             alldevicepaths.append(devicepaths[0][0])
 
         # STEP 5
         # delete storage cluster - all of them.
-        scdelete = 'oc delete -n openshift-storage storagecluster --all --wait=true'
+        scdelete = f"oc delete -n {cluster_namespace} storagecluster --all --wait=true"
         logger.info(scdelete)
         out = run_cmd(scdelete)
         logger.info(out)
 
         # STEP 6
-        spdelete = 'oc delete project openshift-storage --wait=true --timeout=5m'
+        spdelete = f"oc delete project {cluster_namespace} --wait=true --timeout=5m"
         logger.info(spdelete)
         out = run_cmd(spdelete)
         logger.info(out)
@@ -141,7 +140,7 @@ class IBMDeployment(Deployment):
 
         # STEP 8
         for sc in scandlvlist:
-            lvdelete = 'oc delete localvolume -n local-storage --wait=true ' + sc[0]
+            lvdelete = f"oc delete localvolume -n {local_storage_namespace} --wait=true {sc[0]}"
             logger.info(lvdelete)
             out = run_cmd(lvdelete)
             logger.info(out)
@@ -189,26 +188,26 @@ class IBMDeployment(Deployment):
         logger.info(out)
 
         # STEP 12
-        # Remove local-storage namespace
-        spdelete = 'oc delete project local-storage --wait=true --timeout=5m'
+        # Remove local storage namespace
+        spdelete = f"oc delete project {local_storage_namespace} --wait=true --timeout=5m"
         logger.info(spdelete)
         out = run_cmd(spdelete)
         logger.info(out)
 
         # STEP 13
-        catsource = 'oc delete catalogsource ocs-catalogsource -n openshift-marketplace'
+        catsource = f"oc delete catalogsource ocs-catalogsource -n {constants.MARKETPLACE_NAMESPACE}"
         logger.info(catsource)
         out = run_cmd(catsource)
         logger.info(out)
 
         # STEP 14
-        mondelete = 'oc delete configmap cluster-monitoring-config -n openshift-monitoring'
+        mondelete = f"oc delete configmap cluster-monitoring-config -n {constants.OPENSHIFT_MONITORING_NAMESPACE}"
         logger.info(mondelete)
         out = run_cmd(mondelete)
         logger.info(out)
 
         # STEP 15
-        pvcdelete = 'oc delete pvc registry-cephfs-rwx-pvc -n openshift-image-registry'
+        pvcdelete = f"oc delete pvc registry-cephfs-rwx-pvc -n {constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE}"
         logger.info(pvcdelete)
         out = run_cmd(pvcdelete)
         logger.info(out)
