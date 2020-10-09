@@ -37,7 +37,9 @@ class TestOCSWorkerNodeShutdown(ManageTest):
         self.sanity_helpers = Sanity()
 
     @pytest.mark.polarion_id("OCS-2315")
-    def test_node_after_shutdown_and_recovery_worker_node(self, nodes, node_restart_teardown):
+    def test_check_pod_status_after_two_nodes_shutdown_recovery(
+        self, nodes, node_restart_teardown
+    ):
         """
         Test case to check MDS pods rbd and cephfs plugin Provisioner
         pods not running on same node post shutdown and recovery node

@@ -1548,6 +1548,5 @@ def list_of_nodes_running_pods(selector, namespace=defaults.ROOK_CLUSTER_NAMESPA
         namespace=namespace, selector=[selector]
     )
     pods_running_nodes = [get_pod_node(pod) for pod in pod_obj_list]
-
     logger.info(f"{selector} running on nodes {pods_running_nodes}")
     return list(set(pods_running_nodes))
