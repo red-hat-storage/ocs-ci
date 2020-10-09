@@ -42,7 +42,7 @@ class TestPvcSnapshotOfWorkloads(E2ETest):
         postgres_pvcs_obj = pgsql.get_postgres_pvc()
 
         # Take a snapshot
-        log.info(f"Creating snapshot of all postgres PVCs")
+        log.info("Creating snapshot of all postgres PVCs")
         snapshots = []
         for pvc_obj in postgres_pvcs_obj:
             log.info(
