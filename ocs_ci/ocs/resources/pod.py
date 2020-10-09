@@ -1533,7 +1533,7 @@ def wait_for_pods_to_be_running(
         return False
 
 
-def list_of_nodes_running_pods(selector):
+def list_of_nodes_running_pods(selector, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     """
     The function returns the list of nodes for the given selector
 
@@ -1541,15 +1541,13 @@ def list_of_nodes_running_pods(selector):
         selector (str): The resource selector to search with
 
     Returns:
-        list: Pods_running_nodes
+        list: a list of nodes that runs the given selector pods
 
     """
     pod_obj_list = get_all_pods(
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE, selector=[selector]
+        namespace=namespace, selector=[selector]
     )
-    pods_running_nodes = []
-    for pod in pod_obj_list:
-        pods_running_nodes.append(get_pod_node(pod))
+    pods_running_nodes = [get_pod_node(pod) for pod in pod_obj_list]
 
     logger.info(f"{selector} running on nodes {pods_running_nodes}")
-    return pods_running_nodes
+    return list(set(pods_running_nodes))
