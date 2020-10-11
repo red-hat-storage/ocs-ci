@@ -8,7 +8,7 @@ from jsonschema import validate
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.exceptions import ResourceNotFoundError
-from ocs_ci.ocs.node import get_compute_node_names, check_nodes_specs
+from ocs_ci.ocs.node import get_compute_node_names
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import get_pods_having_label
@@ -139,13 +139,8 @@ def ocs_install_verification(
     ) == 4.5 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM and post_upgrade_verification:
         rgw_count = 1
 
-    # Fetch the min and max Noobaa endpoints from the run config
-    if check_nodes_specs(min_cpu=constants.MIN_NODE_CPU, min_memory=constants.MIN_NODE_MEMORY):
-        min_eps = config.DEPLOYMENT.get('min_noobaa_endpoints')
-        max_eps = config.DEPLOYMENT.get('max_noobaa_endpoints')
-    else:
-        min_eps = 1
-        max_eps = 1 if float(config.ENV_DATA['ocs_version']) < 4.6 else 2
+    min_eps = 1
+    max_eps = 2 if float(config.ENV_DATA['ocs_version']) >= 4.6 else 1
 
     if config.ENV_DATA.get('platform') == constants.IBM_POWER_PLATFORM:
         min_eps = 1
@@ -513,42 +508,3 @@ def get_all_storageclass():
         )
     ]
     return storageclass
-
-
-def change_noobaa_endpoints_count(min_nb_eps=None, max_nb_eps=None):
-    """
-    Scale up or down the number of maximum NooBaa emdpoints
-
-    Args:
-        min_nb_eps (int): The number of required minimum Noobaa endpoints
-        max_nb_eps (int): The number of required maximum Noobaa endpoints
-
-    """
-    if float(config.ENV_DATA['ocs_version']) < 4.6:
-        noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-        if min_nb_eps:
-            log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
-            params = f'{{"spec":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}'
-            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
-        if max_nb_eps:
-            log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
-            params = f'{{"spec":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}'
-            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
-    else:
-        sc = get_storage_cluster()
-        if min_nb_eps:
-            log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
-            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}}}'
-            sc.patch(
-                resource_name=sc.get()['items'][0]['metadata']['name'],
-                params=params,
-                format_type='merge'
-            )
-        if max_nb_eps:
-            log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
-            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}}}'
-            sc.patch(
-                resource_name=sc.get()['items'][0]['metadata']['name'],
-                params=params,
-                format_type='merge'
-            )

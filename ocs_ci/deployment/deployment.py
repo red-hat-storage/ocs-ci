@@ -35,7 +35,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods
 )
-from ocs_ci.ocs.node import get_typed_nodes, check_nodes_specs, get_compute_node_names
+from ocs_ci.ocs.node import get_typed_nodes, get_compute_node_names
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -43,7 +43,6 @@ from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
 )
-from ocs_ci.ocs.resources.storage_cluster import change_noobaa_endpoints_count
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state
@@ -65,7 +64,8 @@ from ocs_ci.utility.utils import (
     set_selinux_permissions,
     set_registry_to_managed_state,
     add_stage_cert,
-    modify_csv, wait_for_machineconfigpool_status
+    modify_csv,
+    wait_for_machineconfigpool_status,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from tests import helpers
@@ -817,36 +817,14 @@ class Deployment(object):
                     f"Changing NTP on compute nodes to"
                     f" {constants.RH_NTP_CLOCK}"
                 )
-                update_ntp_compute_nodes()
+                if self.platform == constants.VSPHERE_PLATFORM:
+                    update_ntp_compute_nodes()
                 assert ceph_health_check(
                     namespace=self.namespace, tries=60, delay=10
                 )
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
-
-        if self.platform == constants.IBM_POWER_PLATFORM:
-            logger.info("Noobaa endpoints ignored for IBM Power")
-        else:
-            # Modify Noobaa endpoint auto scale values according to the cluster specs
-            if check_nodes_specs(min_cpu=constants.MIN_NODE_CPU, min_memory=constants.MIN_NODE_MEMORY):
-                logger.info(
-                    "The cluster specs meet the minimum requirements and "
-                    "therefore, NooBaa auto scale will be enabled"
-                )
-                min_nb_eps = config.DEPLOYMENT.get('min_noobaa_endpoints')
-                max_nb_eps = config.DEPLOYMENT.get('max_noobaa_endpoints')
-                change_noobaa_endpoints_count(min_nb_eps=min_nb_eps, max_nb_eps=max_nb_eps)
-            else:
-                logger.warning(
-                    "The cluster specs do not meet the minimum requirements and "
-                    "therefore, NooBaa auto scale will remain with its default values"
-                )
-                min_eps = 1
-                max_eps = 1 if float(config.ENV_DATA['ocs_version']) < 4.6 else 2
-                logger.info(
-                    f"The Noobaa endpoint auto scale values: min: {min_eps}, max: {max_eps}"
-                )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -904,6 +882,25 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     logger.info("Adding CatalogSource")
     if not image:
         image = config.DEPLOYMENT.get('ocs_registry_image', '')
+    if config.DEPLOYMENT.get('stage_rh_osbs'):
+        image = config.DEPLOYMENT.get(
+            "stage_index_image", constants.OSBS_BOUNDLE_IMAGE
+        )
+        osbs_image_tag = config.DEPLOYMENT.get(
+            "stage_index_image_tag", f"v{get_ocp_version()}"
+        )
+        image += f":{osbs_image_tag}"
+        run_cmd(
+            'oc patch image.config.openshift.io/cluster --type merge -p \''
+            '{"spec": {"registrySources": {"insecureRegistries": '
+            '["registry-proxy.engineering.redhat.com"]}}}\''
+        )
+        run_cmd(
+            f"oc apply -f {constants.STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML}"
+        )
+        logger.info("Sleeping for 60 sec to start update machineconfigpool status")
+        time.sleep(60)
+        wait_for_machineconfigpool_status('all', timeout=1800)
     if not ignore_upgrade:
         upgrade = config.UPGRADE.get('upgrade', False)
     else:

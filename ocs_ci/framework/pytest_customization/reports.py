@@ -37,10 +37,10 @@ def pytest_runtest_makereport(item, call):
     extra = getattr(report, 'extra', [])
 
     if report.when == 'call':
-        if isinstance(logging.getLogger().handlers[2], RPLogHandler):
-            log_file = logging.getLogger().handlers[3].baseFilename
-        else:
+        if isinstance(logging.getLogger().handlers[1], RPLogHandler):
             log_file = logging.getLogger().handlers[2].baseFilename
+        else:
+            log_file = logging.getLogger().handlers[1].baseFilename
         extra.append(pytest_html.extras.url(log_file, name='Log File'))
         report.extra = extra
         item.session.results[item] = report
