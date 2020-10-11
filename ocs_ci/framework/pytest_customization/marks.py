@@ -179,7 +179,7 @@ skipif_lso = pytest.mark.skipif(
 )
 
 skipif_no_lso = pytest.mark.skipif(
-    config.DEPLOYMENT.get('local_storage') is False,
+    not config.DEPLOYMENT.get('local_storage'),
     reason="Test run only on LSO deployed cluster"
 )
 
@@ -200,6 +200,9 @@ gather_metrics_on_fail = pytest.mark.gather_metrics_on_fail
 
 # here is the place to implement some plugins hooks which will process marks
 # if some operation needs to be done for some specific marked tests.
+
+# Marker for skipping tests based on OCP version
+skipif_ocp_version = pytest.mark.skipif_ocp_version
 
 # Marker for skipping tests based on OCS version
 skipif_ocs_version = pytest.mark.skipif_ocs_version

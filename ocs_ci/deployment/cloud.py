@@ -6,6 +6,7 @@ deployment.
 
 import logging
 import os
+import subprocess
 
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
@@ -101,17 +102,19 @@ class IPIOCPDeployment(BaseOCPDeployment):
                 (default: "DEBUG")
         """
         logger.info("Deploying OCP cluster")
+        install_timeout = config.DEPLOYMENT.get('openshift_install_timeout')
         logger.info(
-            f"Openshift-installer will be using loglevel:{log_cli_level}"
+            f"running openshift-install with '{log_cli_level}' log level "
+            f"and {install_timeout} second timeout"
         )
         try:
             run_cmd(
                 f"{self.installer} create cluster "
                 f"--dir {self.cluster_path} "
                 f"--log-level {log_cli_level}",
-                timeout=3600
+                timeout=install_timeout
             )
-        except exceptions.CommandFailed as e:
+        except (exceptions.CommandFailed, subprocess.TimeoutExpired) as e:
             if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
                 try:
                     gather_bootstrap()

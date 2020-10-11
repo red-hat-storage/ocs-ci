@@ -696,12 +696,14 @@ class OCP(object):
         # WA, Failed to parse "oc get build" command
         # https://github.com/red-hat-storage/ocs-ci/issues/2312
         try:
-            if self.data['items'][0]['kind'].lower() == 'build':
-                value = (
-                    resource_info[column_index - 1] if len(titles) % 2 == 0
-                    else resource_info[column_index]
-                )
-                return value
+            if self.data['items'][0]['kind'].lower() == 'build' and (
+                self.data['items'][0].get(
+                    'metadata'
+                ).get(
+                    'annotations'
+                ).get('openshift.io/build-config.name') == 'jax-rs-build'
+            ):
+                return resource_info[column_index - 1]
         except Exception:
             pass
 

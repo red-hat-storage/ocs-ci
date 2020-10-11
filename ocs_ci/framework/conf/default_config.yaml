@@ -72,11 +72,10 @@ DEPLOYMENT:
   preserve_bootstrap_node: False
   # Terraform version
   terraform_version: "0.12.26"
-  # Following options are defaults for the min and max Noobaa endpoints
-  min_noobaa_endpoints: 2
-  max_noobaa_endpoints: 3
   # Following options are defaults for deployment with infra worker nodes
   infra_nodes: False
+  # How long should ocs-ci wait for `openshift-install create cluster` run?
+  openshift_install_timeout: 3600
 
 # Section for reporting configuration
 REPORTING:
@@ -91,7 +90,6 @@ REPORTING:
   ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
   default_ocs_must_gather_latest_tag: 'latest-4.6'
   gather_on_deploy_failure: true
-  gather_on_deploy_success: true
   collect_logs_on_success_run: False
 
 # This is the default information about environment.

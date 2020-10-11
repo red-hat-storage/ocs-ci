@@ -1,0 +1,11 @@
+---
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_num_cpus: '8'
+  master_num_cpus: '8'
+  master_memory: '32768'
+  compute_memory: '32768'
+  fio_storageutilization_min_mbps: 10.0

@@ -106,16 +106,14 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
         # Delete parent PVCs
         log.info("Deleting parent PVCs")
         for pvc_obj in self.pvcs:
-            # TODO: Unblock parent PVC deletion for cephfs PVC when the bug 1854501 is fixed
-            if constants.RBD_INTERFACE in pvc_obj.backed_sc:
-                pv_obj = pvc_obj.backed_pv_obj
-                pvc_obj.delete()
-                pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
-                log.info(
-                    f"Deleted PVC {pvc_obj.name}. Verifying whether PV "
-                    f"{pv_obj.name} is deleted."
-                )
-                pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
+            pv_obj = pvc_obj.backed_pv_obj
+            pvc_obj.delete()
+            pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
+            log.info(
+                f"Deleted PVC {pvc_obj.name}. Verifying whether PV "
+                f"{pv_obj.name} is deleted."
+            )
+            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
         log.info(
             "Deleted parent PVCs before restoring snapshot. "
             "PVs are also deleted."
@@ -146,7 +144,7 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
         log.info("Verify the restored PVCs are Bound")
         for pvc_obj in restore_pvc_objs:
             wait_for_resource_state(
-                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=90
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=200
             )
             pvc_obj.reload()
         log.info("Verified: Restored PVCs are Bound.")

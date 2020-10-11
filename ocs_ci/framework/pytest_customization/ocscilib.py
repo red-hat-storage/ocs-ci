@@ -20,6 +20,7 @@ from ocs_ci.framework.exceptions import (
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
+    LOG_FORMAT,
     OCP_VERSION_CONF_DIR,
 )
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError, ChannelNotFound
@@ -36,6 +37,9 @@ __all__ = [
 ]
 
 log = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter(LOG_FORMAT))
+log.addHandler(handler)
 
 
 def pytest_addoption(parser):
@@ -199,6 +203,7 @@ def pytest_configure(config):
         config (pytest.config): Pytest config object
 
     """
+    set_log_level(config)
     # Somewhat hacky but this lets us differentiate between run-ci executions
     # and plain pytest unit test executions
     ocscilib_module = 'ocs_ci.framework.pytest_customization.ocscilib'
@@ -524,3 +529,15 @@ def set_report_portal_tags(config):
     for tag in rp_tags:
         if tag:
             config.addinivalue_line("rp_launch_tags", tag.lower())
+
+
+def set_log_level(config):
+    """
+    Set the log level of this module based on the pytest.ini log_cli_level
+
+    Args:
+        config (pytest.config): Pytest config object
+
+    """
+    level = config.getini('log_cli_level') or 'INFO'
+    log.setLevel(logging.getLevelName(level))

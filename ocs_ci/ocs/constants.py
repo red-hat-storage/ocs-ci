@@ -11,6 +11,8 @@ and with consideration of the entire project.
 
 import os
 
+# Logging
+LOG_FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
 
 # Directories
 TOP_DIR = os.path.dirname(
@@ -553,6 +555,10 @@ CATALOG_SOURCE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "catalog-source.yaml"
 )
 
+STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "stageImageContentSourcePolicy.yaml"
+)
+
 SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml"
 )
@@ -690,6 +696,7 @@ NODE_SELECTOR_ANNOTATION = "openshift.io/node-selector="
 TOPOLOGY_ROOK_LABEL = "topology.rook.io/rack"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
 OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
+OSBS_BOUNDLE_IMAGE = "registry-proxy.engineering.redhat.com/rh-osbs/iib-pub-pending"
 MARKETPLACE_NAMESPACE = "openshift-marketplace"
 MONITORING_NAMESPACE = "openshift-monitoring"
 OPERATOR_INTERNAL_SELECTOR = "ocs-operator-internal=true"
@@ -733,6 +740,9 @@ WORKER_IGN = "worker.ign"
 
 # terraform provider constants
 TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
+
+# Minimum storage needed for vSphere Datastore in bytes
+MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024 ** 4
 
 # vSphere related constants
 VSPHERE_NODE_USER = "core"
@@ -983,6 +993,12 @@ LOCAL_VOLUME_YAML = os.path.join(
 LOCAL_STORAGE_OPTIONAL_OPERATORS = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "local-storage-optional-operators.yaml"
 )
+LOCAL_VOLUME_DISCOVERY_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-volume-discovery.yaml"
+)
+LOCAL_VOLUME_SET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-volume-set.yaml"
+)
 
 # All worker default config files
 RHCOS_WORKER_CONF = os.path.join(CONF_DIR, 'ocsci/aws_upi_rhcos_workers.yaml')
@@ -1129,15 +1145,6 @@ MIN_NODE_MEMORY = 64 * 10 ** 9
 AWS_CLOUDFORMATION_TAG = 'aws:cloudformation:stack-name'
 
 # Bare Metal constants
-BOOTSTRAP_PXE_FILE = os.path.join(
-    TEMPLATE_DIR, "baremetal-pxefile", "bootstrap"
-)
-MASTER_PXE_FILE = os.path.join(
-    TEMPLATE_DIR, "baremetal-pxefile", "master"
-)
-WORKER_PXE_FILE = os.path.join(
-    TEMPLATE_DIR, "baremetal-pxefile", "worker"
-)
 PXE_CONF_FILE = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "dnsmasq.pxe.conf"
 )
@@ -1181,3 +1188,7 @@ SQUADS = {
 }
 
 PRODUCTION_JOBS_PREFIX = ['jnk']
+
+# min and max Noobaa endpoints
+MIN_NB_ENDPOINT_COUNT = 1
+MAX_NB_ENDPOINT_COUNT = 2
