@@ -12,7 +12,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs import constants, exceptions, ocp
+from ocs_ci.ocs import constants, exceptions, ocp, defaults
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
@@ -1244,3 +1244,13 @@ def untaint_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT, nodes_to_untaint=None
             log.info(f"Untainted {node.name}")
         return True
     return False
+
+
+def get_node_pods(node):
+    osd_pods = pod.get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    node_pods = [
+        osd_pod for osd_pod in osd_pods
+        if pod.get_pod_node(osd_pod).name == node.name
+    ]
+
+    return node_pods
