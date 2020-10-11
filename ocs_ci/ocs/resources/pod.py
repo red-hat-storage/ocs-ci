@@ -525,6 +525,23 @@ def get_csi_provisioner_pod(interface):
     return provisioner_pod
 
 
+def get_csi_snapshoter_pod():
+    """
+    Get the csi snapshot controller pod
+
+    Returns:
+        Pod object: csi snapshot controller pod
+
+    """
+    ocp_pod_obj = OCP(
+        kind=constants.POD, namespace='openshift-cluster-storage-operator'
+    )
+    selector = 'app=csi-snapshot-controller'
+    snapshotner_pod = ocp_pod_obj.get(selector=selector)['items']
+    snapshotner_pod = (Pod(**snapshotner_pod[0]).name)
+    return snapshotner_pod
+
+
 def get_rgw_pods(rgw_label=constants.RGW_APP_LABEL, namespace=None):
     """
     Fetches info about rgw pods in the cluster
