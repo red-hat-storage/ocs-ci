@@ -5,7 +5,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
 from ocs_ci.framework.testlib import (
-    skipif_ocs_version, ManageTest, tier2, polarion_id, skipif_upgraded_from
+    skipif_ocs_version, ManageTest, tier2, polarion_id
 )
 from ocs_ci.utility.prometheus import PrometheusAPI, check_alert_list
 from ocs_ci.utility.utils import TimeoutSampler
@@ -15,7 +15,6 @@ log = logging.getLogger(__name__)
 
 @tier2
 @skipif_ocs_version('<4.5')
-@skipif_upgraded_from(['4.4'])
 @polarion_id('OCS-301')
 class TestPvcExpansionWhenFull(ManageTest):
     """

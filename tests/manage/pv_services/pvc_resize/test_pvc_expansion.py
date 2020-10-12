@@ -6,7 +6,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
-    skipif_ocs_version, ManageTest, tier1, acceptance, skipif_upgraded_from
+    skipif_ocs_version, ManageTest, tier1, acceptance
 )
 from tests import helpers
 
@@ -15,7 +15,6 @@ log = logging.getLogger(__name__)
 
 @tier1
 @skipif_ocs_version('<4.5')
-@skipif_upgraded_from(['4.4'])
 @pytest.mark.skipif(
     config.ENV_DATA['platform'].lower() == 'ibm_cloud',
     reason=(
