@@ -1,7 +1,6 @@
 import base64
 import json
 import logging
-import os
 from abc import ABC, abstractmethod
 from time import sleep
 
@@ -362,18 +361,18 @@ class GoogleClient(CloudClient):
             return False
 
     def create_gcp_secret(self):
-            """
-            Create a Kubernetes secret to allow NooBaa to create Google-based backingstores
+        """
+        Create a Kubernetes secret to allow NooBaa to create Google-based backingstores
 
-            """
-            bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
-            bs_secret_data['metadata']['name'] = 'cldmgr-gcp-secret'
-            bs_secret_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
-            bs_secret_data['data']['GoogleServiceAccountPrivateKeyJson'] = base64.urlsafe_b64encode(
-                self.cred_dict_string.encode('UTF-8')
-            ).decode('ascii')
+        """
+        bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
+        bs_secret_data['metadata']['name'] = 'cldmgr-gcp-secret'
+        bs_secret_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
+        bs_secret_data['data']['GoogleServiceAccountPrivateKeyJson'] = base64.urlsafe_b64encode(
+            self.cred_dict_string.encode('UTF-8')
+        ).decode('ascii')
 
-            return create_resource(**bs_secret_data)
+        return create_resource(**bs_secret_data)
 
 
 class AzureClient(CloudClient):
