@@ -2070,9 +2070,7 @@ def skipif_ocp_version(expressions):
 
     """
     skip_this = True
-    ocp_version = ".".join(
-        config.DEPLOYMENT.get('installer_version').split('.')[:-2]
-    )
+    ocp_version = get_ocp_version()
     expr_list = [expressions] if isinstance(expressions, str) else expressions
     for expr in expr_list:
         comparision_str = ocp_version + expr
