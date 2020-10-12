@@ -139,8 +139,8 @@ def ocs_install_verification(
     ) == 4.5 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM and post_upgrade_verification:
         rgw_count = 1
 
-    min_eps = 1
-    max_eps = 2 if float(config.ENV_DATA['ocs_version']) >= 4.6 else 1
+    min_eps = constants.MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT
+    max_eps = constants.MAX_NB_ENDPOINT_COUNT if float(config.ENV_DATA['ocs_version']) >= 4.6 else 1
 
     if config.ENV_DATA.get('platform') == constants.IBM_POWER_PLATFORM:
         min_eps = 1
