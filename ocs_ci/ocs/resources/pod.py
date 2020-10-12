@@ -253,7 +253,8 @@ class Pod(OCS):
 
     def run_io(
         self, storage_type, size, io_direction='rw', rw_ratio=75,
-        jobs=1, runtime=60, depth=4, rate='1m', rate_process='poisson', fio_filename=None, bs='4K'
+        jobs=1, runtime=60, depth=4, rate='1m', rate_process='poisson',
+        fio_filename=None, bs='4K', end_fsync=0
     ):
         """
         Execute FIO on a pod
@@ -280,6 +281,8 @@ class Pod(OCS):
             rate_process (str): kind of rate process default poisson, e.g. poisson
             fio_filename(str): Name of fio file created on app pod's mount point
             bs (str): Block size, e.g. 4K
+            end_fsync (int): If 1, fio will sync file contents when a write
+                stage has completed. Fio default is 0
         """
         if not self.wl_setup_done:
             self.workload_setup(storage_type=storage_type, jobs=jobs)
@@ -302,6 +305,8 @@ class Pod(OCS):
         self.io_params['rate'] = rate
         self.io_params['rate_process'] = rate_process
         self.io_params['bs'] = bs
+        if end_fsync:
+            self.io_params['end_fsync'] = end_fsync
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
     def fillup_fs(self, size, fio_filename=None):
@@ -1548,3 +1553,22 @@ def wait_for_pods_to_be_running(
             f"after {timeout} seconds"
         )
         return False
+
+
+def list_of_nodes_running_pods(selector, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    The function returns the list of nodes for the given selector
+
+    Args:
+        selector (str): The resource selector to search with
+
+    Returns:
+        list: a list of nodes that runs the given selector pods
+
+    """
+    pod_obj_list = get_all_pods(
+        namespace=namespace, selector=[selector]
+    )
+    pods_running_nodes = [get_pod_node(pod) for pod in pod_obj_list]
+    logger.info(f"{selector} running on nodes {pods_running_nodes}")
+    return list(set(pods_running_nodes))
