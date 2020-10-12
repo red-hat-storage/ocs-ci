@@ -2966,8 +2966,8 @@ def nb_ensure_endpoint_count(request):
             should_wait = True
 
         if endpoints.get('maxCount', -1) != max_ep_count:
-            log.info(f"Changing minimum Noobaa endpoints to {max_ep_count}")
-            params = f'{{"spec":{{"endpoints":{{"minCount":{max_ep_count}}}}}}}'
+            log.info(f"Changing maximum Noobaa endpoints to {max_ep_count}")
+            params = f'{{"spec":{{"endpoints":{{"maxCount":{max_ep_count}}}}}}}'
             noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
             should_wait = True
 
@@ -3001,7 +3001,7 @@ def nb_ensure_endpoint_count(request):
 
     # Assert that we have the desired number of endpoints
     ready_count = get_ready_noobaa_endpoint_count(namespace)
-    assert min_ep_count <= ready_count and ready_count <= max_ep_count
+    assert min_ep_count <= ready_count <= max_ep_count
 
 
 @pytest.fixture()

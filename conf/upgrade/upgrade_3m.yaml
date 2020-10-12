@@ -1,7 +1,4 @@
 ---
-ENV_DATA:
-  worker_replicas: 0
-  master_replicas: 3
 REPORTING:
   polarion:
     upgrade_id: 'OCS-1486'
