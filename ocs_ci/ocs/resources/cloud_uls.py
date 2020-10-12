@@ -30,7 +30,7 @@ def cloud_uls_factory(request, cld_mgr):
         'aws': cld_mgr.aws_client,
         'gcp': cld_mgr.gcp_client,
         'azure': cld_mgr.azure_client,
-        # TODO: Implement - 'ibmcos': cld_mgr.ibmcos_client
+        'ibmcos': cld_mgr.ibmcos_client
     }
 
     def _create_uls(uls_dict):
@@ -63,9 +63,8 @@ def cloud_uls_factory(request, cld_mgr):
                     f'available types: {", ".join(ulsMap.keys())}'
                 )
             log.info(f'Creating uls for cloud {cloud.lower()}')
-            for tup in params:
-                amount, region = tup
-                for i in range(amount):
+            for amount, region in params:
+                for _ in range(amount):
                     uls_name = create_unique_resource_name(
                         resource_description='uls', resource_type=cloud.lower()
                     )

@@ -1172,7 +1172,8 @@ MCG_NS_AWS_CONNECTION = 'aws_connection'
 
 # Cloud provider default endpoints
 # Upon use, utilize .format() to replace the curly braces where necessary
-AZURE_BLOB_ENDPOINT_SUFFIX = 'https://{}.blob.core.windows.net'
+AZURE_BLOB_ENDPOINT_TEMPLATE = 'https://{}.blob.core.windows.net'
+IBM_COS_GEO_ENDPOINT_TEMPLATE = 'https://s3.{}.cloud-object-storage.appdomain.cloud'
 
 # NooBaa backingstore types
 BACKINGSTORE_TYPE_AWS = 'aws-s3'

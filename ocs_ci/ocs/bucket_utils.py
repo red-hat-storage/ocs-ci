@@ -364,6 +364,60 @@ def cli_create_azure_backingstore(mcg_obj_session, cld_mgr, backingstore_name, u
     )
 
 
+def oc_create_ibmcos_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new backingstore with IBM COS underlying storage using oc create command
+
+    Args:
+        cld_mgr (CloudManager): holds secret for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data['metadata']['name'] = backingstore_name
+    bs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
+    bs_data['spec'] = {
+        'type': 'ibm-cos',
+        'ibmCos': {
+            'targetBucket': uls_name,
+            'signatureVersion': 'v2',
+            'endpoint': constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(
+                cld_mgr.ibmcos_client.region.lower()
+            ),
+            'secret': {
+                'name': cld_mgr.ibmcos_client.secret.name
+            },
+        }
+    }
+    create_resource(**bs_data)
+
+
+def cli_create_ibmcos_backingstore(mcg_obj_session, cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new backingstore with IBM COS underlying storage using a NooBaa CLI command
+
+    Args:
+        cld_mgr (CloudManager): holds secret for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    mcg_obj_session.exec_mcg_cmd(
+        f'backingstore create ibm-cos {backingstore_name} '
+        f'--access-key {cld_mgr.ibmcos_client.access_key} '
+        f'--secret-key {cld_mgr.ibmcos_client.secret_key} '
+        f"""--endpoint {
+            constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(
+                cld_mgr.ibmcos_client.region.lower()
+            )
+        } """
+        f'--target-bucket {uls_name}'
+    )
+
+
 def oc_create_s3comp_backingstore(cld_mgr, backingstore_name, uls_name, region):
     pass
 

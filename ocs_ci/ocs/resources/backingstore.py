@@ -2,9 +2,9 @@ import logging
 
 from ocs_ci.ocs.bucket_utils import (
     oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
-    oc_create_s3comp_backingstore, oc_create_pv_backingstore, cli_create_aws_backingstore,
+    oc_create_s3comp_backingstore, oc_create_pv_backingstore, oc_create_ibmcos_backingstore,
     cli_create_google_backingstore, cli_create_azure_backingstore, cli_create_s3comp_backingstore,
-    cli_create_pv_backingstore
+    cli_create_pv_backingstore, cli_create_ibmcos_backingstore, cli_create_aws_backingstore
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
@@ -62,14 +62,14 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
             'aws': oc_create_aws_backingstore,
             'gcp': oc_create_google_backingstore,
             'azure': oc_create_azure_backingstore,
-            'ibmcos': oc_create_s3comp_backingstore,
+            'ibmcos': oc_create_ibmcos_backingstore,
             'pv': oc_create_pv_backingstore
         },
         'cli': {
             'aws': cli_create_aws_backingstore,
             'gcp': cli_create_google_backingstore,
             'azure': cli_create_azure_backingstore,
-            'ibmcos': cli_create_s3comp_backingstore,
+            'ibmcos': cli_create_ibmcos_backingstore,
             'pv': cli_create_pv_backingstore
         }
     }
@@ -116,7 +116,7 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
                         backingstore_name, vol_num, size, storage_class
                     )
                 else:
-                    region = uls_tup[1]
+                    _, region = uls_tup
                     # Todo: Verify that the given cloud has an initialized client
                     uls_dict = cloud_uls_factory({cloud: [uls_tup]})
                     for uls_name in uls_dict[cloud.lower()]:
