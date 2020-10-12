@@ -244,7 +244,6 @@ class TestNamespace(MCGTest):
         assert self.compare_dirs(awscli_pod, amount=2)
         assert not self.compare_dirs(awscli_pod, amount=3)
 
-
     def write_files_to_pod_and_upload(self, mcg_obj, awscli_pod, bucket_to_write, amount=1, s3_creds=None):
         """
         Upload files to bucket (NS or uls)
