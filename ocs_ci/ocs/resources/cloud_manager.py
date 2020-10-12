@@ -351,7 +351,7 @@ class GoogleClient(CloudClient):
                 sleep(3)
 
     def get_all_uls_names(self):
-        return self.client.list_buckets()
+        return {bucketname for bucketname in self.client.list_buckets()}
 
     def verify_uls_exists(self, uls_name):
         try:
@@ -421,9 +421,9 @@ class AzureClient(CloudClient):
         self.blob_service_client.get_container_client(name).delete_container()
 
     def get_all_uls_names(self):
-        return [
+        return {
             container['name'] for container in self.blob_service_client.list_containers()
-        ]
+        }
 
     def verify_uls_exists(self, uls_name):
         try:

@@ -330,7 +330,7 @@ def cli_create_google_backingstore(mcg_obj_session, cld_mgr, backingstore_name, 
     )
 
 
-def oc_create_azure_backingstore(cld_mgr, backingstore_name, uls_name):
+def oc_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
     bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
     bs_data['metadata']['name'] = backingstore_name
     bs_data['spec'] = {
