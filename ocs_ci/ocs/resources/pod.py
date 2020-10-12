@@ -253,7 +253,8 @@ class Pod(OCS):
 
     def run_io(
         self, storage_type, size, io_direction='rw', rw_ratio=75,
-        jobs=1, runtime=60, depth=4, rate='1m', rate_process='poisson', fio_filename=None, bs='4K'
+        jobs=1, runtime=60, depth=4, rate='1m', rate_process='poisson',
+        fio_filename=None, bs='4K', end_fsync=0
     ):
         """
         Execute FIO on a pod
@@ -280,6 +281,8 @@ class Pod(OCS):
             rate_process (str): kind of rate process default poisson, e.g. poisson
             fio_filename(str): Name of fio file created on app pod's mount point
             bs (str): Block size, e.g. 4K
+            end_fsync (int): If 1, fio will sync file contents when a write
+                stage has completed. Fio default is 0
         """
         if not self.wl_setup_done:
             self.workload_setup(storage_type=storage_type, jobs=jobs)
@@ -302,6 +305,8 @@ class Pod(OCS):
         self.io_params['rate'] = rate
         self.io_params['rate_process'] = rate_process
         self.io_params['bs'] = bs
+        if end_fsync:
+            self.io_params['end_fsync'] = end_fsync
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
     def fillup_fs(self, size, fio_filename=None):
