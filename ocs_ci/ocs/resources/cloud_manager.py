@@ -51,15 +51,19 @@ class CloudManager(ABC):
         cred_dict = load_auth_config().get('AUTH', {})
         for cloud_name in cred_dict:
             if cloud_name in cloud_map:
-                try:
-                    setattr(
-                        self, f'{cloud_name.lower()}_client',
-                        cloud_map[cloud_name](auth_dict=cred_dict[cloud_name])
+                if any(value is None for value in cred_dict[cloud_name].values()):
+                    logger.warn(
+                        f'{cloud_name} credentials not found in auth.yaml, '
+                        'no client will be instantiated'
                     )
-                except DefaultCredentialsError:
                     setattr(
                         self, f'{cloud_name.lower()}_client',
                         None
+                    )
+                else:
+                    setattr(
+                        self, f'{cloud_name.lower()}_client',
+                        cloud_map[cloud_name](auth_dict=cred_dict[cloud_name])
                     )
 
 
