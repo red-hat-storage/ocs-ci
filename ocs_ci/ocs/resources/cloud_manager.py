@@ -181,6 +181,8 @@ class S3Client(CloudClient):
             """
             if self.verify_uls_exists(name):
                 try:
+                    # TODO: Check why bucket policy deletion fails on IBM COS
+                    # when bucket have no policy set
                     if 'aws' in name:
                         self.client.meta.client.delete_bucket_policy(
                             Bucket=name
