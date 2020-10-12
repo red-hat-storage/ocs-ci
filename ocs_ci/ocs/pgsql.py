@@ -3,6 +3,7 @@ Postgresql workload class
 """
 import logging
 import random
+import time
 from prettytable import PrettyTable
 
 from ocs_ci.ocs.ripsaw import RipSaw
@@ -473,3 +474,64 @@ class Postgresql(RipSaw):
             pod.ocp.wait_for_delete(pod.name)
         log.info("Deleting ripsaw configuration")
         RipSaw.cleanup(self)
+
+    def attach_pgsql_pod_to_claim_pvc(
+        self, pvc_objs, postgres_name=None, run_benchmark=True, pgbench_name=None
+    ):
+        """
+        Attaches pgsql pod to created claim PVC
+
+        Args:
+            pvc_objs (list): List of PVC objs which needs to attached to pod
+            postgres_name (str): Name of the postgres pod
+            run_benchmark (bool): On true, runs pgbench benchmark on postgres pod
+            pgbench_name (str): Name of pgbench benchmark
+
+        Returns:
+            pgsql_obj_list (list): List of pod objs created
+
+        """
+        pgsql_obj_list = []
+        for pvc_obj in pvc_objs:
+            try:
+                pgsql_sset = templating.load_yaml(
+                    constants.PGSQL_STATEFULSET_YAML
+                )
+                del pgsql_sset['spec']['volumeClaimTemplates']
+                pgsql_sset['metadata']['name'] = f"{postgres_name}" + f"{pvc_objs.index(pvc_obj)}"
+                pgsql_sset['spec']['template']['spec']['containers'][0][
+                    'volumeMounts'][0]['name'] = pvc_obj.name
+                pgsql_sset['spec']['template']['spec']['volumes'] = [
+                    {'name': f'{pvc_obj.name}', 'persistentVolumeClaim': {
+                        'claimName': f'{pvc_obj.name}'}
+                     }
+                ]
+                pgsql_sset = OCS(**pgsql_sset)
+                pgsql_sset.create()
+                pgsql_obj_list.append(pgsql_sset)
+
+                self.wait_for_postgres_status(status=constants.STATUS_RUNNING, timeout=300)
+
+                if run_benchmark:
+                    pg_data = templating.load_yaml(constants.PGSQL_BENCHMARK_YAML)
+                    pg_data['metadata']['name'] = f"{pgbench_name}" + f"{pvc_objs.index(pvc_obj)}"
+                    pg_data['spec']['workload']['args']['databases'][0][
+                        'host'
+                    ] = f"{postgres_name}" + f"{pvc_objs.index(pvc_obj)}-0" + ".postgres"
+                    pg_obj = OCS(**pg_data)
+                    pg_obj.create()
+                    pgsql_obj_list.append(pg_obj)
+
+                    wait_time = 120
+                    log.info(f"Wait {wait_time} seconds before mounting pod")
+                    time.sleep(wait_time)
+
+            except (CommandFailed, CalledProcessError) as cf:
+                log.error('Failed during creation of postgres pod')
+                raise cf
+
+        if run_benchmark:
+            log.info("Checking all pgbench benchmark reached Completed state")
+            self.wait_for_pgbench_status(status=constants.STATUS_COMPLETED, timeout=1800)
+
+        return pgsql_obj_list

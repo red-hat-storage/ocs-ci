@@ -30,8 +30,6 @@ spec:
   volumeClaimTemplates:
     - metadata:
         name: postgres-persistent-storage
-        annotations:
-          volume.beta.kubernetes.io/storage-class: ocs-storagecluster-ceph-rbd
       spec:
         accessModes: [ "ReadWriteOnce" ]
         storageClassName: ocs-storagecluster-ceph-rbd

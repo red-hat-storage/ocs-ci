@@ -2868,7 +2868,9 @@ def snapshot_restore_factory(request):
         """
         snapshot_info = snapshot_obj.get()
         size = size or snapshot_info['status']['restoreSize']
-        restore_pvc_name = restore_pvc_name or helpers.create_unique_resource_name(snapshot_obj.name, 'restore')
+        restore_pvc_name = restore_pvc_name or (
+            helpers.create_unique_resource_name(snapshot_obj.name, 'restore')
+        )
 
         if snapshot_info['spec']['volumeSnapshotClassName'] == (
             constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
