@@ -70,11 +70,11 @@ def cloud_uls_factory(request, cld_mgr):
                     )
                     try:
                         ulsMap[cloud.lower()].create_uls(uls_name, region)
-                    except AttributeError:
-                        raise(
+                    except AttributeError as e:
+                        raise Exception(
                             f'{cloud} was initialized as None, '
                             'please verify the needed credentials were set in auth.yaml'
-                        )
+                        ).with_traceback(e.__traceback__)
                     all_created_uls[cloud].add(uls_name)
                     current_call_created_uls[cloud.lower()].add(uls_name)
 
