@@ -351,7 +351,7 @@ class GoogleClient(CloudClient):
                 sleep(3)
 
     def get_all_uls_names(self):
-        return {bucketname for bucketname in self.client.list_buckets()}
+        return {bucket.id for bucket in self.client.list_buckets()}
 
     def verify_uls_exists(self, uls_name):
         try:
