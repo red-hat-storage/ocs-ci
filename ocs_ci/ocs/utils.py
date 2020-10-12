@@ -17,9 +17,9 @@ from libcloud.compute.types import Provider
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.ceph import RolesContainer, Ceph, CephNode
+from ocs_ci.ocs.external_ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterDetailsException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.openstack import CephVMNode
 from ocs_ci.ocs.parallel import parallel
@@ -797,6 +797,7 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
             allows better naming for folders under logs directory
 
     """
+    return
     if not (
         'KUBECONFIG' in os.environ
         or os.path.exists(os.path.expanduser('~/.kube/config'))
@@ -919,3 +920,93 @@ def oc_get_all_obc_names():
     return {
         obc.get('spec').get('bucketName') for obc in all_obcs_in_namespace
     }
+
+
+def get_external_mode_rhcs():
+    """
+
+    Returns:
+        external_ceph.Ceph object
+
+    """
+    external_rhcs_info = ocsci_config.EXTERNAL_MODE.get(
+        'external_cluster_node_roles', ''
+    )
+    if not external_rhcs_info:
+        log.error("No external RHCS cluster info found")
+        raise ExternalClusterDetailsException()
+
+    return get_cluster_object(external_rhcs_info)
+
+
+def get_cluster_object(external_rhcs_info):
+    """
+    Build a external_ceph.ceph object with all node and role
+    info
+
+    Args:
+        external_rhcs_info (dict):
+
+    Returns:
+        external_ceph.ceph object
+
+    """
+    # List of CephNode objects
+    node_list = []
+    for node, node_info in external_rhcs_info.items():
+        node_info['username'] = ocsci_config.EXTERNAL_MODE['login']['username']
+        node_info['password'] = ocsci_config.EXTERNAL_MODE['login']['password']
+        node_info['no_of_volumes'] = ''
+
+        log.info(node_info)
+        node_list.append(CephNode(**node_info))
+
+    return Ceph(node_list=node_list)
+
+
+def kill_osd_external(ceph_cluster, osd_id, sig_type='SIGTERM'):
+    """
+    Kill an osd with given signal
+
+    Args:
+        ceph_cluster (external_cluster.Ceph): Cluster object
+        osd_id (int): id of osd
+        sig_type (str): type of signal to be sent
+
+    Raises:
+        CommandFailed exception
+
+    """
+    log.info(f"OSDID={osd_id}")
+    kill_cmd = f"systemctl kill -s {sig_type} ceph-osd@{osd_id}"
+    osd_obj = ceph_cluster.get_nodes(role=f'osd.{osd_id}')
+    for osd in osd_obj:
+        log.info(f"OSD node = {osd.vmname}")
+        try:
+            osd.exec_command(cmd=kill_cmd)
+        except CommandFailed:
+            log.error("Failed to kill osd")
+            raise
+
+
+def revive_osd_external(ceph_cluster, osd_id):
+    """
+    Start an already stopped osd
+
+    Args:
+        ceph_cluster (external_cluster.Ceph): cluster object
+        osd_id (int): id of osd
+
+    Raises:
+        CommandFailed exception in case of failure
+
+    """
+    log.info(f"Reviving osd ={osd_id}")
+    revive_cmd = f"systemctl start ceph-osd@{osd_id}"
+    osd_obj = ceph_cluster.get_nodes(role=f'osd.{osd_id}')
+    for osd in osd_obj:
+        try:
+            osd.exec_command(cmd=revive_cmd)
+        except CommandFailed:
+            log.error("Failed to revive osd")
+            raise
