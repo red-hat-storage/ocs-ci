@@ -1548,3 +1548,22 @@ def wait_for_pods_to_be_running(
             f"after {timeout} seconds"
         )
         return False
+
+
+def list_of_nodes_running_pods(selector, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    The function returns the list of nodes for the given selector
+
+    Args:
+        selector (str): The resource selector to search with
+
+    Returns:
+        list: a list of nodes that runs the given selector pods
+
+    """
+    pod_obj_list = get_all_pods(
+        namespace=namespace, selector=[selector]
+    )
+    pods_running_nodes = [get_pod_node(pod) for pod in pod_obj_list]
+    logger.info(f"{selector} running on nodes {pods_running_nodes}")
+    return list(set(pods_running_nodes))
