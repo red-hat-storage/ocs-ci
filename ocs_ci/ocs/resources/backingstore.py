@@ -2,9 +2,9 @@ import logging
 
 from ocs_ci.ocs.bucket_utils import (
     oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
-    oc_create_s3comp_backingstore, oc_create_pv_backingstore, oc_create_ibmcos_backingstore,
-    cli_create_google_backingstore, cli_create_azure_backingstore, cli_create_s3comp_backingstore,
-    cli_create_pv_backingstore, cli_create_ibmcos_backingstore, cli_create_aws_backingstore
+    oc_create_pv_backingstore, oc_create_ibmcos_backingstore, cli_create_google_backingstore,
+    cli_create_azure_backingstore, cli_create_pv_backingstore, cli_create_ibmcos_backingstore,
+    cli_create_aws_backingstore
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
