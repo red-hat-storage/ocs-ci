@@ -1,6 +1,11 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import MCGTest, aws_platform_required, tier1, tier4
+from ocs_ci.framework.testlib import (
+    aws_platform_required,
+    MCGTest,
+    tier1,
+    tier4, tier4a
+)
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     verify_s3_object_integrity
@@ -110,6 +115,7 @@ class TestNamespace(MCGTest):
         assert self.compare_dirs(awscli_pod, amount=3)
 
     @tier4
+    @tier4a
     @pytest.mark.parametrize(
         argnames=["mcg_pod"],
         argvalues=[
@@ -127,22 +133,26 @@ class TestNamespace(MCGTest):
 
         """
 
-        # Create the namespace resource and verify health
+        logger.info('Create the namespace resource and verify health')
         resource = ns_resource_factory()
         target_bucket_name = resource[0]
         ns_resource_name = resource[1]
-
-        # Create the namespace bucket on top of the namespace resource
-        rand_ns_bucket = bucket_factory(amount=1, interface='mcg-namespace', write_ns_resource=ns_resource_name,
-                                        read_ns_resources=[ns_resource_name])[0].name
-
         s3_creds = {'access_key_id': cld_mgr.aws_client.access_key, 'access_key': cld_mgr.aws_client.secret_key,
                     'endpoint': constants.MCG_NS_AWS_ENDPOINT, 'region': config.ENV_DATA['region']}
-        # Upload files to NS bucket
+
+        logger.info('Create the namespace bucket on top of the namespace resource')
+        rand_ns_bucket = bucket_factory(
+            amount=1,
+            interface='mcg-namespace',
+            write_ns_resource=ns_resource_name,
+            read_ns_resources=[ns_resource_name]
+        )[0].name
+
+        logger.info('Upload files to NS bucket')
         self.write_files_to_pod_and_upload(mcg_obj, awscli_pod,
                                            bucket_to_write=rand_ns_bucket, amount=3)
 
-        # Respin mcg resource
+        logger.info(f'Respin mcg resource {mcg_pod}')
         noobaa_pods = pod.get_noobaa_pods()
         pod_obj = [
             pod for pod in noobaa_pods if pod.name.startswith(mcg_pod)
@@ -152,17 +162,18 @@ class TestNamespace(MCGTest):
             condition='Running',
             selector='app=noobaa',
             resource_count=len(noobaa_pods),
-            timeout=300
+            timeout=600
         )
 
-        # Read files directly from AWS
+        logger.info('Read files directly from AWS')
         self.download_files(mcg_obj, awscli_pod, bucket_to_read=target_bucket_name, s3_creds=s3_creds)
 
-        # Compare between uploaded files and downloaded files
+        logger.info('Compare between uploaded files and downloaded files')
         assert self.compare_dirs(awscli_pod, amount=3)
 
     @pytest.mark.polarion_id("OCS-2293")
     @tier4
+    @tier4a
     def test_namespace_bucket_creation_with_many_resources(
         self, ns_resource_factory, bucket_factory
     ):
@@ -171,10 +182,10 @@ class TestNamespace(MCGTest):
         Use 100+ read resources.
 
         """
-        # Create namespace resources and verify health
+        logger.info('Create namespace resources and verify health')
         ns_resources = [ns_resource_factory()[1] for _ in range(0, 100)]
 
-        # Create the namespace bucket with many namespace resources
+        logger.info('Create the namespace bucket with many namespace resources')
         bucket_factory(
             amount=1,
             interface='mcg-namespace',
@@ -184,6 +195,7 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2325")
     @tier4
+    @tier4a
     def test_block_read_resource_in_namespace_bucket(
         self, mcg_obj, awscli_pod, ns_resource_factory, bucket_factory, cld_mgr
     ):
@@ -193,38 +205,42 @@ class TestNamespace(MCGTest):
 
         """
         aws_client = cld_mgr.aws_client
+        s3_creds = {'access_key_id': cld_mgr.aws_client.access_key, 'access_key': cld_mgr.aws_client.secret_key,
+                    'endpoint': constants.MCG_NS_AWS_ENDPOINT, 'region': config.ENV_DATA['region']}
 
-        # Create namespace resources and verify health
+        logger.info('Create namespace resources and verify health')
         resource1 = ns_resource_factory()
         resource2 = ns_resource_factory()
 
-        # Upload files to NS resources
-        self.write_files_to_pod_and_upload(mcg_obj, awscli_pod,
-                                           bucket_to_write=resource1[0], amount=3)
-        self.write_files_to_pod_and_upload(mcg_obj, awscli_pod,
-                                           bucket_to_write=resource2[0], amount=2)
+        logger.info('Upload files to NS resources')
+        self.write_files_to_pod_and_upload(
+            mcg_obj, awscli_pod,
+            bucket_to_write=resource1[0], amount=3, s3_creds=s3_creds
+        )
+        self.write_files_to_pod_and_upload(
+            mcg_obj, awscli_pod,
+            bucket_to_write=resource2[0], amount=2, s3_creds=s3_creds
+        )
 
-        # Create the namespace bucket with many namespace resources
+        logger.info('Create the namespace bucket')
         bucket_factory(
             amount=1,
             interface='mcg-namespace',
-            write_ns_resource=resource1[1],
+            write_ns_resource=resource2[1],
             read_ns_resources=[resource1[1], resource2[1]]
         )
 
-        # Bring resource1 down
+        logger.info('Bring resource1 down')
         aws_client.toggle_aws_bucket_readwrite(resource1[0])
 
-        # Read files directly from AWS
-        s3_creds = {'access_key_id': cld_mgr.aws_client.access_key, 'access_key': cld_mgr.aws_client.secret_key,
-                    'endpoint': constants.MCG_NS_AWS_ENDPOINT, 'region': config.ENV_DATA['region']}
+        logger.info('Read files directly from AWS')
         target_bucket_name = resource1[0]
         self.download_files(mcg_obj, awscli_pod, bucket_to_read=target_bucket_name, s3_creds=s3_creds)
 
-        # Bring resource1 up
+        logger.info('Bring resource1 up')
         aws_client.toggle_aws_bucket_readwrite(resource1[0], block=False)
 
-        # Compare between uploaded files and downloaded files
+        logger.info('Compare between uploaded files and downloaded files')
         assert self.compare_dirs(awscli_pod, amount=2)
         assert not self.compare_dirs(awscli_pod, amount=3)
 
@@ -233,7 +249,7 @@ class TestNamespace(MCGTest):
         """
         Upload files to bucket (NS or uls)
         """
-        awscli_pod.exec_cmd_on_pod(command=f'mkdir {self.MCG_NS_ORIGINAL_DIR}')
+        awscli_pod.exec_cmd_on_pod(command=f'mkdir -p {self.MCG_NS_ORIGINAL_DIR}')
         full_object_path = f"s3://{bucket_to_write}"
 
         for i in range(amount):
