@@ -5,12 +5,15 @@ import os
 from abc import ABC, abstractmethod
 from time import sleep
 
-from azure.storage.blob import BlobServiceClient, ContainerClient
-from azure.core.exceptions import ResourceExistsError
 import boto3
+import google.api_core.exceptions as GoogleExceptions
+from azure.core.exceptions import ResourceExistsError
+from azure.storage.blob import BlobServiceClient
 from botocore.exceptions import ClientError
 from google.auth.exceptions import DefaultCredentialsError
-from google.cloud import storage
+from google.cloud.storage import Client as GCPStorageClient
+from google.cloud.storage.bucket import Bucket as GCPBucket
+from google.oauth2 import service_account
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -30,7 +33,7 @@ class CloudManager(ABC):
     def __init__(self):
         cloud_map = {
             'AWS': S3Client,
-            'GOOGLE': GoogleClient,
+            'GCP': GoogleClient,
             'AZURE': AzureClient,
             # TODO: Implement - 'IBMCOS': S3Client
         }
@@ -42,7 +45,7 @@ class CloudManager(ABC):
                 'Failed to load credentials from ocs-ci-data. '
                 'Loading from local auth.yaml'
             )
-            cred_dict = load_auth_config().get('AUTH', {})
+        cred_dict = load_auth_config().get('AUTH', {})
         for cloud_name in cred_dict:
             if cloud_name in cloud_map:
                 try:
@@ -293,12 +296,25 @@ class GoogleClient(CloudClient):
 
     """
 
-    def __init__(self, creds=None, *args, **kwargs):
+    def __init__(self, auth_dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if creds:
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds
+        self.cred_dict_string = base64.b64decode(
+            auth_dict.get('CREDENTIALS_JSON_BASE64')
+        ).decode('utf-8')
+        cred_dict = json.loads(self.cred_dict_string)
+        credentials = service_account.Credentials.from_service_account_info(
+            cred_dict
+        )
+
+        with open(constants.GOOGLE_CREDS_JSON_PATH, 'w') as cred_dump:
+            cred_dump.write(self.cred_dict_string)
+
+        self.secret = self.create_gcp_secret()
+
         try:
-            self.client = storage.Client()
+            self.client = GCPStorageClient(
+                project=cred_dict['project_id'], credentials=credentials
+            )
         except DefaultCredentialsError:
             raise
 
@@ -327,7 +343,7 @@ class GoogleClient(CloudClient):
         # Todo: Replace with a TimeoutSampler
         for _ in range(10):
             try:
-                bucket = self.client.get_bucket(name)
+                bucket = GCPBucket(client=self.client, name=name)
                 bucket.delete_blobs(bucket.list_blobs())
                 bucket.delete()
                 break
@@ -336,10 +352,28 @@ class GoogleClient(CloudClient):
                 sleep(3)
 
     def get_all_uls_names(self):
-        pass
+        return self.client.list_buckets()
 
     def verify_uls_exists(self, uls_name):
-        pass
+        try:
+            self.client.get_bucket(uls_name)
+            return True
+        except GoogleExceptions.NotFound:
+            return False
+
+    def create_gcp_secret(self):
+            """
+            Create a Kubernetes secret to allow NooBaa to create Google-based backingstores
+
+            """
+            bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
+            bs_secret_data['metadata']['name'] = 'cldmgr-gcp-secret'
+            bs_secret_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
+            bs_secret_data['data']['GoogleServiceAccountPrivateKeyJson'] = base64.urlsafe_b64encode(
+                self.cred_dict_string.encode('UTF-8')
+            ).decode('ascii')
+
+            return create_resource(**bs_secret_data)
 
 
 class AzureClient(CloudClient):

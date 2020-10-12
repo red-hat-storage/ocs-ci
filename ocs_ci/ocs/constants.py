@@ -253,6 +253,7 @@ HOSTNAME_LABEL = "kubernetes.io/hostname"
 # Auth Yaml
 OCSCI_DATA_BUCKET = 'ocs-ci-data'
 AUTHYAML = 'auth.yaml'
+GOOGLE_CREDS_JSON_PATH = os.path.join(DATA_DIR, "google_creds.json")
 
 # OBJ File representing serialized data
 NODE_OBJ_FILE = "node_file.objs"
@@ -1177,6 +1178,7 @@ AZURE_BLOB_ENDPOINT_SUFFIX = 'https://{}.blob.core.windows.net'
 BACKINGSTORE_TYPE_AWS = 'aws-s3'
 BACKINGSTORE_TYPE_AZURE = 'azure-blob'
 BACKINGSTORE_TYPE_S3_COMP = 's3-compatible'
+BACKINGSTORE_TYPE_GOOGLE = 'google-cloud-storage'
 
 # Squads assignment
 # Tests are assigned to Squads based on patterns matching test path.

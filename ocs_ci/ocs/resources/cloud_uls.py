@@ -21,14 +21,14 @@ def cloud_uls_factory(request, cld_mgr):
     """
     all_created_uls = {
         'aws': set(),
-        'google': set(),
+        'gcp': set(),
         'azure': set(),
         'ibmcos': set()
     }
 
     ulsMap = {
         'aws': cld_mgr.aws_client,
-        'google': cld_mgr.google_client,
+        'gcp': cld_mgr.gcp_client,
         'azure': cld_mgr.azure_client,
         # TODO: Implement - 'ibmcos': cld_mgr.ibmcos_client
     }
@@ -51,7 +51,7 @@ def cloud_uls_factory(request, cld_mgr):
         """
         current_call_created_uls = {
             'aws': set(),
-            'google': set(),
+            'gcp': set(),
             'azure': set(),
             'ibmcos': set()
         }

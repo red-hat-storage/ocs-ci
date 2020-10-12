@@ -60,14 +60,14 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
     cmdMap = {
         'oc': {
             'aws': oc_create_aws_backingstore,
-            'google': oc_create_google_backingstore,
+            'gcp': oc_create_google_backingstore,
             'azure': oc_create_azure_backingstore,
             'ibmcos': oc_create_s3comp_backingstore,
             'pv': oc_create_pv_backingstore
         },
         'cli': {
             'aws': cli_create_aws_backingstore,
-            'google': cli_create_google_backingstore,
+            'gcp': cli_create_google_backingstore,
             'azure': cli_create_azure_backingstore,
             'ibmcos': cli_create_s3comp_backingstore,
             'pv': cli_create_pv_backingstore
