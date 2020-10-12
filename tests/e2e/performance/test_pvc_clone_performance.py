@@ -78,7 +78,7 @@ class TestPVCSingleClonePerformance(E2ETest):
             status=constants.STATUS_RUNNING
         )
 
-    def convert_str_size_to_int(self,str_size):
+    def convert_str_size_to_int(self, str_size):
         '''
         Converts string size with units to megabyte size
         Args:
