@@ -762,7 +762,7 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments):
             logger.info(f"Upscaling deployment {rgw} to 0")
             oc.exec_oc_cmd(f"scale --replicas=1 deployment/{rgw}")
 
-    request.addfinalizer(teardown)
+    request.addfinalizer(_finalizer)
     test_file = os.path.join(measurement_dir, 'measure_stop_rgw.json')
     measured_op = measure_operation(stop_rgw, test_file)
 

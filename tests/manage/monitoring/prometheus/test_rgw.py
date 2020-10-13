@@ -25,8 +25,8 @@ def test_rgw_unavailable(measure_stop_rgw):
     alerts = measure_stop_rgw.get('prometheus_alerts')
     target_label = constants.ALERT_CLUSTEROBJECTSTORESTATE
     target_msg = (
-            'Cluster Object Store is in unhealthy state for more than 15s. '
-            'Please check Ceph cluster health or RGW connection.'
+        'Cluster Object Store is in unhealthy state for more than 15s. '
+        'Please check Ceph cluster health or RGW connection.'
     )
     states = ['pending', 'firing']
 
