@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 @tier1
 @skipif_ocs_version('<4.6')
-@polarion_id('')
+@polarion_id('OCS-2368')
 class TestCloneWithDifferentAccessMode(ManageTest):
     """
     Tests to verify PVC clone with access mode different than parent PVC
