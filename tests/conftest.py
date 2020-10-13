@@ -3060,6 +3060,7 @@ def pvc_clone_factory(request):
         )
         instances.append(clone_pvc_obj)
         clone_pvc_obj.parent = pvc_obj
+        clone_pvc_obj.volume_mode = volume_mode
 
         if status:
             helpers.wait_for_resource_state(pvc_obj, status)
