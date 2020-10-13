@@ -771,7 +771,6 @@ class AWSUPIFlexy(AWSBase):
     lives here
     """
     def __init__(self):
-        self.cluster_name = config.ENV_DATA['cluster_name']
         super().__init__()
 
     class OCPDeployment(BaseOCPDeployment):

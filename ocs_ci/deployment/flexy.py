@@ -4,6 +4,7 @@ All the flexy related classes and functionality lives here
 import logging
 import os
 import yaml
+import time
 
 import io
 import configparser
@@ -15,7 +16,8 @@ import shutil
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
-    get_ocp_version, clone_repo, run_cmd, expose_ocp_version
+    get_ocp_version, clone_repo, run_cmd, expose_ocp_version,
+    wait_for_machineconfigpool_status,
 )
 from ocs_ci.ocs import exceptions
 
@@ -350,10 +352,12 @@ class FlexyBase(object):
             os.symlink(flexy_cluster_path, abs_cluster_path)
 
         # Apply pull secrets on ocp cluster
-        auth_file = 'flexy/workdir/install-dir/auth/kubeconfig'
+        kubeconfig = os.path.join(
+            self.cluster_path, config.RUN.get('kubeconfig_location')
+        )
         secret_cmd = (
             f"oc set data secret/pull-secret "
-            f"--kubeconfig {self.flexy_host_dir}/{auth_file} "
+            f"--kubeconfig {kubeconfig} "
             f"-n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
             f"--from-file=.dockerconfigjson={constants.DATA_DIR}/pull-secret"
         )
@@ -361,11 +365,14 @@ class FlexyBase(object):
 
         if not config.ENV_DATA.get('skip_ntp_configuration', False):
             ntp_cmd = (
-                f"oc --kubeconfig {self.flexy_host_dir}/{auth_file} "
+                f"oc --kubeconfig {kubeconfig} "
                 f"create -f {constants.NTP_CHRONY_CONF}"
             )
             logger.info("Creating NTP chrony")
             run_cmd(ntp_cmd)
+        # sleep here to start update machineconfigpool status
+        time.sleep(60)
+        wait_for_machineconfigpool_status('all')
 
     def is_jenkins_mount(self):
         """
