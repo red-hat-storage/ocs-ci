@@ -1283,9 +1283,15 @@ def get_running_ocp_version(separator=None):
     """
     char = separator if separator else '.'
     namespace = config.ENV_DATA['cluster_namespace']
-    results = run_cmd(f'oc get clusterversion -n {namespace} -o yaml')
-    build = yaml.safe_load(results)['items'][0]['status']['desired']['version']
-    return char.join(build.split('.')[0:2])
+    try:
+        # if the cluster exist, this part will be run
+        results = run_cmd(f'oc get clusterversion -n {namespace} -o yaml')
+        build = yaml.safe_load(results)['items'][0]['status']['desired']['version']
+        return char.join(build.split('.')[0:2])
+    except Exception:
+        # this part will return version from the config file in case
+        # cluster is not exists.
+        return get_ocp_version(separator=char)
 
 
 def get_ocp_repo():
