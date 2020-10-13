@@ -276,19 +276,19 @@ def oc_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
     create_resource(**bs_data)
 
 
-def cli_create_aws_backingstore(mcg_obj_session, cld_mgr, backingstore_name, uls_name, region):
+def cli_create_aws_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, region):
     """
     Create a new backingstore with aws underlying storage using noobaa cli command
 
     Args:
-        mcg_obj_session (MCG): Used for execution for the NooBaa CLI command
+        mcg_obj (MCG): Used for execution for the NooBaa CLI command
         cld_mgr (CloudManager): holds secret for backingstore creation
         backingstore_name (str): backingstore name
         uls_name (str): underlying storage name
         region (str): which region to create backingstore (should be the same as uls)
 
     """
-    mcg_obj_session.exec_mcg_cmd(
+    mcg_obj.exec_mcg_cmd(
         f'backingstore create aws-s3 {backingstore_name} '
         f'--access-key {cld_mgr.aws_client.access_key} '
         f'--secret-key {cld_mgr.aws_client.secret_key} '
@@ -321,19 +321,19 @@ def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
     create_resource(**bs_data)
 
 
-def cli_create_google_backingstore(mcg_obj_session, cld_mgr, backingstore_name, uls_name, region):
+def cli_create_google_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, region):
     """
     Create a new backingstore with GCP underlying storage using a NooBaa CLI command
 
     Args:
-        mcg_obj_session (MCG): Used for execution for the NooBaa CLI command
+        mcg_obj (MCG): Used for execution for the NooBaa CLI command
         cld_mgr (CloudManager): holds secret for backingstore creation
         backingstore_name (str): backingstore name
         uls_name (str): underlying storage name
         region (str): which region to create backingstore (should be the same as uls)
 
     """
-    mcg_obj_session.exec_mcg_cmd(
+    mcg_obj.exec_mcg_cmd(
         f'backingstore create google-cloud-storage {backingstore_name} '
         f'--private-key-json-file {constants.GOOGLE_CREDS_JSON_PATH} '
         f'--target-bucket {uls_name}'
@@ -365,7 +365,7 @@ def oc_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
     create_resource(**bs_data)
 
 
-def cli_create_azure_backingstore(mcg_obj_session, cld_mgr, backingstore_name, uls_name, region):
+def cli_create_azure_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, region):
     """
     Create a new backingstore with aws underlying storage using noobaa cli command
 
@@ -376,7 +376,7 @@ def cli_create_azure_backingstore(mcg_obj_session, cld_mgr, backingstore_name, u
         region (str): which region to create backingstore (should be the same as uls)
 
     """
-    mcg_obj_session.exec_mcg_cmd(
+    mcg_obj.exec_mcg_cmd(
         f'backingstore create azure-blob {backingstore_name} '
         f'--account-key {cld_mgr.azure_client.credential} '
         f'--account-name {cld_mgr.azure_client.account_name} '
@@ -414,7 +414,7 @@ def oc_create_ibmcos_backingstore(cld_mgr, backingstore_name, uls_name, region):
     create_resource(**bs_data)
 
 
-def cli_create_ibmcos_backingstore(mcg_obj_session, cld_mgr, backingstore_name, uls_name, region):
+def cli_create_ibmcos_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, region):
     """
     Create a new backingstore with IBM COS underlying storage using a NooBaa CLI command
 
@@ -425,7 +425,7 @@ def cli_create_ibmcos_backingstore(mcg_obj_session, cld_mgr, backingstore_name, 
         region (str): which region to create backingstore (should be the same as uls)
 
     """
-    mcg_obj_session.exec_mcg_cmd(
+    mcg_obj.exec_mcg_cmd(
         f'backingstore create ibm-cos {backingstore_name} '
         f'--access-key {cld_mgr.ibmcos_client.access_key} '
         f'--secret-key {cld_mgr.ibmcos_client.secret_key} '
@@ -467,7 +467,7 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA['cluster_namespace'])
 
 
-def cli_create_pv_backingstore(mcg_obj_session, backingstore_name, vol_num, size, storage_class):
+def cli_create_pv_backingstore(mcg_obj, backingstore_name, vol_num, size, storage_class):
     """
     Create a new backingstore with pv underlying storage using noobaa cli command
 
@@ -478,7 +478,7 @@ def cli_create_pv_backingstore(mcg_obj_session, backingstore_name, vol_num, size
         storage_class (str): which storage class to use
 
     """
-    mcg_obj_session.exec_mcg_cmd(f'backingstore create pv-pool {backingstore_name} --num-volumes '
+    mcg_obj.exec_mcg_cmd(f'backingstore create pv-pool {backingstore_name} --num-volumes '
                                  f'{vol_num} --pv-size-gb {size} --storage-class {storage_class}'
                                  )
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA['cluster_namespace'])
