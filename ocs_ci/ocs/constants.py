@@ -688,6 +688,7 @@ ALERT_BUCKETERRORSTATE = 'NooBaaBucketErrorState'
 ALERT_BUCKETEXCEEDINGQUOTASTATE = 'NooBaaBucketExceedingQuotaState'
 ALERT_CLUSTERNEARFULL = 'CephClusterNearFull'
 ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
+ALERT_CLUSTEROBJECTSTORESTATE = 'ClusterObjectStoreState'
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
