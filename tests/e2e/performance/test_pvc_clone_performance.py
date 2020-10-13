@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.resources import pvc, pod
 from tests import helpers
+from ocs_ci.utility.utils import convert_device_size
 
 
 logger = logging.getLogger(__name__)
@@ -23,28 +24,28 @@ logger = logging.getLogger(__name__)
     argnames=["interface_type", "pvc_size", "file_size"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, '1', '600M'], marks=pytest.mark.polarion_id('OCS-2356')
+            *[constants.CEPHBLOCKPOOL, '1', '600Mi'], marks=pytest.mark.polarion_id('OCS-2356')
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, '25', '15G'], marks=pytest.mark.polarion_id('OCS-2340')
+            *[constants.CEPHBLOCKPOOL, '25', '15Gi'], marks=pytest.mark.polarion_id('OCS-2340')
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, '50', '30G'], marks=pytest.mark.polarion_id('OCS-2357')
+            *[constants.CEPHBLOCKPOOL, '50', '30Gi'], marks=pytest.mark.polarion_id('OCS-2357')
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, '100', '60G'], marks=pytest.mark.polarion_id('OCS-2358')
+            *[constants.CEPHBLOCKPOOL, '100', '60Gi'], marks=pytest.mark.polarion_id('OCS-2358')
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, '1', '600M'], marks=pytest.mark.polarion_id('2341')
+            *[constants.CEPHFILESYSTEM, '1', '600Mi'], marks=pytest.mark.polarion_id('2341')
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, '25', '15M'], marks=pytest.mark.polarion_id('2355')
+            *[constants.CEPHFILESYSTEM, '25', '15Mi'], marks=pytest.mark.polarion_id('2355')
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, '50', '30G'], marks=pytest.mark.polarion_id('2359')
+            *[constants.CEPHFILESYSTEM, '50', '30Gi'], marks=pytest.mark.polarion_id('2359')
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, '100', '60G'], marks=pytest.mark.polarion_id('2360')
+            *[constants.CEPHFILESYSTEM, '100', '60Gi'], marks=pytest.mark.polarion_id('2360')
         )
     ]
 )
@@ -78,23 +79,6 @@ class TestPVCSingleClonePerformance(E2ETest):
             status=constants.STATUS_RUNNING
         )
 
-    def convert_str_size_to_int(self, str_size):
-        '''
-        Converts string size with units to megabyte size
-        Args:
-            str_size: a string which contains number with units, currently M and G are sopported
-
-        Returns: and integer for size in M (megabytes).
-
-        '''
-        int_number = 0
-        if 'M' in str_size:
-            int_number = int(str_size.replace('M', ''))
-        if 'G' in str_size:
-            int_number = int(str_size.replace('G', '')) * 1000
-
-        return int_number
-
     def test_clone_create_delete_performance(self, interface_type, pvc_size, file_size, teardown_factory):
         """
         Write data (60% of PVC capacity) to the PVC created in setup
@@ -105,10 +89,12 @@ class TestPVCSingleClonePerformance(E2ETest):
         Note: by increasing max_num_of_clones value you increase number of the clones to be created/deleted
         """
 
+        file_size_for_io = file_size[:-1]
+
         file_name = self.pod_obj.name
         logger.info(f'Starting IO on the POD {self.pod_obj.name}')
         # Going to run only write IO to fill the PVC for the before creating a clone
-        self.pod_obj.fillup_fs(size=file_size, fio_filename=file_name)
+        self.pod_obj.fillup_fs(size=file_size_for_io, fio_filename=file_name)
 
         # Wait for fio to finish
         fio_result = self.pod_obj.get_fio_results()
@@ -136,7 +122,7 @@ class TestPVCSingleClonePerformance(E2ETest):
         clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
         if interface_type == constants.CEPHFILESYSTEM:
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
-        file_size_mb = self.convert_str_size_to_int(file_size)
+        file_size_mb = convert_device_size(file_size,"MB")
 
         # creating single clone ( or many one by one if max_mum_of_clones > 1)
         logger.info(f"Start creating {max_num_of_clones} clones on {interface_type} PVC of size {pvc_size} GB.")
@@ -162,9 +148,6 @@ class TestPVCSingleClonePerformance(E2ETest):
                 "speed": creation_speed
             }
             clone_creation_measures.append(creation_measures)
-
-        logger.info(f"Finished creating and taking measures for {max_num_of_clones} "
-                    f"clones on {interface_type} PVC of size {pvc_size} GB.")
 
         # deleting one by one and measuring deletion times and speed for each one of the clones create above
         # in case of single clone will run one time
@@ -193,9 +176,6 @@ class TestPVCSingleClonePerformance(E2ETest):
             }
             clone_deletion_measures.append(deletion_measures)
 
-        logger.info(f"Finished deleting and taking measures for {max_num_of_clones} clones "
-                    f"on {interface_type} PVC of size {pvc_size} GB.")
-
         logger.info(f"Printing clone creation time and speed for {max_num_of_clones} clones "
                     f"on {interface_type} PVC of size {pvc_size} GB:")
 
@@ -203,14 +183,9 @@ class TestPVCSingleClonePerformance(E2ETest):
             logger.info(f"Clone number {c['clone_num']} creation time is {c['time']} secs.")
             logger.info(f"Clone number {c['clone_num']} creation speed is {c['speed']} MB/sec.")
 
-        logger.info(f"Finished printing {max_num_of_clones} clone creation times and speed"
-                    f"for {pvc_size} GB {interface_type} PVC with {file_size} MB of data.")
-
         logger.info(f"Clone deletion time and speed for {interface_type} PVC of size {pvc_size} GB are:")
         for d in clone_deletion_measures:
             logger.info(f"Clone number {d['clone_num']} deletion time is {d['time']} secs.")
             logger.info(f"Clone number {d['clone_num']} deletion speed is {d['speed']} MB/sec.")
-
-        logger.info(f"Finished printing clone deletion times and speed for {interface_type} PVC of size {pvc_size} GB.")
 
         logger.info("test_clones_creation_performance finished successfully.")
