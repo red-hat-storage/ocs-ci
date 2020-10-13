@@ -158,6 +158,7 @@ CRITICAL_ERRORS = [
 ]
 must_gather_pod_label = "must-gather"
 drain_canary_pod_label = "rook-ceph-drain-canary"
+OCS_MONKEY_REPOSITORY = "https://github.com/red-hat-storage/ocs-monkey.git"
 
 # AMQ
 AMQ_NAMESPACE = "myproject"
