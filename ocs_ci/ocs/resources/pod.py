@@ -638,18 +638,20 @@ def get_file_path(pod_obj, file_name):
     return file_path
 
 
-def cal_md5sum(pod_obj, file_name):
+def cal_md5sum(pod_obj, file_name, block=False):
     """
     Calculates the md5sum of the file
 
     Args:
         pod_obj (Pod): The object of the pod
         file_name (str): The name of the file for which md5sum to be calculated
+        block (bool): True if the volume mode of PVC used on pod is 'Block'.
+            file_name will be the devicePath in this case.
 
     Returns:
         str: The md5sum of the file
     """
-    file_path = get_file_path(pod_obj, file_name)
+    file_path = file_name if block else get_file_path(pod_obj, file_name)
     md5sum_cmd_out = pod_obj.exec_cmd_on_pod(
         command=f"bash -c \"md5sum {file_path}\"", out_yaml_format=False
     )
@@ -658,7 +660,7 @@ def cal_md5sum(pod_obj, file_name):
     return md5sum
 
 
-def verify_data_integrity(pod_obj, file_name, original_md5sum):
+def verify_data_integrity(pod_obj, file_name, original_md5sum, block=False):
     """
     Verifies existence and md5sum of file created from first pod
 
@@ -666,6 +668,8 @@ def verify_data_integrity(pod_obj, file_name, original_md5sum):
         pod_obj (Pod): The object of the pod
         file_name (str): The name of the file for which md5sum to be calculated
         original_md5sum (str): The original md5sum of the file
+        block (bool): True if the volume mode of PVC used on pod is 'Block'.
+            file_name will be the devicePath in this case.
 
     Returns:
         bool: True if the file exists and md5sum matches
@@ -673,11 +677,11 @@ def verify_data_integrity(pod_obj, file_name, original_md5sum):
     Raises:
         AssertionError: If file doesn't exist or md5sum mismatch
     """
-    file_path = get_file_path(pod_obj, file_name)
+    file_path = file_name if block else get_file_path(pod_obj, file_name)
     assert check_file_existence(pod_obj, file_path), (
         f"File {file_name} doesn't exists"
     )
-    current_md5sum = cal_md5sum(pod_obj, file_name)
+    current_md5sum = cal_md5sum(pod_obj, file_name, block)
     logger.info(f"Original md5sum of file: {original_md5sum}")
     logger.info(f"Current md5sum of file: {current_md5sum}")
     assert current_md5sum == original_md5sum, (

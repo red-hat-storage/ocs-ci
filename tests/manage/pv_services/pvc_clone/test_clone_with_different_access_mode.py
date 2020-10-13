@@ -6,6 +6,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     skipif_ocs_version, ManageTest, tier1, polarion_id
 )
+from ocs_ci.ocs.resources import pod
 from tests import helpers
 
 log = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ class TestCloneWithDifferentAccessMode(ManageTest):
         log.info("Starting IO on all pods")
         for pod_obj in self.pods:
             storage_type = (
-                'block' if pod_obj.pvc.volume_mode == 'Block' else 'fs'
+                'block' if pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK else 'fs'
             )
             pod_obj.run_io(
                 storage_type=storage_type, size='1G',
@@ -68,9 +69,14 @@ class TestCloneWithDifferentAccessMode(ManageTest):
         for pod_obj in self.pods:
             pod_obj.get_fio_results()
             log.info(f"IO finished on pod {pod_obj.name}")
-            # Calculate md5sum of the file
-            # TODO: Get md5sum
-            # pod_obj.pvc.md5sum = pod.cal_md5sum(pod_obj, file_name)
+            # Calculate md5sum
+            file_name_pod = file_name if (
+                pod_obj.pvc.volume_mode == constants.VOLUME_MODE_FILESYSTEM
+            ) else pod_obj.get_storage_path(storage_type='block')
+            pod_obj.pvc.md5sum = pod.cal_md5sum(
+                pod_obj, file_name_pod,
+                pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK
+            )
 
         log.info("Creating clone of the PVCs with different access modes")
         cloned_pvcs = []
@@ -132,4 +138,17 @@ class TestCloneWithDifferentAccessMode(ManageTest):
             helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
         log.info("Verified: New pods are running")
 
-        # TODO: Verify data integrity
+        # Verify md5sum
+        for pod_obj in clone_pod_objs:
+            file_name_pod = file_name if (
+                pod_obj.pvc.volume_mode == constants.VOLUME_MODE_FILESYSTEM
+            ) else pod_obj.get_storage_path(storage_type='block')
+            pod.verify_data_integrity(
+                pod_obj, file_name_pod, pod_obj.pvc.parent.md5sum,
+                pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK
+            )
+            log.info(
+                f"Verified: md5sum of {file_name_pod} on pod {pod_obj.name} "
+                f"matches with the original md5sum"
+            )
+        log.info("Data integrity check passed on all pods")
