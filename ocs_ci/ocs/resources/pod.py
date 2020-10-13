@@ -1712,3 +1712,7 @@ def get_mon_deployments(osd_label=constants.OSD_APP_LABEL, namespace=None):
     mons = get_deployments_having_label(osd_label, namespace)
     mon_deployments = [OCS(**mon) for mon in mons]
     return mon_deployments
+
+
+def get_deployment_name(pod_name):
+    return '-'.join(pod_name.split("-")[:-2])
