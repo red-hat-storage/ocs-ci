@@ -122,7 +122,7 @@ class TestPVCSingleClonePerformance(E2ETest):
         clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
         if interface_type == constants.CEPHFILESYSTEM:
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
-        file_size_mb = convert_device_size(file_size,"MB")
+        file_size_mb = convert_device_size(file_size, "MB")
 
         # creating single clone ( or many one by one if max_mum_of_clones > 1)
         logger.info(f"Start creating {max_num_of_clones} clones on {interface_type} PVC of size {pvc_size} GB.")
