@@ -1291,7 +1291,7 @@ def get_running_ocp_version(separator=None):
     except Exception:
         # this part will return version from the config file in case
         # cluster is not exists.
-        return get_ocp_version(separator=char)
+        return get_ocp_version(seperator=char)
 
 
 def get_ocp_repo():
