@@ -478,9 +478,10 @@ def cli_create_pv_backingstore(mcg_obj, backingstore_name, vol_num, size, storag
         storage_class (str): which storage class to use
 
     """
-    mcg_obj.exec_mcg_cmd(f'backingstore create pv-pool {backingstore_name} --num-volumes '
-                                 f'{vol_num} --pv-size-gb {size} --storage-class {storage_class}'
-                                 )
+    mcg_obj.exec_mcg_cmd(
+        f'backingstore create pv-pool {backingstore_name} --num-volumes '
+        f'{vol_num} --pv-size-gb {size} --storage-class {storage_class}'
+    )
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA['cluster_namespace'])
 
 
