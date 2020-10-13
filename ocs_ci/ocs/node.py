@@ -1252,5 +1252,28 @@ def get_node_pods(node):
         osd_pod for osd_pod in osd_pods
         if pod.get_pod_node(osd_pod).name == node.name
     ]
-
     return node_pods
+
+
+def scale_down_deployments(node_obj):
+    ocp = OCP(kind='node', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    pods_to_scale_down = get_node_pods_to_scale_down(node_obj)
+    for p in pods_to_scale_down:
+        deployment_name = pod.get_deployment_name(p.name)
+        cmd = f"scale deployment {deployment_name} --replicas=0"
+        ocp.exec_oc_cmd(cmd)
+
+
+def get_node_pods_to_scale_down(node):
+    pods_to_scale_down = [
+        *pod.get_mon_pods(),
+        *pod.get_osd_pods(),
+        *pod.get_rgw_pods(),
+        *pod.get_mgr_pods()
+    ]
+
+    node_pods_to_scale_down = [
+        p for p in pods_to_scale_down
+        if pod.get_pod_node(p).name == node.name
+    ]
+    return node_pods_to_scale_down
