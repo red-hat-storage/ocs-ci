@@ -1649,7 +1649,7 @@ def rgw_deployments(request):
         kind=constants.DEPLOYMENT,
         namespace=config.ENV_DATA['cluster_namespace']
     )
-    rgw_deployments = oc.get(selector=constants.RGW_APP_LABELL)['items']
+    rgw_deployments = oc.get(selector=constants.RGW_APP_LABEL)['items']
     if rgw_deployments:
         return rgw_deployments
     else:

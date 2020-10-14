@@ -748,22 +748,15 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments):
             oc.exec_oc_cmd(f"scale --replicas=0 deployment/{rgw}")
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
-        return oc.get(mgr)
+        return rgw_deployments
 
-    def _finalizer():
-        """
-        Bring back rgw deployments.
-
-        """
-        nonlocal oc
-        nonlocal rgw_deployments
-        for rgw_deployment in rgw_deployments:
-            rgw = rgw_deployment['metadata']['name']
-            logger.info(f"Upscaling deployment {rgw} to 0")
-            oc.exec_oc_cmd(f"scale --replicas=1 deployment/{rgw}")
-
-    request.addfinalizer(_finalizer)
     test_file = os.path.join(measurement_dir, 'measure_stop_rgw.json')
     measured_op = measure_operation(stop_rgw, test_file)
+
+    logger.info('Return RGW pods')
+    for rgw_deployment in rgw_deployments:
+        rgw = rgw_deployment['metadata']['name']
+        logger.info(f"Upscaling deployment {rgw} to 1")
+        oc.exec_oc_cmd(f"scale --replicas=1 deployment/{rgw}")
 
     return measured_op
