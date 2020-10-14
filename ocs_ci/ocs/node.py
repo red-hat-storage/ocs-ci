@@ -644,20 +644,20 @@ def get_provider():
         return "BareMetal"
 
 
-def get_compute_node_names():
+def get_compute_node_names(no_replace=False):
     """
     Gets the compute node names
+
+    Args:
+        no_replace (bool): If False '.' will replaced with '-'
 
     Returns:
         list: List of compute node names
 
     """
     platform = config.ENV_DATA.get('platform').lower()
-
-    if platform == constants.VSPHERE_PLATFORM:
-        return [node for node in get_all_nodes() if "compute" in node]
-    elif platform == constants.AWS_PLATFORM:
-        compute_node_objs = get_typed_nodes()
+    compute_node_objs = get_typed_nodes()
+    if platform == constants.VSPHERE_PLATFORM or constants.AWS_PLATFORM:
         return [
             compute_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL]
             for compute_obj in compute_node_objs
@@ -665,18 +665,18 @@ def get_compute_node_names():
     elif (
         platform == constants.BAREMETAL_PLATFORM
         or platform == constants.BAREMETALPSI_PLATFORM
+        or platform == constants.IBM_POWER_PLATFORM
     ):
-        compute_node_objs = get_typed_nodes()
-        return [
-            compute_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL].replace('.', '-')
-            for compute_obj in compute_node_objs
-        ]
-    elif platform == constants.IBM_POWER_PLATFORM:
-        compute_node_objs = get_typed_nodes()
-        return [
-            compute_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL].replace('.', '-')
-            for compute_obj in compute_node_objs
-        ]
+        if no_replace:
+            return [
+                compute_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL]
+                for compute_obj in compute_node_objs
+            ]
+        else:
+            return [
+                compute_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL].replace('.', '-')
+                for compute_obj in compute_node_objs
+            ]
     else:
         raise NotImplementedError
 
@@ -1027,18 +1027,3 @@ def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
 
     log.info("Verification steps from the ceph side finish successfully")
     return True
-
-
-def get_worker_hostname():
-    """
-    Gets the worker node hostnames
-
-    Returns:
-        list: List of worker node hostnames
-
-    """
-    worker_node_objs = get_typed_nodes()
-    return [
-        worker_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL]
-        for worker_obj in worker_node_objs
-    ]
