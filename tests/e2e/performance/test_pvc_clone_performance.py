@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
             *[constants.CEPHFILESYSTEM, '1', '600Mi'], marks=pytest.mark.polarion_id('2341')
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, '25', '15Mi'], marks=pytest.mark.polarion_id('2355')
+            *[constants.CEPHFILESYSTEM, '25', '15Gi'], marks=pytest.mark.polarion_id('2355')
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, '50', '30Gi'], marks=pytest.mark.polarion_id('2359')
