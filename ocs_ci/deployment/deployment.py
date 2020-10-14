@@ -1091,9 +1091,11 @@ def setup_local_storage(storageclass):
             constants.LOCAL_VOLUME_SET_YAML
         )
 
-        # as a workaround we are setting Rotational to deviceMechanicalProperties to detect HDD disk
+        # Since we don't have datastore with SSD on our current VMware machines, localvolumeset doesn't detect
+        # NonRotational disk. As a workaround we are setting Rotational to device MechanicalProperties to detect
+        # HDD disk
         if platform == constants.VSPHERE_PLATFORM:
-            logger.info("Adding Rotational for deviceMechanicalProperties spec")
+            logger.info("Adding Rotational for deviceMechanicalProperties spec to detect HDD disk")
             lvs_data['spec']['deviceInclusionSpec']['deviceMechanicalProperties'].append("Rotational")
 
         # Update local volume set data with Worker node Names
