@@ -183,6 +183,11 @@ skipif_no_lso = pytest.mark.skipif(
     reason="Test run only on LSO deployed cluster"
 )
 
+skipif_no_encrypted = pytest.mark.skipif(
+    not config.ENV_DATA.get("encryption_at_rest"),
+    reason="Test run only on encrypted deployed cluster"
+)
+
 metrics_for_external_mode_required = pytest.mark.skipif(
     float(config.ENV_DATA['ocs_version']) < 4.6
     and config.DEPLOYMENT.get('external_mode') is True,
