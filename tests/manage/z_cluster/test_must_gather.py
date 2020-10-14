@@ -7,7 +7,7 @@ from ocs_ci.ocs.must_gather.must_gather import MustGather
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def mustgather(request):
 
     mustgather = MustGather()
