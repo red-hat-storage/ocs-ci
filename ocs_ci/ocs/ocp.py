@@ -115,7 +115,19 @@ class OCP(object):
 
         """
         oc_cmd = "oc "
-        kubeconfig = os.getenv('KUBECONFIG')
+        if os.getenv('KUBECONFIG'):
+            kubeconfig = os.getenv('KUBECONFIG')
+        elif os.path.exists(os.path.join(
+            config.ENV_DATA['cluster_path'],
+            config.RUN.get('kubeconfig_location')
+        )):
+            kubeconfig = os.path.join(
+                config.ENV_DATA['cluster_path'],
+                config.RUN.get('kubeconfig_location')
+            )
+        else:
+            kubeconfig = None
+
         if self.namespace:
             oc_cmd += f"-n {self.namespace} "
 
