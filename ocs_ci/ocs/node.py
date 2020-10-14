@@ -1027,3 +1027,18 @@ def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
 
     log.info("Verification steps from the ceph side finish successfully")
     return True
+
+
+def get_worker_hostname():
+    """
+    Gets the worker node hostnames
+
+    Returns:
+        list: List of worker node hostnames
+
+    """
+    worker_node_objs = get_typed_nodes()
+    return [
+        worker_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL]
+        for worker_obj in worker_node_objs
+    ]
