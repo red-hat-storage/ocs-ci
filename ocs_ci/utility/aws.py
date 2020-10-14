@@ -1015,18 +1015,23 @@ class AWS(object):
         logger.info(f"Stackid = {stack_id}")
         return stack_name, stack_id
 
-    def delete_apps_record_set(self, cluster_name=None):
+    def delete_apps_record_set(self, cluster_name=None, from_base_domain=False):
         """
         Delete apps record set that sometimes blocks sg stack deletion.
             https://github.com/red-hat-storage/ocs-ci/issues/2549
 
         Args:
             cluster_name (str): Name of the cluster
+            from_base_domain (bool): Delete apps record set from base domain
+                created by Flexy
 
         """
         cluster_name = cluster_name or config.ENV_DATA['cluster_name']
         base_domain = config.ENV_DATA['base_domain']
-        hosted_zone_name = f"{cluster_name}.{base_domain}."
+        if from_base_domain:
+            hosted_zone_name = f"{base_domain}."
+        else:
+            hosted_zone_name = f"{cluster_name}.{base_domain}."
         record_set_name = f"\\052.apps.{cluster_name}.{base_domain}."
 
         hosted_zones = self.route53_client.list_hosted_zones_by_name(
@@ -1056,6 +1061,7 @@ class AWS(object):
                 f"app record set not found for record {record_set_name}"
             )
             return
+        logger.info(f"Deleting hosted zone: {record_set_name}")
         self.route53_client.change_resource_record_sets(
             HostedZoneId=hosted_zone_id,
             ChangeBatch={

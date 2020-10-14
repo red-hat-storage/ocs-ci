@@ -809,6 +809,7 @@ class AWSUPIFlexy(AWSBase):
         destroy_volumes(self.cluster_name)
         # Delete apps records
         self.aws.delete_apps_record_set()
+        self.aws.delete_apps_record_set(from_base_domain=True)
 
         super(AWSUPIFlexy, self).destroy_cluster(log_level)
 
