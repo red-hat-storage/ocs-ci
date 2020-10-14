@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    vsphere_platform_required
+    vsphere_platform_required, skip_inconsistent
 )
 from ocs_ci.framework.testlib import (
     MCGTest, tier1, tier2, tier3, acceptance, performance
@@ -70,7 +70,7 @@ class TestBucketIO(MCGTest):
     @pytest.mark.polarion_id("OCS-1949")
     @tier1
     @acceptance
-    def test_data_deduplication(self, mcg_obj, awscli_pod, bucket_factory):
+    def test_mcg_data_deduplication(self, mcg_obj, awscli_pod, bucket_factory):
         """
         Test data deduplication mechanics
         Args:
@@ -94,14 +94,18 @@ class TestBucketIO(MCGTest):
                 ),
                 out_yaml_format=False
             )
-        assert mcg_obj.check_data_reduction(bucketname, 43 * 1024 * 1024), (
+        file_size = int(awscli_pod.exec_cmd_on_pod(
+            command=f'stat - c %s {download_dir}/enwik8',
+            out_yaml_format=False
+        ))
+        assert mcg_obj.check_data_reduction(bucketname, file_size), (
             'Data deduplication did not work as anticipated.'
         )
 
     @pytest.mark.polarion_id("OCS-1949")
     @tier1
     @acceptance
-    def test_data_compression_functionality(self, mcg_obj, awscli_pod, bucket_factory):
+    def test_mcg_data_compression(self, mcg_obj, awscli_pod, bucket_factory):
         """
         Test data reduction mechanics
         Args:
@@ -109,7 +113,7 @@ class TestBucketIO(MCGTest):
             awscli_pod (pod): A pod running the AWSCLI tools
             bucket_factory: Calling this fixture creates a new bucket(s)
         """
-        download_dir = '/aws/reduction/'
+        download_dir = '/aws/compression/'
         awscli_pod.exec_cmd_on_pod(
             command=craft_s3_command(
                 f'cp s3://{constants.TEST_FILES_BUCKET}/enwik8 {download_dir}'
@@ -122,6 +126,8 @@ class TestBucketIO(MCGTest):
         sync_object_directory(
             awscli_pod, download_dir, full_object_path, mcg_obj
         )
+        # The expected amount of data to be compressed according to the snappy
+        # algorithm used by NooBaa.
         assert mcg_obj.check_data_reduction(bucketname, 35 * 1024 * 1024), (
             'Data compression did not work as anticipated.'
         )
@@ -129,6 +135,7 @@ class TestBucketIO(MCGTest):
     @pytest.mark.polarion_id("OCS-1949")
     @tier2
     @performance
+    @skip_inconsistent
     def test_data_reduction_performance(self, mcg_obj, awscli_pod, bucket_factory):
         """
         Test data reduction performance

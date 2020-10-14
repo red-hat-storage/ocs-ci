@@ -310,13 +310,13 @@ class MCG:
             verify=retrieve_verification_mode()
         )
 
-    def check_data_reduction(self, bucketname, amount_reduced):
+    def check_data_reduction(self, bucketname, expected_reduction_in_bytes):
         """
         Checks whether the data reduction on the MCG server works properly
         Args:
             bucketname: An example bucket name that contains compressed/deduped data
-            amount_reduced: amount of data that is supposed to be reduced after data reduction
-            and deduplication.
+            expected_reduction_in_bytes: amount of data that is supposed to be reduced after data
+            compression and deduplication.
 
         Returns:
             bool: True if the data reduction mechanics work, False otherwise
@@ -339,7 +339,7 @@ class MCG:
 
         try:
             for total_size, total_reduced in TimeoutSampler(140, 5, _retrieve_reduction_data):
-                if total_size - total_reduced > amount_reduced:
+                if total_size - total_reduced > expected_reduction_in_bytes:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
                     )
@@ -352,7 +352,7 @@ class MCG:
         except TimeoutExpiredError:
             logger.error(
                 'Data reduction is insufficient. '
-                f'{total_size - total_reduced} bytes reduced out of {amount_reduced}.'
+                f'{total_size - total_reduced} bytes reduced out of {expected_reduction_in_bytes}.'
             )
             assert False
 
