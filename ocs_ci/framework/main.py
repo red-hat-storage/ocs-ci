@@ -64,7 +64,7 @@ def init_ocsci_conf(arguments=None):
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--ocsci-conf', action='append', default=[])
     parser.add_argument(
-        '--ocs-version', action='store', choices=['4.2', '4.3', '4.4', '4.5', '4.6']
+        '--ocs-version', action='store', choices=['4.2', '4.3', '4.4', '4.5', '4.6', '4.7']
     )
     parser.add_argument('--ocs-registry-image')
     parser.add_argument(
