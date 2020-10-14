@@ -5,6 +5,7 @@ from copy import deepcopy
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, tier1
+from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
 from tests.helpers import wait_for_resource_state
 
 log = logging.getLogger(__name__)
@@ -82,6 +83,9 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 setattr(
                     snap_obj, 'md5_sum',
                     deepcopy(getattr(pvc_obj, 'md5_sum', {}))
+                )
+                snap_obj.usage_on_mount = get_used_space_on_mount_point(
+                    pvc_obj.get_attached_pods()[0]
                 )
                 snapshots.append(snap_obj)
                 log.info(f"Created snapshot of PVC {pvc_obj.name} at {usage}%")
@@ -225,3 +229,20 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 f"{restore_pod_obj.pvc.snapshot.md5_sum}"
             )
         log.info("md5sum verified")
+
+        # Verify usage on mount point
+        log.info("Verify usage on new pods")
+        for pod_obj in restore_pod_objs:
+            usage_on_pod = get_used_space_on_mount_point(pod_obj)
+            assert usage_on_pod == pod_obj.pvc.snapshot.usage_on_mount, (
+                f"Usage on mount point is not the expected value on pod "
+                f"{pod_obj.name}. Usage in percentage {usage_on_pod}. "
+                f"Expected usage in percentage "
+                f"{pod_obj.pvc.snapshot.usage_on_mount}"
+            )
+            log.info(
+                f"Verified usage on new pod {pod_obj.name}. Usage in "
+                f"percentage {usage_on_pod}. Expected usage in percentage "
+                f"{pod_obj.pvc.snapshot.usage_on_mount}"
+            )
+        log.info("Verified usage on new pods")
