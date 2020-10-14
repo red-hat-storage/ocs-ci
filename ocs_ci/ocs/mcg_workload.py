@@ -262,6 +262,10 @@ def wait_for_active_pods(job, desired_count, timeout=3):
                 namespace=job_pod['metadata']['namespace']
             )
             log.info(
+                f"Logs from job pod {job_pod['metadata']['name']} are "
+                f"available on DEBUG level"
+            )
+            log.debug(
                 f"Logs from job pod {job_pod['metadata']['name']}: {pod_logs}"
             )
 
