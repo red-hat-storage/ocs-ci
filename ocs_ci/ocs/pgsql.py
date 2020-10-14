@@ -16,7 +16,7 @@ from ocs_ci.ocs import constants
 from subprocess import CalledProcessError
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, get_operator_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
-from tests.helpers import wait_for_resource_state
+from tests.helpers import wait_for_resource_state, create_unique_resource_name
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
@@ -476,7 +476,7 @@ class Postgresql(RipSaw):
         RipSaw.cleanup(self)
 
     def attach_pgsql_pod_to_claim_pvc(
-        self, pvc_objs, postgres_name=None, run_benchmark=True, pgbench_name=None
+        self, pvc_objs, postgres_name, run_benchmark=True, pgbench_name=None
     ):
         """
         Attaches pgsql pod to created claim PVC
@@ -514,7 +514,8 @@ class Postgresql(RipSaw):
 
                 if run_benchmark:
                     pg_data = templating.load_yaml(constants.PGSQL_BENCHMARK_YAML)
-                    pg_data['metadata']['name'] = f"{pgbench_name}" + f"{pvc_objs.index(pvc_obj)}"
+                    pg_data['metadata']['name'] = f"{pgbench_name}" + f"{pvc_objs.index(pvc_obj)}" if \
+                        pgbench_name else create_unique_resource_name('benchmark', 'pgbench')
                     pg_data['spec']['workload']['args']['databases'][0][
                         'host'
                     ] = f"{postgres_name}" + f"{pvc_objs.index(pvc_obj)}-0" + ".postgres"
