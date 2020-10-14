@@ -519,11 +519,6 @@ class CephNode(object):
 
         stdin, stdout, stderr = self.rssh().exec_command("dmesg")
         self.rssh_transport().set_keepalive(15)
-        changepwd = 'echo ' + "'" + self.username + ":" + self.password + "'" \
-                    + "|" + "chpasswd"
-        logger.info("Running command %s", changepwd)
-        stdin, stdout, stderr = self.rssh().exec_command(changepwd)
-        logger.info(stdout.readlines())
         self.rssh().exec_command(
             "echo 120 > /proc/sys/net/ipv4/tcp_keepalive_time")
         self.rssh().exec_command(
@@ -736,19 +731,6 @@ class CephNode(object):
                 continue
         logger.info('No suitable ethernet interface found on {node}'.format(node=ceph_node.ip_address))
         return None
-
-    def write_docker_daemon_json(self, json_text):
-        """
-        Write given string to /etc/docker/daemon/daemon
-        Args:
-            json_text (str): json as string
-
-        """
-        self.exec_command(cmd='sudo mkdir -p /etc/docker/ && sudo chown $USER /etc/docker && chmod 755 /etc/docker')
-        docker_daemon = self.write_file(file_name='/etc/docker/daemon.json', file_mode='w')
-        docker_daemon.write(json_text)
-        docker_daemon.flush()
-        docker_daemon.close()
 
     def obtain_root_permissions(self, path):
         """
