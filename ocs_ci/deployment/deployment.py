@@ -1065,7 +1065,7 @@ def setup_local_storage(storageclass):
         lvd_data = templating.load_yaml(
             constants.LOCAL_VOLUME_DISCOVERY_YAML
         )
-        worker_nodes = get_compute_node_names()
+        worker_nodes = get_compute_node_names(no_replace=True)
 
         # Update local volume discovery data with Worker node Names
         logger.info(
