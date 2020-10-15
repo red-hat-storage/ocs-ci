@@ -70,6 +70,8 @@ def create_pvcs_and_pods(
             status=constants.STATUS_BOUND, num_of_pvc=num_of_rbd_pvc,
             timeout=180
         )
+        for pvc_obj in pvcs_rbd:
+            pvc_obj.interface = constants.CEPHBLOCKPOOL
 
         project = pvcs_rbd[0].project
 
@@ -79,6 +81,9 @@ def create_pvcs_and_pods(
             status=constants.STATUS_BOUND, num_of_pvc=num_of_cephfs_pvc,
             timeout=180
         )
+        for pvc_obj in pvcs_cephfs:
+            pvc_obj.interface = constants.CEPHFILESYSTEM
+
         pvcs = pvcs_cephfs + pvcs_rbd
 
         # Set volume mode on PVC objects
