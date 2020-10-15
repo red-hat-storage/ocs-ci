@@ -371,7 +371,9 @@ def wait_for_pv_backingstore(backingstore_name, namespace=None):
         logger.info(f'Backing Store {backingstore_name} created successfully')
 
 
-def check_pv_backingstore_status(backingstore_name, namespace=None, desired_status=constants.HEALTHY_PV_BS):
+def check_pv_backingstore_status(
+    backingstore_name, namespace=None, desired_status=constants.HEALTHY_PV_BS
+):
     """
     check if existing pv backing store is in OPTIMAL state
 

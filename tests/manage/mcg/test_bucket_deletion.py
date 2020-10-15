@@ -26,6 +26,7 @@ class TestBucketDeletion:
     """
     Test bucket Creation Deletion of buckets
     """
+
     @pytest.mark.parametrize(
         argnames="amount,interface,bucketclass_dict",
         argvalues=[
@@ -89,8 +90,10 @@ class TestBucketDeletion:
             )
         ]
     )
-    def test_bucket_delete(self, verify_rgw_restart_count, mcg_obj, bucket_class_factory,
-                           bucket_factory, amount, interface, bucketclass_dict):
+    def test_bucket_delete(
+        self, verify_rgw_restart_count, mcg_obj, bucket_class_factory,
+        bucket_factory, amount, interface, bucketclass_dict
+    ):
         """
         Test deletion of bucket using the S3 SDK, MCG CLI and OC
         """

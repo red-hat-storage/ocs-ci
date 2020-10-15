@@ -97,7 +97,9 @@ class TestBucketCreation:
             )
         ]
     )
-    def test_bucket_creation(self, bucket_class_factory, bucket_factory, amount, interface, bucketclass_dict):
+    def test_bucket_creation(
+        self, bucket_class_factory, bucket_factory, amount, interface, bucketclass_dict
+    ):
         """
         Test bucket creation using the S3 SDK, OC command or MCG CLI.
         The factory checks the bucket's health by default.

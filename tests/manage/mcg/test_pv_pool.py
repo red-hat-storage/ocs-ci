@@ -19,8 +19,9 @@ class TestPvPool:
     """
     @pytest.mark.polarion_id("OCS-2332")
     @tier3
-    def test_write_to_full_bucket(self, mcg_obj_session, awscli_pod_session,
-                                  bucket_class_factory, bucket_factory):
+    def test_write_to_full_bucket(
+        self, mcg_obj_session, awscli_pod_session, bucket_class_factory, bucket_factory
+    ):
         """
         Test to check the full capacity functionality of a pv based backing store.
         """
