@@ -3,6 +3,7 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, tier1
+from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
 from tests.helpers import wait_for_resource_state, create_pods
 
 log = logging.getLogger(__name__)
@@ -44,25 +45,6 @@ class TestRbdBlockPvcSnapshot(ManageTest):
             pods_for_rwx=1, status=constants.STATUS_RUNNING
         )
 
-    def md5sum(self, pod_obj):
-        """
-        Find md5sum
-
-        Args:
-            pod_obj (Pod): Instance of class Pod
-
-        Returns:
-            str: md5sum value
-
-        """
-        file_path = pod_obj.get_storage_path(storage_type='block')
-        md5sum_cmd_out = pod_obj.exec_cmd_on_pod(
-            command=f"bash -c \"md5sum {file_path}\"", out_yaml_format=False
-        )
-        md5sum = md5sum_cmd_out.split()[0]
-        log.info(f"md5sum of file {file_path} on pod {pod_obj.name}: {md5sum}")
-        return md5sum
-
     def test_rbd_block_pvc_snapshot(
         self, snapshot_factory, snapshot_restore_factory, pod_factory
     ):
@@ -74,7 +56,11 @@ class TestRbdBlockPvcSnapshot(ManageTest):
         log.info("Find initial md5sum value and run IO on all pods")
         for pod_obj in self.pod_objs:
             # Find initial md5sum
-            pod_obj.md5sum_before_io = self.md5sum(pod_obj)
+            pod_obj.md5sum_before_io = cal_md5sum(
+                pod_obj=pod_obj,
+                file_name=pod_obj.get_storage_path(storage_type='block'),
+                block=True
+            )
             pod_obj.run_io(
                 storage_type='block', size=f'{self.pvc_size - 1}G',
                 io_direction='write', runtime=60
@@ -94,7 +80,11 @@ class TestRbdBlockPvcSnapshot(ManageTest):
             "all PVCs"
         )
         for pod_obj in self.pod_objs:
-            md5sum_after_io = self.md5sum(pod_obj)
+            md5sum_after_io = cal_md5sum(
+                pod_obj=pod_obj,
+                file_name=pod_obj.get_storage_path(storage_type='block'),
+                block=True
+            )
             assert pod_obj.md5sum_before_io != md5sum_after_io, (
                 f"md5sum has not changed after IO on pod {pod_obj.name}"
             )
@@ -184,8 +174,10 @@ class TestRbdBlockPvcSnapshot(ManageTest):
         log.info("Verifying md5sum on new pods")
         for pod_obj in restore_pod_objs:
             log.info(f"Verifying md5sum on pod {pod_obj.name}")
-            assert pod_obj.pvc.md5sum == self.md5sum(pod_obj), (
-                f"md5sum mismatch. Pod {pod_obj}"
+            verify_data_integrity(
+                pod_obj=pod_obj,
+                file_name=pod_obj.get_storage_path(storage_type='block'),
+                original_md5sum=pod_obj.pvc.md5sum, block=True
             )
             log.info(f"Verified md5sum on pod {pod_obj.name}")
         log.info("Verified md5sum on all pods")
