@@ -5,9 +5,8 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import deployment, polarion_id
 from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
 from ocs_ci.utility.reporting import get_polarion_id
-from ocs_ci.utility.utils import is_cluster_running
+from ocs_ci.utility.utils import is_cluster_running, run_cmd
 from tests.sanity_helpers import Sanity, SanityExternalCluster
-from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.node import get_osd_running_nodes
 from ocs_ci.ocs.resources.storage_cluster import get_osd_size
 from ocs_ci.ocs.exceptions import UnsupportedFeatureError
@@ -57,7 +56,6 @@ def test_verify_osd_encryption():
     ocs_version = float(config.ENV_DATA['ocs_version'])
     if ocs_version < 4.6:
         error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"
-        log.error(error_message)
         raise UnsupportedFeatureError(error_message)
 
     osd_node_names = get_osd_running_nodes()
@@ -76,8 +74,11 @@ def test_verify_osd_encryption():
         if 'crypt' not in node_lsb:
             raise EnvironmentError('OSD is not encrypted')
         index_crypt = node_lsb.index('crypt')
+        encrypted_component_size = int(
+            (re.findall(r'\d+', node_lsb[index_crypt - 2]))[0]
+        )
         # Verify that OSD is encrypted, and not another component like sda
-        if int((re.findall(r'\d+', node_lsb[index_crypt - 2]))[0]) != osd_size:
+        if encrypted_component_size != osd_size:
             raise EnvironmentError(
                 'The OSD is not encrypted, another mount encrypted.'
             )
