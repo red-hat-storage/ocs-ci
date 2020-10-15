@@ -37,12 +37,12 @@ class MustGather(object):
 
     @property
     def log_type(self):
-        return self.num_of_builds
+        return self.type_log
 
     @log_type.setter
     def log_type(self, type_log):
         if not isinstance(type_log, str):
-            raise ValueError('log type arg must be an string')
+            raise ValueError('log type arg must be a string')
         self.type_log = type_log
 
     def collect_must_gather(self):
@@ -139,18 +139,13 @@ class MustGather(object):
         Print Invalid Files
 
         """
-        error = ''
-        if len(self.empty_files) + len(self.files_not_exist) + len(
-            self.files_content_issue
-        ) != 0:
-            for file in self.files_not_exist:
-                error += f'file not exist:{file}\n'
-            for file in self.empty_files:
-                error += f'empty file:{file}\n'
-            for file in self.files_content_issue:
-                error += f'content issue:{file}\n'
-
-            raise FileNotFoundError(error)
+        if any([self.empty_files, self.files_not_exist, self.files_content_issue]):
+            error = (
+                f"Files don't exist:\n{self.files_not_exist}\n"
+                f"Empty files:\n{self.empty_files}\n"
+                f"Content issues:\n{self.files_content_issue}"
+            )
+            raise Exception(error)
 
     def validate_must_gather(self):
         """
