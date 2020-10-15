@@ -26,7 +26,9 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
 
     """
     @pytest.fixture(autouse=True)
-    def setup(self, project_factory, snapshot_restore_factory, create_pvcs_and_pods):
+    def setup(
+        self, project_factory, snapshot_restore_factory, create_pvcs_and_pods
+    ):
         """
         Create PVCs and pods
 
@@ -76,7 +78,9 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
         )
         for pod_obj in self.pods:
             storage_type = (
-                'block' if pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK else 'fs'
+                'block' if (
+                    pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK
+                ) else 'fs'
             )
             pod_obj.run_io(
                 storage_type=storage_type, size='1G', runtime=30,
@@ -127,7 +131,7 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
         [disruption.delete_proc.result() for disruption in disruption_ops]
 
         # Get snapshots
-        snap_objs =[]
+        snap_objs = []
         for pvc_obj in self.pvcs:
             snap_obj = pvc_obj.snap_proc.result()
             snap_obj.md5sum = pvc_obj.md5sum
@@ -191,6 +195,7 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=300
             )
             pvc_obj.reload()
+            pvc_obj.volume_mode = pvc_obj.data['spec']['volumeMode']
         log.info("Verified: Restored PVCs are Bound.")
 
         restore_pod_objs = []
@@ -198,14 +203,14 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
         # Attach the restored PVCs to pods
         log.info("Attach the restored PVCs to pods")
         for pvc_obj in restore_pvc_objs:
-            if pvc_obj.data['spec']['volumeMode'] == constants.VOLUME_MODE_BLOCK:
+            if pvc_obj.volume_mode == constants.VOLUME_MODE_BLOCK:
                 pod_dict_path = constants.CSI_RBD_RAW_BLOCK_POD_YAML
             else:
                 pod_dict_path = ''
             restore_pod_obj = pod_factory(
                 interface=pvc_obj.interface, pvc=pvc_obj, status='',
                 pod_dict_path=pod_dict_path,
-                raw_block_pv=pvc_obj.data['spec']['volumeMode'] == constants.VOLUME_MODE_BLOCK
+                raw_block_pv=pvc_obj.volume_mode == constants.VOLUME_MODE_BLOCK
             )
             restore_pod_objs.append(restore_pod_obj)
         log.info("Attach the restored PVCs to pods")
@@ -220,11 +225,11 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
         log.info("Verify md5sum")
         for pod_obj in restore_pod_objs:
             file_name_pod = file_name if (
-                pod_obj.pvc.data['spec']['volumeMode'] == constants.VOLUME_MODE_FILESYSTEM
+                pod_obj.pvc.volume_mode == constants.VOLUME_MODE_FILESYSTEM
             ) else pod_obj.get_storage_path(storage_type='block')
             verify_data_integrity(
                 pod_obj, file_name_pod, pod_obj.pvc.snapshot.md5sum,
-                pod_obj.pvc.data['spec']['volumeMode'] == constants.VOLUME_MODE_BLOCK
+                pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK
             )
             log.info(
                 f"Verified: md5sum of {file_name_pod} on pod {pod_obj.name} "
@@ -236,7 +241,9 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
         log.info("Running IO on new pods")
         for pod_obj in restore_pod_objs:
             storage_type = (
-                'block' if pod_obj.pvc.data['spec']['volumeMode'] == constants.VOLUME_MODE_BLOCK else 'fs'
+                'block' if (
+                    pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK
+                ) else 'fs'
             )
             pod_obj.run_io(
                 storage_type=storage_type, size='1G', runtime=20,
