@@ -362,17 +362,16 @@ def ocs_install_verification(
         # a verification of the installation of it will run
         # on all running state pods
         check_fips_enabled()
+    if config.ENV_DATA.get("encryption_at_rest"):
+        osd_encryption_verification()
 
 
 def osd_encryption_verification():
     """
-    osd_encryption_verification
+    Verify if OSD encryption at rest if successfully deployed on OCS
 
-    Returns:
-        bool: True in case no configure encryption mode.
+    :raise: UnsupportedFeatureError, EnvironmentError
     """
-    if not config.ENV_DATA.get("encryption_at_rest"):
-        return True
     ocs_version = float(config.ENV_DATA['ocs_version'])
     if ocs_version < 4.6:
         error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"

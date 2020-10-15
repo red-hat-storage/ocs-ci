@@ -2,9 +2,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import deployment, polarion_id
-from ocs_ci.ocs.resources.storage_cluster import (
-    ocs_install_verification, osd_encryption_verification
-)
+from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
 from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import is_cluster_running
 from tests.sanity_helpers import Sanity, SanityExternalCluster
@@ -25,7 +23,6 @@ def test_deployment(pvc_factory, pod_factory):
                 'ocs_registry_image'
             )
             ocs_install_verification(ocs_registry_image=ocs_registry_image)
-            osd_encryption_verification()
 
             # Check basic cluster functionality by creating resources
             # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
