@@ -1219,13 +1219,17 @@ def get_plugin_pods(interface, namespace=None):
     return plugin_pods
 
 
-def plugin_provisioner_leader(interface, namespace=None):
+def plugin_provisioner_leader(
+    interface, namespace=None, leader_type='provisioner'
+):
     """
     Find csi-cephfsplugin-provisioner or csi-rbdplugin-provisioner leader pod
 
     Args:
         interface (str): Interface type. eg: CephBlockPool, CephFileSystem
         namespace (str): Name of cluster namespace
+        leader_type (str): Parameter to check the lease. eg: 'snapshotter' to
+            select external-snapshotter leader holder
 
     Returns:
         Pod: csi-cephfsplugin-provisioner or csi-rbdplugin-provisioner leader
@@ -1233,10 +1237,21 @@ def plugin_provisioner_leader(interface, namespace=None):
 
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    leader_types = {
+        'provisioner': namespace,
+        'snapshotter': f'external-snapshotter-leader-{namespace}',
+        'resizer': f'external-resizer-{namespace}',
+        'attacher': f'external-attacher-{namespace}'
+    }
     if interface == constants.CEPHBLOCKPOOL:
-        lease_cmd = "get leases openshift-storage-rbd-csi-ceph-com -o yaml"
+        lease_cmd = (
+            f"get leases {leader_types[leader_type]}-rbd-csi-ceph-com -o yaml"
+        )
     if interface == constants.CEPHFILESYSTEM:
-        lease_cmd = "get leases openshift-storage-cephfs-csi-ceph-com -o yaml"
+        lease_cmd = (
+            f"get leases {leader_types[leader_type]}-cephfs-csi-ceph-com "
+            "-o yaml"
+        )
 
     ocp_obj = ocp.OCP(kind=constants.POD, namespace=namespace)
     lease = ocp_obj.exec_oc_cmd(command=lease_cmd)

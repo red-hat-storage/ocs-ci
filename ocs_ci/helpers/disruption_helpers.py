@@ -23,7 +23,7 @@ class Disruptions:
     selector = None
     daemon_pid = None
 
-    def set_resource(self, resource):
+    def set_resource(self, resource, leader_type='provisioner'):
         self.resource = resource
         resource_count = 0
         if self.resource == "mgr":

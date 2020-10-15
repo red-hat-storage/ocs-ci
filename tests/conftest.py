@@ -2900,6 +2900,7 @@ def snapshot_restore_factory(request):
                 constants.CEPHFILESYSTEM
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_CEPHFS_PVC_RESTORE_YAML
+            interface = constants.CEPHFILESYSTEM
         restored_pvc = create_restore_pvc(
             sc_name=storageclass.name,
             snap_name=snapshot_obj.name,
@@ -2912,6 +2913,7 @@ def snapshot_restore_factory(request):
         )
         instances.append(restored_pvc)
         restored_pvc.snapshot = snapshot_obj
+        restored_pvc.interface = interface
         if status:
             helpers.wait_for_resource_state(restored_pvc, status)
         return restored_pvc
