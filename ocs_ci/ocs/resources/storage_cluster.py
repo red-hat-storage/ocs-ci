@@ -370,7 +370,9 @@ def osd_encryption_verification():
     """
     Verify if OSD encryption at rest if successfully deployed on OCS
 
-    :raise: UnsupportedFeatureError, EnvironmentError
+    Raises:
+        UnsupportedFeatureError: OCS version is smaller than 4.6
+        EnvironmentError: The OSD is not encrypted
     """
     ocs_version = float(config.ENV_DATA['ocs_version'])
     if ocs_version < 4.6:
