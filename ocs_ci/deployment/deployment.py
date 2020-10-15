@@ -561,6 +561,11 @@ class Deployment(object):
                         }
                     cluster_data['spec']['resources'] = resources
 
+            cluster_data['spec']['resources']['noobaa-endpoint'] = {
+                'limits': {'cpu': 1, 'memory': '500Mi'},
+                'requests': {'cpu': 1, 'memory': '500Mi'}
+            }
+
         # Enable host network if enabled in config (this require all the
         # rules to be enabled on underlaying platform).
         if config.DEPLOYMENT.get('host_network'):
