@@ -214,6 +214,7 @@ DEFAULT_VOLUMESNAPSHOTCLASS_RBD = f'{DEFAULT_CLUSTERNAME}-rbdplugin-snapclass'
 ADMIN_USER = 'admin'
 GB = 1024 ** 3
 GB2KB = 1024 ** 2
+GB2MB = 1024
 
 # Reclaim Policy
 RECLAIM_POLICY_RETAIN = 'Retain'
