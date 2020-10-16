@@ -7,6 +7,7 @@ from .aws import AWSIPI, AWSUPI, AWSUPIFlexy
 from .azure import AZUREIPI
 from .gcp import GCPIPI
 from .vmware import VSPHEREUPI
+from .rhv import RHVIPI
 from .baremetal import BAREMETALUPI, BaremetalPSIUPI
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class DeploymentFactory(object):
             "aws_upi_flexy": AWSUPIFlexy,
             "azure_ipi": AZUREIPI,
             "vsphere_upi": VSPHEREUPI,
+            "rhv_ipi": RHVIPI,
             "baremetalpsi_upi_flexy": BaremetalPSIUPI,
             "baremetal_upi": BAREMETALUPI,
             "gcp_ipi": GCPIPI,
