@@ -327,11 +327,20 @@ class ClusterLoad:
         """
         now = datetime.now
         timestamp = datetime.timestamp
-        return float(
-            self.prometheus_api.query(
-                query, str(timestamp(now())), mute_logs=mute_logs
-            )[0]['value'][1]
-        )
+
+        counter = 0
+        while counter < 5:
+            counter += 1
+            try:
+                query_result = float(
+                    self.prometheus_api.query(
+                        query, str(timestamp(now())), mute_logs=mute_logs
+                    )[0]['value'][1]
+                )
+                return query_result
+            except IndexError:
+                logger.error(f"Failed to get Prometheus query")
+                time.sleep(5)
 
     def calc_trim_metric_mean(self, metric, samples=5, mute_logs=False):
         """
