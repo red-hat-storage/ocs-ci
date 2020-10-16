@@ -73,15 +73,6 @@ class PlatformNodesFactory:
         return self.cls_map[platform]()
 
 
-class RHVNodes(object):
-    """
-    A base class for nodes related operations
-    for RHV
-    """
-    def __init__(self):
-        logger.info("RHV API")
-
-
 class NodesBase(object):
     """
     A base class for nodes related operations.
@@ -175,6 +166,16 @@ class NodesBase(object):
             default_config_dict = yaml.safe_load(f)
 
         return default_config_dict
+
+
+class RHVNodes(object):
+    """
+    A base class for nodes related operations
+    for RHV
+    """
+
+    def __init__(self):
+        logger.info("RHV API")
 
 
 class VMWareNodes(NodesBase):
