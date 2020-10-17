@@ -95,7 +95,7 @@ class TestCloneWhenFull(ManageTest):
             )
             log.info(
                 f"Attached the PVC {clone_pvc_obj.name} to pod "
-                f"{clone_pvc_obj.name}"
+                f"{clone_pod_obj.name}"
             )
             clone_pod_objs.append(clone_pod_obj)
 
@@ -117,7 +117,7 @@ class TestCloneWhenFull(ManageTest):
                 pod_obj.pvc.parent.md5sum
             )
             log.info(
-                f"Verified: md5sum of {file_name} on pod {pod_obj} "
+                f"Verified: md5sum of {file_name} on pod {pod_obj.name} "
                 f"matches with the original md5sum"
             )
 
