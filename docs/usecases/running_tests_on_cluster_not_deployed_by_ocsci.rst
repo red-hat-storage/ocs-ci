@@ -156,6 +156,29 @@ GCP       ``~/.gcp/osServiceAccount.json``
 See also description of credentials setup in :doc:`/getting_started` guide,
 including additional files in ``ocs-ci/data/`` directory.
 
+Access to cloud object storage (MCG only)
+-----------------------------------------
+
+If you are going to run some of `MCG test cases`_, you also need to create
+``data/auth.yaml`` file inside of ocs-ci directory, with credentials for cloud
+object storage accounts used by MCG.
+
+Minimal structure of the ``auth.yaml`` file is currently described in `this
+github comment
+<https://github.com/red-hat-storage/ocs-ci/issues/2649#issuecomment-671037451>`_.
+
+.. note::
+
+    Known issues related to ``auth.yaml`` file:
+
+    - `#2649`_ Document changes to auth.yaml to be used by CloudManager
+    - `#2623`_ Pick a source of truth for auth.yaml
+
+.. _`MCG test cases`: https://github.com/red-hat-storage/ocs-ci/tree/master/tests/manage/mcg
+.. _`#2649`: https://github.com/red-hat-storage/ocs-ci/issues/2649
+.. _`#2623`: https://github.com/red-hat-storage/ocs-ci/issues/2623
+
+
 What if I need to run tests on a new platform?
 ----------------------------------------------
 
