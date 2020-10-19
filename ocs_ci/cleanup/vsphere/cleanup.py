@@ -25,6 +25,41 @@ logging.basicConfig(format=FORMAT, level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
+def delete_cluster(vsphere, cluster_name):
+    """
+    Deletes the cluster
+
+    Args:
+        vsphere (instance): vSphere instance
+        cluster_name (str): Cluster name to delete from Data center
+
+    """
+    datacenter = config.ENV_DATA['vsphere_datacenter']
+    cluster = config.ENV_DATA['vsphere_cluster']
+
+    # check for Resource pool
+    if not vsphere.is_resource_pool_exist(cluster_name, datacenter, cluster):
+        logger.info(f"Resource pool {cluster_name} does not exists")
+        return
+
+    # Get all VM's in resource pool
+    vms = vsphere.get_all_vms_in_pool(cluster_name, datacenter, cluster)
+    if not vms:
+        logger.info(f"There is no VM's in resource pool {cluster_name}")
+        return
+
+    # Delete the disks
+    logger.info("Deleting disks from VM's")
+    vm_names = []
+    for vm in vms:
+        vm_names.append(vm.name)
+        vsphere.remove_disks(vm)
+    config.ENV_DATA["vm_names"] = vm_names
+
+    # delete the resource pool
+    vsphere.destroy_pool(cluster_name, datacenter, cluster)
+
+
 def get_vsphere_connection(server, user, password):
     """
     Establish connection to vSphere
@@ -108,3 +143,6 @@ def vsphere_cleanup():
     user = config.ENV_DATA['vsphere_user']
     password = config.ENV_DATA['vsphere_password']
     vsphere = get_vsphere_connection(server, user, password)
+
+    # delete the cluster
+    delete_cluster(vsphere, cluster_name)
