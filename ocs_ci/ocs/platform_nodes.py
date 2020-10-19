@@ -290,6 +290,9 @@ class VMWareNodes(NodesBase):
 
         self.vsphere.restart_vms(vms, force=force)
 
+        logger.info(f"Waiting for 30 seconds...")
+        time.sleep(30)
+
         if wait:
             """
             When reboot is initiated on a VM from the VMware, the VM
@@ -526,6 +529,10 @@ class AWSNodes(NodesBase):
             )
 
         self.aws.restart_ec2_instances(instances=instances)
+    
+        logger.info(f"Waiting for 30 seconds...")
+        time.sleep(30)
+
         if wait:
             """
             When reboot is initiated on an instance from the AWS, the
