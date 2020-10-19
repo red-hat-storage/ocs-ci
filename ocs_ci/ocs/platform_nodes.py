@@ -306,6 +306,10 @@ class VMWareNodes(NodesBase):
                 timeout=timeout
             )
             for node in nodes:
+                reboot_events_cmd = (
+                    f"get events -A --field-selector involvedObject.name="
+                    f"{node.name},reason=Rebooted -o yaml"
+                )
                 num_events_post_reboot.append(
                     len(node.ocp.exec_oc_cmd(reboot_events_cmd)['items'])
                 )
@@ -546,6 +550,10 @@ class AWSNodes(NodesBase):
                 timeout=timeout
             )
             for node in nodes:
+                reboot_events_cmd = (
+                    f"get events -A --field-selector involvedObject.name="
+                    f"{node.name},reason=Rebooted -o yaml"
+                )
                 num_events_post_reboot.append(
                     len(node.ocp.exec_oc_cmd(reboot_events_cmd)['items'])
                 )
