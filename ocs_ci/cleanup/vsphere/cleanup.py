@@ -206,3 +206,10 @@ def vsphere_cleanup():
     # Delete AWS route
     aws = AWS()
     aws.delete_hosted_zone(cluster_name=cluster_name)
+
+    # Delete records in base domain
+    base_domain = config.ENV_DATA['base_domain']
+    aws.delete_record_from_base_domain(
+        cluster_name=cluster_name,
+        base_domain=base_domain
+    )
