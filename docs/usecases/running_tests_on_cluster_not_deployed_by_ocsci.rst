@@ -2,7 +2,7 @@ How to execute tests on a cluster not deployed by ocs-ci?
 =========================================================
 
 Running ocs-ci test cases on clusters not deployed by ocs-ci itself is
-possible, but because ocs-ci was not designed with this use case in
+possible, but because ocs-ci was not maintained with this use case in
 mind, it requires few additional steps as explained below. Without
 paying attention to these details, test run could fail or report invalid
 results (both false negative or false positive results are possible).
