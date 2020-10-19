@@ -1389,23 +1389,59 @@ class AWS(object):
                 self.delete_record(each_record, hosted_zone_id)
         logger.info("Successfully deleted all record sets")
 
+    def delete_record_from_base_domain(self, cluster_name, base_domain=None):
+        """
+        Deletes the record for cluster name in base domain
+
+        Args:
+            cluster_name (str): Name of the cluster
+            base_domain (str): Base domain name
+
+        """
+        base_domain = base_domain or config.ENV_DATA['base_domain']
+        record_name = f"{cluster_name}.{base_domain}."
+        hosted_zones = self.route53_client.list_hosted_zones_by_name(
+            DNSName=base_domain,
+            MaxItems='1'
+        )['HostedZones']
+        hosted_zone_ids = [
+            zone['Id'] for zone in hosted_zones
+            if zone['Name'] == f"{base_domain}."
+        ]
+        hosted_zone_id = hosted_zone_ids[0]
+        record_sets_in_base_domain = (
+            self.route53_client.list_resource_record_sets(
+                HostedZoneId=hosted_zone_id
+            )['ResourceRecordSets']
+        )
+
+        for record in record_sets_in_base_domain:
+            if record['Name'] == record_name:
+                logger.info(
+                    f"Deleting record {record_name} from {base_domain}"
+                )
+                self.delete_record(record, hosted_zone_id)
+                # breaking here since we will have single record in
+                # base domain and deleting is destructive action
+                break
+
     def delete_record(self, record, hosted_zone_id):
         """
         Deletes the record from Hosted Zone
 
         Args:
             record (dict): record details to delete
-                example: {
-                            'Name': 'vavuthu-eco1.qe.rh-ocs.com.',
-                            'Type': 'NS',
-                            'TTL': 300,
-                            'ResourceRecords': [
-                                {'Value': 'ns-1389.awsdns-45.org'},
-                                {'Value': 'ns-639.awsdns-15.net'},
-                                {'Value': 'ns-1656.awsdns-15.co.uk'},
-                                {'Value': 'ns-183.awsdns-22.com'}
-                            ]
-                        }
+                e.g:{
+                'Name': 'vavuthu-eco1.qe.rh-ocs.com.',
+                'Type': 'NS',
+                'TTL': 300,
+                'ResourceRecords':[
+                {'Value': 'ns-1389.awsdns-45.org'},
+                {'Value': 'ns-639.awsdns-15.net'},
+                {'Value': 'ns-1656.awsdns-15.co.uk'},
+                {'Value': 'ns-183.awsdns-22.com'}
+                ]
+                }
             hosted_zone_id (str): Hosted Zone ID
                 example: /hostedzone/Z91022921MMOZDVPPC8D6
 
