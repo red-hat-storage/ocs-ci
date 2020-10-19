@@ -273,17 +273,15 @@ class VMWareNodes(NodesBase):
         """
         num_events_pre_reboot, num_events_post_reboot = ([] for i in range(2))
         vms = self.get_vms(nodes)
-        node = nodes[0]
         assert vms, (
             f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
         )
 
-        reboot_events_cmd = (
-            f"get events -A --field-selector involvedObject.name="
-            f"{node.name},reason=Rebooted -o yaml"
-        )
-
         for node in nodes:
+            reboot_events_cmd = (
+                f"get events -A --field-selector involvedObject.name="
+                f"{node.name},reason=Rebooted -o yaml"
+            )
             num_events_pre_reboot.append(
                 len(node.ocp.exec_oc_cmd(reboot_events_cmd)['items'])
             )
@@ -513,17 +511,16 @@ class AWSNodes(NodesBase):
         """
         num_events_pre_reboot, num_events_post_reboot = ([] for i in range(2))
         instances = self.get_ec2_instances(nodes)
-        node = nodes[0]
         assert instances, (
             f"Failed to get the EC2 instances for "
             f"nodes {[n.name for n in nodes]}"
         )
 
-        reboot_events_cmd = (
-            f"get events -A --field-selector involvedObject.name="
-            f"{node.name},reason=Rebooted -o yaml"
-        )
         for node in nodes:
+            reboot_events_cmd = (
+                f"get events -A --field-selector involvedObject.name="
+                f"{node.name},reason=Rebooted -o yaml"
+            )
             num_events_pre_reboot.append(
                 len(node.ocp.exec_oc_cmd(reboot_events_cmd)['items'])
             )
