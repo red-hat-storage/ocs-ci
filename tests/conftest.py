@@ -2596,9 +2596,10 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
         for dc in dc_pods_res:
             pod_obj = dc.result()
             if create_rbd_block_rwx_pod:
-                logging.info(f"#### setting attribute pod_type since"
-                             f" create_rbd_block_rwx_pod = {create_rbd_block_rwx_pod}"
-                             )
+                log.info(
+                    "#### setting attribute pod_type since "
+                    f"create_rbd_block_rwx_pod = {create_rbd_block_rwx_pod}"
+                )
                 setattr(pod_obj, 'pod_type', 'rbd_block_rwx')
             else:
                 setattr(pod_obj, 'pod_type', '')
