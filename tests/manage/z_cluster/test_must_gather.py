@@ -69,7 +69,26 @@ class TestMustGather(ManageTest):
 
         request.addfinalizer(finalizer)
 
+<<<<<<< HEAD
     def test_must_gather(self):
+=======
+    @tier1
+    @pytest.mark.parametrize(
+        argnames=['log_type'],
+        argvalues=[
+            pytest.param(
+                *['CEPH'], marks=pytest.mark.polarion_id("OCS-XXX1")
+            ),
+            pytest.param(
+                *['JSON'], marks=pytest.mark.polarion_id("OCS-XXX2")
+            ),
+            pytest.param(
+                *['OTHERS'], marks=pytest.mark.polarion_id("OCS-XXX3")
+            ),
+        ]
+    )
+    def test_must_gather(self, log_type):
+>>>>>>> Change lists content (name of files)
         """
         Tests functionality of: oc adm must-gather
         """

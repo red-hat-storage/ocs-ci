@@ -10,7 +10,7 @@ from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.ocs.must_gather.const_must_gather import (
     GATHER_COMMANDS_CEPH,
     GATHER_COMMANDS_JSON,
-    GATHER_COMMANDS_OC_OUTPUT
+    GATHER_COMMANDS_OTHERS
 )
 
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 TYPE_LOG = {
     'CEPH': GATHER_COMMANDS_CEPH,
     'JSON': GATHER_COMMANDS_JSON,
-    'OC_OUTPUT': GATHER_COMMANDS_OC_OUTPUT
+    'OTHERS': GATHER_COMMANDS_OTHERS
 }
 
 
