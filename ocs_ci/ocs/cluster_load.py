@@ -10,6 +10,7 @@ import math
 
 from range_key_dict import RangeKeyDict
 
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.utils import get_trim_mean
 from ocs_ci.utility import templating
@@ -313,6 +314,7 @@ class ClusterLoad:
         logger.info(wrap_msg(msg))
         self.target_pods_number = len(self.dc_objs)
 
+    @retry(IndexError, tries=5, delay=5, backoff=1)
     def get_query(self, query, mute_logs=False):
         """
         Get query from Prometheus and parse it
@@ -327,20 +329,11 @@ class ClusterLoad:
         """
         now = datetime.now
         timestamp = datetime.timestamp
-
-        counter = 0
-        while counter < 5:
-            counter += 1
-            try:
-                query_result = float(
-                    self.prometheus_api.query(
-                        query, str(timestamp(now())), mute_logs=mute_logs
-                    )[0]['value'][1]
-                )
-                return query_result
-            except IndexError:
-                logger.error(f"Failed to get Prometheus query")
-                time.sleep(5)
+        return float(
+            self.prometheus_api.query(
+                query, str(timestamp(now())), mute_logs=mute_logs
+            )[0]['value'][1]
+        )
 
     def calc_trim_metric_mean(self, metric, samples=5, mute_logs=False):
         """
