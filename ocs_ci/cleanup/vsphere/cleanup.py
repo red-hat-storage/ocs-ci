@@ -80,6 +80,58 @@ def get_vsphere_connection(server, user, password):
     return vsphere
 
 
+class IPAM(object):
+    """
+    IPAM class
+    """
+    def __init__(self):
+        """
+        Initialize required variables
+        """
+        self.ipam = config.ENV_DATA['ipam']
+        self.token = config.ENV_DATA['ipam_token']
+        self.base_domain = config.ENV_DATA['base_domain']
+        self.cluster_name = config.ENV_DATA['vsphere_cluster']
+        self.apiapp = "address"
+
+    def delete_ips(self, cluster_name):
+        """
+        Delete IP's from IPAM server
+
+        Args:
+            cluster_name (str): Name of the cluster to release IP's
+                from IPAM server
+
+        """
+        # Form the FQDN for the nodes
+        all_nodes = []
+        nodes = config.ENV_DATA['vm_names']
+        for node in nodes:
+            node_fqdn = (
+                f"{node}.{cluster_name}.{config.ENV_DATA['base_domain']}"
+            )
+            all_nodes.append(node_fqdn)
+
+        logger.info(f"Removing IP's for nodes {all_nodes} from IPAM server")
+        # release the IPs
+        endpoint = os.path.join(
+            "http://",
+            self.ipam,
+            "api/removeHost.php?"
+        )
+        for node in all_nodes:
+            payload = {
+                "apiapp": self.apiapp,
+                "apitoken": self.token,
+                "host": node
+            }
+            res = requests.post(endpoint, data=payload)
+            if res.status_code == "200":
+                logger.info(
+                    f"Successfully deleted {node} IP from IPAM server"
+                )
+
+
 def vsphere_cleanup():
     """
     Deletes the cluster and all the associated resources
@@ -146,3 +198,7 @@ def vsphere_cleanup():
 
     # delete the cluster
     delete_cluster(vsphere, cluster_name)
+
+    # release IP's from IPAM server
+    ipam = IPAM()
+    ipam.delete_ips(cluster_name=cluster_name)
