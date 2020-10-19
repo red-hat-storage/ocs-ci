@@ -1,13 +1,13 @@
-import logging
+import datetime
 import json
-from ocs_ci.ocs.exceptions import CommandFailed
+import logging
 from select import select
 from time import sleep
 
-import datetime
 import paramiko
 from paramiko.ssh_exception import SSHException
 
+from ocs_ci.ocs.exceptions import CommandFailed
 
 logger = logging.getLogger(__name__)
 
@@ -54,12 +54,14 @@ class Ceph(object):
     def get_nodes(self, role=None, ignore=None):
         """
         Get node(s) by role. Return all nodes if role is not defined
+
         Args:
             role (str, RolesContainer): node's role. Takes precedence over ignore
             ignore (str, RolesContainer): node's role to ignore from the list
 
         Returns:
             list: nodes
+
         """
         if role:
             return [node for node in self.node_list if node.role == role]
@@ -72,11 +74,13 @@ class Ceph(object):
         """
         Get Ceph Object by role. Returns all objects if role is not defined. Ceph object can be Ceph demon, client,
         installer or generic entity. Pool role is never assigned to Ceph object and means that node has no Ceph objects
+
         Args:
             role (str): Ceph object's role as str
 
         Returns:
             list: ceph objects
+
         """
         node_list = self.get_nodes(role)
         ceph_object_list = []
@@ -88,6 +92,7 @@ class Ceph(object):
         """
         Returns single ceph object. If order id is provided returns that occurrence from results list, otherwise returns
         first occurrence
+
         Args:
             role(str): Ceph object's role
             order_id(int): order number of the ceph object
@@ -104,6 +109,7 @@ class Ceph(object):
     def get_ceph_demons(self, role=None):
         """
         Get Ceph demons list
+
         Returns:
             list: list of CephDemon
 
@@ -118,8 +124,10 @@ class Ceph(object):
     def ceph_demon_stat(self):
         """
         Retrieves expected numbers for demons of each role
+
         Returns:
             dict: Ceph demon stats
+
         """
         ceph_demon_counter = {}
         for demon in self.get_ceph_demons():
@@ -133,12 +141,14 @@ class Ceph(object):
     def get_metadata_list(self, role, client=None):
         """
         Returns metadata for demons of specified role
+
         Args:
             role(str): ceph demon role
             client(CephObject): Client with keyring and ceph-common
 
         Returns:
             list: metadata as json object representation
+
         """
         if not client:
             client = self.get_ceph_object('client') if self.get_ceph_object('client') else self.get_ceph_object('mon')
@@ -150,6 +160,7 @@ class Ceph(object):
     def get_osd_metadata(self, osd_id, client=None):
         """
         Retruns metadata for osd by given id
+
         Args:
             osd_id(int): osd id
             client(CephObject): Client with keyring and ceph-common
@@ -167,23 +178,6 @@ class Ceph(object):
                     "ceph_version": "ceph version 12.2.5-42.el7cp (82d52d7efa6edec70f6a0fc306f40b89265535fb) luminous
                             (stable)",
                     "cpu": "Intel(R) Xeon(R) CPU E5-2690 v3 @ 2.60GHz",
-                    "default_device_class": "hdd",
-                    "distro": "rhel",
-                    "distro_description": "Red Hat Enterprise Linux",
-                    "distro_version": "7.5",
-                    "filestore_backend": "xfs",
-                    "filestore_f_type": "0x58465342",
-                    "front_addr": "172.16.115.29:6800/1672",
-                    "front_iface": "eth0",
-                    "hb_back_addr": "172.16.115.29:6802/1672",
-                    "hb_front_addr": "172.16.115.29:6803/1672",
-                    "hostname": "ceph-shmohan-1537910194970-node2-osd",
-                    "journal_rotational": "1",
-                    "kernel_description": "#1 SMP Wed Mar 21 18:14:51 EDT 2018",
-                    "kernel_version": "3.10.0-862.el7.x86_64",
-                    "mem_swap_kb": "0",
-                    "mem_total_kb": "3880928",
-                    "os": "Linux",
                     "osd_data": "/var/lib/ceph/osd/ceph-8",
                     "osd_journal": "/var/lib/ceph/osd/ceph-8/journal",
                     "osd_objectstore": "filestore",
@@ -199,6 +193,7 @@ class Ceph(object):
 
     def get_osd_container_name_by_id(self, osd_id, client=None):
         """
+
         Args:
             osd_id (int): osd id
             client (CephObject): Client with keyring and ceph-common:
@@ -329,6 +324,7 @@ class RolesContainer(object):
     Container for single or multiple node roles.
     Can be used as iterable or with equality '==' operator to check if role is present for the node.
     Note that '==' operator will behave the same way as 'in' operator i.e. check that value is present in the role list.
+
     """
 
     def __init__(self, role='pool'):
@@ -400,10 +396,10 @@ class SSHConnectionManager(object):
         self.username = username
         self.password = password
         self.look_for_keys = look_for_keys
-        self.__client = paramiko.SSHClient()
-        self.__client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self.__transport = None
-        self.__outage_start_time = None
+        self._client = paramiko.SSHClient()
+        self._client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self._transport = None
+        self._outage_start_time = None
         self.outage_timeout = datetime.timedelta(seconds=outage_timeout)
 
     @property
@@ -411,36 +407,38 @@ class SSHConnectionManager(object):
         return self.get_client()
 
     def get_client(self):
-        if not (self.__transport and self.__transport.is_active()):
-            self.__connect()
-            self.__transport = self.__client.get_transport()
+        if not (self._transport and self._transport.is_active()):
+            self._connect()
+            self._transport = self._client.get_transport()
 
-        return self.__client
+        return self._client
 
-    def __connect(self):
+    def _connect(self):
         while True:
             try:
-                self.__client.connect(self.ip_address,
-                                      username=self.username,
-                                      password=self.password,
-                                      look_for_keys=self.look_for_keys)
+                self._client.connect(
+                    self.ip_address,
+                    username=self.username,
+                    password=self.password,
+                    look_for_keys=self.look_for_keys
+                )
                 break
             except Exception as e:
-                logger.warn('Connection outage: \n{error}'.format(error=e))
-                if not self.__outage_start_time:
-                    self.__outage_start_time = datetime.datetime.now()
-                if datetime.datetime.now() - self.__outage_start_time > self.outage_timeout:
+                logger.warning('Connection outage: \n{error}'.format(error=e))
+                if not self._outage_start_time:
+                    self._outage_start_time = datetime.datetime.now()
+                if datetime.datetime.now() - self._outage_start_time > self.outage_timeout:
                     raise e
                 sleep(10)
-        self.__outage_start_time = None
+        self._outage_start_time = None
 
     @property
     def transport(self):
         return self.get_transport()
 
     def get_transport(self):
-        self.__transport = self.client.get_transport()
-        return self.__transport
+        self._transport = self.client.get_transport()
+        return self._transport
 
     def __getstate__(self):
         pickle_dict = self.__dict__.copy()
@@ -500,6 +498,7 @@ class CephNode(object):
     def get_ceph_demons(self, role=None):
         """
          Get Ceph demons list. Only active (those which will be part of the cluster) demons are shown.
+
          Returns:
              list: list of CephDemon
 
@@ -546,6 +545,7 @@ class CephNode(object):
     def set_internal_ip(self):
         """
         set the internal ip of the vm which differs from floating ip
+
         """
         out, _ = self.exec_command(
             cmd="/sbin/ifconfig eth0 | grep 'inet ' | awk '{ print $2}'")
@@ -554,6 +554,7 @@ class CephNode(object):
     def set_eth_interface(self, eth_interface):
         """
         set the eth interface
+
         """
         self.eth_interface = eth_interface
 
@@ -644,15 +645,15 @@ class CephNode(object):
         pass
 
     def __getstate__(self):
-        d = dict(self.__dict__)
-        del d['vm_node']
-        del d['rssh']
-        del d['ssh']
-        del d['rssh_transport']
-        del d['ssh_transport']
-        del d['root_connection']
-        del d['connection']
-        return d
+        node_info = dict(self.__dict__)
+        del node_info['vm_node']
+        del node_info['rssh']
+        del node_info['ssh']
+        del node_info['rssh_transport']
+        del node_info['ssh_transport']
+        del node_info['root_connection']
+        del node_info['connection']
+        return node_info
 
     def __setstate__(self, pickle_dict):
         self.__dict__.update(pickle_dict)
@@ -666,6 +667,7 @@ class CephNode(object):
     def get_ceph_objects(self, role=None):
         """
         Get Ceph objects list on the node
+
         Args:
             role(str): Ceph object role
 
@@ -678,6 +680,7 @@ class CephNode(object):
     def create_ceph_object(self, role):
         """
         Create ceph object on the node
+
         Args:
             role(str): ceph object role
 
@@ -692,6 +695,7 @@ class CephNode(object):
     def remove_ceph_object(self, ceph_object):
         """
         Removes ceph object form the node
+
         Args:
             ceph_object(CephObject): ceph object to remove
 
@@ -721,11 +725,17 @@ class CephNode(object):
                         logger.info("Skipping ping check on localhost")
                         continue
                     self.exec_command(
-                        cmd='sudo ping -I {interface} -c 3 {ceph_node}'.format(interface=eth_interface,
-                                                                               ceph_node=ceph_node.shortname))
+                        cmd='sudo ping -I {interface} -c 3 {ceph_node}'.format(
+                            interface=eth_interface,
+                            ceph_node=ceph_node.shortname
+                        )
+                    )
                 logger.info(
-                    'Suitable ethernet interface {eth_interface} found on {node}'.format(eth_interface=eth_interface,
-                                                                                         node=ceph_node.ip_address))
+                    'Suitable ethernet interface {eth_interface} found on {node}'.format(
+                        eth_interface=eth_interface,
+                        node=ceph_node.ip_address
+                    )
+                )
                 return eth_interface
             except Exception:
                 continue
@@ -735,6 +745,7 @@ class CephNode(object):
     def obtain_root_permissions(self, path):
         """
         Transfer ownership of root to current user for the path given. Recursive.
+
         Args:
             path(str): file path
 
@@ -746,6 +757,7 @@ class CephObject(object):
     def __init__(self, role, node):
         """
         Generic Ceph object, works as proxy to exec_command method
+
         Args:
             role (str): role string
             node (CephNode): node object
@@ -761,6 +773,7 @@ class CephObject(object):
     def exec_command(self, cmd, **kw):
         """
         Proxy to node's exec_command
+
         Args:
             cmd(str): command to execute
             **kw: options
@@ -774,6 +787,7 @@ class CephObject(object):
     def write_file(self, **kw):
         """
         Proxy to node's write file
+
         Args:
             **kw: options
 
@@ -788,6 +802,7 @@ class CephDemon(CephObject):
     def __init__(self, role, node):
         """
         Ceph demon representation. Can be containerized.
+
         Args:
             role(str): Ceph demon type
             node(CephNode): node object
@@ -795,17 +810,17 @@ class CephDemon(CephObject):
         """
         super(CephDemon, self).__init__(role, node)
         self.containerized = None
-        self.__custom_container_name = None
+        self._custom_container_name = None
         self.is_active = True
 
     @property
     def container_name(self):
         return ('ceph-{role}-{host}'.format(role=self.role, host=self.node.hostname)
-                if not self.__custom_container_name else self.__custom_container_name) if self.containerized else ''
+                if not self._custom_container_name else self._custom_container_name) if self.containerized else ''
 
     @container_name.setter
     def container_name(self, name):
-        self.__custom_container_name = name
+        self._custom_container_name = name
 
     @property
     def container_prefix(self):
@@ -815,6 +830,7 @@ class CephDemon(CephObject):
     def exec_command(self, cmd, **kw):
         """
         Proxy to node's exec_command with wrapper to run commands inside the container for containerized demons
+
         Args:
             cmd(str): command to execute
             **kw: options
@@ -833,6 +849,7 @@ class CephOsd(CephDemon):
     def __init__(self, node, device=None):
         """
         Represents single osd instance associated with a device.
+
         Args:
             node (CephNode): ceph node
             device (str): device, can be left unset but must be set during inventory file configuration
@@ -858,6 +875,7 @@ class CephClient(CephObject):
     def __init__(self, role, node):
         """
         Ceph client representation, works as proxy to exec_command method.
+
         Args:
             role(str): role string
             node(CephNode): node object
@@ -873,6 +891,7 @@ class CephObjectFactory(object):
     def __init__(self, node):
         """
         Factory for Ceph objects.
+
         Args:
             node: node object
 
@@ -882,6 +901,7 @@ class CephObjectFactory(object):
     def create_ceph_object(self, role):
         """
         Create an appropriate Ceph object by role
+
         Args:
             role: role string
 

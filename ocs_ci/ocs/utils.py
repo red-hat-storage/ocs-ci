@@ -797,7 +797,6 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
             allows better naming for folders under logs directory
 
     """
-    return
     if not (
         'KUBECONFIG' in os.environ
         or os.path.exists(os.path.expanduser('~/.kube/config'))
@@ -924,6 +923,9 @@ def oc_get_all_obc_names():
 
 def get_external_mode_rhcs():
     """
+    Get external cluster info from config and obtain
+    external cluster object
+
 
     Returns:
         external_ceph.Ceph object
