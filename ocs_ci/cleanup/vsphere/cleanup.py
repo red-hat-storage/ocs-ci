@@ -202,3 +202,7 @@ def vsphere_cleanup():
     # release IP's from IPAM server
     ipam = IPAM()
     ipam.delete_ips(cluster_name=cluster_name)
+
+    # Delete AWS route
+    aws = AWS()
+    aws.delete_hosted_zone(cluster_name=cluster_name)

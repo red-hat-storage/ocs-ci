@@ -1336,6 +1336,109 @@ class AWS(object):
         logger.info(f"Deleting CloudFormation Stack: {cfs_name}")
         self.delete_cloudformation_stacks([cfs_name])
 
+    def delete_hosted_zone(self, cluster_name):
+        """
+        Deletes the hosted zone
+
+        Args:
+            cluster_name (str): Name of the cluster
+
+        """
+        cluster_name = cluster_name or config.ENV_DATA['cluster_name']
+        base_domain = config.ENV_DATA['base_domain']
+        hosted_zone_name = f"{cluster_name}.{base_domain}."
+
+        hosted_zones = self.route53_client.list_hosted_zones_by_name(
+            DNSName=hosted_zone_name,
+            MaxItems='50'
+        )['HostedZones']
+        hosted_zone_ids = [
+            zone['Id'] for zone in hosted_zones
+            if zone['Name'] == hosted_zone_name
+        ]
+
+        if hosted_zone_ids:
+            for hosted_zone_id in hosted_zone_ids:
+                logger.info(
+                    f"Deleting domain name {hosted_zone_name} with "
+                    f"hosted zone ID {hosted_zone_id}"
+                )
+                self.delete_all_record_sets(hosted_zone_id)
+                self.route53_client.delete_hosted_zone(Id=hosted_zone_id)
+        else:
+            logger.info(f"hosted zone {hosted_zone_name} not found")
+            return
+
+    def delete_all_record_sets(self, hosted_zone_id):
+        """
+        Deletes all record sets in a hosted zone
+
+        Args:
+            hosted_zone_id (str): Hosted Zone ID
+                example: /hostedzone/Z91022921MMOZDVPPC8D6
+
+        """
+        record_types_exclude = ["NS", "SOA"]
+        record_sets = self.route53_client.list_resource_record_sets(
+            HostedZoneId=hosted_zone_id
+        )['ResourceRecordSets']
+
+        for each_record in record_sets:
+            record_set_type = each_record['Type']
+            if record_set_type not in record_types_exclude:
+                self.delete_record(each_record, hosted_zone_id)
+        logger.info("Successfully deleted all record sets")
+
+    def delete_record(self, record, hosted_zone_id):
+        """
+        Deletes the record from Hosted Zone
+
+        Args:
+            record (dict): record details to delete
+                example: {
+                            'Name': 'vavuthu-eco1.qe.rh-ocs.com.',
+                            'Type': 'NS',
+                            'TTL': 300,
+                            'ResourceRecords': [
+                                {'Value': 'ns-1389.awsdns-45.org'},
+                                {'Value': 'ns-639.awsdns-15.net'},
+                                {'Value': 'ns-1656.awsdns-15.co.uk'},
+                                {'Value': 'ns-183.awsdns-22.com'}
+                            ]
+                        }
+            hosted_zone_id (str): Hosted Zone ID
+                example: /hostedzone/Z91022921MMOZDVPPC8D6
+
+        """
+        record_set_name = record['Name']
+        record_set_type = record['Type']
+        record_set_ttl = record['TTL']
+        record_set_resource_records = record['ResourceRecords']
+        logger.info(f"deleting record set: {record_set_name}")
+        resource_record_set = {
+            'Name': record_set_name,
+            'Type': record_set_type,
+            "TTL": record_set_ttl,
+            "ResourceRecords": record_set_resource_records,
+        }
+        # Weight and SetIdentifier is needed for
+        # deleting api-int.cls-vavuthu-eco1.qe.rh-ocs.com. and
+        # api.cls-vavuthu-eco1.qe.rh-ocs.com.
+        if record.get('Weight'):
+            resource_record_set["Weight"] = record.get('Weight')
+            resource_record_set["SetIdentifier"] = record.get('SetIdentifier')
+        self.route53_client.change_resource_record_sets(
+            HostedZoneId=hosted_zone_id,
+            ChangeBatch={
+                'Changes': [
+                    {
+                        'Action': 'DELETE',
+                        'ResourceRecordSet': resource_record_set,
+                    }
+                ]
+            }
+        )
+
 
 def get_instances_ids_and_names(instances):
     """
