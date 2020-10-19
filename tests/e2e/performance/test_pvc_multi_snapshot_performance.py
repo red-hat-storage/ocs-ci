@@ -20,12 +20,10 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
     The test is trying to to take the maximum number of snapshot for one PVC
     """
 
-    def test_pvc_multiple_snapshot_performance(self, interface_iterate,
-                                               teardown_factory,
-                                               storageclass_factory,
-                                               pvc_factory,
-                                               pod_factory
-                                               ):
+    def test_pvc_multiple_snapshot_performance(
+        self, interface_iterate, teardown_factory, storageclass_factory,
+        pvc_factory, pod_factory
+    ):
         """
         1. Creating PVC
            size is depend on storage capacity, but not less then 1 GiB
@@ -46,7 +44,7 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
 
         # Getting the total Storage capacity
         ceph_cluster = CephCluster()
-        ceph_capacity = ceph_cluster.get_ceph_capacity()
+        ceph_capacity = int(ceph_cluster.get_ceph_capacity())
 
         # Use 70% of the storage capacity in the test
         capacity_2_use = int(ceph_capacity * 0.7)
@@ -56,12 +54,11 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
         need_capacity = int((num_of_snaps + 2) * 1.35)
         # Test will run only on system with enough capacity
         if capacity_2_use < need_capacity:
-            log.error(
-                f'The system have only {ceph_capacity} GiB, '
-                f'we want to use only {capacity_2_use} GiB, '
-                f'and we need {need_capacity} GiB to run the test'
-            )
-            raise exceptions.StorageNotSufficientException
+            err_msg = f'The system have only {ceph_capacity} GiB, '
+            err_msg += f'we want to use only {capacity_2_use} GiB, '
+            err_msg += f'and we need {need_capacity} GiB to run the test'
+            log.error(err_msg)
+            raise exceptions.StorageNotSufficientException(err_msg)
 
         # Calculating the PVC size in GiB
         pvc_size = int(capacity_2_use / (num_of_snaps + 2))
@@ -106,8 +103,10 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
                 'create': {'time': None, 'speed': None},
             }
 
-            # Going to run only write IO to fill the PVC for the snapshot - will run 1M BS for 3 Min. 1M
-            log.info(f"Running IO on pod {self.pod_obj.name} - Test number {test_num}")
+            # Going to run only write IO to fill the PVC for the snapshot.
+            log.info(
+                f'Running IO on pod {self.pod_obj.name} - Test num. {test_num}'
+            )
             self.pod_obj.fillup_fs(size=file_size, fio_filename=file_name)
 
             # Wait for fio to finish
@@ -139,7 +138,7 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
                 resource_name=snap_name,
                 out_yaml_format=True
             )["status"]["boundVolumeSnapshotContentName"]
-            log.info(f'Snap content name is {snap_con_name}')
+            log.info(f'Snap content name in test-{test_num} is {snap_con_name}')
 
             test_results['create']['time'] = helpers.measure_snapshot_creation_time(
                 self.interface, snap_obj.name, snap_con_name
@@ -147,7 +146,7 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
             test_results['create']['speed'] = int(
                 filesize * constants.GB2MB / test_results['create']['time']
             )
-            log.info(f' Test {test_num} results:')
+            log.info(f'Test {test_num} results:')
             log.info(f'Snapshot creation time is : {test_results["create"]["time"]} sec.')
             log.info(f'Snapshot speed is : {test_results["create"]["speed"]} MB/sec')
             create_times.append(test_results)
