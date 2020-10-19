@@ -14,7 +14,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed, ResourceWr
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from subprocess import CalledProcessError
-from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, get_operator_pods
+from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, get_operator_pods, get_file_path
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.helpers.helpers import wait_for_resource_state, create_unique_resource_name
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD
@@ -89,33 +89,39 @@ class Postgresql(RipSaw):
         log.info("Successfully deployed postgres database")
 
     def create_pgbench_benchmark(
-        self, replicas, clients=None, threads=None,
+        self, replicas, pgbench_name=None, postgres_name=None,
+        clients=None, threads=None,
         transactions=None, scaling_factor=None,
-        timeout=None
+        timeout=None, wait=True
     ):
         """
         Create pgbench benchmark pods
 
         Args:
             replicas (int): Number of pgbench pods to be deployed
+            pgbench_name (str): Name of pgbench bechmark
+            postgres_name (str): Name of postgres pod
             clients (int): Number of clients
             threads (int): Number of threads
             transactions (int): Number of transactions
             scaling_factor (int): scaling factor
             timeout (int): Time in seconds to wait
+            wait (bool): On true waits till pgbench reaches Completed state
 
         Returns:
             List: pgbench pod objects list
 
         """
         pg_obj_list = []
+        pgbench_name = pgbench_name if pgbench_name else 'pgbench-benchmark'
+        postgres_name = postgres_name if postgres_name else 'postgres'
         for i in range(replicas):
             log.info("Create resource file for pgbench workload")
             pg_data = templating.load_yaml(constants.PGSQL_BENCHMARK_YAML)
-            pg_data['metadata']['name'] = 'pgbench-benchmark' + f"{i}"
+            pg_data['metadata']['name'] = f'{pgbench_name}' + f"{i}"
             pg_data['spec']['workload']['args']['databases'][0][
                 'host'
-            ] = "postgres-" + f"{i}" + ".postgres"
+            ] = f"{postgres_name}-" + f"{i}" + ".postgres"
 
             if clients is not None:
                 pg_data['spec']['workload']['args']['clients'][0] = clients
@@ -132,25 +138,27 @@ class Postgresql(RipSaw):
             pg_obj = OCS(**pg_data)
             pg_obj_list.append(pg_obj)
             pg_obj.create()
-        # Confirm that expected pgbench pods are spinned
-        log.info("Searching the pgbench pods by its name pattern")
-        timeout = timeout if timeout else 300
-        for pgbench_pods in TimeoutSampler(
-            timeout, replicas, get_pod_name_by_pattern,
-            'pgbench-1-dbs-client', RIPSAW_NAMESPACE
-        ):
-            try:
-                if len(pgbench_pods) == replicas:
+
+        if wait:
+            # Confirm that expected pgbench pods are spinned
+            log.info("Searching the pgbench pods by its name pattern")
+            timeout = timeout if timeout else 300
+            for pgbench_pods in TimeoutSampler(
+                timeout, replicas, get_pod_name_by_pattern,
+                'pgbench-1-dbs-client', RIPSAW_NAMESPACE
+            ):
+                try:
+                    if len(pgbench_pods) == replicas:
+                        log.info(
+                            f"Expected number of pgbench pods are "
+                            f"found: {replicas}"
+                        )
+                        break
+                except IndexError:
                     log.info(
-                        f"Expected number of pgbench pods are "
-                        f"found: {replicas}"
+                        f'Expected number of pgbench pods are {replicas} '
+                        f'but only found {len(pgbench_pods)}'
                     )
-                    break
-            except IndexError:
-                log.info(
-                    f'Expected number of pgbench pods are {replicas} '
-                    f'but only found {len(pgbench_pods)}'
-                )
         return pg_obj_list
 
     def get_postgres_pvc(self):
@@ -536,3 +544,24 @@ class Postgresql(RipSaw):
             self.wait_for_pgbench_status(status=constants.STATUS_COMPLETED, timeout=1800)
 
         return pgsql_obj_list
+
+    def get_postgres_used_file_space(self, pod_obj_list):
+        """
+        Get the used file space on a mount point
+
+        Args:
+            pod_obj_list (POD): List of pod objects
+
+        Returns:
+            list: List of pod object
+
+        """
+        # Get the used file space on a mount point
+        for pod_obj in pod_obj_list:
+            filepath = get_file_path(pod_obj, 'pgdata')
+            filespace = pod_obj.exec_cmd_on_pod(
+                command=f"du -sh {filepath}", out_yaml_format=False
+            )
+            filespace = filespace.split()[0]
+            pod_obj.filespace = filespace
+        return pod_obj_list

@@ -3099,7 +3099,7 @@ def pvc_clone_factory(request):
         size = size or pvc_obj.get().get('spec').get('resources').get('requests').get('storage')
         storageclass = storageclass or pvc_obj.backed_sc
         access_mode = access_mode or pvc_obj.get_pvc_access_mode
-        volume_mode = volume_mode or pvc_obj.volume_mode
+        volume_mode = volume_mode or getattr(pvc_obj, 'volume_mode', None)
 
         # Create clone
         clone_pvc_obj = pvc.create_pvc_clone(
