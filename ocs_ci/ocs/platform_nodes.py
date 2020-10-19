@@ -271,7 +271,7 @@ class VMWareNodes(NodesBase):
                 reaches READY state. False otherwise
 
         """
-        num_events_pre_reboot, num_events_post_reboot = ([] for i in range(2))
+        num_events_pre_reboot = {}
         vms = self.get_vms(nodes)
         assert vms, (
             f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
@@ -282,8 +282,8 @@ class VMWareNodes(NodesBase):
                 f"get events -A --field-selector involvedObject.name="
                 f"{node.name},reason=Rebooted -o yaml"
             )
-            num_events_pre_reboot.append(
-                len(node.ocp.exec_oc_cmd(reboot_events_cmd)['items'])
+            num_events_pre_reboot[node.name] = len(
+                node.ocp.exec_oc_cmd(reboot_events_cmd)['items']
             )
 
         self.vsphere.restart_vms(vms, force=force)
@@ -310,12 +310,11 @@ class VMWareNodes(NodesBase):
                     f"get events -A --field-selector involvedObject.name="
                     f"{node.name},reason=Rebooted -o yaml"
                 )
-                num_events_post_reboot.append(
-                    len(node.ocp.exec_oc_cmd(reboot_events_cmd)['items'])
+                assert num_events_pre_reboot[node.name] < len(
+                    node.ocp.exec_oc_cmd(reboot_events_cmd)['items']), (
+                    f"Reboot event not found on node {node.name}"
                 )
-
-            for l1, l2 in zip(num_events_pre_reboot, num_events_post_reboot):
-                assert l1 < l2, "Reboot event not found"
+                logger.info(f"Node {node.name} rebooted")
 
     def restart_nodes_by_stop_and_start(self, nodes, force=True):
         """
@@ -513,7 +512,7 @@ class AWSNodes(NodesBase):
                 and 'ready' state.
 
         """
-        num_events_pre_reboot, num_events_post_reboot = ([] for i in range(2))
+        num_events_pre_reboot = {}
         instances = self.get_ec2_instances(nodes)
         assert instances, (
             f"Failed to get the EC2 instances for "
@@ -525,8 +524,8 @@ class AWSNodes(NodesBase):
                 f"get events -A --field-selector involvedObject.name="
                 f"{node.name},reason=Rebooted -o yaml"
             )
-            num_events_pre_reboot.append(
-                len(node.ocp.exec_oc_cmd(reboot_events_cmd)['items'])
+            num_events_pre_reboot[node.name] = len(
+                node.ocp.exec_oc_cmd(reboot_events_cmd)['items']
             )
 
         self.aws.restart_ec2_instances(instances=instances)
@@ -554,12 +553,11 @@ class AWSNodes(NodesBase):
                     f"get events -A --field-selector involvedObject.name="
                     f"{node.name},reason=Rebooted -o yaml"
                 )
-                num_events_post_reboot.append(
-                    len(node.ocp.exec_oc_cmd(reboot_events_cmd)['items'])
+                assert num_events_pre_reboot[node.name] < len(
+                    node.ocp.exec_oc_cmd(reboot_events_cmd)['items']), (
+                    f"Reboot event not found on node {node.name}"
                 )
-
-            for l1, l2 in zip(num_events_pre_reboot, num_events_post_reboot):
-                assert l1 < l2, "Reboot event not found"
+                logger.info(f"Node {node.name} rebooted")
 
     def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=True):
         """
