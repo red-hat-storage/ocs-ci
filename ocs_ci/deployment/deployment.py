@@ -540,6 +540,11 @@ class Deployment(object):
                 cluster_data['spec']['resources'] = {
                     resource: deepcopy(none_resources) for resource in resources
                 }
+                if ocs_version >= 4.5:
+                    cluster_data['spec']['resources']['noobaa-endpoint'] = {
+                        'limits': {'cpu': 1, 'memory': '500Mi'},
+                        'requests': {'cpu': 1, 'memory': '500Mi'}
+                    }
             else:
                 local_storage = config.DEPLOYMENT.get('local_storage')
                 platform = config.ENV_DATA.get('platform', '').lower()
@@ -560,12 +565,6 @@ class Deployment(object):
                             'requests': {'cpu': 1, 'memory': '8Gi'}
                         }
                     cluster_data['spec']['resources'] = resources
-
-            cluster_data['spec']['resources']['noobaa-endpoint'] = {
-                'limits': {'cpu': 1, 'memory': '500Mi'},
-                'requests': {'cpu': 1, 'memory': '500Mi'}
-            }
-
         # Enable host network if enabled in config (this require all the
         # rules to be enabled on underlaying platform).
         if config.DEPLOYMENT.get('host_network'):
