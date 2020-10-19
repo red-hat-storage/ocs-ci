@@ -109,7 +109,7 @@ class Pod(OCS):
         """
         self._roles.append(role)
 
-    def get_fio_results(self):
+    def get_fio_results(self, timeout=FIO_TIMEOUT):
         """
         Get FIO execution results
 
@@ -121,7 +121,7 @@ class Pod(OCS):
         """
         logger.info(f"Waiting for FIO results from pod {self.name}")
         try:
-            result = self.fio_thread.result(FIO_TIMEOUT)
+            result = self.fio_thread.result(timeout)
             if result:
                 return yaml.safe_load(result)
             raise CommandFailed(f"FIO execution results: {result}.")
