@@ -67,7 +67,8 @@ setup(
             'report-version=ocs_ci.ocs.version:main',
             'ci-cleanup=ocs_ci.cleanup.aws.cleanup:cluster_cleanup',
             'ci-pause=ocs_ci.pause.pause:cluster_pause',
-            'aws-cleanup=ocs_ci.cleanup.aws.cleanup:aws_cleanup'
+            'aws-cleanup=ocs_ci.cleanup.aws.cleanup:aws_cleanup',
+            'vsphere-cleanup=ocs_ci.cleanup.vsphere.cleanup:vsphere_cleanup'
         ],
     },
     zip_safe=True,
