@@ -5,8 +5,9 @@ import botocore.exceptions as boto3exception
 import json
 import uuid
 
+from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import NoBucketPolicyResponse, InvalidStatusCode, UnexpectedBehaviour
-from ocs_ci.framework.testlib import ManageTest, tier1, tier2, tier3, skipif_ocs_version
+from ocs_ci.framework.testlib import MCGTest, tier1, tier2, tier3, skipif_ocs_version
 from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount, HttpResponseParser, gen_bucket_policy
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.bucket_utils import (
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 @skipif_ocs_version('<4.3')
-class TestS3BucketPolicy(ManageTest):
+class TestS3BucketPolicy(MCGTest):
     """
     Test Bucket Policies on Noobaa accounts
     """
@@ -193,9 +194,14 @@ class TestS3BucketPolicy(ManageTest):
         obc = bucket_factory(amount=1, interface='OC')
         obc_obj = OBC(obc[0].name)
 
+        # Creating noobaa account to access bucket belonging to obc account
+        user_name = "noobaa-user" + str(uuid.uuid4().hex)
+        email = user_name + "@mail.com"
+        user = NoobaaAccount(mcg_obj, name=user_name, email=email, buckets=[obc_obj.bucket_name])
+
         # Admin sets policy on obc bucket with obc account principal
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list=[obc_obj.obc_account, user.email_id],
             actions_list=['PutObject'],
             resources_list=[f'{obc_obj.bucket_name}/{"*"}']
         )
@@ -210,14 +216,24 @@ class TestS3BucketPolicy(ManageTest):
         get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
-        # Verifying whether obc account can put object
-        logger.info(f'Adding object on bucket: {obc_obj.bucket_name}')
+        # Verifying whether users can put object
+        logger.info(f'Adding object on bucket: {obc_obj.bucket_name} using user: {obc_obj.obc_account}')
         assert s3_put_object(obc_obj, obc_obj.bucket_name, object_key, data), "Failed: Put Object"
 
+        logger.info(f'Adding object on bucket: {obc_obj.bucket_name} using user: {user.email_id}')
+        assert s3_put_object(user, obc_obj.bucket_name, object_key, data), "Failed: Put Object"
+
         # Verifying whether Get action is not allowed
-        logger.info(f'Verifying whether user: {obc_obj.obc_account} is denied to Get object')
+        logger.info(
+            f'Verifying whether user: '
+            f'{user.email_id if float(config.ENV_DATA["ocs_version"]) >= 4.6 else obc_obj.obc_account}'
+            f' is denied to Get object'
+        )
         try:
-            s3_get_object(obc_obj, obc_obj.bucket_name, object_key)
+            if float(config.ENV_DATA['ocs_version']) >= 4.6:
+                s3_get_object(user, obc_obj.bucket_name, object_key)
+            else:
+                s3_get_object(obc_obj, obc_obj.bucket_name, object_key)
         except boto3exception.ClientError as e:
             logger.info(e.response)
             response = HttpResponseParser(e.response)
@@ -225,15 +241,42 @@ class TestS3BucketPolicy(ManageTest):
                 logger.info('Get Object action has been denied access')
             else:
                 raise UnexpectedBehaviour(f"{e.response} received invalid error code {response.error['Code']}")
+        else:
+            assert False, "Get object succeeded when it should have failed"
+
+        if float(config.ENV_DATA["ocs_version"]) >= 4.6:
+            logger.info(
+                f'Verifying whether the user: '
+                f'{obc_obj.obc_account} is able to access Get action'
+                f'irrespective of the policy set'
+            )
+            assert s3_get_object(obc_obj, obc_obj.bucket_name, object_key), "Failed: Get Object"
 
         # Verifying whether obc account allowed to create multipart
-        logger.info(f'Creating multipart on bucket: {obc_obj.bucket_name} with key: {object_key}')
+        logger.info(
+            f'Creating multipart on bucket: {obc_obj.bucket_name}'
+            f' with key: {object_key} using user: {obc_obj.obc_account}'
+        )
         create_multipart_upload(obc_obj, obc_obj.bucket_name, object_key)
 
+        # Verifying whether S3 user is allowed to create multipart
+        logger.info(
+            f'Creating multipart on bucket: {obc_obj.bucket_name} '
+            f'with key: {object_key} using user: {user.email_id}'
+        )
+        create_multipart_upload(user, obc_obj.bucket_name, object_key)
+
         # Verifying whether obc account is denied access to delete object
-        logger.info(f'Verifying whether user: {obc_obj.obc_account} is denied to Delete object')
+        logger.info(
+            f'Verifying whether user: '
+            f'{user.email_id if float(config.ENV_DATA["ocs_version"]) >= 4.6 else obc_obj.obc_account}'
+            f'is denied to Delete object'
+        )
         try:
-            s3_delete_object(obc_obj, obc_obj.bucket_name, object_key)
+            if float(config.ENV_DATA['ocs_version']) >= 4.6:
+                s3_delete_object(user, obc_obj.bucket_name, object_key)
+            else:
+                s3_delete_object(obc_obj, obc_obj.bucket_name, object_key)
         except boto3exception.ClientError as e:
             logger.info(e.response)
             response = HttpResponseParser(e.response)
@@ -241,11 +284,8 @@ class TestS3BucketPolicy(ManageTest):
                 logger.info('Delete action has been denied access')
             else:
                 raise UnexpectedBehaviour(f"{e.response} received invalid error code {response.error['Code']}")
-
-        # Creating noobaa account to access bucket belonging to obc account
-        user_name = "noobaa-user" + str(uuid.uuid4().hex)
-        email = user_name + "@mail.com"
-        user = NoobaaAccount(mcg_obj, name=user_name, email=email, buckets=[obc_obj.bucket_name])
+        else:
+            assert False, "Delete object succeeded when it should have failed"
 
         # Admin sets a policy on obc-account bucket with noobaa-account principal (cross account access)
         new_policy_generated = gen_bucket_policy(

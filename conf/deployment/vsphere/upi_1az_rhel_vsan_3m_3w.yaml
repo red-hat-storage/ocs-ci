@@ -25,4 +25,3 @@ ENV_DATA:
 REPORTING:
   polarion:
     deployment_id: 'OCS-1448'
-    upgrade_id: 'OCS-1483'

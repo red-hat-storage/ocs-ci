@@ -27,14 +27,15 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     UnavailableResourceException,
     UnsupportedPlatformError,
-    ExternalClusterDetailsException
+    ExternalClusterDetailsException,
+    UnsupportedFeatureError,
 )
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods
 )
-from ocs_ci.ocs.node import get_typed_nodes, check_nodes_specs
+from ocs_ci.ocs.node import get_typed_nodes, get_compute_node_names
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -42,7 +43,6 @@ from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
 )
-from ocs_ci.ocs.resources.storage_cluster import change_noobaa_endpoints_count
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state
@@ -64,7 +64,8 @@ from ocs_ci.utility.utils import (
     set_selinux_permissions,
     set_registry_to_managed_state,
     add_stage_cert,
-    modify_csv, wait_for_machineconfigpool_status
+    modify_csv,
+    wait_for_machineconfigpool_status,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from tests import helpers
@@ -136,7 +137,7 @@ class Deployment(object):
         if not config.ENV_DATA['skip_ocs_deployment']:
             try:
                 self.deploy_ocs()
-                if config.REPORTING['gather_on_deploy_success']:
+                if config.REPORTING['collect_logs_on_success_run']:
                     collect_ocs_logs('deployment', ocp=False, status_failure=False)
             except Exception as e:
                 logger.error(e)
@@ -570,6 +571,16 @@ class Deployment(object):
         else:
             cluster_data['spec']['storageDeviceSets'] = [deviceset_data]
 
+        if config.ENV_DATA.get("encryption_at_rest"):
+            if ocs_version < 4.6:
+                error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"
+                logger.error(error_message)
+                raise UnsupportedFeatureError(error_message)
+            logger.info("Enabling encryption at REST!")
+            cluster_data['spec']['encryption'] = {
+                'enable': True,
+            }
+
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode='w+', prefix='cluster_storage', delete=False
         )
@@ -806,36 +817,14 @@ class Deployment(object):
                     f"Changing NTP on compute nodes to"
                     f" {constants.RH_NTP_CLOCK}"
                 )
-                update_ntp_compute_nodes()
+                if self.platform == constants.VSPHERE_PLATFORM:
+                    update_ntp_compute_nodes()
                 assert ceph_health_check(
                     namespace=self.namespace, tries=60, delay=10
                 )
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
-
-        if self.platform == constants.IBM_POWER_PLATFORM:
-            logger.info("Noobaa endpoints ignored for IBM Power")
-        else:
-            # Modify Noobaa endpoint auto scale values according to the cluster specs
-            if check_nodes_specs(min_cpu=constants.MIN_NODE_CPU, min_memory=constants.MIN_NODE_MEMORY):
-                logger.info(
-                    "The cluster specs meet the minimum requirements and "
-                    "therefore, NooBaa auto scale will be enabled"
-                )
-                min_nb_eps = config.DEPLOYMENT.get('min_noobaa_endpoints')
-                max_nb_eps = config.DEPLOYMENT.get('max_noobaa_endpoints')
-                change_noobaa_endpoints_count(min_nb_eps=min_nb_eps, max_nb_eps=max_nb_eps)
-            else:
-                logger.warning(
-                    "The cluster specs do not meet the minimum requirements and "
-                    "therefore, NooBaa auto scale will remain with its default values"
-                )
-                min_eps = 1
-                max_eps = 1 if float(config.ENV_DATA['ocs_version']) < 4.6 else 2
-                logger.info(
-                    f"The Noobaa endpoint auto scale values: min: {min_eps}, max: {max_eps}"
-                )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -893,6 +882,25 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     logger.info("Adding CatalogSource")
     if not image:
         image = config.DEPLOYMENT.get('ocs_registry_image', '')
+    if config.DEPLOYMENT.get('stage_rh_osbs'):
+        image = config.DEPLOYMENT.get(
+            "stage_index_image", constants.OSBS_BOUNDLE_IMAGE
+        )
+        osbs_image_tag = config.DEPLOYMENT.get(
+            "stage_index_image_tag", f"v{get_ocp_version()}"
+        )
+        image += f":{osbs_image_tag}"
+        run_cmd(
+            'oc patch image.config.openshift.io/cluster --type merge -p \''
+            '{"spec": {"registrySources": {"insecureRegistries": '
+            '["registry-proxy.engineering.redhat.com"]}}}\''
+        )
+        run_cmd(
+            f"oc apply -f {constants.STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML}"
+        )
+        logger.info("Sleeping for 60 sec to start update machineconfigpool status")
+        time.sleep(60)
+        wait_for_machineconfigpool_status('all', timeout=1800)
     if not ignore_upgrade:
         upgrade = config.UPGRADE.get('upgrade', False)
     else:
@@ -963,6 +971,7 @@ def setup_local_storage(storageclass):
     )
 
     ocp_version = get_ocp_version()
+    ocs_version = config.ENV_DATA.get('ocs_version')
     ocp_ga_version = get_ocp_ga_version(ocp_version)
     if not ocp_ga_version:
         optional_operators_data = templating.load_yaml(
@@ -984,7 +993,9 @@ def setup_local_storage(storageclass):
             "Creating optional operators CatalogSource and ImageContentSourcePolicy"
         )
         run_cmd(f"oc create -f {optional_operators_yaml.name}")
-
+        logger.info("Sleeping for 60 sec to start update machineconfigpool status")
+        # sleep here to start update machineconfigpool status
+        time.sleep(60)
         wait_for_machineconfigpool_status('all')
 
     logger.info("Retrieving local-storage-operator data from yaml")
@@ -1048,40 +1059,101 @@ def setup_local_storage(storageclass):
             raise NotImplementedError(
                 "LSO Deployment for VMDirectPath is not implemented"
             )
+    if (ocp_version >= "4.6") and (ocs_version >= "4.6"):
+        # Pull local volume discovery yaml data
+        logger.info("Pulling LocalVolumeDiscovery CR data from yaml")
+        lvd_data = templating.load_yaml(
+            constants.LOCAL_VOLUME_DISCOVERY_YAML
+        )
+        worker_nodes = get_compute_node_names(no_replace=True)
 
-    # Retrieve NVME device path ID for each worker node
-    device_paths = get_device_paths(worker_names)
+        # Update local volume discovery data with Worker node Names
+        logger.info(
+            "Updating LocalVolumeDiscovery CR data with worker nodes Name: %s",
+            worker_nodes
+        )
+        lvd_data['spec']['nodeSelector']['nodeSelectorTerms'][0]['matchExpressions'][0][
+            'values'
+        ] = worker_nodes
+        lvd_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='local_volume_discovery', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            lvd_data, lvd_data_yaml.name
+        )
 
-    # Pull local volume yaml data
-    logger.info("Pulling LocalVolume CR data from yaml")
-    lv_data = templating.load_yaml(
-        constants.LOCAL_VOLUME_YAML
-    )
+        logger.info("Creating LocalVolumeDiscovery CR")
+        run_cmd(f"oc create -f {lvd_data_yaml.name}")
 
-    # Set storage class
-    logger.info(
-        "Updating LocalVolume CR data with LSO storageclass: %s", storageclass)
-    for scd in lv_data['spec']['storageClassDevices']:
-        scd['storageClassName'] = storageclass
+        # Pull local volume set yaml data
+        logger.info("Pulling LocalVolumeSet CR data from yaml")
+        lvs_data = templating.load_yaml(
+            constants.LOCAL_VOLUME_SET_YAML
+        )
 
-    # Update local volume data with NVME IDs
-    logger.info(
-        "Updating LocalVolume CR data with device paths: %s",
-        device_paths
-    )
-    lv_data['spec']['storageClassDevices'][0][
-        'devicePaths'
-    ] = device_paths
+        # Since we don't have datastore with SSD on our current VMware machines, localvolumeset doesn't detect
+        # NonRotational disk. As a workaround we are setting Rotational to device MechanicalProperties to detect
+        # HDD disk
+        if platform == constants.VSPHERE_PLATFORM:
+            logger.info("Adding Rotational for deviceMechanicalProperties spec to detect HDD disk")
+            lvs_data['spec']['deviceInclusionSpec']['deviceMechanicalProperties'].append("Rotational")
 
-    # Create temp yaml file and create local volume
-    lv_data_yaml = tempfile.NamedTemporaryFile(
-        mode='w+', prefix='local_volume', delete=False
-    )
-    templating.dump_data_to_temp_yaml(
-        lv_data, lv_data_yaml.name
-    )
-    logger.info("Creating LocalVolume CR")
-    run_cmd(f"oc create -f {lv_data_yaml.name}")
+        # Update local volume set data with Worker node Names
+        logger.info(
+            "Updating LocalVolumeSet CR data with worker nodes Name: %s",
+            worker_nodes
+        )
+        lvs_data['spec']['nodeSelector']['nodeSelectorTerms'][0]['matchExpressions'][0][
+            'values'
+        ] = worker_nodes
+
+        # Set storage class
+        logger.info(
+            "Updating LocalVolumeSet CR data with LSO storageclass: %s", storageclass)
+        lvs_data['spec']['storageClassName'] = storageclass
+
+        lvs_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='local_volume_set', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            lvs_data, lvs_data_yaml.name
+        )
+        logger.info("Creating LocalVolumeSet CR")
+        run_cmd(f"oc create -f {lvs_data_yaml.name}")
+    else:
+        # Retrieve NVME device path ID for each worker node
+        device_paths = get_device_paths(worker_names)
+
+        # Pull local volume yaml data
+        logger.info("Pulling LocalVolume CR data from yaml")
+        lv_data = templating.load_yaml(
+            constants.LOCAL_VOLUME_YAML
+        )
+
+        # Set storage class
+        logger.info(
+            "Updating LocalVolume CR data with LSO storageclass: %s", storageclass)
+        for scd in lv_data['spec']['storageClassDevices']:
+            scd['storageClassName'] = storageclass
+
+        # Update local volume data with NVME IDs
+        logger.info(
+            "Updating LocalVolume CR data with device paths: %s",
+            device_paths
+        )
+        lv_data['spec']['storageClassDevices'][0][
+            'devicePaths'
+        ] = device_paths
+
+        # Create temp yaml file and create local volume
+        lv_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='local_volume', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            lv_data, lv_data_yaml.name
+        )
+        logger.info("Creating LocalVolume CR")
+        run_cmd(f"oc create -f {lv_data_yaml.name}")
     logger.info("Waiting 30 seconds for PVs to create")
     storage_class_device_count = 1
     if platform == constants.AWS_PLATFORM:

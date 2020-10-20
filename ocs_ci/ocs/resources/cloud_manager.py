@@ -40,7 +40,7 @@ class CloudManager(ABC):
                 'Failed to load credentials from ocs-ci-data. '
                 'Loading from local auth.yaml'
             )
-            cred_dict = load_auth_config().get('AUTH')
+            cred_dict = load_auth_config().get('AUTH', {})
         for cloud_name in cred_dict:
             if cloud_name in cloud_map:
                 try:

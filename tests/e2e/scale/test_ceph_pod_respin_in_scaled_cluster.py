@@ -13,7 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope='class')
 def fioscale(request):
     """
     FIO Scale fixture to create expected number of POD+PVC

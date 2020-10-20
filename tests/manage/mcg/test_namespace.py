@@ -1,16 +1,18 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import aws_platform_required, ManageTest, tier1
+from ocs_ci.framework.testlib import MCGTest, aws_platform_required, tier1
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     verify_s3_object_integrity
 )
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
 from ocs_ci.ocs import constants
 logger = logging.getLogger(__name__)
 
 
-class TestNamespace(ManageTest):
+@skipif_aws_creds_are_missing
+class TestNamespace(MCGTest):
     """
     Test creation of a namespace resource
     """

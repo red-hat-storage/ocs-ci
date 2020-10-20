@@ -1,7 +1,9 @@
 import logging
 import pytest
 
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs.resources import pod as Pod
+from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.framework.testlib import E2ETest, scale
 from tests.helpers import (
@@ -10,7 +12,6 @@ from tests.helpers import (
     validate_pods_are_running_and_not_restarted
 )
 from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.ocs.resources.storage_cluster import get_osd_size
 
 log = logging.getLogger(__name__)
 
@@ -45,9 +46,29 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
         create maxsize pvc, pod and run IO
 
         """
-        osd_size = get_osd_size()
-        pvc_size_gb = osd_size * 1024
-        io_size_mb = f'{int((pvc_size_gb / 2) * 1000)}M'
+        # Setting the io_size_gb to 40% of the total PVC capacity
+        ceph_pod = Pod.get_ceph_tools_pod()
+        external = config.DEPLOYMENT['external_mode']
+        if external:
+            ocp_obj = ocp.OCP()
+            if interface == constants.CEPHBLOCKPOOL:
+                resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+            elif interface == constants.CEPHFILESYSTEM:
+                resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+            cmd = f"get sc {resource_name} -o yaml"
+            pool_data = ocp_obj.exec_oc_cmd(cmd)
+            pool = pool_data['parameters']['pool']
+
+        else:
+            pool = constants.DEFAULT_BLOCKPOOL if interface == constants.CEPHBLOCKPOOL else constants.DATA_POOL
+
+        ceph_replica = ceph_pod.exec_ceph_cmd(ceph_cmd=f"ceph osd pool get {pool} size")
+        replica = ceph_replica['size']
+        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+        ceph_capacity = int(ceph_status['stats']['total_bytes']) / replica / constants.GB
+        pvc_size_gb = int(ceph_capacity * 0.5)
+        io_size_gb = int(pvc_size_gb * 0.4)
+        io_size_gb = 400 if io_size_gb >= 400 else io_size_gb
 
         pod_objs = get_all_pods(
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
@@ -64,9 +85,9 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
 
         self.pod_obj = pod_factory(interface=interface, pvc=self.pvc_obj)
 
-        log.info(f"Running FIO to fill PVC size: {io_size_mb}")
+        log.info(f"Running FIO to fill PVC size: {io_size_gb}G")
         self.pod_obj.run_io(
-            'fs', size=io_size_mb, io_direction='write', runtime=480
+            'fs', size=f"{io_size_gb}G", io_direction='write', runtime=480
         )
 
         log.info("Waiting for IO results")

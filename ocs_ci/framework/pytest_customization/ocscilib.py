@@ -20,9 +20,15 @@ from ocs_ci.framework.exceptions import (
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
+    LOG_FORMAT,
     OCP_VERSION_CONF_DIR,
 )
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError, ChannelNotFound
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ResourceNotFoundError,
+    ChannelNotFound,
+    ResourceInUnexpectedState
+)
 from ocs_ci.ocs.resources.ocs import get_ocs_csv, get_version_info
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
 from ocs_ci.utility.utils import (
@@ -36,6 +42,9 @@ __all__ = [
 ]
 
 log = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter(LOG_FORMAT))
+log.addHandler(handler)
 
 
 def pytest_addoption(parser):
@@ -97,6 +106,13 @@ def pytest_addoption(parser):
         action="store_true",
         default=False,
         help="Collect OCS logs when test case failed",
+    )
+    parser.addoption(
+        '--collect-logs-on-success-run',
+        dest='collect_logs_on_success_run',
+        action="store_true",
+        default=False,
+        help="Collect must gather logs at the end of the execution (also when no failure in the tests)"
     )
     parser.addoption(
         '--io-in-bg',
@@ -192,6 +208,7 @@ def pytest_configure(config):
         config (pytest.config): Pytest config object
 
     """
+    set_log_level(config)
     # Somewhat hacky but this lets us differentiate between run-ci executions
     # and plain pytest unit test executions
     ocscilib_module = 'ocs_ci.framework.pytest_customization.ocscilib'
@@ -245,7 +262,11 @@ def pytest_configure(config):
             config.addinivalue_line(
                 "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
             )
-        except (ResourceNotFoundError, ChannelNotFound):
+        except (
+            ResourceNotFoundError,
+            ChannelNotFound,
+            ResourceInUnexpectedState
+        ):
             # might be using exisitng cluster path using GUI installation
             log.warning("Unable to get CSV version for Reporting")
 
@@ -411,6 +432,9 @@ def process_cluster_cli_params(config):
         csv_change = csv_change.split("::")
         ocsci_config.DEPLOYMENT['csv_change_from'] = csv_change[0]
         ocsci_config.DEPLOYMENT['csv_change_to'] = csv_change[1]
+    collect_logs_on_success_run = get_cli_param(config, 'collect_logs_on_success_run')
+    if collect_logs_on_success_run:
+        ocsci_config.REPORTING['collect_logs_on_success_run'] = True
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -514,3 +538,15 @@ def set_report_portal_tags(config):
     for tag in rp_tags:
         if tag:
             config.addinivalue_line("rp_launch_tags", tag.lower())
+
+
+def set_log_level(config):
+    """
+    Set the log level of this module based on the pytest.ini log_cli_level
+
+    Args:
+        config (pytest.config): Pytest config object
+
+    """
+    level = config.getini('log_cli_level') or 'INFO'
+    log.setLevel(logging.getLevelName(level))

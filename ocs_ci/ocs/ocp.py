@@ -115,7 +115,17 @@ class OCP(object):
 
         """
         oc_cmd = "oc "
-        kubeconfig = os.getenv('KUBECONFIG')
+        cluster_dir_kubeconfig = os.path.join(
+            config.ENV_DATA['cluster_path'],
+            config.RUN.get('kubeconfig_location')
+        )
+        if os.getenv('KUBECONFIG'):
+            kubeconfig = os.getenv('KUBECONFIG')
+        elif os.path.exists(cluster_dir_kubeconfig):
+            kubeconfig = cluster_dir_kubeconfig
+        else:
+            kubeconfig = None
+
         if self.namespace:
             oc_cmd += f"-n {self.namespace} "
 
@@ -696,12 +706,14 @@ class OCP(object):
         # WA, Failed to parse "oc get build" command
         # https://github.com/red-hat-storage/ocs-ci/issues/2312
         try:
-            if self.data['items'][0]['kind'].lower() == 'build':
-                value = (
-                    resource_info[column_index - 1] if len(titles) % 2 == 0
-                    else resource_info[column_index]
-                )
-                return value
+            if self.data['items'][0]['kind'].lower() == 'build' and (
+                self.data['items'][0].get(
+                    'metadata'
+                ).get(
+                    'annotations'
+                ).get('openshift.io/build-config.name') == 'jax-rs-build'
+            ):
+                return resource_info[column_index - 1]
         except Exception:
             pass
 
@@ -928,6 +940,22 @@ def get_ocs_version():
         namespace=config.ENV_DATA['cluster_namespace'],
         kind='', resource_name='csv')
     return ocp_cluster.get()['items'][0]['spec']['version']
+
+
+def get_ocs_parsed_version():
+    """
+    Returns ocs version as float
+
+    Returns:
+        float: ocs version number as major.minor (for example: 4.5)
+
+    """
+    ocs_ver = get_ocs_version().split("-")
+    major_minor = ocs_ver[0].split(".")
+    major = major_minor[0]
+    minor = major_minor[1]
+
+    return float(f"{major}.{minor}")
 
 
 def get_build():

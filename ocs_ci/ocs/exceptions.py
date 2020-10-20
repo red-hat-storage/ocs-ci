@@ -150,6 +150,10 @@ class UnsupportedPlatformError(Exception):
     pass
 
 
+class UnsupportedFeatureError(Exception):
+    pass
+
+
 class UnsupportedBrowser(Exception):
     pass
 
@@ -207,4 +211,16 @@ class RhcosImageNotFound(Exception):
 
 
 class FipsNotInstalledException(Exception):
+    pass
+
+
+class StorageNotSufficientException(Exception):
+    pass
+
+
+class MemoryNotSufficientException(Exception):
+    pass
+
+
+class CPUNotSufficientException(Exception):
     pass

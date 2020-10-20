@@ -10,11 +10,12 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
+from ocs_ci.framework.testlib import MCGTest
 
 logger = logging.getLogger(__name__)
 
 
-class TestBucketCreation:
+class TestBucketCreation(MCGTest):
     """
     Test creation of a bucket
     """

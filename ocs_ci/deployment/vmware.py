@@ -11,6 +11,7 @@ import hcl
 import yaml
 
 from ocs_ci.deployment.helpers.vsphere_helpers import VSPHEREHELPERS
+from ocs_ci.deployment.helpers.prechecks import VSpherePreChecks
 from ocs_ci.deployment.install_ocp_on_rhel import OCPINSTALLRHEL
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
@@ -85,6 +86,14 @@ class VSPHEREBASE(Deployment):
             config.ENV_DATA.get('cluster_path'),
             config.ENV_DATA.get('TF_LOG_FILE')
         )
+
+        # pre-checks for the vSphere environment
+        # skip pre-checks for destroying cluster
+        teardown = config.RUN['cli_params'].get('teardown')
+        if not teardown:
+            vsphere_prechecks = VSpherePreChecks()
+            vsphere_prechecks.get_all_checks()
+
         self.ocp_version = get_ocp_version()
 
         self.wait_time = 90
@@ -570,7 +579,10 @@ class VSPHEREUPI(VSPHEREBASE):
         """
         cluster_name_parts = config.ENV_DATA.get("cluster_name").split("-")
         prefix = cluster_name_parts[0]
-        if not prefix.startswith(tuple(constants.PRODUCTION_JOBS_PREFIX)):
+        if (
+                not prefix.startswith(tuple(constants.PRODUCTION_JOBS_PREFIX))
+                or not config.DEPLOYMENT.get('force_deploy_multiple_clusters')
+        ):
             if self.check_cluster_existence(prefix):
                 raise exceptions.SameNamePrefixClusterAlreadyExistsException(
                     f"Cluster with name prefix {prefix} already exists. "

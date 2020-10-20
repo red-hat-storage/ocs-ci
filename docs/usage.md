@@ -102,6 +102,8 @@ to the pytest.
   bugzilla_password = yourPassword
   ```
 * `--collect-logs` - to collect OCS logs for failed test cases.
+* `--collect-logs-on-success-run` - Collect must gather logs at the end of the 
+   execution (also when no failure in the tests)
 * `--io-in-bg` - If passed, IO will be running in the test background.
 * `--io-load` - IOs throughput target percentage. The value should be
    between 0 to 100. If not provided, the default is 30 (30%)
@@ -138,6 +140,13 @@ Note that during deployment, openshift command line tools like `oc` and
 repository](https://github.com/red-hat-storage/ocs-ci/tree/master/bin). These tools are then available to both deployment and test
 code because `run-ci` wrapper includes the `bin` directory into `PATH`
 environment variable.
+
+##### Deployment configurations
+
+- *encryption at REST* - to enable encryption at REST use this configuration file:
+    conf/ocsci/encryption_at_rest.yaml
+- *FIPS* - to enable FIPS, use this configuration file:
+    conf/ocsci/fips.yaml
 
 #### Deployment of cluster on vSphere Platform
 

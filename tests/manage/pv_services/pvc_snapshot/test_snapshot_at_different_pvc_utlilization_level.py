@@ -5,6 +5,7 @@ from copy import deepcopy
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, tier1
+from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
 from tests.helpers import wait_for_resource_state
 
 log = logging.getLogger(__name__)
@@ -83,6 +84,9 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                     snap_obj, 'md5_sum',
                     deepcopy(getattr(pvc_obj, 'md5_sum', {}))
                 )
+                snap_obj.usage_on_mount = get_used_space_on_mount_point(
+                    pvc_obj.get_attached_pods()[0]
+                )
                 snapshots.append(snap_obj)
                 log.info(f"Created snapshot of PVC {pvc_obj.name} at {usage}%")
             log.info(f"Created snapshot of all PVCs at {usage}%")
@@ -106,16 +110,14 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
         # Delete parent PVCs
         log.info("Deleting parent PVCs")
         for pvc_obj in self.pvcs:
-            # TODO: Unblock parent PVC deletion for cephfs PVC when the bug 1854501 is fixed
-            if constants.RBD_INTERFACE in pvc_obj.backed_sc:
-                pv_obj = pvc_obj.backed_pv_obj
-                pvc_obj.delete()
-                pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
-                log.info(
-                    f"Deleted PVC {pvc_obj.name}. Verifying whether PV "
-                    f"{pv_obj.name} is deleted."
-                )
-                pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
+            pv_obj = pvc_obj.backed_pv_obj
+            pvc_obj.delete()
+            pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
+            log.info(
+                f"Deleted PVC {pvc_obj.name}. Verifying whether PV "
+                f"{pv_obj.name} is deleted."
+            )
+            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
         log.info(
             "Deleted parent PVCs before restoring snapshot. "
             "PVs are also deleted."
@@ -146,7 +148,7 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
         log.info("Verify the restored PVCs are Bound")
         for pvc_obj in restore_pvc_objs:
             wait_for_resource_state(
-                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=90
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=200
             )
             pvc_obj.reload()
         log.info("Verified: Restored PVCs are Bound.")
@@ -227,3 +229,20 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 f"{restore_pod_obj.pvc.snapshot.md5_sum}"
             )
         log.info("md5sum verified")
+
+        # Verify usage on mount point
+        log.info("Verify usage on new pods")
+        for pod_obj in restore_pod_objs:
+            usage_on_pod = get_used_space_on_mount_point(pod_obj)
+            assert usage_on_pod == pod_obj.pvc.snapshot.usage_on_mount, (
+                f"Usage on mount point is not the expected value on pod "
+                f"{pod_obj.name}. Usage in percentage {usage_on_pod}. "
+                f"Expected usage in percentage "
+                f"{pod_obj.pvc.snapshot.usage_on_mount}"
+            )
+            log.info(
+                f"Verified usage on new pod {pod_obj.name}. Usage in "
+                f"percentage {usage_on_pod}. Expected usage in percentage "
+                f"{pod_obj.pvc.snapshot.usage_on_mount}"
+            )
+        log.info("Verified usage on new pods")
