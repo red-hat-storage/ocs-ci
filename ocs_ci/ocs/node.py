@@ -928,8 +928,8 @@ def delete_and_create_osd_node_vsphere_lso(
 
     """
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
+    scale_down_deployments(osd_node)
     remove_nodes([osd_node])
-
     log.info(f"name of deleted node = {osd_node_name}")
 
     if config.ENV_DATA.get('rhel_workers'):
@@ -1264,7 +1264,36 @@ def scale_down_deployments(node_obj):
         ocp.exec_oc_cmd(cmd)
 
 
-def get_node_pods_to_scale_down(node):
+def get_node_pods(node_name, pods_to_search=None):
+    """
+    Get all the pods of a specified node
+
+    Args:
+        node_name (str): The node name to get the pods
+
+    Returns:
+        list: list of all the pods of the specified node
+
+    """
+    pods_to_search = pods_to_search or pod.get_all_pods()
+    return [
+        p for p in pods_to_search
+        if pod.get_pod_node(p).name == node_name
+    ]
+
+
+def get_node_pods_to_scale_down(node_name):
+    """
+    Get the pods of a node to scale down as described in the documents
+    of node replacement with LSO
+
+    Args:
+        node_name (str): The node name
+
+    Returns:
+        list: The node's pods to scale down
+
+    """
     pods_to_scale_down = [
         *pod.get_mon_pods(),
         *pod.get_osd_pods(),
@@ -1272,8 +1301,81 @@ def get_node_pods_to_scale_down(node):
         *pod.get_mgr_pods()
     ]
 
-    node_pods_to_scale_down = [
-        p for p in pods_to_scale_down
-        if pod.get_pod_node(p).name == node.name
-    ]
-    return node_pods_to_scale_down
+    return get_node_pods(node_name, pods_to_scale_down)
+
+
+def scale_down_deployments(node_name):
+    """
+    Scale down the deployments of a node as described in the documents
+    of node replacement with LSO
+
+    Args:
+        node_name (str): The node name
+
+    """
+    ocp = OCP(kind='node', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    pods_to_scale_down = get_node_pods_to_scale_down(node_name)
+    for p in pods_to_scale_down:
+        deployment_name = pod.get_deployment_name(p.name)
+        ocp.exec_oc_cmd(f"scale deployment {deployment_name} --replicas=0")
+
+    ocp.exec_oc_cmd(
+        f"scale deployment --selector=app=rook-ceph-crashcollector, "
+        f"node_name={node_name}  --replicas=0"
+    )
+
+
+def get_node_disk_path(node_name):
+    """
+    Get the node disk path
+
+    Args:
+        node_name (str): The node name to get the disk path
+
+    Returns:
+        str: The node disk path(For example:
+            '/dev/disk/by-id/wwn-0x6000c2918c85473c88331532c93e4597')
+
+    """
+    ocp_obj = ocp.OCP()
+    disk_path = ocp_obj.exec_oc_debug_cmd(
+        node=node_name,
+        cmd_list=["readlink /mnt/local-storage/localblock/sdb"]
+    )
+    return disk_path.strip()
+
+
+def add_new_device_in_local_volume(new_device_path, old_device_path):
+    """
+    Add a new device to the local volume as described in the documents
+    of node replacement with LSO
+
+    Args:
+        new_device_path (str): the new device path to add to local volume
+        old_device_path (str): The old device path to remove from local volume
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    ocp_pvc_obj = OCP(
+        kind=constants.LOCAL_VOLUME,
+        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
+        resource_name='local-block'
+    )
+
+    # Still in progress
+    patch_param_new_device = f'{{spec: {{storageClassDevices:{{ devicePaths: {{ {new_device_path}}}}}}}'
+    patch_param_old_device = f'{{spec: {{storageClassDevices:{{ devicePaths: {{ {old_device_path}}}}}}}'
+
+    ocp_pvc_obj.patch(
+        resource_name='local-block',
+        params=patch_param_new_device,
+        format_type='merge'
+    )
+
+    ocp_pvc_obj.patch(
+        resource_name='local-block',
+        params=patch_param_old_device,
+        format_type='delete'
+    )
