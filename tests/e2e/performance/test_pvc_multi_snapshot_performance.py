@@ -54,9 +54,11 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
         need_capacity = int((num_of_snaps + 2) * 1.35)
         # Test will run only on system with enough capacity
         if capacity_2_use < need_capacity:
-            err_msg = f'The system have only {ceph_capacity} GiB, '
-            err_msg += f'we want to use only {capacity_2_use} GiB, '
-            err_msg += f'and we need {need_capacity} GiB to run the test'
+            err_msg = (
+                f'The system have only {ceph_capacity} GiB, '
+                f'we want to use only {capacity_2_use} GiB, '
+                f'and we need {need_capacity} GiB to run the test'
+            )
             log.error(err_msg)
             raise exceptions.StorageNotSufficientException(err_msg)
 
