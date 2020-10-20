@@ -288,9 +288,6 @@ class VMWareNodes(NodesBase):
 
         self.vsphere.restart_vms(vms, force=force)
 
-        logger.info("Waiting for 30 seconds...")
-        time.sleep(30)
-
         if wait:
             """
             When reboot is initiated on a VM from the VMware, the VM
@@ -299,6 +296,9 @@ class VMWareNodes(NodesBase):
             When the reboot operation is completed and the VM is reachable the
             OCP node reaches status Ready and a Reboot event is logged.
             """
+            logger.info("Waiting for 30 seconds for reboot to complete...")
+            time.sleep(30)
+
             nodes_names = [n.name for n in nodes]
 
             wait_for_nodes_status(
@@ -529,8 +529,6 @@ class AWSNodes(NodesBase):
             )
 
         self.aws.restart_ec2_instances(instances=instances)
-        logger.info("Waiting for 30 seconds...")
-        time.sleep(30)
 
         if wait:
             """
@@ -540,6 +538,9 @@ class AWSNodes(NodesBase):
             When the reboot operation is complete and the instance is reachable
             the OCP node reaches status Ready and a Reboot event is logged.
             """
+            logger.info("Waiting for 60 seconds for reboot to complete...")
+            time.sleep(60)
+
             nodes_names = [n.name for n in nodes]
             logger.info(
                 f"Waiting for nodes: {nodes_names} to reach ready state"
