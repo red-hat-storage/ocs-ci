@@ -14,7 +14,7 @@ from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs import metrics
 from ocs_ci.ocs.resources import pod
-from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result
+from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_enum
 from tests.helpers import storagecluster_independent_check
 
 
@@ -162,7 +162,7 @@ def test_monitoring_reporting_ok_when_idle(workload_idle):
         start=workload_idle['start'],
         end=workload_idle['stop'],
         step=15)
-    health_validation = check_query_range_result(
+    health_validation = check_query_range_result_enum(
         result=health_result,
         good_values=[0],
         bad_values=[1],
@@ -180,7 +180,7 @@ def test_monitoring_reporting_ok_when_idle(workload_idle):
         start=workload_idle['start'],
         end=workload_idle['stop'],
         step=15)
-    mon_validation = check_query_range_result(
+    mon_validation = check_query_range_result_enum(
         result=mon_result,
         good_values=[1],
         bad_values=[0],
@@ -200,7 +200,7 @@ def test_monitoring_reporting_ok_when_idle(workload_idle):
             start=workload_idle['start'],
             end=workload_idle['stop'],
             step=15)
-        osd_validation = check_query_range_result(
+        osd_validation = check_query_range_result_enum(
             result=osd_result,
             good_values=[1],
             bad_values=[0],
