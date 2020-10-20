@@ -65,7 +65,7 @@ from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
     ceph_health_check_base,
-    get_ocp_version,
+    get_running_ocp_version,
     get_openshift_client,
     get_system_architecture,
     get_testrun_name,
@@ -2224,7 +2224,7 @@ def install_logging(request):
     log.info("Configuring Openshift-logging")
 
     # Checks OCP version
-    ocp_version = get_ocp_version()
+    ocp_version = get_running_ocp_version()
 
     # Creates namespace opensift-operators-redhat
     ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
