@@ -69,28 +69,10 @@ class TestMustGather(ManageTest):
 
         request.addfinalizer(finalizer)
 
-<<<<<<< HEAD
     def test_must_gather(self):
-=======
-    @tier1
-    @pytest.mark.parametrize(
-        argnames=['log_type'],
-        argvalues=[
-            pytest.param(
-                *['CEPH'], marks=pytest.mark.polarion_id("OCS-XXX1")
-            ),
-            pytest.param(
-                *['JSON'], marks=pytest.mark.polarion_id("OCS-XXX2")
-            ),
-            pytest.param(
-                *['OTHERS'], marks=pytest.mark.polarion_id("OCS-XXX3")
-            ),
-        ]
-    )
-    def test_must_gather(self, log_type):
->>>>>>> Change lists content (name of files)
         """
         Tests functionality of: oc adm must-gather
+
         """
         # Fetch pod details
         pods = pod.get_all_pods(namespace="openshift-storage")
@@ -172,8 +154,10 @@ class TestMustGather(ManageTest):
         """
         Checks if directory that contains must gather logs already exist
         and use new directory if so.
+
         Returns:
             str: Logs directory
+
         """
         index = 1
         directory = ocsci_log_path()
@@ -192,10 +176,13 @@ class TestMustGather(ManageTest):
     def get_log_directories(self, directory):
         """
         Get list of subdirectories contains openshift-storage pod's logs
+
         Args:
             directory: (str): location of must gather logs
+
         Returns:
             list: Subdirectories of "pods" directory
+
         """
         dir_name = self.locate_pods_directory(directory)
         list_dir = os.listdir(dir_name)
@@ -205,10 +192,13 @@ class TestMustGather(ManageTest):
     def locate_pods_directory(self, root_directory):
         """
         Find full path of 'pods' subdirectory
+
         Args:
             root_directory: (str): location of must gather logs
+
         Returns:
             str: Full path of 'pods' subdirectory, if exist
+
         """
         for dir_name, subdir_list, files_list in os.walk(root_directory + "_ocs_logs"):
             logger.debug(f"dir_name: {dir_name}")
@@ -219,10 +209,13 @@ class TestMustGather(ManageTest):
 
     def search_log_files(self, directory):
         """
+
         Args:
             directory: (str): location of must gather logs
+
         Returns:
             list: list contain full path of each "logs" subdirectory
+
         """
         pods_dir = self.locate_pods_directory(directory)
         logger.info(f"pods dir: {pods_dir}")
@@ -236,10 +229,13 @@ class TestMustGather(ManageTest):
     def check_file_size(self, logs_dir_list):
         """
         Check if log file "current.log" is empty or not
+
         Args:
             logs_dir_list: (list): Contain full path of each "logs" subdirectory
+
         Returns:
             bool: False - if one or more log file is empty
+
         """
         # Workaround for BZ-1766646 Beginning:
         known_missing_logs = [

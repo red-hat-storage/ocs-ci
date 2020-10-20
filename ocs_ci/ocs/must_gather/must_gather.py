@@ -7,19 +7,11 @@ from pathlib import Path
 
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.utils import collect_ocs_logs
-from ocs_ci.ocs.must_gather.const_must_gather import (
-    GATHER_COMMANDS_CEPH,
-    GATHER_COMMANDS_JSON,
-    GATHER_COMMANDS_OTHERS
-)
+from ocs_ci.ocs.must_gather.const_must_gather import GATHER_COMMANDS_VERSION
+from ocs_ci.ocs.ocp import get_ocs_parsed_version
 
 
 logger = logging.getLogger(__name__)
-TYPE_LOG = {
-    'CEPH': GATHER_COMMANDS_CEPH,
-    'JSON': GATHER_COMMANDS_JSON,
-    'OTHERS': GATHER_COMMANDS_OTHERS
-}
 
 
 class MustGather(object):
@@ -59,7 +51,7 @@ class MustGather(object):
         Search File Path
 
         """
-        files = TYPE_LOG[self.type_log]
+        files = GATHER_COMMANDS_VERSION[(self.type_log, get_ocs_parsed_version())]
         for file in files:
             self.files_not_exist.append(file)
             for dir_name, subdir_list, files_list in os.walk(self.root):
@@ -127,9 +119,9 @@ class MustGather(object):
         Delete temporary folder.
 
         """
-        if re.search('_ocs_logs$', self.temp_folder):
+        if re.search('_ocs_logs$', self.root):
             shutil.rmtree(
-                path=self.temp_folder,
+                path=self.root,
                 ignore_errors=False,
                 onerror=None
             )
@@ -145,6 +137,9 @@ class MustGather(object):
                 f"Empty files:\n{self.empty_files}\n"
                 f"Content issues:\n{self.files_content_issue}"
             )
+            self.empty_files = list()
+            self.files_not_exist = list()
+            self.files_content_issue = list()
             raise Exception(error)
 
     def validate_must_gather(self):
@@ -152,7 +147,6 @@ class MustGather(object):
         Validate must_gather
 
         """
-        self.collect_must_gather()
         self.validate_file_size()
         self.validate_expected_files()
         self.print_invalid_files()
