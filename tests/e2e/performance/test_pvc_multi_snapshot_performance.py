@@ -47,23 +47,23 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
         ceph_capacity = int(ceph_cluster.get_ceph_capacity())
 
         # Use 70% of the storage capacity in the test
-        capacity_2_use = int(ceph_capacity * 0.7)
+        capacity_to_use = int(ceph_capacity * 0.7)
 
         # since we do not want to use more then 75%, we add 35% to the needed
         # capacity, and minimum PVC size is 1 GiB
         need_capacity = int((num_of_snaps + 2) * 1.35)
         # Test will run only on system with enough capacity
-        if capacity_2_use < need_capacity:
+        if capacity_to_use < need_capacity:
             err_msg = (
                 f'The system have only {ceph_capacity} GiB, '
-                f'we want to use only {capacity_2_use} GiB, '
+                f'we want to use only {capacity_to_use} GiB, '
                 f'and we need {need_capacity} GiB to run the test'
             )
             log.error(err_msg)
             raise exceptions.StorageNotSufficientException(err_msg)
 
         # Calculating the PVC size in GiB
-        pvc_size = int(capacity_2_use / (num_of_snaps + 2))
+        pvc_size = int(capacity_to_use / (num_of_snaps + 2))
 
         self.interface = interface_iterate
         self.sc_obj = storageclass_factory(self.interface)
