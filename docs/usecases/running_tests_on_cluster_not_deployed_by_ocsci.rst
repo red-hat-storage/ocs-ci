@@ -132,8 +132,8 @@ option as explained in previous section.
 
 .. _`ocs-ci/conf/deployment`: https://github.com/red-hat-storage/ocs-ci/tree/master/conf/deployment
 
-Access to platform where the cluster is deployed (IPI only)
------------------------------------------------------------
+Access to platform where the cluster is deployed
+------------------------------------------------
 
 If you are trying to run tests on a platfrom which is already supported by
 ocs-ci, and are planning to run platform specific test cases, you need to make
