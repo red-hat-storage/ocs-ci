@@ -753,7 +753,7 @@ class AWSUPI(AWSBase):
         stack_names.sort()
         stack_names.reverse()
         stack_names.extend([f'{cluster_name}-{s}' for s in suffixes])
-        logger.info(f"Deleteing stacks: {stack_names}")
+        logger.info(f"Deleting stacks: {stack_names}")
         self.aws.delete_cloudformation_stacks(stack_names)
 
         # Call openshift-installer destroy cluster
@@ -819,7 +819,7 @@ class AWSUPIFlexy(AWSBase):
         stack_names.sort()
         stack_names.reverse()
         stack_names.extend([f'{self.cluster_name}-{s}' for s in suffixes])
-        logger.info(f"Deleteing stacks: {stack_names}")
+        logger.info(f"Deleting stacks: {stack_names}")
         self.aws.delete_cloudformation_stacks(stack_names)
 
         # WORKAROUND for Flexy issue:
