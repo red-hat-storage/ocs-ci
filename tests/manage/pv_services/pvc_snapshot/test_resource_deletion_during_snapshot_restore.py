@@ -38,18 +38,6 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
             pvc_size=self.pvc_size, num_of_rbd_pvc=6, num_of_cephfs_pvc=4
         )
 
-    @pytest.fixture(autouse=True)
-    def teardown(self, request):
-        """
-        Make sure ceph health is OK
-
-        """
-        def finalizer():
-            assert ceph_health_check(), "Ceph cluster health is not OK"
-            log.info("Ceph cluster health is OK")
-
-        request.addfinalizer(finalizer)
-
     def test_resource_deletion_during_snapshot_restore(
         self, snapshot_factory, snapshot_restore_factory,
         pod_factory
