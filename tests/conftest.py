@@ -1640,6 +1640,23 @@ def rgw_obj_fixture(request):
 
 
 @pytest.fixture()
+def rgw_deployments(request):
+    """
+    Return RGW deployments or skip the test.
+
+    """
+    oc = ocp.OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA['cluster_namespace']
+    )
+    rgw_deployments = oc.get(selector=constants.RGW_APP_LABEL)['items']
+    if rgw_deployments:
+        return rgw_deployments
+    else:
+        pytest.skip('There is no RGW deployment available for this test.')
+
+
+@pytest.fixture()
 def mcg_obj(request):
     return mcg_obj_fixture(request)
 
@@ -2596,9 +2613,10 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
         for dc in dc_pods_res:
             pod_obj = dc.result()
             if create_rbd_block_rwx_pod:
-                logging.info(f"#### setting attribute pod_type since"
-                             f" create_rbd_block_rwx_pod = {create_rbd_block_rwx_pod}"
-                             )
+                log.info(
+                    "#### setting attribute pod_type since "
+                    f"create_rbd_block_rwx_pod = {create_rbd_block_rwx_pod}"
+                )
                 setattr(pod_obj, 'pod_type', 'rbd_block_rwx')
             else:
                 setattr(pod_obj, 'pod_type', '')
