@@ -3,7 +3,7 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs import exceptions
 from ocs_ci.deployment.ibm import IBMDeployment
-from .aws import AWSIPI, AWSUPI
+from .aws import AWSIPI, AWSUPI, AWSUPIFlexy
 from .azure import AZUREIPI
 from .gcp import GCPIPI
 from .vmware import VSPHEREUPI
@@ -22,9 +22,10 @@ class DeploymentFactory(object):
         self.cls_map = {
             'aws_ipi': AWSIPI,
             'aws_upi': AWSUPI,
+            'aws_upi_flexy': AWSUPIFlexy,
             'azure_ipi': AZUREIPI,
             'vsphere_upi': VSPHEREUPI,
-            'baremetalpsi_upi': BaremetalPSIUPI,
+            'baremetalpsi_upi_flexy': BaremetalPSIUPI,
             'baremetal_upi': BAREMETALUPI,
             'gcp_ipi': GCPIPI,
             'powervs_upi': IBMDeployment,
@@ -39,16 +40,20 @@ class DeploymentFactory(object):
         """
         deployment_platform = config.ENV_DATA['platform']
         deployment_type = config.ENV_DATA['deployment_type']
+        flexy_deployment = config.ENV_DATA['flexy_deployment']
         deployment_cls_key = (
             f"{deployment_platform.lower()}"
             f"_"
             f"{deployment_type.lower()}"
         )
+        if flexy_deployment:
+            deployment_cls_key = f"{deployment_cls_key}_flexy"
         logger.info(f"Deployment key = {deployment_cls_key}")
         logger.info(
             f"Current deployment platform: "
-            f"{deployment_platform},"
-            f"deployment type: {deployment_type}"
+            f"{deployment_platform}, "
+            f"deployment type: {deployment_type}, "
+            f"flexy_deployment: {flexy_deployment}"
         )
         try:
             return self.cls_map[deployment_cls_key]()

@@ -1041,6 +1041,7 @@ FLEXY_HOST_DIR_PATH = os.path.join(DATA_DIR, FLEXY_HOST_DIR)
 FLEXY_DEFAULT_ENV_FILE = "ocs-osp.env"
 OPENSHIFT_MISC_BASE = "private-openshift-misc/functionality-testing"
 FLEXY_BAREMETAL_UPI_TEMPLATE = "upi-on-baremetal/versioned-installer-openstack"
+FLEXY_AWS_UPI_TEMPLATE = "upi-on-aws/versioned-installer"
 FLEXY_GIT_CRYPT_KEYFILE = os.path.join(DATA_DIR, "git-crypt-keyfile")
 NTP_CHRONY_CONF = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "ntp_chrony.yaml"
@@ -1052,8 +1053,9 @@ FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
 FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
 FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/aosqe/flexy:poc"
+FLEXY_ENV_FILE_UPDATED_NAME = 'ocs-flexy-env-file-updated.env'
 FLEXY_ENV_FILE_UPDATED = os.path.join(
-    FLEXY_HOST_DIR_PATH, 'ocs-flexy-env-file-updated.env'
+    FLEXY_HOST_DIR_PATH, FLEXY_ENV_FILE_UPDATED_NAME
 )
 REGISTRY_SVC = "registry.svc.ci.openshift.org/ocp/release"
 

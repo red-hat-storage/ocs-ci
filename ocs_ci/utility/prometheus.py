@@ -79,7 +79,106 @@ def check_alert_list(
     logger.info("Alerts were triggered correctly during utilization")
 
 
-def check_query_range_result(
+def check_query_range_result_viafunction(
+    result,
+    is_value_good,
+    is_value_bad=lambda val: False,
+    exp_metric_num=None,
+    exp_delay=None,
+    exp_good_time=None,
+    is_float=False
+):
+    """
+    Check that result of range query matches expectations expressed via
+    ``is_value_good`` (and optionally ``is_value_bad``) functions, which takes
+    a value and returns True if the value is good (or bad).
+
+    Args:
+        result (list): Data from ``query_range()`` method.
+        is_value_good (function): returns True for a good value
+        is_value_bad (function): returns True for a bad balue, indicating a
+            problem (optional, use if you need to distinguish bad and invalid
+            values)
+        exp_metric_num (int): expected number of data series in the result,
+            optional (eg. for ``ceph_health_status`` this would be 1, but
+            for something like ``ceph_osd_up`` this will be a number of
+            OSDs in the cluster)
+        exp_delay (int): Number of seconds from the start of the query
+            time range for which we should tolerate bad values. This is
+            useful if you change cluster state and processing of this
+            change is expected to take some time.
+        exp_good_time (int): Number of seconds during which we should see
+            good values in the metrics data. When this time passess values
+            can go bad (but can't be invalid). If not specified, good values
+            should be presend during the whole time.
+        is_float (bool): assume that the value is float, otherwise assume int
+
+    Returns:
+        bool: True if result matches given expectations, False otherwise
+    """
+    logger.info("Validating a result of a range query")
+    # result of the validation
+    is_result_ok = True
+    # timestamps of values in bad_values list
+    bad_value_timestamps = []
+    # timestamps of values outside of both bad and good values list
+    invalid_value_timestamps = []
+
+    # check that result contains expected number of metric data series
+    if exp_metric_num is not None and len(result) != exp_metric_num:
+        msg = (
+            f"result doesn't contain {exp_metric_num} of series only, "
+            f"actual number data series is {len(result)}")
+        logger.error(msg)
+        is_result_ok = False
+
+    for metric in result:
+        name = metric['metric']['__name__']
+        logger.info(f"checking metric {metric['metric']}")
+        # get start of the query range for which we are processing data
+        start_ts = metric["values"][0][0]
+        start_dt = datetime.utcfromtimestamp(start_ts)
+        logger.info(f"metrics for {name} starts at {start_dt}")
+        for ts, value in metric["values"]:
+            if is_float:
+                value = float(value)
+            else:
+                value = int(value)
+            dt = datetime.utcfromtimestamp(ts)
+            if is_value_good(value):
+                logger.debug(f"{name} has good value {value} at {dt}")
+            elif is_value_bad(value):
+                msg = f"{name} has bad value {value} at {dt}"
+                # delta is time since start of the query range
+                delta = dt - start_dt
+                if exp_delay is not None and delta.seconds < exp_delay:
+                    logger.info(
+                        msg + f" but within expected {exp_delay}s delay")
+                elif (exp_good_time is not None
+                        and delta.seconds >= exp_good_time):
+                    logger.info(
+                        msg + f" but after {exp_good_time}s already passed")
+                else:
+                    logger.error(msg)
+                    bad_value_timestamps.append(dt)
+            else:
+                msg = f"{name} invalid (not good or bad): {value} at {dt}"
+                logger.error(msg)
+                invalid_value_timestamps.append(dt)
+
+    if bad_value_timestamps != []:
+        is_result_ok = False
+    else:
+        logger.info("No bad values detected")
+    if invalid_value_timestamps != []:
+        is_result_ok = False
+    else:
+        logger.info("No invalid values detected")
+
+    return is_result_ok
+
+
+def check_query_range_result_enum(
     result,
     good_values,
     bad_values=(),
@@ -115,62 +214,63 @@ def check_query_range_result(
     Returns:
         bool: True if result matches given expectations, False otherwise
     """
-    logger.info("Validating a result of a range query")
-    # result of the validation
-    is_result_ok = True
-    # timestamps of values in bad_values list
-    bad_value_timestamps = []
-    # timestamps of values outside of both bad and good values list
-    invalid_value_timestamps = []
+    is_value_good = lambda val: val in good_values  # noqa: E731
+    is_value_bad = lambda val: val in bad_values    # noqa: E731
+    is_result_ok = check_query_range_result_viafunction(
+        result,
+        is_value_good,
+        is_value_bad,
+        exp_metric_num,
+        exp_delay,
+        exp_good_time,
+        is_float=False
+    )
+    return is_result_ok
 
-    # check that result contains expected number of metric data series
-    if exp_metric_num is not None and len(result) != exp_metric_num:
-        msg = (
-            f"result doesn't contain {exp_metric_num} of series only, "
-            f"actual number data series is {len(result)}")
-        logger.error(msg)
-        is_result_ok = False
 
-    for metric in result:
-        name = metric['metric']['__name__']
-        logger.debug(f"checking metric {name}")
-        # get start of the query range for which we are processing data
-        start_ts = metric["values"][0][0]
-        start_dt = datetime.utcfromtimestamp(start_ts)
-        logger.info(f"metrics for {name} starts at {start_dt}")
-        for ts, value in metric["values"]:
-            value = int(value)
-            dt = datetime.utcfromtimestamp(ts)
-            if value in good_values:
-                logger.debug(f"{name} has good value {value} at {dt}")
-            elif value in bad_values:
-                msg = f"{name} has bad value {value} at {dt}"
-                # delta is time since start of the query range
-                delta = dt - start_dt
-                if exp_delay is not None and delta.seconds < exp_delay:
-                    logger.info(
-                        msg + f" but within expected {exp_delay}s delay")
-                elif (exp_good_time is not None
-                        and delta.seconds >= exp_good_time):
-                    logger.info(
-                        msg + f" but after {exp_good_time}s already passed")
-                else:
-                    logger.error(msg)
-                    bad_value_timestamps.append(dt)
-            else:
-                msg = f"{name} invalid (not good or bad): {value} at {dt}"
-                logger.error(msg)
-                invalid_value_timestamps.append(dt)
+def check_query_range_result_limits(
+    result,
+    good_min,
+    good_max,
+    exp_metric_num=None,
+    exp_delay=None,
+    exp_good_time=None,
+):
+    """
+    Check that result of range query matches given expectations. Useful
+    for metrics which convey continuous value, eg. storage or cpu utilization.
 
-    if bad_value_timestamps != []:
-        is_result_ok = False
-    else:
-        logger.info("No bad values detected")
-    if invalid_value_timestamps != []:
-        is_result_ok = False
-    else:
-        logger.info("No invalid values detected")
+    Args:
+        result (list): Data from ``query_range()`` method.
+        good_min (float): Min. value which is considered good.
+        good_max (float): Max. value which is still considered as good.
+        exp_metric_num (int): expected number of data series in the result,
+            optional (eg. for ``ceph_health_status`` this would be 1, but
+            for something like ``ceph_osd_up`` this will be a number of
+            OSDs in the cluster)
+        exp_delay (int): Number of seconds from the start of the query
+            time range for which we should tolerate bad values. This is
+            useful if you change cluster state and processing of this
+            change is expected to take some time.
+        exp_good_time (int): Number of seconds during which we should see
+            good values in the metrics data. When this time passess values
+            can go bad (but can't be invalid). If not specified, good values
+            should be presend during the whole time.
 
+    Returns:
+        bool: True if result matches given expectations, False otherwise
+    """
+    is_value_good = lambda val: good_min <= val <= good_max  # noqa: E731
+    is_value_bad = lambda val: False                         # noqa: E731
+    is_result_ok = check_query_range_result_viafunction(
+        result,
+        is_value_good,
+        is_value_bad,
+        exp_metric_num,
+        exp_delay,
+        exp_good_time,
+        is_float=True
+    )
     return is_result_ok
 
 
