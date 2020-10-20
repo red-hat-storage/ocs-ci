@@ -49,7 +49,7 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
         # Use 70% of the storage capacity in the test
         capacity_to_use = int(ceph_capacity * 0.7)
 
-        # since we do not want to use more then 75%, we add 35% to the needed
+        # since we do not want to use more then 65%, we add 35% to the needed
         # capacity, and minimum PVC size is 1 GiB
         need_capacity = int((num_of_snaps + 2) * 1.35)
         # Test will run only on system with enough capacity
