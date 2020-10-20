@@ -413,18 +413,24 @@ def create_restore_pvc(
 
 
 def create_pvc_clone(
-    sc_name, parent_pvc, clone_yaml, pvc_name=None, do_reload=True, storage_size=None
+    sc_name, parent_pvc, clone_yaml, pvc_name=None, do_reload=True,
+    storage_size=None, access_mode=None, volume_mode=None
 ):
     """
     Create a cloned pvc from existing pvc
 
     Args:
-        sc_name (str): The name of storage class (same for both parent and cloned pvc).
+        sc_name (str): The name of storage class.
         parent_pvc (str): Name of the parent pvc, whose clone is to be created.
         pvc_name (str): The name of the PVC being created
-        do_reload (bool): True for wait for reloading PVC after its creation, False otherwise
-        storage_size (str): Size of the clone, if not passed will use the default "storage" value from pvc-clone.yaml
-
+        do_reload (bool): True for wait for reloading PVC after its creation,
+            False otherwise
+        storage_size (str): Size of the clone, if not passed will use the
+            default "storage" value from pvc-clone.yaml. eg: '5Gi'
+        access_mode (str): This decides the access mode to be used for
+                the cloned PVC. eg: ReadWriteOnce, ReadOnlyMany, ReadWriteMany
+        volume_mode (str): Volume mode for PVC. This should match the
+            volume mode of parent PVC
     Returns:
         PVC: PVC instance
 
@@ -432,14 +438,19 @@ def create_pvc_clone(
     pvc_data = templating.load_yaml(clone_yaml)
     pvc_data['metadata']['name'] = (
         pvc_name if pvc_name else helpers.create_unique_resource_name(
-            'cloned', 'pvc'
+            parent_pvc, 'clone'
         )
     )
     pvc_data['spec']['storageClassName'] = sc_name
     pvc_data['spec']['dataSource']['name'] = parent_pvc
     if storage_size:
         pvc_data['spec']['resources']['requests']['storage'] = storage_size
+    if volume_mode:
+        pvc_data['spec']['volumeMode'] = volume_mode
+    if access_mode:
+        pvc_data['spec']['accessModes'] = [access_mode]
     ocs_obj = PVC(**pvc_data)
     created_pvc = ocs_obj.create(do_reload=do_reload)
     assert created_pvc, f"Failed to create resource {pvc_name}"
+    ocs_obj.reload()
     return ocs_obj

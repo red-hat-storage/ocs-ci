@@ -2,6 +2,7 @@
 StorageCluster related functionalities
 """
 import logging
+import re
 
 from jsonschema import validate
 
@@ -13,6 +14,9 @@ from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.utility import localstorage, utils
+from ocs_ci.ocs.node import get_osd_running_nodes
+from ocs_ci.ocs.exceptions import UnsupportedFeatureError
+from ocs_ci.utility.utils import run_cmd
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +44,7 @@ class StorageCluster(OCP):
 
 def ocs_install_verification(
     timeout=600, skip_osd_distribution_check=False, ocs_registry_image=None,
-    post_upgrade_verification=False,
+    post_upgrade_verification=False, version_before_upgrade=None
 ):
     """
     Perform steps necessary to verify a successful OCS installation
@@ -54,6 +58,7 @@ def ocs_install_verification(
             properly.
         post_upgrade_verification (bool): Set to True if this function is
             called after upgrade.
+        version_before_upgrade (float): Set to OCS version before upgrade
 
     """
     from ocs_ci.ocs.node import get_typed_nodes
@@ -124,23 +129,25 @@ def ocs_install_verification(
         )
     rgw_count = None
     if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
-        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1857802 - RGW count is 1
-        # post upgrade to OCS 4.5. Tracked with
-        # https://github.com/red-hat-storage/ocs-ci/issues/2532
-        rgw_count = 2 if float(config.ENV_DATA['ocs_version']) >= 4.5 and not (
-            post_upgrade_verification
-        ) else 1
+        #  RGW count is 1 if OCS version < 4.5 or the cluster was upgraded from version <= 4.4
+        if float(config.ENV_DATA['ocs_version']) < 4.5 or float(
+            config.ENV_DATA['ocs_version']
+        ) == 4.5 and (post_upgrade_verification and float(version_before_upgrade) < 4.5):
+            rgw_count = 1
+        else:
+            rgw_count = 2
 
-    # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
-    if float(config.ENV_DATA['ocs_version']) == 4.4 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM:
-        rgw_count = 1
-    if float(
-        config.ENV_DATA['ocs_version']
-    ) == 4.5 and config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM and post_upgrade_verification:
-        rgw_count = 1
+    # # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
+    if config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM:
+        if float(config.ENV_DATA['ocs_version']) == 4.4 or (
+            float(config.ENV_DATA['ocs_version']) == 4.5 and (
+                post_upgrade_verification and float(version_before_upgrade) < 4.5
+            )
+        ):
+            rgw_count = 1
 
-    min_eps = 1
-    max_eps = 2 if float(config.ENV_DATA['ocs_version']) >= 4.6 else 1
+    min_eps = constants.MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT
+    max_eps = constants.MAX_NB_ENDPOINT_COUNT if float(config.ENV_DATA['ocs_version']) >= 4.6 else 1
 
     if config.ENV_DATA.get('platform') == constants.IBM_POWER_PLATFORM:
         min_eps = 1
@@ -358,6 +365,46 @@ def ocs_install_verification(
         # a verification of the installation of it will run
         # on all running state pods
         check_fips_enabled()
+    if config.ENV_DATA.get("encryption_at_rest"):
+        osd_encryption_verification()
+
+
+def osd_encryption_verification():
+    """
+    Verify if OSD encryption at rest if successfully deployed on OCS
+
+    Raises:
+        UnsupportedFeatureError: OCS version is smaller than 4.6
+        EnvironmentError: The OSD is not encrypted
+    """
+    ocs_version = float(config.ENV_DATA['ocs_version'])
+    if ocs_version < 4.6:
+        error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"
+        raise UnsupportedFeatureError(error_message)
+
+    osd_node_names = get_osd_running_nodes()
+    osd_size = get_osd_size()
+    lsblk_output_list = []
+    for worker_node in osd_node_names:
+        lsblk_cmd = 'oc debug node/' + worker_node + ' -- chroot /host lsblk'
+        out = run_cmd(lsblk_cmd)
+        log.info(f"the output from lsblk command is {out}")
+        lsblk_output_list.append(out)
+
+    for node_output_lsblk in lsblk_output_list:
+        node_lsb = node_output_lsblk.split()
+        # Search 'crypt' in node_lsb list
+        if 'crypt' not in node_lsb:
+            raise EnvironmentError('OSD is not encrypted')
+        index_crypt = node_lsb.index('crypt')
+        encrypted_component_size = int(
+            (re.findall(r'\d+', node_lsb[index_crypt - 2]))[0]
+        )
+        # Verify that OSD is encrypted, and not another component like sda
+        if encrypted_component_size != osd_size:
+            raise EnvironmentError(
+                'The OSD is not encrypted, another mount encrypted.'
+            )
 
 
 def add_capacity(osd_size_capacity_requested):

@@ -1265,6 +1265,35 @@ def get_ocp_version(seperator=None):
     )
 
 
+def get_running_ocp_version(separator=None):
+    """
+    Get current running ocp version
+
+    Args:
+        separator (str): String that would separate major and
+            minor version numbers
+
+    Returns:
+        string : If separator is 'None', version string will be returned as is
+            eg: '4.2', '4.3'.
+            If separator is provided then '.' in the version string would be
+            replaced by separator and resulting string will be returned.
+            eg: If separator is '_' then string returned would be '4_2'
+
+    """
+    char = separator if separator else '.'
+    namespace = config.ENV_DATA['cluster_namespace']
+    try:
+        # if the cluster exist, this part will be run
+        results = run_cmd(f'oc get clusterversion -n {namespace} -o yaml')
+        build = yaml.safe_load(results)['items'][0]['status']['desired']['version']
+        return char.join(build.split('.')[0:2])
+    except Exception:
+        # this part will return version from the config file in case
+        # cluster is not exists.
+        return get_ocp_version(seperator=char)
+
+
 def get_ocp_repo():
     """
     Get ocp repo file, name will be generated dynamically based on
@@ -2070,9 +2099,7 @@ def skipif_ocp_version(expressions):
 
     """
     skip_this = True
-    ocp_version = ".".join(
-        config.DEPLOYMENT.get('installer_version').split('.')[:-2]
-    )
+    ocp_version = get_running_ocp_version()
     expr_list = [expressions] if isinstance(expressions, str) else expressions
     for expr in expr_list:
         comparision_str = ocp_version + expr

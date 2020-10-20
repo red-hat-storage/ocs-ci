@@ -1065,7 +1065,7 @@ def setup_local_storage(storageclass):
         lvd_data = templating.load_yaml(
             constants.LOCAL_VOLUME_DISCOVERY_YAML
         )
-        worker_nodes = get_compute_node_names()
+        worker_nodes = get_compute_node_names(no_replace=True)
 
         # Update local volume discovery data with Worker node Names
         logger.info(
@@ -1090,6 +1090,13 @@ def setup_local_storage(storageclass):
         lvs_data = templating.load_yaml(
             constants.LOCAL_VOLUME_SET_YAML
         )
+
+        # Since we don't have datastore with SSD on our current VMware machines, localvolumeset doesn't detect
+        # NonRotational disk. As a workaround we are setting Rotational to device MechanicalProperties to detect
+        # HDD disk
+        if platform == constants.VSPHERE_PLATFORM:
+            logger.info("Adding Rotational for deviceMechanicalProperties spec to detect HDD disk")
+            lvs_data['spec']['deviceInclusionSpec']['deviceMechanicalProperties'].append("Rotational")
 
         # Update local volume set data with Worker node Names
         logger.info(

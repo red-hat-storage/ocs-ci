@@ -158,6 +158,7 @@ CRITICAL_ERRORS = [
 ]
 must_gather_pod_label = "must-gather"
 drain_canary_pod_label = "rook-ceph-drain-canary"
+OCS_MONKEY_REPOSITORY = "https://github.com/red-hat-storage/ocs-monkey.git"
 
 # AMQ
 AMQ_NAMESPACE = "myproject"
@@ -1190,5 +1191,6 @@ SQUADS = {
 PRODUCTION_JOBS_PREFIX = ['jnk']
 
 # min and max Noobaa endpoints
-MIN_NB_ENDPOINT_COUNT = 1
+MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
+MCG_TESTS_MIN_NB_ENDPOINT_COUNT = 2
 MAX_NB_ENDPOINT_COUNT = 2

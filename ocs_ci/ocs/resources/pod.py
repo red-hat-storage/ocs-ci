@@ -253,7 +253,8 @@ class Pod(OCS):
 
     def run_io(
         self, storage_type, size, io_direction='rw', rw_ratio=75,
-        jobs=1, runtime=60, depth=4, rate='1m', rate_process='poisson', fio_filename=None, bs='4K'
+        jobs=1, runtime=60, depth=4, rate='1m', rate_process='poisson',
+        fio_filename=None, bs='4K', end_fsync=0
     ):
         """
         Execute FIO on a pod
@@ -280,6 +281,8 @@ class Pod(OCS):
             rate_process (str): kind of rate process default poisson, e.g. poisson
             fio_filename(str): Name of fio file created on app pod's mount point
             bs (str): Block size, e.g. 4K
+            end_fsync (int): If 1, fio will sync file contents when a write
+                stage has completed. Fio default is 0
         """
         if not self.wl_setup_done:
             self.workload_setup(storage_type=storage_type, jobs=jobs)
@@ -302,6 +305,8 @@ class Pod(OCS):
         self.io_params['rate'] = rate
         self.io_params['rate_process'] = rate_process
         self.io_params['bs'] = bs
+        if end_fsync:
+            self.io_params['end_fsync'] = end_fsync
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
     def fillup_fs(self, size, fio_filename=None):
@@ -633,18 +638,20 @@ def get_file_path(pod_obj, file_name):
     return file_path
 
 
-def cal_md5sum(pod_obj, file_name):
+def cal_md5sum(pod_obj, file_name, block=False):
     """
     Calculates the md5sum of the file
 
     Args:
         pod_obj (Pod): The object of the pod
         file_name (str): The name of the file for which md5sum to be calculated
+        block (bool): True if the volume mode of PVC used on pod is 'Block'.
+            file_name will be the devicePath in this case.
 
     Returns:
         str: The md5sum of the file
     """
-    file_path = get_file_path(pod_obj, file_name)
+    file_path = file_name if block else get_file_path(pod_obj, file_name)
     md5sum_cmd_out = pod_obj.exec_cmd_on_pod(
         command=f"bash -c \"md5sum {file_path}\"", out_yaml_format=False
     )
@@ -653,7 +660,7 @@ def cal_md5sum(pod_obj, file_name):
     return md5sum
 
 
-def verify_data_integrity(pod_obj, file_name, original_md5sum):
+def verify_data_integrity(pod_obj, file_name, original_md5sum, block=False):
     """
     Verifies existence and md5sum of file created from first pod
 
@@ -661,6 +668,8 @@ def verify_data_integrity(pod_obj, file_name, original_md5sum):
         pod_obj (Pod): The object of the pod
         file_name (str): The name of the file for which md5sum to be calculated
         original_md5sum (str): The original md5sum of the file
+        block (bool): True if the volume mode of PVC used on pod is 'Block'.
+            file_name will be the devicePath in this case.
 
     Returns:
         bool: True if the file exists and md5sum matches
@@ -668,11 +677,11 @@ def verify_data_integrity(pod_obj, file_name, original_md5sum):
     Raises:
         AssertionError: If file doesn't exist or md5sum mismatch
     """
-    file_path = get_file_path(pod_obj, file_name)
+    file_path = file_name if block else get_file_path(pod_obj, file_name)
     assert check_file_existence(pod_obj, file_path), (
         f"File {file_name} doesn't exists"
     )
-    current_md5sum = cal_md5sum(pod_obj, file_name)
+    current_md5sum = cal_md5sum(pod_obj, file_name, block)
     logger.info(f"Original md5sum of file: {original_md5sum}")
     logger.info(f"Current md5sum of file: {current_md5sum}")
     assert current_md5sum == original_md5sum, (
@@ -1548,3 +1557,22 @@ def wait_for_pods_to_be_running(
             f"after {timeout} seconds"
         )
         return False
+
+
+def list_of_nodes_running_pods(selector, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    The function returns the list of nodes for the given selector
+
+    Args:
+        selector (str): The resource selector to search with
+
+    Returns:
+        list: a list of nodes that runs the given selector pods
+
+    """
+    pod_obj_list = get_all_pods(
+        namespace=namespace, selector=[selector]
+    )
+    pods_running_nodes = [get_pod_node(pod) for pod in pod_obj_list]
+    logger.info(f"{selector} running on nodes {pods_running_nodes}")
+    return list(set(pods_running_nodes))
