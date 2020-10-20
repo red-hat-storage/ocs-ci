@@ -1640,6 +1640,23 @@ def rgw_obj_fixture(request):
 
 
 @pytest.fixture()
+def rgw_deployments(request):
+    """
+    Return RGW deployments or skip the test.
+
+    """
+    oc = ocp.OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA['cluster_namespace']
+    )
+    rgw_deployments = oc.get(selector=constants.RGW_APP_LABEL)['items']
+    if rgw_deployments:
+        return rgw_deployments
+    else:
+        pytest.skip('There is no RGW deployment available for this test.')
+
+
+@pytest.fixture()
 def mcg_obj(request):
     return mcg_obj_fixture(request)
 
