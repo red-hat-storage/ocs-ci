@@ -35,7 +35,7 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
         6. repeat steps 4-5 the numbers of snapshot we want to take : 512
         7. print all information.
 
-        Raise:
+        Raises:
             StorageNotSufficientException: in case of not enough capacity
 
         """
