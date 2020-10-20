@@ -363,6 +363,14 @@ def image_pull_and_push(project_name, template, image="", pattern="", wait=True)
     """
     if config.DEPLOYMENT.get("disconnected"):
         mirror_image(image=image)
+
+    elif config.DEPLOYMENT.get('powervs'):
+        cmd = f"new-app --template=redis-ephemeral -n {project_name}"
+        ocp_obj = ocp.OCP(kind=constants.POD, namespace=project_name)
+        ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
+        deploy_pod_name = get_pod_name_by_pattern(pattern='deploy', namespace=project_name)
+        ocp_obj.wait_for_resource(condition=constants.STATUS_COMPLETED, resource_name=deploy_pod_name[0])
+
     else:
         cmd = f"new-app --template={template} -n {project_name}"
         ocp_obj = ocp.OCP()
@@ -437,9 +445,14 @@ def validate_image_exists(namespace=None):
                     name=pod_name,
                     namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
                 )
-                return pod_obj.exec_cmd_on_pod(
-                    command=f"find /registry/docker/registry/v2/repositories/{namespace}"
-                )
+                if config.DEPLOYMENT.get('powervs'):
+                    return pod_obj.exec_cmd_on_pod(
+                        command=f"find /registry/docker/registry/v2/repositories/openshift/redis"
+                    )
+                else:
+                    return pod_obj.exec_cmd_on_pod(
+                        command=f"find /registry/docker/registry/v2/repositories/{namespace}"
+                    )
 
 
 def modify_registry_pod_count(count):
