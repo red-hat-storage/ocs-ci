@@ -2863,10 +2863,23 @@ def snapshot_factory(request):
         Delete the snapshots
 
         """
+        snapcontent_objs = []
+
+        # Get VolumeSnapshotContent form VolumeSnapshots and delete
+        # VolumeSnapshots
         for instance in instances:
             if not instance.is_deleted:
+                snapcontent_objs.append(
+                    helpers.get_snapshot_content_obj(snap_obj=instance)
+                )
                 instance.delete()
                 instance.ocp.wait_for_delete(instance.name)
+
+        # Wait for VolumeSnapshotContents to be deleted
+        for snapcontent_obj in snapcontent_objs:
+            snapcontent_obj.ocp.wait_for_delete(
+                resource_name=snapcontent_obj.name, timeout=240
+            )
 
     request.addfinalizer(finalizer)
     return factory

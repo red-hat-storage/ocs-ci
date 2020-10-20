@@ -2625,3 +2625,18 @@ def default_volumesnapshotclass(interface_type):
         resource_name=resource_name
     )
     return OCS(**base_snapshot_class.data)
+
+
+def get_snapshot_content_obj(snap_obj):
+    data = dict()
+    data['api_version'] = snap_obj.api_version
+    data['kind'] = constants.VOLUMESNAPSHOTCONTENT
+    snapcontent = snap_obj.ocp.get(
+        resource_name=snap_obj,out_yaml_format=True
+    )["status"]["boundVolumeSnapshotContentName"]
+    data['metadata'] = {
+        'name': snapcontent, 'namespace': snap_obj.namespace
+    }
+    snapcontent_obj = OCS(**data)
+    snapcontent_obj.reload()
+    return snapcontent_obj
