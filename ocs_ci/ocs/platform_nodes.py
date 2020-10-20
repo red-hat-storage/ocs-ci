@@ -279,7 +279,7 @@ class VMWareNodes(NodesBase):
 
         for node in nodes:
             reboot_events_cmd = (
-                f"get events -A --field-selector involvedObject.name="
+                "get events -A --field-selector involvedObject.name="
                 f"{node.name},reason=Rebooted -o yaml"
             )
             num_events_pre_reboot[node.name] = len(
@@ -307,7 +307,7 @@ class VMWareNodes(NodesBase):
             )
             for node in nodes:
                 reboot_events_cmd = (
-                    f"get events -A --field-selector involvedObject.name="
+                    "get events -A --field-selector involvedObject.name="
                     f"{node.name},reason=Rebooted -o yaml"
                 )
                 assert num_events_pre_reboot[node.name] < len(
@@ -521,7 +521,7 @@ class AWSNodes(NodesBase):
 
         for node in nodes:
             reboot_events_cmd = (
-                f"get events -A --field-selector involvedObject.name="
+                "get events -A --field-selector involvedObject.name="
                 f"{node.name},reason=Rebooted -o yaml"
             )
             num_events_pre_reboot[node.name] = len(
@@ -550,7 +550,7 @@ class AWSNodes(NodesBase):
             )
             for node in nodes:
                 reboot_events_cmd = (
-                    f"get events -A --field-selector involvedObject.name="
+                    "get events -A --field-selector involvedObject.name="
                     f"{node.name},reason=Rebooted -o yaml"
                 )
                 assert num_events_pre_reboot[node.name] < len(
