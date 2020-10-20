@@ -103,7 +103,8 @@ class Ceph(object):
         """
         try:
             return self.get_ceph_objects(role)[order_id]
-        except IndexError:
+        except IndexError as e:
+            logger.warning(e)
             return None
 
     def get_ceph_demons(self, role=None):
@@ -133,7 +134,7 @@ class Ceph(object):
         for demon in self.get_ceph_demons():
             if demon.role == 'mgr':
                 continue
-            increment = 1  # len(self.get_osd_devices(demon.node)) if demon.role == 'osd' else 1
+            increment = 1
             ceph_demon_counter[demon.role] = ceph_demon_counter[demon.role] + increment if ceph_demon_counter.get(
                 demon.role) else increment
         return ceph_demon_counter
@@ -153,7 +154,9 @@ class Ceph(object):
         if not client:
             client = self.get_ceph_object('client') if self.get_ceph_object('client') else self.get_ceph_object('mon')
 
-        out, err = client.exec_command('sudo ceph {role} metadata -f json-pretty'.format(role=role))
+        out, _ = client.exec_command(
+            f'sudo ceph {role} metadata -f json-pretty'
+        )
 
         return json.loads(out.read().decode())
 
@@ -210,7 +213,8 @@ class Ceph(object):
 
 
         Returns:
-            CephDemon: daemon object
+            CephDemon: daemon object or None in case the osd daemon list is
+                empty
 
         """
         hostname = self.get_osd_metadata(osd_id).get('hostname')
@@ -232,12 +236,12 @@ class Ceph(object):
         """
         osd_demon = self.get_osd_by_id(osd_id, client)
         if osd_demon is None:
-            raise RuntimeError('Unable to locate osd@{id} demon'.format(id=osd_id))
+            raise RuntimeError(f'Unable to locate osd@{osd_id} demon')
         if not osd_demon.containerized:
             osd_service_id = osd_id
         else:
             osd_service_id = self.get_osd_device(osd_id)
-        osd_service_name = 'ceph-osd@{id}'.format(id=osd_service_id)
+        osd_service_name = f'ceph-osd@{osd_service_id}'
         return osd_service_name
 
     def get_osd_device(self, osd_id, client=None):
@@ -257,7 +261,9 @@ class Ceph(object):
         elif osd_metadata.get('osd_objectstore') == 'bluestore':
             osd_device = osd_metadata.get('bluefs_db_dev_node')
         else:
-            raise RuntimeError('Unable to detect filestore type for osd #{osd_id}'.format(osd_id=osd_id))
+            raise RuntimeError(
+                f'Unable to detect filestore type for osd #{osd_id}'
+            )
         return osd_device
 
     def get_node_by_hostname(self, hostname):
@@ -709,10 +715,10 @@ class CephNode(object):
         Search interface on the given node node which allows every node in the cluster accesible by it's shortname.
 
         Args:
-            ceph_node_list (list): lsit of CephNode
+            ceph_node_list (list): list of CephNode
 
         Returns:
-            eth_interface (str): retturns None if no suitable interface found
+            eth_interface (str): returns None if no suitable interface found
 
         """
         logger.info('Searching suitable ethernet interface on {node}'.format(node=self.ip_address))
@@ -737,9 +743,12 @@ class CephNode(object):
                     )
                 )
                 return eth_interface
-            except Exception:
+            except Exception as e:
+                logger.warning(e)
                 continue
-        logger.info('No suitable ethernet interface found on {node}'.format(node=ceph_node.ip_address))
+        logger.info(
+            f'No suitable ethernet interface found on {ceph_node.ip_address}'
+        )
         return None
 
     def obtain_root_permissions(self, path):
