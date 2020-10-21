@@ -276,60 +276,29 @@ def check_query_range_result_limits(
 
 class PrometheusAPI(object):
     """
-    This is wrapper class for Prometheus API. It is advised to use pre-created
-    user with access to Prometheus API (e.g. use prometheus_user fixture) so
-    that all tests can run on platforms that don't have access to
-    kubeadmin-password file.
+    This is wrapper class for Prometheus API. It requires access token for
+    API communication.
 
     """
 
     _token = None
-    _user = None
-    _password = None
     _endpoint = None
     _cacert = None
 
-    def __init__(self, user=None, password=None):
+    def __init__(self, token):
         """
         Constructor for PrometheusAPI class.
 
         Args:
-            user (str): OpenShift username used to connect to API
+            token (str): API token used for Prometheus communication
 
         """
-        self._user = user or config.RUN['username']
-        if not password:
-            filename = os.path.join(
-                config.ENV_DATA['cluster_path'],
-                config.RUN['password_location']
-            )
-            with open(filename) as f:
-                password = f.read()
-        self._password = password
-        self.refresh_connection()
+        self._token = token
         self.generate_cert()
-
-    def refresh_connection(self):
-        """
-        Login into OCP, refresh endpoint and token.
-
-        """
-        kubeconfig = os.getenv('KUBECONFIG')
-        kube_data = ""
-        with open(kubeconfig, 'r') as kube_file:
-            kube_data = kube_file.readlines()
-        ocp = OCP(
-            kind=constants.ROUTE,
-            namespace=defaults.OCS_MONITORING_NAMESPACE
-        )
-        assert ocp.login(self._user, self._password), 'Login to OCP failed'
-        self._token = ocp.get_user_token()
-        with open(kubeconfig, 'w') as kube_file:
-            kube_file.writelines(kube_data)
         route_obj = ocp.get(
             resource_name=defaults.PROMETHEUS_ROUTE
         )
-        self._endpoint = 'https://' + route_obj['spec']['host']
+        self._endpoint = f"https://{route_obj['spec']['host']}"
 
     def generate_cert(self):
         """

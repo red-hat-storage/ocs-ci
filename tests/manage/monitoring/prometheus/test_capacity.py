@@ -20,14 +20,13 @@ log = logging.getLogger(__name__)
 )
 def test_rbd_capacity_workload_alerts(
     workload_storageutilization_95p_rbd,
-    prometheus_user
+    prometheus_token
 ):
     """
     Test that there are appropriate alerts when ceph cluster is utilized
     via RBD interface.
     """
-    user, password = prometheus_user
-    api = prometheus.PrometheusAPI(user, password)
+    api = prometheus.PrometheusAPI(prometheus_token)
     measure_end_time = workload_storageutilization_95p_rbd.get('stop')
 
     # Check utilization on 95%
@@ -91,13 +90,12 @@ def test_rbd_capacity_workload_alerts(
 )
 def test_cephfs_capacity_workload_alerts(
     workload_storageutilization_95p_cephfs,
-    prometheus_user
+    prometheus_token
 ):
     """
     Test that there are appropriate alerts when ceph cluster is utilized.
     """
-    user, password = prometheus_user
-    api = prometheus.PrometheusAPI(user, password)
+    api = prometheus.PrometheusAPI(prometheus_token)
     measure_end_time = workload_storageutilization_95p_cephfs.get('stop')
 
     # Check utilization on 95%

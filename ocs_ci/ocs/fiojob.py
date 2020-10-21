@@ -296,13 +296,12 @@ def workload_fio_storageutilization(
     fio_configmap_dict,
     measurement_dir,
     tmp_path,
+    prometheus_token,
     target_percentage=None,
     target_size=None,
     with_checksum=False,
     keep_fio_data=False,
     minimal_time=480,
-    username=None,
-    password=None,
 ):
     """
     This function implements core functionality of fio storage utilization
@@ -334,6 +333,7 @@ def workload_fio_storageutilization(
             directory where measurement results are stored, see also
             :py:func:`ocs_ci.utility.workloadfixture.measure_operation()`
         tmp_path (pathlib.PosixPath): reference to pytest ``tmp_path`` fixture
+        prometheus_token (str): API token used for Prometheus API communication
         target_percentage (float): target utilization as percentage wrt all
             usable OCS space, eg. 0.50 means a request to reach 50% of total
             OCS storage utilization (wrt usable space)
@@ -347,8 +347,6 @@ def workload_fio_storageutilization(
             storage utilization is completed. Else if false, deletes the fio data.
         minimal_time (int): Minimal number of seconds to monitor a system.
             (See more details in the function 'measure_operation')
-        username (str): Username for Prometheus API communication
-        password (str): Password for Prometheus API communication
 
     Returns:
         dict: measurement results with timestamps and other medatada from
@@ -493,10 +491,9 @@ def workload_fio_storageutilization(
         lambda: write_data_via_fio(
             fio_job_file, write_timeout, pvc_size, target_percentage),
         test_file,
+        prometheus_token=prometheus_token,
         measure_after=True,
-        minimal_time=minimal_time,
-        username=username,
-        password=password
+        minimal_time=minimal_time
     )
 
     # we don't need to delete anything if this fixture has been already

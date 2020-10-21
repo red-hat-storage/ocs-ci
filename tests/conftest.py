@@ -1147,7 +1147,7 @@ def log_cli_level(pytestconfig):
 def cluster_load(
     request, project_factory_session, pvc_factory_session,
     service_account_factory_session, pod_factory_session,
-    prometheus_user
+    prometheus_token
 ):
     """
     Run IO during the test execution
@@ -1167,22 +1167,19 @@ def cluster_load(
             "will be written is going to be determined by the cluster "
             "capabilities according to its limit"
         )
-        user, password = prometheus_user
         cl_load_obj = ClusterLoad(
             project_factory=project_factory_session,
             sa_factory=service_account_factory_session,
             pvc_factory=pvc_factory_session,
             pod_factory=pod_factory_session,
             target_percentage=io_load,
-            username=user,
-            password=password
+            prometheus_token=prometheus_token
         )
         cl_load_obj.reach_cluster_load_percentage()
 
     if (log_utilization or io_in_bg) and not deployment_test:
         if not cl_load_obj:
-            user, password = prometheus_user
-            cl_load_obj = ClusterLoad(username=user, password=password)
+            cl_load_obj = ClusterLoad(prometheus_token=prometheus_token)
 
         config.RUN['load_status'] = 'running'
 
@@ -2715,24 +2712,44 @@ def user_factory_session(
     )
 
 
-@pytest.fixture(scope='session')
-def prometheus_user(user_factory_session):
+@pytest.fixture()
+def prometheus_token():
     """
-    User and password used in Prometheus API communication. The user has
-    'cluster-monitoring-view' cluster-role.
+    If prometheus_token is defined in AUTH configuration then this is used.
+    Otherewise new user for accessing Prometheus is created for
+    Prometheus API communication. The user has 'cluster-monitoring-view'
+    cluster-role.
 
     Returns:
-        tuple: username and password
+        str: token for Prometheus API
 
     """
-    username, password = user_factory_session()
-    exec_cmd(
-        [
-            'oc', 'adm', 'policy', 'add-cluster-role-to-user',
-            'cluster-monitoring-view', username
-        ]
-    )
-    return (username, password)
+    if config.ENV_DATA['platform'].lower() == 'ibm_cloud'
+        log.info('Get API access token from IBM cloud')
+        apikey = config.AUTH.get('ibm_apikey')
+        #todo: get token
+
+    else:
+        log.info('Login as kubeadmin and get API access token')
+        password_file = os.path.join(
+            config.ENV_DATA['cluster_path'],
+            config.RUN['password_location']
+        )
+        with open(password_file) as f:
+            password = f.read()
+        kubeconfig = os.getenv('KUBECONFIG')
+        kube_data = ""
+        with open(kubeconfig, 'r') as kube_file:
+            kube_data = kube_file.readlines()
+        ocp = OCP(
+            kind=constants.ROUTE,
+            namespace=defaults.OCS_MONITORING_NAMESPACE
+        )
+        assert ocp.login('kubeadmin', password), 'Login to OCP failed'
+        token = ocp.get_user_token()
+        with open(kubeconfig, 'w') as kube_file:
+            kube_file.writelines(kube_data)
+    return token
 
 
 @pytest.fixture(scope="session", autouse=True)

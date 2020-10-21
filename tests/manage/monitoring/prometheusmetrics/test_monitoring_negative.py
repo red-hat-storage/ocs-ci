@@ -16,12 +16,11 @@ logger = logging.getLogger(__name__)
 
 @tier3
 @pytest.mark.polarion_id("OCS-1306")
-def test_monitoring_shows_mon_down(measure_stop_ceph_mon, prometheus_user):
+def test_monitoring_shows_mon_down(measure_stop_ceph_mon, prometheus_token):
     """
     Make sure simple problems with MON daemons are reported via OCP Prometheus.
     """
-    user, password = prometheus_user
-    prometheus = PrometheusAPI(user, password)
+    prometheus = PrometheusAPI(prometheus_token)
     # time (in seconds) for monitoring to notice the change
     expected_delay = 60
     # query resolution step used in this test case (number of seconds)
@@ -84,12 +83,11 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon, prometheus_user):
 
 @tier3
 @pytest.mark.polarion_id("OCS-1307")
-def test_monitoring_shows_osd_down(measure_stop_ceph_osd, prometheus_user):
+def test_monitoring_shows_osd_down(measure_stop_ceph_osd, prometheus_token):
     """
     Make sure simple problems with OSD daemons are reported via OCP Prometheus.
     """
-    user, password = prometheus_user
-    prometheus = PrometheusAPI(user, password)
+    prometheus = PrometheusAPI(prometheus_token)
     # time (in seconds) for monitoring to notice the change
     expected_delay = 60
 

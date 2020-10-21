@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.libtest
-def test_workload_rbd(workload_storageutilization_50p_rbd, prometheus_user):
+def test_workload_rbd(workload_storageutilization_50p_rbd, prometheus_token):
     """
     Purpose of this test is to make the workload fixture executed, and
     show how to query prometheus.
@@ -59,8 +59,7 @@ def test_workload_rbd(workload_storageutilization_50p_rbd, prometheus_user):
     Note that this test is valid only on 3 osd cluster with all pools using
     3 way replication.
     """
-    user, password = prometheus_user
-    prometheus = PrometheusAPI(user, password)
+    prometheus = PrometheusAPI(prometheus_token)
     # Asking for values of `ceph_osd_stat_bytes_used` for every 15s in
     # when the workload fixture was utilizing 50% of the OCS storage.
     result_used = prometheus.query_range(

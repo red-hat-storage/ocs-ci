@@ -7,12 +7,11 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
-def test_alerting_works(prometheus_user):
+def test_alerting_works(prometheus_token):
     """
     If alerting works then there is at least one alert.
     """
-    user, password = prometheus_user
-    prometheus = ocs_ci.utility.prometheus.PrometheusAPI(user, password)
+    prometheus = ocs_ci.utility.prometheus.PrometheusAPI(prometheus_token)
     alerts_response = prometheus.get('alerts', payload={
         'silenced': False,
         'inhibited': False

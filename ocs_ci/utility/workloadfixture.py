@@ -23,11 +23,10 @@ logger = logging.getLogger(__name__)
 def measure_operation(
     operation,
     result_file,
+    prometheus_token,
     minimal_time=None,
     metadata=None,
     measure_after=False,
-    username=None,
-    password=None
 ):
     """
     Get dictionary with keys 'start', 'stop', 'metadata' and 'result' that
@@ -39,6 +38,7 @@ def measure_operation(
         result_file (str): File name that should contain measurement results
             including logs in json format. If this file exists then it is
             used for test.
+        prometheus_token (str): API token used for Prometheus API communication
         minimal_time (int): Minimal number of seconds to monitor a system.
             If provided then monitoring of system continues even when
             operation is finshed. If not specified then measurement is finished
@@ -49,8 +49,6 @@ def measure_operation(
             after the operation returns its state. This can be useful e.g.
             for capacity utilization testing where operation fills capacity
             and utilized data are measured after the utilization is completed
-        username (str): Username for Prometheus API communication
-        password (str): Password for Prometheus API communication
 
     Returns:
         dict: contains information about `start` and `stop` time of given
@@ -66,7 +64,7 @@ def measure_operation(
                 }
 
     """
-    def prometheus_log(info, alert_list, username=None, password=None):
+    def prometheus_log(info, alert_list, prometheus_token):
         """
         Log all alerts from Prometheus API every 3 seconds.
 
@@ -74,11 +72,10 @@ def measure_operation(
             info (dict): Contains run key attribute that controls thread.
                 If `info['run'] == False` then thread will stop
             alert_list (list): List to be populated with alerts
-            username (str): Username for Prometheus API communication
-            password (str): Password for Prometheus API communication
+            prometheus_token (str): API token used for Prometheus API communication
 
         """
-        prometheus = PrometheusAPI(username, password)
+        prometheus = PrometheusAPI(prometheus_token)
         logger.info('Logging of all prometheus alerts started')
         while info.get('run'):
             alerts_response = prometheus.get(
@@ -130,7 +127,7 @@ def measure_operation(
 
         logging_thread = threading.Thread(
             target=prometheus_log,
-            args=(info, alert_list, username, password)
+            args=(info, alert_list, prometheus_token)
         )
         logging_thread.start()
 

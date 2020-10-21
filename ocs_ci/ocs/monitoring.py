@@ -128,20 +128,19 @@ def get_list_pvc_objs_created_on_monitoring_pods():
 
 
 @retry(ServiceUnavailable, tries=60, delay=3, backoff=1)
-def get_metrics_persistentvolumeclaims_info(username=None, password=None):
+def get_metrics_persistentvolumeclaims_info(prometheus_token):
     """
     Returns the created pvc information on prometheus pod
 
     Args:
-        username (str): Username for Prometheus API communication
-        password (str): Password for Prometheus API communication
+        prometheus_token (str): API token used for Prometheus API communication
 
     Returns:
         response.content (dict): The pvc metrics collected on prometheus pod
 
     """
 
-    prometheus = ocs_ci.utility.prometheus.PrometheusAPI(username, password)
+    prometheus = ocs_ci.utility.prometheus.PrometheusAPI(prometheus_token)
     response = prometheus.get(
         'query?query=kube_pod_spec_volumes_persistentvolumeclaims_info'
     )
@@ -151,14 +150,13 @@ def get_metrics_persistentvolumeclaims_info(username=None, password=None):
 
 
 @retry(UnexpectedBehaviour, tries=60, delay=3, backoff=1)
-def check_pvcdata_collected_on_prometheus(pvc_name, username=None, password=None):
+def check_pvcdata_collected_on_prometheus(pvc_name, prometheus_token):
     """
     Checks whether initially pvc related data is collected on pod
 
     Args:
         pvc_name (str): Name of the pvc
-        username (str): Username for Prometheus API communication
-        password (str): Password for Prometheus API communication
+        prometheus_token (str): API token used for Prometheus API communication
 
     Returns:
         True on success, raises UnexpectedBehaviour on failures
@@ -167,7 +165,7 @@ def check_pvcdata_collected_on_prometheus(pvc_name, username=None, password=None
     logger.info(
         f"Verify for created pvc {pvc_name} related data is collected on prometheus pod"
     )
-    pvcs_data = get_metrics_persistentvolumeclaims_info(username, password)
+    pvcs_data = get_metrics_persistentvolumeclaims_info(prometheus_token)
     list_pvcs_data = pvcs_data.get('data').get('result')
     pvc_list = [pvc for pvc in list_pvcs_data if pvc_name == pvc.get('metric').get('persistentvolumeclaim')]
     if not pvc_list:
@@ -178,20 +176,19 @@ def check_pvcdata_collected_on_prometheus(pvc_name, username=None, password=None
     return True
 
 
-def check_ceph_health_status_metrics_on_prometheus(mgr_pod, username=None, password=None):
+def check_ceph_health_status_metrics_on_prometheus(mgr_pod, prometheus_token):
     """
     Check ceph health status metric is collected on prometheus pod
 
     Args:
         mgr_pod (str): Name of the mgr pod
-        username (str): Username for Prometheus API communication
-        password (str): Password for Prometheus API communication
+        prometheus_token (str): API token used for Prometheus API communication
 
     Returns:
         bool: True on success, false otherwise
 
     """
-    prometheus = ocs_ci.utility.prometheus.PrometheusAPI(username, password)
+    prometheus = ocs_ci.utility.prometheus.PrometheusAPI(prometheus_token)
     response = prometheus.get(
         'query?query=ceph_health_status'
     )
@@ -239,13 +236,12 @@ def prometheus_health_check(name=constants.MONITORING, kind=constants.CLUSTER_OP
     return False
 
 
-def check_ceph_metrics_available(username=None, password=None):
+def check_ceph_metrics_available(prometheus_token):
     """
     Check ceph metrics available
 
     Args:
-        username (str): Username for Prometheus API communication
-        password (str): Password for Prometheus API communication
+        prometheus_token (str): API token used for Prometheus API communication
 
     Returns:
         bool: True on success, false otherwise
@@ -253,7 +249,7 @@ def check_ceph_metrics_available(username=None, password=None):
     """
     logger.info('check ceph metrics available')
     # Check ceph metrics available
-    prometheus = ocs_ci.utility.prometheus.PrometheusAPI(username, password)
+    prometheus = ocs_ci.utility.prometheus.PrometheusAPI(prometheus_token)
     list_of_metrics_without_results = metrics.get_missing_metrics(
         prometheus,
         metrics.ceph_metrics,
