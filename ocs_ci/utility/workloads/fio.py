@@ -70,6 +70,7 @@ def run(**kwargs):
     io_pod = kwargs.pop('pod')
     st_type = kwargs.pop('type')
     path = kwargs.pop('path')
+    timeout = 600  # default timeout for the FIO test
 
     fio_cmd = "fio"
     args = ""
@@ -82,8 +83,12 @@ def run(**kwargs):
                 args = args + f" --{k}={path}"
         else:
             args = args + f" --{k}={v}"
+        if k == 'runtime' and v > timeout:
+            timeout = v  # for FIO with longer runtime, change the timeout
     fio_cmd = fio_cmd + args
     fio_cmd += " --output-format=json"
     log.info(f"Running cmd: {fio_cmd}")
 
-    return io_pod.exec_cmd_on_pod(fio_cmd, out_yaml_format=False)
+    return io_pod.exec_cmd_on_pod(
+        fio_cmd, out_yaml_format=False, timeout=timeout
+    )
