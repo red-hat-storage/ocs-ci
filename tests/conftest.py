@@ -256,8 +256,12 @@ def log_ocs_version(cluster):
     """
     teardown = config.RUN['cli_params'].get('teardown')
     deploy = config.RUN['cli_params'].get('deploy')
+    dev_mode = config.RUN['cli_params'].get('dev_mode')
     if teardown and not deploy:
         log.info("Skipping version reporting for teardown.")
+        return
+    elif dev_mode:
+        log.info("Skipping version reporting for development mode.")
         return
     cluster_version, image_dict = get_ocs_version()
     file_name = os.path.join(
@@ -1036,6 +1040,10 @@ def tier_marks_name():
 @pytest.fixture(scope='function', autouse=True)
 def health_checker(request, tier_marks_name):
     skipped = False
+    dev_mode = config.RUN['cli_params'].get('dev_mode')
+    if dev_mode:
+        log.info("Skipping health checks for development mode")
+        return
 
     def finalizer():
         if not skipped:

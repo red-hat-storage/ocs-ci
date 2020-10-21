@@ -198,6 +198,16 @@ def pytest_addoption(parser):
             "from and the value to replace to, separated by '::'"
         )
     )
+    parser.addoption(
+        '--dev-mode',
+        dest='dev_mode',
+        action="store_true",
+        default=False,
+        help=(
+            "Runs in development mode. It skips few checks like collecting "
+            "versions, collecting logs, etc"
+        )
+    )
 
 
 def pytest_configure(config):
@@ -245,6 +255,9 @@ def pytest_configure(config):
                 "Skipping version collection because we skipped "
                 "the OCS deployment"
             )
+            return
+        elif ocsci_config.RUN['cli_params'].get('dev_mode'):
+            log.info("Running in development mode")
             return
         print("Collecting Cluster versions")
         # remove extraneous metadata
@@ -435,6 +448,7 @@ def process_cluster_cli_params(config):
     collect_logs_on_success_run = get_cli_param(config, 'collect_logs_on_success_run')
     if collect_logs_on_success_run:
         ocsci_config.REPORTING['collect_logs_on_success_run'] = True
+    get_cli_param(config, 'dev_mode')
 
 
 def pytest_collection_modifyitems(session, config, items):
