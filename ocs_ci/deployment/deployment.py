@@ -405,9 +405,13 @@ class Deployment(object):
             self.create_ocs_operator_source()
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
+        subscription_plan_approval = config.DEPLOYMENT.get(
+            'subscription_plan_approval'
+        )
         package_manifest = PackageManifest(
             resource_name=defaults.OCS_OPERATOR_NAME,
             selector=operator_selector,
+            subscription_plan_approval=subscription_plan_approval
         )
         package_manifest.wait_for_resource(timeout=300)
         channel = config.DEPLOYMENT.get('ocs_csv_channel')
@@ -628,9 +632,13 @@ class Deployment(object):
             self.create_ocs_operator_source()
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
+        subscription_plan_approval = config.DEPLOYMENT.get(
+            'subscription_plan_approval'
+        )
         package_manifest = PackageManifest(
             resource_name=defaults.OCS_OPERATOR_NAME,
             selector=operator_selector,
+            subscription_plan_approval=subscription_plan_approval,
         )
         package_manifest.wait_for_resource(timeout=300)
         channel = config.DEPLOYMENT.get('ocs_csv_channel')
