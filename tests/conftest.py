@@ -2013,6 +2013,7 @@ def mcg_job_factory_session(
     )
 
 
+@pytest.fixture()
 def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
     """
         Create a Backing Store factory.
@@ -2079,7 +2080,10 @@ def multiregion_resources_fixture(request, cld_mgr, mcg_obj):
 
 
 @pytest.fixture()
-def multiregion_mirror_setup(mcg_obj, multiregion_resources, backingstore_factory, bucket_factory):
+def multiregion_mirror_setup(
+    mcg_obj, multiregion_resources,
+    backingstore_factory_session, bucket_factory_session
+):
     return multiregion_mirror_setup_fixture(
         mcg_obj,
         multiregion_resources,
