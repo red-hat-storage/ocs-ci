@@ -547,7 +547,6 @@ GATHER_COMMANDS_OTHERS_4_6 = [
     'telemeter-client.yaml',
     'thanos-querier.yaml',
     'thanos-querier.yaml',
-    'thin.yaml',
     'version.yaml',
     'view.yaml',
     'volumesnapshotclass',
