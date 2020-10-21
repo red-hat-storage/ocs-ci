@@ -40,6 +40,7 @@ class TestBucketIO(MCGTest):
     """
     Test IO of a bucket
     """
+
     @pytest.mark.polarion_id("OCS-1300")
     @tier1
     @acceptance
@@ -85,22 +86,21 @@ class TestBucketIO(MCGTest):
             ),
             out_yaml_format=False
         )
+        file_size = int(awscli_pod.exec_cmd_on_pod(
+            command=f'stat -c %s {download_dir}danny.webm',
+            out_yaml_format=False
+        ))
         bucket = bucket_factory(amount=1)[0]
         bucketname = bucket.name
-        for i in range(1, 3):
+        for i in range(3):
             awscli_pod.exec_cmd_on_pod(
                 command=craft_s3_command(
-                    f'cp f"s3://{bucketname}/danny{i}.webm {download_dir}danny.webm'
+                    f'cp {download_dir}danny.webm s3://{bucketname}/danny{i}.webm',
+                    mcg_obj=mcg_obj
                 ),
                 out_yaml_format=False
             )
-        file_size = int(awscli_pod.exec_cmd_on_pod(
-            command=f'stat - c %s {download_dir}/enwik8',
-            out_yaml_format=False
-        ))
-        assert mcg_obj.check_data_reduction(bucketname, file_size), (
-            'Data deduplication did not work as anticipated.'
-        )
+        mcg_obj.check_data_reduction(bucketname, file_size)
 
     @pytest.mark.polarion_id("OCS-1949")
     @tier1
@@ -126,11 +126,9 @@ class TestBucketIO(MCGTest):
         sync_object_directory(
             awscli_pod, download_dir, full_object_path, mcg_obj
         )
-        # The expected amount of data to be compressed according to the snappy
-        # algorithm used by NooBaa.
-        assert mcg_obj.check_data_reduction(bucketname, 35 * 1024 * 1024), (
-            'Data compression did not work as anticipated.'
-        )
+        # For this test, enwik8 is used in conjunction with Snappy compression
+        # utilized by NooBaa. Snappy consistently compresses 35MB of the file.
+        mcg_obj.check_data_reduction(bucketname, 35 * 1024 * 1024)
 
     @pytest.mark.polarion_id("OCS-1949")
     @tier2

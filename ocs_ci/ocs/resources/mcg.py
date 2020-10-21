@@ -350,11 +350,10 @@ class MCG:
                         'Retrying in 5 seconds...'
                     )
         except TimeoutExpiredError:
-            logger.error(
+            assert False, (
                 'Data reduction is insufficient. '
                 f'{total_size - total_reduced} bytes reduced out of {expected_reduction_in_bytes}.'
             )
-            assert False
 
     def request_aws_credentials(self):
         """
