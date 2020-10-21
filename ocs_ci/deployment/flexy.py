@@ -401,16 +401,17 @@ class FlexyBase(object):
         if log_level:
             pass
         cmd = self.build_install_cmd()
-        err = None
+        flexy_err = None
         # Ensure that flexy workdir will be copied to cluster dir even when
         # Flexy itself fails.
         try:
             self.run_container(cmd)
         except Exception as err:
             logger.error(err)
+            flexy_err = err
         self.flexy_post_processing()
-        if err:
-            raise err
+        if flexy_err:
+            raise flexy_err
 
     def destroy(self):
         """
