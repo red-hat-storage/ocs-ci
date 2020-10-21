@@ -100,7 +100,7 @@ class TestBucketIO(MCGTest):
                 ),
                 out_yaml_format=False
             )
-        mcg_obj.check_data_reduction(bucketname, 2*file_size)
+        mcg_obj.check_data_reduction(bucketname, 2 * file_size)
 
     @pytest.mark.polarion_id("OCS-1949")
     @tier1
