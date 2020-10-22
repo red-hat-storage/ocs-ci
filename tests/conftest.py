@@ -1154,9 +1154,16 @@ def cluster_load(
     io_in_bg = config.RUN.get('io_in_bg')
     log_utilization = config.RUN.get('log_utilization')
     io_load = config.RUN.get('io_load')
+    cluster_load_error = None
+    cluster_load_error_msg = (
+        "Cluster load might not work correctly during this run, because "
+        "it failed with an exception: %s"
+    )
 
     # IO load should not happen during deployment
-    deployment_test = True if 'deployment' in request.node.items[0].location[0] else False
+    deployment_test = True if (
+        'deployment' in request.node.items[0].location[0]
+    ) else False
     if io_in_bg and not deployment_test:
         io_load = int(io_load) * 0.01
         log.info(wrap_msg("Tests will be running while IO is in the background"))
@@ -1165,18 +1172,26 @@ def cluster_load(
             "will be written is going to be determined by the cluster "
             "capabilities according to its limit"
         )
-        cl_load_obj = ClusterLoad(
-            project_factory=project_factory_session,
-            sa_factory=service_account_factory_session,
-            pvc_factory=pvc_factory_session,
-            pod_factory=pod_factory_session,
-            target_percentage=io_load
-        )
-        cl_load_obj.reach_cluster_load_percentage()
+        try:
+            cl_load_obj = ClusterLoad(
+                project_factory=project_factory_session,
+                sa_factory=service_account_factory_session,
+                pvc_factory=pvc_factory_session,
+                pod_factory=pod_factory_session,
+                target_percentage=io_load
+            )
+            cl_load_obj.reach_cluster_load_percentage()
+        except Exception as ex:
+            log.error(cluster_load_error_msg, ex)
+            cluster_load_error = ex
 
     if (log_utilization or io_in_bg) and not deployment_test:
         if not cl_load_obj:
-            cl_load_obj = ClusterLoad()
+            try:
+                cl_load_obj = ClusterLoad()
+            except Exception as ex:
+                log.error(cluster_load_error_msg, ex)
+                cluster_load_error = ex
 
         config.RUN['load_status'] = 'running'
 
@@ -1187,6 +1202,8 @@ def cluster_load(
             config.RUN['load_status'] = 'finished'
             if thread:
                 thread.join()
+            if cluster_load_error:
+                raise cluster_load_error
 
         request.addfinalizer(finalizer)
 
