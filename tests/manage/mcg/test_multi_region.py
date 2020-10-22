@@ -28,13 +28,13 @@ class TestMultiRegion:
     @tier1
     @pytest.mark.polarion_id("OCS-1599")
     def test_multiregion_bucket_creation(
-        self, mcg_obj, multiregion_mirror_setup_session
+        self, mcg_obj, multiregion_mirror_setup
     ):
         """
         Test bucket creation using the S3 SDK
         """
 
-        mirrored_bucket_name = multiregion_mirror_setup_session[0].name
+        mirrored_bucket_name = multiregion_mirror_setup[0].name
         system_bucket, mirror_tier_name, mirror_attached_pools = (None,) * 3
 
         # Make sure that the bucket is up and running
@@ -73,13 +73,13 @@ class TestMultiRegion:
     @skipif_ocs_version("==4.4")
     @pytest.mark.polarion_id("OCS-1784")
     def test_multiregion_mirror(
-        self, cld_mgr, mcg_obj, awscli_pod, multiregion_mirror_setup_session
+        self, cld_mgr, mcg_obj, awscli_pod, multiregion_mirror_setup
     ):
         """
         Test multi-region bucket creation using the S3 SDK
         """
 
-        bucket, backingstores = multiregion_mirror_setup_session
+        bucket, backingstores = multiregion_mirror_setup
         backingstore1 = backingstores[0]
         backingstore2 = backingstores[1]
 
