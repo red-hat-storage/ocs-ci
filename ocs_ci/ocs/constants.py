@@ -116,6 +116,7 @@ LOCAL_VOLUME = 'localvolume'
 PROXY = 'Proxy'
 MACHINECONFIGPOOL = "MachineConfigPool"
 VOLUMESNAPSHOTCLASS = "VolumeSnapshotClass"
+HPA = "horizontalpodautoscaler"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -690,6 +691,7 @@ ALERT_BUCKETEXCEEDINGQUOTASTATE = 'NooBaaBucketExceedingQuotaState'
 ALERT_CLUSTERNEARFULL = 'CephClusterNearFull'
 ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
 ALERT_CLUSTEROBJECTSTORESTATE = 'ClusterObjectStoreState'
+ALERT_KUBEHPAREPLICASMISMATCH = 'KubeHpaReplicasMismatch'
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
