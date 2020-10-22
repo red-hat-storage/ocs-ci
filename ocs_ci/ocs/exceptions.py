@@ -146,6 +146,10 @@ class ChannelNotFound(Exception):
     pass
 
 
+class CSVNotFound(Exception):
+    pass
+
+
 class UnsupportedPlatformError(Exception):
     pass
 
