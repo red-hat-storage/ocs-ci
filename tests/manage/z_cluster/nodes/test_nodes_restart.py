@@ -67,18 +67,26 @@ class TestNodesRestart(ManageTest):
         self.sanity_helpers.health_check()
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
-    @bugzilla("1754287")
-    @pytest.mark.polarion_id("OCS-2015")
+    @bugzilla('1754287')
+    @bugzilla('1873938')
+    @pytest.mark.polarion_id('OCS-2015')
     def test_rolling_nodes_restart(self, nodes, pvc_factory, pod_factory):
         """
         Test restart nodes one after the other and check health status in between
 
         """
         ocp_nodes = get_node_objs()
+        pv_current = get_pv_names()
+        pv_list = []
         for node in ocp_nodes:
             nodes.restart_nodes(nodes=[node], wait=False)
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
+            pv_list.append(get_pv_names())
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        for pv in pv_list:
+            assert pv.sort() == pv_current.sort(), (
+                "After reset a node, new PV was created."
+            )
 
     @pytest.mark.parametrize(
         argnames=["interface", "operation"],
