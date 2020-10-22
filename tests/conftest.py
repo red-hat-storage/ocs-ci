@@ -2712,7 +2712,7 @@ def user_factory_session(
     )
 
 
-@pytest.fixture()
+@pytest.fixture(scope='session')
 def prometheus_token():
     """
     If prometheus_token is defined in AUTH configuration then this is used.
@@ -2724,7 +2724,7 @@ def prometheus_token():
         str: token for Prometheus API
 
     """
-    if config.ENV_DATA['platform'].lower() == 'ibm_cloud'
+    if config.ENV_DATA['platform'].lower() == 'ibm_cloud':
         log.info('Get API access token from IBM cloud')
         apikey = config.AUTH.get('ibm_apikey')
         #todo: get token
@@ -2736,7 +2736,7 @@ def prometheus_token():
             config.RUN['password_location']
         )
         with open(password_file) as f:
-            password = f.read()
+            password = f.read().rstrip('\n')
         kubeconfig = os.getenv('KUBECONFIG')
         kube_data = ""
         with open(kubeconfig, 'r') as kube_file:

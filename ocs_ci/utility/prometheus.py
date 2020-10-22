@@ -295,6 +295,11 @@ class PrometheusAPI(object):
         """
         self._token = token
         self.generate_cert()
+
+        ocp = OCP(
+            kind=constants.ROUTE,
+            namespace=defaults.OCS_MONITORING_NAMESPACE
+        )
         route_obj = ocp.get(
             resource_name=defaults.PROMETHEUS_ROUTE
         )
