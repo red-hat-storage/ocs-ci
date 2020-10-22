@@ -2632,7 +2632,7 @@ def get_snapshot_content_obj(snap_obj):
     data['api_version'] = snap_obj.api_version
     data['kind'] = constants.VOLUMESNAPSHOTCONTENT
     snapcontent = snap_obj.ocp.get(
-        resource_name=snap_obj, out_yaml_format=True
+        resource_name=snap_obj.name, out_yaml_format=True
     )["status"]["boundVolumeSnapshotContentName"]
     data['metadata'] = {
         'name': snapcontent, 'namespace': snap_obj.namespace
