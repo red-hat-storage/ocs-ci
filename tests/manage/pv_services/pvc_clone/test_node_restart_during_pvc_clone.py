@@ -119,7 +119,7 @@ class TestNodeRestartDuringPvcClone(ManageTest):
         log.info("Verifying cloned PVCs are Bound")
         for pvc_obj in cloned_pvcs:
             wait_for_resource_state(
-                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=300
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=540
             )
             pvc_obj.reload()
         log.info("Verified: Cloned PVCs are Bound")
