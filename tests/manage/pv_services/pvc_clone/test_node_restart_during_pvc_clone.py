@@ -166,7 +166,7 @@ class TestNodeRestartDuringPvcClone(ManageTest):
 
         # Run IO
         log.info("Starting IO on the new pods")
-        for pod_obj in self.pods:
+        for pod_obj in clone_pod_objs:
             storage_type = (
                 'block' if pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK else 'fs'
             )
@@ -179,7 +179,7 @@ class TestNodeRestartDuringPvcClone(ManageTest):
 
         # Wait for IO to finish
         log.info("Wait for IO to finish on the new pods")
-        for pod_obj in self.pods:
+        for pod_obj in clone_pod_objs:
             pod_obj.get_fio_results()
             log.info(f"IO finished on pod {pod_obj.name}")
         log.info("IO finished on the new pods")
