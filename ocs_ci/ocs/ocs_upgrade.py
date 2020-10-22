@@ -145,6 +145,9 @@ class OCSUpgrade(object):
         self._version_before_upgrade = version_before_upgrade
         self._ocs_registry_image = ocs_registry_image
         self.upgrade_in_current_source = upgrade_in_current_source
+        self.subscription_plan_approval = config.DEPLOYMENT.get(
+            'subscription_plan_approval'
+        )
 
     @property
     def version_before_upgrade(self):
@@ -216,6 +219,7 @@ class OCSUpgrade(object):
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
             resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
+            subscription_plan_approval=self.subscription_plan_approval,
         )
         channel = config.DEPLOYMENT.get('ocs_csv_channel')
 
@@ -309,6 +313,7 @@ class OCSUpgrade(object):
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
             resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
+            subscription_plan_approval=self.subscription_plan_approval,
         )
         csv_name_post_upgrade = package_manifest.get_current_csv(channel)
         if csv_name_post_upgrade == csv_name_pre_upgrade:
@@ -335,6 +340,7 @@ class OCSUpgrade(object):
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
             resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
+            subscription_plan_approval=self.subscription_plan_approval,
         )
         csv_name_post_upgrade = package_manifest.get_current_csv(channel)
         csv_post_upgrade = CSV(

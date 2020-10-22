@@ -183,8 +183,12 @@ class OCS(object):
 
 def get_version_info(namespace=None):
     operator_selector = get_selector_for_ocs_operator()
+    subscription_plan_approval = config.DEPLOYMENT.get(
+        'subscription_plan_approval'
+    )
     package_manifest = PackageManifest(
         resource_name=defaults.OCS_OPERATOR_NAME, selector=operator_selector,
+        subscription_plan_approval=subscription_plan_approval,
     )
     channel = config.DEPLOYMENT.get('ocs_csv_channel')
     csv_name = package_manifest.get_current_csv(channel)
@@ -222,8 +226,12 @@ def get_ocs_csv():
     """
     namespace = config.ENV_DATA['cluster_namespace']
     operator_selector = get_selector_for_ocs_operator()
+    subscription_plan_approval = config.DEPLOYMENT.get(
+        'subscription_plan_approval'
+    )
     ocs_package_manifest = PackageManifest(
         resource_name=defaults.OCS_OPERATOR_NAME, selector=operator_selector,
+        subscription_plan_approval=subscription_plan_approval,
     )
     channel = config.DEPLOYMENT.get('ocs_csv_channel')
     ocs_csv_name = ocs_package_manifest.get_current_csv(channel=channel)
