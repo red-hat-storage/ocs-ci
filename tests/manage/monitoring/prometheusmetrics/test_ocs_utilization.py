@@ -24,12 +24,12 @@ CPU_USAGE_POD = "node_namespace_pod_container:container_cpu_usage_seconds_total:
 @tier1
 @marks.polarion_id("OCS-2364")
 @marks.bugzilla('1849309')
-def test_mcg_cpu_usage(workload_idle):
+def test_mcg_cpu_usage(workload_idle, prometheus_token):
     """
     Without any IO  workload, cpu utilization of MCG pods should be minimal.
     No pod should utilize more than 0.1 cpu units.
     """
-    prometheus = PrometheusAPI()
+    prometheus = PrometheusAPI(prometheus_token)
     cpu_result = prometheus.query_range(
         query=CPU_USAGE_POD + '{namespace="openshift-storage",pod=~"^noobaa.*"}',
         start=workload_idle['start'],

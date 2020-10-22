@@ -13,13 +13,13 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4a
 @pytest.mark.polarion_id("OCS-2323")
-def test_rgw_unavailable(measure_stop_rgw):
+def test_rgw_unavailable(measure_stop_rgw, prometheus_token):
     """
     Test that there is appropriate alert when RGW is unavailable and that
     this alert is cleared when the RGW interface is back online.
 
     """
-    api = prometheus.PrometheusAPI()
+    api = prometheus.PrometheusAPI(prometheus_token)
 
     # get alerts from time when manager deployment was scaled down
     alerts = measure_stop_rgw.get('prometheus_alerts')
