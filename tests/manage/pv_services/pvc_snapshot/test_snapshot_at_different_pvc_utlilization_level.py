@@ -117,7 +117,7 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 f"Deleted PVC {pvc_obj.name}. Verifying whether PV "
                 f"{pv_obj.name} is deleted."
             )
-            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
+            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
         log.info(
             "Deleted parent PVCs before restoring snapshot. "
             "PVs are also deleted."

@@ -135,7 +135,9 @@ class TestCloneWithDifferentAccessMode(ManageTest):
         # Verify the new pods are running
         log.info("Verify the new pods are running")
         for pod_obj in clone_pod_objs:
-            helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+            helpers.wait_for_resource_state(
+                pod_obj, constants.STATUS_RUNNING, 180
+            )
         log.info("Verified: New pods are running")
 
         # Verify md5sum
