@@ -112,7 +112,8 @@ to the pytest.
 * `--csv-change` - Allows changes in the OCS CSV. For example, usage of custom image,
    like MCG or RHCS. The format should be:
    <pattern_to_replace_from::pattern_to_replace_to>, while '::' is the delimiter
-
+* `--dev-mode` - Runs in development mode. Skip the checks like collecting
+   cluster versions, collection ocs versions, health checks etc.
 ## Examples
 
 Deployment and teardown of the test cluster can be done automatically with
