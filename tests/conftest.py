@@ -67,7 +67,6 @@ from ocs_ci.utility.utils import (
     ceph_health_check,
     ceph_health_check_base,
     get_running_ocp_version,
-    exec_cmd,
     get_openshift_client,
     get_system_architecture,
     get_testrun_name,
