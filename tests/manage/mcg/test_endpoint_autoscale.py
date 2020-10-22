@@ -1,10 +1,10 @@
-import pytest
+# import pytest
 
 from ocs_ci.framework.testlib import MCGTest, tier1, skipif_ocs_version
 from ocs_ci.ocs import constants, defaults, ocp
 
 
-@pytest.mark.polarion_id("OCS-XXXX")
+# @pytest.mark.polarion_id("OCS-XXXX")
 @tier1
 class TestEndpointAutoScale(MCGTest):
     """
