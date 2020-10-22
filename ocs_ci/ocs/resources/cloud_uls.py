@@ -25,13 +25,19 @@ def cloud_uls_factory(request, cld_mgr):
         'azure': set(),
         'ibmcos': set()
     }
-
-    ulsMap = {
-        'aws': cld_mgr.aws_client,
-        'gcp': cld_mgr.gcp_client,
-        'azure': cld_mgr.azure_client,
-        'ibmcos': cld_mgr.ibmcos_client
-    }
+    try:
+        ulsMap = {
+            'aws': cld_mgr.aws_client,
+            'gcp': cld_mgr.gcp_client,
+            'azure': cld_mgr.azure_client,
+            'ibmcos': cld_mgr.ibmcos_client
+        }
+    except AttributeError as e:
+        raise Exception(
+            '{} was not initialized, '
+            'please verify the needed credentials '
+            'were set in auth.yaml'.format(str(e).split("'")[3])
+        ).with_traceback(e.__traceback__)
 
     def _create_uls(uls_dict):
         """
