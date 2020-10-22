@@ -132,12 +132,7 @@ class Sanity:
         we will check 2 OBCs
 
         """
-        sample = TimeoutSampler(
-            300,
-            5,
-            self.ceph_cluster.noobaa_health_check
-        )
-        sample.wait_for_func_status(True)
+        self.ceph_cluster.wait_for_noobaa_health_ok()
 
     def delete_resources(self):
         """
