@@ -865,6 +865,7 @@ def collect_prometheus_metrics(
     dir_name,
     start,
     stop,
+    prometheus_token,
     step=1.0,
 ):
     """
@@ -879,9 +880,10 @@ def collect_prometheus_metrics(
             in dir_name suffix with _ocs_metrics.
         start (str): start timestamp of required datapoints
         stop (str): stop timestamp of required datapoints
+        prometheus_token (str): API key used to communicate with Prometheus API
         step (float): step of required datapoints
     """
-    api = PrometheusAPI()
+    api = PrometheusAPI(prometheus_token)
     log_dir_path = os.path.join(
         os.path.expanduser(ocsci_config.RUN['log_dir']),
         f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",

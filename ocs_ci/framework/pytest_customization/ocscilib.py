@@ -31,6 +31,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.resources.ocs import get_ocs_csv, get_version_info
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
+from ocs_ci.utility.prometheus import get_api_token
 from ocs_ci.utility.utils import (
     dump_config_to_file, get_ceph_version, get_cluster_name,
     get_cluster_version, get_csi_versions, get_ocp_version,
@@ -495,13 +496,15 @@ def pytest_runtest_makereport(item, call):
         and rep.failed
         and item.get_closest_marker('gather_metrics_on_fail')
     ):
+        token = get_api_token()
         metrics = item.get_closest_marker('gather_metrics_on_fail').args
         try:
             collect_prometheus_metrics(
                 metrics,
                 f'{item.name}-{call.when}',
                 call.start,
-                call.stop
+                call.stop,
+                prometheus_token=token
             )
         except Exception:
             log.exception("Failed to collect prometheus metrics")

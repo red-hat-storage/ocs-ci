@@ -61,6 +61,7 @@ from ocs_ci.utility import users
 from ocs_ci.utility.environment_check import (
     get_status_before_execution, get_status_after_execution
 )
+from ocs_ci.utility.prometheus import get_api_token
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -2724,32 +2725,7 @@ def prometheus_token():
         str: token for Prometheus API
 
     """
-    if config.ENV_DATA['platform'].lower() == 'ibm_cloud':
-        log.info('Get API access token from IBM cloud')
-        apikey = config.AUTH.get('ibm_apikey')
-        #todo: get token
-
-    else:
-        log.info('Login as kubeadmin and get API access token')
-        password_file = os.path.join(
-            config.ENV_DATA['cluster_path'],
-            config.RUN['password_location']
-        )
-        with open(password_file) as f:
-            password = f.read().rstrip('\n')
-        kubeconfig = os.getenv('KUBECONFIG')
-        kube_data = ""
-        with open(kubeconfig, 'r') as kube_file:
-            kube_data = kube_file.readlines()
-        ocp = OCP(
-            kind=constants.ROUTE,
-            namespace=defaults.OCS_MONITORING_NAMESPACE
-        )
-        assert ocp.login('kubeadmin', password), 'Login to OCP failed'
-        token = ocp.get_user_token()
-        with open(kubeconfig, 'w') as kube_file:
-            kube_file.writelines(kube_data)
-    return token
+    return get_api_token()
 
 
 @pytest.fixture(scope="session", autouse=True)

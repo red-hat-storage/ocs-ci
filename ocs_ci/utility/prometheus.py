@@ -274,6 +274,42 @@ def check_query_range_result_limits(
     return is_result_ok
 
 
+def get_api_token():
+    """
+    Get API token used for communication with Prometheus API.
+
+    Returns:
+        str: API token
+
+    """
+    if config.ENV_DATA['platform'].lower() == 'ibm_cloud':
+        logger.info('Get API access token from IBM cloud')
+        apikey = config.AUTH.get('ibm_apikey')
+        #todo: get token
+
+    else:
+        logger.info('Login as kubeadmin and get API access token')
+        password_file = os.path.join(
+            config.ENV_DATA['cluster_path'],
+            config.RUN['password_location']
+        )
+        with open(password_file) as f:
+            password = f.read().rstrip('\n')
+        kubeconfig = os.getenv('KUBECONFIG')
+        kube_data = ""
+        with open(kubeconfig, 'r') as kube_file:
+            kube_data = kube_file.readlines()
+        ocp = OCP(
+            kind=constants.ROUTE,
+            namespace=defaults.OCS_MONITORING_NAMESPACE
+        )
+        assert ocp.login('kubeadmin', password), 'Login to OCP failed'
+        token = ocp.get_user_token()
+        with open(kubeconfig, 'w') as kube_file:
+            kube_file.writelines(kube_data)
+    return token
+
+
 class PrometheusAPI(object):
     """
     This is wrapper class for Prometheus API. It requires access token for
