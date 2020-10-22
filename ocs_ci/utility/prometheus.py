@@ -1,4 +1,5 @@
 import base64
+import json
 import logging
 import os
 import requests
@@ -10,6 +11,7 @@ from datetime import datetime
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(name=__file__)
 
@@ -285,8 +287,27 @@ def get_api_token():
     if config.ENV_DATA['platform'].lower() == 'ibm_cloud':
         logger.info('Get API access token from IBM cloud')
         apikey = config.AUTH.get('ibm_apikey')
-        #todo: get token
-
+        cluster_id = exec_cmd(
+            "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
+        ).stdout.decode()
+        exec_cmd([
+            'ibmcloud', 'login', '--apikey', apikey,
+            '-c', cluster_id, '-r', config.ENV_DATA['region']
+        ])
+        logger.info('Get IBM token endpoint')
+        ibm_cluster_info = exec_cmd([
+            'ibmcloud', 'oc', 'cluster', 'get', '-c', cluster_id, '--json'
+        ]).stdout.decode()
+        ibm_cluster_info = json.loads(ibm_cluster_info)
+        token_endpoint = requests.get(
+            f"{ibm_cluster_info['serverURL']}/.well-known/oauth-authorization-server"
+        ).json['token_endpoint']
+        logger.info(f"Token endpoint: {token_endpoint}")
+        token = requests.get(
+            f"{token_endpoint.rstrip('token')}/authorize?client_id=openshift-challenging-client&response_type=token",
+            auth=('apikey', apikey),
+            headers={"X-CSRF-Token": "a"}
+        )
     else:
         logger.info('Login as kubeadmin and get API access token')
         password_file = os.path.join(
