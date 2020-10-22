@@ -37,7 +37,7 @@ def cloud_uls_factory(request, cld_mgr):
             '{} was not initialized, '
             'please verify the needed credentials '
             'were set in auth.yaml'.format(str(e).split("'")[3])
-        ).with_traceback(e.__traceback__)
+        )
 
     def _create_uls(uls_dict):
         """
