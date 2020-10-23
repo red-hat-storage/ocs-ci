@@ -3268,3 +3268,134 @@ def reportportal_customization(request):
         config.REPORTING["rp_endpoint"] = endpoint
         config.REPORTING["rp_project"] = project
         request.config._metadata["RP Launch URL:"] = launch_url
+
+
+@pytest.fixture(scope='function')
+def multiple_snapshot_and_clone_of_postgres_pvc_factory(
+    request, pgsql_factory_fixture, snapshot_factory,
+    snapshot_restore_factory, pvc_clone_factory
+):
+    """
+    Calling this fixture creates multiple snapshots & clone of postgres PVC
+    """
+    instances = []
+
+    def factory(pvc_size_new, pgsql):
+        """
+        Args:
+            pvc_size_new (int): Resize/Expand the pvc size
+            pgsql (obj): Pgsql obj
+
+        Returns:
+            Postgres pod: Pod instances
+
+        """
+
+        # Get postgres pvc list obj
+        postgres_pvcs_obj = pgsql.get_postgres_pvc()
+
+        # Take a snapshot
+        log.info("Creating snapshot of all postgres PVCs")
+        snapshots = []
+        for pvc_obj in postgres_pvcs_obj:
+            log.info(
+                f"Creating snapshot of PVC {pvc_obj.name}"
+            )
+            snap_obj = snapshot_factory(pvc_obj=pvc_obj, snapshot_name=f"{pvc_obj.name}-snap")
+            snapshots.append(snap_obj)
+        log.info("Snapshots creation completed and in Ready state")
+
+        # Create PVCs out of the snapshots
+        log.info("Creating new PVCs from snapshots")
+        restore_pvc_objs = []
+        for snapshot in snapshots:
+            log.info(f"Creating a PVC from snapshot {snapshot.name}")
+            restore_pvc_obj = snapshot_restore_factory(
+                snapshot_obj=snapshot,
+                restore_pvc_name=f"{snapshot.name}-restore",
+                volume_mode=snapshot.parent_volume_mode,
+                access_mode=snapshot.parent_access_mode
+            )
+            log.info(
+                f"Created PVC {restore_pvc_obj.name} from snapshot "
+                f"{snapshot.name}"
+            )
+            restore_pvc_objs.append(restore_pvc_obj)
+        log.info("Created new PVCs from all the snapshots and in Bound state")
+
+        # Create clone of pgsql pvc
+        log.info("Creating clone of the Postgres Restored PVCs")
+        cloned_pvcs = [pvc_clone_factory(
+            pvc_obj, volume_mode=constants.VOLUME_MODE_FILESYSTEM
+        ) for pvc_obj in restore_pvc_objs]
+        log.info("Created clone of the PVCs and all cloned PVCs are in Bound state")
+
+        # Attach a new pgsql pod to resized cloned pvcs
+        sset_list = pgsql.attach_pgsql_pod_to_claim_pvc(
+            pvc_objs=cloned_pvcs, postgres_name='postgres-clone', run_benchmark=False
+        )
+        instances.extend(sset_list)
+
+        # Resize cloned PVCs
+        for pvc_obj in cloned_pvcs:
+            log.info(
+                f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G"
+            )
+            pvc_obj.resize_pvc(pvc_size_new, True)
+
+        # Take a snapshot of all cloned postgres PVCs
+        new_snapshots = []
+        log.info("Creating snapshot of all cloned postgres PVCs")
+        for pvc_obj in cloned_pvcs:
+            log.info(
+                f"Creating snapshot of PVC {pvc_obj.name}"
+            )
+            snap_obj = snapshot_factory(pvc_obj=pvc_obj, snapshot_name=f"{pvc_obj.name}-cloned-snap")
+            new_snapshots.append(snap_obj)
+        log.info("Snapshots creation completed and in Ready state")
+
+        # Create PVCs out of the new snapshots
+        log.info("Creating new PVCs from snapshots")
+        new_restored_pvc_objs = []
+        for snapshot in new_snapshots:
+            log.info(f"Creating a PVC from snapshot {snapshot.name}")
+            restore_pvc_obj = snapshot_restore_factory(
+                snapshot_obj=snapshot,
+                restore_pvc_name=f"{snapshot.name}-restore",
+                volume_mode=snapshot.parent_volume_mode,
+                access_mode=snapshot.parent_access_mode
+            )
+            log.info(
+                f"Created PVC {restore_pvc_obj.name} from snapshot "
+                f"{snapshot.name}"
+            )
+            new_restored_pvc_objs.append(restore_pvc_obj)
+        log.info("Created new PVCs from all the snapshots and in Bound state")
+
+        # Attach a new pgsql pod to resized cloned pvcs
+        pgsql_obj_list = pgsql.attach_pgsql_pod_to_claim_pvc(
+            pvc_objs=new_restored_pvc_objs, postgres_name='postgres-clone-restore', run_benchmark=False
+        )
+        instances.extend(pgsql_obj_list)
+
+        # Resize cloned PVCs
+        for pvc_obj in new_restored_pvc_objs:
+            log.info(
+                f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G"
+            )
+            pvc_obj.resize_pvc(pvc_size_new, True)
+
+        return instances
+
+    def finalizer():
+        """
+        Delete the cloned PVCs
+
+        """
+        for instance in instances:
+            if not instance.is_deleted:
+                instance.delete()
+                instance.ocp.wait_for_delete(instance.name)
+
+    request.addfinalizer(finalizer)
+    return factory
