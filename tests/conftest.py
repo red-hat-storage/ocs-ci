@@ -3095,7 +3095,7 @@ def pvc_clone_factory(request):
         clone_pvc_obj.volume_mode = volume_mode
 
         if status:
-            helpers.wait_for_resource_state(pvc_obj, status)
+            helpers.wait_for_resource_state(clone_pvc_obj, status)
         return clone_pvc_obj
 
     def finalizer():
