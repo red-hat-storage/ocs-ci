@@ -657,17 +657,17 @@ def get_compute_node_names(no_replace=False):
     """
     platform = config.ENV_DATA.get('platform').lower()
     compute_node_objs = get_typed_nodes()
-    if platform == (constants.VSPHERE_PLATFORM or constants.AWS_PLATFORM):
+    if platform in [constants.VSPHERE_PLATFORM, constants.AWS_PLATFORM]:
         return [
             compute_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL]
             for compute_obj in compute_node_objs
         ]
     elif (
-        platform == (
-            constants.BAREMETAL_PLATFORM
-            or constants.BAREMETALPSI_PLATFORM
-            or constants.IBM_POWER_PLATFORM
-        )
+        platform in [
+            constants.BAREMETAL_PLATFORM,
+            constants.BAREMETALPSI_PLATFORM,
+            constants.IBM_POWER_PLATFORM
+        ]
     ):
         if no_replace:
             return [
