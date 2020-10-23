@@ -10,11 +10,16 @@ from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import utils, templating
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed, ResourceWrongStatusException
+from ocs_ci.ocs.exceptions import (
+    UnexpectedBehaviour, CommandFailed,
+    ResourceWrongStatusException
+)
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from subprocess import CalledProcessError
-from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, get_operator_pods, get_file_path
+from ocs_ci.ocs.resources.pod import (
+    get_all_pods, get_pod_obj, get_operator_pods, get_file_path
+)
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.helpers.helpers import wait_for_resource_state, create_unique_resource_name
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD

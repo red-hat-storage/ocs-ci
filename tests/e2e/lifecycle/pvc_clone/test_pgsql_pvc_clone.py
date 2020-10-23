@@ -60,9 +60,6 @@ class TestPvcCloneOfWorkloads(E2ETest):
         self.sset_list = []
         for i in range(3):
 
-            # Get usage of pgsql pvc
-            parent_pods_obj = pgsql.get_postgres_used_file_space(postgres_pods_obj)
-
             # Create clone of pgsql pvc
             log.info("Creating clone of the Postgres PVCs")
             cloned_pvcs = [pvc_clone_factory(
@@ -76,6 +73,9 @@ class TestPvcCloneOfWorkloads(E2ETest):
                 run_benchmark=False
             )
             self.sset_list.extend(self.pgsql_obj_list)
+
+            # Get usage of pgsql pvc
+            parent_pods_obj = pgsql.get_postgres_used_file_space(postgres_pods_obj)
 
             # Validate cloned pvcs file space matches with parent
             cloned_pods_list = get_pod_name_by_pattern(
