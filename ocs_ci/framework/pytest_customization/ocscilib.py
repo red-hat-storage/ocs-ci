@@ -143,6 +143,17 @@ def pytest_addoption(parser):
         help="ocs version to upgrade (e.g. 4.3)"
     )
     parser.addoption(
+        '--upgrade-ocp-version',
+        dest='upgrade_ocp_version',
+        help='''
+        OCP version to upgrade to. This version will be used to
+        load file from conf/ocp_version/ocp-VERSION-config.yaml.
+        For example:
+        4.5 (for nightly 4.5 OCP build)
+        4.5-ga (for latest GAed 4.5 OCP build)
+        '''
+    )
+    parser.addoption(
         '--ocp-version',
         dest='ocp_version',
         help="""
@@ -432,6 +443,13 @@ def process_cluster_cli_params(config):
     ocp_version = get_cli_param(config, '--ocp-version')
     if ocp_version:
         version_config_file = f"ocp-{ocp_version}-config.yaml"
+        version_config_file_path = os.path.join(
+            OCP_VERSION_CONF_DIR, version_config_file
+        )
+        load_config_file(version_config_file_path)
+    upgrade_ocp_version = get_cli_param(config, '--upgrade-ocp-version')
+    if upgrade_ocp_version:
+        version_config_file = f"ocp-{upgrade_ocp_version}-upgrade.yaml"
         version_config_file_path = os.path.join(
             OCP_VERSION_CONF_DIR, version_config_file
         )
