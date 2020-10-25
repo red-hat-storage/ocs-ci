@@ -304,14 +304,22 @@ def get_creation_time(snap_name, content_name):
     Returns:
         int: creation time in seconds
 
+    Raises:
+        General exception : can not found start/end of creation time
+
     """
 
     # Getting start creation time
     logs = run_oc_command(f'logs {log_names["start"]}', 'openshift-cluster-storage-operator')
+    st = None
+    et = None
     for line in logs:
         if snap_name in line and 'Creating content for snapshot' in line:
             st = line.split(' ')[1]
             st = datetime.datetime.strptime(st, format)
+    if st is None:
+        log.error(f'Can not found start time of {snap_name}')
+        raise Exception('Can not found start time of {snap_name}')
 
     # Getting end creation time
     logs = []
@@ -324,6 +332,10 @@ def get_creation_time(snap_name, content_name):
             if content_name in line and 'readyToUse true' in line:
                 et = line.split(' ')[1]
                 et = datetime.datetime.strptime(et, format)
+
+    if et is None:
+        log.error(f'Can not found end time of {snap_name}')
+        raise Exception('Can not found end time of {snap_name}')
 
     results = (et - st).total_seconds()
 
@@ -363,9 +375,13 @@ def create_snapshot(snap_num):
         if ERRMSG not in res[0]:
             res = yaml.safe_load('\n'.join(res))
             if res['status']['readyToUse']:
+                log.info(f'{snap_name} Created and ready to use')
                 snap_con_name = res['status']['boundVolumeSnapshotContentName']
                 break
             else:
+                log.info(
+                    f'{snap_name} is not ready yet, sleep 5 sec before re-check'
+                )
                 time.sleep(5)
         else:
             raise Exception(f'Can not get snapshot status {res}')
