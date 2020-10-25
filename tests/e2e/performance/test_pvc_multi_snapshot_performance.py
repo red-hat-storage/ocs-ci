@@ -1,12 +1,13 @@
+import os
 import logging
+import subprocess
 
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.framework.testlib import (
     skipif_ocs_version, skipif_ocp_version, E2ETest, performance
 )
-from ocs_ci.ocs.resources import pvc
-from tests import helpers
 
 log = logging.getLogger(__name__)
 
@@ -33,13 +34,13 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
         4. re-write the data on the PVC
         5. Take a snapshot of the PVC and measure the time of creation.
         6. repeat steps 4-5 the numbers of snapshot we want to take : 512
+           this will be run by outside script for low memory consumption
         7. print all information.
 
         Raises:
             StorageNotSufficientException: in case of not enough capacity
 
         """
-        create_times = []  # list for all snapshots results
         num_of_snaps = 512  # number of snapshots to take
 
         # Getting the total Storage capacity
@@ -94,65 +95,22 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
             f'with the name of {file_name}'
         )
 
+        '''
         snap_yaml = constants.CSI_RBD_SNAPSHOT_YAML
         if self.interface == constants.CEPHFILESYSTEM:
             snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
+        '''
 
-        for test_num in range(1, (num_of_snaps + 1)):
+        os.environ["SNAPNUM"] = f'{num_of_snaps}'
+        os.environ["LOGPATH"] = f'{ocsci_log_path()}'
+        os.environ["FILESIZE"] = file_size
+        os.environ["NSPACE"] = self.pvc_obj.namespace
+        os.environ["PODNAME"] = self.pod_obj.name
+        os.environ["PVCNAME"] = self.pvc_obj.name
+        os.environ["INTERFACE"] = self.interface
 
-            test_results = {
-                'test_num': test_num,
-                'create': {'time': None, 'speed': None},
-            }
-
-            # Going to run only write IO to fill the PVC for the snapshot.
-            log.info(
-                f'Running IO on pod {self.pod_obj.name} - Test num. {test_num}'
-            )
-            self.pod_obj.fillup_fs(size=file_size, fio_filename=file_name)
-
-            # Wait for fio to finish
-            fio_result = self.pod_obj.get_fio_results()
-            err_count = fio_result.get('jobs')[0].get('error')
-            assert err_count == 0, (
-                f"IO error on pod {self.pod_obj.name}. "
-                f"FIO result: {fio_result}"
-            )
-            log.info('IO on the PVC Finished')
-
-            # Take a snapshot of the PVC and measure the time of creation.
-            snap_name = self.pvc_obj.name.replace(
-                'pvc-test', f'snapshot-test{test_num}'
-            )
-            log.info(f'Taking snapshot of the PVC {snap_name}')
-            snap_obj = pvc.create_pvc_snapshot(
-                self.pvc_obj.name,
-                snap_yaml,
-                snap_name,
-                helpers.default_volumesnapshotclass(self.interface).name,
-            )
-            snap_obj.ocp.wait_for_resource(
-                condition='true', resource_name=snap_obj.name,
-                column=constants.STATUS_READYTOUSE, timeout=60
-            )
-
-            snap_con_name = snap_obj.ocp.get(
-                resource_name=snap_name,
-                out_yaml_format=True
-            )["status"]["boundVolumeSnapshotContentName"]
-            log.info(f'Snap content name in test-{test_num} is {snap_con_name}')
-
-            test_results['create']['time'] = helpers.measure_snapshot_creation_time(
-                self.interface, snap_obj.name, snap_con_name
-            )
-            test_results['create']['speed'] = int(
-                filesize * constants.GB2MB / test_results['create']['time']
-            )
-            log.info(f'Test {test_num} results:')
-            log.info(f'Snapshot creation time is : {test_results["create"]["time"]} sec.')
-            log.info(f'Snapshot speed is : {test_results["create"]["speed"]} MB/sec')
-            create_times.append(test_results)
-
-        logging.info(f"Snapshot created results are:  {create_times}")
+        main_script = "tests/e2e/performance/multi_snapshots.py"
+        result = subprocess.run([main_script], stdout=subprocess.PIPE)
+        log.info(f"Results from main script : {result.stdout.decode('utf-8')}")
 
         # TODO: push all results to elasticsearch server
