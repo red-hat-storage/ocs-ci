@@ -2,15 +2,20 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import (
+<<<<<<< HEAD
     tier4,
     tier4a,
     ignore_leftovers,
     ManageTest,
     aws_platform_required,
     bugzilla,
+=======
+    tier4, tier4a, ignore_leftovers, ManageTest,
+    aws_platform_required, bugzilla, skipif_no_lso
+>>>>>>> Create new test to verify unexpected PV is not created after node reboot on LSO cluster
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import get_node_objs
+from ocs_ci.ocs.node import get_node_objs, get_typed_nodes
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
@@ -68,25 +73,22 @@ class TestNodesRestart(ManageTest):
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
     @bugzilla('1754287')
+<<<<<<< HEAD
     @bugzilla('1873938')
     @pytest.mark.polarion_id('OCS-2015')
+=======
+    @pytest.mark.polarion_id("OCS-2015")
+>>>>>>> Create new test to verify unexpected PV is not created after node reboot on LSO cluster
     def test_rolling_nodes_restart(self, nodes, pvc_factory, pod_factory):
         """
         Test restart nodes one after the other and check health status in between
 
         """
         ocp_nodes = get_node_objs()
-        pv_current = get_pv_names()
-        pv_list = []
         for node in ocp_nodes:
             nodes.restart_nodes(nodes=[node], wait=False)
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
-            pv_list.append(get_pv_names())
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
-        for pv in pv_list:
-            assert pv.sort() == pv_current.sort(), (
-                "After reset a node, new PV was created."
-            )
 
     @pytest.mark.parametrize(
         argnames=["interface", "operation"],
@@ -324,3 +326,22 @@ class TestNodesRestart(ManageTest):
 
         # Checking cluster and Ceph health
         self.sanity_helpers.health_check()
+
+    @bugzilla('1873938')
+    @skipif_no_lso
+    def test_pv_after_reboot_node(self, nodes):
+        """
+        Verify unexpected PV is not created after node reboot on LSO cluster
+
+        """
+        pv_before_reset = get_pv_names()
+        worker_node = get_typed_nodes(
+            node_type=constants.WORKER_MACHINE, num_of_nodes=1
+        )
+        nodes.restart_nodes(nodes=worker_node, wait=False)
+        pv_after_reset = get_pv_names()
+        pv_after_reset.sort()
+        pv_before_reset.sort()
+        assert pv_before_reset == pv_after_reset, (
+            "Unexpected PV is created after node reboot"
+        )
