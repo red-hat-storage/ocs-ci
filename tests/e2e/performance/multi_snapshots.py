@@ -368,7 +368,8 @@ def create_snapshot(snap_num):
     if ERRMSG in res[0]:
         raise Exception(f'Can not crete snapshot : {res}')
     # wait until snapshot is ready
-    while True:
+    timeout = 600
+    while timeout > 0:
         res = run_oc_command(
             f'get volumesnapshot {snap_name} -o yaml', params['NSPACE']
         )
@@ -383,6 +384,7 @@ def create_snapshot(snap_num):
                     f'{snap_name} is not ready yet, sleep 5 sec before re-check'
                 )
                 time.sleep(5)
+                timeout -= 5
         else:
             raise Exception(f'Can not get snapshot status {res}')
     return get_creation_time(snap_name, snap_con_name)
