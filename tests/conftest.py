@@ -2013,7 +2013,7 @@ def mcg_job_factory_session(
     )
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
 def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
     """
         Create a Backing Store factory.
