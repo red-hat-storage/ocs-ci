@@ -65,7 +65,7 @@ from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
     ceph_health_check_base,
-    get_ocp_version,
+    get_running_ocp_version,
     get_openshift_client,
     get_system_architecture,
     get_testrun_name,
@@ -256,8 +256,12 @@ def log_ocs_version(cluster):
     """
     teardown = config.RUN['cli_params'].get('teardown')
     deploy = config.RUN['cli_params'].get('deploy')
+    dev_mode = config.RUN['cli_params'].get('dev_mode')
     if teardown and not deploy:
         log.info("Skipping version reporting for teardown.")
+        return
+    elif dev_mode:
+        log.info("Skipping version reporting for development mode.")
         return
     cluster_version, image_dict = get_ocs_version()
     file_name = os.path.join(
@@ -1036,6 +1040,10 @@ def tier_marks_name():
 @pytest.fixture(scope='function', autouse=True)
 def health_checker(request, tier_marks_name):
     skipped = False
+    dev_mode = config.RUN['cli_params'].get('dev_mode')
+    if dev_mode:
+        log.info("Skipping health checks for development mode")
+        return
 
     def finalizer():
         if not skipped:
@@ -2224,7 +2232,7 @@ def install_logging(request):
     log.info("Configuring Openshift-logging")
 
     # Checks OCP version
-    ocp_version = get_ocp_version()
+    ocp_version = get_running_ocp_version()
 
     # Creates namespace opensift-operators-redhat
     ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
@@ -3087,7 +3095,7 @@ def pvc_clone_factory(request):
         clone_pvc_obj.volume_mode = volume_mode
 
         if status:
-            helpers.wait_for_resource_state(pvc_obj, status)
+            helpers.wait_for_resource_state(clone_pvc_obj, status)
         return clone_pvc_obj
 
     def finalizer():

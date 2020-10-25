@@ -19,3 +19,4 @@ data/*
 external/
 apidoc/*
 _build/*
+bugzilla.cfg

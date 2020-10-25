@@ -274,6 +274,24 @@ def check_query_range_result_limits(
     return is_result_ok
 
 
+def log_parsing_error(query, resp_content, ex):
+    """
+    Log an error raised during parsing of a prometheus query.
+
+    Args:
+        query (dict): Full specification of a prometheus query.
+        resp_content (bytes): Response from prometheus
+        ex (Exception): Exception raised during parsing of prometheus reply.
+
+    """
+    logger.error(
+        "For query '%s' Prometheus returned a response which "
+        "failed to be parsed.", query
+    )
+    logger.debug(ex)
+    logger.debug("prometheus reply which failed to load:\n%s\n", resp_content)
+
+
 class PrometheusAPI(object):
     """
     This is wrapper class for Prometheus API.
@@ -403,7 +421,11 @@ class PrometheusAPI(object):
         if not mute_logs:
             logger.info(log_msg)
         resp = self.get('query', payload=query_payload)
-        content = yaml.safe_load(resp.content)
+        try:
+            content = yaml.safe_load(resp.content)
+        except Exception as ex:
+            log_parsing_error(query_payload, resp.content, ex)
+            raise
         if validate:
             # If this fails, Prometheus instance or a query is so broken that
             # test can't be performed. Note that prometheus reports "success"
@@ -447,7 +469,11 @@ class PrometheusAPI(object):
             f"Performing prometheus range query '{query}' "
             f"over a time range ({start}, {end})"))
         resp = self.get('query_range', payload=query_payload)
-        content = yaml.safe_load(resp.content)
+        try:
+            content = yaml.safe_load(resp.content)
+        except Exception as ex:
+            log_parsing_error(query_payload, resp.content, ex)
+            raise
         if validate:
             # If this fails, Prometheus instance is so broken that test can't
             # be performed.
