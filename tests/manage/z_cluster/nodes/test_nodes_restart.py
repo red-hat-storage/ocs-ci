@@ -19,6 +19,7 @@ from ocs_ci.ocs.node import get_node_objs, get_typed_nodes
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
+from ocs_ci.ocs.ocp import OCP
 
 
 logger = logging.getLogger(__name__)
@@ -340,8 +341,13 @@ class TestNodesRestart(ManageTest):
         )
         nodes.restart_nodes(nodes=worker_node, wait=False)
         pv_after_reset = get_pv_names()
-        pv_after_reset.sort()
-        pv_before_reset.sort()
-        assert pv_before_reset == pv_after_reset, (
-            "Unexpected PV is created after node reboot"
+        pv_diff = set(pv_after_reset) - set(pv_before_reset)
+        pv_new = []
+        ocp_obj = OCP(kind=constants.PV)
+        for pv in pv_diff:
+            pv_obj = ocp_obj.get(resource_name=pv)
+            if pv_obj['spec']['storageClassName'] == 'localblock':
+                pv_new.append(pv)
+        assert pv_new == [], (
+            f"Unexpected PV {pv_new} is created after node reboot"
         )
