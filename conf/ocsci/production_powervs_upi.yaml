@@ -1,6 +1,3 @@
-RUN:
-  bin_dir: '/usr/local/bin'
-
 DEPLOYMENT:
   local_storage: True
   force_download_installer: False

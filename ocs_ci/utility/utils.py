@@ -1257,9 +1257,12 @@ def get_ocp_version(seperator=None):
 
     """
     char = seperator if seperator else '.'
-    version = Version.coerce(
-        config.DEPLOYMENT['installer_version']
-    )
+    if config.ENV_DATA.get('skip_ocp_deployment'):
+        raw_version = json.loads(
+            run_cmd("oc version -o json"))['openshiftVersion']
+    else:
+        raw_version = config.DEPLOYMENT['installer_version']
+    version = Version.coerce(raw_version)
     return char.join(
         [str(version.major), str(version.minor)]
     )
