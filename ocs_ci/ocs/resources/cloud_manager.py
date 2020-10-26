@@ -54,7 +54,7 @@ class CloudManager(ABC):
             if cloud_name in cloud_map:
                 if any(value is None for value in cred_dict[cloud_name].values()):
                     logger.warn(
-                        f'{cloud_name} credentials not found in auth.yaml, '
+                        f'{cloud_name} credentials not found '
                         'no client will be instantiated'
                     )
                     setattr(
