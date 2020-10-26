@@ -2017,7 +2017,7 @@ def mcg_job_factory_session(
     )
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture()
 def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     """
         Create a Backing Store factory.
@@ -2055,7 +2055,7 @@ def backingstore_factory_session(request, cld_mgr, mcg_obj_session, cloud_uls_fa
     )
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture()
 def bucket_class_factory(request, mcg_obj, backingstore_factory):
     """
         Create a Bucket Class factory.
