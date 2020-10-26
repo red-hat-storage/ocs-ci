@@ -2015,7 +2015,7 @@ def mcg_job_factory_session(
 
 
 @pytest.fixture(scope='class')
-def backingstore_factory(request, cld_mgr, cloud_uls_factory):
+def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     """
         Create a Backing Store factory.
         Calling this fixture creates a new Backing Store(s).
@@ -2028,12 +2028,13 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
     return backingstore_factory_implementation(
         request,
         cld_mgr,
+        mcg_obj,
         cloud_uls_factory
     )
 
 
 @pytest.fixture(scope='session')
-def backingstore_factory_session(request, cld_mgr, cloud_uls_factory_session):
+def backingstore_factory_session(request, cld_mgr, mcg_obj_session, cloud_uls_factory_session):
     """
         Create a Backing Store factory.
         Calling this fixture creates a new Backing Store(s).
@@ -2046,6 +2047,7 @@ def backingstore_factory_session(request, cld_mgr, cloud_uls_factory_session):
     return backingstore_factory_implementation(
         request,
         cld_mgr,
+        mcg_obj_session,
         cloud_uls_factory_session
     )
 
