@@ -291,9 +291,8 @@ def get_api_token():
         cluster_name = config.ENV_DATA['cluster_name']
         cluster_id = config.ENV_DATA['ibm_id']
         exec_cmd([
-            'ibmcloud', 'login', '--apikey', apikey,
-            '-c', cluster_id, '-r'
-        ])
+            'ibmcloud', 'login', '--apikey', apikey, '-c', cluster_id, '-r'
+        ], secrets=[apikey])
         logger.info('Get IBM token endpoint')
         ibm_cluster_info_cmd = ['ibmcloud', 'oc', 'cluster', 'get', '-c', cluster_name, '--json']
         ibm_cluster_info = exec_cmd(ibm_cluster_info_cmd).stdout.decode()
