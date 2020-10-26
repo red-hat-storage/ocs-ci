@@ -2082,7 +2082,7 @@ def multiregion_resources_fixture(request, cld_mgr, mcg_obj):
 @pytest.fixture()
 def multiregion_mirror_setup(
     mcg_obj, multiregion_resources,
-    backingstore_factory_session, bucket_factory_session
+    backingstore_factory, bucket_factory
 ):
     return multiregion_mirror_setup_fixture(
         mcg_obj,
