@@ -219,7 +219,7 @@ class TestPVCSingleClonePerformance(E2ETest):
             pod_factory: A fixture to create new pod
 
         """
-        self.num_of_clones = 2
+        self.num_of_clones = 100
 
         # Getting the total Storage capacity
         ceph_cluster = CephCluster()
