@@ -1,16 +1,17 @@
 """
-Test to verify clone creation and deletion performance for PVC with data written to it.
-Performance is this test is measured by collecting clone creation/deletion speed.
+Test to verify single and multiple clone creation and deletion performance for PVC with data written to it.
+Performance is this test is measured by collecting clones creation/deletion speed.
 """
 import logging
 import pytest
 
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, exceptions
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     performance,
     E2ETest
 )
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.resources import pvc, pod
 from tests import helpers
 from ocs_ci.utility.utils import convert_device_size
@@ -22,14 +23,14 @@ logger = logging.getLogger(__name__)
 @performance
 class TestPVCSingleClonePerformance(E2ETest):
     """
-    Test to verify clone creation and deletion performance for PVC with data written to it.
+    Test to verify single/multiple clones creation and deletion performance for PVC with data written to it.
     Performance is this test is measured by collecting clone creation/deletion speed.
     """
 
     @pytest.fixture
     def base_setup_single_clone(self, interface_type, pvc_size, pvc_factory, pod_factory):
         """
-        create resources for the test
+        create resources for test_single_clone_create_delete_performance
         Args:
             interface_type(str): The type of the interface
                 (e.g. CephBlockPool, CephFileSystem)
@@ -66,16 +67,16 @@ class TestPVCSingleClonePerformance(E2ETest):
                 *[constants.CEPHBLOCKPOOL, '100', '60Gi'], marks=pytest.mark.polarion_id('OCS-2358')
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, '1', '600Mi'], marks=pytest.mark.polarion_id('2341')
+                *[constants.CEPHFILESYSTEM, '1', '600Mi'], marks=pytest.mark.polarion_id('OCS-2341')
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, '25', '15Gi'], marks=pytest.mark.polarion_id('2355')
+                *[constants.CEPHFILESYSTEM, '25', '15Gi'], marks=pytest.mark.polarion_id('OCS-2355')
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, '50', '30Gi'], marks=pytest.mark.polarion_id('2359')
+                *[constants.CEPHFILESYSTEM, '50', '30Gi'], marks=pytest.mark.polarion_id('OCS-2359')
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, '100', '60Gi'], marks=pytest.mark.polarion_id('2360')
+                *[constants.CEPHFILESYSTEM, '100', '60Gi'], marks=pytest.mark.polarion_id('OCS-2360')
             )
         ]
     )
@@ -87,10 +88,10 @@ class TestPVCSingleClonePerformance(E2ETest):
         Measure clone creation time and speed
         Delete the created clone
         Measure clone deletion time and speed
-        Note: by increasing max_num_of_clones value you increase number of the clones to be created/deleted
-        """
 
-        self.clones_create_delete_performance(interface_type, pvc_size, file_size, 1, teardown_factory)
+        """
+        clones_num = 1
+        self.clones_create_delete_performance(interface_type, pvc_size, file_size, clones_num, teardown_factory)
         logger.info("test_single_clone_create_delete_performance finished successfully.")
 
 
@@ -98,11 +99,11 @@ class TestPVCSingleClonePerformance(E2ETest):
     def clones_create_delete_performance(self, interface_type, pvc_size, file_size, clones_num, teardown_factory):
         """
         Write data (60% of PVC capacity) to the PVC created in setup
-        Create single clone for an existing pvc,
-        Measure clone creation time and speed
-        Delete the created clone
-        Measure clone deletion time and speed
-        Note: by increasing max_num_of_clones value you increase number of the clones to be created/deleted
+        Create clones_num clone(s) for the pvc,
+        Measure clone(s) creation time and speed
+        Delete the created clone(s)
+        Measure clone(s) deletion time and speed
+
         """
 
         file_size_for_io = file_size[:-1]
@@ -113,7 +114,7 @@ class TestPVCSingleClonePerformance(E2ETest):
         self.pod_obj.fillup_fs(size=file_size_for_io, fio_filename=file_name)
 
         # Wait for fio to finish
-        fio_result = self.pod_obj.get_fio_results()
+        fio_result = self.pod_obj.get_fio_results(timeout=18000)
         err_count = fio_result.get('jobs')[0].get('error')
         assert err_count == 0, (
             f"IO error on pod {self.pod_obj.name}. "
@@ -139,8 +140,8 @@ class TestPVCSingleClonePerformance(E2ETest):
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
         file_size_mb = convert_device_size(file_size, "MB")
 
-        # creating single clone ( or many one by one if max_mum_of_clones > 1)
-        logger.info(f"Start creating {clones_num} clones on {interface_type} PVC of size {pvc_size} GB.")
+        # creating clone(s)
+        # logger.info(f"Start creating {clones_num} clones on {interface_type} PVC of size {pvc_size} GB.")
 
         for i in range(clones_num):
             logger.info(f'Start creation of clone number {i + 1}.')
@@ -207,7 +208,9 @@ class TestPVCSingleClonePerformance(E2ETest):
     @pytest.fixture
     def base_setup_multiple_clones(self, interface_type, pvc_factory, pod_factory):
         """
-        create resources for the test
+        create resources for the test_multiple_clone_create_delete_performance
+        and calculates storage size, pvc size for the pvc and clones to be created
+        exits the test if there is not enough storage size for pvc and its multiple clones
         Args:
             interface_type(str): The type of the interface
                 (e.g. CephBlockPool, CephFileSystem)
@@ -216,8 +219,39 @@ class TestPVCSingleClonePerformance(E2ETest):
             pod_factory: A fixture to create new pod
 
         """
-        self.pvc_size = 1 #TODO: calculate from capacity
-        self.file_size = "600Mi" #TODO: calculate from pvc size
+        self.num_of_clones = 2
+
+        # Getting the total Storage capacity
+        ceph_cluster = CephCluster()
+        ceph_capacity = int(ceph_cluster.get_ceph_capacity())
+
+        # Use 70% of the storage capacity in the test
+        capacity_to_use = int(ceph_capacity * 0.7)
+
+        logger.info(f'Capacity to use is {capacity_to_use} GB')
+
+        # since we do not want to use more then 65%, we add 35% to the needed
+        # capacity, and minimum PVC size is 1 GiB
+        need_capacity = int((self.num_of_clones + 2) * 1.35)
+        # Test will run only on system with enough capacity
+        if capacity_to_use < need_capacity:
+            err_msg = (
+                f'The system have only {ceph_capacity} GiB, '
+                f'we want to use at least {capacity_to_use} GiB, '
+                f'and we need {need_capacity} GiB to run the test'
+            )
+            logger.error(err_msg)
+            raise exceptions.StorageNotSufficientException(err_msg)
+
+        # Calculating the PVC size in GiB
+        self.pvc_size = int(capacity_to_use / (self.num_of_clones + 2))
+        logger.info(f'Calculated pvc_size is {self.pvc_size} GB')
+
+        # Calculating the file size as 60% of the PVC size
+        filesize = self.pvc_size * 0.60
+        # Change the file size to MB for the FIO function
+        self.file_size = f'{int(filesize * 1024)}Mi'
+
         self.pvc_obj = pvc_factory(
             interface=interface_type,
             size=self.pvc_size,
@@ -234,24 +268,23 @@ class TestPVCSingleClonePerformance(E2ETest):
         argnames=["interface_type"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL], marks=pytest.mark.polarion_id('OCS-2356')
+                *[constants.CEPHBLOCKPOOL], marks=pytest.mark.polarion_id('OCS-2378')
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM], marks=pytest.mark.polarion_id('2341')
+                *[constants.CEPHFILESYSTEM], marks=pytest.mark.polarion_id('OCS-2377')
             ),
         ]
     )
     @pytest.mark.usefixtures(base_setup_multiple_clones.__name__)
     def test_multiple_clone_create_delete_performance(self, interface_type, teardown_factory):
         """
-        Write data (60% of PVC capacity) to the PVC created in setup  // TODO: update docs
-        Create single clone for an existing pvc,
+        Write data (60% of PVC capacity) to the PVC created in setup
+        Create maximal number of clones for an existing pvc,
         Measure clone creation time and speed
         Delete the created clone
         Measure clone deletion time and speed
-        Note: by increasing max_num_of_clones value you increase number of the clones to be created/deleted
         """
 
-        self.clones_create_delete_performance(interface_type, self.pvc_size, self.file_size, 512, teardown_factory)
+        self.clones_create_delete_performance(interface_type, str(self.pvc_size), self.file_size, self.num_of_clones, teardown_factory)
         logger.info("test_multiple_clone_create_delete_performance finished successfully.")
 
