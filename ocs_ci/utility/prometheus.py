@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+import re
 import requests
 import tempfile
 import time
@@ -287,27 +288,32 @@ def get_api_token():
     if config.ENV_DATA['platform'].lower() == 'ibm_cloud':
         logger.info('Get API access token from IBM cloud')
         apikey = config.AUTH.get('ibm_apikey')
-        cluster_id = exec_cmd(
-            "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
-        ).stdout.decode()
+        cluster_name = config.ENV_DATA['cluster_name']
+        cluster_id = config.ENV_DATA['ibm_id']
         exec_cmd([
             'ibmcloud', 'login', '--apikey', apikey,
-            '-c', cluster_id, '-r', config.ENV_DATA['region']
+            '-c', cluster_id, '-r'
         ])
         logger.info('Get IBM token endpoint')
-        ibm_cluster_info = exec_cmd([
-            'ibmcloud', 'oc', 'cluster', 'get', '-c', cluster_id, '--json'
-        ]).stdout.decode()
+        ibm_cluster_info_cmd = ['ibmcloud', 'oc', 'cluster', 'get', '-c', cluster_name, '--json']
+        ibm_cluster_info = exec_cmd(ibm_cluster_info_cmd).stdout.decode()
         ibm_cluster_info = json.loads(ibm_cluster_info)
-        token_endpoint = requests.get(
-            f"{ibm_cluster_info['serverURL']}/.well-known/oauth-authorization-server"
-        ).json['token_endpoint']
-        logger.info(f"Token endpoint: {token_endpoint}")
-        token = requests.get(
-            f"{token_endpoint.rstrip('token')}/authorize?client_id=openshift-challenging-client&response_type=token",
+        authorization_endpoint = requests.get(
+            f"{ibm_cluster_info['masterURL']}/.well-known/oauth-authorization-server"
+        ).json()['authorization_endpoint']
+        logger.info(f"IBM Auth endpoint: {authorization_endpoint}")
+        # How to get access token:
+        # https://tools.ietf.org/html/rfc6749#section-4.2.2
+        token_source = requests.get(
+            f"{authorization_endpoint}?client_id=openshift-challenging-client&response_type=token",
             auth=('apikey', apikey),
-            headers={"X-CSRF-Token": "a"}
+            headers={"X-CSRF-Token": "a"},
+            allow_redirects=False
         )
+        token_source = token_source.headers['Location']
+        # regular expression to get access token
+        token = re.findall('(?<=access_token=)([^&]*)(?=&)?', token_source)[0]
+
     else:
         logger.info('Login as kubeadmin and get API access token')
         password_file = os.path.join(
@@ -340,7 +346,7 @@ class PrometheusAPI(object):
 
     _token = None
     _endpoint = None
-    _cacert = None
+    _cacert = False
 
     def __init__(self, token):
         """
@@ -351,7 +357,9 @@ class PrometheusAPI(object):
 
         """
         self._token = token
-        self.generate_cert()
+        # TODO: generate certificate for IBM cloud platform
+        if not config.ENV_DATA['platform'].lower() == 'ibm_cloud':
+            self.generate_cert()
 
         ocp = OCP(
             kind=constants.ROUTE,
