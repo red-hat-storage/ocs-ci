@@ -2056,7 +2056,7 @@ def backingstore_factory_session(request, cld_mgr, mcg_obj_session, cloud_uls_fa
 
 
 @pytest.fixture(scope='class')
-def bucketclass_factory(request, mcg_obj, backingstore_factory):
+def bucket_class_factory(request, mcg_obj, backingstore_factory):
     """
         Create a Bucket Class factory.
         Calling this fixture creates a new Bucket Class.
@@ -2074,7 +2074,7 @@ def bucketclass_factory(request, mcg_obj, backingstore_factory):
 
 
 @pytest.fixture(scope='session')
-def bucketclass_factory_session(request, mcg_obj_session, backingstore_factory_session):
+def bucket_class_factory_session(request, mcg_obj_session, backingstore_factory_session):
     """
         Create a Bucket Class factory.
         Calling this fixture creates a new Bucket Class.
