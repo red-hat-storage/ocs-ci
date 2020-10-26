@@ -348,6 +348,6 @@ class TestNodesRestart(ManageTest):
             pv_obj = ocp_obj.get(resource_name=pv)
             if pv_obj['spec']['storageClassName'] == 'localblock':
                 pv_new.append(pv)
-        assert pv_new == [], (
+        assert not pv_new, (
             f"Unexpected PV {pv_new} is created after node reboot"
         )
