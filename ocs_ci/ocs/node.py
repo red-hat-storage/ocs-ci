@@ -14,7 +14,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.ocs import machine
-import tests.helpers
+from ocs_ci.helpers.helpers import get_worker_nodes
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions
 
@@ -272,7 +272,7 @@ def add_new_node_and_label_it(
 
     """
     # Get the initial nodes list
-    initial_nodes = tests.helpers.get_worker_nodes()
+    initial_nodes = get_worker_nodes()
     log.info(f"Current available worker nodes are {initial_nodes}")
 
     # get machineset replica count
@@ -294,7 +294,7 @@ def add_new_node_and_label_it(
     machine.wait_for_new_node_to_be_ready(machineset_name)
 
     # Get the node name of new spun node
-    nodes_after_new_spun_node = tests.helpers.get_worker_nodes()
+    nodes_after_new_spun_node = get_worker_nodes()
     new_spun_nodes = list(
         set(nodes_after_new_spun_node) - set(initial_nodes)
     )
@@ -330,20 +330,20 @@ def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True, no
 
     """
     node_conf = node_conf or {}
-    initial_nodes = tests.helpers.get_worker_nodes()
+    initial_nodes = get_worker_nodes()
     from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
     plt = PlatformNodesFactory()
     node_util = plt.get_nodes_platform()
     node_util.create_and_attach_nodes_to_cluster(node_conf, node_type, num_nodes)
     for sample in TimeoutSampler(
-        timeout=600, sleep=6, func=tests.helpers.get_worker_nodes
+        timeout=600, sleep=6, func=get_worker_nodes
     ):
         if len(sample) == len(initial_nodes) + num_nodes:
             break
 
-    nodes_after_exp = tests.helpers.get_worker_nodes()
+    nodes_after_exp = get_worker_nodes()
     wait_for_nodes_status(
-        node_names=tests.helpers.get_worker_nodes(),
+        node_names=get_worker_nodes(),
         status=constants.NODE_READY
     )
 
