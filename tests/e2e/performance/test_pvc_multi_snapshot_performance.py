@@ -116,4 +116,8 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
         result = subprocess.run([main_script], stdout=subprocess.PIPE)
         log.info(f"Results from main script : {result.stdout.decode('utf-8')}")
 
+        if 'All results are' not in result.stdout.decode('utf-8'):
+            log.error('Test did not compleated')
+            raise Exception('Test did not compleated')
+
         # TODO: push all results to elasticsearch server
