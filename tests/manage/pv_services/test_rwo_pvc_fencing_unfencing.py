@@ -17,7 +17,7 @@ from ocs_ci.ocs.exceptions import ResourceWrongStatusException, UnexpectedBehavi
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check, get_az_count
-from tests import disruption_helpers, helpers
+from ocs_ci.helpers import disruption_helpers, helpers
 
 logger = logging.getLogger(__name__)
 

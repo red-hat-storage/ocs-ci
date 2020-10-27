@@ -20,7 +20,7 @@ from ocs_ci.helpers.helpers import (
     wait_for_resource_count_change, verify_pv_mounted_on_node,
     default_ceph_block_pool
 )
-from tests import disruption_helpers
+from ocs_ci.helpers import disruption_helpers
 
 log = logging.getLogger(__name__)
 
