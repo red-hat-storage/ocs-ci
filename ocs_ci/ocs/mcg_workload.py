@@ -6,7 +6,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.utils import TimeoutSampler
-from tests.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import create_unique_resource_name
 
 log = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework.testlib import (
     E2ETest, workloads, ignore_leftovers
 )
-from tests.helpers import default_storage_class
+from ocs_ci.helpers.helpers import default_storage_class
 from tests.disruption_helpers import Disruptions
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.utils import get_pod_name_by_pattern

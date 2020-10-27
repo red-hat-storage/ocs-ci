@@ -539,7 +539,7 @@ def pytest_runtest_makereport(item, call):
             log.exception("Failed to collect prometheus metrics")
 
     # Get the performance metrics when tests fails for scale or performance tag
-    from tests.helpers import collect_performance_stats
+    from ocs_ci.helpers.helpers import collect_performance_stats
     if (
         (rep.when == "setup" or rep.when == "call")
         and rep.failed

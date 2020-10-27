@@ -21,7 +21,7 @@ from ocs_ci.framework.testlib import (
 )
 from tests.sanity_helpers import Sanity
 from ocs_ci.ocs.resources import pod
-from tests.helpers import (
+from ocs_ci.helpers.helpers import (
     label_worker_node, remove_label_from_worker_node
 )
 from ocs_ci.helpers import helpers

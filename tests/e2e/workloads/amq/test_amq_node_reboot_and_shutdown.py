@@ -7,7 +7,7 @@ from ocs_ci.framework.testlib import (
     E2ETest, workloads, ignore_leftovers
 )
 from tests.sanity_helpers import Sanity
-from tests.helpers import default_storage_class
+from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs.node import (
     wait_for_nodes_status, get_node_objs, get_typed_nodes
 )

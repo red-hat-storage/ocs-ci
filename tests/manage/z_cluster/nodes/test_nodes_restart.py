@@ -8,7 +8,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.resources import pod
 from tests.sanity_helpers import Sanity
-from tests.helpers import wait_for_ct_pod_recovery
+from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
 
 
 logger = logging.getLogger(__name__)

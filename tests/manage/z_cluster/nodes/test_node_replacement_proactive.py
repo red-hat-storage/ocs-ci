@@ -4,7 +4,7 @@ import pytest
 import random
 
 from ocs_ci.framework import config
-from tests.helpers import get_worker_nodes
+from ocs_ci.helpers.helpers import get_worker_nodes
 from ocs_ci.framework.pytest_customization.marks import tier4a
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (

@@ -15,7 +15,7 @@ from ocs_ci.ocs.resources.pod import (
     get_cephfsplugin_provisioner_pods, get_operator_pods, delete_pods
 )
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
-from tests.helpers import (
+from ocs_ci.helpers.helpers import (
     verify_volume_deleted_in_backend, wait_for_resource_state,
     wait_for_resource_count_change, verify_pv_mounted_on_node,
     default_ceph_block_pool

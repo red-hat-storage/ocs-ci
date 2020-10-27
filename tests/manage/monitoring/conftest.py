@@ -15,7 +15,7 @@ from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility.workloadfixture import measure_operation
 from ocs_ci.helpers import helpers
-from tests.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import create_unique_resource_name
 
 
 logger = logging.getLogger(__name__)

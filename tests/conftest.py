@@ -76,7 +76,7 @@ from ocs_ci.utility.utils import (
     skipif_upgraded_from
 )
 from ocs_ci.helpers import helpers
-from tests.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW

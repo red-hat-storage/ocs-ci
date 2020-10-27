@@ -9,7 +9,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import get_all_pods, get_osd_pods, get_pod_node
 from ocs_ci.utility.utils import ceph_health_check
 from tests.sanity_helpers import Sanity
-from tests.helpers import (
+from ocs_ci.helpers.helpers import (
     get_worker_nodes, label_worker_node, remove_label_from_worker_node,
     wait_for_resource_state
 )

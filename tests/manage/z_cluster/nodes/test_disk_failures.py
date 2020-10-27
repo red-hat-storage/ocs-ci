@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import (
     vsphere_platform_required, bugzilla
 )
 from tests.sanity_helpers import Sanity
-from tests.helpers import wait_for_ct_pod_recovery
+from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs, get_deviceset_pvcs
 from ocs_ci.ocs.resources.pod import (
     get_osd_deployments, get_osd_pods, get_pod_node, get_operator_pods, get_osd_prepare_pods, get_pod_obj, get_pod_logs

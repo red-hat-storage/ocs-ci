@@ -1,7 +1,7 @@
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
-from tests.helpers import storagecluster_independent_check
+from ocs_ci.helpers.helpers import storagecluster_independent_check
 
 
 class RGW(object):
