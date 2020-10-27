@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
-from tests.disruption_helpers import Disruptions
+from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.ocs import flowtest
 from ocs_ci.helpers.sanity_helpers import Sanity
 

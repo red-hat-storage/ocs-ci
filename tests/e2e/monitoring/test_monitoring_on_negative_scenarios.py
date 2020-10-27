@@ -9,7 +9,7 @@ from ocs_ci.ocs import ocp, constants, defaults
 from ocs_ci.framework.testlib import workloads, E2ETest, ignore_leftovers
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.helpers.helpers import wait_for_resource_state, default_storage_class, modify_osd_replica_count
-from tests.disruption_helpers import Disruptions
+from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.monitoring import (
     check_pvcdata_collected_on_prometheus,
