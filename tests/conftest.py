@@ -10,6 +10,7 @@ from itertools import chain
 from math import floor
 from shutil import copyfile
 from functools import partial
+from selenium import webdriver
 
 from botocore.exceptions import ClientError
 import pytest
@@ -83,6 +84,7 @@ from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.amq import AMQ
+from ocs_ci.ocs.ui_navigation import ui_login
 
 log = logging.getLogger(__name__)
 
@@ -3127,3 +3129,21 @@ def pvc_clone_factory(request):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture(scope='class')
+def chrome_driver(request):
+    """
+    Fixture for interacting with UI using selenium.
+    Returns:
+        Driver: an instance of Chrome webdriver logged in to OCP console
+    """
+    def fin():
+        driver.close()
+
+    request.addfinalizer(fin)
+
+    driver = webdriver.Chrome()
+    driver.implicitly_wait(10)
+    ui_login(driver)
+    return driver
