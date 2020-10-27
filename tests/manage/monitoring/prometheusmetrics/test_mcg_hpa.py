@@ -25,8 +25,6 @@ def test_hpa_noobaa_endpoint_metric():
 
     hpa = ocp_obj.get()['status']
 
-    if metric_key not in hpa:
-        assert False, "Failed: noobaa-endpoint cpu metrics is unavailable"
-    else:
-        assert hpa[metric_key] >= 0, "Failed: noobaa-endpoint cpu metrics is unknown"
-        logger.info(f"Current resource cpu utilized: {hpa[metric_key]}%")
+    assert metric_key in hpa, "Failed: noobaa-endpoint cpu metrics is unavailable"
+    assert hpa[metric_key] >= 0, "Failed: noobaa-endpoint cpu metrics is unknown"
+    logger.info(f"Current resource cpu utilized: {hpa[metric_key]}%")
