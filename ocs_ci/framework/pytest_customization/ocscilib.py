@@ -143,6 +143,26 @@ def pytest_addoption(parser):
         help="ocs version to upgrade (e.g. 4.3)"
     )
     parser.addoption(
+        '--upgrade-ocp-version',
+        dest='upgrade_ocp_version',
+        help='''
+        OCP version to upgrade to. This version will be used to
+        load file from conf/ocp_version/ocp-VERSION-config.yaml.
+        For example:
+        4.5 (for nightly 4.5 OCP build)
+        4.5-ga (for latest GAed 4.5 OCP build)
+        '''
+    )
+    parser.addoption(
+        '--upgrade-ocp-image',
+        dest='upgrade_ocp_image',
+        help='''
+        OCP image to upgrade to. This image string will be split on ':' to
+        determine the image source and the specified tag to use.
+        (e.g. quay.io/openshift-release-dev/ocp-release:4.6.0-x86_64)
+        '''
+    )
+    parser.addoption(
         '--ocp-version',
         dest='ocp_version',
         help="""
@@ -436,6 +456,18 @@ def process_cluster_cli_params(config):
             OCP_VERSION_CONF_DIR, version_config_file
         )
         load_config_file(version_config_file_path)
+    upgrade_ocp_version = get_cli_param(config, '--upgrade-ocp-version')
+    if upgrade_ocp_version:
+        version_config_file = f"ocp-{upgrade_ocp_version}-upgrade.yaml"
+        version_config_file_path = os.path.join(
+            OCP_VERSION_CONF_DIR, version_config_file
+        )
+        load_config_file(version_config_file_path)
+    upgrade_ocp_image = get_cli_param(config, '--upgrade-ocp-image')
+    if upgrade_ocp_image:
+        ocp_image = upgrade_ocp_image.split(':')
+        ocsci_config.UPGRADE['ocp_upgrade_path'] = ocp_image[0]
+        ocsci_config.UPGRADE['ocp_upgrade_version'] = ocp_image[1]
     ocp_installer_version = get_cli_param(config, '--ocp-installer-version')
     if ocp_installer_version:
         ocsci_config.DEPLOYMENT['installer_version'] = ocp_installer_version
