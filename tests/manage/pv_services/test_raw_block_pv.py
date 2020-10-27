@@ -5,7 +5,7 @@ import pytest
 
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.testlib import tier1, ManageTest
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, node
 from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ class TestRawBlockPV(ManageTest):
         """
         Testing basic creation of app pod with RBD RWX raw block pv support
         """
-        worker_nodes = helpers.get_worker_nodes()
+        worker_nodes = node.get_worker_nodes()
         pvcs = list()
         for size in ['500Mi', '10Gi', '1Ti']:
             pvcs.append(helpers.create_pvc(

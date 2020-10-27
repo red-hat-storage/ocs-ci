@@ -853,7 +853,7 @@ def pull_images(image_name):
 
     """
 
-    node_objs = node.get_node_objs(get_worker_nodes())
+    node_objs = node.get_node_objs(node.get_worker_nodes())
     for node_obj in node_objs:
         logging.info(f'pulling image "{image_name}  " on node {node_obj.name}')
         assert node_obj.ocp.exec_oc_debug_cmd(
@@ -1113,35 +1113,6 @@ def set_image_lookup(image_name):
     logger.info(f'image lookup for image"{image_name}" is set')
     status = ocp_obj.exec_oc_cmd(command)
     return status
-
-
-def get_worker_nodes():
-    """
-    Fetches all worker nodes.
-
-    Returns:
-        list: List of names of worker nodes
-    """
-    label = 'node-role.kubernetes.io/worker'
-    ocp_node_obj = ocp.OCP(kind=constants.NODE)
-    nodes = ocp_node_obj.get(selector=label).get('items')
-    worker_nodes_list = [node.get('metadata').get('name') for node in nodes]
-    return worker_nodes_list
-
-
-def get_master_nodes():
-    """
-    Fetches all master nodes.
-
-    Returns:
-        list: List of names of master nodes
-
-    """
-    label = 'node-role.kubernetes.io/master'
-    ocp_node_obj = ocp.OCP(kind=constants.NODE)
-    nodes = ocp_node_obj.get(selector=label).get('items')
-    master_nodes_list = [node.get('metadata').get('name') for node in nodes]
-    return master_nodes_list
 
 
 def get_snapshot_time(interface, snap_name, status):
@@ -2055,7 +2026,7 @@ def memory_leak_analysis(median_dict):
     """
     # dict to store memory leak difference for each worker
     diff = {}
-    for worker in get_worker_nodes():
+    for worker in node.get_worker_nodes():
         memory_leak_data = []
         if os.path.exists(f"/tmp/{worker}-top-output.txt"):
             with open(f"/tmp/{worker}-top-output.txt", "r") as f:
@@ -2111,7 +2082,7 @@ def get_memory_leak_median_value():
     timeout = 180  # wait for 180 sec to evaluate  memory leak median data.
     logger.info(f"waiting for {timeout} sec to evaluate the median value")
     time.sleep(timeout)
-    for worker in get_worker_nodes():
+    for worker in node.get_worker_nodes():
         memory_leak_data = []
         if os.path.exists(f"/tmp/{worker}-top-output.txt"):
             with open(f"/tmp/{worker}-top-output.txt", "r") as f:
@@ -2162,7 +2133,7 @@ def rsync_kubeconf_to_node(node):
         config.RUN['kubeconfig_location']
     )
     file_path = os.path.dirname(filename)
-    master_list = get_master_nodes()
+    master_list = node.get_master_nodes()
     ocp_obj = ocp.OCP()
     check_auth = 'auth'
     check_conf = 'kubeconfig'

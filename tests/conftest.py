@@ -1504,7 +1504,7 @@ def memory_leak_function(request):
         if thread:
             thread.join()
         log_path = ocsci_log_path()
-        for worker in helpers.get_worker_nodes():
+        for worker in node.get_worker_nodes():
             if os.path.exists(f"/tmp/{worker}-top-output.txt"):
                 copyfile(
                     f"/tmp/{worker}-top-output.txt",
@@ -1539,7 +1539,7 @@ def memory_leak_function(request):
             namespace=config.ENV_DATA['cluster_namespace']
         )
         while get_flag_status() == 'running':
-            for worker in helpers.get_worker_nodes():
+            for worker in node.get_worker_nodes():
                 filename = f"/tmp/{worker}-top-output.txt"
                 top_cmd = f"debug nodes/{worker} -- chroot /host top -n 2 b"
                 with open("/tmp/file.txt", "w+") as temp:

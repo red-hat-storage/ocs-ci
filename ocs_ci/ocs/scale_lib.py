@@ -569,7 +569,7 @@ def check_and_add_enough_worker(worker_count):
     """
     # Check either to use OCS workers for scaling app pods
     # Further continue to label the worker with scale label else not
-    worker_list = helpers.get_worker_nodes()
+    worker_list = node.get_worker_nodes()
     ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
     scale_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
     if config.RUN.get('use_ocs_worker_for_scale'):
@@ -628,7 +628,7 @@ def check_and_add_enough_worker(worker_count):
                 machine.add_node(machine_set=name, count=exp_count)
             for ms in ms_name:
                 machine.wait_for_new_node_to_be_ready(ms)
-            worker_list = helpers.get_worker_nodes()
+            worker_list = node.get_worker_nodes()
             ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
             scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
             ocs_worker_list.extend(scale_label_worker)

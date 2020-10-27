@@ -3,7 +3,7 @@ import pytest
 
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import ManageTest, tier1
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import helpers
 
@@ -34,7 +34,7 @@ class TestRWXMountPoint(ManageTest):
         6. Also, access the data written by deleted pods from the Running pod
 
         """
-        worker_nodes_list = helpers.get_worker_nodes()
+        worker_nodes_list = node.get_worker_nodes()
 
         # Create a RWX PVC
         pvc_obj = pvc_factory(

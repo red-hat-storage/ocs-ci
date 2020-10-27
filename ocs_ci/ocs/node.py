@@ -14,7 +14,6 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.ocs import machine
-from ocs_ci.helpers.helpers import get_worker_nodes
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions
 
@@ -926,6 +925,36 @@ def label_nodes(nodes, label=constants.OPERATOR_NODE_LABEL):
             f"Successfully labeled {new_node_to_label.name} "
             f"with OCS storage label"
         )
+
+
+def get_master_nodes():
+    """
+    Fetches all master nodes.
+
+    Returns:
+        list: List of names of master nodes
+
+    """
+    label = 'node-role.kubernetes.io/master'
+    ocp_node_obj = ocp.OCP(kind=constants.NODE)
+    nodes = ocp_node_obj.get(selector=label).get('items')
+    master_nodes_list = [node.get('metadata').get('name') for node in nodes]
+    return master_nodes_list
+
+
+def get_worker_nodes():
+    """
+    Fetches all worker nodes.
+
+    Returns:
+        list: List of names of worker nodes
+
+    """
+    label = 'node-role.kubernetes.io/worker'
+    ocp_node_obj = ocp.OCP(kind=constants.NODE)
+    nodes = ocp_node_obj.get(selector=label).get('items')
+    worker_nodes_list = [node.get('metadata').get('name') for node in nodes]
+    return worker_nodes_list
 
 
 def get_worker_nodes_not_in_ocs():

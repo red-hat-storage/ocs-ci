@@ -3,12 +3,12 @@ ScalePodPGSQL workload class for scale
 """
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
+from ocs_ci.ocs import constants, machine, node
+from ocs_ci.ocs.exceptions import UnsupportedPlatformError
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.utility import templating
-from ocs_ci.ocs import constants, machine
-from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import UnsupportedPlatformError
 
 log = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ class ScalePodPGSQL(Postgresql):
 def add_worker_node(instance_type=None):
     global ms_name
     ms_name = list()
-    worker_list = helpers.get_worker_nodes()
+    worker_list = node.get_worker_nodes()
     ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
     scale_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
     if config.RUN.get('use_ocs_worker_for_scale'):
@@ -123,7 +123,7 @@ def add_worker_node(instance_type=None):
             for ms in ms_name:
                 machine.wait_for_new_node_to_be_ready(ms)
 
-        worker_list = helpers.get_worker_nodes()
+        worker_list = node.get_worker_nodes()
         ocs_worker_list = machine.get_labeled_nodes(
             constants.OPERATOR_NODE_LABEL
         )

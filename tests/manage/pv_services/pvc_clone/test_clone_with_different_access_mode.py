@@ -2,7 +2,7 @@ import logging
 import pytest
 from itertools import cycle
 
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, node
 from ocs_ci.framework.testlib import (
     skipif_ocs_version, ManageTest, tier1, polarion_id
 )
@@ -105,7 +105,7 @@ class TestCloneWithDifferentAccessMode(ManageTest):
         log.info("Verified: Cloned PVCs are Bound")
 
         # Get worker node names and create an iterator
-        nodes_iter = cycle(helpers.get_worker_nodes())
+        nodes_iter = cycle(node.get_worker_nodes())
 
         # Attach the cloned PVCs to pods
         log.info("Attach the cloned PVCs to pods")
