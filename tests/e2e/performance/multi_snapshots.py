@@ -65,20 +65,19 @@ def run_command(cmd):
         return ERRMSG
 
     msg_logging(f'Going to run {cmd}')
-    completed_process = subprocess.run(
+    cp = subprocess.run(
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         stdin=subprocess.PIPE,
         timeout=600
     )
-    output = completed_process.stdout.decode()
-    err = completed_process.stderr.decode()
+    output = cp.stdout.decode()
+    err = cp.stderr.decode()
     # exit code is not zero
-    if completed_process.returncode:
-        log.error(
-            f'Command finished with non zero {completed_process.returncode}'
-        )
+    if cp.returncode:
+        log.error(f'Command finished with non zero ({cp.returncode}) {err}')
+        print(f'Command finished with non zero ({cp.returncode}) {err}')
         output += f'{ERRMSG} {err}'
 
     output = output.split('\n')  # convert output to list
@@ -98,10 +97,7 @@ def run_oc_command(cmd, namespace):
         list : the results of the command as list of lines
 
     """
-    command = (
-        f'oc --kubeconfig {params["KUBECONFIG"]} '
-        f'-n {namespace} {cmd}'
-    )
+    command = (f'oc --kubeconfig {params["KUBECONFIG"]} -n {namespace} {cmd}')
     return run_command(command)
 
 
@@ -291,7 +287,7 @@ def run_io_on_pod():
         msg_logging('FIO failed on timeout (10Min.)')
 
 
-def get_creation_time(snap_name, content_name):
+def get_creation_time(snap_name, content_name, start_time):
     """
     Calculate the creation time of the snapshot.
     find the start / end time in the logs, and calculate the total time.
@@ -310,7 +306,8 @@ def get_creation_time(snap_name, content_name):
     """
 
     # Getting start creation time
-    logs = run_oc_command(f'logs {log_names["start"]}', 'openshift-cluster-storage-operator')
+    logs = run_oc_command(f'logs {log_names["start"]} --since-time={start_time}',
+                          'openshift-cluster-storage-operator')
     st = None
     et = None
     for line in logs:
@@ -325,7 +322,10 @@ def get_creation_time(snap_name, content_name):
     logs = []
     for l in log_names["end"]:
         logs.append(
-            run_oc_command(f'logs {l} -c csi-snapshotter', 'openshift-storage')
+            run_oc_command(
+                f'logs {l} -c csi-snapshotter --since-time={start_time}',
+                'openshift-storage'
+            )
         )
     for sublog in logs:
         for line in sublog:
@@ -355,6 +355,8 @@ def create_snapshot(snap_num):
     """
     global snap_yaml
     msg_logging(f'Taking snapshot number {snap_num}')
+    # Getting UTC time before test starting for log retrieve
+    UTC_datetime = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     snap_name = f'pvc-snap-{snap_num}-'
     snap_name += params['PVCNAME'].split('-')[-1]
     snap_yaml['metadata']['name'] = snap_name
@@ -387,7 +389,7 @@ def create_snapshot(snap_num):
                 timeout -= 5
         else:
             raise Exception(f'Can not get snapshot status {res}')
-    return get_creation_time(snap_name, snap_con_name)
+    return get_creation_time(snap_name, snap_con_name, UTC_datetime)
 
 
 def main():
@@ -419,4 +421,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
