@@ -173,16 +173,21 @@ class MCG:
         """
         def internal_retrieval_logic():
             try:
-                return self.send_rpc_query(
+                rpc_response = self.send_rpc_query(
                     'auth_api', 'create_auth', params={
                         'role': 'admin',
                         'system': 'noobaa',
                         'email': self.noobaa_user,
                         'password': self.noobaa_password
                     }
-                ).json().get('reply').get('token')
+                )
+                return rpc_response.json().get('reply').get('token')
 
             except json.JSONDecodeError:
+                logger.warning(
+                    'RPC did not respond with a JSON. Response: \n'
+                    + str(rpc_response)
+                )
                 logger.warning('Failed to retrieve token, NooBaa might be unhealthy. Retrying')
                 return False
 
