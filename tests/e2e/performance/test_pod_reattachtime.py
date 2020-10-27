@@ -6,7 +6,7 @@ import time
 from ocs_ci.framework.testlib import (
     performance, E2ETest
 )
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 

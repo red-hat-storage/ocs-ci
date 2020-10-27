@@ -6,7 +6,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 

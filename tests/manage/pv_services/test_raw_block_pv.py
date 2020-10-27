@@ -6,7 +6,7 @@ import pytest
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.ocs import constants
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
 

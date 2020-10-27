@@ -1,7 +1,7 @@
 import pytest
 
 from ocs_ci.ocs.resources.pod import delete_deploymentconfig_pods
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, ocp
 
 

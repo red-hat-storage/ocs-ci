@@ -9,7 +9,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
 from ocs_ci.utility.utils import TimeoutSampler, load_auth_config, exec_cmd
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 

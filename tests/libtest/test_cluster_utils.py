@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.framework.testlib import ManageTest, libtest
 from ocs_ci.ocs.cluster import CephCluster
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 
 log = logging.getLogger(__name__)

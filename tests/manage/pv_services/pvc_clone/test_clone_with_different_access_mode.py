@@ -7,7 +7,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version, ManageTest, tier1, polarion_id
 )
 from ocs_ci.ocs.resources import pod
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
 

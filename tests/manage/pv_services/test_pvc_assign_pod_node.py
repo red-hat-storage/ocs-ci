@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import ManageTest, tier1, acceptance
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 

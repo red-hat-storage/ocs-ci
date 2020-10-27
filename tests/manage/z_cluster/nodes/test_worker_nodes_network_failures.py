@@ -10,7 +10,7 @@ from ocs_ci.ocs import constants, machine, node
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import ceph_health_check
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 

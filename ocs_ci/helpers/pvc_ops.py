@@ -5,7 +5,7 @@ from time import sleep
 from ocs_ci.framework.testlib import ignore_leftovers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import delete_pvcs
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
 

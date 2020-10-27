@@ -75,7 +75,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     skipif_upgraded_from
 )
-from tests import helpers
+from ocs_ci.helpers import helpers
 from tests.helpers import create_unique_resource_name
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql

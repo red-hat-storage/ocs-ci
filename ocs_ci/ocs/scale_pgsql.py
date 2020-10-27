@@ -3,7 +3,7 @@ ScalePodPGSQL workload class for scale
 """
 import logging
 
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants, machine

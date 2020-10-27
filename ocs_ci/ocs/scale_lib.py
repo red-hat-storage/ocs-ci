@@ -3,7 +3,7 @@ import threading
 import random
 import time
 
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
 from ocs_ci.utility import templating, utils

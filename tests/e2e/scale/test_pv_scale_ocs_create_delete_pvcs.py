@@ -10,7 +10,7 @@ import random
 import time
 import threading
 
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers

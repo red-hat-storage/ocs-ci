@@ -14,7 +14,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility.workloadfixture import measure_operation
-from tests import helpers
+from ocs_ci.helpers import helpers
 from tests.helpers import create_unique_resource_name
 
 

@@ -11,7 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import scale
 from ocs_ci.framework.testlib import E2ETest, ignore_leftovers
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.utility.utils import run_cmd
-from tests import helpers, disruption_helpers
+from ocs_ci.helpers import helpers, disruption_helpers
 
 TARFILE = 'cephfs.tar.gz'
 SIZE = '20Gi'
