@@ -5,7 +5,7 @@ from ocs_ci.framework.testlib import deployment, polarion_id
 from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
 from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import is_cluster_running
-from tests.sanity_helpers import Sanity, SanityExternalCluster
+from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 
 log = logging.getLogger(__name__)
 

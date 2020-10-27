@@ -11,7 +11,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.helpers import (
     get_worker_nodes, label_worker_node, remove_label_from_worker_node
 )
-from tests.sanity_helpers import Sanity
+from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import (
     get_osd_running_nodes, get_app_pod_running_nodes,
     get_both_osd_and_app_pod_running_node,

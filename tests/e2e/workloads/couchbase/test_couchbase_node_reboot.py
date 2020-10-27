@@ -4,7 +4,7 @@ import time
 import pytest
 
 from ocs_ci.ocs import ocp
-from tests.sanity_helpers import Sanity
+from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.framework.testlib import (
     E2ETest, workloads, ignore_leftovers
 )

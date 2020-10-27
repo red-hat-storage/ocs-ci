@@ -5,7 +5,7 @@ from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources.pod import check_pods_in_running_state
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
-from tests.sanity_helpers import Sanity
+from ocs_ci.helpers.sanity_helpers import Sanity
 
 logger = logging.getLogger(__name__)
 

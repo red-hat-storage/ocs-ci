@@ -8,7 +8,7 @@ from ocs_ci.ocs.registry import (
 )
 from ocs_ci.framework.testlib import E2ETest, workloads
 from tests import disruption_helpers
-from tests.sanity_helpers import Sanity
+from ocs_ci.helpers.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
 IMAGE_URL = 'docker.io/library/busybox'

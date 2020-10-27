@@ -19,7 +19,7 @@ from ocs_ci.framework.testlib import (
     ManageTest, aws_platform_required, ignore_leftovers,
     ipi_deployment_required, skipif_bm
 )
-from tests.sanity_helpers import Sanity
+from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.helpers import (
     label_worker_node, remove_label_from_worker_node
