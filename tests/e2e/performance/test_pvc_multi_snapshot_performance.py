@@ -41,7 +41,10 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
             StorageNotSufficientException: in case of not enough capacity
 
         """
-        num_of_snaps = 512  # number of snapshots to take
+        # Number od snapshot for CephFS is 100 and for RBD is 512
+        num_of_snaps = 100
+        if interface_iterate == constants.CEPHBLOCKPOOL:
+            num_of_snaps = 512
 
         # Getting the total Storage capacity
         ceph_cluster = CephCluster()
