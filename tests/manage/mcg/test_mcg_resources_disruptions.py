@@ -4,7 +4,6 @@ import pytest
 from ocs_ci.framework.testlib import (
     ManageTest, tier4, tier4a, ignore_leftovers, skipif_ocs_version, on_prem_platform_required
 )
-from ocs_ci.ocs.mcg_workload import wait_for_active_pods
 from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
