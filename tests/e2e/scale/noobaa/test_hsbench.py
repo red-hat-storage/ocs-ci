@@ -21,7 +21,6 @@ def hsbenchs3(request):
 
 
 @scale
-@ignore_leftovers
 @pytest.mark.polarion_id("OCS-2321")
 class TestHsBench(E2ETest):
     """
@@ -45,7 +44,7 @@ class TestHsBench(E2ETest):
         hsbenchs3.install_hsbench()
 
         # Running hsbench
-        hsbenchs3.run_hsbench(num_obj=50000, timeout=1800)
+        hsbenchs3.run_hsbench(num_obj=1000000, timeout=3600)
 
         # Validate hsbench created objects
         hsbenchs3.validate_S3_objects()

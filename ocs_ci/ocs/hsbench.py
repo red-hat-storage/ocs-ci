@@ -21,7 +21,7 @@ class HsBench(object):
 
     def __init__(self):
         """
-        Initializer to treate pvc and rgw pod to running hsbench benchmark
+        Initializer to create pvc and rgw pod to running hsbench benchmark
 
         Args:
             kind (str): Kind of service POD or DeploymentConfig
