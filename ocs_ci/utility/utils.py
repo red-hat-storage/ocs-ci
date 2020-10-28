@@ -2108,12 +2108,12 @@ def skipif_ocp_version(expressions, reason=None):
         comparision_str = ocp_version + expr
         skip_this = skip_this and eval(comparision_str)
         if skip_this and reason:
-            log.info(f'OCS version skip match. Skip reason: {reason}')
+            log.info(f'OCP version skip match. Skip reason: {reason}')
     # skip_this will be either True or False after eval
     return skip_this
 
 
-def skipif_ocs_version(expressions):
+def skipif_ocs_version(expressions, reason=None):
     """
     This function evaluates the condition for test skip
     based on expression
