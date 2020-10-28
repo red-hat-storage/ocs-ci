@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 @marks.bugzilla('1836299')
 def test_hpa_maxreplica_alert():
     """
-    Test that there is no HPA max replica alert triggered
+    Test to verify that no HPA max replica alert is triggered
     """
     api = prometheus.PrometheusAPI()
 
