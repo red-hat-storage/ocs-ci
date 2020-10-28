@@ -37,7 +37,8 @@ from ocs_ci.ocs.mcg_workload import (
 )
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.utils import setup_ceph_toolbox
+from ocs_ci.ocs.resources import pvc
+from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation
 )
@@ -49,13 +50,14 @@ from ocs_ci.ocs.node import check_nodes_specs
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods
-from ocs_ci.ocs.resources.pvc import PVC
+from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods, get_pods_having_label
+from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import aws
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility import templating
+from ocs_ci.utility import users
 from ocs_ci.utility.environment_check import (
     get_status_before_execution, get_status_after_execution
 )
@@ -63,11 +65,12 @@ from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
     ceph_health_check_base,
-    get_ocp_version,
+    get_running_ocp_version,
     get_openshift_client,
     get_system_architecture,
     get_testrun_name,
     ocsci_log_path,
+    skipif_ocp_version,
     skipif_ocs_version,
     TimeoutSampler,
     skipif_upgraded_from
@@ -101,7 +104,7 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
-def pytest_collection_modifyitems(session, config, items):
+def pytest_collection_modifyitems(session, items):
     """
     A pytest hook to filter out skipped tests satisfying
     skipif_ocs_version or skipif_upgraded_from
@@ -112,31 +115,47 @@ def pytest_collection_modifyitems(session, config, items):
         items: list of collected tests
 
     """
-    for item in items[:]:
-        skipif_ocs_version_marker = item.get_closest_marker(
-            "skipif_ocs_version"
-        )
-        skipif_upgraded_from_marker = item.get_closest_marker(
-            "skipif_upgraded_from"
-        )
-        if skipif_ocs_version_marker:
-            skip_condition = skipif_ocs_version_marker.args
-            # skip_condition will be a tuple
-            # and condition will be first element in the tuple
-            if skipif_ocs_version(skip_condition[0]):
-                log.info(
-                    f'Test: {item} will be skipped due to {skip_condition}'
-                )
-                items.remove(item)
-                continue
-        if skipif_upgraded_from_marker:
-            skip_args = skipif_upgraded_from_marker.args
-            if skipif_upgraded_from(skip_args[0]):
-                log.info(
-                    f'Test: {item} will be skipped because the OCS cluster is'
-                    f' upgraded from one of these versions: {skip_args[0]}'
-                )
-                items.remove(item)
+    teardown = config.RUN['cli_params'].get('teardown')
+    deploy = config.RUN['cli_params'].get('deploy')
+    if not (teardown or deploy):
+        for item in items[:]:
+            skipif_ocp_version_marker = item.get_closest_marker(
+                "skipif_ocp_version"
+            )
+            skipif_ocs_version_marker = item.get_closest_marker(
+                "skipif_ocs_version"
+            )
+            skipif_upgraded_from_marker = item.get_closest_marker(
+                "skipif_upgraded_from"
+            )
+            if skipif_ocp_version_marker:
+                skip_condition = skipif_ocp_version_marker.args
+                # skip_condition will be a tuple
+                # and condition will be first element in the tuple
+                if skipif_ocp_version(skip_condition[0]):
+                    log.info(
+                        f'Test: {item} will be skipped due to OCP {skip_condition}'
+                    )
+                    items.remove(item)
+                    continue
+            if skipif_ocs_version_marker:
+                skip_condition = skipif_ocs_version_marker.args
+                # skip_condition will be a tuple
+                # and condition will be first element in the tuple
+                if skipif_ocs_version(skip_condition[0]):
+                    log.info(
+                        f'Test: {item} will be skipped due to {skip_condition}'
+                    )
+                    items.remove(item)
+                    continue
+            if skipif_upgraded_from_marker:
+                skip_args = skipif_upgraded_from_marker.args
+                if skipif_upgraded_from(skip_args[0]):
+                    log.info(
+                        f'Test: {item} will be skipped because the OCS cluster is'
+                        f' upgraded from one of these versions: {skip_args[0]}'
+                    )
+                    items.remove(item)
 
 
 @pytest.fixture()
@@ -237,8 +256,12 @@ def log_ocs_version(cluster):
     """
     teardown = config.RUN['cli_params'].get('teardown')
     deploy = config.RUN['cli_params'].get('deploy')
+    dev_mode = config.RUN['cli_params'].get('dev_mode')
     if teardown and not deploy:
         log.info("Skipping version reporting for teardown.")
+        return
+    elif dev_mode:
+        log.info("Skipping version reporting for development mode.")
         return
     cluster_version, image_dict = get_ocs_version()
     file_name = os.path.join(
@@ -1017,6 +1040,10 @@ def tier_marks_name():
 @pytest.fixture(scope='function', autouse=True)
 def health_checker(request, tier_marks_name):
     skipped = False
+    dev_mode = config.RUN['cli_params'].get('dev_mode')
+    if dev_mode:
+        log.info("Skipping health checks for development mode")
+        return
 
     def finalizer():
         if not skipped:
@@ -1127,9 +1154,16 @@ def cluster_load(
     io_in_bg = config.RUN.get('io_in_bg')
     log_utilization = config.RUN.get('log_utilization')
     io_load = config.RUN.get('io_load')
+    cluster_load_error = None
+    cluster_load_error_msg = (
+        "Cluster load might not work correctly during this run, because "
+        "it failed with an exception: %s"
+    )
 
     # IO load should not happen during deployment
-    deployment_test = True if 'deployment' in request.node.items[0].location[0] else False
+    deployment_test = True if (
+        'deployment' in request.node.items[0].location[0]
+    ) else False
     if io_in_bg and not deployment_test:
         io_load = int(io_load) * 0.01
         log.info(wrap_msg("Tests will be running while IO is in the background"))
@@ -1138,18 +1172,26 @@ def cluster_load(
             "will be written is going to be determined by the cluster "
             "capabilities according to its limit"
         )
-        cl_load_obj = ClusterLoad(
-            project_factory=project_factory_session,
-            sa_factory=service_account_factory_session,
-            pvc_factory=pvc_factory_session,
-            pod_factory=pod_factory_session,
-            target_percentage=io_load
-        )
-        cl_load_obj.reach_cluster_load_percentage()
+        try:
+            cl_load_obj = ClusterLoad(
+                project_factory=project_factory_session,
+                sa_factory=service_account_factory_session,
+                pvc_factory=pvc_factory_session,
+                pod_factory=pod_factory_session,
+                target_percentage=io_load
+            )
+            cl_load_obj.reach_cluster_load_percentage()
+        except Exception as ex:
+            log.error(cluster_load_error_msg, ex)
+            cluster_load_error = ex
 
     if (log_utilization or io_in_bg) and not deployment_test:
         if not cl_load_obj:
-            cl_load_obj = ClusterLoad()
+            try:
+                cl_load_obj = ClusterLoad()
+            except Exception as ex:
+                log.error(cluster_load_error_msg, ex)
+                cluster_load_error = ex
 
         config.RUN['load_status'] = 'running'
 
@@ -1160,6 +1202,8 @@ def cluster_load(
             config.RUN['load_status'] = 'finished'
             if thread:
                 thread.join()
+            if cluster_load_error:
+                raise cluster_load_error
 
         request.addfinalizer(finalizer)
 
@@ -1180,8 +1224,11 @@ def cluster_load(
                         if config.RUN['load_status'] == 'running':
                             cl_load_obj.adjust_load_if_needed()
                         elif config.RUN['load_status'] == 'to_be_paused':
-                            cl_load_obj.pause_load()
+                            cl_load_obj.reduce_load(pause=True)
                             config.RUN['load_status'] = 'paused'
+                        elif config.RUN['load_status'] == 'to_be_reduced':
+                            cl_load_obj.reduce_load(pause=False)
+                            config.RUN['load_status'] = 'reduced'
                         elif config.RUN['load_status'] == 'to_be_resumed':
                             cl_load_obj.resume_load()
                             config.RUN['load_status'] = 'running'
@@ -1195,10 +1242,9 @@ def cluster_load(
         thread.start()
 
 
-@pytest.fixture()
-def pause_cluster_load(request):
+def reduce_cluster_load_implementation(request, pause):
     """
-    Pause the background cluster load
+    Pause/reduce the background cluster load
 
     """
     if config.RUN.get('io_in_bg'):
@@ -1210,20 +1256,38 @@ def pause_cluster_load(request):
             """
             config.RUN['load_status'] = 'to_be_resumed'
             try:
-                for load_status in TimeoutSampler(180, 3, config.RUN.get, 'load_status'):
+                for load_status in TimeoutSampler(300, 3, config.RUN.get, 'load_status'):
                     if load_status == 'running':
                         break
             except TimeoutExpiredError:
                 log.error("Cluster load was not resumed successfully")
         request.addfinalizer(finalizer)
 
-        config.RUN['load_status'] = 'to_be_paused'
+        config.RUN['load_status'] = 'to_be_paused' if pause else 'to_be_reduced'
         try:
-            for load_status in TimeoutSampler(180, 3, config.RUN.get, 'load_status'):
-                if load_status == 'paused':
+            for load_status in TimeoutSampler(300, 3, config.RUN.get, 'load_status'):
+                if load_status in ['paused', 'reduced']:
                     break
         except TimeoutExpiredError:
-            log.error("Cluster load was not paused successfully")
+            log.error(f"Cluster load was not {'paused' if pause else 'reduced'} successfully")
+
+
+@pytest.fixture()
+def pause_cluster_load(request):
+    """
+    Pause the background cluster load
+
+    """
+    reduce_cluster_load_implementation(request=request, pause=True)
+
+
+@pytest.fixture()
+def reduce_cluster_load(request):
+    """
+    Reduce the background cluster load to be 50% of what it is
+
+    """
+    reduce_cluster_load_implementation(request=request, pause=False)
 
 
 @pytest.fixture(
@@ -1598,6 +1662,23 @@ def rgw_obj_fixture(request):
         RGW: An RGW resource
     """
     return RGW()
+
+
+@pytest.fixture()
+def rgw_deployments(request):
+    """
+    Return RGW deployments or skip the test.
+
+    """
+    oc = ocp.OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA['cluster_namespace']
+    )
+    rgw_deployments = oc.get(selector=constants.RGW_APP_LABEL)['items']
+    if rgw_deployments:
+        return rgw_deployments
+    else:
+        pytest.skip('There is no RGW deployment available for this test.')
 
 
 @pytest.fixture()
@@ -2168,7 +2249,7 @@ def install_logging(request):
     log.info("Configuring Openshift-logging")
 
     # Checks OCP version
-    ocp_version = get_ocp_version()
+    ocp_version = get_running_ocp_version()
 
     # Creates namespace opensift-operators-redhat
     ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
@@ -2381,7 +2462,7 @@ def couchbase_factory_fixture(request):
     """
     couchbase = CouchBase()
 
-    def factory(replicas=3, run_in_bg=False, skip_analyze=False):
+    def factory(replicas=3, run_in_bg=False, skip_analyze=True):
         """
         Factory to start couchbase workload
 
@@ -2398,6 +2479,7 @@ def couchbase_factory_fixture(request):
         couchbase.run_workload(replicas=replicas, run_in_bg=run_in_bg)
         # Run sanity check on data logs
         couchbase.analyze_run(skip_analyze=skip_analyze)
+
         return couchbase
 
     def finalizer():
@@ -2539,26 +2621,27 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
         dc_pods_res = []
         sa_obj = service_account_factory(project=project)
         with ThreadPoolExecutor() as p:
-            for pvc in pvc_objs:
+            for pvc_obj in pvc_objs:
                 if create_rbd_block_rwx_pod:
                     dc_pods_res.append(
                         p.submit(
                             dc_pod_factory, interface=constants.CEPHBLOCKPOOL,
-                            pvc=pvc, raw_block_pv=True, sa_obj=sa_obj
+                            pvc=pvc_obj, raw_block_pv=True, sa_obj=sa_obj
                         ))
                 else:
                     dc_pods_res.append(
                         p.submit(
                             dc_pod_factory, interface=dict_types[pool_type],
-                            pvc=pvc, sa_obj=sa_obj
+                            pvc=pvc_obj, sa_obj=sa_obj
                         ))
 
         for dc in dc_pods_res:
             pod_obj = dc.result()
             if create_rbd_block_rwx_pod:
-                logging.info(f"#### setting attribute pod_type since"
-                             f" create_rbd_block_rwx_pod = {create_rbd_block_rwx_pod}"
-                             )
+                log.info(
+                    "#### setting attribute pod_type since "
+                    f"create_rbd_block_rwx_pod = {create_rbd_block_rwx_pod}"
+                )
                 setattr(pod_obj, 'pod_type', 'rbd_block_rwx')
             else:
                 setattr(pod_obj, 'pod_type', '')
@@ -2577,6 +2660,72 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
     return factory
 
 
+@pytest.fixture(scope='session')
+def htpasswd_path(tmpdir_factory):
+    """
+    Returns:
+        string: Path to HTPasswd file with additional usernames
+
+    """
+    return str(tmpdir_factory.mktemp('idp_data').join('users.htpasswd'))
+
+
+@pytest.fixture(scope='session')
+def htpasswd_identity_provider(request):
+    """
+    Creates HTPasswd Identity provider.
+
+    Returns:
+        object: OCS object representing OCP OAuth object with HTPasswd IdP
+
+    """
+    users.create_htpasswd_idp()
+    cluster = OCS(
+        kind=constants.OAUTH,
+        metadata={'name': 'cluster'}
+    )
+    cluster.reload()
+
+    def finalizer():
+        """
+        Remove HTPasswd IdP
+
+        """
+        # TODO(fbalak): remove HTPasswd identityProvider
+        # cluster.ocp.patch(
+        #     resource_name='cluster',
+        #     params=f'[{ "op": "remove", "path": "/spec/identityProviders" }]'
+        # )
+        # users.delete_htpasswd_secret()
+
+    request.addfinalizer(finalizer)
+    return cluster
+
+
+@pytest.fixture(scope='function')
+def user_factory(
+    request,
+    htpasswd_identity_provider,
+    htpasswd_path
+):
+    return users.user_factory(
+        request,
+        htpasswd_path
+    )
+
+
+@pytest.fixture(scope='session')
+def user_factory_session(
+    request,
+    htpasswd_identity_provider,
+    htpasswd_path
+):
+    return users.user_factory(
+        request,
+        htpasswd_path
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def ceph_toolbox(request):
     """
@@ -2587,8 +2736,11 @@ def ceph_toolbox(request):
     teardown = config.RUN['cli_params'].get('teardown')
     skip_ocs = config.ENV_DATA['skip_ocs_deployment']
     if not (deploy or teardown or skip_ocs):
-        # Creating toolbox pod
-        setup_ceph_toolbox()
+        try:
+            # Creating toolbox pod
+            setup_ceph_toolbox()
+        except CommandFailed:
+            log.info("Failed to create toolbox")
 
 
 @pytest.fixture(scope='function')
@@ -2610,6 +2762,7 @@ def node_drain_teardown(request):
         ]
         if scheduling_disabled_nodes:
             schedule_nodes(scheduling_disabled_nodes)
+        ceph_health_check()
 
     request.addfinalizer(finalizer)
 
@@ -2676,3 +2829,301 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
     request.addfinalizer(ns_resources_and_connections_cleanup)
 
     return _create_ns_resources
+
+
+@pytest.fixture()
+def snapshot_factory(request):
+    """
+    Snapshot factory. Calling this fixture creates a volume snapshot from the
+    specified PVC
+
+    """
+    instances = []
+
+    def factory(
+        pvc_obj,
+        wait=True,
+        snapshot_name=None
+    ):
+        """
+        Args:
+            pvc_obj (PVC): PVC object from which snapshot has to be created
+            wait (bool): True to wait for snapshot to be ready, False otherwise
+            snapshot_name (str): Name to be provided for snapshot
+
+        Returns:
+            OCS: OCS instance of kind VolumeSnapshot
+
+        """
+        snap_obj = pvc_obj.create_snapshot(snapshot_name=snapshot_name, wait=wait)
+        return snap_obj
+
+    def finalizer():
+        """
+        Delete the snapshots
+
+        """
+        for instance in instances:
+            if not instance.is_deleted:
+                instance.delete()
+                instance.ocp.wait_for_delete(instance.name)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def snapshot_restore_factory(request):
+    """
+    Snapshot restore factory. Calling this fixture creates new PVC out of the
+    specified VolumeSnapshot.
+
+    """
+    instances = []
+
+    def factory(
+        snapshot_obj,
+        restore_pvc_name=None,
+        storageclass=None,
+        size=None,
+        volume_mode=None,
+        restore_pvc_yaml=None,
+        access_mode=constants.ACCESS_MODE_RWO,
+        status=constants.STATUS_BOUND
+    ):
+        """
+        Args:
+            snapshot_obj (OCS): OCS instance of kind VolumeSnapshot which has
+                to be restored to new PVC
+            restore_pvc_name (str): Name to be provided for restored pvc
+            storageclass (str): Name of storageclass
+            size (str): Size of PVC being created. eg: 5Gi. Ideally, this
+                should be same as the restore size of snapshot. Adding this
+                parameter to consider negative test scenarios.
+            volume_mode (str): Volume mode for PVC. This should match the
+                volume mode of parent PVC.
+            restore_pvc_yaml (str): The location of pvc-restore.yaml
+            access_mode (str): This decides the access mode to be used for the
+                PVC. ReadWriteOnce is default.
+            status (str): If provided then factory waits for the PVC to reach
+                desired state.
+
+        Returns:
+            PVC: Restored PVC object
+
+        """
+        snapshot_info = snapshot_obj.get()
+        size = size or snapshot_info['status']['restoreSize']
+        restore_pvc_name = restore_pvc_name or (
+            helpers.create_unique_resource_name(snapshot_obj.name, 'restore')
+        )
+
+        if snapshot_info['spec']['volumeSnapshotClassName'] == (
+            constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+        ):
+            storageclass = storageclass or helpers.default_storage_class(
+                constants.CEPHBLOCKPOOL
+            )
+            restore_pvc_yaml = restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
+        elif snapshot_info['spec']['volumeSnapshotClassName'] == (
+            constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+        ):
+            storageclass = storageclass or helpers.default_storage_class(
+                constants.CEPHFILESYSTEM
+            )
+            restore_pvc_yaml = restore_pvc_yaml or constants.CSI_CEPHFS_PVC_RESTORE_YAML
+        restored_pvc = create_restore_pvc(
+            sc_name=storageclass.name, snap_name=snapshot_obj.name,
+            namespace=snapshot_obj.namespace, size=size,
+            pvc_name=restore_pvc_name, volume_mode=volume_mode,
+            restore_pvc_yaml=restore_pvc_yaml, access_mode=access_mode
+        )
+        instances.append(restored_pvc)
+        restored_pvc.snapshot = snapshot_obj
+        if status:
+            helpers.wait_for_resource_state(restored_pvc, status)
+        return restored_pvc
+
+    def finalizer():
+        """
+        Delete the PVCs
+
+        """
+        for instance in instances:
+            if not instance.is_deleted:
+                instance.delete()
+                instance.ocp.wait_for_delete(instance.name)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="session", autouse=True)
+def collect_logs_fixture(request):
+    """
+    This fixture collects ocs logs after tier execution and this will allow
+    to see the cluster's status after the execution on all execution status options.
+    """
+    def finalizer():
+        """
+        Tracking both logs separately reduce changes of collision
+        """
+        if not config.RUN['cli_params'].get('deploy') and not config.RUN['cli_params'].get('teardown'):
+            if config.REPORTING['collect_logs_on_success_run']:
+                collect_ocs_logs('testcases', ocs=False, status_failure=False)
+                collect_ocs_logs('testcases', ocp=False, status_failure=False)
+
+    request.addfinalizer(finalizer)
+
+
+def get_ready_noobaa_endpoint_count(namespace):
+    """
+    Get the number of ready nooobaa endpoints
+    """
+    pods_info = get_pods_having_label(label=constants.NOOBAA_ENDPOINT_POD_LABEL, namespace=namespace)
+    ready_count = 0
+    for ep_info in pods_info:
+        if ep_info['status']['containerStatuses'][0]['ready']:
+            ready_count += 1
+    return ready_count
+
+
+@pytest.fixture(scope="function")
+def nb_ensure_endpoint_count(request):
+    """
+    Validate and ensure the number of running noobaa endpoints
+    """
+    cls = request.cls
+    min_ep_count = cls.MIN_ENDPOINT_COUNT
+    max_ep_count = cls.MAX_ENDPOINT_COUNT
+
+    assert min_ep_count <= max_ep_count
+    namespace = defaults.ROOK_CLUSTER_NAMESPACE
+    should_wait = False
+
+    # prior to 4.6 we configured the ep count directly on the noobaa cr.
+    if float(config.ENV_DATA['ocs_version']) < 4.6:
+        noobaa = OCP(kind='noobaa', namespace=namespace)
+        resource = noobaa.get()['items'][0]
+        resource_name = resource['metadata']['name']
+        endpoints = resource.get('spec', {}).get('endpoints', {})
+
+        if endpoints.get('minCount', -1) != min_ep_count:
+            log.info(f"Changing minimum Noobaa endpoints to {min_ep_count}")
+            params = f'{{"spec":{{"endpoints":{{"minCount":{min_ep_count}}}}}}}'
+            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+            should_wait = True
+
+        if endpoints.get('maxCount', -1) != max_ep_count:
+            log.info(f"Changing maximum Noobaa endpoints to {max_ep_count}")
+            params = f'{{"spec":{{"endpoints":{{"maxCount":{max_ep_count}}}}}}}'
+            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+            should_wait = True
+
+    else:
+        storage_cluster = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
+        resource = storage_cluster.get()['items'][0]
+        resource_name = resource['metadata']['name']
+        endpoints = resource.get('spec', {}).get('multiCloudGateway', {}).get('endpoints', {})
+
+        if endpoints.get('minCount', -1) != min_ep_count:
+            log.info(f"Changing minimum Noobaa endpoints to {min_ep_count}")
+            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"minCount":{min_ep_count}}}}}}}}}'
+            storage_cluster.patch(resource_name=resource_name, params=params, format_type='merge')
+            should_wait = True
+
+        if endpoints.get('maxCount', -1) != max_ep_count:
+            log.info(f"Changing maximum Noobaa endpoints to {max_ep_count}")
+            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"maxCount":{max_ep_count}}}}}}}}}'
+            storage_cluster.patch(resource_name=resource_name, params=params, format_type='merge')
+            should_wait = True
+
+    if should_wait:
+        # loggin the ready endpoint count for 5 min in 30sec internvals
+        for i in range(10):
+            ready_count = get_ready_noobaa_endpoint_count(namespace)
+            log.info(
+                f"Elapsed time {i * 30} sec: Waiting for noobaa endpoints to stabilize. "
+                f"Current ready count: {ready_count}"
+            )
+            time.sleep(30)
+
+    # Assert that we have the desired number of endpoints
+    ready_count = get_ready_noobaa_endpoint_count(namespace)
+    assert min_ep_count <= ready_count <= max_ep_count
+
+
+@pytest.fixture()
+def pvc_clone_factory(request):
+    """
+    Calling this fixture creates a clone from the specified PVC
+
+    """
+    instances = []
+
+    def factory(
+        pvc_obj,
+        status=constants.STATUS_BOUND,
+        clone_name=None,
+        storageclass=None,
+        size=None,
+        access_mode=None,
+        volume_mode=None
+    ):
+        """
+        Args:
+            pvc_obj (PVC): PVC object from which clone has to be created
+            status (str): If provided then factory waits for cloned PVC to
+                reach the desired state
+            clone_name (str): Name to be provided for cloned PVC
+            storageclass (str): storage class to be used for cloned PVC
+            size (int): The requested size for the cloned PVC. This should
+                be same as the size of parent PVC for a successful clone
+            access_mode (str): This decides the access mode to be used for
+                the cloned PVC. eg: ReadWriteOnce, ReadOnlyMany, ReadWriteMany
+            volume_mode (str): Volume mode for PVC. This should match the
+                volume mode of parent PVC
+
+        Returns:
+            PVC: PVC instance
+
+        """
+        assert pvc_obj.provisioner in constants.OCS_PROVISIONERS, (
+            f"Unknown provisioner in PVC {pvc_obj.name}"
+        )
+        if pvc_obj.provisioner == 'openshift-storage.rbd.csi.ceph.com':
+            clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
+        elif pvc_obj.provisioner == 'openshift-storage.cephfs.csi.ceph.com':
+            clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
+
+        size = size or pvc_obj.get().get('spec').get('resources').get('requests').get('storage')
+        storageclass = storageclass or pvc_obj.backed_sc
+        access_mode = access_mode or pvc_obj.get_pvc_access_mode
+        volume_mode = volume_mode or pvc_obj.volume_mode
+
+        # Create clone
+        clone_pvc_obj = pvc.create_pvc_clone(
+            sc_name=storageclass, parent_pvc=pvc_obj.name,
+            clone_yaml=clone_yaml, pvc_name=clone_name, storage_size=size,
+            access_mode=access_mode, volume_mode=volume_mode
+        )
+        instances.append(clone_pvc_obj)
+        clone_pvc_obj.parent = pvc_obj
+        clone_pvc_obj.volume_mode = volume_mode
+
+        if status:
+            helpers.wait_for_resource_state(clone_pvc_obj, status)
+        return clone_pvc_obj
+
+    def finalizer():
+        """
+        Delete the cloned PVCs
+
+        """
+        for instance in instances:
+            if not instance.is_deleted:
+                instance.delete()
+                instance.ocp.wait_for_delete(instance.name)
+
+    request.addfinalizer(finalizer)
+    return factory

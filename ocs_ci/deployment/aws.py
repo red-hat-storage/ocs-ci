@@ -28,6 +28,7 @@ from ocs_ci.utility.utils import (
 from semantic_version import Version
 from .cloud import CloudDeploymentBase
 from .cloud import IPIOCPDeployment
+from .flexy import FlexyAWSUPI
 
 logger = logging.getLogger(__name__)
 
@@ -752,7 +753,7 @@ class AWSUPI(AWSBase):
         stack_names.sort()
         stack_names.reverse()
         stack_names.extend([f'{cluster_name}-{s}' for s in suffixes])
-        logger.info(f"Deleteing stacks: {stack_names}")
+        logger.info(f"Deleting stacks: {stack_names}")
         self.aws.delete_cloudformation_stacks(stack_names)
 
         # Call openshift-installer destroy cluster
@@ -762,3 +763,69 @@ class AWSUPI(AWSBase):
         suffixes = ['inf', 'vpc']
         stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
         self.aws.delete_cloudformation_stacks(stack_names)
+
+
+class AWSUPIFlexy(AWSBase):
+    """
+    All the functionalities related to AWS UPI Flexy deployment
+    lives here
+    """
+    def __init__(self):
+        super().__init__()
+
+    class OCPDeployment(BaseOCPDeployment):
+        def __init__(self):
+            self.flexy_deployment = True
+            super().__init__()
+            self.flexy_instance = FlexyAWSUPI()
+
+        def deploy_prereq(self):
+            """
+            Instantiate proper flexy class here
+
+            """
+            super().deploy_prereq()
+            self.flexy_instance.deploy_prereq()
+
+        def deploy(self, log_level=''):
+            self.flexy_instance.deploy(log_level)
+            self.test_cluster()
+
+        def destroy(self, log_level=''):
+            """
+            Destroy cluster using Flexy
+            """
+            self.flexy_instance.destroy()
+
+    def destroy_cluster(self, log_level="DEBUG"):
+        """
+        Destroy OCP cluster specific to AWS UPI Flexy
+
+        Args:
+            log_level (str): log level openshift-installer (default: DEBUG)
+
+        """
+        # Destroy extra volumes
+        destroy_volumes(self.cluster_name)
+        # Delete apps records
+        self.aws.delete_apps_record_set()
+        self.aws.delete_apps_record_set(from_base_domain=True)
+
+        super(AWSUPIFlexy, self).destroy_cluster(log_level)
+
+        # Delete master, bootstrap, security group, and worker stacks
+        suffixes = ['ma', 'bs', 'sg']
+        stack_names = self.aws.get_worker_stacks()
+        stack_names.sort()
+        stack_names.reverse()
+        stack_names.extend([f'{self.cluster_name}-{s}' for s in suffixes])
+        logger.info(f"Deleting stacks: {stack_names}")
+        self.aws.delete_cloudformation_stacks(stack_names)
+
+        # WORKAROUND for Flexy issue:
+        # https://issues.redhat.com/browse/OCPQE-1521
+        self.aws.delete_cf_stack_including_dependencies(
+            f"{self.cluster_name}-vpc"
+        )
+        # cleanup related S3 buckets
+        delete_cluster_buckets(self.cluster_name)

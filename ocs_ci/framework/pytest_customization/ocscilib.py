@@ -20,9 +20,15 @@ from ocs_ci.framework.exceptions import (
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
+    LOG_FORMAT,
     OCP_VERSION_CONF_DIR,
 )
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError, ChannelNotFound
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ResourceNotFoundError,
+    ChannelNotFound,
+    ResourceInUnexpectedState
+)
 from ocs_ci.ocs.resources.ocs import get_ocs_csv, get_version_info
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
 from ocs_ci.utility.utils import (
@@ -36,6 +42,9 @@ __all__ = [
 ]
 
 log = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter(LOG_FORMAT))
+log.addHandler(handler)
 
 
 def pytest_addoption(parser):
@@ -85,11 +94,25 @@ def pytest_addoption(parser):
         help="Email ID to send results",
     )
     parser.addoption(
+        '--squad-analysis',
+        dest='squad_analysis',
+        action="store_true",
+        default=False,
+        help="Include Squad Analysis to email report.",
+    )
+    parser.addoption(
         '--collect-logs',
         dest='collect-logs',
         action="store_true",
         default=False,
         help="Collect OCS logs when test case failed",
+    )
+    parser.addoption(
+        '--collect-logs-on-success-run',
+        dest='collect_logs_on_success_run',
+        action="store_true",
+        default=False,
+        help="Collect must gather logs at the end of the execution (also when no failure in the tests)"
     )
     parser.addoption(
         '--io-in-bg',
@@ -118,6 +141,26 @@ def pytest_addoption(parser):
         '--upgrade-ocs-version',
         dest='upgrade_ocs_version',
         help="ocs version to upgrade (e.g. 4.3)"
+    )
+    parser.addoption(
+        '--upgrade-ocp-version',
+        dest='upgrade_ocp_version',
+        help='''
+        OCP version to upgrade to. This version will be used to
+        load file from conf/ocp_version/ocp-VERSION-config.yaml.
+        For example:
+        4.5 (for nightly 4.5 OCP build)
+        4.5-ga (for latest GAed 4.5 OCP build)
+        '''
+    )
+    parser.addoption(
+        '--upgrade-ocp-image',
+        dest='upgrade_ocp_image',
+        help='''
+        OCP image to upgrade to. This image string will be split on ':' to
+        determine the image source and the specified tag to use.
+        (e.g. quay.io/openshift-release-dev/ocp-release:4.6.0-x86_64)
+        '''
     )
     parser.addoption(
         '--ocp-version',
@@ -175,6 +218,16 @@ def pytest_addoption(parser):
             "from and the value to replace to, separated by '::'"
         )
     )
+    parser.addoption(
+        '--dev-mode',
+        dest='dev_mode',
+        action="store_true",
+        default=False,
+        help=(
+            "Runs in development mode. It skips few checks like collecting "
+            "versions, collecting logs, etc"
+        )
+    )
 
 
 def pytest_configure(config):
@@ -185,6 +238,7 @@ def pytest_configure(config):
         config (pytest.config): Pytest config object
 
     """
+    set_log_level(config)
     # Somewhat hacky but this lets us differentiate between run-ci executions
     # and plain pytest unit test executions
     ocscilib_module = 'ocs_ci.framework.pytest_customization.ocscilib'
@@ -222,6 +276,9 @@ def pytest_configure(config):
                 "the OCS deployment"
             )
             return
+        elif ocsci_config.RUN['cli_params'].get('dev_mode'):
+            log.info("Running in development mode")
+            return
         print("Collecting Cluster versions")
         # remove extraneous metadata
         del config._metadata['Python']
@@ -238,7 +295,11 @@ def pytest_configure(config):
             config.addinivalue_line(
                 "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
             )
-        except (ResourceNotFoundError, ChannelNotFound):
+        except (
+            ResourceNotFoundError,
+            ChannelNotFound,
+            ResourceInUnexpectedState
+        ):
             # might be using exisitng cluster path using GUI installation
             log.warning("Unable to get CSV version for Reporting")
 
@@ -383,6 +444,7 @@ def process_cluster_cli_params(config):
             raise ClusterNameNotProvidedError()
     if get_cli_param(config, 'email') and not get_cli_param(config, '--html'):
         pytest.exit("--html option must be provided to send email reports")
+    get_cli_param(config, 'squad_analysis')
     get_cli_param(config, '-m')
     osd_size = get_cli_param(config, '--osd-size')
     if osd_size:
@@ -394,15 +456,31 @@ def process_cluster_cli_params(config):
             OCP_VERSION_CONF_DIR, version_config_file
         )
         load_config_file(version_config_file_path)
+    upgrade_ocp_version = get_cli_param(config, '--upgrade-ocp-version')
+    if upgrade_ocp_version:
+        version_config_file = f"ocp-{upgrade_ocp_version}-upgrade.yaml"
+        version_config_file_path = os.path.join(
+            OCP_VERSION_CONF_DIR, version_config_file
+        )
+        load_config_file(version_config_file_path)
+    upgrade_ocp_image = get_cli_param(config, '--upgrade-ocp-image')
+    if upgrade_ocp_image:
+        ocp_image = upgrade_ocp_image.split(':')
+        ocsci_config.UPGRADE['ocp_upgrade_path'] = ocp_image[0]
+        ocsci_config.UPGRADE['ocp_upgrade_version'] = ocp_image[1]
     ocp_installer_version = get_cli_param(config, '--ocp-installer-version')
     if ocp_installer_version:
         ocsci_config.DEPLOYMENT['installer_version'] = ocp_installer_version
-        ocsci_config.RUN['client_verison'] = ocp_installer_version
+        ocsci_config.RUN['client_version'] = ocp_installer_version
     csv_change = get_cli_param(config, '--csv-change')
     if csv_change:
         csv_change = csv_change.split("::")
         ocsci_config.DEPLOYMENT['csv_change_from'] = csv_change[0]
         ocsci_config.DEPLOYMENT['csv_change_to'] = csv_change[1]
+    collect_logs_on_success_run = get_cli_param(config, 'collect_logs_on_success_run')
+    if collect_logs_on_success_run:
+        ocsci_config.REPORTING['collect_logs_on_success_run'] = True
+    get_cli_param(config, 'dev_mode')
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -436,7 +514,10 @@ def pytest_runtest_makereport(item, call):
         ocp_logs_collection = True if rep.when == "call" else False
         mcg = True if any(x in item.location[0] for x in ['mcg', 'ecosystem']) else False
         try:
-            collect_ocs_logs(dir_name=test_case_name, ocp=ocp_logs_collection, mcg=mcg)
+            if not ocsci_config.RUN.get('is_ocp_deployment_failed'):
+                collect_ocs_logs(
+                    dir_name=test_case_name, ocp=ocp_logs_collection, mcg=mcg
+                )
         except Exception:
             log.exception("Failed to collect OCS logs")
 
@@ -503,3 +584,15 @@ def set_report_portal_tags(config):
     for tag in rp_tags:
         if tag:
             config.addinivalue_line("rp_launch_tags", tag.lower())
+
+
+def set_log_level(config):
+    """
+    Set the log level of this module based on the pytest.ini log_cli_level
+
+    Args:
+        config (pytest.config): Pytest config object
+
+    """
+    level = config.getini('log_cli_level') or 'INFO'
+    log.setLevel(logging.getLevelName(level))

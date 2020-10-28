@@ -16,7 +16,7 @@ setup(
     install_requires=[
         'apache-libcloud==3.1.0',
         'docopt==0.6.2',
-        'gevent==20.6.2',
+        'gevent==20.9.0',
         'reportportal-client==3.2.3',
         'requests==2.23.0',
         'paramiko==2.4.2',
@@ -67,7 +67,8 @@ setup(
             'report-version=ocs_ci.ocs.version:main',
             'ci-cleanup=ocs_ci.cleanup.aws.cleanup:cluster_cleanup',
             'ci-pause=ocs_ci.pause.pause:cluster_pause',
-            'aws-cleanup=ocs_ci.cleanup.aws.cleanup:aws_cleanup'
+            'aws-cleanup=ocs_ci.cleanup.aws.cleanup:aws_cleanup',
+            'vsphere-cleanup=ocs_ci.cleanup.vsphere.cleanup:vsphere_cleanup'
         ],
     },
     zip_safe=True,

@@ -1,6 +1,7 @@
 ENV_DATA:
   platform: 'baremetalpsi'
   deployment_type: 'upi'
+  flexy_deployment: true
 
 # Override flexy params here
 FLEXY:

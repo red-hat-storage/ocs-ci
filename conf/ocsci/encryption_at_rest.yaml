@@ -1,0 +1,6 @@
+---
+# This configuration file is used for enable encryption at REST in the deployment
+# Valid only for OCS >= 4.6
+# https://issues.redhat.com/browse/KNIP-1264
+ENV_DATA:
+  encryption_at_rest: true

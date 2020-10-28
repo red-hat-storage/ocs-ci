@@ -109,7 +109,7 @@ class Pod(OCS):
         """
         self._roles.append(role)
 
-    def get_fio_results(self):
+    def get_fio_results(self, timeout=FIO_TIMEOUT):
         """
         Get FIO execution results
 
@@ -121,7 +121,7 @@ class Pod(OCS):
         """
         logger.info(f"Waiting for FIO results from pod {self.name}")
         try:
-            result = self.fio_thread.result(FIO_TIMEOUT)
+            result = self.fio_thread.result(timeout)
             if result:
                 return yaml.safe_load(result)
             raise CommandFailed(f"FIO execution results: {result}.")
@@ -253,7 +253,8 @@ class Pod(OCS):
 
     def run_io(
         self, storage_type, size, io_direction='rw', rw_ratio=75,
-        jobs=1, runtime=60, depth=4, rate='1m', rate_process='poisson', fio_filename=None, bs='4K'
+        jobs=1, runtime=60, depth=4, rate='1m', rate_process='poisson',
+        fio_filename=None, bs='4K', end_fsync=0
     ):
         """
         Execute FIO on a pod
@@ -280,6 +281,8 @@ class Pod(OCS):
             rate_process (str): kind of rate process default poisson, e.g. poisson
             fio_filename(str): Name of fio file created on app pod's mount point
             bs (str): Block size, e.g. 4K
+            end_fsync (int): If 1, fio will sync file contents when a write
+                stage has completed. Fio default is 0
         """
         if not self.wl_setup_done:
             self.workload_setup(storage_type=storage_type, jobs=jobs)
@@ -302,6 +305,35 @@ class Pod(OCS):
         self.io_params['rate'] = rate
         self.io_params['rate_process'] = rate_process
         self.io_params['bs'] = bs
+        if end_fsync:
+            self.io_params['end_fsync'] = end_fsync
+        self.fio_thread = self.wl_obj.run(**self.io_params)
+
+    def fillup_fs(self, size, fio_filename=None):
+        """
+        Execute FIO on a pod to fillup a file
+        This will run sequantial IO of 1MB block size to fill up the fill with data
+        This operation will run in background and will store the results in
+        'self.thread.result()'.
+        In order to wait for the output and not continue with the test until
+        FIO is done, call self.thread.result() right after calling run_io.
+        See tests/manage/test_pvc_deletion_during_io.py::test_run_io
+        for usage of FIO
+
+        Args:
+            size (str): Size in MB, e.g. '200M'
+            fio_filename(str): Name of fio file created on app pod's mount point
+
+        """
+
+        if not self.wl_setup_done:
+            self.workload_setup(storage_type='fs', jobs=1)
+
+        self.io_params = templating.load_yaml(constants.FIO_IO_FILLUP_PARAMS_YAML)
+        size = size if isinstance(size, str) else f"{size}M"
+        self.io_params['size'] = size
+        if fio_filename:
+            self.io_params['filename'] = fio_filename
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
     def run_git_clone(self):
@@ -498,6 +530,23 @@ def get_csi_provisioner_pod(interface):
     return provisioner_pod
 
 
+def get_csi_snapshoter_pod():
+    """
+    Get the csi snapshot controller pod
+
+    Returns:
+        Pod object: csi snapshot controller pod
+
+    """
+    ocp_pod_obj = OCP(
+        kind=constants.POD, namespace='openshift-cluster-storage-operator'
+    )
+    selector = 'app=csi-snapshot-controller'
+    snapshotner_pod = ocp_pod_obj.get(selector=selector)['items']
+    snapshotner_pod = (Pod(**snapshotner_pod[0]).name)
+    return snapshotner_pod
+
+
 def get_rgw_pods(rgw_label=constants.RGW_APP_LABEL, namespace=None):
     """
     Fetches info about rgw pods in the cluster
@@ -589,18 +638,20 @@ def get_file_path(pod_obj, file_name):
     return file_path
 
 
-def cal_md5sum(pod_obj, file_name):
+def cal_md5sum(pod_obj, file_name, block=False):
     """
     Calculates the md5sum of the file
 
     Args:
         pod_obj (Pod): The object of the pod
         file_name (str): The name of the file for which md5sum to be calculated
+        block (bool): True if the volume mode of PVC used on pod is 'Block'.
+            file_name will be the devicePath in this case.
 
     Returns:
         str: The md5sum of the file
     """
-    file_path = get_file_path(pod_obj, file_name)
+    file_path = file_name if block else get_file_path(pod_obj, file_name)
     md5sum_cmd_out = pod_obj.exec_cmd_on_pod(
         command=f"bash -c \"md5sum {file_path}\"", out_yaml_format=False
     )
@@ -609,7 +660,7 @@ def cal_md5sum(pod_obj, file_name):
     return md5sum
 
 
-def verify_data_integrity(pod_obj, file_name, original_md5sum):
+def verify_data_integrity(pod_obj, file_name, original_md5sum, block=False):
     """
     Verifies existence and md5sum of file created from first pod
 
@@ -617,6 +668,8 @@ def verify_data_integrity(pod_obj, file_name, original_md5sum):
         pod_obj (Pod): The object of the pod
         file_name (str): The name of the file for which md5sum to be calculated
         original_md5sum (str): The original md5sum of the file
+        block (bool): True if the volume mode of PVC used on pod is 'Block'.
+            file_name will be the devicePath in this case.
 
     Returns:
         bool: True if the file exists and md5sum matches
@@ -624,11 +677,11 @@ def verify_data_integrity(pod_obj, file_name, original_md5sum):
     Raises:
         AssertionError: If file doesn't exist or md5sum mismatch
     """
-    file_path = get_file_path(pod_obj, file_name)
+    file_path = file_name if block else get_file_path(pod_obj, file_name)
     assert check_file_existence(pod_obj, file_path), (
         f"File {file_name} doesn't exists"
     )
-    current_md5sum = cal_md5sum(pod_obj, file_name)
+    current_md5sum = cal_md5sum(pod_obj, file_name, block)
     logger.info(f"Original md5sum of file: {original_md5sum}")
     logger.info(f"Current md5sum of file: {current_md5sum}")
     assert current_md5sum == original_md5sum, (
@@ -1474,3 +1527,52 @@ def get_running_state_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
             running_pods_object.append(pod)
 
     return running_pods_object
+
+
+def wait_for_pods_to_be_running(
+    timeout=200, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+):
+    """
+    Wait for all the pods in a specific namespace to be running.
+
+    Args:
+        timeout (int): time to wait for pods to be running
+        namespace (str): the namespace ot the pods
+
+    Returns:
+         bool: True, if all pods in Running state. False, otherwise
+
+    """
+    try:
+        for pods_running in TimeoutSampler(
+            timeout=timeout, sleep=10, func=check_pods_in_running_state, namespace=namespace
+        ):
+            # Check if all the pods in running state
+            if pods_running:
+                logging.info("All the pods reached status running!")
+                return True
+    except TimeoutExpiredError:
+        logging.warning(
+            f"Not all the pods reached status running "
+            f"after {timeout} seconds"
+        )
+        return False
+
+
+def list_of_nodes_running_pods(selector, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    The function returns the list of nodes for the given selector
+
+    Args:
+        selector (str): The resource selector to search with
+
+    Returns:
+        list: a list of nodes that runs the given selector pods
+
+    """
+    pod_obj_list = get_all_pods(
+        namespace=namespace, selector=[selector]
+    )
+    pods_running_nodes = [get_pod_node(pod) for pod in pod_obj_list]
+    logger.info(f"{selector} running on nodes {pods_running_nodes}")
+    return list(set(pods_running_nodes))

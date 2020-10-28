@@ -3,12 +3,14 @@ Package manifest related functionalities
 """
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, ChannelNotFound, ResourceNotFoundError
+    CommandFailed, CSVNotFound, ChannelNotFound, ResourceNotFoundError
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.resources.install_plan import InstallPlan
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -22,8 +24,10 @@ class PackageManifest(OCP):
     """
 
     def __init__(
-            self, resource_name='', namespace=constants.MARKETPLACE_NAMESPACE,
-            **kwargs
+        self, resource_name='', namespace=constants.MARKETPLACE_NAMESPACE,
+        install_plan_namespace=None,
+        subscription_plan_approval="Automatic",
+        **kwargs
     ):
         """
         Initializer function for PackageManifest class
@@ -31,8 +35,15 @@ class PackageManifest(OCP):
         Args:
             resource_name (str): Name of package manifest
             namespace (str): Namespace of package manifest
+            install_plan_namespace (str): install_plan_namespace
+            subscription_plan_approval (str): subscription plan approval:
+                Automatic or Manual
 
         """
+        self.install_plan_namespace = install_plan_namespace or (
+            config.ENV_DATA.get('cluster_namespace')
+        )
+        self.subscription_plan_approval = subscription_plan_approval
         super(PackageManifest, self).__init__(
             namespace=namespace, resource_name=resource_name, kind='packagemanifest',
             **kwargs
@@ -117,9 +128,16 @@ class PackageManifest(OCP):
             )
             raise ex
 
-    def get_current_csv(self, channel=None):
+    def get_current_csv(
+        self, channel=None, csv_pattern=constants.OCS_CSV_PREFIX
+    ):
         """
         Returns current csv for default or specified channel
+
+        Args:
+            channel (str): Channel of the CSV
+            csv_pattern (str): CSV name pattern - needed for manual subscription
+                plan
 
         Returns:
             str: Current CSV name
@@ -133,6 +151,16 @@ class PackageManifest(OCP):
         self.check_name_is_specified()
         channel = channel if channel else self.get_default_channel()
         channels = self.get_channels()
+        if self.subscription_plan_approval == "Manual":
+            try:
+                return self.get_installed_csv_from_install_plans(
+                    pattern=csv_pattern,
+                )
+            except CSVNotFound:
+                log.warning(
+                    "No CSV found from any installPlan, continue to get the CSV"
+                    "name from the packageManifest"
+                )
         for _channel in channels:
             if _channel['name'] == channel:
                 return _channel['currentCSV']
@@ -141,6 +169,27 @@ class PackageManifest(OCP):
             f"Channel: {channel} not found in available channels: "
             f"{channel_names}"
         )
+
+    def get_installed_csv_from_install_plans(self, pattern):
+        """
+        Get currently installed CSV out latest approved install plans.
+
+        Args:
+            patter (str): pattern of CSV name to look for.
+
+        Raises:
+            CSVNotFound: In case no CSV found from approved install plans.
+        """
+        install_plan = InstallPlan(namespace=self.install_plan_namespace)
+        install_plans = install_plan.get()['items']
+        for ip in install_plans:
+            csv_names = ip['spec']['clusterServiceVersionNames']
+            if len(csv_names) != 1:
+                continue
+            csv_name = ip['spec']['clusterServiceVersionNames'][0]
+            if (pattern in csv_name and ip['spec']['approved']):
+                return csv_name
+        raise CSVNotFound("No CSV found from approved install plans")
 
     def wait_for_resource(
         self, resource_name='', timeout=60, sleep=3, label=None, selector=None,

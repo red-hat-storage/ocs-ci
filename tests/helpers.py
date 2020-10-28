@@ -19,6 +19,7 @@ from uuid import uuid4
 import yaml
 
 from ocs_ci.framework import config
+from ocs_ci.ocs.utils import mirror_image
 from ocs_ci.ocs import constants, defaults, node, ocp
 from ocs_ci.ocs.exceptions import (
     CommandFailed, ResourceWrongStatusException,
@@ -590,10 +591,10 @@ def create_pvc(
 
 def create_multiple_pvcs(
     sc_name, namespace, number_of_pvc=1, size=None, do_reload=False,
-    access_mode=constants.ACCESS_MODE_RWO
+    access_mode=constants.ACCESS_MODE_RWO, burst=False
 ):
     """
-    Create one or more PVC
+    Create one or more PVC as a bulk or one by one
 
     Args:
         sc_name (str): The name of the storage class to provision the PVCs from
@@ -607,16 +608,54 @@ def create_multiple_pvcs(
     Returns:
          list: List of PVC objects
     """
+    if not burst:
+        if access_mode == 'ReadWriteMany' and 'rbd' in sc_name:
+            volume_mode = 'Block'
+        else:
+            volume_mode = None
+        return [
+            create_pvc(
+                sc_name=sc_name, size=size, namespace=namespace,
+                do_reload=do_reload, access_mode=access_mode, volume_mode=volume_mode
+            ) for _ in range(number_of_pvc)
+        ]
+
+    pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
+    pvc_data['metadata']['namespace'] = namespace
+    pvc_data['spec']['accessModes'] = [access_mode]
+    pvc_data['spec']['storageClassName'] = sc_name
+    if size:
+        pvc_data['spec']['resources']['requests']['storage'] = size
     if access_mode == 'ReadWriteMany' and 'rbd' in sc_name:
-        volume_mode = 'Block'
+        pvc_data['spec']['volumeMode'] = 'Block'
     else:
-        volume_mode = None
-    return [
-        create_pvc(
-            sc_name=sc_name, size=size, namespace=namespace,
-            do_reload=do_reload, access_mode=access_mode, volume_mode=volume_mode
-        ) for _ in range(number_of_pvc)
-    ]
+        pvc_data['spec']['volumeMode'] = None
+
+    # Creating tem directory to hold the files for the PVC creation
+    tmpdir = tempfile.mkdtemp()
+    logger.info('Creating the PVC yaml files for creation in bulk')
+    ocs_objs = []
+    for _ in range(number_of_pvc):
+        name = create_unique_resource_name('test', 'pvc')
+        logger.info(f"Adding PVC with name {name}")
+        pvc_data['metadata']['name'] = name
+        templating.dump_data_to_temp_yaml(pvc_data, f'{tmpdir}/{name}.yaml')
+        ocs_objs.append(pvc.PVC(**pvc_data))
+
+    logger.info('Creating all PVCs as bulk')
+    oc = OCP(kind='pod', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cmd = f"create -f {tmpdir}/"
+    oc.exec_oc_cmd(command=cmd, out_yaml_format=False)
+
+    # Letting the system 1 sec for each PVC to create.
+    # this will prevent any other command from running in the system in this
+    # period of time.
+    logger.info(
+        f"Going to sleep for {number_of_pvc} sec. "
+        "until starting verify that PVCs was created.")
+    time.sleep(number_of_pvc)
+
+    return ocs_objs
 
 
 def verify_block_pool_exists(pool_name):
@@ -970,7 +1009,7 @@ def create_build_from_docker_image(
     image_name,
     install_package,
     namespace,
-    source_image='centos',
+    source_image='fedora',
     source_image_label='latest'
 ):
     """
@@ -994,6 +1033,10 @@ def create_build_from_docker_image(
 
     """
     base_image = source_image + ':' + source_image_label
+
+    if config.DEPLOYMENT.get('disconnected'):
+        base_image = mirror_image(image=base_image)
+
     cmd = f'yum install -y {install_package}'
     http_proxy, https_proxy, no_proxy = get_cluster_proxies()
     if http_proxy:
@@ -1001,6 +1044,7 @@ def create_build_from_docker_image(
             f"http_proxy={http_proxy} https_proxy={https_proxy} "
             f"no_proxy='{no_proxy}' {cmd}"
         )
+
     docker_file = (
         f"FROM {base_image}\n "
         f" RUN {cmd}\n"
@@ -1098,6 +1142,155 @@ def get_master_nodes():
     nodes = ocp_node_obj.get(selector=label).get('items')
     master_nodes_list = [node.get('metadata').get('name') for node in nodes]
     return master_nodes_list
+
+
+def get_snapshot_time(interface, snap_name, status):
+    """
+    Get the starting/ending creation time of a PVC based on provisioner logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pvc_name (str / list): Name of the PVC(s) for creation time
+                               the list will be list of pvc objects
+        status (str): the status that we want to get - Start / End
+
+    Returns:
+        datetime object: Time of PVC(s) creation
+
+    """
+
+    def get_pattern_time(log, snapname, pattern):
+        """
+        Get the time of pattern in the log
+
+        Args:
+            log (list): list of all lines in the log file
+            snapname (str): the name of hte snapshot
+            pattern (str): the pattern that need to be found in the log (start / bound)
+
+        Returns:
+            str: string of the pattern timestamp in the log, if not found None
+
+        """
+        for line in log:
+            if re.search(snapname, line) and re.search(pattern, line):
+                return line.split(' ')[1]
+        return None
+
+    logs = ''
+    format = '%H:%M:%S.%f'
+
+    # the starting and ending time are taken from different logs,
+    # the start creation time is taken from the snapshot controller, while
+    # the end creation time is taken from the csi snapshot driver
+    if status.lower() == 'start':
+        pattern = 'Creating content for snapshot'
+        # Get the snapshoter-controller pod
+        pod_name = pod.get_csi_snapshoter_pod()
+        logs = pod.get_pod_logs(
+            pod_name, namespace='openshift-cluster-storage-operator'
+        )
+    elif status.lower() == 'end':
+        pattern = 'readyToUse true'
+        pod_name = pod.get_csi_provisioner_pod(interface)
+        # get the logs from the csi-provisioner containers
+        for log_pod in pod_name:
+            logs += pod.get_pod_logs(log_pod, 'csi-snapshotter')
+    else:
+        logger.error(f'the status {status} is invalid.')
+        return None
+
+    logs = logs.split("\n")
+
+    stat = None
+    # Extract the time for the one PVC snapshot provisioning
+    if isinstance(snap_name, str):
+        stat = get_pattern_time(logs, snap_name, pattern)
+    # Extract the time for the list of PVCs snapshot provisioning
+    if isinstance(snap_name, list):
+        all_stats = []
+        for snapname in snap_name:
+            all_stats.append(get_pattern_time(logs, snapname.name, pattern))
+        all_stats = sorted(all_stats)
+        if status.lower() == 'end':
+            stat = all_stats[-1]  # return the highest time
+        elif status.lower() == 'start':
+            stat = all_stats[0]  # return the lowest time
+    if stat:
+        return datetime.datetime.strptime(stat, format)
+    else:
+        return None
+
+
+def measure_snapshot_creation_time(interface, snap_name, snap_con_name):
+    """
+    Measure Snapshot creation time based on logs
+
+    Args:
+        snap_name (str): Name of the snapshot for creation time measurement
+
+    Returns:
+        float: Creation time for the snapshot
+
+    """
+    start = get_snapshot_time(interface, snap_name, status='start')
+    end = get_snapshot_time(interface, snap_con_name, status='end')
+    if start and end:
+        total = end - start
+        return total.total_seconds()
+    else:
+        return None
+
+
+def get_provision_time(interface, pvc_name, status='start'):
+    """
+    Get the starting/ending creation time of a PVC based on provisioner logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pvc_name (str / list): Name of the PVC(s) for creation time
+                               the list will be list of pvc objects
+        status (str): the status that we want to get - Start / End
+
+    Returns:
+        datetime object: Time of PVC(s) creation
+
+    """
+    # Define the status that need to retrieve
+    operation = 'started'
+    if status.lower() == 'end':
+        operation = 'succeeded'
+
+    format = '%H:%M:%S.%f'
+    # Get the correct provisioner pod based on the interface
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    # get the logs from the csi-provisioner containers
+    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
+    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+
+    logs = logs.split("\n")
+    # Extract the time for the one PVC provisioning
+    if isinstance(pvc_name, str):
+        stat = [
+            i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)
+        ]
+        stat = stat[0].split(' ')[1]
+    # Extract the time for the list of PVCs provisioning
+    if isinstance(pvc_name, list):
+        all_stats = []
+        for pv_name in pvc_name:
+            name = pv_name.name
+            stat = [
+                i for i in logs if re.search(f"provision.*{name}.*{operation}", i)
+            ]
+            stat = stat[0].split(' ')[1]
+            all_stats.append(stat)
+        all_stats = sorted(all_stats)
+        if status.lower() == 'end':
+            stat = all_stats[-1]  # return the highest time
+        elif status.lower() == 'start':
+            stat = all_stats[0]  # return the lowest time
+    return datetime.datetime.strptime(stat, format)
 
 
 def get_start_creation_time(interface, pvc_name):
@@ -2227,12 +2420,20 @@ def collect_performance_stats(dir_name):
         logger.info(f'Creating directory {log_dir_path}')
         os.makedirs(log_dir_path)
 
-    ceph_obj = CephCluster()
     performance_stats = {}
+    external = config.DEPLOYMENT['external_mode']
+    if external:
+        # Skip collecting performance_stats for external mode RHCS cluster
+        logging.info("Skipping status collection for external mode")
+    else:
+        ceph_obj = CephCluster()
 
-    # Get iops and throughput percentage of cluster
-    iops_percentage = ceph_obj.get_iops_percentage()
-    throughput_percentage = ceph_obj.get_throughput_percentage()
+        # Get iops and throughput percentage of cluster
+        iops_percentage = ceph_obj.get_iops_percentage()
+        throughput_percentage = ceph_obj.get_throughput_percentage()
+
+        performance_stats['iops_percentage'] = iops_percentage
+        performance_stats['throughput_percentage'] = throughput_percentage
 
     # ToDo: Get iops and throughput percentage of each nodes
 
@@ -2248,8 +2449,6 @@ def collect_performance_stats(dir_name):
     worker_node_utilization_from_oc_describe = \
         node.get_node_resource_utilization_from_oc_describe(node_type='worker')
 
-    performance_stats['iops_percentage'] = iops_percentage
-    performance_stats['throughput_percentage'] = throughput_percentage
     performance_stats['master_node_utilization'] = master_node_utilization_from_adm_top
     performance_stats['worker_node_utilization'] = worker_node_utilization_from_adm_top
     performance_stats['master_node_utilization_from_oc_describe'] = master_node_utilization_from_oc_describe

@@ -29,6 +29,8 @@ class TestCouchBaseWorkload(E2ETest):
         Testing basic couchbase workload
         """
         couchbase.setup_cb()
-        couchbase.create_couchbase_worker(replicas=5)
-        couchbase.run_workload(replicas=5)
-        couchbase.analyze_run()
+        couchbase.create_couchbase_worker(replicas=3)
+        couchbase.run_workload(replicas=3)
+        couchbase.export_pfoutput_to_googlesheet(sheet_name='E2E Workloads',
+                                                 sheet_index=2
+                                                 )

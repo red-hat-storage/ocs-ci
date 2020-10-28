@@ -155,6 +155,7 @@ class TestPVCCreationPerformance(E2ETest):
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             number_of_pvc=number_of_pvcs,
             size=self.pvc_size,
+            burst=True
         )
         for pvc_obj in pvc_objs:
             pvc_obj.reload()
@@ -167,11 +168,11 @@ class TestPVCCreationPerformance(E2ETest):
                 )
 
                 executor.submit(pvc_obj.reload)
-        start_time = helpers.get_start_creation_time(
-            self.interface, pvc_objs[0].name
+        start_time = helpers.get_provision_time(
+            self.interface, pvc_objs, status='start'
         )
-        end_time = helpers.get_end_creation_time(
-            self.interface, pvc_objs[number_of_pvcs - 1].name,
+        end_time = helpers.get_provision_time(
+            self.interface, pvc_objs, status='end'
         )
         total = end_time - start_time
         total_time = total.total_seconds()
@@ -209,6 +210,7 @@ class TestPVCCreationPerformance(E2ETest):
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             number_of_pvc=initial_number_of_pvcs,
             size=self.pvc_size,
+            burst=True
         )
         for pvc_obj in pvc_objs:
             teardown_factory(pvc_obj)
@@ -230,12 +232,13 @@ class TestPVCCreationPerformance(E2ETest):
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             number_of_pvc=number_of_pvcs,
             size=self.pvc_size,
+            burst=True
         )
-        start_time = helpers.get_start_creation_time(
-            self.interface, pvc_objs[0].name
+        start_time = helpers.get_provision_time(
+            self.interface, pvc_objs, status='start'
         )
-        end_time = helpers.get_end_creation_time(
-            self.interface, pvc_objs[number_of_pvcs - 1].name,
+        end_time = helpers.get_provision_time(
+            self.interface, pvc_objs, status='end'
         )
         total = end_time - start_time
         total_time = total.total_seconds()

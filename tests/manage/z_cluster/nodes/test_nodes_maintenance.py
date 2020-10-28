@@ -96,7 +96,7 @@ class TestNodesMaintenance(ManageTest):
             pytest.param(*['master'], marks=pytest.mark.polarion_id("OCS-1272"))
         ]
     )
-    def test_node_maintenance(self, node_type, pvc_factory, pod_factory):
+    def test_node_maintenance(self, reduce_cluster_load, node_type, pvc_factory, pod_factory):
         """
         OCS-1269/OCS-1272:
         - Maintenance (mark as unscheduable and drain) 1 worker/master node
@@ -124,7 +124,7 @@ class TestNodesMaintenance(ManageTest):
         schedule_nodes([typed_node_name])
 
         # Perform cluster and Ceph health checks
-        self.sanity_helpers.health_check(tries=60)
+        self.sanity_helpers.health_check(tries=90)
 
     @tier4
     @tier4b

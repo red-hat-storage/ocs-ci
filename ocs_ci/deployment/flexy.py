@@ -4,6 +4,7 @@ All the flexy related classes and functionality lives here
 import logging
 import os
 import yaml
+import time
 
 import io
 import configparser
@@ -15,7 +16,8 @@ import shutil
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
-    get_ocp_version, clone_repo, run_cmd, expose_ocp_version
+    get_ocp_version, clone_repo, run_cmd, expose_ocp_version,
+    wait_for_machineconfigpool_status,
 )
 from ocs_ci.ocs import exceptions
 
@@ -34,6 +36,9 @@ class FlexyBase(object):
         self.flexy_host_dir = os.path.expanduser(
             constants.FLEXY_HOST_DIR_PATH
         )
+        if not os.path.exists(self.flexy_host_dir):
+            os.mkdir(self.flexy_host_dir)
+            os.chmod(self.flexy_host_dir, mode=0o777)
 
         # Path inside container where flexy_host_dir will be mounted
         self.flexy_mnt_container_dir = config.ENV_DATA.get(
@@ -69,6 +74,18 @@ class FlexyBase(object):
         else:
             self.flexy_env_file = config.ENV_DATA['flexy_env_file']
 
+        if not config.ENV_DATA.get('flexy_env_file'):
+            self.template_file = config.FLEXY.get(
+                'VARIABLES_LOCATION',
+                os.path.join(
+                    constants.OPENSHIFT_MISC_BASE,
+                    f"aos-{get_ocp_version('_')}",
+                    config.ENV_DATA.get(
+                        'flexy_template', self.default_flexy_template
+                    )
+                )
+            )
+
     def deploy_prereq(self):
         """
           Common flexy prerequisites like cloning the private-conf
@@ -76,9 +93,6 @@ class FlexyBase(object):
           values
 
           """
-        if not os.path.exists(self.flexy_host_dir):
-            os.mkdir(self.flexy_host_dir)
-            os.chmod(self.flexy_host_dir, mode=0o777)
         # If user has provided absolute path for env file (through
         # '--flexy-env-file <path>' CLI option)
         # then no need of clone else continue with default
@@ -151,6 +165,18 @@ class FlexyBase(object):
         Build flexy command line for 'destroy' operation
 
         """
+        # if ocs-ci/data were cleaned up (e.g. on Jenkins), copy
+        # Flexy env file from cluster dir to the data directory
+        if not os.path.exists(constants.FLEXY_ENV_FILE_UPDATED):
+            cluster_dir_flexy_env_file_updated = os.path.join(
+                constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
+                constants.FLEXY_HOST_DIR,
+                constants.FLEXY_ENV_FILE_UPDATED_NAME,
+            )
+            shutil.copyfile(
+                cluster_dir_flexy_env_file_updated,
+                constants.FLEXY_ENV_FILE_UPDATED
+            )
         cmd = shlex.split("sudo podman run --rm=true")
         flexy_container_args = self.build_container_args('destroy')
         return cmd + flexy_container_args + ['destroy']
@@ -282,13 +308,6 @@ class FlexyBase(object):
         and do this only if its jenkins run
 
         """
-        auth_file = 'flexy/workdir/install-dir/auth/kubeconfig'
-        secret_cmd = (
-            f"oc set data secret/pull-secret "
-            f"--kubeconfig {self.flexy_host_dir}/{auth_file} "
-            f"-n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
-            f"--from-file=.dockerconfigjson={constants.DATA_DIR}/pull-secret"
-        )
         abs_cluster_path = os.path.abspath(self.cluster_path)
         flexy_cluster_path = os.path.join(
             self.flexy_host_dir, 'flexy/workdir/install-dir'
@@ -322,8 +341,6 @@ class FlexyBase(object):
                     ),
                     abs_cluster_path
                 )
-                # Apply pull secrets on ocp cluster
-                run_cmd(secret_cmd)
         else:
             # recursively change permissions
             # for all the subdirs
@@ -333,14 +350,29 @@ class FlexyBase(object):
                 f"Symlinking {flexy_cluster_path, abs_cluster_path}"
             )
             os.symlink(flexy_cluster_path, abs_cluster_path)
-            run_cmd(secret_cmd)
+
+        # Apply pull secrets on ocp cluster
+        kubeconfig = os.path.join(
+            self.cluster_path, config.RUN.get('kubeconfig_location')
+        )
+        secret_cmd = (
+            f"oc set data secret/pull-secret "
+            f"--kubeconfig {kubeconfig} "
+            f"-n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
+            f"--from-file=.dockerconfigjson={constants.DATA_DIR}/pull-secret"
+        )
+        run_cmd(secret_cmd)
+
         if not config.ENV_DATA.get('skip_ntp_configuration', False):
             ntp_cmd = (
-                f"oc --kubeconfig {self.flexy_host_dir}/{auth_file} "
+                f"oc --kubeconfig {kubeconfig} "
                 f"create -f {constants.NTP_CHRONY_CONF}"
             )
             logger.info("Creating NTP chrony")
             run_cmd(ntp_cmd)
+        # sleep here to start update machineconfigpool status
+        time.sleep(60)
+        wait_for_machineconfigpool_status('all')
 
     def is_jenkins_mount(self):
         """
@@ -356,26 +388,6 @@ class FlexyBase(object):
             and os.path.ismount(constants.JENKINS_NFS_CURRENT_CLUSTER_DIR)
         )
 
-
-class FlexyBaremetalPSI(FlexyBase):
-    """
-    A specific implementation of Baremetal with PSI using flexy
-    """
-    def __init__(self):
-        super().__init__()
-        if not config.ENV_DATA.get('flexy_env_file'):
-            if not config.ENV_DATA.get('template_file_path'):
-                self.template_file = os.path.join(
-                    constants.OPENSHIFT_MISC_BASE,
-                    f"aos-{get_ocp_version('_')}",
-                    constants.FLEXY_BAREMETAL_UPI_TEMPLATE
-                )
-            else:
-                self.template_file = config.ENV_DATA.get('template_file_path')
-
-    def deploy_prereq(self):
-        super().deploy_prereq()
-
     def deploy(self, log_level=''):
         """
         build and invoke flexy deployer here
@@ -389,8 +401,17 @@ class FlexyBaremetalPSI(FlexyBase):
         if log_level:
             pass
         cmd = self.build_install_cmd()
-        self.run_container(cmd)
-        super().flexy_post_processing()
+        flexy_err = None
+        # Ensure that flexy workdir will be copied to cluster dir even when
+        # Flexy itself fails.
+        try:
+            self.run_container(cmd)
+        except Exception as err:
+            logger.error(err)
+            flexy_err = err
+        self.flexy_post_processing()
+        if flexy_err:
+            raise flexy_err
 
     def destroy(self):
         """
@@ -399,3 +420,21 @@ class FlexyBaremetalPSI(FlexyBase):
         """
         cmd = self.build_destroy_cmd()
         self.run_container(cmd)
+
+
+class FlexyBaremetalPSI(FlexyBase):
+    """
+    A specific implementation of Baremetal with PSI using flexy
+    """
+    def __init__(self):
+        self.default_flexy_template = constants.FLEXY_BAREMETAL_UPI_TEMPLATE
+        super().__init__()
+
+
+class FlexyAWSUPI(FlexyBase):
+    """
+    A specific implementation of AWS UPI installation using flexy
+    """
+    def __init__(self):
+        self.default_flexy_template = constants.FLEXY_AWS_UPI_TEMPLATE
+        super().__init__()

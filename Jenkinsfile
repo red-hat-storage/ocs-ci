@@ -142,9 +142,9 @@ pipeline {
           build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-olm-operator:latest-stable-${short_ocs_version}")]
         }
         else {
-          // tag ocs-bundle-operator and ocs-registry container because versions > 4.5 use bundle index containers
-          build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-bundle-operator:latest-stable-${ocs_version}")]
-          build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-bundle-operator:latest-stable-${short_ocs_version}")]
+          // tag ocs-operator-bundle and ocs-registry container because versions > 4.5 use bundle index containers
+          build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-operator-bundle:latest-stable-${ocs_version}")]
+          build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-operator-bundle:latest-stable-${short_ocs_version}")]
           build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-registry:latest-stable-${ocs_version}")]
           build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-registry:latest-stable-${short_ocs_version}")]
         }

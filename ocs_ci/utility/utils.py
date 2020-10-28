@@ -373,7 +373,8 @@ def mask_secrets(plaintext, secrets):
     Replace secrets in plaintext with asterisks
 
     Args:
-        plaintext (str): The plaintext to remove the secrets from
+        plaintext (str or list): The plaintext to remove the secrets from or
+            list of strings to remove secrets from
         secrets (list): List of secret strings to replace in the plaintext
 
     Returns:
@@ -382,7 +383,12 @@ def mask_secrets(plaintext, secrets):
     """
     if secrets:
         for secret in secrets:
-            plaintext = plaintext.replace(secret, '*' * 5)
+            if isinstance(plaintext, list):
+                plaintext = [
+                    string.replace(secret, '*' * 5) for string in plaintext
+                ]
+            else:
+                plaintext = plaintext.replace(secret, '*' * 5)
     return plaintext
 
 
@@ -934,7 +940,147 @@ def parse_html_for_email(soup):
     main_header.string.replace_with('OCS-CI RESULTS')
 
 
-def email_reports():
+def add_squad_analysis_to_email(session, soup):
+    """
+    Add squad analysis to the html test results used in email reporting
+
+    Args:
+        session (obj): Pytest session object
+        soup (obj): BeautifulSoup object of HTML Report data
+
+    """
+    failed = {}
+    skipped = {}
+    # sort out failed and skipped test cases to failed and skipped dicts
+    for result in session.results.values():
+        if result.failed or result.skipped:
+            unassigned = True
+            for squad, res in constants.SQUADS.items():
+                for item in res:
+                    if item in result.nodeid:
+                        if result.failed:
+                            if squad not in failed:
+                                failed[squad] = []
+                            failed[squad].append(result.nodeid)
+                            unassigned = False
+
+                        if result.skipped:
+                            if squad not in skipped:
+                                skipped[squad] = []
+                            skipped_message = result.longrepr[2]
+                            skipped[squad].append((result.nodeid, skipped_message))
+                            unassigned = False
+            if unassigned:
+                if result.failed:
+                    if 'UNASSIGNED' not in failed:
+                        failed['UNASSIGNED'] = []
+                    failed['UNASSIGNED'].append(result.nodeid)
+                if result.skipped:
+                    if 'UNASSIGNED' not in skipped:
+                        skipped['UNASSIGNED'] = []
+                    skipped['UNASSIGNED'].append((result.nodeid, skipped_message))
+
+    # no failed or skipped tests - exist the function
+    if not failed and not skipped:
+        return
+
+    # add CSS for the Squad Analysis report
+    style = soup.find('style')
+    # use colors for squad names from squad names
+    style.string += "\n".join(
+        [
+            f"h4.squad-{color.lower()} {{\n    color: {color.lower()};\n}}"
+            for color in constants.SQUADS
+        ]
+    )
+    # few additional styles
+    style.string += """
+    .squad-analysis {
+        color: black;
+        font-family: monospace;
+        background-color: #eee;
+        padding: 5px;
+    }
+    .squad-analysis h2 {
+        margin: 0px;
+    }
+    .squad-analysis h3 {
+        margin: 0px;
+        margin-top: 10px;
+    }
+    .squad-analysis h4 {
+        margin: 0px;
+    }
+    .squad-analysis ul {
+        margin: 0px;
+    }
+    .squad-analysis ul li em {
+        margin-left: 1em;
+    }
+    .squad-unassigned {
+        background-color: #FFBA88;
+    }
+    h4.squad-yellow {
+        color: black;
+        background-color: yellow;
+        display: inline;
+    }
+    """
+    # prepare place for the Squad Analysis in the email
+    squad_analysis_div = soup.new_tag("div")
+    squad_analysis_div["class"] = "squad-analysis"
+    main_header = soup.find('h1')
+    main_header.insert_after(squad_analysis_div)
+    failed_h2_tag = soup.new_tag("h2")
+    failed_h2_tag.string = "Squad Analysis - please analyze:"
+    squad_analysis_div.append(failed_h2_tag)
+    if failed:
+        # print failed testcases peer squad
+        failed_div_tag = soup.new_tag("div")
+        squad_analysis_div.append(failed_div_tag)
+        failed_h3_tag = soup.new_tag("h3")
+        failed_h3_tag.string = "Failures:"
+        failed_div_tag.append(failed_h3_tag)
+        for squad in failed:
+            failed_h4_tag = soup.new_tag("h4")
+            failed_h4_tag.string = f"{squad} squad"
+            failed_h4_tag['class'] = f"squad-{squad.lower()}"
+            failed_div_tag.append(failed_h4_tag)
+            failed_ul_tag = soup.new_tag("ul")
+            failed_ul_tag['class'] = f"squad-{squad.lower()}"
+            failed_div_tag.append(failed_ul_tag)
+            for test in failed[squad]:
+                failed_li_tag = soup.new_tag("li")
+                failed_li_tag.string = test
+                failed_ul_tag.append(failed_li_tag)
+    if skipped:
+        # print skipped testcases with reason peer squad
+        skips_div_tag = soup.new_tag("div")
+        squad_analysis_div.append(skips_div_tag)
+        skips_h3_tag = soup.new_tag("h3")
+        skips_h3_tag.string = "Skips:"
+        skips_div_tag.append(skips_h3_tag)
+        for squad in skipped:
+            skips_h4_tag = soup.new_tag("h4")
+            skips_h4_tag.string = f"{squad} squad"
+            skips_h4_tag['class'] = f"squad-{squad.lower()}"
+            skips_div_tag.append(skips_h4_tag)
+            skips_ul_tag = soup.new_tag("ul")
+            skips_ul_tag['class'] = f"squad-{squad.lower()}"
+            skips_div_tag.append(skips_ul_tag)
+            for test in skipped[squad]:
+                skips_li_tag = soup.new_tag("li")
+                skips_test_span_tag = soup.new_tag("span")
+                skips_test_span_tag.string = test[0]
+                skips_li_tag.append(skips_test_span_tag)
+                skips_li_tag.append(soup.new_tag("br"))
+                skips_reason_em_tag = soup.new_tag("em")
+                skips_reason_em_tag.string = f"Reason: {test[1][8:]}"
+                skips_li_tag.append(skips_reason_em_tag)
+                skips_ul_tag.append(skips_li_tag)
+
+
+def email_reports(session):
     """
     Email results of test run
 
@@ -960,6 +1106,8 @@ def email_reports():
     soup = BeautifulSoup(html_data, "html.parser")
 
     parse_html_for_email(soup)
+    if config.RUN['cli_params'].get('squad_analysis'):
+        add_squad_analysis_to_email(session, soup)
     part1 = MIMEText(soup, 'html')
     msg.attach(part1)
     try:
@@ -1109,12 +1257,44 @@ def get_ocp_version(seperator=None):
 
     """
     char = seperator if seperator else '.'
-    version = Version.coerce(
-        config.DEPLOYMENT['installer_version']
-    )
+    if config.ENV_DATA.get('skip_ocp_deployment'):
+        raw_version = json.loads(
+            run_cmd("oc version -o json"))['openshiftVersion']
+    else:
+        raw_version = config.DEPLOYMENT['installer_version']
+    version = Version.coerce(raw_version)
     return char.join(
         [str(version.major), str(version.minor)]
     )
+
+
+def get_running_ocp_version(separator=None):
+    """
+    Get current running ocp version
+
+    Args:
+        separator (str): String that would separate major and
+            minor version numbers
+
+    Returns:
+        string : If separator is 'None', version string will be returned as is
+            eg: '4.2', '4.3'.
+            If separator is provided then '.' in the version string would be
+            replaced by separator and resulting string will be returned.
+            eg: If separator is '_' then string returned would be '4_2'
+
+    """
+    char = separator if separator else '.'
+    namespace = config.ENV_DATA['cluster_namespace']
+    try:
+        # if the cluster exist, this part will be run
+        results = run_cmd(f'oc get clusterversion -n {namespace} -o yaml')
+        build = yaml.safe_load(results)['items'][0]['status']['desired']['version']
+        return char.join(build.split('.')[0:2])
+    except Exception:
+        # this part will return version from the config file in case
+        # cluster is not exists.
+        return get_ocp_version(seperator=char)
 
 
 def get_ocp_repo():
@@ -1479,7 +1659,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
     for tag in tags:
         if not upgrade:
             if (
-                tag['name'] not in constants.LATEST_TAGS
+                not any(t in tag['name'] for t in constants.LATEST_TAGS)
                 and tag['manifest_digest'] == latest_image
             ):
                 return tag['name']
@@ -1490,7 +1670,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
             if not latest_tag_found:
                 continue
             if (
-                tag['name'] not in constants.LATEST_TAGS
+                not any(t in tag['name'] for t in constants.LATEST_TAGS)
                 and tag['manifest_digest'] != latest_image
                 and ocs_version in tag['name']
             ):
@@ -1520,7 +1700,7 @@ def get_next_version_available_for_upgrade(current_tag):
 
     """
     tags = get_ocs_olm_operator_tags()
-    if current_tag in constants.LATEST_TAGS:
+    if any(t in current_tag for t in constants.LATEST_TAGS):
         return current_tag
     current_tag_index = None
     for index, tag in enumerate(tags):
@@ -1534,7 +1714,7 @@ def get_next_version_available_for_upgrade(current_tag):
     ocs_version = config.ENV_DATA['ocs_version']
     for tag in sliced_reversed_tags:
         if (
-            tag['name'] not in constants.LATEST_TAGS
+            not any(t in tag['name'] for t in constants.LATEST_TAGS)
             and ocs_version in tag['name']
         ):
             if config.UPGRADE.get("use_rc_build") and "rc" not in tag['name']:
@@ -1907,7 +2087,33 @@ def get_cluster_name(cluster_path):
     return metadata["clusterName"]
 
 
-def skipif_ocs_version(expressions, reason=None):
+def skipif_ocp_version(expressions, reason=None):
+    """
+    This function evaluates the condition for test skip
+    based on expression
+
+    Args:
+        expressions (str OR list): condition for which we need to check,
+        eg: A single expression string '>=4.2' OR
+            A list of expressions like ['<4.3', '>4.2'], ['<=4.3', '>=4.2']
+
+    Return:
+        'True' if test needs to be skipped else 'False'
+
+    """
+    skip_this = True
+    ocp_version = get_running_ocp_version()
+    expr_list = [expressions] if isinstance(expressions, str) else expressions
+    for expr in expr_list:
+        comparision_str = ocp_version + expr
+        skip_this = skip_this and eval(comparision_str)
+        if skip_this and reason:
+            log.info(f'OCS version skip match. Skip reason: {reason}')
+    # skip_this will be either True or False after eval
+    return skip_this
+
+
+def skipif_ocs_version(expressions):
     """
     This function evaluates the condition for test skip
     based on expression
@@ -2510,6 +2716,7 @@ def configure_chrony_and_wait_for_machineconfig_status(
     Args:
         node_type (str): The node type to configure chrony
             e.g: worker, master and all if we want to configure on all nodes
+        timeout (int): Time in seconds to wait
 
     """
     # importing here to avoid dependencies
@@ -2646,3 +2853,23 @@ def get_cluster_id(cluster_path):
     with open(metadata_file) as f:
         metadata = json.load(f)
     return metadata["clusterID"]
+
+
+def get_ocp_upgrade_history():
+    """
+    Gets the OCP upgrade history for the cluster
+
+    Returns:
+        list: List of OCP upgrade paths. Latest version in the
+            beginning of the list
+
+    """
+    # importing here to avoid circular imports
+    from ocs_ci.ocs.ocp import OCP
+    ocp = OCP(kind="clusterversion")
+    cluster_version_info = ocp.get("version")
+    upgrade_history_info = cluster_version_info['status']['history']
+    upgrade_history = [
+        each_upgrade['version'] for each_upgrade in upgrade_history_info
+    ]
+    return upgrade_history
