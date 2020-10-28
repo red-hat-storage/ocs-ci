@@ -30,10 +30,7 @@ class BackingStore():
 
         OCP(
             namespace=config.ENV_DATA['cluster_namespace']
-        ).exec_oc_cmd(
-            command=f'delete backingstore {self.name}',
-            out_yaml_format=False
-        )
+        ).delete(resource_name=self.name)
 
         log.info(
             f"Verifying whether backingstore {self.name} exists after deletion"
