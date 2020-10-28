@@ -466,3 +466,68 @@ def create_pvc_clone(
     assert created_pvc, f"Failed to create resource {pvc_name}"
     ocs_obj.reload()
     return ocs_obj
+
+
+def get_pvcs_by_names(pvc_names):
+    """
+    Get the pvc objects by their names
+
+    Args:
+        pvc_names (list): The list of the pvc names
+
+    Returns:
+        list: list of the pvc objects
+
+    """
+    pvc_objects = get_all_pvc_objs(
+        namespace=config.ENV_DATA['cluster_namespace']
+    )
+
+    return [pvc_obj for pvc_obj in pvc_objects if pvc_obj.name in pvc_names]
+
+
+def get_osd_deployment_deviceset(osd_deployment):
+    """
+    Get the deviceset of the osd deployment
+
+    Args:
+         osd_deployment (ocs_ci.ocs.resources.ocs.OCS): The osd deployment
+            to get it's deviceset
+
+    Returns:
+        str: The name of the deviceset associated with the osd deployment
+
+    """
+    spec = osd_deployment.get().get('spec').get('template').get('spec')
+    for volume in spec['volumes']:
+        volume_name = volume.get('name', '')
+        if volume_name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME):
+            return volume_name
+
+
+def delete_pvc_and_associated_pv(pvc_name):
+    """
+    Delete a pvc and the associated pv
+
+    Args:
+        pvc_name (str): The pvc name to delete
+
+    Returns:
+        True if the pvc and the associated pv deleted successfully.
+        False otherwise
+
+    """
+    pvc_obj = get_pvcs_by_names([pvc_name])[0]
+    pv_obj = pvc_obj.backed_pv_obj
+    res = pvc_obj.delete()
+    if not res:
+        log.error(f"Deleting pvc {pvc_name} failed")
+        return False
+
+    res = pv_obj.delete()
+    if not res:
+        log.error(f"Deleting pv {pvc_obj.name} failed")
+        return False
+
+    log.info(f"pvc {pvc_name} and pv {pvc_obj.name} deleted successfully")
+    return True

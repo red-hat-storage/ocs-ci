@@ -17,6 +17,7 @@ from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions
+from ocs_ci.ocs.resources import pvc
 
 log = logging.getLogger(__name__)
 
@@ -952,6 +953,9 @@ def delete_and_create_osd_node_vsphere_lso(
         label_nodes([node_not_in_ocs])
         new_node_name = node_not_in_ocs.name
 
+    osd_deployment = get_node_osd_deployments(osd_node_name)[0]
+    ocs_deviceset = pvc.get_osd_deployment_deviceset(osd_deployment)
+    pvc.delete_pvc_and_associated_pv(ocs_deviceset.name)
     return new_node_name
 
 
@@ -1270,6 +1274,8 @@ def get_node_pods(node_name, pods_to_search=None):
 
     Args:
         node_name (str): The node name to get the pods
+        pods_to_search (list): list of pods to search for the node pods.
+            If not specified, will search in all the pods.
 
     Returns:
         list: list of all the pods of the specified node
@@ -1379,3 +1385,54 @@ def add_new_device_in_local_volume(new_device_path, old_device_path):
         params=patch_param_old_device,
         format_type='delete'
     )
+
+
+def get_deployment_node_name(deployment):
+    """
+    Get the deployment's node name
+
+    Args:
+         deployment (ocs_ci.ocs.resources.ocs.OCS): The deployment object
+
+    Returns:
+        str: The node name of the deployment
+
+    """
+    spec = deployment.get().get('spec').get('template').get('spec')
+    return spec.get('nodeSelector').get('kubernetes.io/hostname')
+
+
+def find_node_deployments(node_name, deployments_to_search):
+    """
+    Find all the deployments that related to the node
+    from the deployment list 'deployments_to_search'
+
+    Args:
+        node_name (str): The node name
+        deployments_to_search (list): The list of the deployments to search.
+
+    Returns:
+          list: The list of the deployments that related to the node
+              from the list 'deployments_to_search'.
+
+    """
+    return [
+        d for d in deployments_to_search
+        if get_deployment_node_name(d) == node_name
+    ]
+
+
+def get_node_osd_deployments(node_name):
+    """
+    Get the node's osd deployments
+
+    Args:
+        node_name (str): The node name
+
+    Returns:
+        list: The osd deployments associated to the node
+
+    """
+    osd_deployments = pod.get_osd_deployments()
+    node_osd_deployments = find_node_deployments(node_name, osd_deployments)
+    return node_osd_deployments
