@@ -122,16 +122,12 @@ class TestMCGResourcesDisruptions(ManageTest):
     )
     def test_drain_mcg_pod_node(
         self, node_drain_teardown, reduce_cluster_load,
-        mcg_job_factory, pod_to_drain
+        pod_to_drain
     ):
         """
         Test drianage of nodes which contain NB resources
 
         """
-        # Start MCG IO in the background
-        mcg_io_job = mcg_job_factory()
-        wait_for_active_pods(mcg_io_job, 1)
-
         # Retrieve the relevant pod object
         pod_obj = pod.Pod(
             **pod.get_pods_having_label(
