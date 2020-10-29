@@ -1,0 +1,5 @@
+---
+ENV_DATA:
+  worker_replicas: 6
+  ocs_operator_nodes_to_label: 6
+  worker_instance_type: 'm5.4xlarge'
