@@ -12,7 +12,7 @@ import boto3
 from ocs_ci.cleanup.aws.defaults import CLUSTER_PREFIXES_SPECIAL_RULES
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, exceptions, ocp
+from ocs_ci.ocs import constants, exceptions, ocp, machine
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import (
@@ -182,7 +182,12 @@ class AWSIPI(AWSBase):
                 (default: "DEBUG")
         """
         super(AWSIPI, self).deploy_ocp(log_cli_level)
-        if config.DEPLOYMENT.get("host_network"):
+        if config.DEPLOYMENT['infra_nodes']:
+            num_nodes = config.DEPLOYMENT['ocs_operator_nodes_to_taint']
+            ms_list = machine.create_infra_nodes(num_nodes)
+            for node in ms_list:
+                machine.wait_for_new_node_to_be_ready(node)
+        if config.DEPLOYMENT.get('host_network'):
             self.host_network_update()
 
     def destroy_cluster(self, log_level="DEBUG"):
