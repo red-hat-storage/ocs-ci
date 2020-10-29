@@ -99,6 +99,7 @@ ENV_DATA:
   storage_device_sets_name: "storageDeviceSets"
   cluster_namespace: 'openshift-storage'
   local_storage_namespace: 'openshift-local-storage'
+  allow_rotational_storage: false
   monitoring_enabled: true
   persistent-monitoring: true
   platform: 'AWS'
