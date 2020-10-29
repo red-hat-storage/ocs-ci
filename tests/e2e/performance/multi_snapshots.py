@@ -123,7 +123,6 @@ def get_env_args():
     variables
 
     """
-    global snap_yaml
     print(f'Validating arguments : {params.keys()}')
     error = 0
     for key in params.keys():
@@ -172,9 +171,10 @@ def get_env_args():
         except yaml.YAMLError as exc:
             log.error(f'Can not read template yaml file {exc}')
     msg_logging(
-        f'Snapshot yaml file : {params["snap_yaml"]}'
+        f'Snapshot yaml file : {params["snap_yaml"]} '
         f'Content of snapshot yaml file {snap_yaml}'
     )
+    return snap_yaml
 
 
 def setup_fio_pod():
@@ -342,7 +342,7 @@ def get_creation_time(snap_name, content_name, start_time):
     return results
 
 
-def create_snapshot(snap_num):
+def create_snapshot(snap_num, snap_yaml):
     """
     Creating snapshot of volume, and measure the creation time
 
@@ -353,7 +353,6 @@ def create_snapshot(snap_num):
         int: the creation time of the snapshot (in sec.)
 
     """
-    global snap_yaml
     msg_logging(f'Taking snapshot number {snap_num}')
     # Getting UTC time before test starting for log retrieve
     UTC_datetime = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -396,7 +395,7 @@ def main():
 
     print('Going to create Snapshots.....')
 
-    get_env_args()
+    snap_yaml = get_env_args()
     get_log_names()
 
     setup_fio_pod()
@@ -409,7 +408,7 @@ def main():
         msg_logging(f'Starting test number {test_num}')
         run_io_on_pod()
         time.sleep(10)
-        ct = create_snapshot(test_num)
+        ct = create_snapshot(test_num, snap_yaml)
         speed = params['dataset'] / ct
         results.append({'Snap Num': test_num, 'time': ct, 'speed': speed})
         msg_logging(
