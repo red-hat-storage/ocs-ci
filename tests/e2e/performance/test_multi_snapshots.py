@@ -315,8 +315,8 @@ def get_creation_time(snap_name, content_name, start_time):
             st = line.split(' ')[1]
             st = datetime.datetime.strptime(st, format)
     if st is None:
-        log.error(f'Can not found start time of {snap_name}')
-        raise Exception('Can not found start time of {snap_name}')
+        log.error(f'Can not find start time of {snap_name}')
+        raise Exception('Can not find start time of {snap_name}')
 
     # Getting end creation time
     logs = []
@@ -334,8 +334,8 @@ def get_creation_time(snap_name, content_name, start_time):
                 et = datetime.datetime.strptime(et, format)
 
     if et is None:
-        log.error(f'Can not found end time of {snap_name}')
-        raise Exception('Can not found end time of {snap_name}')
+        log.error(f'Can not find end time of {snap_name}')
+        raise Exception('Can not find end time of {snap_name}')
 
     results = (et - st).total_seconds()
 
@@ -367,7 +367,7 @@ def create_snapshot(snap_num, snap_yaml):
     msg_logging(f'Snapshot yaml file is {snap_yaml}')
     res = run_oc_command(f'create -f {tmpfile}', params['NSPACE'])
     if ERRMSG in res[0]:
-        raise Exception(f'Can not crete snapshot : {res}')
+        raise Exception(f'Can not create snapshot : {res}')
     # wait until snapshot is ready
     timeout = 600
     while timeout > 0:
