@@ -533,7 +533,7 @@ class Deployment(object):
                     }
                 if (ocp_version >= "4.6") and (ocs_version >= 4.6):
                     cluster_data['metadata']['annotations'] = {
-                        'cluster.ocs.openshift.io/local-devices': True
+                        'cluster.ocs.openshift.io/local-devices': 'true'
                     }
 
             # Allow lower instance requests and limits for OCS deployment
