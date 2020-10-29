@@ -204,7 +204,6 @@ class MCG:
                 'within the time limit.'
             )
 
-
     def s3_get_all_bucket_names(self):
         """
         Returns:
