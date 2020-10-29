@@ -136,7 +136,7 @@ def get_env_args():
         print('Not all variables defined !')
         sys.exit(error)
 
-    full_log = params['LOGPATH'] + '/' + log_file_name
+    full_log = f'{params["LOGPATH"]}/{log_file_name}'
     logging.basicConfig(
         filename=full_log, level=logging.INFO, format=constants.LOG_FORMAT
     )
