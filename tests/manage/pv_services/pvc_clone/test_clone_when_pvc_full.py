@@ -102,7 +102,7 @@ class TestCloneWhenFull(ManageTest):
         # Verify the new pods are running
         log.info("Verify the new pods are running")
         for pod_obj in clone_pod_objs:
-            wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, 180)
+            wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
         log.info("Verified: New pods are running")
 
         # Verify that the md5sum matches
