@@ -294,7 +294,7 @@ def create_project(project_name=None):
         project_name (str): The name for the new project
 
     Returns:
-        OCP: Project object
+        ocs_ci.ocs.ocp.OCP: Project object
 
     """
     namespace = project_name or create_unique_resource_name('test', 'namespace')
@@ -862,23 +862,22 @@ def pull_images(image_name):
 
 
 def run_io_with_rados_bench(**kw):
-    """ A task for radosbench
+    """
+    A task for radosbench. Runs radosbench command on specified pod . If
+    parameters are not provided task assumes few default parameters.This task
+    runs command in synchronous fashion.
 
-        Runs radosbench command on specified pod . If parameters are
-        not provided task assumes few default parameters.This task
-        runs command in synchronous fashion.
+    Args:
+        kw (dict): a dictionary of various radosbench parameters.
+           ex::
 
+               pool_name:pool
+               pg_num:number of pgs for pool
+               op: type of operation {read, write}
+               cleanup: True OR False
 
-        Args:
-            **kw: Needs a dictionary of various radosbench parameters.
-                ex: pool_name:pool
-                    pg_num:number of pgs for pool
-                    op: type of operation {read, write}
-                    cleanup: True OR False
-
-
-        Returns:
-            ret: return value of radosbench command
+    Returns:
+        ret: return value of radosbench command
     """
 
     logger.info("Running radosbench task")
@@ -1013,21 +1012,24 @@ def create_build_from_docker_image(
     source_image_label='latest'
 ):
     """
-    Allows to create a build config using a Dockerfile specified as an argument
-    For eg., oc new-build -D $'FROM centos:7\nRUN yum install -y httpd',
-    creates a build with 'httpd' installed
+    Allows to create a build config using a Dockerfile specified as an
+    argument, eg.::
+
+        $ oc new-build -D $'FROM centos:7\\nRUN yum install -y httpd'
+
+    creates a build with ``httpd`` installed.
 
     Args:
         image_name (str): Name of the image to be created
         source_image (str): Source image to build docker image from,
-        Defaults to Centos as base image
+           defaults to Centos as base image
         namespace (str): project where build config should be created
         source_image_label (str): Tag to use along with the image name,
-        Defaults to 'latest'
+           defaults to 'latest'
         install_package (str): package to install over the base image
 
     Returns:
-        OCP (obj): Returns the OCP object for the image
+        ocs_ci.ocs.ocp.OCP (obj): The OCP object for the image
         Fails on UnavailableBuildException exception if build creation
         fails
 
@@ -1096,13 +1098,14 @@ def create_build_from_docker_image(
 def set_image_lookup(image_name):
     """
     Function to enable lookup, which allows reference to the image stream tag
-    in the image field of the object. Example,
-      $ oc set image-lookup mysql
-      $ oc run mysql --image=mysql
+    in the image field of the object. Example::
+
+        $ oc set image-lookup mysql
+        $ oc run mysql --image=mysql
 
     Args:
         image_name (str): Name of the image stream to pull
-        the image locally
+           the image locally
 
     Returns:
         str: output of set image-lookup command
@@ -1587,13 +1590,12 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
 
     Args:
         interface (str): The interface backed the PVC
-        image_uuid (str): Part of VolID which represents
-            corresponding image/subvolume in backend
-            eg: oc get pv/<volumeName> -o jsonpath='{.spec.csi.volumeHandle}'
-                Output is the CSI generated VolID and looks like:
-                '0001-000c-rook-cluster-0000000000000001-
-                f301898c-a192-11e9-852a-1eeeb6975c91' where
-                image_uuid is 'f301898c-a192-11e9-852a-1eeeb6975c91'
+        image_uuid (str): Part of VolID which represents corresponding
+          image/subvolume in backend, eg:
+          ``oc get pv/<volumeName> -o jsonpath='{.spec.csi.volumeHandle}'``
+          Output is the CSI generated VolID and looks like:
+          ``0001-000c-rook-cluster-0000000000000001-f301898c-a192-11e9-852a-1eeeb6975c91``
+          where image_uuid is ``f301898c-a192-11e9-852a-1eeeb6975c91``
         pool_name (str): Name of the rbd-pool if interface is CephBlockPool
 
     Returns:
@@ -1641,13 +1643,12 @@ def verify_volume_deleted_in_backend(
 
     Args:
         interface (str): The interface backed the PVC
-        image_uuid (str): Part of VolID which represents
-            corresponding image/subvolume in backend
-            eg: oc get pv/<volumeName> -o jsonpath='{.spec.csi.volumeHandle}'
-                Output is the CSI generated VolID and looks like:
-                '0001-000c-rook-cluster-0000000000000001-
-                f301898c-a192-11e9-852a-1eeeb6975c91' where
-                image_uuid is 'f301898c-a192-11e9-852a-1eeeb6975c91'
+        image_uuid (str): Part of VolID which represents corresponding
+          image/subvolume in backend, eg:
+          ``oc get pv/<volumeName> -o jsonpath='{.spec.csi.volumeHandle}'``
+          Output is the CSI generated VolID and looks like:
+          ``0001-000c-rook-cluster-0000000000000001-f301898c-a192-11e9-852a-1eeeb6975c91``
+          where image_uuid is ``f301898c-a192-11e9-852a-1eeeb6975c91``
         pool_name (str): Name of the rbd-pool if interface is CephBlockPool
         timeout (int): Wait time for the volume to be deleted.
 
@@ -1999,22 +2000,22 @@ def delete_objs_parallel(obj_list):
 
 def memory_leak_analysis(median_dict):
     """
-    Function to analyse Memory leak after execution of test case
-    Memory leak is analyzed based on top output "RES" value of ceph-osd daemon,
-    i.e. list[7] in code
+    Function to analyse Memory leak after execution of test case Memory leak is
+    analyzed based on top output "RES" value of ceph-osd daemon, i.e.
+    ``list[7]`` in code.
+
+    More Detail on Median value: For calculating memory leak require a constant
+    value, which should not be start or end of test, so calculating it by
+    getting memory for 180 sec before TC execution and take a median out of it.
+    Memory value could be different for each nodes, so identify constant value
+    for each node and update in median_dict
 
     Args:
          median_dict (dict): dict of worker nodes and respective median value
          eg: median_dict = {'worker_node_1':102400, 'worker_node_2':204800, ...}
 
-    More Detail on Median value:
-        For calculating memory leak require a constant value, which should not be
-        start or end of test, so calculating it by getting memory for 180 sec
-        before TC execution and take a median out of it.
-        Memory value could be different for each nodes, so identify constant value
-        for each node and update in median_dict
+    Usage::
 
-    Usage:
         test_case(.., memory_leak_function):
             .....
             median_dict = helpers.get_memory_leak_median_value()
@@ -2572,14 +2573,15 @@ def get_pv_size(storageclass=None):
 
 def get_cluster_proxies():
     """
-    Get http and https proxy configuration.
-    * If configuration ENV_DATA['http_proxy'] (and prospectively
-        ENV_DATA['https_proxy']) exists, return the respective values.
-        (If https_proxy not defined, use value from http_proxy.)
-    * If configuration ENV_DATA['http_proxy'] doesn't exist, try to gather
-        cluster wide proxy configuration.
-    * If no proxy configuration found, return empty string for all http_proxy,
-        https_proxy and no_proxy.
+    Get http and https proxy configuration:
+
+     * If configuration ``ENV_DATA['http_proxy']`` (and prospectively
+       ``ENV_DATA['https_proxy']``) exists, return the respective values.
+       (If https_proxy not defined, use value from http_proxy.)
+     * If configuration ``ENV_DATA['http_proxy']`` doesn't exist, try to gather
+       cluster wide proxy configuration.
+     * If no proxy configuration found, return empty string for all http_proxy,
+       https_proxy and no_proxy.
 
     Returns:
         tuple: (http_proxy, https_proxy, no_proxy)
