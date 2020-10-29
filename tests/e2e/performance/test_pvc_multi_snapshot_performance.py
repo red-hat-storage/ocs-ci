@@ -98,12 +98,6 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
             f'with the name of {file_name}'
         )
 
-        '''
-        snap_yaml = constants.CSI_RBD_SNAPSHOT_YAML
-        if self.interface == constants.CEPHFILESYSTEM:
-            snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
-        '''
-
         os.environ["SNAPNUM"] = f'{num_of_snaps}'
         os.environ["LOGPATH"] = f'{ocsci_log_path()}'
         os.environ["FILESIZE"] = file_size
