@@ -2,25 +2,27 @@ import logging
 import pytest
 
 from ocs_ci.ocs.resources.pod import (
-    get_rgw_pods, get_pod_node, get_noobaa_pods
+    get_rgw_pods, get_pod_node, get_noobaa_pods, wait_for_storage_pods
 )
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework.testlib import (
-    ManageTest, tier4
+    ManageTest, tier4a
 )
-from tests.sanity_helpers import Sanity
-from tests.helpers import wait_for_resource_state
+from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs.node import get_node_objs
 
 log = logging.getLogger(__name__)
 
 
-@tier4
+@tier4a
 @pytest.mark.polarion_id("OCS-2374")
-class TestRGWHostNodeFailure(ManageTest):
+@pytest.mark.bugzilla('1852983')
+class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
     """
-    Test to verify fail node hosting RGW pods and its impact
+    Test to verify fail node hosting
+    RGW pods and Noobaa-db pods and its impact
 
     """
 
@@ -46,7 +48,7 @@ class TestRGWHostNodeFailure(ManageTest):
 
     def test_rgw_host_node_failure(self, nodes):
         """
-        Test case to fail node where RGW hosting
+        Test case to fail node where RGW and Noobaa-db-0 hosting
         and verify new pod spuns on healthy node
 
         """
@@ -65,7 +67,8 @@ class TestRGWHostNodeFailure(ManageTest):
             pod_node = rgw_pod.get().get('spec').get('nodeName')
             if pod_node == noobaa_pod_node.name:
                 # Stop the node
-                log.info(f"Stopping node {pod_node} where rgw pod {rgw_pod.name} hosted")
+                log.info(f"Stopping node {pod_node} where"
+                         f" rgw pod {rgw_pod.name} and noobaa-db-0 hosted")
                 node_obj = get_node_objs(node_names=[pod_node])
                 nodes.stop_nodes(node_obj)
 
@@ -86,4 +89,8 @@ class TestRGWHostNodeFailure(ManageTest):
                 # Start the node
                 nodes.start_nodes(node_obj)
 
+        # Verify cluster health
         self.sanity_helpers.health_check()
+
+        # Verify all storage pods are running
+        wait_for_storage_pods()
