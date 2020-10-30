@@ -23,8 +23,8 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
 
     @pytest.fixture(autouse=True)
     def pgsql_setup(
-        self, pgsql_factory_fixture, snapshot_factory,
-        snapshot_restore_factory, pvc_clone_factory
+        self, pgsql_factory_fixture, multi_snapshot_factory,
+        multi_snapshot_restore_factory, multi_pvc_clone_factory
     ):
         # Deploy PGSQL workload
         log.info("Deploying pgsql workloads")
