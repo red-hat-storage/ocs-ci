@@ -26,17 +26,16 @@ logger = logging.getLogger(name=__file__)
 
 # default location of files with necessary GCP cluster details
 SERVICE_ACCOUNT_KEY_FILEPATH = os.path.expanduser("~/.gcp/osServiceAccount.json")
-"""str: absolute filepath of json file with service account key
+# str: absolute filepath of json file with service account key
 
-This is json key file of ``sg-serv-account`` service account, which has full
-admin rights in given GCP project. The same key file is used by openshift
-installer during OCP installation to create all cluster resources from virtual
-machines to hostnames. Modules from ocs-ci are using the same key to get full
-cluster access as well.
+# This is json key file of ``sg-serv-account`` service account, which has full
+# admin rights in given GCP project. The same key file is used by openshift
+# installer during OCP installation to create all cluster resources from virtual
+# machines to hostnames. Modules from ocs-ci are using the same key to get full
+# cluster access as well.
 
-For more details, see `GCP documentation on ServiceAccountKey resource
-<https://cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts.keys>`_
-"""
+# For more details, see `GCP documentation on ServiceAccountKey resource
+# <https://cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts.keys>`_
 
 
 def load_service_account_key_dict(filepath=SERVICE_ACCOUNT_KEY_FILEPATH):
@@ -55,8 +54,8 @@ def load_service_account_key_dict(filepath=SERVICE_ACCOUNT_KEY_FILEPATH):
         sa_dict = json.load(sa_file)
     logger.debug(
         "fetching GCP service account (for client %s) from %s file",
-        sa_dict.get('client_email'),
-        filepath
+        sa_dict.get("client_email"),
+        filepath,
     )
     return sa_dict
 
@@ -79,7 +78,7 @@ class GoogleCloudUtil:
                 not specified, the value is loaded from ocs-ci config file.
 
         """
-        self._region_name = region_name or config.ENV_DATA['region']
+        self._region_name = region_name or config.ENV_DATA["region"]
 
     @property
     def service_account(self):
@@ -99,13 +98,13 @@ class GoogleCloudUtil:
         """
         if self._compute_driver is not None:
             return self._compute_driver
-        service_account_username = self.service_account['client_email']
-        project_id = self.service_account['project_id']
+        service_account_username = self.service_account["client_email"]
+        project_id = self.service_account["project_id"]
         Driver = get_driver(Provider.GCE)
         self._compute_driver = Driver(
             service_account_username,
             SERVICE_ACCOUNT_KEY_FILEPATH,
             project=project_id,
-            datacenter=self._region_name
+            datacenter=self._region_name,
         )
         return self._compute_driver

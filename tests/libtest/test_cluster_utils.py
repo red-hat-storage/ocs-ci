@@ -9,7 +9,7 @@ from ocs_ci.helpers import helpers
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture(scope="class")
 def test_fixture(request):
     """
     Create disks
@@ -18,6 +18,7 @@ def test_fixture(request):
 
     def finalizer():
         teardown(self)
+
     request.addfinalizer(finalizer)
     setup(self)
 
@@ -33,20 +34,15 @@ def mon_resource(request):
     log.info(f"Mon count before add = {mon_count}")
     self.cluster_obj.scan_cluster()
     self.cluster_obj.cluster.reload()
-    self.cluster_obj.cluster.data['spec']['mon']['allowMultiplePerNode'] = True
+    self.cluster_obj.cluster.data["spec"]["mon"]["allowMultiplePerNode"] = True
     self.cluster_obj.cluster.apply(**self.cluster_obj.cluster.data)
     yield
     self.cluster_obj.mon_change_count(mon_count)
     if mon_count != self.cluster_obj.mon_count:
         log.error("Mon teardown failure")
-        log.error(
-            f"Expected: {mon_count}",
-            f"but found {self.cluster_obj.mon_count}"
-        )
+        log.error(f"Expected: {mon_count}", f"but found {self.cluster_obj.mon_count}")
     log.info("Removed mon")
-    self.cluster_obj.cluster.data['spec']['mon'][
-        'allowMultiplePerNode'
-    ] = False
+    self.cluster_obj.cluster.data["spec"]["mon"]["allowMultiplePerNode"] = False
     self.cluster_obj.cluster.apply(**self.cluster_obj.cluster.data)
 
 

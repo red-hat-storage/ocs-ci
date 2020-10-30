@@ -22,7 +22,7 @@ from ocs_ci.ocs.version import get_environment_info
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def es(request):
 
     # Create internal ES only if Cloud platform is tested
@@ -35,11 +35,12 @@ def es(request):
         if es is not None:
             es.cleanup()
             time.sleep(10)
+
     request.addfinalizer(teardown)
     return es
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def ripsaw(request):
 
     # Create RipSaw Operator
@@ -48,6 +49,7 @@ def ripsaw(request):
     def teardown():
         ripsaw.cleanup()
         time.sleep(10)
+
     request.addfinalizer(teardown)
     return ripsaw
 
@@ -78,8 +80,8 @@ class FIOResultsAnalyse(PerfResult):
         """
 
         super(FIOResultsAnalyse, self).__init__(uuid, crd)
-        self.index = 'ripsaw-fio-analyzed-result'
-        self.new_index = 'ripsaw-fio-fullres'
+        self.index = "ripsaw-fio-analyzed-result"
+        self.new_index = "ripsaw-fio-fullres"
         # make sure we have connection to the elastic search server
         self.es_connect()
 
@@ -91,18 +93,21 @@ class FIOResultsAnalyse(PerfResult):
         """
 
         for result in self.es_read():
-            test_data = result['_source']['ceph_benchmark_test']['test_data']
-            object_size = test_data['object_size']
-            operation = test_data['operation']
-            total_iops = '{:.2f}'.format(test_data['total-iops'])
-            std_dev = 'std-dev-' + object_size
-            variance = '{:.2f}'.format(test_data[std_dev])
+            test_data = result["_source"]["ceph_benchmark_test"]["test_data"]
+            object_size = test_data["object_size"]
+            operation = test_data["operation"]
+            total_iops = "{:.2f}".format(test_data["total-iops"])
+            std_dev = "std-dev-" + object_size
+            variance = "{:.2f}".format(test_data[std_dev])
             if object_size in self.all_results.keys():
                 self.all_results[object_size][operation] = {
-                    'IOPS': total_iops, 'std_dev': variance}
+                    "IOPS": total_iops,
+                    "std_dev": variance,
+                }
             else:
                 self.all_results[object_size] = {
-                    operation: {'IOPS': total_iops, 'std_dev': variance}}
+                    operation: {"IOPS": total_iops, "std_dev": variance}
+                }
 
             log.info(
                 f"\nio_pattern: {self.results['io_pattern']} : "
@@ -118,20 +123,21 @@ class FIOResultsAnalyse(PerfResult):
         """
 
         # in case of io pattern is sequential - do nothing
-        if self.results['io_pattern'] == 'sequential':
+        if self.results["io_pattern"] == "sequential":
             return
 
         # in case of random test - push the results
-        reads = self.all_results['4KiB']['randread']['IOPS']
-        writes = self.all_results['4KiB']['randwrite']['IOPS']
-        r_bw = self.all_results['1024KiB']['randread']['IOPS']
-        w_bw = self.all_results['1024KiB']['randwrite']['IOPS']
+        reads = self.all_results["4KiB"]["randread"]["IOPS"]
+        writes = self.all_results["4KiB"]["randwrite"]["IOPS"]
+        r_bw = self.all_results["1024KiB"]["randread"]["IOPS"]
+        w_bw = self.all_results["1024KiB"]["randwrite"]["IOPS"]
 
         # Pushing the results into codespeed
-        log.info(f'Pushing to codespeed : Read={reads} ; Write={writes} ; '
-                 f'R-BW={r_bw} ; W-BW={w_bw}')
-        push_perf_dashboard(self.results['storageclass'],
-                            reads, writes, r_bw, w_bw)
+        log.info(
+            f"Pushing to codespeed : Read={reads} ; Write={writes} ; "
+            f"R-BW={r_bw} ; W-BW={w_bw}"
+        )
+        push_perf_dashboard(self.results["storageclass"], reads, writes, r_bw, w_bw)
 
 
 @performance
@@ -139,18 +145,22 @@ class FIOResultsAnalyse(PerfResult):
     argnames=["interface", "io_pattern"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'sequential'], marks=pytest.mark.polarion_id("OCS-844")
+            *[constants.CEPHBLOCKPOOL, "sequential"],
+            marks=pytest.mark.polarion_id("OCS-844"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'sequential'], marks=pytest.mark.polarion_id("OCS-845")
+            *[constants.CEPHFILESYSTEM, "sequential"],
+            marks=pytest.mark.polarion_id("OCS-845"),
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'random'], marks=pytest.mark.polarion_id("OCS-846")
+            *[constants.CEPHBLOCKPOOL, "random"],
+            marks=pytest.mark.polarion_id("OCS-846"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'random'], marks=pytest.mark.polarion_id("OCS-847")
-        )
-    ]
+            *[constants.CEPHFILESYSTEM, "random"],
+            marks=pytest.mark.polarion_id("OCS-847"),
+        ),
+    ],
 )
 class TestFIOBenchmark(E2ETest):
     """
@@ -166,11 +176,8 @@ class TestFIOBenchmark(E2ETest):
 
         # Deployment ripsaw
         log.info("Deploying ripsaw operator")
-        ripsaw.apply_crd(
-            'resources/crds/'
-            'ripsaw_v1alpha1_ripsaw_crd.yaml'
-        )
-        if interface == 'CephBlockPool':
+        ripsaw.apply_crd("resources/crds/" "ripsaw_v1alpha1_ripsaw_crd.yaml")
+        if interface == "CephBlockPool":
             sc = constants.CEPHBLOCKPOOL_SC
         else:
             sc = constants.CEPHFILESYSTEM_SC
@@ -180,50 +187,56 @@ class TestFIOBenchmark(E2ETest):
         fio_cr = templating.load_yaml(constants.FIO_CR_YAML)
 
         # Saving the Original elastic-search IP and PORT - if defined in yaml
-        if 'elasticsearch' in fio_cr['spec']:
-            backup_es = fio_cr['spec']['elasticsearch']
+        if "elasticsearch" in fio_cr["spec"]:
+            backup_es = fio_cr["spec"]["elasticsearch"]
         else:
-            log.warning('Elastic Search information does not exists in YAML file')
-            fio_cr['spec']['elasticsearch'] = {}
+            log.warning("Elastic Search information does not exists in YAML file")
+            fio_cr["spec"]["elasticsearch"] = {}
 
         # Use the internal define elastic-search server in the test - if exist
         if es:
-            fio_cr['spec']['elasticsearch'] = {'server': es.get_ip(), 'port': es.get_port()}
+            fio_cr["spec"]["elasticsearch"] = {
+                "server": es.get_ip(),
+                "port": es.get_port(),
+            }
 
         # Setting the data set to 40% of the total storage capacity
         ceph_cluster = CephCluster()
         ceph_capacity = ceph_cluster.get_ceph_capacity()
         total_data_set = int(ceph_capacity * 0.4)
-        filesize = int(fio_cr['spec']['workload']['args']['filesize'].replace('GiB', ''))
+        filesize = int(
+            fio_cr["spec"]["workload"]["args"]["filesize"].replace("GiB", "")
+        )
         # To make sure the number of App pods will not be more then 50, in case
         # of large data set, changing the size of the file each pod will work on
         if total_data_set > 500:
             filesize = int(ceph_capacity * 0.008)
-            fio_cr['spec']['workload']['args']['filesize'] = f'{filesize}GiB'
+            fio_cr["spec"]["workload"]["args"]["filesize"] = f"{filesize}GiB"
             # make sure that the storage size is larger then the file size
-            fio_cr['spec']['workload']['args']['storagesize'] = f'{int(filesize * 1.2)}Gi'
-        fio_cr['spec']['workload']['args']['servers'] = int(total_data_set / filesize)
-        log.info(f'Total Data set to work on is : {total_data_set} GiB')
+            fio_cr["spec"]["workload"]["args"][
+                "storagesize"
+            ] = f"{int(filesize * 1.2)}Gi"
+        fio_cr["spec"]["workload"]["args"]["servers"] = int(total_data_set / filesize)
+        log.info(f"Total Data set to work on is : {total_data_set} GiB")
 
         environment = get_environment_info()
-        if not environment['user'] == '':
-            fio_cr['spec']['test_user'] = environment['user']
-        fio_cr['spec']['clustername'] = environment['clustername']
+        if not environment["user"] == "":
+            fio_cr["spec"]["test_user"] = environment["user"]
+        fio_cr["spec"]["clustername"] = environment["clustername"]
 
-        log.debug(f'Environment information is : {environment}')
+        log.debug(f"Environment information is : {environment}")
 
-        fio_cr['spec']['workload']['args']['storageclass'] = sc
-        if io_pattern == 'sequential':
-            fio_cr['spec']['workload']['args']['jobs'] = ['write', 'read']
-            fio_cr['spec']['workload']['args']['iodepth'] = 1
-        log.info(f'The FIO CR file is {fio_cr}')
+        fio_cr["spec"]["workload"]["args"]["storageclass"] = sc
+        if io_pattern == "sequential":
+            fio_cr["spec"]["workload"]["args"]["jobs"] = ["write", "read"]
+            fio_cr["spec"]["workload"]["args"]["iodepth"] = 1
+        log.info(f"The FIO CR file is {fio_cr}")
         fio_cr_obj = OCS(**fio_cr)
         fio_cr_obj.create()
 
         # Wait for fio client pod to be created
         for fio_pod in TimeoutSampler(
-            300, 20, get_pod_name_by_pattern, 'fio-client',
-            constants.RIPSAW_NAMESPACE
+            300, 20, get_pod_name_by_pattern, "fio-client", constants.RIPSAW_NAMESPACE
         ):
             try:
                 if fio_pod[0] is not None:
@@ -233,12 +246,12 @@ class TestFIOBenchmark(E2ETest):
                 log.info("Bench pod not ready yet")
 
         # Getting the start time of the test
-        start_time = time.strftime('%Y-%m-%dT%H:%M:%SGMT', time.gmtime())
+        start_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
 
         # Getting the UUID from inside the benchmark pod
         uuid = ripsaw.get_uuid(fio_client_pod)
         # Setting back the original elastic-search information
-        fio_cr['spec']['elasticsearch'] = backup_es
+        fio_cr["spec"]["elasticsearch"] = backup_es
 
         full_results = FIOResultsAnalyse(uuid, fio_cr)
 
@@ -247,53 +260,50 @@ class TestFIOBenchmark(E2ETest):
             full_results.add_key(key, environment[key])
 
         # Setting the global parameters of the test
-        full_results.add_key('io_pattern', io_pattern)
-        full_results.add_key('dataset', f'{total_data_set}GiB')
+        full_results.add_key("io_pattern", io_pattern)
+        full_results.add_key("dataset", f"{total_data_set}GiB")
         full_results.add_key(
-            'file_size', fio_cr['spec']['workload']['args']['filesize'])
+            "file_size", fio_cr["spec"]["workload"]["args"]["filesize"]
+        )
+        full_results.add_key("servers", fio_cr["spec"]["workload"]["args"]["servers"])
+        full_results.add_key("samples", fio_cr["spec"]["workload"]["args"]["samples"])
+        full_results.add_key("operations", fio_cr["spec"]["workload"]["args"]["jobs"])
+        full_results.add_key("block_sizes", fio_cr["spec"]["workload"]["args"]["bs"])
+        full_results.add_key("io_depth", fio_cr["spec"]["workload"]["args"]["iodepth"])
+        full_results.add_key("jobs", fio_cr["spec"]["workload"]["args"]["numjobs"])
         full_results.add_key(
-            'servers', fio_cr['spec']['workload']['args']['servers'])
-        full_results.add_key(
-            'samples', fio_cr['spec']['workload']['args']['samples'])
-        full_results.add_key(
-            'operations', fio_cr['spec']['workload']['args']['jobs'])
-        full_results.add_key(
-            'block_sizes', fio_cr['spec']['workload']['args']['bs'])
-        full_results.add_key(
-            'io_depth', fio_cr['spec']['workload']['args']['iodepth'])
-        full_results.add_key(
-            'jobs', fio_cr['spec']['workload']['args']['numjobs'])
-        full_results.add_key(
-            'runtime', {
-                'read': fio_cr['spec']['workload']['args']['read_runtime'],
-                'write': fio_cr['spec']['workload']['args']['write_runtime']
-            }
+            "runtime",
+            {
+                "read": fio_cr["spec"]["workload"]["args"]["read_runtime"],
+                "write": fio_cr["spec"]["workload"]["args"]["write_runtime"],
+            },
         )
         full_results.add_key(
-            'storageclass', fio_cr['spec']['workload']['args']['storageclass'])
+            "storageclass", fio_cr["spec"]["workload"]["args"]["storageclass"]
+        )
         full_results.add_key(
-            'vol_size', fio_cr['spec']['workload']['args']['storagesize'])
+            "vol_size", fio_cr["spec"]["workload"]["args"]["storagesize"]
+        )
 
         # Wait for fio pod to initialized and complete
         log.info("Waiting for fio_client to complete")
-        pod_obj = OCP(kind='pod')
+        pod_obj = OCP(kind="pod")
         pod_obj.wait_for_resource(
-            condition='Completed',
+            condition="Completed",
             resource_name=fio_client_pod,
             timeout=18000,
             sleep=300,
         )
 
         # Getting the end time of the test
-        end_time = time.strftime('%Y-%m-%dT%H:%M:%SGMT', time.gmtime())
-        full_results.add_key('test_time', {'start': start_time,
-                                           'end': end_time})
+        end_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
+        full_results.add_key("test_time", {"start": start_time, "end": end_time})
 
-        output = run_cmd(f'oc logs {fio_client_pod}')
-        log.info(f'The Test log is : {output}')
+        output = run_cmd(f"oc logs {fio_client_pod}")
+        log.info(f"The Test log is : {output}")
 
         try:
-            if 'Fio failed to execute' not in output:
+            if "Fio failed to execute" not in output:
                 log.info("FIO has completed successfully")
         except IOError:
             log.info("FIO failed to complete")
@@ -302,11 +312,11 @@ class TestFIOBenchmark(E2ETest):
         log.info("Deleting FIO benchmark")
         fio_cr_obj.delete()
 
-        log.debug(f'Full results is : {full_results.results}')
+        log.debug(f"Full results is : {full_results.results}")
 
         # if Internal ES is exists, Copy all data from the Internal to main ES
         if es:
-            log.info('Copy all data from Internal ES to Main ES')
+            log.info("Copy all data from Internal ES to Main ES")
             es._copy(full_results.es)
         # Adding this sleep between the copy and the analyzing of the results
         # since sometimes the results of the read (just after write) are empty
@@ -316,4 +326,4 @@ class TestFIOBenchmark(E2ETest):
         full_results.es_write()
         full_results.codespeed_push()  # Push results to codespeed
         # Creating full link to the results on the ES server
-        log.info(f'The Result can be found at ; {full_results.results_link()}')
+        log.info(f"The Result can be found at ; {full_results.results_link()}")

@@ -16,35 +16,31 @@ log = logging.getLogger(__name__)
     argnames=["interface"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL],
-            marks=pytest.mark.polarion_id("OCS-852")
+            *[constants.CEPHBLOCKPOOL], marks=pytest.mark.polarion_id("OCS-852")
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM],
-            marks=[
-                pytest.mark.polarion_id("OCS-853"),
-                pytest.mark.bugzilla("1745344")
-            ]
+            marks=[pytest.mark.polarion_id("OCS-853"), pytest.mark.bugzilla("1745344")],
         ),
-    ]
+    ],
 )
 @tier2
 class TestPVCFullWithIORWO(ManageTest):
     """
     Test to verify PVC behavior when full with data
     """
+
     pvc_size_gb = 5
 
     @pytest.fixture()
-    def base_setup(
-        self, request, interface, pvc_factory, pod_factory
-    ):
+    def base_setup(self, request, interface, pvc_factory, pod_factory):
         """
         A setup phase for the test
         """
         self.interface = interface
         self.pvc_obj = pvc_factory(
-            interface=self.interface, size=self.pvc_size_gb,
+            interface=self.interface,
+            size=self.pvc_size_gb,
         )
         self.pod_obj = pod_factory(interface=self.interface, pvc=self.pvc_obj)
 
@@ -54,7 +50,7 @@ class TestPVCFullWithIORWO(ManageTest):
         """
         log.info(f"Running FIO to fill PVC size: {self.pvc_size_gb}")
         self.pod_obj.run_io(
-            'fs', size=self.pvc_size_gb, io_direction='write', runtime=60
+            "fs", size=self.pvc_size_gb, io_direction="write", runtime=60
         )
         log.info("Waiting for IO results")
         try:
@@ -64,7 +60,7 @@ class TestPVCFullWithIORWO(ManageTest):
                 raise
             else:
                 used_space = get_used_space_on_mount_point(self.pod_obj)
-                assert used_space == '100%', (
+                assert used_space == "100%", (
                     f"The used space is not 100% but {used_space} which means "
                     f"the device is not full"
                 )
@@ -75,9 +71,9 @@ class TestPVCFullWithIORWO(ManageTest):
         log.info("Creating a new Pod with the existing full PVC")
         self.pod_obj = pod_factory(interface=self.interface, pvc=self.pvc_obj)
         used_space = get_used_space_on_mount_point(self.pod_obj)
-        assert used_space == '100%', (
-            f"The used space is not 100% but {used_space} from the new pod"
-        )
+        assert (
+            used_space == "100%"
+        ), f"The used space is not 100% but {used_space} from the new pod"
 
 
 @pytest.mark.polarion_id("OCS-854")
@@ -87,19 +83,19 @@ class TestPVCFullWithIORWX(ManageTest):
     """
     Test to verify PVC behavior when full with data
     """
+
     pvc_size_gb = 5
 
     @pytest.fixture()
-    def base_setup(
-        self, request, pvc_factory, pod_factory
-    ):
+    def base_setup(self, request, pvc_factory, pod_factory):
         """
         A setup phase for the test
         """
         self.interface = constants.CEPHFILESYSTEM
         self.pvc_obj = pvc_factory(
-            interface=self.interface, size=self.pvc_size_gb,
-            access_mode=constants.ACCESS_MODE_RWX
+            interface=self.interface,
+            size=self.pvc_size_gb,
+            access_mode=constants.ACCESS_MODE_RWX,
         )
         self.pod_obj1 = pod_factory(interface=self.interface, pvc=self.pvc_obj)
         self.pod_obj2 = pod_factory(interface=self.interface, pvc=self.pvc_obj)
@@ -110,7 +106,7 @@ class TestPVCFullWithIORWX(ManageTest):
         """
         log.info(f"Running FIO to fill PVC size: {self.pvc_size_gb}")
         self.pod_obj1.run_io(
-            'fs', size=self.pvc_size_gb, io_direction='write', runtime=60
+            "fs", size=self.pvc_size_gb, io_direction="write", runtime=60
         )
         log.info("Waiting for IO results")
         try:
@@ -120,21 +116,19 @@ class TestPVCFullWithIORWX(ManageTest):
                 raise
             else:
                 used_space = get_used_space_on_mount_point(self.pod_obj1)
-                assert used_space == '100%', (
+                assert used_space == "100%", (
                     f"The used space is not 100% but {used_space} which means "
                     f"the device is not full"
                 )
                 used_space = get_used_space_on_mount_point(self.pod_obj2)
-                assert used_space == '100%', (
+                assert used_space == "100%", (
                     f"The used space is not 100% but {used_space} which means "
                     f"the device is not full"
                 )
                 log.info("FIO succeeded to fill the PVC with data")
-        log.info(
-            "Deleting the first pod and checking used size from the 2nd pod"
-        )
+        log.info("Deleting the first pod and checking used size from the 2nd pod")
         self.pod_obj1.delete()
         used_space = get_used_space_on_mount_point(self.pod_obj2)
-        assert used_space == '100%', (
-            f"The used space is not 100% but {used_space} from 2nd pod"
-        )
+        assert (
+            used_space == "100%"
+        ), f"The used space is not 100% but {used_space} from 2nd pod"

@@ -3,27 +3,35 @@ import pytest
 
 from subprocess import TimeoutExpired
 
-from ocs_ci.ocs.exceptions import (
-    CephHealthException, ResourceWrongStatusException
-)
+from ocs_ci.ocs.exceptions import CephHealthException, ResourceWrongStatusException
 from ocs_ci.utility.utils import ceph_health_check_base
 
 from ocs_ci.ocs import constants, machine, ocp, defaults
 from ocs_ci.ocs.node import (
-    drain_nodes, schedule_nodes, get_typed_nodes, wait_for_nodes_status,
-    remove_nodes, get_osd_running_nodes, get_node_objs,
-    add_new_node_and_label_it
+    drain_nodes,
+    schedule_nodes,
+    get_typed_nodes,
+    wait_for_nodes_status,
+    remove_nodes,
+    get_osd_running_nodes,
+    get_node_objs,
+    add_new_node_and_label_it,
 )
 from ocs_ci.framework.testlib import (
-    tier1, tier2, tier3, tier4, tier4b,
-    ManageTest, aws_platform_required, ignore_leftovers,
-    ipi_deployment_required, skipif_bm
+    tier1,
+    tier2,
+    tier3,
+    tier4,
+    tier4b,
+    ManageTest,
+    aws_platform_required,
+    ignore_leftovers,
+    ipi_deployment_required,
+    skipif_bm,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.resources import pod
-from ocs_ci.helpers.helpers import (
-    label_worker_node, remove_label_from_worker_node
-)
+from ocs_ci.helpers.helpers import label_worker_node, remove_label_from_worker_node
 from ocs_ci.helpers import helpers
 
 
@@ -36,15 +44,17 @@ def teardown(request):
     Tear down function
 
     """
+
     def finalizer():
         """
         Make sure that all cluster's nodes are in 'Ready' state and if not,
         change them back to 'Ready' state by marking them as schedulable
         """
         scheduling_disabled_nodes = [
-            n.name for n in get_node_objs() if n.ocp.get_resource_status(
-                n.name
-            ) == constants.NODE_READY_SCHEDULING_DISABLED
+            n.name
+            for n in get_node_objs()
+            if n.ocp.get_resource_status(n.name)
+            == constants.NODE_READY_SCHEDULING_DISABLED
         ]
         if scheduling_disabled_nodes:
             schedule_nodes(scheduling_disabled_nodes)
@@ -52,10 +62,9 @@ def teardown(request):
         # Remove label created for DC app pods on all worker nodes
         node_objs = get_node_objs()
         for node_obj in node_objs:
-            if 'dc' in node_obj.get().get('metadata').get('labels').keys():
-                remove_label_from_worker_node(
-                    [node_obj.name], label_key="dc"
-                )
+            if "dc" in node_obj.get().get("metadata").get("labels").keys():
+                remove_label_from_worker_node([node_obj.name], label_key="dc")
+
     request.addfinalizer(finalizer)
 
 
@@ -66,6 +75,7 @@ class TestNodesMaintenance(ManageTest):
     activate operations, followed by cluster functionality and health checks
 
     """
+
     @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
@@ -92,11 +102,13 @@ class TestNodesMaintenance(ManageTest):
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
-            pytest.param(*['worker'], marks=pytest.mark.polarion_id("OCS-1269")),
-            pytest.param(*['master'], marks=pytest.mark.polarion_id("OCS-1272"))
-        ]
+            pytest.param(*["worker"], marks=pytest.mark.polarion_id("OCS-1269")),
+            pytest.param(*["master"], marks=pytest.mark.polarion_id("OCS-1272")),
+        ],
     )
-    def test_node_maintenance(self, reduce_cluster_load, node_type, pvc_factory, pod_factory):
+    def test_node_maintenance(
+        self, reduce_cluster_load, node_type, pvc_factory, pod_factory
+    ):
         """
         OCS-1269/OCS-1272:
         - Maintenance (mark as unscheduable and drain) 1 worker/master node
@@ -132,9 +144,9 @@ class TestNodesMaintenance(ManageTest):
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
-            pytest.param(*['worker'], marks=pytest.mark.polarion_id("OCS-1292")),
-            pytest.param(*['master'], marks=pytest.mark.polarion_id("OCS-1293"))
-        ]
+            pytest.param(*["worker"], marks=pytest.mark.polarion_id("OCS-1292")),
+            pytest.param(*["master"], marks=pytest.mark.polarion_id("OCS-1293")),
+        ],
     )
     def test_node_maintenance_restart_activate(
         self, nodes, pvc_factory, pod_factory, node_type
@@ -160,9 +172,7 @@ class TestNodesMaintenance(ManageTest):
         )
 
         # Find the number of reboot events in 'typed_node_name'
-        num_events = len(
-            typed_nodes[0].ocp.exec_oc_cmd(reboot_events_cmd)['items']
-        )
+        num_events = len(typed_nodes[0].ocp.exec_oc_cmd(reboot_events_cmd)["items"])
 
         # Maintenance the node (unschedule and drain). The function contains logging
         drain_nodes([typed_node_name])
@@ -173,23 +183,22 @@ class TestNodesMaintenance(ManageTest):
         try:
             wait_for_nodes_status(
                 node_names=[typed_node_name],
-                status=constants.NODE_NOT_READY_SCHEDULING_DISABLED
+                status=constants.NODE_NOT_READY_SCHEDULING_DISABLED,
             )
         except ResourceWrongStatusException:
             # Sometimes, the node will be back to running state quickly so
             # that the status change won't be detected. Verify the node was
             # actually restarted by checking the reboot events count
             new_num_events = len(
-                typed_nodes[0].ocp.exec_oc_cmd(reboot_events_cmd)['items']
+                typed_nodes[0].ocp.exec_oc_cmd(reboot_events_cmd)["items"]
             )
             assert new_num_events > num_events, (
-                f"Reboot event not found."
-                f"Node {typed_node_name} did not restart."
+                f"Reboot event not found." f"Node {typed_node_name} did not restart."
             )
 
         wait_for_nodes_status(
             node_names=[typed_node_name],
-            status=constants.NODE_READY_SCHEDULING_DISABLED
+            status=constants.NODE_READY_SCHEDULING_DISABLED,
         )
 
         # Mark the node back to schedulable
@@ -206,9 +215,9 @@ class TestNodesMaintenance(ManageTest):
     @pytest.mark.parametrize(
         argnames=["nodes_type"],
         argvalues=[
-            pytest.param(*['worker'], marks=pytest.mark.polarion_id("OCS-1273")),
-            pytest.param(*['master'], marks=pytest.mark.polarion_id("OCS-1271"))
-        ]
+            pytest.param(*["worker"], marks=pytest.mark.polarion_id("OCS-1273")),
+            pytest.param(*["master"], marks=pytest.mark.polarion_id("OCS-1271")),
+        ],
     )
     def test_2_nodes_maintenance_same_type(self, nodes_type):
         """
@@ -249,9 +258,8 @@ class TestNodesMaintenance(ManageTest):
         """
         # Get 1 node from each type
         nodes = [
-            get_typed_nodes(
-                node_type=node_type, num_of_nodes=1
-            )[0] for node_type in ['worker', 'master']
+            get_typed_nodes(node_type=node_type, num_of_nodes=1)[0]
+            for node_type in ["worker", "master"]
         ]
         assert nodes, "Failed to find a nodes for the test"
 
@@ -279,19 +287,12 @@ class TestNodesMaintenance(ManageTest):
     @pytest.mark.parametrize(
         argnames=["interface"],
         argvalues=[
-            pytest.param(
-                *['rbd'],
-                marks=pytest.mark.polarion_id("OCS-2128")
-            ),
-            pytest.param(
-                *['cephfs'],
-                marks=pytest.mark.polarion_id("OCS-2129")
-            ),
-        ]
+            pytest.param(*["rbd"], marks=pytest.mark.polarion_id("OCS-2128")),
+            pytest.param(*["cephfs"], marks=pytest.mark.polarion_id("OCS-2129")),
+        ],
     )
     def test_simultaneous_drain_of_two_ocs_nodes(
-        self, pvc_factory, pod_factory, dc_pod_factory,
-        interface
+        self, pvc_factory, pod_factory, dc_pod_factory, interface
     ):
         """
         OCS-2128/OCS-2129:
@@ -313,21 +314,18 @@ class TestNodesMaintenance(ManageTest):
 
         # Label osd nodes with fedora app
         label_worker_node(
-            osd_running_worker_nodes, label_key='dc', label_value='fedora'
+            osd_running_worker_nodes, label_key="dc", label_value="fedora"
         )
         log.info("Successfully labeled worker nodes with {dc:fedora}")
 
         # Create DC app pods
         log.info("Creating DC based app pods and starting IO in background")
         interface = (
-            constants.CEPHBLOCKPOOL if interface == 'rbd'
-            else constants.CEPHFILESYSTEM
+            constants.CEPHBLOCKPOOL if interface == "rbd" else constants.CEPHFILESYSTEM
         )
         dc_pod_obj = []
         for i in range(2):
-            dc_pod = dc_pod_factory(
-                interface=interface, node_selector={'dc': 'fedora'}
-            )
+            dc_pod = dc_pod_factory(interface=interface, node_selector={"dc": "fedora"})
             pod.run_io_in_bg(dc_pod, fedora_dc=True)
             dc_pod_obj.append(dc_pod)
 
@@ -337,15 +335,12 @@ class TestNodesMaintenance(ManageTest):
             for osd_running_worker_node in osd_running_worker_nodes[:2]
         ]
         log.info(
-            f"{osd_running_worker_nodes} associated "
-            f"machine are {machine_names}"
+            f"{osd_running_worker_nodes} associated " f"machine are {machine_names}"
         )
 
         # Get the machineset name using machine name
         machineset_names = [
-            machine.get_machineset_from_machine_name(
-                machine_name
-            )
+            machine.get_machineset_from_machine_name(machine_name)
             for machine_name in machine_names
         ]
         log.info(
@@ -363,11 +358,10 @@ class TestNodesMaintenance(ManageTest):
         # Check the pods should be in running state
         all_pod_obj = pod.get_all_pods(wait=True)
         for pod_obj in all_pod_obj:
-            if ('-1-deploy' or 'ocs-deviceset') not in pod_obj.name:
+            if ("-1-deploy" or "ocs-deviceset") not in pod_obj.name:
                 try:
                     helpers.wait_for_resource_state(
-                        resource=pod_obj, state=constants.STATUS_RUNNING,
-                        timeout=200
+                        resource=pod_obj, state=constants.STATUS_RUNNING, timeout=200
                     )
                 except ResourceWrongStatusException:
                     # 'rook-ceph-crashcollector' on the failed node stucks at
@@ -375,21 +369,17 @@ class TestNodesMaintenance(ManageTest):
                     # Ignoring 'rook-ceph-crashcollector' pod health check as
                     # WA and deleting its deployment so that the pod
                     # disappears. Will revert this WA once the BZ is fixed
-                    if 'rook-ceph-crashcollector' in pod_obj.name:
-                        ocp_obj = ocp.OCP(
-                            namespace=defaults.ROOK_CLUSTER_NAMESPACE
-                        )
+                    if "rook-ceph-crashcollector" in pod_obj.name:
+                        ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
                         pod_name = pod_obj.name
-                        deployment_name = '-'.join(pod_name.split("-")[:-2])
+                        deployment_name = "-".join(pod_name.split("-")[:-2])
                         command = f"delete deployment {deployment_name}"
                         ocp_obj.exec_oc_cmd(command=command)
                         log.info(f"Deleted deployment for pod {pod_obj.name}")
 
         # DC app pods on the drained node will get automatically created on other
         # running node in same AZ. Waiting for all dc app pod to reach running state
-        pod.wait_for_dc_app_pods_to_reach_running_state(
-            dc_pod_obj, timeout=1200
-        )
+        pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj, timeout=1200)
         log.info("All the dc pods reached running state")
 
         # Remove unscheduled nodes

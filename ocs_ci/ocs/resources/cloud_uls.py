@@ -19,17 +19,12 @@ def cloud_uls_factory(request, cld_mgr):
             an Underlying Storage factory
 
     """
-    all_created_uls = {
-        'aws': set(),
-        'google': set(),
-        'azure': set(),
-        'ibmcos': set()
-    }
+    all_created_uls = {"aws": set(), "google": set(), "azure": set(), "ibmcos": set()}
 
     ulsMap = {
-        'aws': cld_mgr.aws_client,
-        'google': cld_mgr.google_client,
-        'azure': cld_mgr.azure_client,
+        "aws": cld_mgr.aws_client,
+        "google": cld_mgr.google_client,
+        "azure": cld_mgr.azure_client,
         # TODO: Implement - 'ibmcos': cld_mgr.ibmcos_client
     }
 
@@ -50,24 +45,24 @@ def cloud_uls_factory(request, cld_mgr):
 
         """
         current_call_created_uls = {
-            'aws': set(),
-            'google': set(),
-            'azure': set(),
-            'ibmcos': set()
+            "aws": set(),
+            "google": set(),
+            "azure": set(),
+            "ibmcos": set(),
         }
 
         for cloud, params in uls_dict.items():
             if cloud.lower() not in ulsMap:
                 raise RuntimeError(
-                    f'Invalid interface type received: {cloud}. '
+                    f"Invalid interface type received: {cloud}. "
                     f'available types: {", ".join(ulsMap.keys())}'
                 )
-            log.info(f'Creating uls for cloud {cloud.lower()}')
+            log.info(f"Creating uls for cloud {cloud.lower()}")
             for tup in params:
                 amount, region = tup
                 for i in range(amount):
                     uls_name = create_unique_resource_name(
-                        resource_description='uls', resource_type=cloud.lower()
+                        resource_description="uls", resource_type=cloud.lower()
                     )
                     ulsMap[cloud.lower()].create_uls(uls_name, region)
                     all_created_uls[cloud].add(uls_name)
@@ -82,10 +77,10 @@ def cloud_uls_factory(request, cld_mgr):
                 all_existing_uls = client.get_all_uls_names()
                 for uls in uls_set:
                     if uls in all_existing_uls:
-                        log.info(f'Cleaning up uls {uls}')
+                        log.info(f"Cleaning up uls {uls}")
                         client.delete_uls(uls)
                     else:
-                        log.warning(f'Underlying Storage {uls} not found.')
+                        log.warning(f"Underlying Storage {uls} not found.")
 
     request.addfinalizer(uls_cleanup)
 

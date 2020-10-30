@@ -21,7 +21,7 @@ class CSV(OCP):
 
         """
         super(CSV, self).__init__(
-            resource_name=resource_name, kind='csv', *args, **kwargs
+            resource_name=resource_name, kind="csv", *args, **kwargs
         )
 
 
@@ -39,5 +39,5 @@ def get_csvs_start_with_prefix(csv_prefix, namespace):
     """
 
     csvs = CSV(namespace=namespace)
-    csv_list = csvs.get()['items']
-    return [csv for csv in csv_list if csv_prefix in csv['metadata']['name']]
+    csv_list = csvs.get()["items"]
+    return [csv for csv in csv_list if csv_prefix in csv["metadata"]["name"]]

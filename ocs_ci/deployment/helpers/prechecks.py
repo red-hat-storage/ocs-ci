@@ -21,49 +21,43 @@ class PreChecks(object):
     A base class for pre-checks.
     Should be inherited by specific platform classes
     """
+
     def __init__(self):
         """
         Initialize required variables
         """
-        self.cluster_path = config.ENV_DATA['cluster_path']
-        self.platform = config.ENV_DATA['platform']
-        self.deployment_type = config.ENV_DATA['deployment_type']
+        self.cluster_path = config.ENV_DATA["cluster_path"]
+        self.platform = config.ENV_DATA["platform"]
+        self.deployment_type = config.ENV_DATA["deployment_type"]
 
     def storage_check(self):
-        raise NotImplementedError(
-            "storage check functionality is not implemented"
-        )
+        raise NotImplementedError("storage check functionality is not implemented")
 
     def memory_check(self):
-        raise NotImplementedError(
-            "memory check functionality is not implemented"
-        )
+        raise NotImplementedError("memory check functionality is not implemented")
 
     def cpu_check(self):
-        raise NotImplementedError(
-            "CPU check functionality is not implemented"
-        )
+        raise NotImplementedError("CPU check functionality is not implemented")
 
     def network_check(self):
-        raise NotImplementedError(
-            "Network check functionality is not implemented"
-        )
+        raise NotImplementedError("Network check functionality is not implemented")
 
 
 class VSpherePreChecks(PreChecks):
     """
     Pre-checks for vSphere platform
     """
+
     def __init__(self):
         """
         Initialize required variables
         """
         super(VSpherePreChecks, self).__init__()
-        self.server = config.ENV_DATA['vsphere_server']
-        self.user = config.ENV_DATA['vsphere_user']
-        self.password = config.ENV_DATA['vsphere_password']
-        self.datacenter = config.ENV_DATA['vsphere_datacenter']
-        self.datastore = config.ENV_DATA['vsphere_datastore']
+        self.server = config.ENV_DATA["vsphere_server"]
+        self.user = config.ENV_DATA["vsphere_user"]
+        self.password = config.ENV_DATA["vsphere_password"]
+        self.datacenter = config.ENV_DATA["vsphere_datacenter"]
+        self.datastore = config.ENV_DATA["vsphere_datastore"]
         self.vsphere = VSPHEREUtil(self.server, self.user, self.password)
 
     def storage_check(self):
@@ -77,8 +71,7 @@ class VSpherePreChecks(PreChecks):
         """
         logger.debug(f"Checking for datastore {self.datastore} free capacity")
         datastore_free_capacity = self.vsphere.get_datastore_free_capacity(
-            self.datastore,
-            self.datacenter
+            self.datastore, self.datacenter
         )
         if datastore_free_capacity < MIN_STORAGE_FOR_DATASTORE:
             raise StorageNotSufficientException
@@ -118,6 +111,7 @@ class BareMetalPreChecks(PreChecks):
     """
     pre-checks for Bare Metal platform (PSI environment)
     """
+
     def __init__(self):
         super(BareMetalPreChecks, self).__init__()
 

@@ -23,9 +23,9 @@ def add_htpasswd_user(username, password, htpasswd_path):
 
     """
     if os.path.isfile(htpasswd_path):
-        cmd = ['htpasswd', '-B', '-b', htpasswd_path, username, password]
+        cmd = ["htpasswd", "-B", "-b", htpasswd_path, username, password]
     else:
-        cmd = ['htpasswd', '-c', '-B', '-b', htpasswd_path, username, password]
+        cmd = ["htpasswd", "-c", "-B", "-b", htpasswd_path, username, password]
     exec_cmd(cmd, secrets=[password])
 
 
@@ -38,7 +38,7 @@ def create_htpasswd_secret(htpasswd_path, replace=False):
         replace (bool): If secret already exists then this will replace it
 
     """
-    kubeconfig = os.getenv('KUBECONFIG')
+    kubeconfig = os.getenv("KUBECONFIG")
 
     cmd = (
         f"oc create secret generic htpass-secret "
@@ -47,10 +47,10 @@ def create_htpasswd_secret(htpasswd_path, replace=False):
     )
     if replace:
         secret_data = exec_cmd(f"{cmd} --dry-run -o yaml").stdout
-        with NamedTemporaryFile(prefix='htpasswd_secret_') as secret_file:
+        with NamedTemporaryFile(prefix="htpasswd_secret_") as secret_file:
             secret_file.write(secret_data)
             secret_file.flush()
-            exec_cmd(f'oc apply --kubeconfig {kubeconfig} -f {secret_file.name}')
+            exec_cmd(f"oc apply --kubeconfig {kubeconfig} -f {secret_file.name}")
     else:
         exec_cmd(cmd)
 
@@ -109,26 +109,23 @@ def user_factory(request, htpasswd_path):
             # Generate random username from letters and numbers starting
             # with letter. Length is between 1 and 11 characters.
             username = random.choice(string.ascii_letters)
-            username = username + ''.join(
-                random.choice(
-                    string.ascii_letters + string.digits
-                ) for _ in range(random.randint(0, 10))
+            username = username + "".join(
+                random.choice(string.ascii_letters + string.digits)
+                for _ in range(random.randint(0, 10))
             )
         if not password:
             # Generate random password from letters, numbers and special
             # characters. Length is between 6 and 15 characters.
-            password = ''.join(
-                random.choice(
-                    string.ascii_letters + string.digits + string.punctuation
-                ) for _ in range(random.randint(6, 15))
+            password = "".join(
+                random.choice(string.ascii_letters + string.digits + string.punctuation)
+                for _ in range(random.randint(6, 15))
             )
         add_htpasswd_user(username, password, htpasswd_path)
         if not _users:
             ocp_obj = ocp.OCP(
-                kind=constants.SECRET,
-                namespace=constants.OPENSHIFT_CONFIG_NAMESPACE
+                kind=constants.SECRET, namespace=constants.OPENSHIFT_CONFIG_NAMESPACE
             )
-            secret = ocp_obj.get(resource_name='htpass-secret') or None
+            secret = ocp_obj.get(resource_name="htpass-secret") or None
             if secret:
                 create_htpasswd_secret(htpasswd_path, replace=True)
             else:
@@ -149,10 +146,8 @@ def user_factory(request, htpasswd_path):
         """
         with open(htpasswd_path) as f:
             htpasswd = f.readlines()
-        new_htpasswd = [
-            line for line in htpasswd if not line.startswith(tuple(_users))
-        ]
-        with open(htpasswd_path, 'w+') as f:
+        new_htpasswd = [line for line in htpasswd if not line.startswith(tuple(_users))]
+        with open(htpasswd_path, "w+") as f:
             for line in new_htpasswd:
                 f.write(line)
         create_htpasswd_secret(htpasswd_path, replace=True)

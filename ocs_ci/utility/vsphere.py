@@ -13,8 +13,13 @@ from pyVim.task import WaitForTask, WaitForTasks
 from pyVim.connect import Disconnect, SmartStubAdapter, VimSessionOrientedStub
 from ocs_ci.ocs.exceptions import VMMaxDisksReachedException
 from ocs_ci.ocs.constants import (
-    GB2KB, VM_DISK_TYPE, VM_DISK_MODE, VM_POWERED_OFF,
-    DISK_MODE, COMPATABILITY_MODE, DISK_PATH_PREFIX,
+    GB2KB,
+    VM_DISK_TYPE,
+    VM_DISK_MODE,
+    VM_POWERED_OFF,
+    DISK_MODE,
+    COMPATABILITY_MODE,
+    DISK_PATH_PREFIX,
     VMFS,
 )
 from ocs_ci.utility.utils import TimeoutSampler
@@ -26,6 +31,7 @@ class VSPHERE(object):
     """
     wrapper for vSphere
     """
+
     def __init__(self, host, user, password, port=443):
         """
         Initialize the variables required for vCenter server
@@ -57,12 +63,13 @@ class VSPHERE(object):
                 host=self._host,
                 port=int(self._port),
                 sslContext=self.sslContext,
-                connectionPoolTimeout=0
+                connectionPoolTimeout=0,
             )
             session_stub = VimSessionOrientedStub(
                 smart_stub,
-                VimSessionOrientedStub.makeUserLoginMethod(self._user, self._password))
-            service_instance = vim.ServiceInstance('ServiceInstance', session_stub)
+                VimSessionOrientedStub.makeUserLoginMethod(self._user, self._password),
+            )
+            service_instance = vim.ServiceInstance("ServiceInstance", session_stub)
 
             # Ensure connection to server is closed on program exit
             atexit.register(Disconnect, service_instance)
@@ -117,24 +124,13 @@ class VSPHERE(object):
             folder = content.rootFolder
 
         obj = {}
-        container = content.viewManager.CreateContainerView(
-            folder,
-            vimtype,
-            recurse
-        )
+        container = content.viewManager.CreateContainerView(folder, vimtype, recurse)
         for managed_object_ref in container.view:
             obj.update({managed_object_ref: managed_object_ref.name})
         container.Destroy()
         return obj
 
-    def find_object_by_name(
-            self,
-            content,
-            name,
-            obj_type,
-            folder=None,
-            recurse=True
-    ):
+    def find_object_by_name(self, content, name, obj_type, folder=None, recurse=True):
         """
         Finds object by given name
 
@@ -155,12 +151,7 @@ class VSPHERE(object):
         if not isinstance(obj_type, list):
             obj_type = [obj_type]
 
-        objects = self.get_all_objs(
-            content,
-            obj_type,
-            folder=folder,
-            recurse=recurse
-        )
+        objects = self.get_all_objs(content, obj_type, folder=folder, recurse=recurse)
         for obj in objects:
             if obj.name == name:
                 return obj
@@ -180,7 +171,9 @@ class VSPHERE(object):
             vim.VirtualMachine: VM instance
 
         """
-        return self.get_search_index.FindByIp(datacenter=self.get_dc(dc), ip=str(ip), vmSearch=vm_search)
+        return self.get_search_index.FindByIp(
+            datacenter=self.get_dc(dc), ip=str(ip), vmSearch=vm_search
+        )
 
     def get_dc(self, name):
         """
@@ -277,10 +270,14 @@ class VSPHERE(object):
             list: list of controllers
 
         """
-        return [device for device in vm.config.hardware.device
-                if (isinstance(device, vim.vm.device.VirtualSCSIController)
-                    or isinstance(device, vim.vm.device.VirtualSCSIController))
-                ]
+        return [
+            device
+            for device in vm.config.hardware.device
+            if (
+                isinstance(device, vim.vm.device.VirtualSCSIController)
+                or isinstance(device, vim.vm.device.VirtualSCSIController)
+            )
+        ]
 
     def get_controller_for_adding_disk(self, vm):
         """
@@ -311,7 +308,7 @@ class VSPHERE(object):
         """
         unit_number = 0
         for device in vm.config.hardware.device:
-            if hasattr(device.backing, 'fileName'):
+            if hasattr(device.backing, "fileName"):
                 unit_number = max(unit_number, int(device.unitNumber) + 1)
                 # unit_number 7 reserved for scsi controller
                 if unit_number == 7:
@@ -322,7 +319,7 @@ class VSPHERE(object):
                     raise VMMaxDisksReachedException
         return unit_number
 
-    def add_disk(self, vm, size, disk_type='thin'):
+    def add_disk(self, vm, size, disk_type="thin"):
         """
         Attaches disk to VM
 
@@ -356,7 +353,7 @@ class VSPHERE(object):
         WaitForTask(vm.ReconfigVM_Task(spec=spec))
         logger.info(f"{size}GB disk added successfully to {vm.config.name}")
 
-    def add_disks(self, num_disks, vm, size, disk_type='thin'):
+    def add_disks(self, num_disks, vm, size, disk_type="thin"):
         """
         Adds multiple disks to the VM
 
@@ -494,7 +491,7 @@ class VSPHERE(object):
                     f"Waiting for VMs {[vm.name for vm in vms]} to power on "
                     f"based on network connectivity. Current VMs IPs: {ips}"
                 )
-                if not (None in ips or '<unset>' in ips):
+                if not (None in ips or "<unset>" in ips):
                     break
 
     def restart_vms_by_stop_and_start(self, vms, force=True):
@@ -629,7 +626,7 @@ class VSPHERE(object):
         WaitForTask(pi.Destroy())
         logger.info(f"Successfully deleted resource pool {pool}")
 
-    def remove_disk(self, vm, identifier, key='unit_number', datastore=True):
+    def remove_disk(self, vm, identifier, key="unit_number", datastore=True):
         """
         Removes the Disk from VM and datastore. By default, it will delete
         the disk ( vmdk ) from VM and backend datastore. If datastore parameter
@@ -652,11 +649,9 @@ class VSPHERE(object):
             virtual_disk_spec.fileOperation = (
                 vim.vm.device.VirtualDeviceSpec.FileOperation.destroy
             )
-        virtual_disk_spec.operation = (
-            vim.vm.device.VirtualDeviceSpec.Operation.remove
-        )
+        virtual_disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.remove
 
-        if key == 'unit_number':
+        if key == "unit_number":
             disk_prefix = "Hard disk "
             for dev in vm.config.hardware.device:
                 # choose the device based on unit number instead of
@@ -668,11 +663,11 @@ class VSPHERE(object):
                 ):
                     virtual_disk_device = dev
 
-        elif key == 'volume_path':
+        elif key == "volume_path":
             vm_volumes = [
-                device for device in vm.config.hardware.device if isinstance(
-                    device, vim.vm.device.VirtualDisk
-                )
+                device
+                for device in vm.config.hardware.device
+                if isinstance(device, vim.vm.device.VirtualDisk)
             ]
             for vol in vm_volumes:
                 if vol.backing.fileName == identifier:
@@ -680,7 +675,9 @@ class VSPHERE(object):
                     break
 
         if not virtual_disk_device:
-            logger.warning(f"Volume with {key} {identifier} for {vm.name} could not be found")
+            logger.warning(
+                f"Volume with {key} {identifier} for {vm.name} could not be found"
+            )
 
         virtual_disk_spec.device = virtual_disk_device
         spec = vim.vm.ConfigSpec()
@@ -716,8 +713,9 @@ class VSPHERE(object):
 
         """
         return [
-            device.unitNumber for device in vm.config.hardware.device
-            if hasattr(device.backing, 'fileName') and device.unitNumber != 0
+            device.unitNumber
+            for device in vm.config.hardware.device
+            if hasattr(device.backing, "fileName") and device.unitNumber != 0
         ]
 
     def check_folder_exists(self, name, cluster, dc):
@@ -793,8 +791,9 @@ class VSPHERE(object):
         storage_system = host.configManager.storageSystem
         storage_device_info = storage_system.storageDeviceInfo
         return [
-            ScsiDisk.deviceName for ScsiDisk in storage_device_info.scsiLun
-            if ScsiDisk.deviceType == 'disk'
+            ScsiDisk.deviceName
+            for ScsiDisk in storage_device_info.scsiLun
+            if ScsiDisk.deviceType == "disk"
         ]
 
     def get_mounted_devices_in_vsan(self, host):
@@ -809,9 +808,7 @@ class VSPHERE(object):
 
         """
         device_list = []
-        logger.debug(
-            f"Fetching all the storage devices mounted in host {host.name}"
-        )
+        logger.debug(f"Fetching all the storage devices mounted in host {host.name}")
         disk_mapping = host.config.vsanHostConfig.storageInfo.diskMapping
         for each in disk_mapping:
             device_list.append(each.ssd.devicePath)
@@ -832,19 +829,14 @@ class VSPHERE(object):
 
         """
         device_list = []
-        logger.debug(
-            f"Fetching all the storage devices mounted in host {host.name}"
-        )
+        logger.debug(f"Fetching all the storage devices mounted in host {host.name}")
         mount_info = host.config.fileSystemVolume.mountInfo
         for each in mount_info:
             try:
                 if each.volume.extent:
                     extent = each.volume.extent
                     for scsidisk in extent:
-                        disk_path = os.path.join(
-                            DISK_PATH_PREFIX,
-                            scsidisk.diskName
-                        )
+                        disk_path = os.path.join(DISK_PATH_PREFIX, scsidisk.diskName)
                         device_list.append(disk_path)
             except AttributeError:
                 continue
@@ -880,9 +872,7 @@ class VSPHERE(object):
             str: Active partition disk
 
         """
-        logger.debug(
-            f"Getting the active partition device in host {host.name}"
-        )
+        logger.debug(f"Getting the active partition device in host {host.name}")
         active_partition = host.config.activeDiagnosticPartition
         if not active_partition:
             active_partition = self.get_active_partition_from_mount_info(host)
@@ -911,20 +901,18 @@ class VSPHERE(object):
         if used_devices:
             used_devices_all += used_devices
 
-        devices_with_active_disk = list(
-            set(storage_devices) - set(used_devices_all)
-        )
+        devices_with_active_disk = list(set(storage_devices) - set(used_devices_all))
         logger.debug(f"Host {host.name} Storage Devices information:")
         logger.debug(f"Available Storage Devices: {storage_devices}")
         logger.debug(f"Mounted Storage Devices: {mounted_devices}")
         logger.debug(f"Used Storage Devices: {used_devices}")
         logger.debug(
-            f"Storage Devices with active partition:"
-            f" {devices_with_active_disk}"
+            f"Storage Devices with active partition:" f" {devices_with_active_disk}"
         )
 
         return [
-            device for device in devices_with_active_disk
+            device
+            for device in devices_with_active_disk
             if active_partition not in device
         ]
 
@@ -944,7 +932,7 @@ class VSPHERE(object):
         vmfolder = dc.vmFolder
         vmlist = vmfolder.childEntity
         for each in vmlist:
-            if hasattr(each, 'childEntity'):
+            if hasattr(each, "childEntity"):
                 for vm in each.childEntity:
                     vms.append(vm)
             else:
@@ -974,7 +962,7 @@ class VSPHERE(object):
         vms = self.get_all_vms_in_dc(dc)
         for vm in vms:
             for device in vm.config.hardware.device:
-                if hasattr(device.backing, 'lunUuid'):
+                if hasattr(device.backing, "lunUuid"):
                     host = self.get_host(vm).name
                     if host not in lunids.keys():
                         lunids[host] = []
@@ -1003,9 +991,7 @@ class VSPHERE(object):
             host = self.get_host_obj(each_host)
             if host not in host_devices_mapping.keys():
                 host_devices_mapping[host] = []
-            storagedeviceinfo = (
-                host.configManager.storageSystem.storageDeviceInfo
-            )
+            storagedeviceinfo = host.configManager.storageSystem.storageDeviceInfo
             scsilun = storagedeviceinfo.scsiLun
             for scsidisk in scsilun:
                 if scsidisk.uuid in data[each_host]:
@@ -1026,9 +1012,7 @@ class VSPHERE(object):
         """
         content = self.get_content
         host_view = content.viewManager.CreateContainerView(
-            content.rootFolder,
-            [vim.HostSystem],
-            True
+            content.rootFolder, [vim.HostSystem], True
         )
         host_obj = [host for host in host_view.view]
         host_view.Destroy()
@@ -1050,9 +1034,7 @@ class VSPHERE(object):
             list: List of storage devices used
 
         """
-        logger.debug(
-            f"Fetching all the storage devices used in host {host.name}"
-        )
+        logger.debug(f"Fetching all the storage devices used in host {host.name}")
         cluster = host.parent
         dc = cluster.parent.parent.name
         lunids = self.get_lunids(dc)
@@ -1070,9 +1052,7 @@ class VSPHERE(object):
             str: Active partition disk
 
         """
-        logger.debug(
-            "Fetching active partition from fileSystemVolume information"
-        )
+        logger.debug("Fetching active partition from fileSystemVolume information")
         mount_info = host.config.fileSystemVolume.mountInfo
         for each in mount_info:
             try:
@@ -1093,10 +1073,7 @@ class VSPHERE(object):
         """
         # set empty partition spec
         spec = vim.HostDiskPartitionSpec()
-        host.configManager.storageSystem.UpdateDiskPartitions(
-            device_path,
-            spec
-        )
+        host.configManager.storageSystem.UpdateDiskPartitions(device_path, spec)
 
     def find_datastore_by_name(self, datastore_name, datacenter_name):
         """
@@ -1113,10 +1090,7 @@ class VSPHERE(object):
         dc = self.find_datacenter_by_name(datacenter_name)
         folder = dc.datastoreFolder
         return self.find_object_by_name(
-            self.get_content,
-            datastore_name,
-            [vim.Datastore],
-            folder=folder
+            self.get_content, datastore_name, [vim.Datastore], folder=folder
         )
 
     def find_datacenter_by_name(self, datacenter_name):
@@ -1131,9 +1105,7 @@ class VSPHERE(object):
 
         """
         return self.find_object_by_name(
-            self.get_content,
-            datacenter_name,
-            [vim.Datacenter]
+            self.get_content, datacenter_name, [vim.Datacenter]
         )
 
     def get_datastore_type(self, datastore):
@@ -1161,10 +1133,7 @@ class VSPHERE(object):
             str: Datastore type. Either VMFS or vsan
 
         """
-        datastore = self.find_datastore_by_name(
-            datastore_name,
-            datacenter_name
-        )
+        datastore = self.find_datastore_by_name(datastore_name, datacenter_name)
         return self.get_datastore_type(datastore)
 
     def get_datastore_free_capacity(self, datastore_name, datacenter_name):

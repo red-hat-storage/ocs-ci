@@ -2,9 +2,7 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import (
-    pre_upgrade, post_upgrade
-)
+from ocs_ci.framework.pytest_customization.marks import pre_upgrade, post_upgrade
 from ocs_ci.ocs.resources import pod
 
 log = logging.getLogger(__name__)
@@ -18,14 +16,14 @@ def get_crush_map():
         str: Multiline string representing current Ceph CRUSH map
     """
     ct_pod = pod.get_ceph_tools_pod()
-    file_comp = '/tmp/crush_comp'
-    file_decomp = '/tmp/crush_decomp'
+    file_comp = "/tmp/crush_comp"
+    file_decomp = "/tmp/crush_decomp"
     ct_pod.exec_ceph_cmd(f"ceph osd getcrushmap -o {file_comp}")
     ct_pod.exec_ceph_cmd(f"crushtool -d {file_comp} -o {file_decomp}")
     return ct_pod.exec_sh_cmd_on_pod(f"cat {file_decomp}")
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def pre_upgrade_crush_map():
     """
     Loads CRUSH map before upgrade by `test_load_crush_map` test case.
@@ -47,7 +45,7 @@ def test_load_crush_map(pre_upgrade_crush_map):
 
 
 @post_upgrade
-@pytest.mark.polarion_id('OCS-1936')
+@pytest.mark.polarion_id("OCS-1936")
 def test_crush_map_unchanged(pre_upgrade_crush_map):
     """
     Test that CRUSH map loaded before upgrade is the same as CRUSH map after

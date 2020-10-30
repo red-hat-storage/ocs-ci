@@ -18,6 +18,7 @@ class VSPHERENode(object):
     """
     A class that handles operations related to VM node
     """
+
     def __init__(self, host, user=None, private_key=None):
         """
         Initialize all required variables
@@ -31,7 +32,7 @@ class VSPHERENode(object):
         self.host = host
         self.user = user or constants.VSPHERE_NODE_USER
         self.private_key = private_key or os.path.expanduser(
-            config.DEPLOYMENT['ssh_key_private']
+            config.DEPLOYMENT["ssh_key_private"]
         )
         self.vmnode = Connection(self.host, self.user, self.private_key)
 
@@ -47,10 +48,7 @@ class VSPHERENode(object):
         ntp_server_str = f"server {server}"
 
         # backup the conf file
-        cmd = (
-            f"sudo cp {constants.CHRONY_CONF}"
-            f" {constants.CHRONY_CONF}_backup"
-        )
+        cmd = f"sudo cp {constants.CHRONY_CONF}" f" {constants.CHRONY_CONF}_backup"
         self.vmnode.exec_cmd(cmd)
 
         # replace default NTP server
@@ -79,9 +77,7 @@ class VSPHERENode(object):
         logger.info(f"Restarting chronyd service on {self.host}")
         retcode, _, _ = self.restart_service("chronyd")
         if retcode:
-            logger.info(
-                "Successfully restarted chronyd service"
-            )
+            logger.info("Successfully restarted chronyd service")
             _rc = True
         return _rc
 
@@ -99,21 +95,14 @@ def get_node_ips_from_module(module):
 
     """
     terraform_state_file = os.path.join(
-        config.ENV_DATA['cluster_path'],
-        "terraform_data",
-        "terraform.tfstate"
+        config.ENV_DATA["cluster_path"], "terraform_data", "terraform.tfstate"
     )
 
     if not os.path.isfile(terraform_state_file):
         raise FileNotFoundError(
-            errno.ENOENT,
-            os.strerror(errno.ENOENT),
-            terraform_state_file
+            errno.ENOENT, os.strerror(errno.ENOENT), terraform_state_file
         )
-    ip_address = get_module_ip(
-        terraform_state_file,
-        module
-    )
+    ip_address = get_module_ip(terraform_state_file, module)
     return ip_address
 
 

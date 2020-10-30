@@ -20,13 +20,14 @@ log = logging.getLogger(__name__)
         ),
         pytest.param(
             constants.RECLAIM_POLICY_RETAIN, marks=pytest.mark.polarion_id("OCS-750")
-        )
-    ]
+        ),
+    ],
 )
 class TestRawBlockPV(ManageTest):
     """
     Base class for creating pvc,pods and run IOs
     """
+
     @pytest.fixture()
     def namespace(self, project_factory):
         """
@@ -42,7 +43,9 @@ class TestRawBlockPV(ManageTest):
         Create storage class with reclaim policy
         """
         self.reclaim_policy = reclaim_policy
-        self.sc_obj = storageclass_factory(interface=constants.CEPHBLOCKPOOL, reclaim_policy=self.reclaim_policy)
+        self.sc_obj = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL, reclaim_policy=self.reclaim_policy
+        )
 
     @property
     def raw_block_pv(self):
@@ -51,13 +54,15 @@ class TestRawBlockPV(ManageTest):
         """
         worker_nodes = node.get_worker_nodes()
         pvcs = list()
-        for size in ['500Mi', '10Gi', '1Ti']:
-            pvcs.append(helpers.create_pvc(
-                sc_name=self.sc_obj.name, size=size,
-                access_mode=constants.ACCESS_MODE_RWX,
-                namespace=self.namespace,
-                volume_mode='Block'
-            )
+        for size in ["500Mi", "10Gi", "1Ti"]:
+            pvcs.append(
+                helpers.create_pvc(
+                    sc_name=self.sc_obj.name,
+                    size=size,
+                    access_mode=constants.ACCESS_MODE_RWX,
+                    namespace=self.namespace,
+                    volume_mode="Block",
+                )
             )
         pvc_mb, pvc_gb, pvc_tb = pvcs[0], pvcs[1], pvcs[2]
 
@@ -72,39 +77,45 @@ class TestRawBlockPV(ManageTest):
         pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
         for pvc in pvc_mb, pvc_gb, pvc_tb:
             for _ in range(3):
-                pods.append(helpers.create_pod(
-                    interface_type=constants.CEPHBLOCKPOOL,
-                    pvc_name=pvc.name,
-                    namespace=self.namespace,
-                    raw_block_pv=True,
-                    pod_dict_path=pod_dict,
-                    node_name=random.choice(
-                        worker_nodes
+                pods.append(
+                    helpers.create_pod(
+                        interface_type=constants.CEPHBLOCKPOOL,
+                        pvc_name=pvc.name,
+                        namespace=self.namespace,
+                        raw_block_pv=True,
+                        pod_dict_path=pod_dict,
+                        node_name=random.choice(worker_nodes),
                     )
-                )
                 )
 
         pvc_mb_pods, pvc_gb_pods, pvc_tb_pods = pods[0:3], pods[3:6], pods[6:9]
         for pod in pods:
             helpers.wait_for_resource_state(
-                resource=pod, state=constants.STATUS_RUNNING, timeout=120)
-        storage_type = 'block'
+                resource=pod, state=constants.STATUS_RUNNING, timeout=120
+            )
+        storage_type = "block"
 
         with ThreadPoolExecutor() as p:
             for pod in pvc_mb_pods:
-                logging.info(f'running io on pod {pod.name}')
+                logging.info(f"running io on pod {pod.name}")
                 p.submit(
-                    pod.run_io, storage_type=storage_type, size=f'{random.randint(10,200)}M',
+                    pod.run_io,
+                    storage_type=storage_type,
+                    size=f"{random.randint(10,200)}M",
                 )
             for pod in pvc_gb_pods:
-                logging.info(f'running io on pod {pod.name}')
+                logging.info(f"running io on pod {pod.name}")
                 p.submit(
-                    pod.run_io, storage_type=storage_type, size=f'{random.randint(1,5)}G',
+                    pod.run_io,
+                    storage_type=storage_type,
+                    size=f"{random.randint(1,5)}G",
                 )
             for pod in pvc_tb_pods:
-                logging.info(f'running io on pod {pod.name}')
+                logging.info(f"running io on pod {pod.name}")
                 p.submit(
-                    pod.run_io, storage_type=storage_type, size=f'{random.randint(10,15)}G',
+                    pod.run_io,
+                    storage_type=storage_type,
+                    size=f"{random.randint(10,15)}G",
                 )
 
         for pod in pods:

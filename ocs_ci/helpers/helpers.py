@@ -22,9 +22,11 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.utils import mirror_image
 from ocs_ci.ocs import constants, defaults, node, ocp
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, ResourceWrongStatusException,
-    TimeoutExpiredError, UnavailableBuildException,
-    UnexpectedBehaviour
+    CommandFailed,
+    ResourceWrongStatusException,
+    TimeoutExpiredError,
+    UnavailableBuildException,
+    UnexpectedBehaviour,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
@@ -73,11 +75,9 @@ def create_resource(do_reload=True, **kwargs):
         AssertionError: In case of any failure
     """
     ocs_obj = OCS(**kwargs)
-    resource_name = kwargs.get('metadata').get('name')
+    resource_name = kwargs.get("metadata").get("name")
     created_resource = ocs_obj.create(do_reload=do_reload)
-    assert created_resource, (
-        f"Failed to create resource {resource_name}"
-    )
+    assert created_resource, f"Failed to create resource {resource_name}"
     return ocs_obj
 
 
@@ -113,12 +113,22 @@ def wait_for_resource_state(resource, state, timeout=60):
 
 
 def create_pod(
-    interface_type=None, pvc_name=None,
-    do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-    node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
-    raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1,
-    pod_name=None, node_selector=None, command=None, command_args=None,
-    deploy_pod_status=constants.STATUS_COMPLETED
+    interface_type=None,
+    pvc_name=None,
+    do_reload=True,
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    node_name=None,
+    pod_dict_path=None,
+    sa_name=None,
+    dc_deployment=False,
+    raw_block_pv=False,
+    raw_block_device=constants.RAW_BLOCK_DEVICE,
+    replica_count=1,
+    pod_name=None,
+    node_selector=None,
+    command=None,
+    command_args=None,
+    deploy_pod_status=constants.STATUS_COMPLETED,
 ):
     """
     Create a pod
@@ -161,74 +171,94 @@ def create_pod(
         pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
     pod_data = templating.load_yaml(pod_dict)
     if not pod_name:
-        pod_name = create_unique_resource_name(
-            f'test-{interface}', 'pod'
-        )
-    pod_data['metadata']['name'] = pod_name
-    pod_data['metadata']['namespace'] = namespace
+        pod_name = create_unique_resource_name(f"test-{interface}", "pod")
+    pod_data["metadata"]["name"] = pod_name
+    pod_data["metadata"]["namespace"] = namespace
     if dc_deployment:
-        pod_data['metadata']['labels']['app'] = pod_name
-        pod_data['spec']['template']['metadata']['labels']['name'] = pod_name
-        pod_data['spec']['replicas'] = replica_count
+        pod_data["metadata"]["labels"]["app"] = pod_name
+        pod_data["spec"]["template"]["metadata"]["labels"]["name"] = pod_name
+        pod_data["spec"]["replicas"] = replica_count
 
     if pvc_name:
         if dc_deployment:
-            pod_data['spec']['template']['spec']['volumes'][0][
-                'persistentVolumeClaim'
-            ]['claimName'] = pvc_name
+            pod_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+                "claimName"
+            ] = pvc_name
         else:
-            pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
+            pod_data["spec"]["volumes"][0]["persistentVolumeClaim"][
+                "claimName"
+            ] = pvc_name
 
     if interface_type == constants.CEPHBLOCKPOOL and raw_block_pv:
         if pod_dict_path in [constants.FEDORA_DC_YAML, constants.FIO_DC_YAML]:
             temp_dict = [
-                {'devicePath': raw_block_device, 'name': pod_data.get('spec').get(
-                    'template').get('spec').get('volumes')[0].get('name')}
+                {
+                    "devicePath": raw_block_device,
+                    "name": pod_data.get("spec")
+                    .get("template")
+                    .get("spec")
+                    .get("volumes")[0]
+                    .get("name"),
+                }
             ]
             if pod_dict_path == constants.FEDORA_DC_YAML:
-                del pod_data['spec']['template']['spec']['containers'][0]['volumeMounts']
-                security_context = {'capabilities': {'add': ["SYS_ADMIN"]}}
-                pod_data['spec']['template']['spec']['containers'][0]['securityContext'] = security_context
+                del pod_data["spec"]["template"]["spec"]["containers"][0][
+                    "volumeMounts"
+                ]
+                security_context = {"capabilities": {"add": ["SYS_ADMIN"]}}
+                pod_data["spec"]["template"]["spec"]["containers"][0][
+                    "securityContext"
+                ] = security_context
 
-            pod_data['spec']['template']['spec']['containers'][0]['volumeDevices'] = temp_dict
+            pod_data["spec"]["template"]["spec"]["containers"][0][
+                "volumeDevices"
+            ] = temp_dict
 
         elif pod_dict_path == constants.NGINX_POD_YAML:
             temp_dict = [
-                {'devicePath': raw_block_device, 'name': pod_data.get('spec').get(
-                    'containers')[0].get('volumeMounts')[0].get('name')}
+                {
+                    "devicePath": raw_block_device,
+                    "name": pod_data.get("spec")
+                    .get("containers")[0]
+                    .get("volumeMounts")[0]
+                    .get("name"),
+                }
             ]
-            del pod_data['spec']['containers'][0]['volumeMounts']
-            pod_data['spec']['containers'][0]['volumeDevices'] = temp_dict
+            del pod_data["spec"]["containers"][0]["volumeMounts"]
+            pod_data["spec"]["containers"][0]["volumeDevices"] = temp_dict
         else:
-            pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = raw_block_device
-            pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data.get('spec').get('volumes')[
-                0].get('name')
+            pod_data["spec"]["containers"][0]["volumeDevices"][0][
+                "devicePath"
+            ] = raw_block_device
+            pod_data["spec"]["containers"][0]["volumeDevices"][0]["name"] = (
+                pod_data.get("spec").get("volumes")[0].get("name")
+            )
 
     if command:
         if dc_deployment:
-            pod_data['spec']['template']['spec']['containers'][0]['command'] = command
+            pod_data["spec"]["template"]["spec"]["containers"][0]["command"] = command
         else:
-            pod_data['spec']['containers'][0]['command'] = command
+            pod_data["spec"]["containers"][0]["command"] = command
     if command_args:
         if dc_deployment:
-            pod_data['spec']['template']['spec']['containers'][0]['args'] = command_args
+            pod_data["spec"]["template"]["spec"]["containers"][0]["args"] = command_args
         else:
-            pod_data['spec']['containers'][0]['args'] = command_args
+            pod_data["spec"]["containers"][0]["args"] = command_args
 
     if node_name:
         if dc_deployment:
-            pod_data['spec']['template']['spec']['nodeName'] = node_name
+            pod_data["spec"]["template"]["spec"]["nodeName"] = node_name
         else:
-            pod_data['spec']['nodeName'] = node_name
+            pod_data["spec"]["nodeName"] = node_name
 
     if node_selector:
         if dc_deployment:
-            pod_data['spec']['template']['spec']['nodeSelector'] = node_selector
+            pod_data["spec"]["template"]["spec"]["nodeSelector"] = node_selector
         else:
-            pod_data['spec']['nodeSelector'] = node_selector
+            pod_data["spec"]["nodeSelector"] = node_selector
 
     if sa_name and dc_deployment:
-        pod_data['spec']['template']['spec']['serviceAccountName'] = sa_name
+        pod_data["spec"]["template"]["spec"]["serviceAccountName"] = sa_name
 
     # overwrite used image (required for disconnected installation)
     update_container_with_mirrored_image(pod_data)
@@ -237,51 +267,56 @@ def create_pod(
     try:
         http_proxy, https_proxy, no_proxy = get_cluster_proxies()
         if http_proxy:
-            if 'containers' in pod_data['spec']:
-                container = pod_data['spec']['containers'][0]
+            if "containers" in pod_data["spec"]:
+                container = pod_data["spec"]["containers"][0]
             else:
-                container = pod_data['spec']['template']['spec']['containers'][0]
-            if 'env' not in container:
-                container['env'] = []
-            container['env'].append({
-                'name': 'http_proxy',
-                'value': http_proxy,
-            })
-            container['env'].append({
-                'name': 'https_proxy',
-                'value': https_proxy,
-            })
-            container['env'].append({
-                'name': 'no_proxy',
-                'value': no_proxy,
-            })
+                container = pod_data["spec"]["template"]["spec"]["containers"][0]
+            if "env" not in container:
+                container["env"] = []
+            container["env"].append(
+                {
+                    "name": "http_proxy",
+                    "value": http_proxy,
+                }
+            )
+            container["env"].append(
+                {
+                    "name": "https_proxy",
+                    "value": https_proxy,
+                }
+            )
+            container["env"].append(
+                {
+                    "name": "no_proxy",
+                    "value": no_proxy,
+                }
+            )
     except KeyError as err:
         logging.warning(
-            "Http(s)_proxy variable wasn't configured, "
-            "'%s' key not found.", err
+            "Http(s)_proxy variable wasn't configured, " "'%s' key not found.", err
         )
 
     if dc_deployment:
         ocs_obj = create_resource(**pod_data)
         logger.info(ocs_obj.name)
-        assert (ocp.OCP(kind='pod', namespace=namespace)).wait_for_resource(
+        assert (ocp.OCP(kind="pod", namespace=namespace)).wait_for_resource(
             condition=deploy_pod_status,
-            resource_name=pod_name + '-1-deploy',
-            resource_count=0, timeout=360, sleep=3
+            resource_name=pod_name + "-1-deploy",
+            resource_count=0,
+            timeout=360,
+            sleep=3,
         )
         dpod_list = pod.get_all_pods(namespace=namespace)
         for dpod in dpod_list:
-            if '-1-deploy' not in dpod.name:
+            if "-1-deploy" not in dpod.name:
                 if pod_name in dpod.name:
                     return dpod
     else:
         pod_obj = pod.Pod(**pod_data)
-        pod_name = pod_data.get('metadata').get('name')
-        logger.info(f'Creating new Pod {pod_name} for test')
+        pod_name = pod_data.get("metadata").get("name")
+        logger.info(f"Creating new Pod {pod_name} for test")
         created_resource = pod_obj.create(do_reload=do_reload)
-        assert created_resource, (
-            f"Failed to create Pod {pod_name}"
-        )
+        assert created_resource, f"Failed to create Pod {pod_name}"
 
         return pod_obj
 
@@ -297,8 +332,8 @@ def create_project(project_name=None):
         ocs_ci.ocs.ocp.OCP: Project object
 
     """
-    namespace = project_name or create_unique_resource_name('test', 'namespace')
-    project_obj = ocp.OCP(kind='Project', namespace=namespace)
+    namespace = project_name or create_unique_resource_name("test", "namespace")
+    project_obj = ocp.OCP(kind="Project", namespace=namespace)
     assert project_obj.new_project(namespace), f"Failed to create namespace {namespace}"
     return project_obj
 
@@ -333,25 +368,21 @@ def create_secret(interface_type):
     """
     secret_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
-        secret_data = templating.load_yaml(
-            constants.CSI_RBD_SECRET_YAML
-        )
-        secret_data['stringData']['userID'] = constants.ADMIN_USER
-        secret_data['stringData']['userKey'] = get_admin_key()
+        secret_data = templating.load_yaml(constants.CSI_RBD_SECRET_YAML)
+        secret_data["stringData"]["userID"] = constants.ADMIN_USER
+        secret_data["stringData"]["userKey"] = get_admin_key()
         interface = constants.RBD_INTERFACE
     elif interface_type == constants.CEPHFILESYSTEM:
-        secret_data = templating.load_yaml(
-            constants.CSI_CEPHFS_SECRET_YAML
-        )
-        del secret_data['stringData']['userID']
-        del secret_data['stringData']['userKey']
-        secret_data['stringData']['adminID'] = constants.ADMIN_USER
-        secret_data['stringData']['adminKey'] = get_admin_key()
+        secret_data = templating.load_yaml(constants.CSI_CEPHFS_SECRET_YAML)
+        del secret_data["stringData"]["userID"]
+        del secret_data["stringData"]["userKey"]
+        secret_data["stringData"]["adminID"] = constants.ADMIN_USER
+        secret_data["stringData"]["adminKey"] = get_admin_key()
         interface = constants.CEPHFS_INTERFACE
-    secret_data['metadata']['name'] = create_unique_resource_name(
-        f'test-{interface}', 'secret'
+    secret_data["metadata"]["name"] = create_unique_resource_name(
+        f"test-{interface}", "secret"
     )
-    secret_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    secret_data["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
 
     return create_resource(**secret_data)
 
@@ -364,7 +395,7 @@ def default_ceph_block_pool():
         default CephBlockPool
     """
     sc_obj = default_storage_class(constants.CEPHBLOCKPOOL)
-    cbp_name = sc_obj.get().get('parameters').get('pool')
+    cbp_name = sc_obj.get().get("parameters").get("pool")
     return cbp_name if cbp_name else constants.DEFAULT_BLOCKPOOL
 
 
@@ -384,20 +415,18 @@ def create_ceph_block_pool(pool_name=None, failure_domain=None, verify=True):
         OCS: An OCS instance for the Ceph block pool
     """
     cbp_data = templating.load_yaml(constants.CEPHBLOCKPOOL_YAML)
-    cbp_data['metadata']['name'] = (
-        pool_name if pool_name else create_unique_resource_name(
-            'test', 'cbp'
-        )
+    cbp_data["metadata"]["name"] = (
+        pool_name if pool_name else create_unique_resource_name("test", "cbp")
     )
-    cbp_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    cbp_data['spec']['failureDomain'] = failure_domain or get_failure_domin()
+    cbp_data["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
+    cbp_data["spec"]["failureDomain"] = failure_domain or get_failure_domin()
     cbp_obj = create_resource(**cbp_data)
     cbp_obj.reload()
 
     if verify:
-        assert verify_block_pool_exists(cbp_obj.name), (
-            f"Block pool {cbp_obj.name} does not exist"
-        )
+        assert verify_block_pool_exists(
+            cbp_obj.name
+        ), f"Block pool {cbp_obj.name} does not exist"
     return cbp_obj
 
 
@@ -414,18 +443,16 @@ def create_ceph_file_system(pool_name=None):
         OCS: An OCS instance for the Ceph file system
     """
     cfs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
-    cfs_data['metadata']['name'] = (
-        pool_name if pool_name else create_unique_resource_name(
-            'test', 'cfs'
-        )
+    cfs_data["metadata"]["name"] = (
+        pool_name if pool_name else create_unique_resource_name("test", "cfs")
     )
-    cfs_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    cfs_data["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
     cfs_data = create_resource(**cfs_data)
     cfs_data.reload()
 
-    assert validate_cephfilesystem(cfs_data.name), (
-        f"File system {cfs_data.name} does not exist"
-    )
+    assert validate_cephfilesystem(
+        cfs_data.name
+    ), f"File system {cfs_data.name} does not exist"
     return cfs_data
 
 
@@ -442,33 +469,30 @@ def default_storage_class(
     Returns:
         OCS: Existing StorageClass Instance
     """
-    external = config.DEPLOYMENT['external_mode']
+    external = config.DEPLOYMENT["external_mode"]
     if interface_type == constants.CEPHBLOCKPOOL:
         if external:
             resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         else:
             resource_name = constants.DEFAULT_STORAGECLASS_RBD
-        base_sc = OCP(
-            kind='storageclass',
-            resource_name=resource_name
-        )
+        base_sc = OCP(kind="storageclass", resource_name=resource_name)
     elif interface_type == constants.CEPHFILESYSTEM:
         if external:
             resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
         else:
             resource_name = constants.DEFAULT_STORAGECLASS_CEPHFS
-        base_sc = OCP(
-            kind='storageclass',
-            resource_name=resource_name
-        )
+        base_sc = OCP(kind="storageclass", resource_name=resource_name)
     sc = OCS(**base_sc.data)
     return sc
 
 
 def create_storage_class(
-    interface_type, interface_name, secret_name,
-    reclaim_policy=constants.RECLAIM_POLICY_DELETE, sc_name=None,
-    provisioner=None
+    interface_type,
+    interface_name,
+    secret_name,
+    reclaim_policy=constants.RECLAIM_POLICY_DELETE,
+    sc_name=None,
+    provisioner=None,
 ):
     """
     Create a storage class
@@ -490,69 +514,63 @@ def create_storage_class(
 
     sc_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
-        sc_data = templating.load_yaml(
-            constants.CSI_RBD_STORAGECLASS_YAML
-        )
-        sc_data['parameters'][
-            'csi.storage.k8s.io/node-stage-secret-name'
-        ] = secret_name
-        sc_data['parameters'][
-            'csi.storage.k8s.io/node-stage-secret-namespace'
+        sc_data = templating.load_yaml(constants.CSI_RBD_STORAGECLASS_YAML)
+        sc_data["parameters"]["csi.storage.k8s.io/node-stage-secret-name"] = secret_name
+        sc_data["parameters"][
+            "csi.storage.k8s.io/node-stage-secret-namespace"
         ] = defaults.ROOK_CLUSTER_NAMESPACE
         interface = constants.RBD_INTERFACE
-        sc_data['provisioner'] = (
+        sc_data["provisioner"] = (
             provisioner if provisioner else defaults.RBD_PROVISIONER
         )
     elif interface_type == constants.CEPHFILESYSTEM:
-        sc_data = templating.load_yaml(
-            constants.CSI_CEPHFS_STORAGECLASS_YAML
-        )
-        sc_data['parameters'][
-            'csi.storage.k8s.io/node-stage-secret-name'
-        ] = secret_name
-        sc_data['parameters'][
-            'csi.storage.k8s.io/node-stage-secret-namespace'
+        sc_data = templating.load_yaml(constants.CSI_CEPHFS_STORAGECLASS_YAML)
+        sc_data["parameters"]["csi.storage.k8s.io/node-stage-secret-name"] = secret_name
+        sc_data["parameters"][
+            "csi.storage.k8s.io/node-stage-secret-namespace"
         ] = defaults.ROOK_CLUSTER_NAMESPACE
         interface = constants.CEPHFS_INTERFACE
-        sc_data['parameters']['fsName'] = get_cephfs_name()
-        sc_data['provisioner'] = (
+        sc_data["parameters"]["fsName"] = get_cephfs_name()
+        sc_data["provisioner"] = (
             provisioner if provisioner else defaults.CEPHFS_PROVISIONER
         )
-    sc_data['parameters']['pool'] = interface_name
+    sc_data["parameters"]["pool"] = interface_name
 
-    sc_data['metadata']['name'] = (
-        sc_name if sc_name else create_unique_resource_name(
-            f'test-{interface}', 'storageclass'
-        )
+    sc_data["metadata"]["name"] = (
+        sc_name
+        if sc_name
+        else create_unique_resource_name(f"test-{interface}", "storageclass")
     )
-    sc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    sc_data['parameters'][
-        'csi.storage.k8s.io/provisioner-secret-name'
-    ] = secret_name
-    sc_data['parameters'][
-        'csi.storage.k8s.io/provisioner-secret-namespace'
+    sc_data["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
+    sc_data["parameters"]["csi.storage.k8s.io/provisioner-secret-name"] = secret_name
+    sc_data["parameters"][
+        "csi.storage.k8s.io/provisioner-secret-namespace"
     ] = defaults.ROOK_CLUSTER_NAMESPACE
-    sc_data['parameters'][
-        'csi.storage.k8s.io/controller-expand-secret-name'
+    sc_data["parameters"][
+        "csi.storage.k8s.io/controller-expand-secret-name"
     ] = secret_name
-    sc_data['parameters'][
-        'csi.storage.k8s.io/controller-expand-secret-namespace'
+    sc_data["parameters"][
+        "csi.storage.k8s.io/controller-expand-secret-namespace"
     ] = defaults.ROOK_CLUSTER_NAMESPACE
 
-    sc_data['parameters']['clusterID'] = defaults.ROOK_CLUSTER_NAMESPACE
-    sc_data['reclaimPolicy'] = reclaim_policy
+    sc_data["parameters"]["clusterID"] = defaults.ROOK_CLUSTER_NAMESPACE
+    sc_data["reclaimPolicy"] = reclaim_policy
 
     try:
-        del sc_data['parameters']['userid']
+        del sc_data["parameters"]["userid"]
     except KeyError:
         pass
     return create_resource(**sc_data)
 
 
 def create_pvc(
-    sc_name, pvc_name=None, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-    size=None, do_reload=True, access_mode=constants.ACCESS_MODE_RWO,
-    volume_mode=None
+    sc_name,
+    pvc_name=None,
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    size=None,
+    do_reload=True,
+    access_mode=constants.ACCESS_MODE_RWO,
+    volume_mode=None,
 ):
     """
     Create a PVC
@@ -571,18 +589,16 @@ def create_pvc(
         PVC: PVC instance
     """
     pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
-    pvc_data['metadata']['name'] = (
-        pvc_name if pvc_name else create_unique_resource_name(
-            'test', 'pvc'
-        )
+    pvc_data["metadata"]["name"] = (
+        pvc_name if pvc_name else create_unique_resource_name("test", "pvc")
     )
-    pvc_data['metadata']['namespace'] = namespace
-    pvc_data['spec']['accessModes'] = [access_mode]
-    pvc_data['spec']['storageClassName'] = sc_name
+    pvc_data["metadata"]["namespace"] = namespace
+    pvc_data["spec"]["accessModes"] = [access_mode]
+    pvc_data["spec"]["storageClassName"] = sc_name
     if size:
-        pvc_data['spec']['resources']['requests']['storage'] = size
+        pvc_data["spec"]["resources"]["requests"]["storage"] = size
     if volume_mode:
-        pvc_data['spec']['volumeMode'] = volume_mode
+        pvc_data["spec"]["volumeMode"] = volume_mode
     ocs_obj = pvc.PVC(**pvc_data)
     created_pvc = ocs_obj.create(do_reload=do_reload)
     assert created_pvc, f"Failed to create resource {pvc_name}"
@@ -590,8 +606,13 @@ def create_pvc(
 
 
 def create_multiple_pvcs(
-    sc_name, namespace, number_of_pvc=1, size=None, do_reload=False,
-    access_mode=constants.ACCESS_MODE_RWO, burst=False
+    sc_name,
+    namespace,
+    number_of_pvc=1,
+    size=None,
+    do_reload=False,
+    access_mode=constants.ACCESS_MODE_RWO,
+    burst=False,
 ):
     """
     Create one or more PVC as a bulk or one by one
@@ -609,41 +630,46 @@ def create_multiple_pvcs(
          list: List of PVC objects
     """
     if not burst:
-        if access_mode == 'ReadWriteMany' and 'rbd' in sc_name:
-            volume_mode = 'Block'
+        if access_mode == "ReadWriteMany" and "rbd" in sc_name:
+            volume_mode = "Block"
         else:
             volume_mode = None
         return [
             create_pvc(
-                sc_name=sc_name, size=size, namespace=namespace,
-                do_reload=do_reload, access_mode=access_mode, volume_mode=volume_mode
-            ) for _ in range(number_of_pvc)
+                sc_name=sc_name,
+                size=size,
+                namespace=namespace,
+                do_reload=do_reload,
+                access_mode=access_mode,
+                volume_mode=volume_mode,
+            )
+            for _ in range(number_of_pvc)
         ]
 
     pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
-    pvc_data['metadata']['namespace'] = namespace
-    pvc_data['spec']['accessModes'] = [access_mode]
-    pvc_data['spec']['storageClassName'] = sc_name
+    pvc_data["metadata"]["namespace"] = namespace
+    pvc_data["spec"]["accessModes"] = [access_mode]
+    pvc_data["spec"]["storageClassName"] = sc_name
     if size:
-        pvc_data['spec']['resources']['requests']['storage'] = size
-    if access_mode == 'ReadWriteMany' and 'rbd' in sc_name:
-        pvc_data['spec']['volumeMode'] = 'Block'
+        pvc_data["spec"]["resources"]["requests"]["storage"] = size
+    if access_mode == "ReadWriteMany" and "rbd" in sc_name:
+        pvc_data["spec"]["volumeMode"] = "Block"
     else:
-        pvc_data['spec']['volumeMode'] = None
+        pvc_data["spec"]["volumeMode"] = None
 
     # Creating tem directory to hold the files for the PVC creation
     tmpdir = tempfile.mkdtemp()
-    logger.info('Creating the PVC yaml files for creation in bulk')
+    logger.info("Creating the PVC yaml files for creation in bulk")
     ocs_objs = []
     for _ in range(number_of_pvc):
-        name = create_unique_resource_name('test', 'pvc')
+        name = create_unique_resource_name("test", "pvc")
         logger.info(f"Adding PVC with name {name}")
-        pvc_data['metadata']['name'] = name
-        templating.dump_data_to_temp_yaml(pvc_data, f'{tmpdir}/{name}.yaml')
+        pvc_data["metadata"]["name"] = name
+        templating.dump_data_to_temp_yaml(pvc_data, f"{tmpdir}/{name}.yaml")
         ocs_objs.append(pvc.PVC(**pvc_data))
 
-    logger.info('Creating all PVCs as bulk')
-    oc = OCP(kind='pod', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    logger.info("Creating all PVCs as bulk")
+    oc = OCP(kind="pod", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     cmd = f"create -f {tmpdir}/"
     oc.exec_oc_cmd(command=cmd, out_yaml_format=False)
 
@@ -652,7 +678,8 @@ def create_multiple_pvcs(
     # period of time.
     logger.info(
         f"Going to sleep for {number_of_pvc} sec. "
-        "until starting verify that PVCs was created.")
+        "until starting verify that PVCs was created."
+    )
     time.sleep(number_of_pvc)
 
     return ocs_objs
@@ -671,12 +698,10 @@ def verify_block_pool_exists(pool_name):
     logger.info(f"Verifying that block pool {pool_name} exists")
     ct_pod = pod.get_ceph_tools_pod()
     try:
-        for pools in TimeoutSampler(
-            60, 3, ct_pod.exec_ceph_cmd, 'ceph osd lspools'
-        ):
-            logger.info(f'POOLS are {pools}')
+        for pools in TimeoutSampler(60, 3, ct_pod.exec_ceph_cmd, "ceph osd lspools"):
+            logger.info(f"POOLS are {pools}")
             for pool in pools:
-                if pool_name in pool.get('poolname'):
+                if pool_name in pool.get("poolname"):
                     return True
     except TimeoutExpiredError:
         return False
@@ -690,8 +715,8 @@ def get_admin_key():
         str: The admin key
     """
     ct_pod = pod.get_ceph_tools_pod()
-    out = ct_pod.exec_ceph_cmd('ceph auth get-key client.admin')
-    return out['key']
+    out = ct_pod.exec_ceph_cmd("ceph auth get-key client.admin")
+    return out["key"]
 
 
 def get_cephfs_data_pool_name():
@@ -702,45 +727,40 @@ def get_cephfs_data_pool_name():
         str: fs datapool name
     """
     ct_pod = pod.get_ceph_tools_pod()
-    out = ct_pod.exec_ceph_cmd('ceph fs ls')
-    return out[0]['data_pools'][0]
+    out = ct_pod.exec_ceph_cmd("ceph fs ls")
+    return out[0]["data_pools"][0]
 
 
 def validate_cephfilesystem(fs_name):
     """
-     Verify CephFileSystem exists at Ceph and OCP
+    Verify CephFileSystem exists at Ceph and OCP
 
-     Args:
-        fs_name (str): The name of the Ceph FileSystem
+    Args:
+       fs_name (str): The name of the Ceph FileSystem
 
-     Returns:
-         bool: True if CephFileSystem is created at Ceph and OCP side else
-            will return False with valid msg i.e Failure cause
+    Returns:
+        bool: True if CephFileSystem is created at Ceph and OCP side else
+           will return False with valid msg i.e Failure cause
     """
     cfs = ocp.OCP(
-        kind=constants.CEPHFILESYSTEM,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.CEPHFILESYSTEM, namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
     ct_pod = pod.get_ceph_tools_pod()
     ceph_validate = False
     ocp_validate = False
 
     result = cfs.get(resource_name=fs_name)
-    if result.get('metadata').get('name'):
+    if result.get("metadata").get("name"):
         logger.info("Filesystem %s got created from Openshift Side", fs_name)
         ocp_validate = True
     else:
-        logger.info(
-            "Filesystem %s was not create at Openshift Side", fs_name
-        )
+        logger.info("Filesystem %s was not create at Openshift Side", fs_name)
         return False
 
     try:
-        for pools in TimeoutSampler(
-            60, 3, ct_pod.exec_ceph_cmd, 'ceph fs ls'
-        ):
+        for pools in TimeoutSampler(60, 3, ct_pod.exec_ceph_cmd, "ceph fs ls"):
             for out in pools:
-                result = out.get('name')
+                result = out.get("name")
                 if result == fs_name:
                     logger.info("FileSystem %s got created from Ceph Side", fs_name)
                     ceph_validate = True
@@ -764,23 +784,24 @@ def get_all_storageclass_names():
          list: list of storageclass name
     """
     sc_obj = ocp.OCP(
-        kind=constants.STORAGECLASS,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.STORAGECLASS, namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
     result = sc_obj.get()
-    sample = result['items']
+    sample = result["items"]
 
     storageclass = [
-        item.get('metadata').get('name') for item in sample if (
-            (item.get('metadata').get('name') not in constants.IGNORE_SC_GP2)
-            and (item.get('metadata').get('name') not in constants.IGNORE_SC_FLEX)
+        item.get("metadata").get("name")
+        for item in sample
+        if (
+            (item.get("metadata").get("name") not in constants.IGNORE_SC_GP2)
+            and (item.get("metadata").get("name") not in constants.IGNORE_SC_FLEX)
         )
     ]
     return storageclass
 
 
 def delete_storageclasses(sc_objs):
-    """"
+    """ "
     Function for Deleting storageclasses
 
     Args:
@@ -804,14 +825,11 @@ def get_cephblockpool_names():
          list: list of cephblockpool name
     """
     pool_obj = ocp.OCP(
-        kind=constants.CEPHBLOCKPOOL,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.CEPHBLOCKPOOL, namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
     result = pool_obj.get()
-    sample = result['items']
-    pool_list = [
-        item.get('metadata').get('name') for item in sample
-    ]
+    sample = result["items"]
+    pool_list = [item.get("metadata").get("name") for item in sample]
     return pool_list
 
 
@@ -838,8 +856,8 @@ def get_cephfs_name():
         str: Name of CFS
     """
     ct_pod = pod.get_ceph_tools_pod()
-    result = ct_pod.exec_ceph_cmd('ceph fs ls')
-    return result[0]['name']
+    result = ct_pod.exec_ceph_cmd("ceph fs ls")
+    return result[0]["name"]
 
 
 def pull_images(image_name):
@@ -857,7 +875,7 @@ def pull_images(image_name):
     for node_obj in node_objs:
         logging.info(f'pulling image "{image_name}  " on node {node_obj.name}')
         assert node_obj.ocp.exec_oc_debug_cmd(
-            node_obj.name, cmd_list=[f'podman pull {image_name}']
+            node_obj.name, cmd_list=[f"podman pull {image_name}"]
         )
 
 
@@ -881,20 +899,20 @@ def run_io_with_rados_bench(**kw):
     """
 
     logger.info("Running radosbench task")
-    ceph_pods = kw.get('ceph_pods')  # list of pod objects of ceph cluster
-    config = kw.get('config')
+    ceph_pods = kw.get("ceph_pods")  # list of pod objects of ceph cluster
+    config = kw.get("config")
 
-    role = config.get('role', 'client')
+    role = config.get("role", "client")
     clients = [cpod for cpod in ceph_pods if role in cpod.roles]
 
-    idx = config.get('idx', 0)
+    idx = config.get("idx", 0)
     client = clients[idx]
-    op = config.get('op', 'write')
-    cleanup = ['--no-cleanup', '--cleanup'][config.get('cleanup', True)]
-    pool = config.get('pool')
+    op = config.get("op", "write")
+    cleanup = ["--no-cleanup", "--cleanup"][config.get("cleanup", True)]
+    pool = config.get("pool")
 
-    block = str(config.get('size', 4 << 20))
-    time = config.get('time', 120)
+    block = str(config.get("size", 4 << 20))
+    time = config.get("time", 120)
     time = str(time)
 
     rados_bench = (
@@ -924,13 +942,12 @@ def get_all_pvs():
     Returns:
          dict: Dict of all pv in openshift-storage namespace
     """
-    ocp_pv_obj = ocp.OCP(
-        kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE
-    )
+    ocp_pv_obj = ocp.OCP(kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     return ocp_pv_obj.get()
 
 
 # TODO: revert counts of tries and delay,BZ 1726266
+
 
 @retry(AssertionError, tries=20, delay=10, backoff=1)
 def validate_pv_delete(pv_name):
@@ -945,9 +962,7 @@ def validate_pv_delete(pv_name):
     Raises:
         AssertionError: If pv is not deleted
     """
-    ocp_pv_obj = ocp.OCP(
-        kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE
-    )
+    ocp_pv_obj = ocp.OCP(kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
 
     try:
         if ocp_pv_obj.get(resource_name=pv_name):
@@ -978,26 +993,33 @@ def create_pods(pvc_objs, pod_factory, interface, pods_for_rwx=1, status=""):
 
     for pvc_obj in pvc_objs:
         volume_mode = getattr(
-            pvc_obj, 'volume_mode', pvc_obj.get()['spec']['volumeMode']
+            pvc_obj, "volume_mode", pvc_obj.get()["spec"]["volumeMode"]
         )
-        access_mode = getattr(
-            pvc_obj, 'access_mode', pvc_obj.get_pvc_access_mode
-        )
-        if volume_mode == 'Block':
+        access_mode = getattr(pvc_obj, "access_mode", pvc_obj.get_pvc_access_mode)
+        if volume_mode == "Block":
             pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
             raw_block_pv = True
         else:
             raw_block_pv = False
-            pod_dict = ''
+            pod_dict = ""
         if access_mode == constants.ACCESS_MODE_RWX:
-            pod_obj_rwx = [pod_factory(
-                interface=interface, pvc=pvc_obj, status=status,
-                pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
-            ) for _ in range(1, pods_for_rwx)]
+            pod_obj_rwx = [
+                pod_factory(
+                    interface=interface,
+                    pvc=pvc_obj,
+                    status=status,
+                    pod_dict_path=pod_dict,
+                    raw_block_pv=raw_block_pv,
+                )
+                for _ in range(1, pods_for_rwx)
+            ]
             pod_objs.extend(pod_obj_rwx)
         pod_obj = pod_factory(
-            interface=interface, pvc=pvc_obj, status=status,
-            pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
+            interface=interface,
+            pvc=pvc_obj,
+            status=status,
+            pod_dict_path=pod_dict,
+            raw_block_pv=raw_block_pv,
         )
         pod_objs.append(pod_obj)
 
@@ -1008,8 +1030,8 @@ def create_build_from_docker_image(
     image_name,
     install_package,
     namespace,
-    source_image='fedora',
-    source_image_label='latest'
+    source_image="fedora",
+    source_image_label="latest",
 ):
     """
     Allows to create a build config using a Dockerfile specified as an
@@ -1034,12 +1056,12 @@ def create_build_from_docker_image(
         fails
 
     """
-    base_image = source_image + ':' + source_image_label
+    base_image = source_image + ":" + source_image_label
 
-    if config.DEPLOYMENT.get('disconnected'):
+    if config.DEPLOYMENT.get("disconnected"):
         base_image = mirror_image(image=base_image)
 
-    cmd = f'yum install -y {install_package}'
+    cmd = f"yum install -y {install_package}"
     http_proxy, https_proxy, no_proxy = get_cluster_proxies()
     if http_proxy:
         cmd = (
@@ -1047,52 +1069,40 @@ def create_build_from_docker_image(
             f"no_proxy='{no_proxy}' {cmd}"
         )
 
-    docker_file = (
-        f"FROM {base_image}\n "
-        f" RUN {cmd}\n"
-        f"CMD tail -f /dev/null"
-    )
+    docker_file = f"FROM {base_image}\n " f" RUN {cmd}\n" f"CMD tail -f /dev/null"
 
-    command = f"new-build -D $\'{docker_file}\' --name={image_name}"
-    kubeconfig = os.getenv('KUBECONFIG')
+    command = f"new-build -D $'{docker_file}' --name={image_name}"
+    kubeconfig = os.getenv("KUBECONFIG")
 
     oc_cmd = f"oc -n {namespace} "
 
     if kubeconfig:
         oc_cmd += f"--kubeconfig {kubeconfig} "
     oc_cmd += command
-    logger.info(f'Running command {oc_cmd}')
-    result = run(
-        oc_cmd,
-        stdout=PIPE,
-        stderr=PIPE,
-        timeout=15,
-        shell=True
-    )
+    logger.info(f"Running command {oc_cmd}")
+    result = run(oc_cmd, stdout=PIPE, stderr=PIPE, timeout=15, shell=True)
     if result.stderr.decode():
         raise UnavailableBuildException(
-            f'Build creation failed with error: {result.stderr.decode()}'
+            f"Build creation failed with error: {result.stderr.decode()}"
         )
     out = result.stdout.decode()
     logger.info(out)
-    if 'Success' in out:
+    if "Success" in out:
         # Build becomes ready once build pod goes into Completed state
-        pod_obj = OCP(kind='Pod', resource_name=image_name)
+        pod_obj = OCP(kind="Pod", resource_name=image_name)
         if pod_obj.wait_for_resource(
-            condition='Completed',
-            resource_name=f'{image_name}' + '-1-build',
+            condition="Completed",
+            resource_name=f"{image_name}" + "-1-build",
             timeout=300,
-            sleep=30
+            sleep=30,
         ):
-            logger.info(f'build {image_name} ready')
+            logger.info(f"build {image_name} ready")
             set_image_lookup(image_name)
-            logger.info(f'image {image_name} can now be consumed')
-            image_stream_obj = OCP(
-                kind='ImageStream', resource_name=image_name
-            )
+            logger.info(f"image {image_name} can now be consumed")
+            image_stream_obj = OCP(kind="ImageStream", resource_name=image_name)
             return image_stream_obj
     else:
-        raise UnavailableBuildException('Build creation failed')
+        raise UnavailableBuildException("Build creation failed")
 
 
 def set_image_lookup(image_name):
@@ -1111,8 +1121,8 @@ def set_image_lookup(image_name):
         str: output of set image-lookup command
 
     """
-    ocp_obj = ocp.OCP(kind='ImageStream')
-    command = f'set image-lookup {image_name}'
+    ocp_obj = ocp.OCP(kind="ImageStream")
+    command = f"set image-lookup {image_name}"
     logger.info(f'image lookup for image"{image_name}" is set')
     status = ocp_obj.exec_oc_cmd(command)
     return status
@@ -1148,30 +1158,30 @@ def get_snapshot_time(interface, snap_name, status):
         """
         for line in log:
             if re.search(snapname, line) and re.search(pattern, line):
-                return line.split(' ')[1]
+                return line.split(" ")[1]
         return None
 
-    logs = ''
-    format = '%H:%M:%S.%f'
+    logs = ""
+    format = "%H:%M:%S.%f"
 
     # the starting and ending time are taken from different logs,
     # the start creation time is taken from the snapshot controller, while
     # the end creation time is taken from the csi snapshot driver
-    if status.lower() == 'start':
-        pattern = 'Creating content for snapshot'
+    if status.lower() == "start":
+        pattern = "Creating content for snapshot"
         # Get the snapshoter-controller pod
         pod_name = pod.get_csi_snapshoter_pod()
         logs = pod.get_pod_logs(
-            pod_name, namespace='openshift-cluster-storage-operator'
+            pod_name, namespace="openshift-cluster-storage-operator"
         )
-    elif status.lower() == 'end':
-        pattern = 'readyToUse true'
+    elif status.lower() == "end":
+        pattern = "readyToUse true"
         pod_name = pod.get_csi_provisioner_pod(interface)
         # get the logs from the csi-provisioner containers
         for log_pod in pod_name:
-            logs += pod.get_pod_logs(log_pod, 'csi-snapshotter')
+            logs += pod.get_pod_logs(log_pod, "csi-snapshotter")
     else:
-        logger.error(f'the status {status} is invalid.')
+        logger.error(f"the status {status} is invalid.")
         return None
 
     logs = logs.split("\n")
@@ -1186,9 +1196,9 @@ def get_snapshot_time(interface, snap_name, status):
         for snapname in snap_name:
             all_stats.append(get_pattern_time(logs, snapname.name, pattern))
         all_stats = sorted(all_stats)
-        if status.lower() == 'end':
+        if status.lower() == "end":
             stat = all_stats[-1]  # return the highest time
-        elif status.lower() == 'start':
+        elif status.lower() == "start":
             stat = all_stats[0]  # return the lowest time
     if stat:
         return datetime.datetime.strptime(stat, format)
@@ -1207,8 +1217,8 @@ def measure_snapshot_creation_time(interface, snap_name, snap_con_name):
         float: Creation time for the snapshot
 
     """
-    start = get_snapshot_time(interface, snap_name, status='start')
-    end = get_snapshot_time(interface, snap_con_name, status='end')
+    start = get_snapshot_time(interface, snap_name, status="start")
+    end = get_snapshot_time(interface, snap_con_name, status="end")
     if start and end:
         total = end - start
         return total.total_seconds()
@@ -1216,7 +1226,7 @@ def measure_snapshot_creation_time(interface, snap_name, snap_con_name):
         return None
 
 
-def get_provision_time(interface, pvc_name, status='start'):
+def get_provision_time(interface, pvc_name, status="start"):
     """
     Get the starting/ending creation time of a PVC based on provisioner logs
 
@@ -1231,38 +1241,34 @@ def get_provision_time(interface, pvc_name, status='start'):
 
     """
     # Define the status that need to retrieve
-    operation = 'started'
-    if status.lower() == 'end':
-        operation = 'succeeded'
+    operation = "started"
+    if status.lower() == "end":
+        operation = "succeeded"
 
-    format = '%H:%M:%S.%f'
+    format = "%H:%M:%S.%f"
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
     # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
-    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+    logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
+    logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
 
     logs = logs.split("\n")
     # Extract the time for the one PVC provisioning
     if isinstance(pvc_name, str):
-        stat = [
-            i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)
-        ]
-        stat = stat[0].split(' ')[1]
+        stat = [i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)]
+        stat = stat[0].split(" ")[1]
     # Extract the time for the list of PVCs provisioning
     if isinstance(pvc_name, list):
         all_stats = []
         for pv_name in pvc_name:
             name = pv_name.name
-            stat = [
-                i for i in logs if re.search(f"provision.*{name}.*{operation}", i)
-            ]
-            stat = stat[0].split(' ')[1]
+            stat = [i for i in logs if re.search(f"provision.*{name}.*{operation}", i)]
+            stat = stat[0].split(" ")[1]
             all_stats.append(stat)
         all_stats = sorted(all_stats)
-        if status.lower() == 'end':
+        if status.lower() == "end":
             stat = all_stats[-1]  # return the highest time
-        elif status.lower() == 'start':
+        elif status.lower() == "start":
             stat = all_stats[0]  # return the lowest time
     return datetime.datetime.strptime(stat, format)
 
@@ -1279,19 +1285,17 @@ def get_start_creation_time(interface, pvc_name):
         datetime object: Start time of PVC creation
 
     """
-    format = '%H:%M:%S.%f'
+    format = "%H:%M:%S.%f"
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
     # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
-    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+    logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
+    logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
 
     logs = logs.split("\n")
     # Extract the starting time for the PVC provisioning
-    start = [
-        i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)
-    ]
-    start = start[0].split(' ')[1]
+    start = [i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)]
+    start = start[0].split(" ")[1]
     return datetime.datetime.strptime(start, format)
 
 
@@ -1307,19 +1311,17 @@ def get_end_creation_time(interface, pvc_name):
         datetime object: End time of PVC creation
 
     """
-    format = '%H:%M:%S.%f'
+    format = "%H:%M:%S.%f"
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
     # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
-    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+    logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
+    logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
 
     logs = logs.split("\n")
     # Extract the starting time for the PVC provisioning
-    end = [
-        i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)
-    ]
-    end = end[0].split(' ')[1]
+    end = [i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)]
+    end = end[0].split(" ")[1]
     return datetime.datetime.strptime(end, format)
 
 
@@ -1359,24 +1361,20 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
     # due to some delay in CSI log generation added wait
     time.sleep(wait_time)
     # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
-    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+    logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
+    logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
     logs = logs.split("\n")
 
     pvc_dict = dict()
-    format = '%H:%M:%S.%f'
+    format = "%H:%M:%S.%f"
     for pvc_name in pvc_name_list:
         # Extract the starting time for the PVC provisioning
-        start = [
-            i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)
-        ]
-        start = start[0].split(' ')[1]
+        start = [i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)]
+        start = start[0].split(" ")[1]
         start_time = datetime.datetime.strptime(start, format)
         # Extract the end time for the PVC provisioning
-        end = [
-            i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)
-        ]
-        end = end[0].split(' ')[1]
+        end = [i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)]
+        end = end[0].split(" ")[1]
         end_time = datetime.datetime.strptime(end, format)
         total = end_time - start_time
         pvc_dict[pvc_name] = total.total_seconds()
@@ -1402,24 +1400,20 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
     # due to some delay in CSI log generation added wait
     time.sleep(wait_time)
     # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
-    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+    logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
+    logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
     logs = logs.split("\n")
 
     pv_dict = dict()
-    format = '%H:%M:%S.%f'
+    format = "%H:%M:%S.%f"
     for pv_name in pv_name_list:
         # Extract the deletion start time for the PV
-        start = [
-            i for i in logs if re.search(f"delete \"{pv_name}\": started", i)
-        ]
-        start = start[0].split(' ')[1]
+        start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
+        start = start[0].split(" ")[1]
         start_time = datetime.datetime.strptime(start, format)
         # Extract the deletion end time for the PV
-        end = [
-            i for i in logs if re.search(f"delete \"{pv_name}\": succeeded", i)
-        ]
-        end = end[0].split(' ')[1]
+        end = [i for i in logs if re.search(f'delete "{pv_name}": succeeded', i)]
+        end = end[0].split(" ")[1]
         end_time = datetime.datetime.strptime(end, format)
         total = end_time - start_time
         pv_dict[pv_name] = total.total_seconds()
@@ -1439,19 +1433,17 @@ def get_start_deletion_time(interface, pv_name):
         datetime object: Start time of PVC deletion
 
     """
-    format = '%H:%M:%S.%f'
+    format = "%H:%M:%S.%f"
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
     # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
-    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+    logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
+    logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
 
     logs = logs.split("\n")
     # Extract the starting time for the PVC deletion
-    start = [
-        i for i in logs if re.search(f"delete \"{pv_name}\": started", i)
-    ]
-    start = start[0].split(' ')[1]
+    start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
+    start = start[0].split(" ")[1]
     return datetime.datetime.strptime(start, format)
 
 
@@ -1467,19 +1459,17 @@ def get_end_deletion_time(interface, pv_name):
         datetime object: End time of PVC deletion
 
     """
-    format = '%H:%M:%S.%f'
+    format = "%H:%M:%S.%f"
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
     # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
-    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+    logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
+    logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
 
     logs = logs.split("\n")
     # Extract the starting time for the PV deletion
-    end = [
-        i for i in logs if re.search(f"delete \"{pv_name}\": succeeded", i)
-    ]
-    end = end[0].split(' ')[1]
+    end = [i for i in logs if re.search(f'delete "{pv_name}": succeeded', i)]
+    end = end[0].split(" ")[1]
     return datetime.datetime.strptime(end, format)
 
 
@@ -1516,17 +1506,16 @@ def pod_start_time(pod_obj):
         Returns the name and start time of container(s) in a pod
 
     """
-    time_format = '%Y-%m-%dT%H:%M:%SZ'
+    time_format = "%Y-%m-%dT%H:%M:%SZ"
     containers_start_time = {}
-    start_time = pod_obj.data['status']['startTime']
+    start_time = pod_obj.data["status"]["startTime"]
     start_time = datetime.datetime.strptime(start_time, time_format)
-    for container in range(len(pod_obj.data['status']['containerStatuses'])):
-        started_time = pod_obj.data[
-            'status']['containerStatuses'][container]['state'][
-            'running']['startedAt']
+    for container in range(len(pod_obj.data["status"]["containerStatuses"])):
+        started_time = pod_obj.data["status"]["containerStatuses"][container]["state"][
+            "running"
+        ]["startedAt"]
         started_time = datetime.datetime.strptime(started_time, time_format)
-        container_name = pod_obj.data[
-            'status']['containerStatuses'][container]['name']
+        container_name = pod_obj.data["status"]["containerStatuses"][container]["name"]
         container_start_time = (started_time - start_time).seconds
         containers_start_time[container_name] = container_start_time
         return containers_start_time
@@ -1540,17 +1529,18 @@ def get_default_storage_class():
         list: default StorageClass(es) list
 
     """
-    default_sc_obj = ocp.OCP(kind='StorageClass')
-    storage_classes = default_sc_obj.get().get('items')
+    default_sc_obj = ocp.OCP(kind="StorageClass")
+    storage_classes = default_sc_obj.get().get("items")
     storage_classes = [
-        sc for sc in storage_classes if 'annotations' in sc.get('metadata')
+        sc for sc in storage_classes if "annotations" in sc.get("metadata")
     ]
     return [
-        sc.get('metadata').get('name') for sc in storage_classes if sc.get(
-            'metadata'
-        ).get('annotations').get(
-            'storageclass.kubernetes.io/is-default-class'
-        ) == 'true'
+        sc.get("metadata").get("name")
+        for sc in storage_classes
+        if sc.get("metadata")
+        .get("annotations")
+        .get("storageclass.kubernetes.io/is-default-class")
+        == "true"
     ]
 
 
@@ -1566,19 +1556,23 @@ def change_default_storageclass(scname):
 
     """
     default_sc = get_default_storage_class()
-    ocp_obj = ocp.OCP(kind='StorageClass')
+    ocp_obj = ocp.OCP(kind="StorageClass")
     if default_sc:
         # Change the existing default Storageclass annotation to false
-        patch = " '{\"metadata\": {\"annotations\":" \
-                "{\"storageclass.kubernetes.io/is-default-class\"" \
-                ":\"false\"}}}' "
+        patch = (
+            ' \'{"metadata": {"annotations":'
+            '{"storageclass.kubernetes.io/is-default-class"'
+            ':"false"}}}\' '
+        )
         patch_cmd = f"patch storageclass {default_sc} -p" + patch
         ocp_obj.exec_oc_cmd(command=patch_cmd)
 
     # Change the new storageclass to default
-    patch = " '{\"metadata\": {\"annotations\":" \
-            "{\"storageclass.kubernetes.io/is-default-class\"" \
-            ":\"true\"}}}' "
+    patch = (
+        ' \'{"metadata": {"annotations":'
+        '{"storageclass.kubernetes.io/is-default-class"'
+        ':"true"}}}\' '
+    )
     patch_cmd = f"patch storageclass {scname} -p" + patch
     ocp_obj.exec_oc_cmd(command=patch_cmd)
     return True
@@ -1609,7 +1603,7 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
     if interface == constants.CEPHFILESYSTEM:
         valid_error = [
             f"Subvolume 'csi-vol-{image_uuid}' not found",
-            f"subvolume 'csi-vol-{image_uuid}' does not exist"
+            f"subvolume 'csi-vol-{image_uuid}' does not exist",
         ]
         cmd = (
             f"ceph fs subvolume getpath {get_cephfs_name()}"
@@ -1617,10 +1611,9 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
         )
 
     try:
-        ct_pod.exec_ceph_cmd(ceph_cmd=cmd, format='json')
+        ct_pod.exec_ceph_cmd(ceph_cmd=cmd, format="json")
         logger.info(
-            f"Verified: Volume corresponding to uuid {image_uuid} exists "
-            f"in backend"
+            f"Verified: Volume corresponding to uuid {image_uuid} exists " f"in backend"
         )
         return True
     except CommandFailed as ecf:
@@ -1629,8 +1622,7 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
             f"{str(ecf)} ImageUUID: {image_uuid}. Interface type: {interface}"
         )
         logger.info(
-            f"Volume corresponding to uuid {image_uuid} does not exist "
-            f"in backend"
+            f"Volume corresponding to uuid {image_uuid} does not exist " f"in backend"
         )
         return False
 
@@ -1658,8 +1650,12 @@ def verify_volume_deleted_in_backend(
     """
     try:
         for ret in TimeoutSampler(
-            timeout, 2, is_volume_present_in_backend, interface=interface,
-            image_uuid=image_uuid, pool_name=pool_name
+            timeout,
+            2,
+            is_volume_present_in_backend,
+            interface=interface,
+            image_uuid=image_uuid,
+            pool_name=pool_name,
         ):
             if not ret:
                 break
@@ -1670,13 +1666,12 @@ def verify_volume_deleted_in_backend(
         return True
     except TimeoutExpiredError:
         logger.error(
-            f"Volume corresponding to uuid {image_uuid} is not deleted "
-            f"in backend"
+            f"Volume corresponding to uuid {image_uuid} is not deleted " f"in backend"
         )
         # Log 'ceph progress' and 'ceph rbd task list' for debugging purpose
         ct_pod = pod.get_ceph_tools_pod()
-        ct_pod.exec_ceph_cmd('ceph progress json', format=None)
-        ct_pod.exec_ceph_cmd('ceph rbd task list')
+        ct_pod.exec_ceph_cmd("ceph progress json", format=None)
+        ct_pod.exec_ceph_cmd("ceph rbd task list")
         return False
 
 
@@ -1691,13 +1686,11 @@ def create_serviceaccount(namespace):
         OCS: An OCS instance for the service_account
     """
 
-    service_account_data = templating.load_yaml(
-        constants.SERVICE_ACCOUNT_YAML
+    service_account_data = templating.load_yaml(constants.SERVICE_ACCOUNT_YAML)
+    service_account_data["metadata"]["name"] = create_unique_resource_name(
+        "sa", "serviceaccount"
     )
-    service_account_data['metadata']['name'] = create_unique_resource_name(
-        'sa', 'serviceaccount'
-    )
-    service_account_data['metadata']['namespace'] = namespace
+    service_account_data["metadata"]["namespace"] = namespace
 
     return create_resource(**service_account_data)
 
@@ -1737,7 +1730,7 @@ def validate_scc_policy(sa_name, namespace):
     logger.info(sa_name)
     ocp_scc_obj = ocp.OCP(kind=constants.SCC, namespace=namespace)
     scc_dict = ocp_scc_obj.get(resource_name=constants.PRIVILEGED)
-    scc_users_list = scc_dict.get('users')
+    scc_users_list = scc_dict.get("users")
     for scc_user in scc_users_list:
         if scc_user == sa_name:
             return True
@@ -1756,7 +1749,7 @@ def add_scc_policy(sa_name, namespace):
     ocp = OCP()
     out = ocp.exec_oc_cmd(
         command=f"adm policy add-scc-to-user privileged system:serviceaccount:{namespace}:{sa_name}",
-        out_yaml_format=False
+        out_yaml_format=False,
     )
 
     logger.info(out)
@@ -1774,7 +1767,7 @@ def remove_scc_policy(sa_name, namespace):
     ocp = OCP()
     out = ocp.exec_oc_cmd(
         command=f"adm policy remove-scc-from-user privileged system:serviceaccount:{namespace}:{sa_name}",
-        out_yaml_format=False
+        out_yaml_format=False,
     )
 
     logger.info(out)
@@ -1794,28 +1787,32 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
         str: The crafted command, ready to be executed on the pod
 
     """
-    api = 'api' if api else ''
+    api = "api" if api else ""
     if mcg_obj:
         base_command = (
             f'sh -c "AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
-            f'AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} '
-            f'AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} '
-            f'AWS_DEFAULT_REGION={mcg_obj.region} '
-            f'aws s3{api} '
-            f'--endpoint={mcg_obj.s3_internal_endpoint} '
+            f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
+            f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
+            f"AWS_DEFAULT_REGION={mcg_obj.region} "
+            f"aws s3{api} "
+            f"--endpoint={mcg_obj.s3_internal_endpoint} "
         )
         string_wrapper = '"'
     else:
-        base_command = (
-            f"aws s3{api} --no-sign-request "
-        )
-        string_wrapper = ''
+        base_command = f"aws s3{api} --no-sign-request "
+        string_wrapper = ""
     return f"{base_command}{cmd}{string_wrapper}"
 
 
 def wait_for_resource_count_change(
-    func_to_use, previous_num, namespace, change_type='increase',
-    min_difference=1, timeout=20, interval=2, **func_kwargs
+    func_to_use,
+    previous_num,
+    namespace,
+    change_type="increase",
+    min_difference=1,
+    timeout=20,
+    interval=2,
+    **func_kwargs,
 ):
     """
     Wait for a change in total count of PVC or pod
@@ -1842,9 +1839,9 @@ def wait_for_resource_count_change(
             if func_to_use == pod.get_all_pods:
                 current_num = len(sample)
             else:
-                current_num = len(sample['items'])
+                current_num = len(sample["items"])
 
-            if change_type == 'increase':
+            if change_type == "increase":
                 count_diff = current_num - previous_num
             else:
                 count_diff = previous_num - current_num
@@ -1868,7 +1865,7 @@ def verify_pv_mounted_on_node(node_pv_dict):
     """
     existing_pvs = {}
     for node_name, pvs in node_pv_dict.items():
-        cmd = f'oc debug nodes/{node_name} -- df'
+        cmd = f"oc debug nodes/{node_name} -- df"
         df_on_node = run_cmd(cmd)
         existing_pvs[node_name] = []
         for pv_name in pvs:
@@ -1890,9 +1887,7 @@ def converge_lists(list_to_converge):
     return [item for sublist in list_to_converge for item in sublist]
 
 
-def create_multiple_pvc_parallel(
-    sc_obj, namespace, number_of_pvc, size, access_modes
-):
+def create_multiple_pvc_parallel(sc_obj, namespace, number_of_pvc, size, access_modes):
     """
     Funtion to create multiple PVC in parallel using threads
     Function will create PVCs based on the available access modes
@@ -1912,9 +1907,13 @@ def create_multiple_pvc_parallel(
         for mode in access_modes:
             result_lists.append(
                 executor.submit(
-                    create_multiple_pvcs, sc_name=sc_obj.name,
-                    namespace=namespace, number_of_pvc=number_of_pvc,
-                    access_mode=mode, size=size)
+                    create_multiple_pvcs,
+                    sc_name=sc_obj.name,
+                    namespace=namespace,
+                    number_of_pvc=number_of_pvc,
+                    access_mode=mode,
+                    size=size,
+                )
             )
     result_list = [result.result() for result in result_lists]
     pvc_objs_list = converge_lists(result_list)
@@ -1922,7 +1921,7 @@ def create_multiple_pvc_parallel(
     with ThreadPoolExecutor() as executor:
         for objs in pvc_objs_list:
             obj_status_list.append(
-                executor.submit(wait_for_resource_state, objs, 'Bound', 90)
+                executor.submit(wait_for_resource_state, objs, "Bound", 90)
             )
     if False in [obj.result() for obj in obj_status_list]:
         raise TimeoutExpiredError
@@ -1930,8 +1929,14 @@ def create_multiple_pvc_parallel(
 
 
 def create_pods_parallel(
-    pvc_list, namespace, interface, pod_dict_path=None, sa_name=None, raw_block_pv=False,
-    dc_deployment=False, node_selector=None
+    pvc_list,
+    namespace,
+    interface,
+    pod_dict_path=None,
+    sa_name=None,
+    raw_block_pv=False,
+    dc_deployment=False,
+    node_selector=None,
 ):
     """
     Function to create pods in parallel
@@ -1958,19 +1963,29 @@ def create_pods_parallel(
         pod_dict_path = constants.CSI_RBD_RAW_BLOCK_POD_YAML
     with ThreadPoolExecutor() as executor:
         for pvc_obj in pvc_list:
-            future_pod_objs.append(executor.submit(
-                create_pod, interface_type=interface,
-                pvc_name=pvc_obj.name, do_reload=False, namespace=namespace,
-                raw_block_pv=raw_block_pv, pod_dict_path=pod_dict_path,
-                sa_name=sa_name, dc_deployment=dc_deployment, node_selector=node_selector
-            ))
+            future_pod_objs.append(
+                executor.submit(
+                    create_pod,
+                    interface_type=interface,
+                    pvc_name=pvc_obj.name,
+                    do_reload=False,
+                    namespace=namespace,
+                    raw_block_pv=raw_block_pv,
+                    pod_dict_path=pod_dict_path,
+                    sa_name=sa_name,
+                    dc_deployment=dc_deployment,
+                    node_selector=node_selector,
+                )
+            )
     pod_objs = [pvc_obj.result() for pvc_obj in future_pod_objs]
     # Check for all the pods are in Running state
     # In above pod creation not waiting for the pod to be created because of threads usage
     with ThreadPoolExecutor() as executor:
         for obj in pod_objs:
             future_pod_objs.append(
-                executor.submit(wait_for_resource_state, obj, 'Running', timeout=wait_time)
+                executor.submit(
+                    wait_for_resource_state, obj, "Running", timeout=wait_time
+                )
             )
     # If pods not up raise exception/failure
     if False in [obj.result() for obj in future_pod_objs]:
@@ -2045,15 +2060,15 @@ def memory_leak_analysis(median_dict):
         logging.info(f"Median value {start_value}")
         logging.info(f"End value {end_value}")
         # Convert the values to kb for calculations
-        if start_value.__contains__('g'):
+        if start_value.__contains__("g"):
             start_value = float(1024 ** 2 * float(start_value[:-1]))
-        elif start_value.__contains__('m'):
+        elif start_value.__contains__("m"):
             start_value = float(1024 * float(start_value[:-1]))
         else:
             start_value = float(start_value)
-        if end_value.__contains__('g'):
+        if end_value.__contains__("g"):
             end_value = float(1024 ** 2 * float(end_value[:-1]))
-        elif end_value.__contains__('m'):
+        elif end_value.__contains__("m"):
             end_value = float(1024 * float(end_value[:-1]))
         else:
             end_value = float(end_value)
@@ -2108,11 +2123,10 @@ def refresh_oc_login_connection(user=None, password=None):
         password (str): Password to login
 
     """
-    user = user or config.RUN['username']
+    user = user or config.RUN["username"]
     if not password:
         filename = os.path.join(
-            config.ENV_DATA['cluster_path'],
-            config.RUN['password_location']
+            config.ENV_DATA["cluster_path"], config.RUN["password_location"]
         )
         with open(filename) as f:
             password = f.read()
@@ -2130,23 +2144,22 @@ def rsync_kubeconf_to_node(node):
     """
     # ocp_obj = ocp.OCP()
     filename = os.path.join(
-        config.ENV_DATA['cluster_path'],
-        config.RUN['kubeconfig_location']
+        config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
     )
     file_path = os.path.dirname(filename)
     master_list = node.get_master_nodes()
     ocp_obj = ocp.OCP()
-    check_auth = 'auth'
-    check_conf = 'kubeconfig'
-    node_path = '/home/core/'
-    if check_auth not in ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=[f"ls {node_path}"]):
-        ocp.rsync(
-            src=file_path, dst=f"{node_path}", node=node, dst_node=True
-        )
-    elif check_conf not in ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=[f"ls {node_path}auth"]):
-        ocp.rsync(
-            src=file_path, dst=f"{node_path}", node=node, dst_node=True
-        )
+    check_auth = "auth"
+    check_conf = "kubeconfig"
+    node_path = "/home/core/"
+    if check_auth not in ocp_obj.exec_oc_debug_cmd(
+        node=master_list[0], cmd_list=[f"ls {node_path}"]
+    ):
+        ocp.rsync(src=file_path, dst=f"{node_path}", node=node, dst_node=True)
+    elif check_conf not in ocp_obj.exec_oc_debug_cmd(
+        node=master_list[0], cmd_list=[f"ls {node_path}auth"]
+    ):
+        ocp.rsync(src=file_path, dst=f"{node_path}", node=node, dst_node=True)
 
 
 def create_dummy_osd(deployment):
@@ -2163,26 +2176,23 @@ def create_dummy_osd(deployment):
             object
     """
     oc = OCP(
-        kind=constants.DEPLOYMENT,
-        namespace=config.ENV_DATA.get('cluster_namespace')
+        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA.get("cluster_namespace")
     )
     osd_data = oc.get(deployment)
-    dummy_deployment = create_unique_resource_name('dummy', 'osd')
-    osd_data['metadata']['name'] = dummy_deployment
+    dummy_deployment = create_unique_resource_name("dummy", "osd")
+    osd_data["metadata"]["name"] = dummy_deployment
 
-    osd_containers = osd_data.get('spec').get('template').get('spec').get(
-        'containers'
-    )
+    osd_containers = osd_data.get("spec").get("template").get("spec").get("containers")
     # get osd container spec
-    original_osd_args = osd_containers[0].get('args')
-    osd_data['spec']['template']['spec']['containers'][0]['args'] = []
-    osd_data['spec']['template']['spec']['containers'][0]['command'] = [
-        '/bin/bash',
-        '-c',
-        'sleep infinity'
+    original_osd_args = osd_containers[0].get("args")
+    osd_data["spec"]["template"]["spec"]["containers"][0]["args"] = []
+    osd_data["spec"]["template"]["spec"]["containers"][0]["command"] = [
+        "/bin/bash",
+        "-c",
+        "sleep infinity",
     ]
     osd_file = tempfile.NamedTemporaryFile(
-        mode='w+', prefix=dummy_deployment, delete=False
+        mode="w+", prefix=dummy_deployment, delete=False
     )
     with open(osd_file.name, "w") as temp:
         yaml.dump(osd_data, temp)
@@ -2195,16 +2205,14 @@ def create_dummy_osd(deployment):
     osd_list = pod.get_osd_pods()
     dummy_pod = [pod for pod in osd_list if dummy_deployment in pod.name][0]
     wait_for_resource_state(
-        resource=dummy_pod,
-        state=constants.STATUS_RUNNING,
-        timeout=60
+        resource=dummy_pod, state=constants.STATUS_RUNNING, timeout=60
     )
-    ceph_init_cmd = '/rook/tini' + ' ' + ' '.join(original_osd_args)
+    ceph_init_cmd = "/rook/tini" + " " + " ".join(original_osd_args)
     try:
-        logger.info('Following command should expire after 7 seconds')
+        logger.info("Following command should expire after 7 seconds")
         dummy_pod.exec_cmd_on_pod(ceph_init_cmd, timeout=7)
     except TimeoutExpired:
-        logger.info('Killing /rook/tini process')
+        logger.info("Killing /rook/tini process")
         try:
             dummy_pod.exec_sh_cmd_on_pod(
                 "kill $(ps aux | grep '[/]rook/tini' | awk '{print $2}')"
@@ -2224,7 +2232,7 @@ def get_failure_domin():
 
     """
     ct_pod = pod.get_ceph_tools_pod()
-    out = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd crush rule dump", format='json')
+    out = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd crush rule dump", format="json")
     assert out, "Failed to get cmd output"
     for crush_rule in out:
         if constants.CEPHBLOCKPOOL.lower() in crush_rule.get("rule_name"):
@@ -2252,9 +2260,11 @@ def wait_for_ct_pod_recovery():
                 "Hence, waiting for a new Ceph tools box pod to spin up"
             )
             wait_for_resource_count_change(
-                func_to_use=pod.get_all_pods, previous_num=1,
-                namespace=config.ENV_DATA['cluster_namespace'], timeout=120,
-                selector=constants.TOOL_APP_LABEL
+                func_to_use=pod.get_all_pods,
+                previous_num=1,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                timeout=120,
+                selector=constants.TOOL_APP_LABEL,
             )
             return True
         else:
@@ -2273,7 +2283,8 @@ def label_worker_node(node_list, label_key, label_value):
     """
     ocp_obj = OCP()
     out = ocp_obj.exec_oc_cmd(
-        command=f"label node {' '.join(node_list)} {label_key}={label_value}", out_yaml_format=False
+        command=f"label node {' '.join(node_list)} {label_key}={label_value}",
+        out_yaml_format=False,
     )
     logger.info(out)
 
@@ -2346,7 +2357,7 @@ def get_logs_with_errors(errors=None):
                 output_logs.update({name: log_content})
 
                 log_path = f"{ocsci_log_path()}/{name}.log"
-                with open(log_path, 'w') as fh:
+                with open(log_path, "w") as fh:
                     fh.write(log_content)
 
     return output_logs
@@ -2364,9 +2375,11 @@ def modify_osd_replica_count(resource_name, replica_count):
         bool: True in case if changes are applied. False otherwise
 
     """
-    ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp_obj = ocp.OCP(
+        kind=constants.DEPLOYMENT, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
-    resource_name = '-'.join(resource_name.split('-')[0:4])
+    resource_name = "-".join(resource_name.split("-")[0:4])
     return ocp_obj.patch(resource_name=resource_name, params=params)
 
 
@@ -2384,16 +2397,16 @@ def collect_performance_stats(dir_name):
     from ocs_ci.ocs.cluster import CephCluster
 
     log_dir_path = os.path.join(
-        os.path.expanduser(config.RUN['log_dir']),
+        os.path.expanduser(config.RUN["log_dir"]),
         f"failed_testcase_ocs_logs_{config.RUN['run_id']}",
-        f"{dir_name}_performance_stats"
+        f"{dir_name}_performance_stats",
     )
     if not os.path.exists(log_dir_path):
-        logger.info(f'Creating directory {log_dir_path}')
+        logger.info(f"Creating directory {log_dir_path}")
         os.makedirs(log_dir_path)
 
     performance_stats = {}
-    external = config.DEPLOYMENT['external_mode']
+    external = config.DEPLOYMENT["external_mode"]
     if external:
         # Skip collecting performance_stats for external mode RHCS cluster
         logging.info("Skipping status collection for external mode")
@@ -2404,30 +2417,38 @@ def collect_performance_stats(dir_name):
         iops_percentage = ceph_obj.get_iops_percentage()
         throughput_percentage = ceph_obj.get_throughput_percentage()
 
-        performance_stats['iops_percentage'] = iops_percentage
-        performance_stats['throughput_percentage'] = throughput_percentage
+        performance_stats["iops_percentage"] = iops_percentage
+        performance_stats["throughput_percentage"] = throughput_percentage
 
     # ToDo: Get iops and throughput percentage of each nodes
 
     # Get the cpu and memory of each nodes from adm top
-    master_node_utilization_from_adm_top = \
-        node.get_node_resource_utilization_from_adm_top(node_type='master')
-    worker_node_utilization_from_adm_top = \
-        node.get_node_resource_utilization_from_adm_top(node_type='worker')
+    master_node_utilization_from_adm_top = (
+        node.get_node_resource_utilization_from_adm_top(node_type="master")
+    )
+    worker_node_utilization_from_adm_top = (
+        node.get_node_resource_utilization_from_adm_top(node_type="worker")
+    )
 
     # Get the cpu and memory from describe of nodes
-    master_node_utilization_from_oc_describe = \
-        node.get_node_resource_utilization_from_oc_describe(node_type='master')
-    worker_node_utilization_from_oc_describe = \
-        node.get_node_resource_utilization_from_oc_describe(node_type='worker')
+    master_node_utilization_from_oc_describe = (
+        node.get_node_resource_utilization_from_oc_describe(node_type="master")
+    )
+    worker_node_utilization_from_oc_describe = (
+        node.get_node_resource_utilization_from_oc_describe(node_type="worker")
+    )
 
-    performance_stats['master_node_utilization'] = master_node_utilization_from_adm_top
-    performance_stats['worker_node_utilization'] = worker_node_utilization_from_adm_top
-    performance_stats['master_node_utilization_from_oc_describe'] = master_node_utilization_from_oc_describe
-    performance_stats['worker_node_utilization_from_oc_describe'] = worker_node_utilization_from_oc_describe
+    performance_stats["master_node_utilization"] = master_node_utilization_from_adm_top
+    performance_stats["worker_node_utilization"] = worker_node_utilization_from_adm_top
+    performance_stats[
+        "master_node_utilization_from_oc_describe"
+    ] = master_node_utilization_from_oc_describe
+    performance_stats[
+        "worker_node_utilization_from_oc_describe"
+    ] = worker_node_utilization_from_oc_describe
 
-    file_name = os.path.join(log_dir_path, 'performance')
-    with open(file_name, 'w') as outfile:
+    file_name = os.path.join(log_dir_path, "performance")
+    with open(file_name, "w") as outfile:
         json.dump(performance_stats, outfile)
 
 
@@ -2453,23 +2474,21 @@ def validate_pod_oomkilled(
     rc = True
     try:
         pod_log = pod.get_pod_logs(
-            pod_name=pod_name, namespace=namespace,
-            container=container, previous=True
+            pod_name=pod_name, namespace=namespace, container=container, previous=True
         )
         result = pod_log.find("signal: killed")
         if result != -1:
             rc = False
     except CommandFailed as ecf:
-        assert f'previous terminated container "{container}" in pod "{pod_name}" not found' in str(ecf), (
-            "Failed to fetch logs"
-        )
+        assert (
+            f'previous terminated container "{container}" in pod "{pod_name}" not found'
+            in str(ecf)
+        ), "Failed to fetch logs"
 
     return rc
 
 
-def validate_pods_are_running_and_not_restarted(
-    pod_name, pod_restart_count, namespace
-):
+def validate_pods_are_running_and_not_restarted(pod_name, pod_restart_count, namespace):
     """
     Validate given pod is in running state and not restarted or re-spinned
 
@@ -2485,12 +2504,16 @@ def validate_pods_are_running_and_not_restarted(
     """
     ocp_obj = ocp.OCP(kind=constants.POD, namespace=namespace)
     pod_obj = ocp_obj.get(resource_name=pod_name)
-    restart_count = pod_obj.get('status').get('containerStatuses')[0].get('restartCount')
-    pod_state = pod_obj.get('status').get('phase')
-    if pod_state == 'Running' and restart_count == pod_restart_count:
+    restart_count = (
+        pod_obj.get("status").get("containerStatuses")[0].get("restartCount")
+    )
+    pod_state = pod_obj.get("status").get("phase")
+    if pod_state == "Running" and restart_count == pod_restart_count:
         logger.info("Pod is running state and restart count matches with previous one")
         return True
-    logger.error(f"Pod is in {pod_state} state and restart count of pod {restart_count}")
+    logger.error(
+        f"Pod is in {pod_state} state and restart count of pod {restart_count}"
+    )
     logger.info(f"{pod_obj}")
     return False
 
@@ -2506,7 +2529,7 @@ def calc_local_file_md5_sum(path):
         str: The MD5 checksum
 
     """
-    with open(path, 'rb') as file_to_hash:
+    with open(path, "rb") as file_to_hash:
         file_as_bytes = file_to_hash.read()
     return hashlib.md5(file_as_bytes).hexdigest()
 
@@ -2517,15 +2540,20 @@ def retrieve_default_ingress_crt():
     to the local code runner for usage with boto3.
 
     """
-    default_ingress_crt_b64 = OCP(
-        kind='secret',
-        namespace='openshift-ingress-operator',
-        resource_name='router-ca'
-    ).get().get('data').get('tls.crt')
+    default_ingress_crt_b64 = (
+        OCP(
+            kind="secret",
+            namespace="openshift-ingress-operator",
+            resource_name="router-ca",
+        )
+        .get()
+        .get("data")
+        .get("tls.crt")
+    )
 
-    decoded_crt = base64.b64decode(default_ingress_crt_b64).decode('utf-8')
+    decoded_crt = base64.b64decode(default_ingress_crt_b64).decode("utf-8")
 
-    with open(constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, 'w') as crtfile:
+    with open(constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, "w") as crtfile:
         crtfile.write(decoded_crt)
 
 
@@ -2538,15 +2566,14 @@ def storagecluster_independent_check():
         bool: True if storagecluster is running on external mode False otherwise
 
     """
-    storage_cluster = OCP(
-        kind='StorageCluster',
-        namespace=config.ENV_DATA['cluster_namespace']
-    ).get().get('items')[0]
+    storage_cluster = (
+        OCP(kind="StorageCluster", namespace=config.ENV_DATA["cluster_namespace"])
+        .get()
+        .get("items")[0]
+    )
 
     return bool(
-        storage_cluster.get('spec', {}).get(
-            'externalStorage', {}
-        ).get('enable', False)
+        storage_cluster.get("spec", {}).get("externalStorage", {}).get("enable", False)
     )
 
 
@@ -2564,10 +2591,10 @@ def get_pv_size(storageclass=None):
     return_list = []
 
     ocp_obj = ocp.OCP(kind=constants.PV)
-    pv_objs = ocp_obj.get()['items']
+    pv_objs = ocp_obj.get()["items"]
     for pv_obj in pv_objs:
-        if pv_obj['spec']['storageClassName'] == storageclass:
-            return_list.append(pv_obj['spec']['capacity']['storage'])
+        if pv_obj["spec"]["storageClassName"] == storageclass:
+            return_list.append(pv_obj["spec"]["capacity"]["storage"])
     return return_list
 
 
@@ -2587,18 +2614,16 @@ def get_cluster_proxies():
         tuple: (http_proxy, https_proxy, no_proxy)
 
     """
-    if 'http_proxy' in config.ENV_DATA:
-        http_proxy = config.ENV_DATA['http_proxy']
-        https_proxy = config.ENV_DATA.get(
-            'https_proxy', config.ENV_DATA['http_proxy']
-        )
-        no_proxy = config.ENV_DATA.get('no_proxy', '')
+    if "http_proxy" in config.ENV_DATA:
+        http_proxy = config.ENV_DATA["http_proxy"]
+        https_proxy = config.ENV_DATA.get("https_proxy", config.ENV_DATA["http_proxy"])
+        no_proxy = config.ENV_DATA.get("no_proxy", "")
     else:
-        ocp_obj = ocp.OCP(kind=constants.PROXY, resource_name='cluster')
+        ocp_obj = ocp.OCP(kind=constants.PROXY, resource_name="cluster")
         proxy_obj = ocp_obj.get()
-        http_proxy = proxy_obj.get('spec', {}).get('httpProxy', '')
-        https_proxy = proxy_obj.get('spec', {}).get('httpsProxy', '')
-        no_proxy = proxy_obj.get('status', {}).get('noProxy', '')
+        http_proxy = proxy_obj.get("spec", {}).get("httpProxy", "")
+        https_proxy = proxy_obj.get("spec", {}).get("httpsProxy", "")
+        no_proxy = proxy_obj.get("status", {}).get("noProxy", "")
     logger.info("Using http_proxy: '%s'", http_proxy)
     logger.info("Using https_proxy: '%s'", https_proxy)
     logger.info("Using no_proxy: '%s'", no_proxy)
@@ -2616,19 +2641,20 @@ def default_volumesnapshotclass(interface_type):
     Returns:
         OCS: VolumeSnapshotClass Instance
     """
-    external = config.DEPLOYMENT['external_mode']
+    external = config.DEPLOYMENT["external_mode"]
     if interface_type == constants.CEPHBLOCKPOOL:
         resource_name = (
             constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
-            if external else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+            if external
+            else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
         )
     elif interface_type == constants.CEPHFILESYSTEM:
         resource_name = (
             constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
-            if external else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+            if external
+            else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
         )
     base_snapshot_class = OCP(
-        kind=constants.VOLUMESNAPSHOTCLASS,
-        resource_name=resource_name
+        kind=constants.VOLUMESNAPSHOTCLASS, resource_name=resource_name
     )
     return OCS(**base_snapshot_class.data)

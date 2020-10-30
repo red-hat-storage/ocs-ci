@@ -15,14 +15,15 @@ class TestRGWBucketCreation:
     """
     Test creation of a bucket
     """
+
     @pytest.mark.parametrize(
         argnames="amount,interface",
         argvalues=[
             pytest.param(
-                *[3, 'RGW-OC'],
-                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-2242")]
+                *[3, "RGW-OC"],
+                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-2242")],
             ),
-        ]
+        ],
     )
     def test_bucket_creation(self, rgw_bucket_factory, amount, interface):
         """
@@ -36,10 +37,9 @@ class TestRGWBucketCreation:
         argnames="amount,interface",
         argvalues=[
             pytest.param(
-                *[3, 'RGW-OC'],
-                marks=[tier3, pytest.mark.polarion_id("OCS-2247")]
+                *[3, "RGW-OC"], marks=[tier3, pytest.mark.polarion_id("OCS-2247")]
             ),
-        ]
+        ],
     )
     def test_duplicate_bucket_creation(
         self, rgw_obj, rgw_bucket_factory, amount, interface
@@ -49,20 +49,16 @@ class TestRGWBucketCreation:
         """
         expected_err = "BucketAlready|Already ?Exists"
         bucket_set = set(
-            bucket.name for bucket in rgw_bucket_factory(
-                amount, interface, verify_health=False
-            )
+            bucket.name
+            for bucket in rgw_bucket_factory(amount, interface, verify_health=False)
         )
         for bucket_name in bucket_set:
             try:
                 bucket = BUCKET_MAP[interface.lower()](bucket_name, rgw=rgw_obj)
-                assert not bucket, (
-                    "Unexpected: Duplicate creation hasn't failed."
-                )
+                assert not bucket, "Unexpected: Duplicate creation hasn't failed."
             except (CommandFailed, botocore.exceptions.ClientError) as err:
                 assert re.search(expected_err, str(err)), (
-                    "Couldn't verify OBC creation. Unexpected error "
-                    f"{str(err)}"
+                    "Couldn't verify OBC creation. Unexpected error " f"{str(err)}"
                 )
                 logger.info(
                     f"Creation of duplicate bucket {bucket_name} failed as expected"

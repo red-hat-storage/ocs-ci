@@ -26,44 +26,47 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
     # query resolution step used in this test case (number of seconds)
     query_step = 15
 
-    affected_mons = measure_stop_ceph_mon['result']
+    affected_mons = measure_stop_ceph_mon["result"]
     # we asked to stop just a single mon ... make this assumption explicit
     assert len(affected_mons) == 1
     affected_mon = affected_mons[0]
     # translate this into ceph daemon name
-    ceph_daemon = "mon.{}".format(affected_mon[len('rook-ceph-mon-'):])
-    logger.info(
-        f"affected mon was {affected_mon}, aka {ceph_daemon} ceph daemon")
+    ceph_daemon = "mon.{}".format(affected_mon[len("rook-ceph-mon-") :])
+    logger.info(f"affected mon was {affected_mon}, aka {ceph_daemon} ceph daemon")
 
     logger.info("let's check that ceph health was affected")
     health_result = prometheus.query_range(
-        query='ceph_health_status',
-        start=measure_stop_ceph_mon['start'],
-        end=measure_stop_ceph_mon['stop'],
-        step=query_step)
+        query="ceph_health_status",
+        start=measure_stop_ceph_mon["start"],
+        end=measure_stop_ceph_mon["stop"],
+        step=query_step,
+    )
     health_validation = check_query_range_result_enum(
         result=health_result,
         good_values=[1],
         bad_values=[0],
         exp_metric_num=1,
-        exp_good_time=measure_stop_ceph_mon['min_downtime'],
-        exp_delay=expected_delay)
+        exp_good_time=measure_stop_ceph_mon["min_downtime"],
+        exp_delay=expected_delay,
+    )
     health_msg = "health status should be affected by missing mon"
 
     logger.info("let's check that mon quorum status value was affected")
     mon_result = prometheus.query_range(
         query='ceph_mon_quorum_status{ceph_daemon="%s"}' % ceph_daemon,
-        start=measure_stop_ceph_mon['start'],
-        end=measure_stop_ceph_mon['stop'],
+        start=measure_stop_ceph_mon["start"],
+        end=measure_stop_ceph_mon["stop"],
         step=query_step,
-        validate=False)
+        validate=False,
+    )
     mon_validation = check_query_range_result_enum(
         result=mon_result,
         good_values=[0],
         bad_values=[1],
         exp_metric_num=1,
-        exp_good_time=measure_stop_ceph_mon['min_downtime'],
-        exp_delay=expected_delay)
+        exp_good_time=measure_stop_ceph_mon["min_downtime"],
+        exp_delay=expected_delay,
+    )
     mon_msg = "ceph_mon_quorum_status value should be affected by missing mon"
 
     # checking validation results when both queries are performed makes sure
@@ -76,7 +79,7 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
     # are going to check the min. expected size of the reply explicitly, taking
     # into account the min. expected downtime of the affected ceph mon
     assert len(mon_result) == 1, "there should be one metric for one mon"
-    min_mon_samples = measure_stop_ceph_mon['min_downtime'] / query_step
+    min_mon_samples = measure_stop_ceph_mon["min_downtime"] / query_step
     mon_sample_size = len(mon_result[0]["values"])
     assert mon_sample_size >= min_mon_samples
 
@@ -91,38 +94,41 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
     # time (in seconds) for monitoring to notice the change
     expected_delay = 60
 
-    affected_osd = measure_stop_ceph_osd['result']
+    affected_osd = measure_stop_ceph_osd["result"]
     # translate this into ceph daemon name
-    ceph_daemon = "osd.{}".format(int(affected_osd[len('rook-ceph-osd-'):]))
-    logger.info(
-        f"affected osd was {affected_osd}, aka {ceph_daemon} ceph daemon")
+    ceph_daemon = "osd.{}".format(int(affected_osd[len("rook-ceph-osd-") :]))
+    logger.info(f"affected osd was {affected_osd}, aka {ceph_daemon} ceph daemon")
 
     logger.info("let's check that ceph health was affected")
     health_result = prometheus.query_range(
-        query='ceph_health_status',
-        start=measure_stop_ceph_osd['start'],
-        end=measure_stop_ceph_osd['stop'],
-        step=15)
+        query="ceph_health_status",
+        start=measure_stop_ceph_osd["start"],
+        end=measure_stop_ceph_osd["stop"],
+        step=15,
+    )
     health_validation = check_query_range_result_enum(
         result=health_result,
         good_values=[1],
         bad_values=[0],
         exp_metric_num=1,
-        exp_delay=expected_delay)
+        exp_delay=expected_delay,
+    )
     health_msg = "health status should be affected by missing osd"
 
     logger.info("let's check that osd up value was affected")
     osd_up_result = prometheus.query_range(
         query='ceph_osd_up{ceph_daemon="%s"}' % ceph_daemon,
-        start=measure_stop_ceph_osd['start'],
-        end=measure_stop_ceph_osd['stop'],
-        step=15)
+        start=measure_stop_ceph_osd["start"],
+        end=measure_stop_ceph_osd["stop"],
+        step=15,
+    )
     osd_up_validation = check_query_range_result_enum(
         result=osd_up_result,
         good_values=[0],
         bad_values=[1],
         exp_metric_num=1,
-        exp_delay=expected_delay)
+        exp_delay=expected_delay,
+    )
     osd_up_msg = "ceph_osd_up value should be affected by missing osd"
 
     logger.info("let's check that osd in value was not affected")
@@ -130,14 +136,13 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
     # haven't removed it from the luster
     osd_in_result = prometheus.query_range(
         query='ceph_osd_in{ceph_daemon="%s"}' % ceph_daemon,
-        start=measure_stop_ceph_osd['start'],
-        end=measure_stop_ceph_osd['stop'],
-        step=15)
+        start=measure_stop_ceph_osd["start"],
+        end=measure_stop_ceph_osd["stop"],
+        step=15,
+    )
     osd_in_validation = check_query_range_result_enum(
-        result=osd_in_result,
-        good_values=[1],
-        bad_values=[0],
-        exp_metric_num=1)
+        result=osd_in_result, good_values=[1], bad_values=[0], exp_metric_num=1
+    )
     osd_in_msg = "ceph_osd_in value should not be affected by missing osd"
 
     # checking validation results when all queries are performed makes sure

@@ -3,24 +3,22 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import (
-    vsphere_platform_required
-)
-from ocs_ci.framework.testlib import (
-    MCGTest, tier1, tier2, tier3, acceptance
-)
+from ocs_ci.framework.pytest_customization.marks import vsphere_platform_required
+from ocs_ci.framework.testlib import MCGTest, tier1, tier2, tier3, acceptance
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
-    sync_object_directory, retrieve_test_objects_to_pod,
-    retrieve_anon_s3_resource, craft_s3_command
+    sync_object_directory,
+    retrieve_test_objects_to_pod,
+    retrieve_anon_s3_resource,
+    craft_s3_command,
 )
 
 logger = logging.getLogger(__name__)
 
 PUBLIC_BUCKET = "1000genomes"
 LARGE_FILE_KEY = "1000G_2504_high_coverage/data/ERR3239276/NA06985.final.cram"
-FILESIZE_SKIP = pytest.mark.skip('Current test filesize is too large.')
-RUNTIME_SKIP = pytest.mark.skip('Runtime is too long; Code needs to be parallelized')
+FILESIZE_SKIP = pytest.mark.skip("Current test filesize is too large.")
+RUNTIME_SKIP = pytest.mark.skip("Runtime is too long; Code needs to be parallelized")
 
 
 def pod_io(pods):
@@ -33,13 +31,14 @@ def pod_io(pods):
     """
     with ThreadPoolExecutor() as p:
         for pod in pods:
-            p.submit(pod.run_io, 'fs', '1G')
+            p.submit(pod.run_io, "fs", "1G")
 
 
 class TestBucketIO(MCGTest):
     """
     Test IO of a bucket
     """
+
     @pytest.mark.polarion_id("OCS-1300")
     @tier1
     @acceptance
@@ -49,22 +48,15 @@ class TestBucketIO(MCGTest):
         """
         # Retrieve a list of all objects on the test-objects bucket and
         # downloads them to the pod
-        data_dir = '/data'
+        data_dir = "/data"
         bucketname = bucket_factory(1)[0].name
         full_object_path = f"s3://{bucketname}"
-        downloaded_files = retrieve_test_objects_to_pod(
-            awscli_pod, data_dir
-        )
+        downloaded_files = retrieve_test_objects_to_pod(awscli_pod, data_dir)
         # Write all downloaded objects to the new bucket
-        sync_object_directory(
-            awscli_pod, data_dir, full_object_path, mcg_obj
-        )
+        sync_object_directory(awscli_pod, data_dir, full_object_path, mcg_obj)
 
-        assert set(
-            downloaded_files
-        ).issubset(
-            obj.key for obj in
-            mcg_obj.s3_list_all_objects_in_bucket(bucketname)
+        assert set(downloaded_files).issubset(
+            obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(bucketname)
         )
 
     @pytest.mark.polarion_id("OCS-1949")
@@ -76,43 +68,40 @@ class TestBucketIO(MCGTest):
 
         """
         # TODO: Privatize test bucket
-        download_dir = '/aws/downloaded'
+        download_dir = "/aws/downloaded"
         retrieve_test_objects_to_pod(awscli_pod, download_dir)
         bucket = bucket_factory(1)[0]
         bucketname = bucket.name
         full_object_path = f"s3://{bucketname}"
-        sync_object_directory(
-            awscli_pod, download_dir, full_object_path, mcg_obj
-        )
+        sync_object_directory(awscli_pod, download_dir, full_object_path, mcg_obj)
 
-        assert mcg_obj.check_data_reduction(bucketname), (
-            'Data reduction did not work as anticipated.'
-        )
+        assert mcg_obj.check_data_reduction(
+            bucketname
+        ), "Data reduction did not work as anticipated."
 
     @pytest.mark.parametrize(
         argnames="amount,file_type",
         argvalues=[
             pytest.param(
-                *[1, 'large'],
-                marks=[pytest.mark.polarion_id("OCS-1944"), tier2, FILESIZE_SKIP]
+                *[1, "large"],
+                marks=[pytest.mark.polarion_id("OCS-1944"), tier2, FILESIZE_SKIP],
             ),
             pytest.param(
-                *[100, 'large'],
-                marks=[pytest.mark.polarion_id("OCS-1946"), tier3, FILESIZE_SKIP]
+                *[100, "large"],
+                marks=[pytest.mark.polarion_id("OCS-1946"), tier3, FILESIZE_SKIP],
             ),
             pytest.param(
-                *[1, 'small'],
-                marks=[pytest.mark.polarion_id("OCS-1950"), tier2]
+                *[1, "small"], marks=[pytest.mark.polarion_id("OCS-1950"), tier2]
             ),
             pytest.param(
-                *[1000, 'small'],
-                marks=[pytest.mark.polarion_id("OCS-1951"), tier3, RUNTIME_SKIP]
+                *[1000, "small"],
+                marks=[pytest.mark.polarion_id("OCS-1951"), tier3, RUNTIME_SKIP],
             ),
             pytest.param(
-                *[100, 'large_small'],
-                marks=[pytest.mark.polarion_id("OCS-1952"), tier3, FILESIZE_SKIP]
+                *[100, "large_small"],
+                marks=[pytest.mark.polarion_id("OCS-1952"), tier3, FILESIZE_SKIP],
             ),
-        ]
+        ],
     )
     def test_write_multi_files_to_bucket(
         self, mcg_obj, awscli_pod, bucket_factory, amount, file_type
@@ -120,94 +109,78 @@ class TestBucketIO(MCGTest):
         """
         Test write multiple files to bucket
         """
-        data_dir = '/data'
-        if file_type == 'large':
+        data_dir = "/data"
+        if file_type == "large":
             public_bucket = PUBLIC_BUCKET
             obj_key = LARGE_FILE_KEY
-        elif file_type == 'small':
+        elif file_type == "small":
             public_bucket = constants.TEST_FILES_BUCKET
-            obj_key = 'random1.txt'
-        elif file_type == 'large_small':
+            obj_key = "random1.txt"
+        elif file_type == "large_small":
             public_bucket = PUBLIC_BUCKET
-            obj_key = LARGE_FILE_KEY.rsplit('/', 1)[0]
+            obj_key = LARGE_FILE_KEY.rsplit("/", 1)[0]
 
         # Download the file to pod
-        awscli_pod.exec_cmd_on_pod(command=f'mkdir {data_dir}')
+        awscli_pod.exec_cmd_on_pod(command=f"mkdir {data_dir}")
         public_s3_client = retrieve_anon_s3_resource().meta.client
         download_files = []
         # Use obj_key as prefix to download multiple files for large_small
         # case, it also works with single file
         for obj in public_s3_client.list_objects(
-            Bucket=public_bucket,
-            Prefix=obj_key
-        ).get('Contents'):
+            Bucket=public_bucket, Prefix=obj_key
+        ).get("Contents"):
             # Skip the extra file in large file type
-            if file_type == 'large' and obj["Key"] != obj_key:
+            if file_type == "large" and obj["Key"] != obj_key:
                 continue
-            logger.info(
-                f'Downloading {obj["Key"]} from AWS bucket {public_bucket}'
-            )
+            logger.info(f'Downloading {obj["Key"]} from AWS bucket {public_bucket}')
             download_obj_cmd = f'cp s3://{public_bucket}/{obj["Key"]} {data_dir}'
             awscli_pod.exec_cmd_on_pod(
-                command=craft_s3_command(download_obj_cmd),
-                out_yaml_format=False
+                command=craft_s3_command(download_obj_cmd), out_yaml_format=False
             )
-            download_files.append(obj['Key'])
+            download_files.append(obj["Key"])
         # Write all downloaded objects to the new bucket
         bucketname = bucket_factory(1)[0].name
         base_path = f"s3://{bucketname}"
         for i in range(amount):
             full_object_path = base_path + f"/{i}/"
-            sync_object_directory(
-                awscli_pod, data_dir, full_object_path, mcg_obj
-            )
+            sync_object_directory(awscli_pod, data_dir, full_object_path, mcg_obj)
 
         obj_list = list(
-            obj.key.split('/')[-1] for obj in
-            mcg_obj.s3_list_all_objects_in_bucket(bucketname)
+            obj.key.split("/")[-1]
+            for obj in mcg_obj.s3_list_all_objects_in_bucket(bucketname)
         )
 
         # Check total copy files amount match
-        if file_type == 'large_small':
-            assert len(obj_list) == 2 * amount, (
-                "Total file amount does not match"
-            )
+        if file_type == "large_small":
+            assert len(obj_list) == 2 * amount, "Total file amount does not match"
         else:
             assert len(obj_list) == amount, "Total file amount does not match"
 
         # Check deduplicate set is same
-        test_set = set([i.split('/')[-1] for i in download_files])
+        test_set = set([i.split("/")[-1] for i in download_files])
         assert test_set == set(obj_list), "File name set does not match"
 
     @pytest.mark.polarion_id("OCS-1945")
     @tier2
-    def test_write_empty_file_to_bucket(
-        self, mcg_obj, awscli_pod, bucket_factory
-    ):
+    def test_write_empty_file_to_bucket(self, mcg_obj, awscli_pod, bucket_factory):
         """
         Test write empty files to bucket
         """
-        data_dir = '/data'
+        data_dir = "/data"
         bucketname = bucket_factory(1)[0].name
         full_object_path = f"s3://{bucketname}"
 
         # Touch create 1000 empty files in pod
-        awscli_pod.exec_cmd_on_pod(command=f'mkdir {data_dir}')
+        awscli_pod.exec_cmd_on_pod(command=f"mkdir {data_dir}")
         command = "for i in $(seq 1 100); do touch /data/test$i; done"
-        awscli_pod.exec_sh_cmd_on_pod(
-            command=command,
-            sh='sh'
-        )
+        awscli_pod.exec_sh_cmd_on_pod(command=command, sh="sh")
         # Write all empty objects to the new bucket
-        sync_object_directory(
-            awscli_pod, data_dir, full_object_path, mcg_obj
-        )
+        sync_object_directory(awscli_pod, data_dir, full_object_path, mcg_obj)
 
         obj_set = set(
-            obj.key for obj in
-            mcg_obj.s3_list_all_objects_in_bucket(bucketname)
+            obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(bucketname)
         )
-        test_set = set('test' + str(i + 1) for i in range(100))
+        test_set = set("test" + str(i + 1) for i in range(100))
         assert test_set == obj_set, "File name set does not match"
 
     @pytest.fixture()
@@ -227,31 +200,34 @@ class TestBucketIO(MCGTest):
 
         pods = []
         for pvc in pvc_objs_rbd:
-            pods.append(pod_factory(
-                interface=constants.CEPHBLOCKPOOL, pvc=pvc)
-            )
+            pods.append(pod_factory(interface=constants.CEPHBLOCKPOOL, pvc=pvc))
 
         for pvc in pvc_objs_cephfs:
-            pods.append(pod_factory(
-                interface=constants.CEPHFILESYSTEM, pvc=pvc)
-            )
+            pods.append(pod_factory(interface=constants.CEPHFILESYSTEM, pvc=pvc))
 
         return pods
 
     @vsphere_platform_required
     @tier2
     @pytest.mark.polarion_id("OCS-2040")
-    def test_write_to_bucket_rbd_cephfs(self, verify_rgw_restart_count, setup_rbd_cephfs_pods,
-                                        mcg_obj, awscli_pod, bucket_factory
-                                        ):
+    def test_write_to_bucket_rbd_cephfs(
+        self,
+        verify_rgw_restart_count,
+        setup_rbd_cephfs_pods,
+        mcg_obj,
+        awscli_pod,
+        bucket_factory,
+    ):
         """
         Test RGW restarts after running s3, rbd and cephfs IOs in parallel
 
         """
         bucketname = bucket_factory(1)[0].name
         full_object_path = f"s3://{bucketname}"
-        target_dir = '/data/'
+        target_dir = "/data/"
         retrieve_test_objects_to_pod(awscli_pod, target_dir)
         with ThreadPoolExecutor() as p:
             p.submit(pod_io, setup_rbd_cephfs_pods)
-            p.submit(sync_object_directory(awscli_pod, target_dir, full_object_path, mcg_obj))
+            p.submit(
+                sync_object_directory(awscli_pod, target_dir, full_object_path, mcg_obj)
+            )

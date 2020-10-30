@@ -24,10 +24,7 @@ SERVICE_PRINCIPAL_FILEPATH = os.path.expanduser("~/.azure/osServicePrincipal.jso
 TERRRAFORM_FILENAME = "terraform.azure.auto.tfvars.json"
 
 
-def load_cluster_resource_group(
-    cluster_path,
-    terraform_filename=TERRRAFORM_FILENAME
-):
+def load_cluster_resource_group(cluster_path, terraform_filename=TERRRAFORM_FILENAME):
     """
     Read terraform tfvars.json file created by ``openshift-installer`` in a
     cluster dir to get azure ``resource group`` of an OCP cluster. All Azure
@@ -45,11 +42,11 @@ def load_cluster_resource_group(
     filepath = os.path.join(cluster_path, terraform_filename)
     with open(filepath, "r") as tf_file:
         tf_dict = json.load(tf_file)
-    resource_group = tf_dict.get('azure_network_resource_group_name')
+    resource_group = tf_dict.get("azure_network_resource_group_name")
     logger.debug(
         "fetching azure resource group (%s) from %s file",
-        tf_dict.get('clientId'),
-        filepath
+        tf_dict.get("clientId"),
+        filepath,
     )
     return resource_group
 
@@ -69,8 +66,8 @@ def load_service_principal_dict(filepath=SERVICE_PRINCIPAL_FILEPATH):
         sp_dict = json.load(sp_file)
     logger.debug(
         "fetching azure service principal (clientId %s) from %s file",
-        sp_dict.get('clientId'),
-        filepath
+        sp_dict.get("clientId"),
+        filepath,
     )
     return sp_dict
 
@@ -93,7 +90,7 @@ class AZURE:
         tenant_id=None,
         client_id=None,
         client_secret=None,
-        cluster_resource_group=None
+        cluster_resource_group=None,
     ):
         """
         Constructor for Azure cluster util class.
@@ -134,11 +131,17 @@ class AZURE:
         if self._cluster_resource_group is not None:
             return self._cluster_resource_group
         # we can override the resource group via ocs-ci config
-        if 'azure_cluster_resource_group' in config.ENV_DATA:
-            self._cluster_resource_group = config.ENV_DATA['azure_cluster_resource_group']
-        elif 'cluster_path' in config.ENV_DATA and os.path.exists(config.ENV_DATA['cluster_path']):
+        if "azure_cluster_resource_group" in config.ENV_DATA:
+            self._cluster_resource_group = config.ENV_DATA[
+                "azure_cluster_resource_group"
+            ]
+        elif "cluster_path" in config.ENV_DATA and os.path.exists(
+            config.ENV_DATA["cluster_path"]
+        ):
             try:
-                self._cluster_resource_group = load_cluster_resource_group(config.ENV_DATA['cluster_path'])
+                self._cluster_resource_group = load_cluster_resource_group(
+                    config.ENV_DATA["cluster_path"]
+                )
             except Exception as ex:
                 logger.warning("failed to load azure resource group: %s", ex)
         return self._cluster_resource_group
@@ -156,37 +159,38 @@ class AZURE:
             self._subscription_id,
             self._tenant_id,
             self._client_id,
-            self._client_secret)
+            self._client_secret,
+        )
         # load azure service principal file *only* if necessary
         if None in sp_attributes:
             sp_dict = load_service_principal_dict()
         if self._subscription_id is None:
-            self._subscription_id = sp_dict['subscriptionId']
+            self._subscription_id = sp_dict["subscriptionId"]
         if self._tenant_id is None:
-            self._tenant_id = sp_dict['tenantId']
+            self._tenant_id = sp_dict["tenantId"]
         if self._client_id is None:
-            self._client_id = sp_dict['clientId']
+            self._client_id = sp_dict["clientId"]
         if self._client_secret is None:
-            self._client_secret = sp_dict['clientSecret']
+            self._client_secret = sp_dict["clientSecret"]
         # create azure SP Credentials object
         self._credentials = ServicePrincipalCredentials(
             client_id=self._client_id,
             secret=self._client_secret,
-            tenant=self._tenant_id
+            tenant=self._tenant_id,
         )
         return self._credentials
 
     @property
     def compute_client(self):
-        """ Property for Azure vm resource
+        """Property for Azure vm resource
 
         Returns:
             ComputeManagementClient instance for managing Azure vm resource
         """
         if not self._compute_client:
             self._compute_client = ComputeManagementClient(
-                credentials=self.credentials,
-                subscription_id=self._subscription_id)
+                credentials=self.credentials, subscription_id=self._subscription_id
+            )
         return self._compute_client
 
     @property
@@ -196,8 +200,8 @@ class AZURE:
         """
         if not self._resource_client:
             self._resource_client = ResourceManagementClient(
-                credentials=self.credentials,
-                subscription_id=self._subscription_id)
+                credentials=self.credentials, subscription_id=self._subscription_id
+            )
         return self._resource_client
 
     def get_vm_instance(self, vm_name):
@@ -212,8 +216,7 @@ class AZURE:
 
         """
         vm = self.compute_client.virtual_machines.get(
-            self.cluster_resource_group,
-            vm_name
+            self.cluster_resource_group, vm_name
         )
         return vm
 
@@ -248,21 +251,14 @@ class AZURE:
         vm = self.get_vm_instance(node.name)
         data_disks = vm.storage_profile.data_disks
         data_disks[:] = [disk for disk in data_disks if disk.name != volume.name]
-        logger.info(
-            "Detaching volume: %s Instance: %s", volume.name, vm.name
-        )
+        logger.info("Detaching volume: %s Instance: %s", volume.name, vm.name)
         result = self.compute_client.virtual_machines.create_or_update(
-            self.cluster_resource_group,
-            vm.name,
-            vm)
+            self.cluster_resource_group, vm.name, vm
+        )
         result.wait()
         try:
-            for sample in TimeoutSampler(
-                timeout, 3, self.get_disk_state, volume.name
-            ):
-                logger.info(
-                    f"Volume id: {volume.name} has status: {sample}"
-                )
+            for sample in TimeoutSampler(timeout, 3, self.get_disk_state, volume.name):
+                logger.info(f"Volume id: {volume.name} has status: {sample}")
                 if sample == "Unattached":
                     break
         except TimeoutExpiredError:
@@ -280,7 +276,8 @@ class AZURE:
 
         """
         result = self.compute_client.virtual_machines.restart(
-            self.cluster_resource_group, vm_name)
+            self.cluster_resource_group, vm_name
+        )
         result.wait()
 
     def get_data_volumes(self, deviceset_pvs):
@@ -294,8 +291,13 @@ class AZURE:
             list: Azure Vm disk objects
 
         """
-        volume_names = [pv.get()['spec']['azureDisk']['diskName'] for pv in deviceset_pvs]
-        return [self.compute_client.disks.get(self.cluster_resource_group, volume_name) for volume_name in volume_names]
+        volume_names = [
+            pv.get()["spec"]["azureDisk"]["diskName"] for pv in deviceset_pvs
+        ]
+        return [
+            self.compute_client.disks.get(self.cluster_resource_group, volume_name)
+            for volume_name in volume_names
+        ]
 
     def get_disk_state(self, volume_name):
         """
@@ -308,4 +310,6 @@ class AZURE:
             str: Azure Vm disk state
 
         """
-        return self.compute_client.disks.get(self.cluster_resource_group, volume_name).disk_state
+        return self.compute_client.disks.get(
+            self.cluster_resource_group, volume_name
+        ).disk_state

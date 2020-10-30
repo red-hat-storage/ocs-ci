@@ -4,15 +4,14 @@ from ocs_ci.framework.pytest_customization.marks import *  # noqa: F403
 from ocs_ci.ocs.constants import MCG_TESTS_MIN_NB_ENDPOINT_COUNT, MAX_NB_ENDPOINT_COUNT
 
 
-@pytest.mark.usefixtures(  # noqa: F405
-    'environment_checker'
-)
+@pytest.mark.usefixtures("environment_checker")  # noqa: F405
 class BaseTest:
     """
     Base test class for our testing.
     If some functionality/property needs to be implemented in all test classes
     here is the place to put your code.
     """
+
     pass
 
 
@@ -21,6 +20,7 @@ class E2ETest(BaseTest):
     """
     Base class for E2E team
     """
+
     pass
 
 
@@ -29,6 +29,7 @@ class ManageTest(BaseTest):
     """
     Base class for E2E team
     """
+
     pass
 
 
@@ -37,12 +38,11 @@ class EcosystemTest(BaseTest):
     """
     Base class for E2E team
     """
+
     pass
 
 
-@pytest.mark.usefixtures(
-    "nb_ensure_endpoint_count"
-)
+@pytest.mark.usefixtures("nb_ensure_endpoint_count")
 class MCGTest(ManageTest):
     MIN_ENDPOINT_COUNT = MCG_TESTS_MIN_NB_ENDPOINT_COUNT
     MAX_ENDPOINT_COUNT = MAX_NB_ENDPOINT_COUNT

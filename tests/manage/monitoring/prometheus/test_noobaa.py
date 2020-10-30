@@ -19,50 +19,50 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
     """
     api = prometheus.PrometheusAPI()
 
-    alerts = measure_noobaa_exceed_bucket_quota.get('prometheus_alerts')
+    alerts = measure_noobaa_exceed_bucket_quota.get("prometheus_alerts")
 
     # since version 4.5 all NooBaa alerts have defined Pending state
-    if float(config.ENV_DATA['ocs_version']) < 4.5:
+    if float(config.ENV_DATA["ocs_version"]) < 4.5:
         expected_alerts = [
             (
                 constants.ALERT_BUCKETREACHINGQUOTASTATE,
-                'A NooBaa Bucket Is In Reaching Quota State',
-                ['firing'],
-                'warning'
+                "A NooBaa Bucket Is In Reaching Quota State",
+                ["firing"],
+                "warning",
             ),
             (
                 constants.ALERT_BUCKETERRORSTATE,
-                'A NooBaa Bucket Is In Error State',
-                ['pending', 'firing'],
-                'warning'
+                "A NooBaa Bucket Is In Error State",
+                ["pending", "firing"],
+                "warning",
             ),
             (
                 constants.ALERT_BUCKETEXCEEDINGQUOTASTATE,
-                'A NooBaa Bucket Is In Exceeding Quota State',
-                ['firing'],
-                'warning'
-            )
+                "A NooBaa Bucket Is In Exceeding Quota State",
+                ["firing"],
+                "warning",
+            ),
         ]
     else:
         expected_alerts = [
             (
                 constants.ALERT_BUCKETREACHINGQUOTASTATE,
-                'A NooBaa Bucket Is In Reaching Quota State',
-                ['pending', 'firing'],
-                'warning'
+                "A NooBaa Bucket Is In Reaching Quota State",
+                ["pending", "firing"],
+                "warning",
             ),
             (
                 constants.ALERT_BUCKETERRORSTATE,
-                'A NooBaa Bucket Is In Error State',
-                ['pending', 'firing'],
-                'warning'
+                "A NooBaa Bucket Is In Error State",
+                ["pending", "firing"],
+                "warning",
             ),
             (
                 constants.ALERT_BUCKETEXCEEDINGQUOTASTATE,
-                'A NooBaa Bucket Is In Exceeding Quota State',
-                ['pending', 'firing'],
-                'warning'
-            )
+                "A NooBaa Bucket Is In Exceeding Quota State",
+                ["pending", "firing"],
+                "warning",
+            ),
         ]
 
     for target_label, target_msg, target_states, target_severity in expected_alerts:
@@ -71,15 +71,15 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
             msg=target_msg,
             alerts=alerts,
             states=target_states,
-            severity=target_severity
+            severity=target_severity,
         )
         # the time to wait is increased because it takes more time for OCS
         # cluster to resolve its issues
         pg_wait = 480
         api.check_alert_cleared(
             label=target_label,
-            measure_end_time=measure_noobaa_exceed_bucket_quota.get('stop'),
-            time_min=pg_wait
+            measure_end_time=measure_noobaa_exceed_bucket_quota.get("stop"),
+            time_min=pg_wait,
         )
 
 

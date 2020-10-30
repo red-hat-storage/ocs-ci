@@ -17,13 +17,14 @@ log = logging.getLogger(__name__)
         ),
         pytest.param(
             constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2043")
-        )
-    ]
+        ),
+    ],
 )
 class TestPodStartTime(E2ETest):
     """
     Measure time to start pod with PVC attached
     """
+
     pvc_size = 5
 
     @pytest.fixture()
@@ -35,9 +36,7 @@ class TestPodStartTime(E2ETest):
             pod obj: Pod instance
 
         """
-        pvc_obj = pvc_factory(
-            interface=interface, size=self.pvc_size
-        )
+        pvc_obj = pvc_factory(interface=interface, size=self.pvc_size)
         pod_obj = pod_factory(pvc=pvc_obj)
         return pod_obj
 
@@ -46,10 +45,9 @@ class TestPodStartTime(E2ETest):
         Test to log pod start time
         """
         start_time_dict = pod_start_time(pod)
-        start_time = start_time_dict['web-server']
-        logging.info(f'pod start time: {start_time} seconds')
+        start_time = start_time_dict["web-server"]
+        logging.info(f"pod start time: {start_time} seconds")
         if start_time > 30:
             raise ex.PerformanceException(
-                f'pod start time is {start_time},'
-                f'which is greater than 30 seconds'
+                f"pod start time is {start_time}," f"which is greater than 30 seconds"
             )

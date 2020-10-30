@@ -7,7 +7,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
     config_to_string,
     get_system_architecture,
-    update_container_with_mirrored_image
+    update_container_with_mirrored_image,
 )
 
 log = logging.getLogger(__name__)
@@ -34,24 +34,20 @@ def get_mcg_conf(mcg_obj, workload_bucket, custom_options=None):
     """
     config = configparser.ConfigParser()
     config.read_file(open(constants.FIO_S3))
-    config.set('global', 'name', workload_bucket[0].name)
-    config.set('global', 'http_s3_key', mcg_obj.access_key)
-    config.set('global', 'http_s3_keyid', mcg_obj.access_key_id)
-    if mcg_obj.s3_endpoint.startswith('https://'):
-        http_host = mcg_obj.s3_endpoint[len('https://'):]
-    elif mcg_obj.s3_endpoint.startswith('http://'):
-        http_host = mcg_obj.s3_endpoint[len('http://'):]
+    config.set("global", "name", workload_bucket[0].name)
+    config.set("global", "http_s3_key", mcg_obj.access_key)
+    config.set("global", "http_s3_keyid", mcg_obj.access_key_id)
+    if mcg_obj.s3_endpoint.startswith("https://"):
+        http_host = mcg_obj.s3_endpoint[len("https://") :]
+    elif mcg_obj.s3_endpoint.startswith("http://"):
+        http_host = mcg_obj.s3_endpoint[len("http://") :]
     else:
         http_host = mcg_obj.s3_endpoint
-    config.set(
-        'global',
-        'http_host',
-        http_host.rstrip(':443')
-    )
-    config.set('global', 'http_s3_region', mcg_obj.region)
-    config.set('global', 'filename', f"/{workload_bucket[0].name}/object")
-    config.set('create', 'time_based', '1')
-    config.set('create', 'runtime', '24h')
+    config.set("global", "http_host", http_host.rstrip(":443"))
+    config.set("global", "http_s3_region", mcg_obj.region)
+    config.set("global", "filename", f"/{workload_bucket[0].name}/object")
+    config.set("create", "time_based", "1")
+    config.set("create", "runtime", "24h")
 
     # add or overwrite custom values
     if custom_options:
@@ -71,7 +67,8 @@ def get_pvc_dict():
         dict: YAML data for a PVC object
 
     """
-    template = textwrap.dedent("""
+    template = textwrap.dedent(
+        """
         kind: PersistentVolumeClaim
         apiVersion: v1
         metadata:
@@ -82,7 +79,8 @@ def get_pvc_dict():
           resources:
             requests:
               storage: None
-        """)
+        """
+    )
     pvc_dict = yaml.safe_load(template)
     return pvc_dict
 
@@ -96,7 +94,8 @@ def get_configmap_dict():
         dict: YAML data for a OCP ConfigMap object
 
     """
-    template = textwrap.dedent("""
+    template = textwrap.dedent(
+        """
         kind: ConfigMap
         apiVersion: v1
         metadata:
@@ -104,7 +103,8 @@ def get_configmap_dict():
         data:
           workload.fio: |
             # here comes workload configuration
-        """)
+        """
+    )
     cm_dict = yaml.safe_load(template)
     return cm_dict
 
@@ -118,16 +118,17 @@ def get_job_dict():
 
     """
     arch = get_system_architecture()
-    if arch.startswith('x86'):
-        image = 'quay.io/fbalak/fio-fedora:latest'
+    if arch.startswith("x86"):
+        image = "quay.io/fbalak/fio-fedora:latest"
     else:
-        image = 'quay.io/multiarch-origin-e2e/fio-fedora:latest'
+        image = "quay.io/multiarch-origin-e2e/fio-fedora:latest"
 
-    log.info(f'Discovered architecture: {arch.strip()}')
-    log.info(f'Using image: {image}')
+    log.info(f"Discovered architecture: {arch.strip()}")
+    log.info(f"Using image: {image}")
 
     # TODO(fbalak): load dictionary fixtures from one place
-    template = textwrap.dedent(f"""
+    template = textwrap.dedent(
+        f"""
         apiVersion: batch/v1
         kind: Job
         metadata:
@@ -158,7 +159,8 @@ def get_job_dict():
                 - name: fio-config-volume
                   configMap:
                     name: fio-config
-        """)
+        """
+    )
     job_dict = yaml.safe_load(template)
 
     # overwrite used image (required for disconnected installation)

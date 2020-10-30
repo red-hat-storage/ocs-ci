@@ -11,7 +11,6 @@ log = logging.getLogger(__name__)
 @tier1
 @pytest.mark.polarion_id("OCS-2231")
 class TestCephDefaultValuesCheck(ManageTest):
-
     def test_ceph_default_values_check(self):
         """
         This test checks ceph default values taken from OCS 4.3 with the
@@ -20,14 +19,14 @@ class TestCephDefaultValuesCheck(ManageTest):
         """
         # The default ceph osd full ratio values
         expected_full_ratios = {
-            'full_ratio': 0.85,
-            'backfillfull_ratio': 0.8,
-            'nearfull_ratio': 0.75
+            "full_ratio": 0.85,
+            "backfillfull_ratio": 0.8,
+            "nearfull_ratio": 0.75,
         }
         actual_full_ratios = {}
         ct_pod = pod.get_ceph_tools_pod()
         log.info("Checking the values of ceph osd full ratios in osd map")
-        osd_dump_dict = ct_pod.exec_ceph_cmd('ceph osd dump')
+        osd_dump_dict = ct_pod.exec_ceph_cmd("ceph osd dump")
         for ratio_parm, value in expected_full_ratios.items():
             ratio_value = osd_dump_dict.get(ratio_parm)
             actual_full_ratios[ratio_parm] = float(round(ratio_value, 2))
@@ -37,8 +36,7 @@ class TestCephDefaultValuesCheck(ManageTest):
                     f"matching the expected value {value}"
                 )
         assert expected_full_ratios == actual_full_ratios, (
-            "Actual full ratio values does not match expected full "
-            "ratio values"
+            "Actual full ratio values does not match expected full " "ratio values"
         )
         log.info(
             f"Actual full ratio {actual_full_ratios} values MATCHES expected "
@@ -48,13 +46,9 @@ class TestCephDefaultValuesCheck(ManageTest):
         # Check if the osd full ratios satisfies condition
         #  "nearfull < backfillfull < full"
         assert (
-            osd_dump_dict[
-                'nearfull_ratio'
-            ] < osd_dump_dict[
-                'backfillfull_ratio'
-            ] < osd_dump_dict[
-                'full_ratio'
-            ]
+            osd_dump_dict["nearfull_ratio"]
+            < osd_dump_dict["backfillfull_ratio"]
+            < osd_dump_dict["full_ratio"]
         ), (
             "osd full ratio values does not satisfy condition "
             f"{osd_dump_dict['nearfull_ratio']:.2f} < "

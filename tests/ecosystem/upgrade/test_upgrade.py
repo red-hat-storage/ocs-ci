@@ -12,7 +12,6 @@ log = logging.getLogger(__name__)
 
 @pytest.fixture()
 def teardown(request, nodes):
-
     def finalizer():
         """
         Make sure all nodes are up again
@@ -30,9 +29,7 @@ def test_worker_node_abrupt_shutdown(teardown):
     for 5.5 minutes
 
     """
-    log.info(
-        "Starting disruptive function: test_worker_node_abrupt_shutdown"
-    )
+    log.info("Starting disruptive function: test_worker_node_abrupt_shutdown")
     run_ocs_upgrade(operation=worker_node_shutdown, abrupt=True)
 
 
@@ -42,9 +39,7 @@ def test_worker_node_permanent_shutdown(teardown):
     Test OCS upgrade with disruption of shutting down worker node
 
     """
-    log.info(
-        "Starting disruptive function: test_worker_node_permanent_shutdown"
-    )
+    log.info("Starting disruptive function: test_worker_node_permanent_shutdown")
     run_ocs_upgrade(operation=worker_node_shutdown, abrupt=False)
 
 

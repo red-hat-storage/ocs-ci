@@ -3,14 +3,17 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import (
-    ManageTest, tier4, tier4c, ignore_leftover_label
-)
+from ocs_ci.framework.testlib import ManageTest, tier4, tier4c, ignore_leftover_label
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
-    get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_plugin_pods,
-    get_rbdfsplugin_provisioner_pods, get_cephfsplugin_provisioner_pods,
-    get_operator_pods
+    get_mds_pods,
+    get_mon_pods,
+    get_mgr_pods,
+    get_osd_pods,
+    get_plugin_pods,
+    get_rbdfsplugin_provisioner_pods,
+    get_cephfsplugin_provisioner_pods,
+    get_operator_pods,
 )
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers import helpers, disruption_helpers
@@ -22,78 +25,64 @@ log = logging.getLogger(__name__)
 @tier4c
 @ignore_leftover_label(constants.drain_canary_pod_label)
 @pytest.mark.parametrize(
-    argnames=['interface', 'resource_to_delete'],
+    argnames=["interface", "resource_to_delete"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-735")
+            *[constants.CEPHBLOCKPOOL, "mgr"], marks=pytest.mark.polarion_id("OCS-735")
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'mon'],
-            marks=pytest.mark.polarion_id("OCS-736")
+            *[constants.CEPHBLOCKPOOL, "mon"], marks=pytest.mark.polarion_id("OCS-736")
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'osd'],
-            marks=pytest.mark.polarion_id("OCS-737")
+            *[constants.CEPHBLOCKPOOL, "osd"], marks=pytest.mark.polarion_id("OCS-737")
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-738")
+            *[constants.CEPHFILESYSTEM, "mgr"], marks=pytest.mark.polarion_id("OCS-738")
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'mon'],
-            marks=pytest.mark.polarion_id("OCS-739")
+            *[constants.CEPHFILESYSTEM, "mon"], marks=pytest.mark.polarion_id("OCS-739")
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'osd'],
-            marks=pytest.mark.polarion_id("OCS-740")
+            *[constants.CEPHFILESYSTEM, "osd"], marks=pytest.mark.polarion_id("OCS-740")
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'mds'],
-            marks=pytest.mark.polarion_id("OCS-741")
+            *[constants.CEPHFILESYSTEM, "mds"], marks=pytest.mark.polarion_id("OCS-741")
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'cephfsplugin'],
-            marks=pytest.mark.polarion_id("OCS-1011")
+            *[constants.CEPHFILESYSTEM, "cephfsplugin"],
+            marks=pytest.mark.polarion_id("OCS-1011"),
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'rbdplugin'],
-            marks=[pytest.mark.polarion_id("OCS-1010"), pytest.mark.bugzilla(
-                '1752487'
-            )]
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, 'cephfsplugin_provisioner'],
+            *[constants.CEPHBLOCKPOOL, "rbdplugin"],
             marks=[
-                pytest.mark.polarion_id("OCS-952"),
-                pytest.mark.bugzilla('1860891')
-            ]
+                pytest.mark.polarion_id("OCS-1010"),
+                pytest.mark.bugzilla("1752487"),
+            ],
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'rbdplugin_provisioner'],
-            marks=pytest.mark.polarion_id("OCS-945")
+            *[constants.CEPHFILESYSTEM, "cephfsplugin_provisioner"],
+            marks=[pytest.mark.polarion_id("OCS-952"), pytest.mark.bugzilla("1860891")],
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'operator'],
-            marks=[
-                pytest.mark.polarion_id("OCS-933"),
-                pytest.mark.bugzilla('1815078')
-            ]
+            *[constants.CEPHBLOCKPOOL, "rbdplugin_provisioner"],
+            marks=pytest.mark.polarion_id("OCS-945"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'operator'],
-            marks=[
-                pytest.mark.polarion_id("OCS-929"),
-                pytest.mark.bugzilla('1815078')
-            ]
-        )
-    ]
+            *[constants.CEPHBLOCKPOOL, "operator"],
+            marks=[pytest.mark.polarion_id("OCS-933"), pytest.mark.bugzilla("1815078")],
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, "operator"],
+            marks=[pytest.mark.polarion_id("OCS-929"), pytest.mark.bugzilla("1815078")],
+        ),
+    ],
 )
 class TestResourceDeletionDuringCreationOperations(ManageTest):
     """
     This class consists of tests which verifies resource deletion during
     multiple operations - pods creation, PVC creation and IO
     """
+
     num_of_pvcs = 12
     pvc_size = 5
 
@@ -111,8 +100,8 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         if interface == constants.CEPHBLOCKPOOL:
             access_modes.extend(
                 [
-                    f'{constants.ACCESS_MODE_RWO}-Block',
-                    f'{constants.ACCESS_MODE_RWX}-Block'
+                    f"{constants.ACCESS_MODE_RWO}-Block",
+                    f"{constants.ACCESS_MODE_RWX}-Block",
                 ]
             )
 
@@ -124,27 +113,31 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
             access_modes=access_modes,
             status=constants.STATUS_BOUND,
             num_of_pvc=self.num_of_pvcs,
-            wait_each=False
+            wait_each=False,
         )
 
         # Set volume mode on PVC objects
         for pvc_obj in pvc_objs:
             pvc_info = pvc_obj.get()
-            setattr(pvc_obj, 'volume_mode', pvc_info['spec']['volumeMode'])
+            setattr(pvc_obj, "volume_mode", pvc_info["spec"]["volumeMode"])
 
-        rwo_pvcs = [pvc_obj for pvc_obj in pvc_objs if (
-            pvc_obj.access_mode == constants.ACCESS_MODE_RWO
-        )]
-        rwx_pvcs = [pvc_obj for pvc_obj in pvc_objs if (
-            pvc_obj.access_mode == constants.ACCESS_MODE_RWX
-        )]
+        rwo_pvcs = [
+            pvc_obj
+            for pvc_obj in pvc_objs
+            if (pvc_obj.access_mode == constants.ACCESS_MODE_RWO)
+        ]
+        rwx_pvcs = [
+            pvc_obj
+            for pvc_obj in pvc_objs
+            if (pvc_obj.access_mode == constants.ACCESS_MODE_RWX)
+        ]
 
         num_of_rwo_pvc = len(rwo_pvcs)
         num_of_rwx_pvc = len(rwx_pvcs)
 
         block_rwo_pvcs = []
         for pvc_obj in rwo_pvcs[:]:
-            if pvc_obj.volume_mode == 'Block':
+            if pvc_obj.volume_mode == "Block":
                 block_rwo_pvcs.append(pvc_obj)
                 rwo_pvcs.remove(pvc_obj)
 
@@ -164,9 +157,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
 
         # Create one pod using each RWO PVC and two pods using each RWX PVC
         # for running IO
-        io_pods = helpers.create_pods(
-            pvc_objs_for_io_pods, pod_factory, interface, 2
-        )
+        io_pods = helpers.create_pods(pvc_objs_for_io_pods, pod_factory, interface, 2)
 
         # Wait for pods to be in Running state
         for pod_obj in io_pods:
@@ -179,8 +170,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         return pvc_objs, io_pods, pvc_objs_new_pods, access_modes
 
     def test_resource_deletion_during_pvc_pod_creation_and_io(
-        self, interface, resource_to_delete, setup, multi_pvc_factory,
-        pod_factory
+        self, interface, resource_to_delete, setup, multi_pvc_factory, pod_factory
     ):
         """
         Delete resource 'resource_to_delete' while PVCs creation, Pods
@@ -192,13 +182,15 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         storageclass = pvc_objs[0].storageclass
 
         pod_functions = {
-            'mds': partial(get_mds_pods), 'mon': partial(get_mon_pods),
-            'mgr': partial(get_mgr_pods), 'osd': partial(get_osd_pods),
-            'rbdplugin': partial(get_plugin_pods, interface=interface),
-            'cephfsplugin': partial(get_plugin_pods, interface=interface),
-            'cephfsplugin_provisioner': partial(get_cephfsplugin_provisioner_pods),
-            'rbdplugin_provisioner': partial(get_rbdfsplugin_provisioner_pods),
-            'operator': partial(get_operator_pods)
+            "mds": partial(get_mds_pods),
+            "mon": partial(get_mon_pods),
+            "mgr": partial(get_mgr_pods),
+            "osd": partial(get_osd_pods),
+            "rbdplugin": partial(get_plugin_pods, interface=interface),
+            "cephfsplugin": partial(get_plugin_pods, interface=interface),
+            "cephfsplugin_provisioner": partial(get_cephfsplugin_provisioner_pods),
+            "rbdplugin_provisioner": partial(get_rbdfsplugin_provisioner_pods),
+            "operator": partial(get_operator_pods),
         }
 
         executor = ThreadPoolExecutor(max_workers=len(io_pods))
@@ -212,22 +204,19 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         # Do setup for running IO on pods
         log.info("Setting up pods for running IO")
         for pod_obj in io_pods:
-            if pod_obj.pvc.volume_mode == 'Block':
-                storage_type = 'block'
+            if pod_obj.pvc.volume_mode == "Block":
+                storage_type = "block"
             else:
-                storage_type = 'fs'
+                storage_type = "fs"
             executor.submit(pod_obj.workload_setup, storage_type=storage_type)
 
         # Wait for setup on pods to complete
         for pod_obj in io_pods:
             log.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
-            for sample in TimeoutSampler(
-                180, 2, getattr, pod_obj, 'wl_setup_done'
-            ):
+            for sample in TimeoutSampler(180, 2, getattr, pod_obj, "wl_setup_done"):
                 if sample:
                     log.info(
-                        f"Setup for running IO is completed on pod "
-                        f"{pod_obj.name}."
+                        f"Setup for running IO is completed on pod " f"{pod_obj.name}."
                     )
                     break
         log.info("Setup for running IO is completed on pods")
@@ -241,23 +230,30 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         # Start creation of new PVCs
         log.info("Start creating new PVCs.")
         bulk_pvc_create = executor.submit(
-            multi_pvc_factory, interface=interface,
-            project=proj_obj, storageclass=storageclass, size=self.pvc_size,
+            multi_pvc_factory,
+            interface=interface,
+            project=proj_obj,
+            storageclass=storageclass,
+            size=self.pvc_size,
             access_modes=access_modes,
-            access_modes_selection='distribute_random',
-            status="", num_of_pvc=num_of_new_pvcs, wait_each=False
+            access_modes_selection="distribute_random",
+            status="",
+            num_of_pvc=num_of_new_pvcs,
+            wait_each=False,
         )
 
         # Start IO on each pod
         log.info("Start IO on pods")
         for pod_obj in io_pods:
-            if pod_obj.pvc.volume_mode == 'Block':
-                storage_type = 'block'
+            if pod_obj.pvc.volume_mode == "Block":
+                storage_type = "block"
             else:
-                storage_type = 'fs'
+                storage_type = "fs"
             pod_obj.run_io(
-                storage_type=storage_type, size='1G', runtime=10,
-                fio_filename=f'{pod_obj.name}_io_file1'
+                storage_type=storage_type,
+                size="1G",
+                runtime=10,
+                fio_filename=f"{pod_obj.name}_io_file1",
             )
         log.info("IO started on all pods.")
 
@@ -290,17 +286,13 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         log.info("Fetching IO results from IO pods.")
         for pod_obj in io_pods:
             fio_result = pod_obj.get_fio_results()
-            err_count = fio_result.get('jobs')[0].get('error')
-            assert err_count == 0, (
-                f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
-            )
+            err_count = fio_result.get("jobs")[0].get("error")
+            assert (
+                err_count == 0
+            ), f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
             log.info(f"IOPs after FIO on pod {pod_obj.name}:")
-            log.info(
-                f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
-            )
-            log.info(
-                f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
-            )
+            log.info(f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}")
+            log.info(f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}")
         log.info("Verified IO result on IO pods.")
 
         all_pod_objs = io_pods + pod_objs_new
@@ -309,8 +301,8 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         node_pv_dict = {}
         for pod in all_pod_objs:
             pod_info = pod.get()
-            node = pod_info['spec']['nodeName']
-            pvc = pod_info['spec']['volumes'][0]['persistentVolumeClaim']['claimName']
+            node = pod_info["spec"]["nodeName"]
+            pvc = pod_info["spec"]["volumes"][0]["persistentVolumeClaim"]["claimName"]
             for pvc_obj in pvc_objs:
                 if pvc_obj.name == pvc:
                     pvc_obj.reload()
@@ -346,20 +338,17 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
                 f"deleting the pods."
             )
         log.info(
-            "Verified: mount points are removed from nodes after deleting "
-            "the pods"
+            "Verified: mount points are removed from nodes after deleting " "the pods"
         )
 
         # Set volume mode on PVC objects
         for pvc_obj in pvc_objs_new:
             pvc_info = pvc_obj.get()
-            setattr(pvc_obj, 'volume_mode', pvc_info['spec']['volumeMode'])
+            setattr(pvc_obj, "volume_mode", pvc_info["spec"]["volumeMode"])
 
         # Verify that PVCs are reusable by creating new pods
         all_pvc_objs = pvc_objs + pvc_objs_new
-        pod_objs_re = helpers.create_pods(
-            all_pvc_objs, pod_factory, interface, 2
-        )
+        pod_objs_re = helpers.create_pods(all_pvc_objs, pod_factory, interface, 2)
 
         # Verify pods are Running
         for pod_obj in pod_objs_re:
@@ -371,27 +360,25 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
 
         # Run IO on each of the newly created pods
         for pod_obj in pod_objs_re:
-            if pod_obj.pvc.volume_mode == 'Block':
-                storage_type = 'block'
+            if pod_obj.pvc.volume_mode == "Block":
+                storage_type = "block"
             else:
-                storage_type = 'fs'
+                storage_type = "fs"
             pod_obj.run_io(
-                storage_type=storage_type, size='1G', runtime=10,
-                fio_filename=f'{pod_obj.name}_io_file2'
+                storage_type=storage_type,
+                size="1G",
+                runtime=10,
+                fio_filename=f"{pod_obj.name}_io_file2",
             )
 
         log.info("Fetching IO results from newly created pods")
         for pod_obj in pod_objs_re:
             fio_result = pod_obj.get_fio_results()
-            err_count = fio_result.get('jobs')[0].get('error')
-            assert err_count == 0, (
-                f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
-            )
+            err_count = fio_result.get("jobs")[0].get("error")
+            assert (
+                err_count == 0
+            ), f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
             log.info(f"IOPs after FIO on pod {pod_obj.name}:")
-            log.info(
-                f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
-            )
-            log.info(
-                f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
-            )
+            log.info(f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}")
+            log.info(f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}")
         log.info("Verified IO result on newly created pods.")

@@ -6,7 +6,10 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, CSVNotFound, ChannelNotFound, ResourceNotFoundError
+    CommandFailed,
+    CSVNotFound,
+    ChannelNotFound,
+    ResourceNotFoundError,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -24,10 +27,12 @@ class PackageManifest(OCP):
     """
 
     def __init__(
-        self, resource_name='', namespace=constants.MARKETPLACE_NAMESPACE,
+        self,
+        resource_name="",
+        namespace=constants.MARKETPLACE_NAMESPACE,
         install_plan_namespace=None,
         subscription_plan_approval="Automatic",
-        **kwargs
+        **kwargs,
     ):
         """
         Initializer function for PackageManifest class
@@ -41,12 +46,14 @@ class PackageManifest(OCP):
 
         """
         self.install_plan_namespace = install_plan_namespace or (
-            config.ENV_DATA.get('cluster_namespace')
+            config.ENV_DATA.get("cluster_namespace")
         )
         self.subscription_plan_approval = subscription_plan_approval
         super(PackageManifest, self).__init__(
-            namespace=namespace, resource_name=resource_name, kind='packagemanifest',
-            **kwargs
+            namespace=namespace,
+            resource_name=resource_name,
+            kind="packagemanifest",
+            **kwargs,
         )
 
     def get(self, **kwargs):
@@ -59,12 +66,12 @@ class PackageManifest(OCP):
         """
         resource_name = kwargs.get("resource_name", "")
         resource_name = resource_name if resource_name else self.resource_name
-        selector = kwargs.get('selector')
+        selector = kwargs.get("selector")
         selector = selector if selector else self.selector
 
         data = super(PackageManifest, self).get(**kwargs)
-        if type(data) == dict and (data.get('kind') == 'List'):
-            items = data['items']
+        if type(data) == dict and (data.get("kind") == "List"):
+            items = data["items"]
             data_len = len(items)
             if data_len == 0 and selector and resource_name:
                 raise ResourceNotFoundError(
@@ -75,7 +82,7 @@ class PackageManifest(OCP):
                 return items[0]
             if data_len > 1 and resource_name:
                 items_match_name = [
-                    i for i in items if i['metadata']['name'] == resource_name
+                    i for i in items if i["metadata"]["name"] == resource_name
                 ]
                 if len(items_match_name) == 1:
                     return items_match_name[0]
@@ -98,11 +105,12 @@ class PackageManifest(OCP):
         """
         self.check_name_is_specified()
         try:
-            return self.data['status']['defaultChannel']
+            return self.data["status"]["defaultChannel"]
         except KeyError as ex:
             log.error(
                 "Can't get default channel for package manifest. "
-                "Value of self.data attribute: %s", str(self.data)
+                "Value of self.data attribute: %s",
+                str(self.data),
             )
             raise ex
 
@@ -120,17 +128,16 @@ class PackageManifest(OCP):
         """
         self.check_name_is_specified()
         try:
-            return self.data['status']['channels']
+            return self.data["status"]["channels"]
         except KeyError as ex:
             log.error(
                 "Can't get channels for package manifest. "
-                "Value of self.data attribute: %s", str(self.data)
+                "Value of self.data attribute: %s",
+                str(self.data),
             )
             raise ex
 
-    def get_current_csv(
-        self, channel=None, csv_pattern=constants.OCS_CSV_PREFIX
-    ):
+    def get_current_csv(self, channel=None, csv_pattern=constants.OCS_CSV_PREFIX):
         """
         Returns current csv for default or specified channel
 
@@ -162,12 +169,11 @@ class PackageManifest(OCP):
                     "name from the packageManifest"
                 )
         for _channel in channels:
-            if _channel['name'] == channel:
-                return _channel['currentCSV']
-        channel_names = [_channel['name'] for _channel in channels]
+            if _channel["name"] == channel:
+                return _channel["currentCSV"]
+        channel_names = [_channel["name"] for _channel in channels]
         raise ChannelNotFound(
-            f"Channel: {channel} not found in available channels: "
-            f"{channel_names}"
+            f"Channel: {channel} not found in available channels: " f"{channel_names}"
         )
 
     def get_installed_csv_from_install_plans(self, pattern):
@@ -181,18 +187,23 @@ class PackageManifest(OCP):
             CSVNotFound: In case no CSV found from approved install plans.
         """
         install_plan = InstallPlan(namespace=self.install_plan_namespace)
-        install_plans = install_plan.get()['items']
+        install_plans = install_plan.get()["items"]
         for ip in install_plans:
-            csv_names = ip['spec']['clusterServiceVersionNames']
+            csv_names = ip["spec"]["clusterServiceVersionNames"]
             if len(csv_names) != 1:
                 continue
-            csv_name = ip['spec']['clusterServiceVersionNames'][0]
-            if (pattern in csv_name and ip['spec']['approved']):
+            csv_name = ip["spec"]["clusterServiceVersionNames"][0]
+            if pattern in csv_name and ip["spec"]["approved"]:
                 return csv_name
         raise CSVNotFound("No CSV found from approved install plans")
 
     def wait_for_resource(
-        self, resource_name='', timeout=60, sleep=3, label=None, selector=None,
+        self,
+        resource_name="",
+        timeout=60,
+        sleep=3,
+        label=None,
+        selector=None,
     ):
         """
         Wait for a packagemanifest exists.
@@ -219,10 +230,8 @@ class PackageManifest(OCP):
         selector = selector if selector else self.selector
         self.check_name_is_specified(resource_name)
 
-        for sample in TimeoutSampler(
-            timeout=timeout, sleep=sleep, func=self.get
-        ):
-            if sample.get('metadata', {}).get('name') == resource_name:
+        for sample in TimeoutSampler(timeout=timeout, sleep=sleep, func=self.get):
+            if sample.get("metadata", {}).get("name") == resource_name:
                 log.info(f"package manifest {resource_name} found!")
                 return
             log.info(f"package manifest {resource_name} not found!")
@@ -250,7 +259,8 @@ def get_selector_for_ocs_operator():
     except CommandFailed:
         log.info("Catalog source not found!")
     operator_source = OCP(
-        kind="OperatorSource", resource_name=constants.OPERATOR_SOURCE_NAME,
+        kind="OperatorSource",
+        resource_name=constants.OPERATOR_SOURCE_NAME,
         namespace=constants.MARKETPLACE_NAMESPACE,
     )
     try:

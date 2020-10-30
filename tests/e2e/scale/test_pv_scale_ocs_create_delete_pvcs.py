@@ -37,12 +37,18 @@ class BasePvcPodCreateDelete(E2ETest):
         log.info(f"Create {number_of_pvc} pvcs and pods")
         self.delete_pod_count = round(number_of_pvc / 2)
         cephfs_pvcs = helpers.create_multiple_pvc_parallel(
-            cephfs_sc_obj, self.namespace, number_of_pvc, size,
-            access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
+            cephfs_sc_obj,
+            self.namespace,
+            number_of_pvc,
+            size,
+            access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX],
         )
         rbd_pvcs = helpers.create_multiple_pvc_parallel(
-            rbd_sc_obj, self.namespace, number_of_pvc, size,
-            access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
+            rbd_sc_obj,
+            self.namespace,
+            number_of_pvc,
+            size,
+            access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX],
         )
         # Appending all the pvc obj to base case param for cleanup and evaluation
         self.all_pvc_obj.extend(cephfs_pvcs + rbd_pvcs)
@@ -61,8 +67,7 @@ class BasePvcPodCreateDelete(E2ETest):
             rbd_rwo_pvc, self.namespace, constants.CEPHBLOCKPOOL
         )
         rbd_rwx_pods = helpers.create_pods_parallel(
-            rbd_rwx_pvc, self.namespace, constants.CEPHBLOCKPOOL,
-            raw_block_pv=True
+            rbd_rwx_pvc, self.namespace, constants.CEPHBLOCKPOOL, raw_block_pv=True
         )
         temp_pod_objs = list()
         temp_pod_objs.extend(cephfs_pods + rbd_rwo_pods)
@@ -73,11 +78,23 @@ class BasePvcPodCreateDelete(E2ETest):
         if start_io:
             threads = list()
             for pod_obj in temp_pod_objs:
-                process = threading.Thread(target=pod_obj.run_io, args=('fs', '512M',))
+                process = threading.Thread(
+                    target=pod_obj.run_io,
+                    args=(
+                        "fs",
+                        "512M",
+                    ),
+                )
                 process.start()
                 threads.append(process)
             for pod_obj in rbd_rwx_pods:
-                process = threading.Thread(target=pod_obj.run_io, args=('block', '512M',))
+                process = threading.Thread(
+                    target=pod_obj.run_io,
+                    args=(
+                        "block",
+                        "512M",
+                    ),
+                )
                 process.start()
                 threads.append(process)
             for process in threads:
@@ -117,19 +134,19 @@ class BasePvcPodCreateDelete(E2ETest):
 @pytest.mark.parametrize(
     argnames="start_io",
     argvalues=[
+        pytest.param(*[False], marks=pytest.mark.polarion_id("OCS-682")),
         pytest.param(
-            *[False], marks=pytest.mark.polarion_id("OCS-682")
+            *[True],
+            marks=[pytest.mark.polarion_id("OCS-679"), pytest.mark.bugzilla("1768031")],
         ),
-        pytest.param(
-            *[True], marks=[pytest.mark.polarion_id("OCS-679"), pytest.mark.bugzilla("1768031")]
-        )
-    ]
+    ],
 )
 class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
     """
     Class for TC OCS-682 & OCS-679 Create & Delete Cluster with 1000 PVC with
     and without IO, then Increase the PVC count to 1500. Check for Memory leak
     """
+
     @pytest.fixture()
     def setup_fixture(self, request):
         def finalizer():
@@ -159,7 +176,7 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
     ):
         pvc_count_each_itr = 10
         scale_pod_count = 120
-        size = '10Gi'
+        size = "10Gi"
         test_run_time = 180
         self.all_pvc_obj, self.all_pod_obj = ([] for i in range(2))
         self.delete_pod_count = 0
@@ -170,7 +187,9 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
         # log.info(f"Median dict values for memory leak {median_dict}")
 
         # First Iteration call to create PVC and POD
-        self.create_pvc_pod(self.rbd_sc_obj, self.cephfs_sc_obj, pvc_count_each_itr, size, start_io)
+        self.create_pvc_pod(
+            self.rbd_sc_obj, self.cephfs_sc_obj, pvc_count_each_itr, size, start_io
+        )
 
         # Continue to iterate till the scale pvc limit is reached
         # Also continue to perform create and delete of pod, pvc in parallel
@@ -184,9 +203,15 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
                     " pods & pvc"
                 )
                 thread1 = threading.Thread(target=self.delete_pvc_pod, args=())
-                thread2 = threading.Thread(target=self.create_pvc_pod, args=(
-                    self.rbd_sc_obj, self.cephfs_sc_obj, pvc_count_each_itr, size, start_io
-                )
+                thread2 = threading.Thread(
+                    target=self.create_pvc_pod,
+                    args=(
+                        self.rbd_sc_obj,
+                        self.cephfs_sc_obj,
+                        pvc_count_each_itr,
+                        size,
+                        start_io,
+                    ),
                 )
                 thread1.start()
                 thread2.start()

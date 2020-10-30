@@ -10,7 +10,7 @@ from ocs_ci.helpers.helpers import default_storage_class
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def test_fixture_amq(request):
 
     amq = AMQ()
@@ -31,9 +31,13 @@ class TestAMQBasics(E2ETest):
             pytest.param(
                 constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2217")
             )
-        ]
+        ],
     )
-    def test_install_and_run_amq_benchmark(self, interface, test_fixture_amq,):
+    def test_install_and_run_amq_benchmark(
+        self,
+        interface,
+        test_fixture_amq,
+    ):
         """
         Create amq cluster and run open messages on it
 
@@ -46,11 +50,11 @@ class TestAMQBasics(E2ETest):
 
         # Run benchmark
         amq_workload_dict = templating.load_yaml(constants.AMQ_WORKLOAD_YAML)
-        amq_workload_dict['producersPerTopic'] = 3
-        amq_workload_dict['consumerPerSubscription'] = 3
+        amq_workload_dict["producersPerTopic"] = 3
+        amq_workload_dict["consumerPerSubscription"] = 3
         result = test_fixture_amq.run_amq_benchmark(amq_workload_yaml=amq_workload_dict)
         amq_output = test_fixture_amq.validate_amq_benchmark(result, amq_workload_dict)
         # Export pgdata to google  google spreadsheet
         test_fixture_amq.export_amq_output_to_gsheet(
-            amq_output=amq_output, sheet_name='E2E Workloads', sheet_index=1
+            amq_output=amq_output, sheet_name="E2E Workloads", sheet_index=1
         )

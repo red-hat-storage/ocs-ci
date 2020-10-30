@@ -20,32 +20,29 @@ class PSIUtils(object):
     """
     A class for handling PSI functionalities
     """
-    def __init__(self, psi_conf):
-        self.auth_url = psi_conf['auth_url']
-        self.username = psi_conf['username']
-        self.password = psi_conf['password']
-        self.project_id = psi_conf['project_id']
-        self.user_domain_name = psi_conf['user_domain_name']
 
-        self.loader = loading.get_plugin_loader('password')
+    def __init__(self, psi_conf):
+        self.auth_url = psi_conf["auth_url"]
+        self.username = psi_conf["username"]
+        self.password = psi_conf["password"]
+        self.project_id = psi_conf["project_id"]
+        self.user_domain_name = psi_conf["user_domain_name"]
+
+        self.loader = loading.get_plugin_loader("password")
         self.auth = self.loader.load_from_options(
             auth_url=self.auth_url,
             username=self.username,
             password=self.password,
             project_id=self.project_id,
-            user_domain_name=self.user_domain_name
+            user_domain_name=self.user_domain_name,
         )
         self.sess = session.Session(auth=self.auth)
-        self.nova_clnt = novac.Client(
-            constants.NOVA_CLNT_VERSION, session=self.sess
-        )
+        self.nova_clnt = novac.Client(constants.NOVA_CLNT_VERSION, session=self.sess)
         self.cinder_clnt = cinderc.Client(
             constants.CINDER_CLNT_VERSION, session=self.sess
         )
 
-    def create_volume(
-        self, name, size=100, volume_type='tripleo', metadata=None
-    ):
+    def create_volume(self, name, size=100, volume_type="tripleo", metadata=None):
         """
         A function to create openstack volumes
 
@@ -59,14 +56,11 @@ class PSIUtils(object):
            Volume : cinderclient.Client.Volumes
 
         """
-        cluster_tag = {'cluster_name': config.ENV_DATA['cluster_name']}
+        cluster_tag = {"cluster_name": config.ENV_DATA["cluster_name"]}
         meta_data = metadata if metadata else cluster_tag
 
         vol = self.cinder_clnt.volumes.create(
-            name=name,
-            size=size,
-            volume_type=volume_type,
-            metadata=meta_data
+            name=name, size=size, volume_type=volume_type, metadata=meta_data
         )
         if not vol:
             raise exceptions.PSIVolumeCreationFailed(
@@ -84,9 +78,7 @@ class PSIUtils(object):
             instance_id (str): uuid of the instance
 
         """
-        self.nova_clnt.volumes.create_server_volume(
-            instance_id, vol.id
-        )
+        self.nova_clnt.volumes.create_server_volume(instance_id, vol.id)
 
     def get_instances_with_pattern(self, pattern):
         """
@@ -101,9 +93,7 @@ class PSIUtils(object):
             novaclient.base.ListWithMeta
 
         """
-        return self.nova_clnt.servers.list(
-            search_opts={'name': pattern}
-        )
+        return self.nova_clnt.servers.list(search_opts={"name": pattern})
 
     def get_volumes_with_tag(self, tag):
         """
@@ -133,7 +123,7 @@ class PSIUtils(object):
 
         """
         for v in volumes:
-            if v.status == 'in-use':
+            if v.status == "in-use":
                 v.detach()
                 v.get()
                 sample = TimeoutSampler(
@@ -141,19 +131,14 @@ class PSIUtils(object):
                     5,
                     self.check_expected_vol_status,
                     vol=v,
-                    expected_state='available'
+                    expected_state="available",
                 )
                 if not sample.wait_for_func_status(True):
                     logger.error(f"Volume {v.name} failed to detach")
                     raise exceptions.PSIVolumeNotInExpectedState()
 
             v.delete()
-            sample = TimeoutSampler(
-                100,
-                5,
-                self.check_vol_deleted,
-                vol=v
-            )
+            sample = TimeoutSampler(100, 5, self.check_vol_deleted, vol=v)
             if not sample.wait_for_func_status(True):
                 logger.error(f"Failed to delete Volume {v.name}")
                 raise exceptions.PSIVolumeDeletionFailed()

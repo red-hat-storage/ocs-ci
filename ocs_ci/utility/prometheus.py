@@ -17,12 +17,7 @@ logger = logging.getLogger(name=__file__)
 # TODO(fbalak): if ignore_more_occurences is set to False then tests are flaky.
 # The root cause should be inspected.
 def check_alert_list(
-    label,
-    msg,
-    alerts,
-    states,
-    severity="warning",
-    ignore_more_occurences=True
+    label, msg, alerts, states, severity="warning", ignore_more_occurences=True
 ):
     """
     Check list of alerts that there are alerts with requested label and
@@ -40,10 +35,7 @@ def check_alert_list(
     """
 
     target_alerts = [
-        alert
-        for alert
-        in alerts
-        if alert.get('labels').get('alertname') == label
+        alert for alert in alerts if alert.get("labels").get("alertname") == label
     ]
 
     logger.info(f"Checking properties of found {label} alerts")
@@ -51,7 +43,7 @@ def check_alert_list(
         for state in states:
             delete = False
             for key, alert in reversed(list(enumerate(target_alerts))):
-                if alert.get('state') == state:
+                if alert.get("state") == state:
                     if delete:
                         d_msg = f"Ignoring {alert} as alert already appeared."
                         logger.debug(d_msg)
@@ -67,14 +59,16 @@ def check_alert_list(
 
     for key, state in enumerate(states):
 
-        assert_msg = 'Alert message for alert {label} is not correct'
-        assert target_alerts[key]['annotations']['message'] == msg, assert_msg
+        assert_msg = "Alert message for alert {label} is not correct"
+        assert target_alerts[key]["annotations"]["message"] == msg, assert_msg
 
         assert_msg = f"Alert {label} doesn't have {severity} severity"
-        assert target_alerts[key]['annotations']['severity_level'] == severity, assert_msg
+        assert (
+            target_alerts[key]["annotations"]["severity_level"] == severity
+        ), assert_msg
 
         assert_msg = f"Alert {label} is not in {state} state"
-        assert target_alerts[key]['state'] == state, assert_msg
+        assert target_alerts[key]["state"] == state, assert_msg
 
     logger.info("Alerts were triggered correctly during utilization")
 
@@ -86,7 +80,7 @@ def check_query_range_result_viafunction(
     exp_metric_num=None,
     exp_delay=None,
     exp_good_time=None,
-    is_float=False
+    is_float=False,
 ):
     """
     Check that result of range query matches expectations expressed via
@@ -128,12 +122,13 @@ def check_query_range_result_viafunction(
     if exp_metric_num is not None and len(result) != exp_metric_num:
         msg = (
             f"result doesn't contain {exp_metric_num} of series only, "
-            f"actual number data series is {len(result)}")
+            f"actual number data series is {len(result)}"
+        )
         logger.error(msg)
         is_result_ok = False
 
     for metric in result:
-        name = metric['metric']['__name__']
+        name = metric["metric"]["__name__"]
         logger.info(f"checking metric {metric['metric']}")
         # get start of the query range for which we are processing data
         start_ts = metric["values"][0][0]
@@ -152,12 +147,9 @@ def check_query_range_result_viafunction(
                 # delta is time since start of the query range
                 delta = dt - start_dt
                 if exp_delay is not None and delta.seconds < exp_delay:
-                    logger.info(
-                        msg + f" but within expected {exp_delay}s delay")
-                elif (exp_good_time is not None
-                        and delta.seconds >= exp_good_time):
-                    logger.info(
-                        msg + f" but after {exp_good_time}s already passed")
+                    logger.info(msg + f" but within expected {exp_delay}s delay")
+                elif exp_good_time is not None and delta.seconds >= exp_good_time:
+                    logger.info(msg + f" but after {exp_good_time}s already passed")
                 else:
                     logger.error(msg)
                     bad_value_timestamps.append(dt)
@@ -215,7 +207,7 @@ def check_query_range_result_enum(
         bool: True if result matches given expectations, False otherwise
     """
     is_value_good = lambda val: val in good_values  # noqa: E731
-    is_value_bad = lambda val: val in bad_values    # noqa: E731
+    is_value_bad = lambda val: val in bad_values  # noqa: E731
     is_result_ok = check_query_range_result_viafunction(
         result,
         is_value_good,
@@ -223,7 +215,7 @@ def check_query_range_result_enum(
         exp_metric_num,
         exp_delay,
         exp_good_time,
-        is_float=False
+        is_float=False,
     )
     return is_result_ok
 
@@ -261,7 +253,7 @@ def check_query_range_result_limits(
         bool: True if result matches given expectations, False otherwise
     """
     is_value_good = lambda val: good_min <= val <= good_max  # noqa: E731
-    is_value_bad = lambda val: False                         # noqa: E731
+    is_value_bad = lambda val: False  # noqa: E731
     is_result_ok = check_query_range_result_viafunction(
         result,
         is_value_good,
@@ -269,7 +261,7 @@ def check_query_range_result_limits(
         exp_metric_num,
         exp_delay,
         exp_good_time,
-        is_float=True
+        is_float=True,
     )
     return is_result_ok
 
@@ -285,8 +277,8 @@ def log_parsing_error(query, resp_content, ex):
 
     """
     logger.error(
-        "For query '%s' Prometheus returned a response which "
-        "failed to be parsed.", query
+        "For query '%s' Prometheus returned a response which " "failed to be parsed.",
+        query,
     )
     logger.debug(ex)
     logger.debug("prometheus reply which failed to load:\n%s\n", resp_content)
@@ -310,11 +302,10 @@ class PrometheusAPI(object):
         Args:
             user (str): OpenShift username used to connect to API
         """
-        self._user = user or config.RUN['username']
+        self._user = user or config.RUN["username"]
         if not password:
             filename = os.path.join(
-                config.ENV_DATA['cluster_path'],
-                config.RUN['password_location']
+                config.ENV_DATA["cluster_path"], config.RUN["password_location"]
             )
             with open(filename) as f:
                 password = f.read()
@@ -326,16 +317,11 @@ class PrometheusAPI(object):
         """
         Login into OCP, refresh endpoint and token.
         """
-        ocp = OCP(
-            kind=constants.ROUTE,
-            namespace=defaults.OCS_MONITORING_NAMESPACE
-        )
-        assert ocp.login(self._user, self._password), 'Login to OCP failed'
+        ocp = OCP(kind=constants.ROUTE, namespace=defaults.OCS_MONITORING_NAMESPACE)
+        assert ocp.login(self._user, self._password), "Login to OCP failed"
         self._token = ocp.get_user_token()
-        route_obj = ocp.get(
-            resource_name=defaults.PROMETHEUS_ROUTE
-        )
-        self._endpoint = 'https://' + route_obj['spec']['host']
+        route_obj = ocp.get(resource_name=defaults.PROMETHEUS_ROUTE)
+        self._endpoint = "https://" + route_obj["spec"]["host"]
 
     def generate_cert(self):
         """
@@ -344,15 +330,14 @@ class PrometheusAPI(object):
         TODO: find proper way how to generate/load cert files.
         """
         kubeconfig_path = os.path.join(
-            config.ENV_DATA['cluster_path'],
-            config.RUN['kubeconfig_location']
+            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
         with open(kubeconfig_path, "r") as f:
             kubeconfig = yaml.load(f, yaml.Loader)
         cert_file = tempfile.NamedTemporaryFile(delete=False)
         cert_file.write(
             base64.b64decode(
-                kubeconfig['clusters'][0]['cluster']['certificate-authority-data']
+                kubeconfig["clusters"][0]["cluster"]["certificate-authority-data"]
             )
         )
         cert_file.close()
@@ -374,7 +359,7 @@ class PrometheusAPI(object):
             dict: Response from Prometheus alerts api
         """
         pattern = f"/api/v1/{resource}"
-        headers = {'Authorization': f"Bearer {self._token}"}
+        headers = {"Authorization": f"Bearer {self._token}"}
 
         logger.debug(f"GET {self._endpoint + pattern}")
         logger.debug(f"headers={headers}")
@@ -385,11 +370,13 @@ class PrometheusAPI(object):
             self._endpoint + pattern,
             headers=headers,
             verify=self._cacert,
-            params=payload
+            params=payload,
         )
         return response
 
-    def query(self, query, timestamp=None, timeout=None, validate=True, mute_logs=False):
+    def query(
+        self, query, timestamp=None, timeout=None, validate=True, mute_logs=False
+    ):
         """
         Perform Prometheus `instant query`_. This is a simple wrapper over
         ``get()`` method with plumbing code for instant queries, additional
@@ -410,17 +397,17 @@ class PrometheusAPI(object):
 
         .. _`instant query`: https://prometheus.io/docs/prometheus/latest/querying/api/#instant-queries
         """
-        query_payload = {'query': query}
+        query_payload = {"query": query}
         log_msg = f"Performing prometheus instant query '{query}'"
         if timestamp is not None:
-            query_payload['time'] = timestamp
+            query_payload["time"] = timestamp
             log_msg += f" for timestamp {timestamp}"
         if timeout is not None:
-            query_payload['timeout'] = timeout
+            query_payload["timeout"] = timeout
         # Log human readable summary of the query
         if not mute_logs:
             logger.info(log_msg)
-        resp = self.get('query', payload=query_payload)
+        resp = self.get("query", payload=query_payload)
         try:
             content = yaml.safe_load(resp.content)
         except Exception as ex:
@@ -456,19 +443,18 @@ class PrometheusAPI(object):
 
         .. _`range query`: https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
         """
-        query_payload = {
-            'query': query,
-            'start': start,
-            'end': end,
-            'step': step}
+        query_payload = {"query": query, "start": start, "end": end, "step": step}
         if timeout is not None:
-            query_payload['timeout'] = timeout
+            query_payload["timeout"] = timeout
         # Human readable summary of the query (details are logged by get
         # method itself with debug level).
-        logger.info((
-            f"Performing prometheus range query '{query}' "
-            f"over a time range ({start}, {end})"))
-        resp = self.get('query_range', payload=query_payload)
+        logger.info(
+            (
+                f"Performing prometheus range query '{query}' "
+                f"over a time range ({start}, {end})"
+            )
+        )
+        resp = self.get("query_range", payload=query_payload)
         try:
             content = yaml.safe_load(resp.content)
         except Exception as ex:
@@ -521,24 +507,25 @@ class PrometheusAPI(object):
         """
         while timeout > 0:
             alerts_response = self.get(
-                'alerts',
+                "alerts",
                 payload={
-                    'silenced': False,
-                    'inhibited': False,
-                }
+                    "silenced": False,
+                    "inhibited": False,
+                },
             )
             msg = f"Request {alerts_response.request.url} failed"
             assert alerts_response.ok, msg
             if state:
                 alerts = [
                     alert
-                    for alert
-                    in alerts_response.json().get('data').get('alerts')
-                    if alert.get('labels').get('alertname') == name
-                    and alert.get('state') == state
+                    for alert in alerts_response.json().get("data").get("alerts")
+                    if alert.get("labels").get("alertname") == name
+                    and alert.get("state") == state
                 ]
-                logger.info(f"Checking for {name} alerts with state {state}... "
-                            f"{len(alerts)} found")
+                logger.info(
+                    f"Checking for {name} alerts with state {state}... "
+                    f"{len(alerts)} found"
+                )
                 if len(alerts) > 0:
                     break
             else:
@@ -546,12 +533,13 @@ class PrometheusAPI(object):
                 # there are no alerts with given name
                 alerts = [
                     alert
-                    for alert
-                    in alerts_response.json().get('data').get('alerts')
-                    if alert.get('labels').get('alertname') == name
+                    for alert in alerts_response.json().get("data").get("alerts")
+                    if alert.get("labels").get("alertname") == name
                 ]
-                logger.info(f"Checking for {name} alerts. There should be no alerts ... "
-                            f"{len(alerts)} found")
+                logger.info(
+                    f"Checking for {name} alerts. There should be no alerts ... "
+                    f"{len(alerts)} found"
+                )
                 if len(alerts) == 0:
                     break
             time.sleep(sleep)
@@ -569,19 +557,15 @@ class PrometheusAPI(object):
                 since measurement end
         """
         time_actual = time.time()
-        time_wait = int(
-            (measure_end_time + time_min) - time_actual
-        )
+        time_wait = int((measure_end_time + time_min) - time_actual)
         if time_wait > 0:
-            logger.info(f"Waiting for approximately {time_wait} seconds for alerts "
-                        f"to be cleared ({time_min} seconds since measurement end)")
+            logger.info(
+                f"Waiting for approximately {time_wait} seconds for alerts "
+                f"to be cleared ({time_min} seconds since measurement end)"
+            )
         else:
             time_wait = 1
-        cleared_alerts = self.wait_for_alert(
-            name=label,
-            state=None,
-            timeout=time_wait
-        )
+        cleared_alerts = self.wait_for_alert(name=label, state=None, timeout=time_wait)
         logger.info(f"Cleared alerts: {cleared_alerts}")
         assert len(cleared_alerts) == 0, f"{label} alerts were not cleared"
         logger.info(f"{label} alerts were cleared")
