@@ -2616,10 +2616,17 @@ def default_volumesnapshotclass(interface_type):
     Returns:
         OCS: VolumeSnapshotClass Instance
     """
+    external = config.DEPLOYMENT['external_mode']
     if interface_type == constants.CEPHBLOCKPOOL:
-        resource_name = constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+        resource_name = (
+            constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
+            if external else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+        )
     elif interface_type == constants.CEPHFILESYSTEM:
-        resource_name = constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+        resource_name = (
+            constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
+            if external else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+        )
     base_snapshot_class = OCP(
         kind=constants.VOLUMESNAPSHOTCLASS,
         resource_name=resource_name
