@@ -7,14 +7,14 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.framework.testlib import tier2, ignore_leftovers, ManageTest
-from tests.manage.z_cluster import cluster_exp_helpers
+from ocs_ci.helpers import cluster_exp_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import s3_io_create_delete, obc_io_create_delete
 from ocs_ci.ocs import cluster as cluster_helpers
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.framework import config
-from tests.manage.z_cluster.pvc_ops import test_create_delete_pvcs
+from ocs_ci.helpers.pvc_ops import test_create_delete_pvcs
 
 logger = logging.getLogger(__name__)
 

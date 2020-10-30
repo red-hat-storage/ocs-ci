@@ -14,7 +14,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
-from tests.helpers import create_resource
+from ocs_ci.helpers.helpers import create_resource
 
 logger = logging.getLogger(__name__)
 

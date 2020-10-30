@@ -3,7 +3,7 @@ import logging
 from abc import ABC, abstractmethod
 
 import boto3
-from tests.helpers import create_resource, create_unique_resource_name, storagecluster_independent_check
+from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name, storagecluster_independent_check
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants

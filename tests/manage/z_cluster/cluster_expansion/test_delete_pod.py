@@ -11,7 +11,7 @@ from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.cluster import get_percent_used_capacity, CephCluster
 from ocs_ci.utility.utils import ceph_health_check
-from tests.disruption_helpers import Disruptions
+from ocs_ci.helpers.disruption_helpers import Disruptions
 
 
 @ignore_leftovers

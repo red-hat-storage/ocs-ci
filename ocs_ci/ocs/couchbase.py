@@ -14,7 +14,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.pillowfight import PillowFight
 from ocs_ci.ocs.ocp import switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources.pod import get_pod_obj
-from tests.helpers import wait_for_resource_state
+from ocs_ci.helpers.helpers import wait_for_resource_state
 
 log = logging.getLogger(__name__)
 

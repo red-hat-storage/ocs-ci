@@ -1,6 +1,6 @@
 import pytest
 import logging
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import ManageTest, tier3, skipif_external_mode
 from tests.fixtures import (

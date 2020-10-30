@@ -20,9 +20,9 @@ from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import utils
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-from ocs_ci.ocs.node import get_typed_nodes, get_app_pod_running_nodes
-from tests.helpers import (
-    wait_for_resource_state, create_pvc, get_worker_nodes
+from ocs_ci.ocs.node import get_typed_nodes, get_app_pod_running_nodes, get_worker_nodes
+from ocs_ci.helpers.helpers import (
+    wait_for_resource_state, create_pvc
 )
 
 

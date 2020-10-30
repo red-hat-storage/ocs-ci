@@ -1,5 +1,5 @@
 import logging
-from tests.helpers import wait_for_resource_state
+from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status
 import pytest
 

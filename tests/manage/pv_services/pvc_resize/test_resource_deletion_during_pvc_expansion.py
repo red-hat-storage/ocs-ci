@@ -8,7 +8,7 @@ from ocs_ci.framework.testlib import (
     skipif_upgraded_from
 )
 from ocs_ci.utility.utils import ceph_health_check
-from tests import disruption_helpers
+from ocs_ci.helpers import disruption_helpers
 
 log = logging.getLogger(__name__)
 

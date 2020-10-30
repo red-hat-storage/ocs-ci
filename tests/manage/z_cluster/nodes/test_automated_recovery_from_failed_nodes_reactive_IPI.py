@@ -8,15 +8,16 @@ from ocs_ci.ocs import machine, constants, defaults
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import get_all_pods, get_osd_pods, get_pod_node
 from ocs_ci.utility.utils import ceph_health_check
-from tests.sanity_helpers import Sanity
-from tests.helpers import (
-    get_worker_nodes, label_worker_node, remove_label_from_worker_node,
+from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.helpers.helpers import (
+    label_worker_node, remove_label_from_worker_node,
     wait_for_resource_state
 )
 from ocs_ci.ocs.node import (
     get_osd_running_nodes, get_app_pod_running_nodes,
     get_both_osd_and_app_pod_running_node, get_node_objs,
-    add_new_node_and_label_it
+    add_new_node_and_label_it,
+    get_worker_nodes
 )
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 

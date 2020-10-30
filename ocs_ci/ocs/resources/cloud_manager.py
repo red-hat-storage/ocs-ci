@@ -15,7 +15,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import TimeoutSampler, load_auth_config
-from tests.helpers import create_resource
+from ocs_ci.helpers.helpers import create_resource
 
 logger = logging.getLogger(name=__file__)
 

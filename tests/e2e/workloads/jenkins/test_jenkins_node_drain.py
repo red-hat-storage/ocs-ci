@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from tests.sanity_helpers import Sanity
+from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.framework.testlib import (

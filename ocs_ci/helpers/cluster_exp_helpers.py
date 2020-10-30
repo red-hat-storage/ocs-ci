@@ -104,9 +104,10 @@ class ClusterFiller():
 
     def filler(self, fill_pod):
         """
-        This function copies the file downloaded by 'downloader' function in a unique directory to increase the
-        cluster space utilization. Currently it makes 30 copies of the downloaded file in a given directory which is
-         equivalent to almost 4 GiB of storage.
+        This function copies the file downloaded by 'downloader' function in a
+        unique directory to increase the cluster space utilization. Currently
+        it makes 30 copies of the downloaded file in a given directory which is
+        equivalent to almost 4 GiB of storage.
 
         Args:
             fill_pod: the pod on which the storage space need to be filled.

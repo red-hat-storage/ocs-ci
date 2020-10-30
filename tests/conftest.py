@@ -75,8 +75,8 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     skipif_upgraded_from
 )
-from tests import helpers
-from tests.helpers import create_unique_resource_name
+from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW
@@ -1504,7 +1504,7 @@ def memory_leak_function(request):
         if thread:
             thread.join()
         log_path = ocsci_log_path()
-        for worker in helpers.get_worker_nodes():
+        for worker in node.get_worker_nodes():
             if os.path.exists(f"/tmp/{worker}-top-output.txt"):
                 copyfile(
                     f"/tmp/{worker}-top-output.txt",
@@ -1539,7 +1539,7 @@ def memory_leak_function(request):
             namespace=config.ENV_DATA['cluster_namespace']
         )
         while get_flag_status() == 'running':
-            for worker in helpers.get_worker_nodes():
+            for worker in node.get_worker_nodes():
                 filename = f"/tmp/{worker}-top-output.txt"
                 top_cmd = f"debug nodes/{worker} -- chroot /host top -n 2 b"
                 with open("/tmp/file.txt", "w+") as temp:

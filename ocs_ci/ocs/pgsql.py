@@ -16,7 +16,7 @@ from ocs_ci.ocs import constants
 from subprocess import CalledProcessError
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, get_operator_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
-from tests.helpers import wait_for_resource_state, create_unique_resource_name
+from ocs_ci.helpers.helpers import wait_for_resource_state, create_unique_resource_name
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 

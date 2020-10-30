@@ -14,7 +14,7 @@ from threading import Thread
 import base64
 
 from ocs_ci.ocs.ocp import OCP, verify_images_upgraded
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (

@@ -7,7 +7,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources import pod
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 

@@ -28,7 +28,7 @@ from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants, node
 from ocs_ci.framework.testlib import E2ETest, performance
 from ocs_ci.ocs.perfresult import PerfResult
-from tests.helpers import get_logs_with_errors
+from ocs_ci.helpers.helpers import get_logs_with_errors
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.version import get_environment_info
 

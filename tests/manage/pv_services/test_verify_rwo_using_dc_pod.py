@@ -8,7 +8,7 @@ from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.ocp import OCP
-from tests.helpers import wait_for_resource_state, create_pod
+from ocs_ci.helpers.helpers import wait_for_resource_state, create_pod
 
 from ocs_ci.utility.utils import TimeoutSampler
 

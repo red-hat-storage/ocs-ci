@@ -12,7 +12,7 @@ from ocs_ci.framework.testlib import (
     E2ETest
 )
 from ocs_ci.ocs.resources import pvc, pod
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.utility.utils import convert_device_size
 
 

@@ -4,11 +4,11 @@ import os
 import re
 import time
 
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, ocp, node
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.framework import config
 from ocs_ci.ocs.utils import mirror_image, get_pod_name_by_pattern
@@ -119,7 +119,7 @@ def get_oc_podman_login_cmd(skip_tls_verify=True):
         f" --insecure-skip-tls-verify={skip_tls_verify}",
         f"podman login -u {user} -p $(oc whoami -t) image-registry.openshift-image-registry.svc:5000"
     ]
-    master_list = helpers.get_master_nodes()
+    master_list = node.get_master_nodes()
     helpers.rsync_kubeconf_to_node(node=master_list[0])
     return cmd_list
 
@@ -243,7 +243,7 @@ def enable_route_and_create_ca_for_registry_access():
         run_cmd(cmd='mkdir /tmp/secret')
     with open(f"/tmp/secret/{route}.crt", "wb") as temp:
         temp.write(base64.b64decode(crt))
-    master_list = helpers.get_master_nodes()
+    master_list = node.get_master_nodes()
     ocp.rsync(
         src="/tmp/secret/", dst='/etc/pki/ca-trust/source/anchors',
         node=master_list[0], dst_node=True
@@ -262,7 +262,7 @@ def image_pull(image_url):
     """
     cmd_list = get_oc_podman_login_cmd()
     cmd_list.append(f"podman pull {image_url}")
-    master_list = helpers.get_master_nodes()
+    master_list = node.get_master_nodes()
     ocp_obj = ocp.OCP()
     ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=cmd_list)
 
@@ -285,7 +285,7 @@ def image_push(image_url, namespace):
     cmd_list = get_oc_podman_login_cmd()
     cmd_list.append(tag_cmd)
     cmd_list.append(push_cmd)
-    master_list = helpers.get_master_nodes()
+    master_list = node.get_master_nodes()
     ocp_obj = ocp.OCP()
     ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=cmd_list)
     logger.info(f"Pushed {image_path} to registry")
@@ -303,7 +303,7 @@ def image_list_all():
     """
     cmd_list = get_oc_podman_login_cmd()
     cmd_list.append("podman image list --format json")
-    master_list = helpers.get_master_nodes()
+    master_list = node.get_master_nodes()
     ocp_obj = ocp.OCP()
     return ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=cmd_list)
 
@@ -320,7 +320,7 @@ def image_rm(registry_path, image_url):
     cmd_list = get_oc_podman_login_cmd()
     cmd_list.append(f"podman rmi {registry_path}")
     cmd_list.append(f"podman rmi {image_url}")
-    master_list = helpers.get_master_nodes()
+    master_list = node.get_master_nodes()
     ocp_obj = ocp.OCP()
     ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=cmd_list)
     logger.info(f"Image {registry_path} rm successful")
