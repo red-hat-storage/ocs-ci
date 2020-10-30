@@ -134,6 +134,9 @@ ENV_DATA:
   # use Flexy for OCP installation (not available for all platforms and
   # deployment types)
   flexy_deployment: False
+  # To enable rotational disk devices for LSO deployment we can set
+  # local_storage_allow_rotational_disks to true
+  local_storage_allow_rotational_disks: false
 
 # This section is related to upgrade
 UPGRADE:
