@@ -1106,7 +1106,10 @@ def setup_local_storage(storageclass):
         # Since we don't have datastore with SSD on our current VMware machines, localvolumeset doesn't detect
         # NonRotational disk. As a workaround we are setting Rotational to device MechanicalProperties to detect
         # HDD disk
-        if platform == constants.VSPHERE_PLATFORM:
+        if (
+            platform == constants.VSPHERE_PLATFORM
+            or config.ENV_DATA.get("local_storage_allow_rotational_disks")
+        ):
             logger.info("Adding Rotational for deviceMechanicalProperties spec to detect HDD disk")
             lvs_data['spec']['deviceInclusionSpec']['deviceMechanicalProperties'].append("Rotational")
 
