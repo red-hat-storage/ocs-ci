@@ -7,7 +7,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version, E2ETest, flowtests
 )
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
-from tests.disruption_helpers import Disruptions
+from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.ocs import flowtest
 
 log = logging.getLogger(__name__)
