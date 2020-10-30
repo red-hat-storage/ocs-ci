@@ -7,7 +7,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework.testlib import (
     skipif_ocs_version, ManageTest, tier1, acceptance, skipif_upgraded_from
 )
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
 

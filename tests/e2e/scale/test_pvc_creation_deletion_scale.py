@@ -5,7 +5,7 @@ import logging
 import csv
 import pytest
 
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.utility.utils import ocsci_log_path

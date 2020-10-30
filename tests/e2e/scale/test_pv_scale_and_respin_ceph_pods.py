@@ -9,7 +9,7 @@ import pytest
 import threading
 import time
 
-from tests import helpers, disruption_helpers
+from ocs_ci.helpers import helpers, disruption_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import utils

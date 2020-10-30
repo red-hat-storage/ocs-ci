@@ -5,7 +5,7 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.utility.utils import TimeoutSampler
-from tests.helpers import (
+from ocs_ci.helpers.helpers import (
     wait_for_resource_state, verify_volume_deleted_in_backend,
     default_ceph_block_pool
 )

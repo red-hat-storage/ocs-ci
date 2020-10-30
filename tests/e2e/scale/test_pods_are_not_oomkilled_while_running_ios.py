@@ -6,7 +6,7 @@ from ocs_ci.ocs.resources import pod as Pod
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.framework.testlib import E2ETest, scale
-from tests.helpers import (
+from ocs_ci.helpers.helpers import (
     default_storage_class,
     validate_pod_oomkilled,
     validate_pods_are_running_and_not_restarted

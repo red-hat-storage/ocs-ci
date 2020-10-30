@@ -15,7 +15,7 @@ from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs import metrics
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_enum
-from tests.helpers import storagecluster_independent_check
+from ocs_ci.helpers.helpers import storagecluster_independent_check
 
 
 logger = logging.getLogger(__name__)

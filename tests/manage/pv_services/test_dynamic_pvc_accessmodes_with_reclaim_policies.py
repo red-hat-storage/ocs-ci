@@ -2,11 +2,11 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import ManageTest, tier1, acceptance
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class TestDynamicPvc(ManageTest):
         sc_obj = storageclass_factory(
             interface=interface_type, reclaim_policy=reclaim_policy
         )
-        worker_nodes_list = helpers.get_worker_nodes()
+        worker_nodes_list = node.get_worker_nodes()
 
         return sc_obj, worker_nodes_list
 

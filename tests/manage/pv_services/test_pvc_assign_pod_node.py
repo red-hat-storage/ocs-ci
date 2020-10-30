@@ -5,8 +5,9 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import ManageTest, tier1, acceptance
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.resources import pod
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class TestPvcAssignPodNode(ManageTest):
         """
         Test assign nodeName to a pod using RWO pvc
         """
-        worker_nodes_list = helpers.get_worker_nodes()
+        worker_nodes_list = get_worker_nodes()
 
         # Create a RWO PVC
         pvc_obj = pvc_factory(
@@ -97,7 +98,7 @@ class TestPvcAssignPodNode(ManageTest):
         """
         Test assign nodeName to a pod using RWX pvc
         """
-        worker_nodes_list = helpers.get_worker_nodes()
+        worker_nodes_list = get_worker_nodes()
         if interface == constants.CEPHBLOCKPOOL:
             volume_mode = 'Block'
             storage_type = 'block'

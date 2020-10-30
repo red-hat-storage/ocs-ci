@@ -6,8 +6,8 @@ import time
 from ocs_ci.framework.testlib import (
     performance, E2ETest
 )
-from tests import helpers
-from ocs_ci.ocs import constants
+from ocs_ci.helpers import helpers
+from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class TestPVCCreationPerformance(E2ETest):
             os.makedirs(dir_path)
         urllib.request.urlretrieve(kernel_url, file_path)
 
-        worker_nodes_list = helpers.get_worker_nodes()
+        worker_nodes_list = node.get_worker_nodes()
         assert (len(worker_nodes_list) > 1)
         node_one = worker_nodes_list[0]
         node_two = worker_nodes_list[1]

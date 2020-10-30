@@ -6,13 +6,15 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required, ignore_leftovers)
 from ocs_ci.ocs import machine, constants, ocp
 from ocs_ci.ocs.resources import pod
-from tests.sanity_helpers import Sanity
-from tests.helpers import (
-    get_worker_nodes, label_worker_node, remove_label_from_worker_node)
+from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.helpers.helpers import (
+    label_worker_node, remove_label_from_worker_node)
 from ocs_ci.ocs.node import (
     get_osd_running_nodes, get_app_pod_running_nodes,
     get_both_osd_and_app_pod_running_node, get_node_objs,
-    node_network_failure)
+    node_network_failure,
+    get_worker_nodes
+)
 
 
 log = logging.getLogger(__name__)

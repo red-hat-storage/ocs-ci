@@ -5,7 +5,7 @@ import os.path
 import yaml
 
 from ocs_ci.ocs.resources.pvc import PVC
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework.testlib import tier3, ManageTest

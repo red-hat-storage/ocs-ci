@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import (
 )
 
 from concurrent.futures import ThreadPoolExecutor
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import defaults, constants
 from ocs_ci.utility.performance_dashboard import push_to_pvc_time_dashboard
 

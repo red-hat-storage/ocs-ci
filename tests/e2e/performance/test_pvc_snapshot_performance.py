@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import (
     E2ETest, performance
 )
 from ocs_ci.ocs.resources import pod, pvc
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
 

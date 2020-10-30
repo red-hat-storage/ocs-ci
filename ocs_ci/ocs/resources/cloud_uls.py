@@ -1,6 +1,6 @@
 import logging
 
-from tests.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import create_unique_resource_name
 
 log = logging.getLogger(__name__)
 

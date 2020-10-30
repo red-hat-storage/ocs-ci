@@ -13,7 +13,7 @@ from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.utility import templating
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
 

@@ -6,10 +6,9 @@ import pyipmi.interfaces
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.constants import VM_POWERED_OFF, VM_POWERED_ON
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
-from ocs_ci.ocs.node import wait_for_nodes_status
+from ocs_ci.ocs.node import wait_for_nodes_status, get_worker_nodes, get_master_nodes
 from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
 from ocs_ci.utility.utils import TimeoutSampler, load_auth_config, exec_cmd
-from tests import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -149,12 +148,12 @@ class BAREMETAL(object):
 
         wait_for_cluster_connectivity(tries=400)
         wait_for_nodes_status(
-            node_names=helpers.get_master_nodes(),
+            node_names=get_master_nodes(),
             status=constants.NODE_READY,
             timeout=800
         )
         wait_for_nodes_status(
-            node_names=helpers.get_worker_nodes(),
+            node_names=get_worker_nodes(),
             status=constants.NODE_READY,
             timeout=800
         )
@@ -196,12 +195,12 @@ class BAREMETAL(object):
 
         wait_for_cluster_connectivity(tries=400)
         wait_for_nodes_status(
-            node_names=helpers.get_master_nodes(),
+            node_names=get_master_nodes(),
             status=constants.NODE_READY,
             timeout=800
         )
         wait_for_nodes_status(
-            node_names=helpers.get_worker_nodes(),
+            node_names=get_worker_nodes(),
             status=constants.NODE_READY,
             timeout=800
         )

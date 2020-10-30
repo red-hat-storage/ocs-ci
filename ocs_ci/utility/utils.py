@@ -1949,7 +1949,7 @@ def create_rhelpod(namespace, pod_name, timeout=300):
 
     """
     # importing here to avoid dependencies
-    from tests import helpers
+    from ocs_ci.helpers import helpers
     rhelpod_obj = helpers.create_pod(
         namespace=namespace,
         pod_name=pod_name,

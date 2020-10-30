@@ -10,7 +10,7 @@ from ocs_ci.ocs import constants, machine, node
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import ceph_health_check
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class TestWorkerNodesFailure(ManageTest):
             list: dc pod objs
 
         """
-        worker_nodes = helpers.get_worker_nodes()
+        worker_nodes = node.get_worker_nodes()
         ocs_nodes = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
         non_ocs_nodes = list(set(worker_nodes) - set(ocs_nodes))
 
@@ -76,7 +76,7 @@ class TestWorkerNodesFailure(ManageTest):
                 node.add_new_node_and_label_upi(
                     node_type=node_type, num_nodes=1, mark_for_ocs_label=False
                 )
-            non_ocs_nodes = list(set(helpers.get_worker_nodes()) - set(ocs_nodes))
+            non_ocs_nodes = list(set(node.get_worker_nodes()) - set(ocs_nodes))
 
         app_pod_nodes = ocs_nodes if (scenario == "colocated") else non_ocs_nodes
 
@@ -164,7 +164,7 @@ class TestWorkerNodesFailure(ManageTest):
         - Again run IOs from app pods
         """
         pod_objs = setup
-        worker_nodes = helpers.get_worker_nodes()
+        worker_nodes = node.get_worker_nodes()
 
         # Run IO on pods
         logger.info(f"Starting IO on {len(pod_objs)} app pods")
