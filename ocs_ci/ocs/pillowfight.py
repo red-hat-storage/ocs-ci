@@ -56,8 +56,6 @@ class PillowFight(object):
         self.namespace = self.args.get(
             'namespace', 'couchbase-operator-namespace')
         self.ocp = OCP()
-        self.ns_obj = OCP(kind='namespace')
-        self.pod_obj = OCP(kind='pod')
         self.up_check = OCP(namespace=constants.COUCHBASE_OPERATOR)
         self.logs = tempfile.mkdtemp(prefix='pf_logs_')
 
@@ -268,9 +266,3 @@ class PillowFight(object):
 
         """
         rmtree(self.logs)
-        nsinfo = self.pod_obj.exec_oc_cmd(command="get namespace")
-        if constants.COUCHBASE_OPERATOR in nsinfo:
-            self.pod_obj.exec_oc_cmd(
-                command=f"delete namespace {constants.COUCHBASE_OPERATOR}"
-            )
-            self.ns_obj.wait_for_delete(resource_name=constants.COUCHBASE_OPERATOR)

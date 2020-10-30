@@ -35,6 +35,7 @@ class CouchBase(PillowFight):
         constants.COUCHBASE_VALIDATING_WEBHOOK_YAML
     ]
     pod_obj = OCP(kind='pod')
+    ns_obj = OCP(kind='namespace')
     couchbase_pod = OCP(kind='pod')
     secretsadder = OCP(kind='pod')
     admission_pod = []
@@ -106,7 +107,7 @@ class CouchBase(PillowFight):
             timeout=self.WAIT_FOR_TIME,
             sleep=10,
         )
-        self.pod_obj.new_project(constants.COUCHBASE_OPERATOR)
+        self.ns_obj.new_project(constants.COUCHBASE_OPERATOR)
         couchbase_data = templating.load_yaml(
             constants.COUCHBASE_CRD_YAML
         )
@@ -297,7 +298,8 @@ class CouchBase(PillowFight):
         self.operator_role.delete()
         self.couchbase_obj.delete()
         switch_to_project('default')
-        self.pod_obj.delete_project(constants.COUCHBASE_OPERATOR)
+        self.ns_obj.delete_project(constants.COUCHBASE_OPERATOR)
+        self.ns_obj.wait_for_delete(resource_name=constants.COUCHBASE_OPERATOR)
         for adm_yaml in self.admission_parts:
             adm_data = templating.load_yaml(adm_yaml)
             adm_obj = OCS(**adm_data)
