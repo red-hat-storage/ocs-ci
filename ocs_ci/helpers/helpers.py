@@ -2636,6 +2636,7 @@ def get_snapshot_content_obj(snap_obj):
 
     Returns:
         OCS: OCS instance of kind VolumeSnapshotContent
+
     """
     data = dict()
     data['api_version'] = snap_obj.api_version
