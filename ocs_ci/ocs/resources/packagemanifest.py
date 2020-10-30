@@ -6,7 +6,8 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, CSVNotFound, ChannelNotFound, ResourceNotFoundError
+    CommandFailed, CSVNotFound, ChannelNotFound,
+    NoInstallPlanForApproveFoundException, ResourceNotFoundError
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -156,10 +157,15 @@ class PackageManifest(OCP):
                 return self.get_installed_csv_from_install_plans(
                     pattern=csv_pattern,
                 )
+            except NoInstallPlanForApproveFoundException:
+                log.debug(
+                    "All install plans approved, continue to get the CSV name "
+                    "from the packageManifest"
+                )
             except CSVNotFound:
                 log.warning(
                     "No CSV found from any installPlan, continue to get the CSV"
-                    "name from the packageManifest"
+                    " name from the packageManifest"
                 )
         for _channel in channels:
             if _channel['name'] == channel:
@@ -179,9 +185,20 @@ class PackageManifest(OCP):
 
         Raises:
             CSVNotFound: In case no CSV found from approved install plans.
+            NoInstallPlanForApproveFoundException: In case no install plan
+                for approve found.
+
         """
         install_plan = InstallPlan(namespace=self.install_plan_namespace)
         install_plans = install_plan.get()['items']
+        not_approved_install_plans = [
+            ip for ip in install_plans if not ip['spec']['approved']
+        ]
+        if not not_approved_install_plans:
+            raise NoInstallPlanForApproveFoundException(
+                "No insall plan for approve found!"
+            )
+        install_plans.reverse()
         for ip in install_plans:
             csv_names = ip['spec']['clusterServiceVersionNames']
             if len(csv_names) != 1:
