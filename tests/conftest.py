@@ -2919,14 +2919,14 @@ def snapshot_restore_factory(request):
         )
 
         if snapshot_info['spec']['volumeSnapshotClassName'] == (
-            constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+            helpers.default_volumesnapshotclass(constants.CEPHBLOCKPOOL).name
         ):
             storageclass = storageclass or helpers.default_storage_class(
                 constants.CEPHBLOCKPOOL
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
         elif snapshot_info['spec']['volumeSnapshotClassName'] == (
-            constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+            helpers.default_volumesnapshotclass(constants.CEPHFILESYSTEM).name
         ):
             storageclass = storageclass or helpers.default_storage_class(
                 constants.CEPHFILESYSTEM
