@@ -2628,6 +2628,15 @@ def default_volumesnapshotclass(interface_type):
 
 
 def get_snapshot_content_obj(snap_obj):
+    """
+    Get volume snapshot content of a volume snapshot
+
+    Args:
+        snap_obj (OCS): OCS instance of kind VolumeSnapshot
+
+    Returns:
+        OCS: OCS instance of kind VolumeSnapshotContent
+    """
     data = dict()
     data['api_version'] = snap_obj.api_version
     data['kind'] = constants.VOLUMESNAPSHOTCONTENT
