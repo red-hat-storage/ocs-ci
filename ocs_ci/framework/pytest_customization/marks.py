@@ -95,6 +95,11 @@ ignore_leftover_label = pytest.mark.ignore_leftover_label
 # under development, you can mark it with @run_this and run pytest -m run_this
 run_this = pytest.mark.run_this
 
+# Skip marks
+skip_inconsistent = pytest.mark.skip(
+    reason='Currently the reduction is too inconsistent leading to inconsistent test results'
+)
+
 # Skipif marks
 skipif_aws_creds_are_missing = pytest.mark.skipif(
     (
@@ -139,10 +144,9 @@ on_prem_platform_required = pytest.mark.skipif(
     reason="Test runs ONLY on on-prem based deployed cluster"
 )
 
-
 rh_internal_lab_required = pytest.mark.skipif(
     (config.ENV_DATA['platform'].lower() == 'aws'
-        or config.ENV_DATA['platform'].lower() == 'azure'),
+     or config.ENV_DATA['platform'].lower() == 'azure'),
     reason="Tests will not run in AWS or Azure Cloud"
 )
 
