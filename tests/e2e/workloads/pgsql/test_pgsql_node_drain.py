@@ -3,7 +3,7 @@ import pytest
 from datetime import datetime
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import node
-from tests.sanity_helpers import Sanity
+from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.framework.testlib import (
     E2ETest, workloads
 )

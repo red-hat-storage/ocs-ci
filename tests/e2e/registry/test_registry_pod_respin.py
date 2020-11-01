@@ -1,18 +1,14 @@
 import pytest
 import logging
 
-
-from ocs_ci.ocs.constants import OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.registry import (
-    validate_registry_pod_status,
-    image_pull, image_push, image_list_all, image_rm,
-    check_image_exists_in_registry
+    validate_registry_pod_status, image_pull_and_push,
+    validate_image_exists
 )
 from ocs_ci.framework.testlib import E2ETest, workloads
-from ocs_ci.utility.svt import svt_setup, svt_cleanup
-from tests import disruption_helpers
-from tests.sanity_helpers import Sanity
+from ocs_ci.helpers import disruption_helpers
+from ocs_ci.helpers.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
 IMAGE_URL = 'docker.io/library/busybox'
@@ -34,40 +30,45 @@ class TestRegistryPodRespin(E2ETest):
         self.sanity_helpers = Sanity()
 
     @pytest.fixture(autouse=True)
-    def teardown(self, request):
+    def setup(self, request):
         """
-        Clean up svt
+        Setup and clean up the namespace
+        """
 
-        """
-        self.image_path = None
+        self.project_name = 'test'
+        ocp_obj = ocp.OCP(kind=constants.NAMESPACES)
+        ocp_obj.new_project(project_name=self.project_name)
 
         def finalizer():
-            log.info("Remove image from registry")
-            image_rm(registry_path=self.image_path, image_url=IMAGE_URL)
-            log.info("Calling svt cleanup")
-            assert svt_cleanup(), "Failed to cleanup svt"
+            log.info("Clean up and remove namespace")
+            ocp_obj.exec_oc_cmd(command=f'delete project {self.project_name}')
+
+            # Reset namespace to default
+            ocp.switch_to_default_rook_cluster_project()
+            ocp_obj.wait_for_delete(resource_name=self.project_name)
+
         request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
         argnames=[
-            "pod_name", "iterations"
+            "pod_name"
         ],
         argvalues=[
             pytest.param(
-                *['mon', 5], marks=pytest.mark.polarion_id("OCS-1797")
+                *['mon'], marks=pytest.mark.polarion_id("OCS-1797")
             ),
             pytest.param(
-                *['osd', 5], marks=pytest.mark.polarion_id("OCS-1798")
+                *['osd'], marks=pytest.mark.polarion_id("OCS-1798")
             ),
             pytest.param(
-                *['mgr', 5], marks=pytest.mark.polarion_id("OCS-1799")
+                *['mgr'], marks=pytest.mark.polarion_id("OCS-1799")
             ),
             pytest.param(
-                *['mds', 5], marks=pytest.mark.polarion_id("OCS-1790")
+                *['mds'], marks=pytest.mark.polarion_id("OCS-1790")
             )
         ]
     )
-    def test_registry_respin_pod(self, pod_name, iterations):
+    def test_registry_respin_pod(self, pod_name):
         """
         Test registry workload when backed by OCS respin of ceph pods
         """
@@ -78,23 +79,16 @@ class TestRegistryPodRespin(E2ETest):
         disruption.set_resource(resource=f'{pod_name}')
         disruption.delete_resource()
 
-        # Start SVT workload for pushing images to registry
-        svt_setup(iterations=iterations)
-
-        # Image pull and push to registry
-        image_pull(image_url=IMAGE_URL)
-        self.image_path = image_push(
-            image_url=IMAGE_URL, namespace=OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+        # Pull and push images to registries
+        log.info("Pull and push images to registries")
+        image_pull_and_push(
+            project_name=self.project_name, template='eap-cd-basic-s2i',
+            image='registry.redhat.io/jboss-eap-7-tech-preview/eap-cd-openshift-rhel8:latest',
+            pattern='eap-app'
         )
 
-        # List the images in registry
-        img_list = image_list_all()
-        log.info(f"Image list {img_list}")
-
-        # Check either image present in registry or not
-        validate = check_image_exists_in_registry(image_url=IMAGE_URL)
-        if not validate:
-            raise UnexpectedBehaviour("Image URL not present in registry")
+        # Validate image exists in registries path
+        validate_image_exists(namespace=self.project_name)
 
         # Validate image registry pods
         validate_registry_pod_status()

@@ -19,7 +19,7 @@ from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
-from tests.helpers import (
+from ocs_ci.helpers.helpers import (
     create_unique_resource_name, create_resource,
     calc_local_file_md5_sum, retrieve_default_ingress_crt,
     storagecluster_independent_check
@@ -344,11 +344,13 @@ class MCG:
             verify=retrieve_verification_mode()
         )
 
-    def check_data_reduction(self, bucketname):
+    def check_data_reduction(self, bucketname, expected_reduction_in_bytes):
         """
         Checks whether the data reduction on the MCG server works properly
         Args:
             bucketname: An example bucket name that contains compressed/deduped data
+            expected_reduction_in_bytes: amount of data that is supposed to be reduced after data
+            compression and deduplication.
 
         Returns:
             bool: True if the data reduction mechanics work, False otherwise
@@ -370,9 +372,8 @@ class MCG:
             return bucket_data, bucket_data_reduced
 
         try:
-            expected_reduction = 100 * 1024 * 1024
             for total_size, total_reduced in TimeoutSampler(140, 5, _retrieve_reduction_data):
-                if total_size - total_reduced > expected_reduction:
+                if total_size - total_reduced > expected_reduction_in_bytes:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
                     )
@@ -383,11 +384,10 @@ class MCG:
                         'Retrying in 5 seconds...'
                     )
         except TimeoutExpiredError:
-            logger.error(
+            assert False, (
                 'Data reduction is insufficient. '
-                f'{total_size - total_reduced} bytes reduced out of {expected_reduction}.'
+                f'{total_size - total_reduced} bytes reduced out of {expected_reduction_in_bytes}.'
             )
-            assert False
 
     def request_aws_credentials(self):
         """
@@ -591,13 +591,14 @@ class MCG:
         tiers['placement'] = placement
         return create_resource(**bc_data)
 
-    def check_if_mirroring_is_done(self, bucket_name):
+    def check_if_mirroring_is_done(self, bucket_name, timeout=140):
         """
         Check whether all object chunks in a bucket
         are mirrored across all backing stores.
 
         Args:
             bucket_name: The name of the bucket that should be checked
+            timeout: timeout in seconds to check if mirroring
 
         Returns:
             bool: Whether mirroring finished successfully
@@ -631,7 +632,7 @@ class MCG:
             return all(results)
 
         try:
-            for mirroring_is_complete in TimeoutSampler(140, 5, _check_mirroring):
+            for mirroring_is_complete in TimeoutSampler(timeout, 5, _check_mirroring):
                 if mirroring_is_complete:
                     logger.info(
                         'All objects mirrored successfully.'

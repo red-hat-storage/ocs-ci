@@ -11,6 +11,8 @@ and with consideration of the entire project.
 
 import os
 
+# Logging
+LOG_FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
 
 # Directories
 TOP_DIR = os.path.dirname(
@@ -56,6 +58,7 @@ TEMPLATE_DEPLOYMENT_EO = os.path.join(
 TEMPLATE_DEPLOYMENT_CLO = os.path.join(
     TEMPLATE_DEPLOYMENT_LOGGING, "clusterlogging_operator"
 )
+TEMPLATE_AUTHENTICATION_DIR = os.path.join(TEMPLATE_DIR, 'authentication')
 DATA_DIR = os.path.join(TOP_DIR, 'data')
 ROOK_REPO_DIR = os.path.join(DATA_DIR, 'rook')
 ROOK_EXAMPLES_DIR = os.path.join(
@@ -108,10 +111,12 @@ CLUSTER_OPERATOR = 'ClusterOperator'
 MONITORING = 'monitoring'
 CLUSTER_SERVICE_VERSION = 'csv'
 JOB = 'job'
+OAUTH = 'OAuth'
 LOCAL_VOLUME = 'localvolume'
 PROXY = 'Proxy'
 MACHINECONFIGPOOL = "MachineConfigPool"
 VOLUMESNAPSHOTCLASS = "VolumeSnapshotClass"
+HPA = "horizontalpodautoscaler"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -154,6 +159,7 @@ CRITICAL_ERRORS = [
 ]
 must_gather_pod_label = "must-gather"
 drain_canary_pod_label = "rook-ceph-drain-canary"
+OCS_MONKEY_REPOSITORY = "https://github.com/red-hat-storage/ocs-monkey.git"
 
 # AMQ
 AMQ_NAMESPACE = "myproject"
@@ -179,7 +185,6 @@ JENKINS_BUILD_COMPLETE = "Complete"
 RIPSAW_CRD = "resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml"
 RIPSAW_DROP_CACHE = os.path.join(TEMPLATE_FIO_DIR, "drop_cache_pod.yaml")
 OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
-LOCAL_STORAGE_NAMESPACE = 'local-storage'
 
 
 # Default StorageClass
@@ -205,11 +210,18 @@ DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS = (
     f'{DEFAULT_CLUSTERNAME}-cephfsplugin-snapclass'
 )
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD = f'{DEFAULT_CLUSTERNAME}-rbdplugin-snapclass'
+DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS = (
+    f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephfsplugin-snapclass'
+)
+DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD = (
+    f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-rbdplugin-snapclass'
+)
 
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
 GB = 1024 ** 3
 GB2KB = 1024 ** 2
+GB2MB = 1024
 
 # Reclaim Policy
 RECLAIM_POLICY_RETAIN = 'Retain'
@@ -240,6 +252,7 @@ NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
 NOOBAA_OPERATOR_POD_LABEL = "noobaa-operator=deployment"
 NOOBAA_DB_LABEL = "noobaa-db=noobaa"
 NOOBAA_ENDPOINT_POD_LABEL = "noobaa-s3=noobaa"
+ROOK_CEPH_DETECT_VERSION_LABEL = "app=rook-ceph-detect-version"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
@@ -552,12 +565,20 @@ CATALOG_SOURCE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "catalog-source.yaml"
 )
 
+STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "stageImageContentSourcePolicy.yaml"
+)
+
 SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml"
 )
 
 STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
+)
+
+IBM_STORAGE_CLUSTER_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "ibm-storage-cluster.yaml"
 )
 
 EXTERNAL_STORAGE_CLUSTER_YAML = os.path.join(
@@ -575,6 +596,11 @@ OPERATOR_SOURCE_SECRET_YAML = os.path.join(
 OPERATOR_SOURCE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "operator-source.yaml"
 )
+
+HTPASSWD_IDP_YAML = os.path.join(
+    TEMPLATE_AUTHENTICATION_DIR, 'htpasswd_provider.yaml'
+)
+
 
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
@@ -600,6 +626,9 @@ FIO_IO_PARAMS_YAML = os.path.join(
 )
 FIO_IO_RW_PARAMS_YAML = os.path.join(
     TEMPLATE_FIO_DIR, "workload_io_rw.yaml"
+)
+FIO_IO_FILLUP_PARAMS_YAML = os.path.join(
+    TEMPLATE_FIO_DIR, "workload_io_fillup.yaml"
 )
 FIO_DC_YAML = os.path.join(
     TEMPLATE_FIO_DIR, "fio_dc.yaml"
@@ -669,6 +698,8 @@ ALERT_BUCKETERRORSTATE = 'NooBaaBucketErrorState'
 ALERT_BUCKETEXCEEDINGQUOTASTATE = 'NooBaaBucketExceedingQuotaState'
 ALERT_CLUSTERNEARFULL = 'CephClusterNearFull'
 ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
+ALERT_CLUSTEROBJECTSTORESTATE = 'ClusterObjectStoreState'
+ALERT_KUBEHPAREPLICASMISMATCH = 'KubeHpaReplicasMismatch'
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -677,6 +708,7 @@ NODE_SELECTOR_ANNOTATION = "openshift.io/node-selector="
 TOPOLOGY_ROOK_LABEL = "topology.rook.io/rack"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
 OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
+OSBS_BOUNDLE_IMAGE = "registry-proxy.engineering.redhat.com/rh-osbs/iib-pub-pending"
 MARKETPLACE_NAMESPACE = "openshift-marketplace"
 MONITORING_NAMESPACE = "openshift-monitoring"
 OPERATOR_INTERNAL_SELECTOR = "ocs-operator-internal=true"
@@ -706,9 +738,12 @@ AZURE_PLATFORM = 'azure'
 GCP_PLATFORM = 'gcp'
 VSPHERE_PLATFORM = 'vsphere'
 BAREMETAL_PLATFORM = 'baremetal'
-ON_PREM_PLATFORMS = [VSPHERE_PLATFORM, BAREMETAL_PLATFORM]
-CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
+IBM_POWER_PLATFORM = "powervs"
 BAREMETALPSI_PLATFORM = 'baremetalpsi'
+ON_PREM_PLATFORMS = (
+    [VSPHERE_PLATFORM, BAREMETAL_PLATFORM, BAREMETALPSI_PLATFORM]
+)
+CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
 
 # ignition files
 BOOTSTRAP_IGN = "bootstrap.ign"
@@ -717,6 +752,9 @@ WORKER_IGN = "worker.ign"
 
 # terraform provider constants
 TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
+
+# Minimum storage needed for vSphere Datastore in bytes
+MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024 ** 4
 
 # vSphere related constants
 VSPHERE_NODE_USER = "core"
@@ -964,6 +1002,15 @@ LOCAL_STORAGE_OPERATOR = os.path.join(
 LOCAL_VOLUME_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "local-volume.yaml"
 )
+LOCAL_STORAGE_OPTIONAL_OPERATORS = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-storage-optional-operators.yaml"
+)
+LOCAL_VOLUME_DISCOVERY_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-volume-discovery.yaml"
+)
+LOCAL_VOLUME_SET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-volume-set.yaml"
+)
 
 # All worker default config files
 RHCOS_WORKER_CONF = os.path.join(CONF_DIR, 'ocsci/aws_upi_rhcos_workers.yaml')
@@ -1004,6 +1051,7 @@ FLEXY_HOST_DIR_PATH = os.path.join(DATA_DIR, FLEXY_HOST_DIR)
 FLEXY_DEFAULT_ENV_FILE = "ocs-osp.env"
 OPENSHIFT_MISC_BASE = "private-openshift-misc/functionality-testing"
 FLEXY_BAREMETAL_UPI_TEMPLATE = "upi-on-baremetal/versioned-installer-openstack"
+FLEXY_AWS_UPI_TEMPLATE = "upi-on-aws/versioned-installer"
 FLEXY_GIT_CRYPT_KEYFILE = os.path.join(DATA_DIR, "git-crypt-keyfile")
 NTP_CHRONY_CONF = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "ntp_chrony.yaml"
@@ -1015,8 +1063,9 @@ FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
 FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
 FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/aosqe/flexy:poc"
+FLEXY_ENV_FILE_UPDATED_NAME = 'ocs-flexy-env-file-updated.env'
 FLEXY_ENV_FILE_UPDATED = os.path.join(
-    FLEXY_HOST_DIR_PATH, 'ocs-flexy-env-file-updated.env'
+    FLEXY_HOST_DIR_PATH, FLEXY_ENV_FILE_UPDATED_NAME
 )
 REGISTRY_SVC = "registry.svc.ci.openshift.org/ocp/release"
 
@@ -1110,15 +1159,6 @@ MIN_NODE_MEMORY = 64 * 10 ** 9
 AWS_CLOUDFORMATION_TAG = 'aws:cloudformation:stack-name'
 
 # Bare Metal constants
-BOOTSTRAP_PXE_FILE = os.path.join(
-    TEMPLATE_DIR, "baremetal-pxefile", "bootstrap"
-)
-MASTER_PXE_FILE = os.path.join(
-    TEMPLATE_DIR, "baremetal-pxefile", "master"
-)
-WORKER_PXE_FILE = os.path.join(
-    TEMPLATE_DIR, "baremetal-pxefile", "worker"
-)
 PXE_CONF_FILE = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "dnsmasq.pxe.conf"
 )
@@ -1142,3 +1182,28 @@ MCG_NS_AWS_ENDPOINT = 'https://s3.amazonaws.com'
 MCG_NS_RESOURCE = 'ns_resource'
 MCG_NS_BUCKET = 'ns-bucket'
 MCG_NS_AWS_CONNECTION = 'aws_connection'
+
+# Squads assignment
+# Tests are assigned to Squads based on patterns matching test path.
+# For example: In case following test fails:
+# tests/e2e/registry/test_pod_from_registry.py::TestRegistryImage::test_run_pod_local_image
+# the pattern "/registry/" match the test path and so the test belongs to
+# Magenta squad.
+SQUADS = {
+    'Brown': ["/nodes/"],
+    'Green': ["/pv_services/", "/storageclass/"],
+    'Blue': ["/monitoring/"],
+    'Red': ["/mcg/", "/rgw/"],
+    'Yellow': ["/cluster_expansion/"],
+    'Purple': ["/test_must_gather", "/upgrade/"],
+    'Magenta': ["/workloads/", "/registry/", "/logging/"],
+    'Grey': ["/performance/"],
+    'Orange': ["/scale/"],
+}
+
+PRODUCTION_JOBS_PREFIX = ['jnk']
+
+# min and max Noobaa endpoints
+MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
+MCG_TESTS_MIN_NB_ENDPOINT_COUNT = 2
+MAX_NB_ENDPOINT_COUNT = 2

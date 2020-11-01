@@ -6,7 +6,7 @@ from ocs_ci.framework.testlib import (
     E2ETest, workloads, ignore_leftovers
 )
 from ocs_ci.ocs.pgsql import Postgresql
-from tests import disruption_helpers
+from ocs_ci.helpers import disruption_helpers
 from ocs_ci.ocs.node import get_node_resource_utilization_from_adm_top
 
 log = logging.getLogger(__name__)

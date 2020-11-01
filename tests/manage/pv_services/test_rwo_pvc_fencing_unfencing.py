@@ -17,7 +17,7 @@ from ocs_ci.ocs.exceptions import ResourceWrongStatusException, UnexpectedBehavi
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check, get_az_count
-from tests import disruption_helpers, helpers
+from ocs_ci.helpers import disruption_helpers, helpers
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +219,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
         """
         nodes_to_add = 0
-        initial_worker_nodes = helpers.get_worker_nodes()
+        initial_worker_nodes = node.get_worker_nodes()
         ocs_nodes = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
         non_ocs_nodes = list(set(initial_worker_nodes) - set(ocs_nodes))
 
@@ -260,7 +260,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                     mark_for_ocs_label=False
                 )
 
-            new_worker_nodes = helpers.get_worker_nodes()
+            new_worker_nodes = node.get_worker_nodes()
             new_nodes_added = list(set(new_worker_nodes) - set(initial_worker_nodes))
             assert len(new_nodes_added) == nodes_to_add, 'Extra nodes not added in the cluster'
             non_ocs_nodes += new_nodes_added

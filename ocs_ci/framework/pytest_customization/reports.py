@@ -43,6 +43,18 @@ def pytest_runtest_makereport(item, call):
             log_file = logging.getLogger().handlers[1].baseFilename
         extra.append(pytest_html.extras.url(log_file, name='Log File'))
         report.extra = extra
+        item.session.results[item] = report
+    if report.skipped:
+        item.session.results[item] = report
+    if report.when in ('setup', 'teardown') and report.failed:
+        item.session.results[item] = report
+
+
+def pytest_sessionstart(session):
+    """
+    Prepare results dict
+    """
+    session.results = dict()
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -50,4 +62,4 @@ def pytest_sessionfinish(session, exitstatus):
     send email report
     """
     if ocsci_config.RUN['cli_params'].get('email'):
-        email_reports()
+        email_reports(session)

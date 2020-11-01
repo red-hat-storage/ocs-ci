@@ -8,7 +8,7 @@ import pytest
 
 import random
 
-from tests import helpers, disruption_helpers
+from ocs_ci.helpers import helpers, disruption_helpers
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.pod import get_all_pods, delete_deploymentconfig_pods
 from ocs_ci.utility.retry import retry

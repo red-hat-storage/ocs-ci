@@ -72,11 +72,10 @@ DEPLOYMENT:
   preserve_bootstrap_node: False
   # Terraform version
   terraform_version: "0.12.26"
-  # Following options are defaults for the min and max Noobaa endpoints
-  min_noobaa_endpoints: 2
-  max_noobaa_endpoints: 3
   # Following options are defaults for deployment with infra worker nodes
   infra_nodes: False
+  # How long should ocs-ci wait for `openshift-install create cluster` run?
+  openshift_install_timeout: 3600
 
 # Section for reporting configuration
 REPORTING:
@@ -91,6 +90,7 @@ REPORTING:
   ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
   default_ocs_must_gather_latest_tag: 'latest-4.6'
   gather_on_deploy_failure: true
+  collect_logs_on_success_run: False
 
 # This is the default information about environment.
 ENV_DATA:
@@ -98,6 +98,7 @@ ENV_DATA:
   storage_cluster_name: 'ocs-storagecluster'
   storage_device_sets_name: "storageDeviceSets"
   cluster_namespace: 'openshift-storage'
+  local_storage_namespace: 'openshift-local-storage'
   monitoring_enabled: true
   persistent-monitoring: true
   platform: 'AWS'
@@ -130,6 +131,12 @@ ENV_DATA:
   # which allows for 510 (2^(32 - 23) - 2) pod IPs addresses.
   # https://docs.openshift.com/container-platform/4.1/installing/installing_bare_metal/installing-bare-metal.html
   cluster_host_prefix: 23
+  # use Flexy for OCP installation (not available for all platforms and
+  # deployment types)
+  flexy_deployment: False
+  # To enable rotational disk devices for LSO deployment we can set
+  # local_storage_allow_rotational_disks to true
+  local_storage_allow_rotational_disks: false
 
 # This section is related to upgrade
 UPGRADE:
@@ -143,7 +150,7 @@ UPGRADE:
 # for entry into this section, please email ecosystem team
 # or ping in ocs infra chat room.
 AUTH:
-    test_quay_auth: test_secret
+  test_quay_auth: test_secret
 
 # This section is for FLEXY, any variable in this section will be copied into
 # flexy env file
@@ -152,4 +159,4 @@ FLEXY:
 # Defines the configuration of external Ceph Cluster
 EXTERNAL_MODE:
   admin_keyring:
-     key: PLACE_HOLDER
+    key: PLACE_HOLDER

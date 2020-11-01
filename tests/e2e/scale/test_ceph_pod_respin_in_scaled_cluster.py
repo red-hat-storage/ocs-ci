@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from tests import disruption_helpers
+from ocs_ci.helpers import disruption_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.utility import utils
 from ocs_ci.ocs.scale_lib import FioPodScale
@@ -13,7 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope='class')
 def fioscale(request):
     """
     FIO Scale fixture to create expected number of POD+PVC

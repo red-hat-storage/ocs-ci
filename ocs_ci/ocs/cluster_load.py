@@ -9,7 +9,9 @@ from uuid import uuid4
 import math
 
 from range_key_dict import RangeKeyDict
+from yaml.scanner import ScannerError
 
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.utils import get_trim_mean
 from ocs_ci.utility import templating
@@ -313,6 +315,7 @@ class ClusterLoad:
         logger.info(wrap_msg(msg))
         self.target_pods_number = len(self.dc_objs)
 
+    @retry((IndexError, ScannerError), tries=15, delay=5, backoff=1)
     def get_query(self, query, mute_logs=False):
         """
         Get query from Prometheus and parse it

@@ -14,8 +14,8 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility.workloadfixture import measure_operation
-from tests import helpers
-from tests.helpers import create_unique_resource_name
+from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import create_unique_resource_name
 
 
 logger = logging.getLogger(__name__)
@@ -711,4 +711,52 @@ def workload_idle(measurement_dir):
 
     test_file = os.path.join(measurement_dir, 'measure_workload_idle.json')
     measured_op = measure_operation(do_nothing, test_file)
+    return measured_op
+
+
+@pytest.fixture
+def measure_stop_rgw(measurement_dir, request, rgw_deployments):
+    """
+    Downscales RGW deployments, measures the time when it was
+    downscaled and monitors alerts that were triggered during this event.
+
+    Returns:
+        dict: Contains information about `start` and `stop` time for stopping
+            RGW pods
+
+    """
+    oc = ocp.OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA['cluster_namespace']
+    )
+
+    def stop_rgw():
+        """
+        Downscale RGW interface deployments for 5 minutes.
+
+        Returns:
+            str: Name of downscaled deployment
+
+        """
+        # run_time of operation
+        run_time = 60 * 5
+        nonlocal oc
+        nonlocal rgw_deployments
+        for rgw_deployment in rgw_deployments:
+            rgw = rgw_deployment['metadata']['name']
+            logger.info(f"Downscaling deployment {rgw} to 0")
+            oc.exec_oc_cmd(f"scale --replicas=0 deployment/{rgw}")
+        logger.info(f"Waiting for {run_time} seconds")
+        time.sleep(run_time)
+        return rgw_deployments
+
+    test_file = os.path.join(measurement_dir, 'measure_stop_rgw.json')
+    measured_op = measure_operation(stop_rgw, test_file)
+
+    logger.info('Return RGW pods')
+    for rgw_deployment in rgw_deployments:
+        rgw = rgw_deployment['metadata']['name']
+        logger.info(f"Upscaling deployment {rgw} to 1")
+        oc.exec_oc_cmd(f"scale --replicas=1 deployment/{rgw}")
+
     return measured_op

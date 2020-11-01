@@ -57,6 +57,7 @@ ui = pytest.mark.ui
 csi = pytest.mark.csi
 monitoring = pytest.mark.monitoring
 workloads = pytest.mark.workloads
+flowtests = pytest.mark.flowtests
 performance = pytest.mark.performance
 scale = pytest.mark.scale
 deployment = pytest.mark.deployment
@@ -94,6 +95,11 @@ ignore_leftover_label = pytest.mark.ignore_leftover_label
 # under development, you can mark it with @run_this and run pytest -m run_this
 run_this = pytest.mark.run_this
 
+# Skip marks
+skip_inconsistent = pytest.mark.skip(
+    reason='Currently the reduction is too inconsistent leading to inconsistent test results'
+)
+
 # Skipif marks
 skipif_aws_creds_are_missing = pytest.mark.skipif(
     (
@@ -123,6 +129,11 @@ azure_platform_required = pytest.mark.skipif(
     reason="Test runs ONLY on Azure deployed cluster"
 )
 
+gcp_platform_required = pytest.mark.skipif(
+    config.ENV_DATA['platform'].lower() != 'gcp',
+    reason="Test runs ONLY on GCP deployed cluster"
+)
+
 cloud_platform_required = pytest.mark.skipif(
     config.ENV_DATA['platform'].lower() not in CLOUD_PLATFORMS,
     reason="Test runs ONLY on cloud based deployed cluster"
@@ -133,10 +144,9 @@ on_prem_platform_required = pytest.mark.skipif(
     reason="Test runs ONLY on on-prem based deployed cluster"
 )
 
-
 rh_internal_lab_required = pytest.mark.skipif(
     (config.ENV_DATA['platform'].lower() == 'aws'
-        or config.ENV_DATA['platform'].lower() == 'azure'),
+     or config.ENV_DATA['platform'].lower() == 'azure'),
     reason="Tests will not run in AWS or Azure Cloud"
 )
 
@@ -172,6 +182,11 @@ skipif_lso = pytest.mark.skipif(
     reason="Test will not run on LSO deployed cluster"
 )
 
+skipif_no_lso = pytest.mark.skipif(
+    not config.DEPLOYMENT.get('local_storage'),
+    reason="Test run only on LSO deployed cluster"
+)
+
 metrics_for_external_mode_required = pytest.mark.skipif(
     float(config.ENV_DATA['ocs_version']) < 4.6
     and config.DEPLOYMENT.get('external_mode') is True,
@@ -189,6 +204,9 @@ gather_metrics_on_fail = pytest.mark.gather_metrics_on_fail
 
 # here is the place to implement some plugins hooks which will process marks
 # if some operation needs to be done for some specific marked tests.
+
+# Marker for skipping tests based on OCP version
+skipif_ocp_version = pytest.mark.skipif_ocp_version
 
 # Marker for skipping tests based on OCS version
 skipif_ocs_version = pytest.mark.skipif_ocs_version

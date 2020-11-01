@@ -1,6 +1,6 @@
 import logging
 
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.framework.testlib import polarion_id, skipif_ocs_version, tier2
 
 log = logging.getLogger(__name__)

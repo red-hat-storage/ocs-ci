@@ -3,11 +3,11 @@ import pytest
 import random
 
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.framework import config
 from ocs_ci.framework.testlib import ManageTest, tier1, acceptance
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.resources import pod
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class TestPvcAssignPodNode(ManageTest):
         """
         Test assign nodeName to a pod using RWO pvc
         """
-        worker_nodes_list = helpers.get_worker_nodes()
+        worker_nodes_list = get_worker_nodes()
 
         # Create a RWO PVC
         pvc_obj = pvc_factory(
@@ -79,13 +79,6 @@ class TestPvcAssignPodNode(ManageTest):
 
     @acceptance
     @tier1
-    @pytest.mark.skipif(
-        config.ENV_DATA['platform'].lower() == 'ibm_cloud',
-        reason=(
-            "Skipping tests on IBM Cloud due to bug 1871314 "
-            "https://bugzilla.redhat.com/show_bug.cgi?id=1871314"
-        )
-    )
     @pytest.mark.parametrize(
         argnames=["interface"],
         argvalues=[
@@ -105,7 +98,7 @@ class TestPvcAssignPodNode(ManageTest):
         """
         Test assign nodeName to a pod using RWX pvc
         """
-        worker_nodes_list = helpers.get_worker_nodes()
+        worker_nodes_list = get_worker_nodes()
         if interface == constants.CEPHBLOCKPOOL:
             volume_mode = 'Block'
             storage_type = 'block'

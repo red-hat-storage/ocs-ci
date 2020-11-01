@@ -4,6 +4,6 @@ kind: VolumeSnapshot
 metadata:
   name: cephfs-pvc-snapshot
 spec:
-  volumeSnapshotClassName: csi-cephfsplugin-snapclass
+  volumeSnapshotClassName: ocs-storagecluster-cephfsplugin-snapclass
   source:
     persistentVolumeClaimName: csi-cephfs-pvc

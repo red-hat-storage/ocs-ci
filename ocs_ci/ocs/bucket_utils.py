@@ -14,7 +14,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
-from tests.helpers import create_resource
+from ocs_ci.helpers.helpers import create_resource
 
 logger = logging.getLogger(__name__)
 
@@ -776,3 +776,26 @@ def retrieve_verification_mode():
     else:
         verify = constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
     return verify
+
+
+def namespace_bucket_update(mcg_obj, bucket_name, read_resource, write_resource):
+    """
+    Edits MCG namespace bucket resources
+
+    Args:
+        mcg_obj (obj): An MCG object containing the MCG S3 connection credentials
+        bucket_name (str): Name of the bucket
+        read_resource (list): Resource names to provide read access
+        write_resource (str): Resource name to provide write access
+
+    """
+    mcg_obj.send_rpc_query(
+        'bucket_api', 'update_bucket',
+        {
+            'name': bucket_name,
+            'namespace': {
+                'read_resources': read_resource,
+                'write_resource': write_resource
+            }
+        }
+    )

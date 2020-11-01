@@ -39,6 +39,7 @@ class AWS(object):
     _region_name = None
     _s3_client = None
     _route53_client = None
+    _elb_client = None
 
     def __init__(self, region_name=None):
         """
@@ -108,6 +109,22 @@ class AWS(object):
                 region_name=self._region_name,
             )
         return self._route53_client
+
+    @property
+    def elb_client(self):
+        """
+        Property for elb client
+
+        Returns:
+            boto3.client: instance of elb client
+
+        """
+        if not self._elb_client:
+            self._elb_client = boto3.client(
+                'elb',
+                region_name=self._region_name,
+            )
+        return self._elb_client
 
     def get_ec2_instance(self, instance_id):
         """
@@ -998,18 +1015,23 @@ class AWS(object):
         logger.info(f"Stackid = {stack_id}")
         return stack_name, stack_id
 
-    def delete_apps_record_set(self, cluster_name=None):
+    def delete_apps_record_set(self, cluster_name=None, from_base_domain=False):
         """
         Delete apps record set that sometimes blocks sg stack deletion.
             https://github.com/red-hat-storage/ocs-ci/issues/2549
 
         Args:
             cluster_name (str): Name of the cluster
+            from_base_domain (bool): Delete apps record set from base domain
+                created by Flexy
 
         """
         cluster_name = cluster_name or config.ENV_DATA['cluster_name']
         base_domain = config.ENV_DATA['base_domain']
-        hosted_zone_name = f"{cluster_name}.{base_domain}."
+        if from_base_domain:
+            hosted_zone_name = f"{base_domain}."
+        else:
+            hosted_zone_name = f"{cluster_name}.{base_domain}."
         record_set_name = f"\\052.apps.{cluster_name}.{base_domain}."
 
         hosted_zones = self.route53_client.list_hosted_zones_by_name(
@@ -1039,6 +1061,7 @@ class AWS(object):
                 f"app record set not found for record {record_set_name}"
             )
             return
+        logger.info(f"Deleting hosted zone: {record_set_name}")
         self.route53_client.change_resource_record_sets(
             HostedZoneId=hosted_zone_id,
             ChangeBatch={
@@ -1093,6 +1116,364 @@ class AWS(object):
                 stack_name = get_stack_name_from_instance_dict(instance_dict)
 
         return stack_name
+
+    @retry(StackStatusError, tries=3, delay=10, backoff=2)
+    def delete_cf_stack_including_dependencies(self, cfs_name):
+        """
+        Delete cloudformation stack including dependencies.
+
+        Some of the depending resources are not deletable, so related errors
+        are ignored and only logged.
+        Thsi method is mainly used as a WORKAROUND for folowing Flexy issue:
+        https://issues.redhat.com/browse/OCPQE-1521
+
+        Args:
+            cfs_name (str): CloudFormation stack name to cleanup
+
+        """
+        # get all VPCs related to the CloudFormation Stack
+        vpcs = self.ec2_client.describe_vpcs(
+            Filters=[{
+                'Name': 'tag:aws:cloudformation:stack-name',
+                'Values': [f"{cfs_name}"],
+            }]
+        )['Vpcs']
+
+        for vpc in vpcs:
+            # get all NetworkInterfaces related to the particular VPC
+            nis = self.ec2_client.describe_network_interfaces(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['NetworkInterfaces']
+            for ni in nis:
+                # delete LoadBalancer related to the NetworkInterface
+                if ni['Description'].split(' ')[0] == 'ELB':
+                    elb = ni['Description'].split(' ')[1]
+                    logger.info(f"Deleting LoadBalancer: {elb}")
+                    try:
+                        self.elb_client.delete_load_balancer(
+                            LoadBalancerName=elb
+                        )
+                    except ClientError as err:
+                        logger.warning(err)
+
+                logger.info(f"Deleting NetworkInterface: {ni['NetworkInterfaceId']}")
+                try:
+                    self.ec2_client.delete_network_interface(
+                        NetworkInterfaceId=ni['NetworkInterfaceId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all InternetGateways related to the particular VPC
+            igs = self.ec2_client.describe_internet_gateways(
+                Filters=[{
+                    'Name': 'attachment.vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['InternetGateways']
+            for ig in igs:
+                logger.info(f"Deleting InternetGateway: {ig['InternetGatewayId']}")
+                try:
+                    self.ec2_client.delete_internet_gateway(
+                        InternetGatewayId=ig['InternetGatewayId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all Subnets related to the particular VPC
+            subnets = self.ec2_client.describe_subnets(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['Subnets']
+            for subnet in subnets:
+                logger.info(f"Deleting Subnet: {subnet['SubnetId']}")
+                try:
+                    self.ec2_client.delete_subnet(
+                        SubnetId=subnet['SubnetId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all RouteTables related to the particular VPC
+            rts = self.ec2_client.describe_route_tables(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['RouteTables']
+            for rt in rts:
+                logger.info(f"Deleting RouteTable: {rt['RouteTableId']}")
+                try:
+                    self.ec2_client.delete_route_table(
+                        RouteTableId=rt['RouteTableId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all NetworkAcls related to the particular VPC
+            nas = self.ec2_client.describe_network_acls(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['NetworkAcls']
+            for na in nas:
+                logger.info(f"Deleting NetworkAcl: {na['NetworkAclId']}")
+                try:
+                    self.ec2_client.delete_network_acl(
+                        NetworkAclId=na['NetworkAclId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all VpcPeeringConnections related to the particular VPC
+            vpc_pcs = self.ec2_client.describe_vpc_peering_connections(
+                Filters=[{
+                    'Name': 'requester-vpc-info.vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['VpcPeeringConnections']
+            for vpc_pc in vpc_pcs:
+                logger.info(f"Deleting VpcPeeringConnection: {vpc_pc['VpcPeeringConnectionId']}")
+                try:
+                    self.ec2_client.delete_vpc_peering_connections(
+                        VpcPeeringConnectionId=vpc_pc['VpcPeeringConnectionId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all VpcEndpoints related to the particular VPC
+            vpc_es = self.ec2_client.describe_vpc_endpoints(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['VpcEndpoints']
+            for vpc_e in vpc_es:
+                logger.info(f"Deleting VpcEndpoint: {vpc_e['VpcEndpointId']}")
+                try:
+                    self.ec2_client.delete_vpc_endpoints(
+                        VpcEndpointIds=[vpc_e['VpcEndpointId']]
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all NatGateways related to the particular VPC
+            ngs = self.ec2_client.describe_nat_gateways(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['NatGateways']
+            for ng in ngs:
+                logger.info(f"Deleting NatGateway: {ng['NatGatewayId']}")
+                try:
+                    self.ec2_client.delete_nat_gateways(
+                        NatGatewayId=ng['NatGatewayId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all VpnConnections related to the particular VPC
+            vcs = self.ec2_client.describe_vpn_connections(
+                Filters=[{
+                    'Name': 'attachment.vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['VpnConnections']
+            for vc in vcs:
+                logger.info(f"Deleting VpnConnection: {vc['VpnConnectionId']}")
+                try:
+                    self.ec2_client.delete_vpn_connection(
+                        VpnConnectionId=vc['VpnConnectionId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all VpnGateways related to the particular VPC
+            vgs = self.ec2_client.describe_vpn_gateways(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['VpnGateways']
+            for vg in vgs:
+                logger.info(f"Deleting VpnGateway: {vg['VpnGatewayId']}")
+                try:
+                    self.ec2_client.delete_vpn_gateway(
+                        VpnGatewayId=vg['VpnGatewayId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all SecurityGroups related to the particular VPC
+            sgs = self.ec2_client.describe_security_groups(
+                Filters=[{
+                    'Name': 'vpc-id',
+                    'Values': [vpc['VpcId']],
+                }]
+            )['SecurityGroups']
+            for sg in sgs:
+                logger.info(f"Deleting SecurityGroup: {sg['GroupId']}")
+                try:
+                    self.ec2_client.delete_security_group(
+                        GroupId=sg['GroupId']
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            logger.info(f"Deleting VPC: {vpc['VpcId']}")
+            try:
+                self.ec2_client.delete_vpc(VpcId=vpc['VpcId'], DryRun=False)
+            except ClientError as err:
+                logger.warning(err)
+
+        logger.info(f"Deleting CloudFormation Stack: {cfs_name}")
+        self.delete_cloudformation_stacks([cfs_name])
+
+    def delete_hosted_zone(self, cluster_name):
+        """
+        Deletes the hosted zone
+
+        Args:
+            cluster_name (str): Name of the cluster
+
+        """
+        cluster_name = cluster_name or config.ENV_DATA['cluster_name']
+        base_domain = config.ENV_DATA['base_domain']
+        hosted_zone_name = f"{cluster_name}.{base_domain}."
+
+        hosted_zones = self.route53_client.list_hosted_zones_by_name(
+            DNSName=hosted_zone_name,
+            MaxItems='50'
+        )['HostedZones']
+        hosted_zone_ids = [
+            zone['Id'] for zone in hosted_zones
+            if zone['Name'] == hosted_zone_name
+        ]
+
+        if hosted_zone_ids:
+            for hosted_zone_id in hosted_zone_ids:
+                logger.info(
+                    f"Deleting domain name {hosted_zone_name} with "
+                    f"hosted zone ID {hosted_zone_id}"
+                )
+                self.delete_all_record_sets(hosted_zone_id)
+                self.route53_client.delete_hosted_zone(Id=hosted_zone_id)
+        else:
+            logger.info(f"hosted zone {hosted_zone_name} not found")
+            return
+
+    def delete_all_record_sets(self, hosted_zone_id):
+        """
+        Deletes all record sets in a hosted zone
+
+        Args:
+            hosted_zone_id (str): Hosted Zone ID
+                example: /hostedzone/Z91022921MMOZDVPPC8D6
+
+        """
+        record_types_exclude = ["NS", "SOA"]
+        record_sets = self.route53_client.list_resource_record_sets(
+            HostedZoneId=hosted_zone_id
+        )['ResourceRecordSets']
+
+        for each_record in record_sets:
+            record_set_type = each_record['Type']
+            if record_set_type not in record_types_exclude:
+                self.delete_record(each_record, hosted_zone_id)
+        logger.info("Successfully deleted all record sets")
+
+    def delete_record_from_base_domain(self, cluster_name, base_domain=None):
+        """
+        Deletes the record for cluster name in base domain
+
+        Args:
+            cluster_name (str): Name of the cluster
+            base_domain (str): Base domain name
+
+        """
+        base_domain = base_domain or config.ENV_DATA['base_domain']
+        record_name = f"{cluster_name}.{base_domain}."
+        hosted_zones = self.route53_client.list_hosted_zones_by_name(
+            DNSName=base_domain,
+            MaxItems='1'
+        )['HostedZones']
+        hosted_zone_ids = [
+            zone['Id'] for zone in hosted_zones
+            if zone['Name'] == f"{base_domain}."
+        ]
+        hosted_zone_id = hosted_zone_ids[0]
+        record_sets_in_base_domain = (
+            self.route53_client.list_resource_record_sets(
+                HostedZoneId=hosted_zone_id
+            )['ResourceRecordSets']
+        )
+
+        for record in record_sets_in_base_domain:
+            if record['Name'] == record_name:
+                logger.info(
+                    f"Deleting record {record_name} from {base_domain}"
+                )
+                self.delete_record(record, hosted_zone_id)
+                # breaking here since we will have single record in
+                # base domain and deleting is destructive action
+                break
+
+    def delete_record(self, record, hosted_zone_id):
+        """
+        Deletes the record from Hosted Zone
+
+        Args:
+            record (dict): record details to delete
+                e.g:{
+                'Name': 'vavuthu-eco1.qe.rh-ocs.com.',
+                'Type': 'NS',
+                'TTL': 300,
+                'ResourceRecords':[
+                {'Value': 'ns-1389.awsdns-45.org'},
+                {'Value': 'ns-639.awsdns-15.net'},
+                {'Value': 'ns-1656.awsdns-15.co.uk'},
+                {'Value': 'ns-183.awsdns-22.com'}
+                ]
+                }
+            hosted_zone_id (str): Hosted Zone ID
+                example: /hostedzone/Z91022921MMOZDVPPC8D6
+
+        """
+        record_set_name = record['Name']
+        record_set_type = record['Type']
+        record_set_ttl = record['TTL']
+        record_set_resource_records = record['ResourceRecords']
+        logger.info(f"deleting record set: {record_set_name}")
+        resource_record_set = {
+            'Name': record_set_name,
+            'Type': record_set_type,
+            "TTL": record_set_ttl,
+            "ResourceRecords": record_set_resource_records,
+        }
+        # Weight and SetIdentifier is needed for
+        # deleting api-int.cls-vavuthu-eco1.qe.rh-ocs.com. and
+        # api.cls-vavuthu-eco1.qe.rh-ocs.com.
+        if record.get('Weight'):
+            resource_record_set["Weight"] = record.get('Weight')
+            resource_record_set["SetIdentifier"] = record.get('SetIdentifier')
+        self.route53_client.change_resource_record_sets(
+            HostedZoneId=hosted_zone_id,
+            ChangeBatch={
+                'Changes': [
+                    {
+                        'Action': 'DELETE',
+                        'ResourceRecordSet': resource_record_set,
+                    }
+                ]
+            }
+        )
 
 
 def get_instances_ids_and_names(instances):
@@ -1301,10 +1682,12 @@ def delete_cluster_buckets(cluster_name):
     bucket_names = [bucket['Name'] for bucket in buckets]
     logger.debug("Found buckets: %s", bucket_names)
 
-    # patterns for mcg target bucket and image-registry buckets
+    # patterns for mcg target bucket, image-registry buckets and bucket created
+    # durring installation via Flexy (for installation files)
     patterns = [
         f"nb.(\\d+).apps.{cluster_name}.{base_domain}",
-        f"{cluster_name}-(\\w+)-image-registry-{region}-(\\w+)"
+        f"{cluster_name}-(\\w+)-image-registry-{region}-(\\w+)",
+        f"{cluster_name}-(\\d{{4}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})",
     ]
     for pattern in patterns:
         r = re.compile(pattern)

@@ -1,4 +1,6 @@
 ---
+DEPLOYMENT:
+  openshift_install_timeout: 4800
 ENV_DATA:
   platform: 'azure'
   deployment_type: 'ipi'
@@ -8,3 +10,6 @@ ENV_DATA:
   master_replicas: 3
   master_instance_type: 'Standard_D8s_v3'
   worker_instance_type: 'Standard_D16s_v3'
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-2371'

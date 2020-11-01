@@ -4,6 +4,6 @@ kind: VolumeSnapshot
 metadata:
   name: rbd-pvc-snapshot
 spec:
-  volumeSnapshotClassName: csi-rbdplugin-snapclass
+  volumeSnapshotClassName: ocs-storagecluster-rbdplugin-snapclass
   source:
     persistentVolumeClaimName: rbd-pvc

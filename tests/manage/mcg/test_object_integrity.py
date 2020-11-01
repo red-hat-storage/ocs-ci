@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier1, tier2, tier3
+from ocs_ci.framework.testlib import MCGTest, tier1, tier2, tier3
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     retrieve_test_objects_to_pod, sync_object_directory,
@@ -18,7 +18,7 @@ FILESIZE_SKIP = pytest.mark.skip('Current test filesize is too large.')
 RUNTIME_SKIP = pytest.mark.skip('Runtime is too long; Code needs to be parallelized')
 
 
-class TestObjectIntegrity(ManageTest):
+class TestObjectIntegrity(MCGTest):
     """
     Test data integrity of various objects
     """

@@ -10,7 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.pod import wait_for_storage_pods
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
 

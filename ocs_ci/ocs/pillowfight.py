@@ -7,13 +7,14 @@ import re
 from os import listdir
 from os.path import isfile, join
 from shutil import rmtree
+from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
-from ocs_ci.utility import templating
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility import utils, templating
 
 log = logging.getLogger(__name__)
 
@@ -55,8 +56,6 @@ class PillowFight(object):
         self.namespace = self.args.get(
             'namespace', 'couchbase-operator-namespace')
         self.ocp = OCP()
-        self.ns_obj = OCP(kind='namespace')
-        self.pod_obj = OCP(kind='pod')
         self.up_check = OCP(namespace=constants.COUCHBASE_OPERATOR)
         self.logs = tempfile.mkdtemp(prefix='pf_logs_')
 
@@ -94,7 +93,7 @@ class PillowFight(object):
                     num_threads) if num_threads else '20'
                 lpillowfight = OCS(**pfight)
                 lpillowfight.create()
-        pods_info = {}
+        self.pods_info = {}
 
         for pillowfight_pods in TimeoutSampler(
             self.WAIT_FOR_TIME,
@@ -114,7 +113,7 @@ class PillowFight(object):
                         pf_completion_info = pf_status['terminated']['reason']
                         if pf_completion_info == constants.STATUS_COMPLETED:
                             counter += 1
-                            pods_info.update({pf_pod: pf_completion_info})
+                            self.pods_info.update({pf_pod: pf_completion_info})
                     elif 'running' in pf_status:
                         pass
                 if counter == self.replicas:
@@ -122,9 +121,9 @@ class PillowFight(object):
             except IndexError:
                 log.info("Pillowfight not yet completed")
 
-        logging.info(pods_info)
+        logging.info(self.pods_info)
         pf_yaml = pf_files[0]  # for  basic-fillowfight.yaml
-        for pod, pf_completion_info in pods_info.items():
+        for pod, pf_completion_info in self.pods_info.items():
             if pf_completion_info == 'Completed':
                 pf_endlog = f'{pod}.log'
                 pf_log = join(self.logs, pf_endlog)
@@ -199,6 +198,7 @@ class PillowFight(object):
         #
         # So what's left is a list of OPS/SEC values and a histogram of
         # response times.  This routine organizes that data.
+
         ops_per_sec = []
         resp_hist = {}
         log.info(
@@ -227,15 +227,42 @@ class PillowFight(object):
         ret_data = {'opspersec': ops_per_sec, 'resptimes': resp_hist}
         return ret_data
 
+    def export_pfoutput_to_googlesheet(self, sheet_name, sheet_index):
+        """
+        Collect pillowfight output to google spreadsheet
+
+        Args:
+            sheet_name (str): Name of the sheet
+            sheet_index (int): Index of sheet
+
+        """
+        # Collect data and export to Google doc spreadsheet
+        g_sheet = GoogleSpreadSheetAPI(
+            sheet_name=sheet_name, sheet_index=sheet_index
+        )
+        logging.info("Exporting pf data to google spreadsheet")
+        for path in listdir(self.logs):
+            full_path = join(self.logs, path)
+            with open(full_path, 'r') as fdesc:
+                data_from_log = fdesc.read()
+            log_data = self.parse_pillowfight_log(data_from_log)
+
+            g_sheet.insert_row([f"{path}", min(log_data['opspersec']),
+                                max(log_data['resptimes'].keys()) / 1000], 2
+                               )
+        g_sheet.insert_row(["", "opspersec", "resptimes"], 2)
+
+        # Capturing versions(OCP, OCS and Ceph) and test run name
+        g_sheet.insert_row(
+            [f"ocp_version:{utils.get_cluster_version()}",
+             f"ocs_build_number:{utils.get_ocs_build_number()}",
+             f"ceph_version:{utils.get_ceph_version()}",
+             f"test_run_name:{utils.get_testrun_name()}"], 2
+        )
+
     def cleanup(self):
         """
         Remove pillowfight pods and temp files
 
         """
         rmtree(self.logs)
-        nsinfo = self.pod_obj.exec_oc_cmd(command="get namespace")
-        if constants.COUCHBASE_OPERATOR in nsinfo:
-            self.pod_obj.exec_oc_cmd(
-                command=f"delete namespace {constants.COUCHBASE_OPERATOR}"
-            )
-            self.ns_obj.wait_for_delete(resource_name=constants.COUCHBASE_OPERATOR)

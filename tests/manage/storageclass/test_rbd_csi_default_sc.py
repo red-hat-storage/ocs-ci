@@ -5,8 +5,8 @@ Basic test for creating PVC with default StorageClass - RBD-CSI
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import tier1, ManageTest
-from tests import helpers
+from ocs_ci.framework.testlib import tier1, ManageTest, skipif_external_mode
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceLeftoversException
 from tests.fixtures import (
@@ -50,6 +50,7 @@ def resources(request):
     return pod, pvc, storageclass
 
 
+@skipif_external_mode
 @tier1
 @pytest.mark.usefixtures(
     create_ceph_block_pool.__name__,

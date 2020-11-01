@@ -15,7 +15,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import TimeoutSampler, load_auth_config
-from tests.helpers import create_resource
+from ocs_ci.helpers.helpers import create_resource
 
 logger = logging.getLogger(name=__file__)
 
@@ -40,7 +40,7 @@ class CloudManager(ABC):
                 'Failed to load credentials from ocs-ci-data. '
                 'Loading from local auth.yaml'
             )
-            cred_dict = load_auth_config().get('AUTH')
+            cred_dict = load_auth_config().get('AUTH', {})
         for cloud_name in cred_dict:
             if cloud_name in cloud_map:
                 try:

@@ -12,7 +12,7 @@ from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.testlib import ManageTest, ignore_leftovers
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
-from tests.helpers import run_io_with_rados_bench, delete_cephblockpools, create_ceph_block_pool
+from ocs_ci.helpers.helpers import run_io_with_rados_bench, delete_cephblockpools, create_ceph_block_pool
 from ocs_ci.ocs.cluster import CephCluster
 
 

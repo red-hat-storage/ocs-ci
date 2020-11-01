@@ -542,6 +542,25 @@ class VSPHERE(object):
         """
         return True if self.get_pool(pool, dc, cluster) else False
 
+    def is_resource_pool_prefix_exist(self, pool_prefix, dc, cluster):
+        """
+        Check whether or not resource pool with the provided prefix exist
+
+        Args:
+            pool_prefix (str): The prefix to look for
+            dc (str): Datacenter name
+            cluster (str): Cluster name
+
+        Returns:
+            bool: True if a resource pool with the same name prefix exists, False otherwise
+
+        """
+        cluster_obj = self.get_cluster(cluster, dc)
+        for rp in cluster_obj.resourcePool.resourcePool:
+            if rp.name.startswith(pool_prefix):
+                return True
+        return False
+
     def poweroff_vms(self, vms):
         """
         Powers off the VM and wait for operation to complete
@@ -1147,3 +1166,18 @@ class VSPHERE(object):
             datacenter_name
         )
         return self.get_datastore_type(datastore)
+
+    def get_datastore_free_capacity(self, datastore_name, datacenter_name):
+        """
+        Gets the Datastore capacity
+
+        Args:
+            datastore_name (str): Name of the Datastore
+            datacenter_name (str): Name of the Datacenter
+
+        Returns:
+            int: Datastore capacity in bytes
+
+        """
+        ds_obj = self.find_datastore_by_name(datastore_name, datacenter_name)
+        return ds_obj.summary.freeSpace

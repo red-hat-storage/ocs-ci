@@ -20,9 +20,9 @@ from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import utils
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-from ocs_ci.ocs.node import get_typed_nodes, get_app_pod_running_nodes
-from tests.helpers import (
-    wait_for_resource_state, create_pvc, get_worker_nodes
+from ocs_ci.ocs.node import get_typed_nodes, get_app_pod_running_nodes, get_worker_nodes
+from ocs_ci.helpers.helpers import (
+    wait_for_resource_state, create_pvc
 )
 
 
@@ -296,11 +296,13 @@ class Jenkins(object):
         tmp_dict['labels']['app'] = 'jenkins-persistent-ocs'
         tmp_dict['labels']['template'] = 'jenkins-persistent-ocs-template'
         tmp_dict['metadata']['name'] = 'jenkins-persistent-ocs'
-        tmp_dict['objects'][1]['metadata']['annotations'] = {
-            'volume.beta.kubernetes.io/storage-class': 'ocs-storagecluster-ceph-rbd'
-        }
-        tmp_dict['objects'][2]['spec']['template']['spec']['containers'][0]['env'].append(
-            {'name': 'JAVA_OPTS', 'value': '${JAVA_OPTS}'})
+        # Find Kind: 'PersistentVolumeClaim' position in the objects list, differs in OCP 4.5 and OCP 4.6.
+        for i in range(len(tmp_dict['objects'])):
+            if tmp_dict['objects'][i]['kind'] == constants.PVC:
+                tmp_dict['objects'][i]['metadata']['annotations'] = {
+                    'volume.beta.kubernetes.io/storage-class': 'ocs-storagecluster-ceph-rbd'
+                }
+
         tmp_dict['parameters'][4]['value'] = '10Gi'
         tmp_dict['parameters'].append({
             'description': "Override jenkins options to speed up slave spawning",

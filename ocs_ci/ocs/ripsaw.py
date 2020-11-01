@@ -127,6 +127,6 @@ class RipSaw(object):
         run(f'oc delete -f {self.operator}', shell=True, cwd=self.dir)
         run('oc delete -f deploy', shell=True, cwd=self.dir)
         run_cmd(f'oc delete project {self.namespace}')
-        self.ns_obj.wait_for_delete(resource_name=self.namespace)
+        self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=180)
         # Reset namespace to default
         switch_to_default_rook_cluster_project()

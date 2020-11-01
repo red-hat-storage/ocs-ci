@@ -11,7 +11,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
-from tests import helpers, disruption_helpers
+from ocs_ci.helpers import helpers, disruption_helpers
 
 
 logger = logging.getLogger(__name__)

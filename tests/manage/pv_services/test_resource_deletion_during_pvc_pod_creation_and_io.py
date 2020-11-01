@@ -13,7 +13,7 @@ from ocs_ci.ocs.resources.pod import (
     get_operator_pods
 )
 from ocs_ci.utility.utils import TimeoutSampler
-from tests import helpers, disruption_helpers
+from ocs_ci.helpers import helpers, disruption_helpers
 
 log = logging.getLogger(__name__)
 

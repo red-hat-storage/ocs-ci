@@ -1,11 +1,11 @@
 import pytest
 import logging
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs.exceptions import ResourceLeftoversException
-from ocs_ci.framework.testlib import ManageTest, tier2
+from ocs_ci.framework.testlib import ManageTest, tier2, skipif_external_mode
 from tests.fixtures import (
     create_ceph_block_pool,
     create_rbd_secret, create_cephfs_secret,
@@ -47,6 +47,7 @@ def resources(request):
     return pods, pvcs, storageclasses
 
 
+@skipif_external_mode
 @tier2
 @pytest.mark.usefixtures(
     create_project.__name__,

@@ -6,8 +6,8 @@ import time
 from ocs_ci.framework.testlib import (
     performance, E2ETest
 )
-from tests import helpers
-from ocs_ci.ocs import constants
+from ocs_ci.helpers import helpers
+from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
@@ -32,6 +32,11 @@ class TestPVCCreationPerformance(E2ETest):
                 storageclass
         """
         self.interface = interface_iterate
+
+        if self.interface.lower() == 'cephfs':
+            self.interface = constants.CEPHFILESYSTEM
+        if self.interface.lower() == 'rbd':
+            self.interface = constants.CEPHBLOCKPOOL
         self.sc_obj = storageclass_factory(self.interface)
 
     @pytest.mark.usefixtures(base_setup.__name__)
@@ -41,6 +46,7 @@ class TestPVCCreationPerformance(E2ETest):
         Performance in test_multiple_pvc_creation_measurement_performance
         Each kernel (unzipped) is 892M and 61694 files
         """
+
         kernel_url = 'https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.5.tar.gz'
         download_path = 'tmp'
         # Number of times we copy the kernel
@@ -54,14 +60,17 @@ class TestPVCCreationPerformance(E2ETest):
             os.makedirs(dir_path)
         urllib.request.urlretrieve(kernel_url, file_path)
 
-        worker_nodes_list = helpers.get_worker_nodes()
+        worker_nodes_list = node.get_worker_nodes()
         assert (len(worker_nodes_list) > 1)
         node_one = worker_nodes_list[0]
         node_two = worker_nodes_list[1]
 
-        # Create a RWX PVC
+        # Create a PVC
+        accessmode = constants.ACCESS_MODE_RWX
+        if self.interface == constants.CEPHBLOCKPOOL:
+            accessmode = constants.ACCESS_MODE_RWO
         pvc_obj = pvc_factory(
-            interface=constants.CEPHFILESYSTEM, access_mode=constants.ACCESS_MODE_RWX,
+            interface=self.interface, access_mode=accessmode,
             status=constants.STATUS_BOUND,
             size='15',
         )
@@ -73,7 +82,7 @@ class TestPVCCreationPerformance(E2ETest):
 
         helpers.pull_images('nginx')
         pod_obj1 = helpers.create_pod(
-            interface_type=constants.CEPHFILESYSTEM, pvc_name=pvc_obj.name,
+            interface_type=self.interface, pvc_name=pvc_obj.name,
             namespace=pvc_obj.namespace, node_name=node_one,
             pod_dict_path=constants.NGINX_POD_YAML
         )
@@ -115,7 +124,7 @@ class TestPVCCreationPerformance(E2ETest):
         )
 
         pod_obj2 = helpers.create_pod(
-            interface_type=constants.CEPHFILESYSTEM, pvc_name=pvc_obj.name,
+            interface_type=self.interface, pvc_name=pvc_obj.name,
             namespace=pvc_obj.namespace, node_name=node_two,
             pod_dict_path=constants.NGINX_POD_YAML
         )

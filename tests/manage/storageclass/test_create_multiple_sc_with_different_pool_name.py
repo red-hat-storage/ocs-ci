@@ -1,9 +1,9 @@
 import pytest
 import logging
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
-from ocs_ci.framework.testlib import ManageTest, tier2
+from ocs_ci.framework.testlib import ManageTest, tier2, skipif_external_mode
 from tests.fixtures import (
     create_rbd_secret, create_project
 )
@@ -11,6 +11,7 @@ from tests.fixtures import (
 log = logging.getLogger(__name__)
 
 
+@skipif_external_mode
 @tier2
 @pytest.mark.usefixtures(
     create_project.__name__,
@@ -33,10 +34,10 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
         *. Run IO on each app pod
         """
 
-        # Create 3 storageclasses, each with different pool name
+        # Create 2 storageclasses, each with different pool name
         cbp_list = []
         sc_list = []
-        for i in range(3):
+        for i in range(2):
             log.info("Creating cephblockpool")
             cbp_obj = helpers.create_ceph_block_pool()
             log.info(
@@ -62,7 +63,7 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
 
         # Create PVCs using each SC
         pvc_list = []
-        for i in range(3):
+        for i in range(2):
             log.info(f"Creating a PVC using {sc_list[i].name}")
             pvc_obj = helpers.create_pvc(sc_list[i].name)
             log.info(
@@ -76,7 +77,7 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
 
         # Create app pod and mount each PVC
         pod_list = []
-        for i in range(3):
+        for i in range(2):
             log.info(f"Creating an app pod and mount {pvc_list[i].name}")
             pod_obj = helpers.create_pod(
                 interface_type=constants.CEPHBLOCKPOOL,

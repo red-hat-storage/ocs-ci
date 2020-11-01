@@ -5,7 +5,7 @@ import time
 from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.amq import AMQ
-from tests.helpers import default_storage_class
+from ocs_ci.helpers.helpers import default_storage_class
 
 log = logging.getLogger(__name__)
 

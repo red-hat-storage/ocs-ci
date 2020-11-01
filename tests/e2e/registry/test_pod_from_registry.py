@@ -2,7 +2,7 @@ import pytest
 import logging
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest, tier1
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.utility import templating
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ class TestRegistryImage(E2ETest):
         pvc_obj = pvc_factory(size=self.pvc_size)
         image_obj = helpers.create_build_from_docker_image(
             namespace=pvc_obj.namespace,
-            source_image_label='7',
+            source_image_label='latest',
             image_name='fio',
             install_package='fio'
         )

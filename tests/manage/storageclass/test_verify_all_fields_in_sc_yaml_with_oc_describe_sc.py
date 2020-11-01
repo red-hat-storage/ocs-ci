@@ -1,11 +1,11 @@
 import pytest
 import logging
 
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, skipif_external_mode
 from tests.fixtures import (
     create_ceph_block_pool,
     create_rbd_secret, create_cephfs_secret
@@ -16,6 +16,7 @@ log = logging.getLogger(__name__)
 SC_OBJ = None
 
 
+@skipif_external_mode
 @tier1
 @pytest.mark.usefixtures(
     create_rbd_secret.__name__,
