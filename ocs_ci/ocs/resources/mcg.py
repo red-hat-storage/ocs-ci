@@ -168,7 +168,7 @@ class MCG:
 
     def retrieve_nb_token(self):
         """
-        Try to retrieve a NB RPC token and decode its JSON'
+        Try to retrieve a NB RPC token and decode its JSON
         Returns:
             String: If token was retrieved successfully
             None: Otherwise
