@@ -168,7 +168,10 @@ class MCG:
 
     def retrieve_nb_token(self):
         """
-        Try to retrieve a NB RPC token and decode its JSON
+        Try to retrieve a NB RPC token and decode its JSON'
+        Returns:
+            String - If token was retrieved successfully
+            None - Otherwise
 
         """
         def internal_retrieval_logic():
@@ -189,7 +192,7 @@ class MCG:
                     + str(rpc_response)
                 )
                 logger.warning('Failed to retrieve token, NooBaa might be unhealthy. Retrying')
-                return False
+                return None
 
         try:
             for token in TimeoutSampler(300, 30, internal_retrieval_logic):
