@@ -2988,8 +2988,10 @@ def get_ready_noobaa_endpoint_count(namespace):
     pods_info = get_pods_having_label(label=constants.NOOBAA_ENDPOINT_POD_LABEL, namespace=namespace)
     ready_count = 0
     for ep_info in pods_info:
-        if ep_info['status']['containerStatuses'][0]['ready']:
-            ready_count += 1
+        container_statuses = ep_info.get('status', {}).get('containerStatuses')
+        if container_statuses and container_statuses is not []:
+            if container_statuses[0].get('ready'):
+                ready_count += 1
     return ready_count
 
 
@@ -3010,7 +3012,6 @@ def nb_ensure_endpoint_count(request):
     if float(config.ENV_DATA['ocs_version']) < 4.6:
         noobaa = OCP(kind='noobaa', namespace=namespace)
         resource = noobaa.get()['items'][0]
-        resource_name = resource['metadata']['name']
         endpoints = resource.get('spec', {}).get('endpoints', {})
 
         if endpoints.get('minCount', -1) != min_ep_count:
