@@ -4,7 +4,6 @@ import pytest
 import random
 
 from ocs_ci.framework import config
-from tests.helpers import get_worker_nodes
 from ocs_ci.framework.pytest_customization.marks import tier4a
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
@@ -14,7 +13,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.cluster import CephCluster
 
-from tests.sanity_helpers import Sanity
+from ocs_ci.helpers.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
 
@@ -116,7 +115,7 @@ class TestNodeReplacementWithIO(ManageTest):
         """
 
         # Get worker nodes
-        worker_node_list = get_worker_nodes()
+        worker_node_list = node.get_worker_nodes()
         log.info(f"Current available worker nodes are {worker_node_list}")
 
         osd_node_name = select_osd_node_name()

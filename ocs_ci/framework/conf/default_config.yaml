@@ -131,6 +131,12 @@ ENV_DATA:
   # which allows for 510 (2^(32 - 23) - 2) pod IPs addresses.
   # https://docs.openshift.com/container-platform/4.1/installing/installing_bare_metal/installing-bare-metal.html
   cluster_host_prefix: 23
+  # use Flexy for OCP installation (not available for all platforms and
+  # deployment types)
+  flexy_deployment: False
+  # To enable rotational disk devices for LSO deployment we can set
+  # local_storage_allow_rotational_disks to true
+  local_storage_allow_rotational_disks: false
 
 # This section is related to upgrade
 UPGRADE:
@@ -144,7 +150,7 @@ UPGRADE:
 # for entry into this section, please email ecosystem team
 # or ping in ocs infra chat room.
 AUTH:
-    test_quay_auth: test_secret
+  test_quay_auth: test_secret
 
 # This section is for FLEXY, any variable in this section will be copied into
 # flexy env file
@@ -153,4 +159,4 @@ FLEXY:
 # Defines the configuration of external Ceph Cluster
 EXTERNAL_MODE:
   admin_keyring:
-     key: PLACE_HOLDER
+    key: PLACE_HOLDER

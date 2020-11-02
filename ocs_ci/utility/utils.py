@@ -1257,9 +1257,12 @@ def get_ocp_version(seperator=None):
 
     """
     char = seperator if seperator else '.'
-    version = Version.coerce(
-        config.DEPLOYMENT['installer_version']
-    )
+    if config.ENV_DATA.get('skip_ocp_deployment'):
+        raw_version = json.loads(
+            run_cmd("oc version -o json"))['openshiftVersion']
+    else:
+        raw_version = config.DEPLOYMENT['installer_version']
+    version = Version.coerce(raw_version)
     return char.join(
         [str(version.major), str(version.minor)]
     )
@@ -1946,7 +1949,7 @@ def create_rhelpod(namespace, pod_name, timeout=300):
 
     """
     # importing here to avoid dependencies
-    from tests import helpers
+    from ocs_ci.helpers import helpers
     rhelpod_obj = helpers.create_pod(
         namespace=namespace,
         pod_name=pod_name,

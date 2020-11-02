@@ -3,7 +3,7 @@ import pytest
 from ocs_ci.ocs import constants
 import ocs_ci.ocs.exceptions as ex
 from ocs_ci.framework.testlib import E2ETest, performance
-from tests.helpers import pod_start_time
+from ocs_ci.helpers.helpers import pod_start_time
 
 log = logging.getLogger(__name__)
 

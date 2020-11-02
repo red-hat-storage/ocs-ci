@@ -3,21 +3,13 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
-from ocs_ci.framework import config
 from ocs_ci.framework.testlib import ManageTest, tier1
-from tests.helpers import wait_for_resource_state
+from ocs_ci.helpers.helpers import wait_for_resource_state
 
 log = logging.getLogger(__name__)
 
 
 @tier1
-@pytest.mark.skipif(
-    config.ENV_DATA['platform'].lower() == 'ibm_cloud',
-    reason=(
-        "Skipping tests on IBM Cloud due to bug 1871315 "
-        "https://bugzilla.redhat.com/show_bug.cgi?id=1871315"
-    )
-)
 @pytest.mark.parametrize(
     argnames='interface',
     argvalues=[

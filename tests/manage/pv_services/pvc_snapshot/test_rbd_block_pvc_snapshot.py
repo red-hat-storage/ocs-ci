@@ -4,7 +4,7 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, tier1
 from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
-from tests.helpers import wait_for_resource_state, create_pods
+from ocs_ci.helpers.helpers import wait_for_resource_state, create_pods
 
 log = logging.getLogger(__name__)
 

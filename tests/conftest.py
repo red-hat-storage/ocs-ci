@@ -68,7 +68,7 @@ from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
     ceph_health_check_base,
-    get_ocp_version,
+    get_running_ocp_version,
     get_openshift_client,
     get_system_architecture,
     get_testrun_name,
@@ -78,8 +78,8 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     skipif_upgraded_from
 )
-from tests import helpers
-from tests.helpers import create_unique_resource_name
+from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW
@@ -259,8 +259,12 @@ def log_ocs_version(cluster):
     """
     teardown = config.RUN['cli_params'].get('teardown')
     deploy = config.RUN['cli_params'].get('deploy')
+    dev_mode = config.RUN['cli_params'].get('dev_mode')
     if teardown and not deploy:
         log.info("Skipping version reporting for teardown.")
+        return
+    elif dev_mode:
+        log.info("Skipping version reporting for development mode.")
         return
     cluster_version, image_dict = get_ocs_version()
     file_name = os.path.join(
@@ -1039,6 +1043,10 @@ def tier_marks_name():
 @pytest.fixture(scope='function', autouse=True)
 def health_checker(request, tier_marks_name):
     skipped = False
+    dev_mode = config.RUN['cli_params'].get('dev_mode')
+    if dev_mode:
+        log.info("Skipping health checks for development mode")
+        return
 
     def finalizer():
         if not skipped:
@@ -1149,9 +1157,16 @@ def cluster_load(
     io_in_bg = config.RUN.get('io_in_bg')
     log_utilization = config.RUN.get('log_utilization')
     io_load = config.RUN.get('io_load')
+    cluster_load_error = None
+    cluster_load_error_msg = (
+        "Cluster load might not work correctly during this run, because "
+        "it failed with an exception: %s"
+    )
 
     # IO load should not happen during deployment
-    deployment_test = True if 'deployment' in request.node.items[0].location[0] else False
+    deployment_test = True if (
+        'deployment' in request.node.items[0].location[0]
+    ) else False
     if io_in_bg and not deployment_test:
         io_load = int(io_load) * 0.01
         log.info(wrap_msg("Tests will be running while IO is in the background"))
@@ -1160,18 +1175,26 @@ def cluster_load(
             "will be written is going to be determined by the cluster "
             "capabilities according to its limit"
         )
-        cl_load_obj = ClusterLoad(
-            project_factory=project_factory_session,
-            sa_factory=service_account_factory_session,
-            pvc_factory=pvc_factory_session,
-            pod_factory=pod_factory_session,
-            target_percentage=io_load
-        )
-        cl_load_obj.reach_cluster_load_percentage()
+        try:
+            cl_load_obj = ClusterLoad(
+                project_factory=project_factory_session,
+                sa_factory=service_account_factory_session,
+                pvc_factory=pvc_factory_session,
+                pod_factory=pod_factory_session,
+                target_percentage=io_load
+            )
+            cl_load_obj.reach_cluster_load_percentage()
+        except Exception as ex:
+            log.error(cluster_load_error_msg, ex)
+            cluster_load_error = ex
 
     if (log_utilization or io_in_bg) and not deployment_test:
         if not cl_load_obj:
-            cl_load_obj = ClusterLoad()
+            try:
+                cl_load_obj = ClusterLoad()
+            except Exception as ex:
+                log.error(cluster_load_error_msg, ex)
+                cluster_load_error = ex
 
         config.RUN['load_status'] = 'running'
 
@@ -1182,6 +1205,8 @@ def cluster_load(
             config.RUN['load_status'] = 'finished'
             if thread:
                 thread.join()
+            if cluster_load_error:
+                raise cluster_load_error
 
         request.addfinalizer(finalizer)
 
@@ -1482,7 +1507,7 @@ def memory_leak_function(request):
         if thread:
             thread.join()
         log_path = ocsci_log_path()
-        for worker in helpers.get_worker_nodes():
+        for worker in node.get_worker_nodes():
             if os.path.exists(f"/tmp/{worker}-top-output.txt"):
                 copyfile(
                     f"/tmp/{worker}-top-output.txt",
@@ -1517,7 +1542,7 @@ def memory_leak_function(request):
             namespace=config.ENV_DATA['cluster_namespace']
         )
         while get_flag_status() == 'running':
-            for worker in helpers.get_worker_nodes():
+            for worker in node.get_worker_nodes():
                 filename = f"/tmp/{worker}-top-output.txt"
                 top_cmd = f"debug nodes/{worker} -- chroot /host top -n 2 b"
                 with open("/tmp/file.txt", "w+") as temp:
@@ -1640,6 +1665,23 @@ def rgw_obj_fixture(request):
         RGW: An RGW resource
     """
     return RGW()
+
+
+@pytest.fixture()
+def rgw_deployments(request):
+    """
+    Return RGW deployments or skip the test.
+
+    """
+    oc = ocp.OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA['cluster_namespace']
+    )
+    rgw_deployments = oc.get(selector=constants.RGW_APP_LABEL)['items']
+    if rgw_deployments:
+        return rgw_deployments
+    else:
+        pytest.skip('There is no RGW deployment available for this test.')
 
 
 @pytest.fixture()
@@ -2120,7 +2162,10 @@ def multiregion_resources_fixture(request, cld_mgr, mcg_obj):
 
 
 @pytest.fixture()
-def multiregion_mirror_setup(mcg_obj, multiregion_resources, backingstore_factory, bucket_factory):
+def multiregion_mirror_setup(
+    mcg_obj, multiregion_resources,
+    backingstore_factory, bucket_factory
+):
     return multiregion_mirror_setup_fixture(
         mcg_obj,
         multiregion_resources,
@@ -2248,7 +2293,7 @@ def install_logging(request):
     log.info("Configuring Openshift-logging")
 
     # Checks OCP version
-    ocp_version = get_ocp_version()
+    ocp_version = get_running_ocp_version()
 
     # Creates namespace opensift-operators-redhat
     ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
@@ -2761,7 +2806,7 @@ def node_drain_teardown(request):
         ]
         if scheduling_disabled_nodes:
             schedule_nodes(scheduling_disabled_nodes)
-        ceph_health_check()
+        ceph_health_check(tries=60)
 
     request.addfinalizer(finalizer)
 
@@ -2918,14 +2963,14 @@ def snapshot_restore_factory(request):
         )
 
         if snapshot_info['spec']['volumeSnapshotClassName'] == (
-            constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+            helpers.default_volumesnapshotclass(constants.CEPHBLOCKPOOL).name
         ):
             storageclass = storageclass or helpers.default_storage_class(
                 constants.CEPHBLOCKPOOL
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
         elif snapshot_info['spec']['volumeSnapshotClassName'] == (
-            constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+            helpers.default_volumesnapshotclass(constants.CEPHFILESYSTEM).name
         ):
             storageclass = storageclass or helpers.default_storage_class(
                 constants.CEPHFILESYSTEM
@@ -3111,7 +3156,7 @@ def pvc_clone_factory(request):
         clone_pvc_obj.volume_mode = volume_mode
 
         if status:
-            helpers.wait_for_resource_state(pvc_obj, status)
+            helpers.wait_for_resource_state(clone_pvc_obj, status)
         return clone_pvc_obj
 
     def finalizer():

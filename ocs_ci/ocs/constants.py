@@ -117,6 +117,7 @@ LOCAL_VOLUME = 'localvolume'
 PROXY = 'Proxy'
 MACHINECONFIGPOOL = "MachineConfigPool"
 VOLUMESNAPSHOTCLASS = "VolumeSnapshotClass"
+HPA = "horizontalpodautoscaler"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -211,11 +212,18 @@ DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS = (
     f'{DEFAULT_CLUSTERNAME}-cephfsplugin-snapclass'
 )
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD = f'{DEFAULT_CLUSTERNAME}-rbdplugin-snapclass'
+DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS = (
+    f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephfsplugin-snapclass'
+)
+DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD = (
+    f'{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-rbdplugin-snapclass'
+)
 
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
 GB = 1024 ** 3
 GB2KB = 1024 ** 2
+GB2MB = 1024
 
 # Reclaim Policy
 RECLAIM_POLICY_RETAIN = 'Retain'
@@ -246,6 +254,7 @@ NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
 NOOBAA_OPERATOR_POD_LABEL = "noobaa-operator=deployment"
 NOOBAA_DB_LABEL = "noobaa-db=noobaa"
 NOOBAA_ENDPOINT_POD_LABEL = "noobaa-s3=noobaa"
+ROOK_CEPH_DETECT_VERSION_LABEL = "app=rook-ceph-detect-version"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
@@ -256,6 +265,7 @@ HOSTNAME_LABEL = "kubernetes.io/hostname"
 # Auth Yaml
 OCSCI_DATA_BUCKET = 'ocs-ci-data'
 AUTHYAML = 'auth.yaml'
+GOOGLE_CREDS_JSON_PATH = os.path.join(DATA_DIR, "google_creds.json")
 
 # OBJ File representing serialized data
 NODE_OBJ_FILE = "node_file.objs"
@@ -691,6 +701,8 @@ ALERT_BUCKETERRORSTATE = 'NooBaaBucketErrorState'
 ALERT_BUCKETEXCEEDINGQUOTASTATE = 'NooBaaBucketExceedingQuotaState'
 ALERT_CLUSTERNEARFULL = 'CephClusterNearFull'
 ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
+ALERT_CLUSTEROBJECTSTORESTATE = 'ClusterObjectStoreState'
+ALERT_KUBEHPAREPLICASMISMATCH = 'KubeHpaReplicasMismatch'
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -1042,6 +1054,7 @@ FLEXY_HOST_DIR_PATH = os.path.join(DATA_DIR, FLEXY_HOST_DIR)
 FLEXY_DEFAULT_ENV_FILE = "ocs-osp.env"
 OPENSHIFT_MISC_BASE = "private-openshift-misc/functionality-testing"
 FLEXY_BAREMETAL_UPI_TEMPLATE = "upi-on-baremetal/versioned-installer-openstack"
+FLEXY_AWS_UPI_TEMPLATE = "upi-on-aws/versioned-installer"
 FLEXY_GIT_CRYPT_KEYFILE = os.path.join(DATA_DIR, "git-crypt-keyfile")
 NTP_CHRONY_CONF = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "ntp_chrony.yaml"
@@ -1053,8 +1066,9 @@ FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
 FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
 FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/aosqe/flexy:poc"
+FLEXY_ENV_FILE_UPDATED_NAME = 'ocs-flexy-env-file-updated.env'
 FLEXY_ENV_FILE_UPDATED = os.path.join(
-    FLEXY_HOST_DIR_PATH, 'ocs-flexy-env-file-updated.env'
+    FLEXY_HOST_DIR_PATH, FLEXY_ENV_FILE_UPDATED_NAME
 )
 REGISTRY_SVC = "registry.svc.ci.openshift.org/ocp/release"
 
@@ -1171,6 +1185,17 @@ MCG_NS_AWS_ENDPOINT = 'https://s3.amazonaws.com'
 MCG_NS_RESOURCE = 'ns_resource'
 MCG_NS_BUCKET = 'ns-bucket'
 MCG_NS_AWS_CONNECTION = 'aws_connection'
+
+# Cloud provider default endpoints
+# Upon use, utilize .format() to replace the curly braces where necessary
+AZURE_BLOB_ENDPOINT_TEMPLATE = 'https://{}.blob.core.windows.net'
+IBM_COS_GEO_ENDPOINT_TEMPLATE = 'https://s3.{}.cloud-object-storage.appdomain.cloud'
+
+# NooBaa backingstore types
+BACKINGSTORE_TYPE_AWS = 'aws-s3'
+BACKINGSTORE_TYPE_AZURE = 'azure-blob'
+BACKINGSTORE_TYPE_S3_COMP = 's3-compatible'
+BACKINGSTORE_TYPE_GOOGLE = 'google-cloud-storage'
 
 # Squads assignment
 # Tests are assigned to Squads based on patterns matching test path.

@@ -1,6 +1,6 @@
 import pytest
 import logging
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.testlib import ManageTest, tier2, skipif_external_mode

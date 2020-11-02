@@ -4,7 +4,7 @@ import time
 from ocs_ci.ocs.node import get_typed_nodes, get_node_name
 from ocs_ci.ocs.resources.pod import get_ocs_operator_pod, get_pod_node
 from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
-from tests.helpers import wait_for_ct_pod_recovery
+from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
 
 log = logging.getLogger(__name__)
 

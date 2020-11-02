@@ -308,9 +308,9 @@ class VSPHEREBASE(Deployment):
         """
         pool = config.ENV_DATA['cluster_name']
         if self.vsphere.is_resource_pool_exist(
-                pool,
-                self.datacenter,
-                self.cluster
+            pool,
+            self.datacenter,
+            self.cluster
         ):
             logger.warning(
                 f"Resource pool {pool} exists even after destroying cluster"
@@ -579,9 +579,9 @@ class VSPHEREUPI(VSPHEREBASE):
         """
         cluster_name_parts = config.ENV_DATA.get("cluster_name").split("-")
         prefix = cluster_name_parts[0]
-        if (
-                not prefix.startswith(tuple(constants.PRODUCTION_JOBS_PREFIX))
-                or not config.DEPLOYMENT.get('force_deploy_multiple_clusters')
+        if not (
+            prefix.startswith(tuple(constants.PRODUCTION_JOBS_PREFIX))
+            or config.DEPLOYMENT.get('force_deploy_multiple_clusters')
         ):
             if self.check_cluster_existence(prefix):
                 raise exceptions.SameNamePrefixClusterAlreadyExistsException(
@@ -596,8 +596,8 @@ class VSPHEREUPI(VSPHEREBASE):
 
         # remove RHCOS compute nodes
         if (
-                config.ENV_DATA.get('scale_up')
-                and not config.ENV_DATA.get('mixed_cluster')
+            config.ENV_DATA.get('scale_up')
+            and not config.ENV_DATA.get('mixed_cluster')
         ):
             rhcos_nodes = get_typed_worker_nodes()
             logger.info(
@@ -866,10 +866,10 @@ def change_mem_and_cpu():
     worker_memory = config.ENV_DATA.get('compute_memory')
     master_memory = config.ENV_DATA.get('master_memory')
     if (
-            worker_num_cpus
-            or master_num_cpus
-            or master_memory
-            or worker_memory
+        worker_num_cpus
+        or master_num_cpus
+        or master_memory
+        or worker_memory
     ):
         with open(constants.VSPHERE_MAIN, 'r') as fd:
             obj = hcl.load(fd)

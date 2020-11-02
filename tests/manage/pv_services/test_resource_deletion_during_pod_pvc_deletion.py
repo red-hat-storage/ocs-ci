@@ -16,11 +16,11 @@ from ocs_ci.ocs.resources.pod import (
     get_rbdfsplugin_provisioner_pods, get_cephfsplugin_provisioner_pods,
     get_operator_pods
 )
-from tests.helpers import (
+from ocs_ci.helpers.helpers import (
     verify_volume_deleted_in_backend, wait_for_resource_count_change,
     default_ceph_block_pool
 )
-from tests import disruption_helpers
+from ocs_ci.helpers import disruption_helpers
 
 log = logging.getLogger(__name__)
 

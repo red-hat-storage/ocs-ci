@@ -19,7 +19,7 @@ from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
-from tests.helpers import (
+from ocs_ci.helpers.helpers import (
     create_unique_resource_name, create_resource,
     calc_local_file_md5_sum, retrieve_default_ingress_crt,
     storagecluster_independent_check
@@ -101,14 +101,7 @@ class MCG:
             creds_secret_obj.get('data').get('password')
         ).decode('utf-8')
 
-        self.noobaa_token = self.send_rpc_query(
-            'auth_api', 'create_auth', params={
-                'role': 'admin',
-                'system': 'noobaa',
-                'email': self.noobaa_user,
-                'password': self.noobaa_password
-            }
-        ).json().get('reply').get('token')
+        self.noobaa_token = self.retrieve_nb_token()
 
         self.s3_resource = boto3.resource(
             's3', verify=retrieve_verification_mode(),
@@ -171,6 +164,44 @@ class MCG:
                 selector=constants.RGW_APP_LABEL,
                 resource_count=rgw_count,
                 timeout=60
+            )
+
+    def retrieve_nb_token(self):
+        """
+        Try to retrieve a NB RPC token and decode its JSON
+
+        """
+        def internal_retrieval_logic():
+            try:
+                rpc_response = self.send_rpc_query(
+                    'auth_api', 'create_auth', params={
+                        'role': 'admin',
+                        'system': 'noobaa',
+                        'email': self.noobaa_user,
+                        'password': self.noobaa_password
+                    }
+                )
+                return rpc_response.json().get('reply').get('token')
+
+            except json.JSONDecodeError:
+                logger.warning(
+                    'RPC did not respond with a JSON. Response: \n'
+                    + str(rpc_response)
+                )
+                logger.warning('Failed to retrieve token, NooBaa might be unhealthy. Retrying')
+                return None
+
+        try:
+            for token in TimeoutSampler(300, 30, internal_retrieval_logic):
+                if token:
+                    return token
+        except TimeoutExpiredError:
+            logger.error(
+                'NB RPC token was not retrieved successfully within the time limit.'
+            )
+            assert False, (
+                'NB RPC token was not retrieved successfully '
+                'within the time limit.'
             )
 
     def s3_get_all_bucket_names(self):
@@ -310,11 +341,13 @@ class MCG:
             verify=retrieve_verification_mode()
         )
 
-    def check_data_reduction(self, bucketname):
+    def check_data_reduction(self, bucketname, expected_reduction_in_bytes):
         """
         Checks whether the data reduction on the MCG server works properly
         Args:
             bucketname: An example bucket name that contains compressed/deduped data
+            expected_reduction_in_bytes: amount of data that is supposed to be reduced after data
+            compression and deduplication.
 
         Returns:
             bool: True if the data reduction mechanics work, False otherwise
@@ -336,9 +369,8 @@ class MCG:
             return bucket_data, bucket_data_reduced
 
         try:
-            expected_reduction = 100 * 1024 * 1024
             for total_size, total_reduced in TimeoutSampler(140, 5, _retrieve_reduction_data):
-                if total_size - total_reduced > expected_reduction:
+                if total_size - total_reduced > expected_reduction_in_bytes:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
                     )
@@ -349,11 +381,10 @@ class MCG:
                         'Retrying in 5 seconds...'
                     )
         except TimeoutExpiredError:
-            logger.error(
+            assert False, (
                 'Data reduction is insufficient. '
-                f'{total_size - total_reduced} bytes reduced out of {expected_reduction}.'
+                f'{total_size - total_reduced} bytes reduced out of {expected_reduction_in_bytes}.'
             )
-            assert False
 
     def request_aws_credentials(self):
         """
@@ -572,13 +603,14 @@ class MCG:
         bc = f" --backingstores={','.join(backingstores)} --placement={placement}"
         self.exec_mcg_cmd(f'bucketclass create {name}{bc}')
 
-    def check_if_mirroring_is_done(self, bucket_name):
+    def check_if_mirroring_is_done(self, bucket_name, timeout=140):
         """
         Check whether all object chunks in a bucket
         are mirrored across all backing stores.
 
         Args:
             bucket_name: The name of the bucket that should be checked
+            timeout: timeout in seconds to check if mirroring
 
         Returns:
             bool: Whether mirroring finished successfully
@@ -612,7 +644,7 @@ class MCG:
             return all(results)
 
         try:
-            for mirroring_is_complete in TimeoutSampler(140, 5, _check_mirroring):
+            for mirroring_is_complete in TimeoutSampler(timeout, 5, _check_mirroring):
                 if mirroring_is_complete:
                     logger.info(
                         'All objects mirrored successfully.'

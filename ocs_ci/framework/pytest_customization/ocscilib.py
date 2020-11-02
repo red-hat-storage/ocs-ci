@@ -143,6 +143,26 @@ def pytest_addoption(parser):
         help="ocs version to upgrade (e.g. 4.3)"
     )
     parser.addoption(
+        '--upgrade-ocp-version',
+        dest='upgrade_ocp_version',
+        help='''
+        OCP version to upgrade to. This version will be used to
+        load file from conf/ocp_version/ocp-VERSION-config.yaml.
+        For example:
+        4.5 (for nightly 4.5 OCP build)
+        4.5-ga (for latest GAed 4.5 OCP build)
+        '''
+    )
+    parser.addoption(
+        '--upgrade-ocp-image',
+        dest='upgrade_ocp_image',
+        help='''
+        OCP image to upgrade to. This image string will be split on ':' to
+        determine the image source and the specified tag to use.
+        (e.g. quay.io/openshift-release-dev/ocp-release:4.6.0-x86_64)
+        '''
+    )
+    parser.addoption(
         '--ocp-version',
         dest='ocp_version',
         help="""
@@ -198,6 +218,16 @@ def pytest_addoption(parser):
             "from and the value to replace to, separated by '::'"
         )
     )
+    parser.addoption(
+        '--dev-mode',
+        dest='dev_mode',
+        action="store_true",
+        default=False,
+        help=(
+            "Runs in development mode. It skips few checks like collecting "
+            "versions, collecting logs, etc"
+        )
+    )
 
 
 def pytest_configure(config):
@@ -245,6 +275,9 @@ def pytest_configure(config):
                 "Skipping version collection because we skipped "
                 "the OCS deployment"
             )
+            return
+        elif ocsci_config.RUN['cli_params'].get('dev_mode'):
+            log.info("Running in development mode")
             return
         print("Collecting Cluster versions")
         # remove extraneous metadata
@@ -423,6 +456,18 @@ def process_cluster_cli_params(config):
             OCP_VERSION_CONF_DIR, version_config_file
         )
         load_config_file(version_config_file_path)
+    upgrade_ocp_version = get_cli_param(config, '--upgrade-ocp-version')
+    if upgrade_ocp_version:
+        version_config_file = f"ocp-{upgrade_ocp_version}-upgrade.yaml"
+        version_config_file_path = os.path.join(
+            OCP_VERSION_CONF_DIR, version_config_file
+        )
+        load_config_file(version_config_file_path)
+    upgrade_ocp_image = get_cli_param(config, '--upgrade-ocp-image')
+    if upgrade_ocp_image:
+        ocp_image = upgrade_ocp_image.split(':')
+        ocsci_config.UPGRADE['ocp_upgrade_path'] = ocp_image[0]
+        ocsci_config.UPGRADE['ocp_upgrade_version'] = ocp_image[1]
     ocp_installer_version = get_cli_param(config, '--ocp-installer-version')
     if ocp_installer_version:
         ocsci_config.DEPLOYMENT['installer_version'] = ocp_installer_version
@@ -435,6 +480,7 @@ def process_cluster_cli_params(config):
     collect_logs_on_success_run = get_cli_param(config, 'collect_logs_on_success_run')
     if collect_logs_on_success_run:
         ocsci_config.REPORTING['collect_logs_on_success_run'] = True
+    get_cli_param(config, 'dev_mode')
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -493,7 +539,7 @@ def pytest_runtest_makereport(item, call):
             log.exception("Failed to collect prometheus metrics")
 
     # Get the performance metrics when tests fails for scale or performance tag
-    from tests.helpers import collect_performance_stats
+    from ocs_ci.helpers.helpers import collect_performance_stats
     if (
         (rep.when == "setup" or rep.when == "call")
         and rep.failed

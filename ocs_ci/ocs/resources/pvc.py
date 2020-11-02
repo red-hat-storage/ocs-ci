@@ -13,7 +13,7 @@ from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.utility import templating
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
 
@@ -205,12 +205,18 @@ class PVC(OCS):
         )
         if self.provisioner == 'openshift-storage.rbd.csi.ceph.com':
             snap_yaml = constants.CSI_RBD_SNAPSHOT_YAML
+            snapshotclass = helpers.default_volumesnapshotclass(
+                constants.CEPHBLOCKPOOL
+            ).name
         elif self.provisioner == 'openshift-storage.cephfs.csi.ceph.com':
             snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
+            snapshotclass = helpers.default_volumesnapshotclass(
+                constants.CEPHFILESYSTEM
+            ).name
         snapshot_name = snapshot_name or f"{self.name}-snapshot-{uuid4().hex}"
         snapshot_obj = create_pvc_snapshot(
             pvc_name=self.name, snap_yaml=snap_yaml, snap_name=snapshot_name,
-            wait=wait
+            sc_name=snapshotclass, wait=wait
         )
         snapshot_obj.parent_access_mode = self.get_pvc_access_mode
         snapshot_obj.parent_sc = self.backed_sc

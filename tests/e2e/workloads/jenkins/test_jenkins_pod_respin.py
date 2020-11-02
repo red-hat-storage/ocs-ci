@@ -6,7 +6,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.constants import STATUS_COMPLETED
-from tests import disruption_helpers
+from ocs_ci.helpers import disruption_helpers
 
 log = logging.getLogger(__name__)
 

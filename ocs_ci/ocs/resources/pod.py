@@ -15,7 +15,7 @@ import base64
 
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.ocp import OCP, verify_images_upgraded
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
@@ -110,7 +110,7 @@ class Pod(OCS):
         """
         self._roles.append(role)
 
-    def get_fio_results(self):
+    def get_fio_results(self, timeout=FIO_TIMEOUT):
         """
         Get FIO execution results
 
@@ -122,7 +122,7 @@ class Pod(OCS):
         """
         logger.info(f"Waiting for FIO results from pod {self.name}")
         try:
-            result = self.fio_thread.result(FIO_TIMEOUT)
+            result = self.fio_thread.result(timeout)
             if result:
                 return yaml.safe_load(result)
             raise CommandFailed(f"FIO execution results: {result}.")
@@ -1331,6 +1331,11 @@ def wait_for_storage_pods(timeout=200):
     all_pod_obj = get_all_pods(
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
+    # Ignoring pods with "app=rook-ceph-detect-version" app label
+    all_pod_obj = [
+        pod for pod in all_pod_obj if constants.ROOK_CEPH_DETECT_VERSION_LABEL not in pod.get_labels()
+    ]
+
     for pod_obj in all_pod_obj:
         state = constants.STATUS_RUNNING
         if any(i in pod_obj.name for i in ['-1-deploy', 'ocs-deviceset']):

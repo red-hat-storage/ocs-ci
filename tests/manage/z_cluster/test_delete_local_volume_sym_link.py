@@ -6,7 +6,7 @@ from ocs_ci.ocs.defaults import ROOK_CLUSTER_NAMESPACE
 from ocs_ci.framework.testlib import E2ETest, tier4a
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.pytest_customization.marks import skipif_no_lso
-from tests.helpers import wait_for_resource_state
+from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.resources.pod import wait_for_storage_pods, get_pod_obj, get_pod_node
 from ocs_ci.framework import config

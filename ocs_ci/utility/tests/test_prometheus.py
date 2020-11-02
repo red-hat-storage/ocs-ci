@@ -2,7 +2,7 @@
 
 import pytest
 
-from ocs_ci.utility.prometheus import check_query_range_result
+from ocs_ci.utility.prometheus import check_query_range_result_enum
 
 
 @pytest.fixture
@@ -125,7 +125,7 @@ def test_check_query_range_result_null():
     The function does't throw any exception and returns true when executed
     with empty arguments.
     """
-    assert check_query_range_result({}, [])
+    assert check_query_range_result_enum({}, [])
 
 
 def test_check_query_range_result_simple(query_range_result_ok):
@@ -133,14 +133,14 @@ def test_check_query_range_result_simple(query_range_result_ok):
     The function validates query_range_result_ok data assuming 1 is a good
     value.
     """
-    assert check_query_range_result(query_range_result_ok, good_values=[1])
+    assert check_query_range_result_enum(query_range_result_ok, good_values=[1])
 
 
 def test_check_query_range_result_simple_fail(query_range_result_ok):
     """
     Assuming 0 is a good value, the validation should fail.
     """
-    result = check_query_range_result(query_range_result_ok, good_values=[0])
+    result = check_query_range_result_enum(query_range_result_ok, good_values=[0])
     assert not result
 
 
@@ -149,11 +149,11 @@ def test_check_query_range_result_single_error(query_range_result_single_error):
     The function finds single error in query_range_result_single_error data,
     assuming 1 is a good value.
     """
-    result1 = check_query_range_result(
+    result1 = check_query_range_result_enum(
         query_range_result_single_error,
         good_values=[1])
     assert not result1
-    result2 = check_query_range_result(
+    result2 = check_query_range_result_enum(
         query_range_result_single_error,
         good_values=[1, 0])
     assert result2, "assuming both 1 and 0 are good values, check should pass"
@@ -163,12 +163,12 @@ def test_check_query_range_result_exp_metric_num(query_range_result_ok):
     """
     Check that exp_metric_num is checked as expected when specified.
     """
-    result1 = check_query_range_result(
+    result1 = check_query_range_result_enum(
         query_range_result_ok,
         good_values=[1],
         exp_metric_num=2)
     assert result1, "check should pass when exp_metric_num matches the data"
-    result2 = check_query_range_result(
+    result2 = check_query_range_result_enum(
         query_range_result_ok,
         good_values=[1],
         exp_metric_num=3)
@@ -180,12 +180,12 @@ def test_check_query_range_result_exp_delay(query_range_result_delay_60s):
     Check that exp_metric_num is taken into account, so that initial bad values
     are ignored.
     """
-    result1 = check_query_range_result(
+    result1 = check_query_range_result_enum(
         query_range_result_delay_60s,
         good_values=[1],
         bad_values=[0])
     assert not result1, "without specifying exp_delay validation should fail"
-    result2 = check_query_range_result(
+    result2 = check_query_range_result_enum(
         query_range_result_delay_60s,
         good_values=[1],
         bad_values=[0],
@@ -198,12 +198,12 @@ def test_check_query_range_result_exp_good_time(query_range_result_bad_last_90s)
     Check that exp_good_time is taken into account, so that initial bad values
     are ignored if appear after the good time passess.
     """
-    result1 = check_query_range_result(
+    result1 = check_query_range_result_enum(
         query_range_result_bad_last_90s,
         good_values=[1],
         bad_values=[0])
     assert not result1, "without exp_good_time validation should fail"
-    result2 = check_query_range_result(
+    result2 = check_query_range_result_enum(
         query_range_result_bad_last_90s,
         good_values=[1],
         bad_values=[0],

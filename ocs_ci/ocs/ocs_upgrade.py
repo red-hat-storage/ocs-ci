@@ -111,12 +111,10 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     )
     verify_pods_upgraded(old_images, selector=constants.MON_APP_LABEL, count=3)
     verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
-    # OSD upgrade have timeout 10mins for new attempt if cluster is not health.
-    # https://bugzilla.redhat.com/show_bug.cgi?id=1840729 setting timeout for
-    # 12.5 minutes per OSD
+    osd_timeout = 600 if upgrade_version >= parse_version('4.5') else 750
     verify_pods_upgraded(
         old_images, selector=constants.OSD_APP_LABEL, count=osd_count,
-        timeout=750 * osd_count,
+        timeout=osd_timeout * osd_count,
     )
     verify_pods_upgraded(old_images, selector=constants.MDS_APP_LABEL, count=2)
     if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
@@ -145,6 +143,9 @@ class OCSUpgrade(object):
         self._version_before_upgrade = version_before_upgrade
         self._ocs_registry_image = ocs_registry_image
         self.upgrade_in_current_source = upgrade_in_current_source
+        self.subscription_plan_approval = config.DEPLOYMENT.get(
+            'subscription_plan_approval'
+        )
 
     @property
     def version_before_upgrade(self):
@@ -216,6 +217,7 @@ class OCSUpgrade(object):
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
             resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
+            subscription_plan_approval=self.subscription_plan_approval,
         )
         channel = config.DEPLOYMENT.get('ocs_csv_channel')
 
@@ -309,6 +311,7 @@ class OCSUpgrade(object):
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
             resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
+            subscription_plan_approval=self.subscription_plan_approval,
         )
         csv_name_post_upgrade = package_manifest.get_current_csv(channel)
         if csv_name_post_upgrade == csv_name_pre_upgrade:
@@ -335,6 +338,7 @@ class OCSUpgrade(object):
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
             resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
+            subscription_plan_approval=self.subscription_plan_approval,
         )
         csv_name_post_upgrade = package_manifest.get_current_csv(channel)
         csv_post_upgrade = CSV(

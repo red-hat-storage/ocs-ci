@@ -7,7 +7,7 @@ from ocs_ci.utility import templating
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, PVC
 from ocs_ci.ocs.resources.pod import get_pod_obj
-from tests import helpers
+from ocs_ci.helpers import helpers
 import ocs_ci.utility.prometheus
 from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,

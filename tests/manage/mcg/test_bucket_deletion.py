@@ -16,7 +16,7 @@ from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     rm_object_recursive
 )
-from tests.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.framework.testlib import MCGTest
 
 logger = logging.getLogger(__name__)

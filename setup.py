@@ -16,7 +16,7 @@ setup(
     install_requires=[
         'apache-libcloud==3.1.0',
         'docopt==0.6.2',
-        'gevent==20.6.2',
+        'gevent==20.9.0',
         'reportportal-client==3.2.3',
         'requests==2.23.0',
         'paramiko==2.4.2',
@@ -54,6 +54,7 @@ setup(
         'azure-mgmt-compute==12.0.0',
         'azure-mgmt-network==10.2.0',
         'azure-mgmt-resource==10.0.0',
+        'azure-storage-blob==12.5.0',
         'msrestazure==0.6.3',
         'python-novaclient==17.1.0',
         'python-cinderclient==7.1.0',
@@ -67,7 +68,8 @@ setup(
             'report-version=ocs_ci.ocs.version:main',
             'ci-cleanup=ocs_ci.cleanup.aws.cleanup:cluster_cleanup',
             'ci-pause=ocs_ci.pause.pause:cluster_pause',
-            'aws-cleanup=ocs_ci.cleanup.aws.cleanup:aws_cleanup'
+            'aws-cleanup=ocs_ci.cleanup.aws.cleanup:aws_cleanup',
+            'vsphere-cleanup=ocs_ci.cleanup.vsphere.cleanup:vsphere_cleanup'
         ],
     },
     zip_safe=True,

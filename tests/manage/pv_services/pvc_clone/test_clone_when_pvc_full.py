@@ -8,7 +8,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.prometheus import PrometheusAPI, check_alert_list
 from ocs_ci.utility.utils import TimeoutSampler
-from tests.helpers import wait_for_resource_state
+from ocs_ci.helpers.helpers import wait_for_resource_state
 
 log = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import tier3, ManageTest
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
-from tests import helpers
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import templating
 

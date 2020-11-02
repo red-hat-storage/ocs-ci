@@ -14,7 +14,7 @@ from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 
 logger = logging.getLogger(__name__)
