@@ -2,7 +2,9 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, tier1
+from ocs_ci.framework.testlib import (
+    skipif_ocs_version, ManageTest, tier1, skipif_ocp_version
+)
 from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
 from ocs_ci.helpers.helpers import wait_for_resource_state, create_pods
 
@@ -11,6 +13,7 @@ log = logging.getLogger(__name__)
 
 @tier1
 @skipif_ocs_version('<4.6')
+@skipif_ocp_version('<4.6')
 @pytest.mark.polarion_id('OCS-2361')
 class TestRbdBlockPvcSnapshot(ManageTest):
     """
