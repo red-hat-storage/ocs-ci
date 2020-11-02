@@ -7,11 +7,12 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework.testlib import (
-    ManageTest, tier4a
+    ManageTest, tier4a, vsphere_platform_required
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs.node import get_node_objs
+from ocs_ci.ocs.bucket_utils import s3_put_object, s3_get_object
 
 log = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ log = logging.getLogger(__name__)
 @tier4a
 @pytest.mark.polarion_id("OCS-2374")
 @pytest.mark.bugzilla('1852983')
+@vsphere_platform_required
 class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
     """
     Test to verify fail node hosting
@@ -34,19 +36,21 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
-    @pytest.fixture(autouse=True)
-    def teardown(self, request, nodes):
-        """
-        Make sure all nodes are up again
-
+    def create_obc_creation(self, bucket_factory, mcg_obj, key):
         """
 
-        def finalizer():
-            nodes.restart_nodes_by_stop_and_start_teardown()
+        """
+        # Create a bucket then read & write
+        bucket_name = bucket_factory(amount=1, interface='OC')[0].name
+        obj_data = "A random string data"
+        assert s3_put_object(mcg_obj, bucket_name, key, obj_data), \
+            f"Failed: Put object, {key}"
+        assert s3_get_object(mcg_obj, bucket_name, key), f"Failed: Get object, {key}"
 
-        request.addfinalizer(finalizer)
-
-    def test_rgw_host_node_failure(self, nodes):
+    def test_rgw_host_node_failure(
+        self, nodes, node_restart_teardown,
+        mcg_obj, bucket_factory
+    ):
         """
         Test case to fail node where RGW and Noobaa-db-0 hosting
         and verify new pod spuns on healthy node
@@ -86,8 +90,14 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
                     selector=constants.RGW_APP_LABEL
                 )
 
+                # Create OBC and read wnd write
+                self.create_obc_creation(bucket_factory, mcg_obj, 'Object-key-1')
+
                 # Start the node
                 nodes.start_nodes(node_obj)
+
+                # Create OBC and read wnd write
+                self.create_obc_creation(bucket_factory, mcg_obj, 'Object-key-2')
 
         # Verify cluster health
         self.sanity_helpers.health_check()
