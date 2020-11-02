@@ -3,7 +3,8 @@ import pytest
 import time
 
 from ocs_ci.framework.testlib import (
-    skipif_ocs_version, E2ETest, tier2
+    skipif_ocs_version, skipif_ocp_version,
+    E2ETest, tier2
 )
 from ocs_ci.ocs.constants import (
     RIPSAW_NAMESPACE, STATUS_COMPLETED, VOLUME_MODE_FILESYSTEM
@@ -16,6 +17,7 @@ log = logging.getLogger(__name__)
 
 @tier2
 @skipif_ocs_version('<4.6')
+@skipif_ocp_version('<4.6')
 @pytest.mark.polarion_id("OCS-2342")
 class TestPvcCloneOfWorkloads(E2ETest):
     """
@@ -87,18 +89,22 @@ class TestPvcCloneOfWorkloads(E2ETest):
             cloned_obj = pgsql.get_postgres_used_file_space(cloned_pods_obj)
             for pod_obj in parent_pods_obj:
                 if pod_obj.filespace != cloned_obj[parent_pods_obj.index(pod_obj)].filespace:
-                    raise Exception(
+                    # ToDo: Before clone need to check data is synced
+                    if not abs(
+                        int(pod_obj.filespace.strip('M')) - int(
+                            cloned_obj[parent_pods_obj.index(pod_obj)].filespace.strip('M'))
+                    ) < 2:
+                        raise Exception(
+                            f"Parent pvc {pod_obj.name} used file space is {pod_obj.filespace}. "
+                            f"And for cloned pvc {cloned_obj[parent_pods_obj.index(pod_obj)].name} "
+                            f"used file space is {cloned_obj[parent_pods_obj.index(pod_obj)].filespace}"
+                        )
+                    log.warn(
                         f"Parent pvc {pod_obj.name} used file space is {pod_obj.filespace}. "
                         f"And for cloned pvc {cloned_obj[parent_pods_obj.index(pod_obj)].name} "
                         f"used file space is {cloned_obj[parent_pods_obj.index(pod_obj)].filespace}"
                     )
             log.info("All cloned PVC matches the parent PVC data")
-
-            # Run benchmark on cloned PVC
-            pgsql.create_pgbench_benchmark(
-                replicas=3, pgbench_name=f'pgbench-cloned-{i}',
-                postgres_name=f'postgres-cloned-{i}', wait=False
-            )
 
             # Run benchmark on parent PVC
             pgsql.create_pgbench_benchmark(replicas=3, pgbench_name=f'pgbench-{i}', wait=False)
