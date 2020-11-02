@@ -263,6 +263,7 @@ HOSTNAME_LABEL = "kubernetes.io/hostname"
 # Auth Yaml
 OCSCI_DATA_BUCKET = 'ocs-ci-data'
 AUTHYAML = 'auth.yaml'
+GOOGLE_CREDS_JSON_PATH = os.path.join(DATA_DIR, "google_creds.json")
 
 # OBJ File representing serialized data
 NODE_OBJ_FILE = "node_file.objs"
@@ -1182,6 +1183,17 @@ MCG_NS_AWS_ENDPOINT = 'https://s3.amazonaws.com'
 MCG_NS_RESOURCE = 'ns_resource'
 MCG_NS_BUCKET = 'ns-bucket'
 MCG_NS_AWS_CONNECTION = 'aws_connection'
+
+# Cloud provider default endpoints
+# Upon use, utilize .format() to replace the curly braces where necessary
+AZURE_BLOB_ENDPOINT_TEMPLATE = 'https://{}.blob.core.windows.net'
+IBM_COS_GEO_ENDPOINT_TEMPLATE = 'https://s3.{}.cloud-object-storage.appdomain.cloud'
+
+# NooBaa backingstore types
+BACKINGSTORE_TYPE_AWS = 'aws-s3'
+BACKINGSTORE_TYPE_AZURE = 'azure-blob'
+BACKINGSTORE_TYPE_S3_COMP = 's3-compatible'
+BACKINGSTORE_TYPE_GOOGLE = 'google-cloud-storage'
 
 # Squads assignment
 # Tests are assigned to Squads based on patterns matching test path.
