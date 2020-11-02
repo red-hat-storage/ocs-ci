@@ -54,6 +54,7 @@ setup(
         'azure-mgmt-compute==12.0.0',
         'azure-mgmt-network==10.2.0',
         'azure-mgmt-resource==10.0.0',
+        'azure-storage-blob==12.5.0',
         'msrestazure==0.6.3',
         'python-novaclient==17.1.0',
         'python-cinderclient==7.1.0',
