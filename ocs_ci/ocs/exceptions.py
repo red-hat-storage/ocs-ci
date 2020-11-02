@@ -221,6 +221,10 @@ class StorageNotSufficientException(Exception):
     pass
 
 
+class PoolNotFound(Exception):
+    pass
+
+
 class MemoryNotSufficientException(Exception):
     pass
 
