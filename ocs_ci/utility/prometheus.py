@@ -301,7 +301,7 @@ class PrometheusAPI(object):
     _user = None
     _password = None
     _endpoint = None
-    _cacert = None
+    _cacert = False
 
     def __init__(self, user=None, password=None):
         """
@@ -310,17 +310,23 @@ class PrometheusAPI(object):
         Args:
             user (str): OpenShift username used to connect to API
         """
-        self._user = user or config.RUN['username']
-        if not password:
-            filename = os.path.join(
-                config.ENV_DATA['cluster_path'],
-                config.RUN['password_location']
-            )
-            with open(filename) as f:
-                password = f.read()
-        self._password = password
+        if config.ENV_DATA['platform'].lower() == 'ibm_cloud':
+            self._user = user or 'apikey'
+            self._password = password or config.AUTH.get('ibm_apikey')
+        else:
+            self._user = user or config.RUN['username']
+            if not password:
+                filename = os.path.join(
+                    config.ENV_DATA['cluster_path'],
+                    config.RUN['password_location']
+                )
+                with open(filename) as f:
+                    password = f.read().rstrip('\n')
+            self._password = password
         self.refresh_connection()
-        self.generate_cert()
+        # TODO: generate certificate for IBM cloud platform
+        if not config.ENV_DATA['platform'].lower() == 'ibm_cloud':
+            self.generate_cert()
 
     def refresh_connection(self):
         """
@@ -330,8 +336,14 @@ class PrometheusAPI(object):
             kind=constants.ROUTE,
             namespace=defaults.OCS_MONITORING_NAMESPACE
         )
+        kubeconfig = os.getenv('KUBECONFIG')
+        kube_data = ""
+        with open(kubeconfig, 'r') as kube_file:
+            kube_data = kube_file.readlines()
         assert ocp.login(self._user, self._password), 'Login to OCP failed'
         self._token = ocp.get_user_token()
+        with open(kubeconfig, 'w') as kube_file:
+            kube_file.writelines(kube_data)
         route_obj = ocp.get(
             resource_name=defaults.PROMETHEUS_ROUTE
         )
