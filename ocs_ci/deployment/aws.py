@@ -183,7 +183,7 @@ class AWSIPI(AWSBase):
         """
         super(AWSIPI, self).deploy_ocp(log_cli_level)
         if config.DEPLOYMENT['infra_nodes']:
-            num_nodes = config.DEPLOYMENT['ocs_operator_nodes_to_taint']
+            num_nodes = config.ENV_DATA['infra_replicas']
             ms_list = machine.create_infra_nodes(num_nodes)
             for node in ms_list:
                 machine.wait_for_new_node_to_be_ready(node)

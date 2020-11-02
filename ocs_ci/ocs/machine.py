@@ -340,7 +340,7 @@ def create_infra_nodes(num_nodes):
         num_nodes (int): Number of instances to be created
 
     Returns:
-        list : of instance names
+        list: list of instance names
 
     """
     ms_names = []
