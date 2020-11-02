@@ -736,14 +736,10 @@ def run_must_gather(log_dir_path, image, command=None):
     # Must-gather has many changes in 4.6 which add more time to the collection.
     # https://github.com/red-hat-storage/ocs-ci/issues/3240
     ocs_version = float(ocsci_config.ENV_DATA['ocs_version'])
-    if ocs_version == 4.6:
-        must_gather_timeout = ocsci_config.REPORTING.get(
-            'must_gather_timeout', 1500
-        )
-    else:
-        must_gather_timeout = ocsci_config.REPORTING.get(
-            'must_gather_timeout', 600
-        )
+    timeout = 1500 if ocs_version == 4.6 else 600
+    must_gather_timeout = ocsci_config.REPORTING.get(
+        'must_gather_timeout', timeout
+    )
 
     log.info(f"Must gather image: {image} will be used.")
     create_directory_path(log_dir_path)
