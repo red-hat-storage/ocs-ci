@@ -101,14 +101,7 @@ class MCG:
             creds_secret_obj.get('data').get('password')
         ).decode('utf-8')
 
-        self.noobaa_token = self.send_rpc_query(
-            'auth_api', 'create_auth', params={
-                'role': 'admin',
-                'system': 'noobaa',
-                'email': self.noobaa_user,
-                'password': self.noobaa_password
-            }
-        ).json().get('reply').get('token')
+        self.noobaa_token = self.retrieve_nb_token()
 
         self.s3_resource = boto3.resource(
             's3', verify=retrieve_verification_mode(),
@@ -171,6 +164,44 @@ class MCG:
                 selector=constants.RGW_APP_LABEL,
                 resource_count=rgw_count,
                 timeout=60
+            )
+
+    def retrieve_nb_token(self):
+        """
+        Try to retrieve a NB RPC token and decode its JSON
+
+        """
+        def internal_retrieval_logic():
+            try:
+                rpc_response = self.send_rpc_query(
+                    'auth_api', 'create_auth', params={
+                        'role': 'admin',
+                        'system': 'noobaa',
+                        'email': self.noobaa_user,
+                        'password': self.noobaa_password
+                    }
+                )
+                return rpc_response.json().get('reply').get('token')
+
+            except json.JSONDecodeError:
+                logger.warning(
+                    'RPC did not respond with a JSON. Response: \n'
+                    + str(rpc_response)
+                )
+                logger.warning('Failed to retrieve token, NooBaa might be unhealthy. Retrying')
+                return None
+
+        try:
+            for token in TimeoutSampler(300, 30, internal_retrieval_logic):
+                if token:
+                    return token
+        except TimeoutExpiredError:
+            logger.error(
+                'NB RPC token was not retrieved successfully within the time limit.'
+            )
+            assert False, (
+                'NB RPC token was not retrieved successfully '
+                'within the time limit.'
             )
 
     def s3_get_all_bucket_names(self):
