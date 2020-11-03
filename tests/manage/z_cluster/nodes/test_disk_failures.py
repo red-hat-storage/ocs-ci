@@ -25,10 +25,11 @@ from ocs_ci.ocs.resources.pod import (
     get_osd_prepare_pods,
     get_pod_obj,
     get_pod_logs,
+    get_osd_removal_pod_name,
 )
 from ocs_ci.ocs.resources.ocs import get_job_obj, OCS
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.aws import AWSTimeoutException
+from ocs_ci.utility.utils import get_ocp_version
 
 
 logger = logging.getLogger(__name__)
@@ -289,16 +290,21 @@ class TestDiskFailures(ManageTest):
             osd_pod.ocp.wait_for_delete(resource_name=osd_pod_name)
 
         # Run ocs-osd-removal job
+        ocp_veriopn = get_ocp_version()
+        if ocp_veriopn >= "4.6":
+            cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_id} -o yaml"
+        else:
+            cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_id} -o yaml"
+
         logger.info(f"Executing OSD removal job on OSD-{osd_id}")
-        osd_removal_job_yaml = ocp.OCP(
-            namespace=config.ENV_DATA["cluster_namespace"]
-        ).exec_oc_cmd(f"process ocs-osd-removal" f" -p FAILED_OSD_ID={osd_id} -o yaml")
+        ocp_obj = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
+        osd_removal_job_yaml = ocp_obj.exec_oc_cmd(cmd)
         osd_removal_job = OCS(**osd_removal_job_yaml)
         osd_removal_job.create(do_reload=False)
 
         # Get ocs-osd-removal pod name
         logger.info("Getting the ocs-osd-removal pod name")
-        osd_removal_pod_name = get_pod_name_by_pattern(f"ocs-osd-removal-{osd_id}")[0]
+        osd_removal_pod_name = get_osd_removal_pod_name(osd_id)
         osd_removal_pod_obj = get_pod_obj(
             osd_removal_pod_name, namespace="openshift-storage"
         )
@@ -326,11 +332,16 @@ class TestDiskFailures(ManageTest):
         osd_pvc.ocp.wait_for_delete(resource_name=osd_pvc_name)
 
         # Delete the OSD deployment
-        logger.info(f"Deleting OSD deployment {osd_deployment_name}")
-        osd_deployment.delete()
-        osd_deployment.ocp.wait_for_delete(
-            resource_name=osd_deployment_name, timeout=120
-        )
+        logger.info(f"Verifying deletion of OSD deployment {osd_deployment_name}")
+        try:
+            osd_deployment.ocp.wait_for_delete(
+                resource_name=osd_deployment_name, timeout=30
+            )
+        except TimeoutError:
+            osd_deployment.delete()
+            osd_deployment.ocp.wait_for_delete(
+                resource_name=osd_deployment_name, timeout=120
+            )
 
         # Delete PV
         logger.info(f"Verifying deletion of PV {osd_pv_name}")
