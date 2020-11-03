@@ -3422,12 +3422,10 @@ def multi_pvc_clone_factory(pvc_clone_factory):
                 storageclass=storageclass, size=size,
                 access_mode=access_mode, volume_mode=volume_mode
             )
-            clone_pvc_obj.parent = pvc_obj
-            clone_pvc_obj.volume_mode = volume_mode
             cloned_pvcs.append(clone_pvc_obj)
             instances.append(clone_pvc_obj)
 
-            if status and not wait_each:
+            if status and wait_each:
                 helpers.wait_for_resource_state(clone_pvc_obj, status)
         return cloned_pvcs
 
@@ -3510,7 +3508,7 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
 
     def finalizer():
         """
-        Delete the cloned PVCs
+        Delete the list of pod objects created
 
         """
         for instance in instances:
