@@ -860,7 +860,8 @@ class Deployment(object):
                 # TODO - add ocs uninstall validation function call
                 logger.info("OCS uninstalled succesfully")
             except Exception:
-                logger.warning("Failed to uninstall OCS, resuming teardown")
+                logger.warning(f"Failed to uninstall OCS: {Exception}")
+                logger.log("resuming teardown")
             self.ocp_deployment.destroy(log_level)
 
     def add_node(self):
