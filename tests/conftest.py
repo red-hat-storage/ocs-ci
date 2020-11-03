@@ -1752,7 +1752,7 @@ def awscli_pod_fixture(request, scope_name):
         pod_dict_path = constants.AWSCLI_MULTIARCH_POD_YAML
 
     awscli_pod_dict = templating.load_yaml(pod_dict_path)
-    awscli_pod_dict['spec']['volumes']['configMap']['name'] = service_ca_configmap_name
+    awscli_pod_dict['spec']['volumes'][0]['configMap']['name'] = service_ca_configmap_name
     awscli_pod_dict['metadata']['name'] = create_unique_resource_name(
         constants.AWSCLI_RELAY_POD_NAME, scope_name
     )
