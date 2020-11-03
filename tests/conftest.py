@@ -1758,7 +1758,9 @@ def awscli_pod_fixture(request, scope_name):
     )
 
     awscli_pod_obj = helpers.create_resource(**awscli_pod_dict)
-    OCP(namespace=constants.DEFAULT_NAMESPACE, kind='ConfigMap').wait_for_resource(
+    OCP(
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind='ConfigMap'
+    ).wait_for_resource(
         resource_name=service_ca_configmap.name,
         column='DATA',
         condition='1'
