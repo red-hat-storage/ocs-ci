@@ -107,7 +107,7 @@ class VSPHERENode(object):
             tuple: tuple which contains command return code, output and error
 
         """
-        cmd = f"sudo reboot"
+        cmd = "sudo reboot"
         return self.vmnode.exec_cmd(cmd)
 
 

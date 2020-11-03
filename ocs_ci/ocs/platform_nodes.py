@@ -10,10 +10,7 @@ import boto3
 import yaml
 
 from ocs_ci.deployment.terraform import Terraform
-from ocs_ci.deployment.vmware import (
-    clone_openshift_installer,
-    update_machine_conf,
-)
+from ocs_ci.deployment.vmware import update_machine_conf
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
@@ -22,7 +19,7 @@ from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.ocs.node import (
     get_node_objs, get_typed_worker_nodes, get_typed_nodes,
-    get_compute_node_names, generate_node_names_for_vsphere,
+    generate_node_names_for_vsphere,
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
@@ -1618,10 +1615,10 @@ class VSPHEREUPINode(VMWareNodes):
                 f"base64 -w0 {worker_ignition_path}"
             )
             data = {
-                "disk.EnableUUID": config.ENV_DATA['disk.EnableUUID'],
+                "disk.EnableUUID": config.ENV_DATA['disk_enable_uuid'],
                 "guestinfo.ignition.config.data": worker_ignition_base64,
                 "guestinfo.ignition.config.data.encoding":
-                    config.ENV_DATA['guestinfo.ignition.config.data.encoding'],
+                    config.ENV_DATA['ignition_data_encoding'],
             }
 
             # clone VM
@@ -1638,6 +1635,7 @@ class VSPHEREUPINode(VMWareNodes):
                     125829120,
                     config.ENV_DATA['network_adapter'],
                     power_on=True,
+                    **data
                 )
             logger.info("Sleeping for 120 sec to settle down the VMs")
             time.sleep(120)
@@ -1652,7 +1650,6 @@ class VSPHEREUPINode(VMWareNodes):
                     config.ENV_DATA['vsphere_cluster'],
                     self.cluster_name
                 ):
-                    logger.info(ip)
                     if not ('<unset>' in ip or '127.0.0.1' in ip):
                         logger.info("setting host name")
                         self.wait_for_connection_and_set_host_name(
