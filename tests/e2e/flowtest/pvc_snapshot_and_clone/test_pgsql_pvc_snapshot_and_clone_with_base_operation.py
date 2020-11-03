@@ -65,7 +65,9 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
             disruption.set_resource(resource=f'{pod}')
             disruption.delete_resource()
         log.info("Verifying exit criteria for operation 1: Pod Restarts")
-        flow_ops.validate_cluster(node_status=True, pod_status=True, operation_name="Pod Restarts")
+        flow_ops.validate_cluster(
+            node_status=True, pod_status=True, operation_name="Pod Restarts"
+        )
 
         log.info("Starting operation 2: Node Reboot")
         node_names = flow_ops.node_operations_entry_criteria(
@@ -74,7 +76,9 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
         # Reboot node
         nodes.restart_nodes(node_names)
         log.info("Verifying exit criteria for operation 2: Node Reboot")
-        flow_ops.validate_cluster(node_status=True, pod_status=True, operation_name="Node Reboot")
+        flow_ops.validate_cluster(
+            node_status=True, pod_status=True, operation_name="Node Reboot"
+        )
 
         log.info("Starting operation 3: Node Drain")
         node_name = flow_ops.node_operations_entry_criteria(
@@ -85,7 +89,9 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
         # Make the node schedulable again
         schedule_nodes([node_name[0].name])
         log.info("Verifying exit criteria for operation 3: Node Drain")
-        flow_ops.validate_cluster(node_status=True, pod_status=True, operation_name="Node Drain")
+        flow_ops.validate_cluster(
+            node_status=True, pod_status=True, operation_name="Node Drain"
+        )
 
         log.info("Waiting for background operations to be completed")
         bg_handler.wait_for_bg_operations([pgsql_snapshot_and_clone], timeout=600)

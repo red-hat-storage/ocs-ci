@@ -2955,7 +2955,7 @@ def snapshot_factory(request):
 
 
 @pytest.fixture()
-def multi_snapshot_factory(request, snapshot_factory):
+def multi_snapshot_factory(snapshot_factory):
     """
     Snapshot factory. Calling this fixture creates sets of volume snapshot from the
     specified PVC
@@ -2966,14 +2966,12 @@ def multi_snapshot_factory(request, snapshot_factory):
     def factory(
         pvc_obj,
         wait=True,
-        snapshot_name=None,
         snapshot_name_suffix=None
     ):
         """
         Args:
             pvc_obj (list): List PVC object from which snapshot has to be created
             wait (bool): True to wait for snapshot to be ready, False otherwise
-            snapshot_name (str): Name to be provided for snapshot
             snapshot_name_suffix (str): Suffix to be added to snapshot
 
         Returns:
@@ -2985,8 +2983,8 @@ def multi_snapshot_factory(request, snapshot_factory):
             log.info(
                 f"Creating snapshot of PVC {obj.name}"
             )
-            if snapshot_name_suffix:
-                snapshot_name = f"{obj.name}-{snapshot_name_suffix}"
+            snapshot_name = f"{obj.name}-{snapshot_name_suffix}" \
+                if snapshot_name_suffix else None
             snap_obj = snapshot_factory(
                 pvc_obj=obj, snapshot_name=snapshot_name, wait=wait
             )
@@ -2994,17 +2992,6 @@ def multi_snapshot_factory(request, snapshot_factory):
             instances.append(snap_obj)
         return snapshot
 
-    def finalizer():
-        """
-        Delete the snapshots
-
-        """
-        for instance in instances:
-            if not instance.is_deleted:
-                instance.delete()
-                instance.ocp.wait_for_delete(instance.name)
-
-    request.addfinalizer(finalizer)
     return factory
 
 
@@ -3111,7 +3098,7 @@ def snapshot_restore_factory(request):
 
 
 @pytest.fixture()
-def multi_snapshot_restore_factory(request, snapshot_restore_factory):
+def multi_snapshot_restore_factory(snapshot_restore_factory):
     """
     Snapshot restore factory. Calling this fixture creates set of new PVC out of the
     specified VolumeSnapshot.
@@ -3121,8 +3108,7 @@ def multi_snapshot_restore_factory(request, snapshot_restore_factory):
 
     def factory(
         snapshot_obj,
-        restore_pvc_name=None,
-        restore_pvc_name_suffix=None,
+        restore_pvc_suffix=None,
         storageclass=None,
         size=None,
         volume_mode=None,
@@ -3135,7 +3121,6 @@ def multi_snapshot_restore_factory(request, snapshot_restore_factory):
         Args:
             snapshot_obj (list): List OCS instance of kind VolumeSnapshot which has
                 to be restored to new PVC
-            restore_pvc_name (str): Name to be provided for restored pvc
             restore_pvc_name_suffix (str): Suffix to be added to pvc name
             storageclass (str): Name of storageclass
             size (str): Size of PVC being created. eg: 5Gi. Ideally, this
@@ -3158,8 +3143,8 @@ def multi_snapshot_restore_factory(request, snapshot_restore_factory):
         new_pvcs = []
         for snap_obj in snapshot_obj:
             log.info(f"Creating a PVC from snapshot {snap_obj.name}")
-            if restore_pvc_name_suffix:
-                restore_pvc_name = f"{snap_obj.name}-{restore_pvc_name_suffix}"
+            restore_pvc_name = f"{snap_obj.name}-{restore_pvc_suffix}"\
+                if restore_pvc_suffix else None
             restored_pvc = snapshot_restore_factory(
                 snapshot_obj=snap_obj, restore_pvc_name=restore_pvc_name,
                 storageclass=storageclass, size=size,
@@ -3169,22 +3154,11 @@ def multi_snapshot_restore_factory(request, snapshot_restore_factory):
             restored_pvc.snapshot = snapshot_obj
             new_pvcs.append(restored_pvc)
             instances.append(restored_pvc)
-            if status and not wait_each:
+            if status and wait_each:
                 helpers.wait_for_resource_state(restored_pvc, status)
 
         return new_pvcs
 
-    def finalizer():
-        """
-        Delete the PVCs
-
-        """
-        for instance in instances:
-            if not instance.is_deleted:
-                instance.delete()
-                instance.ocp.wait_for_delete(instance.name)
-
-    request.addfinalizer(finalizer)
     return factory
 
 
@@ -3403,7 +3377,7 @@ def reportportal_customization(request):
 
 
 @pytest.fixture()
-def multi_pvc_clone_factory(request, pvc_clone_factory):
+def multi_pvc_clone_factory(pvc_clone_factory):
     """
     Calling this fixture creates a sets of clone from the specified PVC
 
@@ -3457,17 +3431,6 @@ def multi_pvc_clone_factory(request, pvc_clone_factory):
                 helpers.wait_for_resource_state(clone_pvc_obj, status)
         return cloned_pvcs
 
-    def finalizer():
-        """
-        Delete the cloned PVCs
-
-        """
-        for instance in instances:
-            if not instance.is_deleted:
-                instance.delete()
-                instance.ocp.wait_for_delete(instance.name)
-
-    request.addfinalizer(finalizer)
     return factory
 
 
@@ -3495,22 +3458,22 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
         # Get postgres pvc list obj
         postgres_pvcs_obj = pgsql.get_postgres_pvc()
 
-        snapshots = multi_snapshot_factory(
-            pvc_obj=postgres_pvcs_obj, snapshot_name_suffix="snap"
-        )
-        log.info("Created new PVCs from all the snapshots and in Bound state")
+        snapshots = multi_snapshot_factory(pvc_obj=postgres_pvcs_obj)
+        log.info("Created snapshots from all the PVCs and snapshots are in Ready state")
 
-        restored_pvc_objs = multi_snapshot_restore_factory(
-            snapshot_obj=snapshots, restore_pvc_name_suffix="restore"
-        )
+        restored_pvc_objs = multi_snapshot_restore_factory(snapshot_obj=snapshots)
+        log.info("Created new PVCs from all the snapshots")
 
         cloned_pvcs = multi_pvc_clone_factory(
             pvc_obj=restored_pvc_objs, volume_mode=constants.VOLUME_MODE_FILESYSTEM
         )
+        log.info("Created new PVCs from all restored volumes")
 
-        # Attach a new pgsql pod to resized cloned pvcs
+        # Attach a new pgsql pod cloned pvcs
         sset_list = pgsql.attach_pgsql_pod_to_claim_pvc(
-            pvc_objs=cloned_pvcs, postgres_name='postgres-clone', run_benchmark=False
+            pvc_objs=cloned_pvcs,
+            postgres_name='postgres-clone',
+            run_benchmark=False
         )
         instances.extend(sset_list)
 
@@ -3521,21 +3484,22 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
             )
             pvc_obj.resize_pvc(pvc_size_new, True)
 
-        new_snapshots = multi_snapshot_factory(
-            pvc_obj=cloned_pvcs, snapshot_name_suffix="snap"
-        )
+        new_snapshots = multi_snapshot_factory(pvc_obj=cloned_pvcs)
+        log.info("Created snapshots from all the cloned PVCs"
+                 " and snapshots are in Ready state")
+
+        new_restored_pvc_objs = multi_snapshot_restore_factory(snapshot_obj=new_snapshots)
         log.info("Created new PVCs from all the snapshots and in Bound state")
 
-        new_restored_pvc_objs = multi_snapshot_restore_factory(
-            snapshot_obj=new_snapshots, restore_pvc_name_suffix="restore")
-
-        # Attach a new pgsql pod to resized cloned pvcs
+        # Attach a new pgsql pod restored pvcs
         pgsql_obj_list = pgsql.attach_pgsql_pod_to_claim_pvc(
-            pvc_objs=new_restored_pvc_objs, postgres_name='postgres-clone-restore', run_benchmark=False
+            pvc_objs=new_restored_pvc_objs,
+            postgres_name='postgres-clone-restore',
+            run_benchmark=False
         )
         instances.extend(pgsql_obj_list)
 
-        # Resize cloned PVCs
+        # Resize restored PVCs
         for pvc_obj in new_restored_pvc_objs:
             log.info(
                 f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G"
