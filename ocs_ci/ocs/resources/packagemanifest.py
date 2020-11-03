@@ -80,6 +80,11 @@ class PackageManifest(OCP):
                 ]
                 if len(items_match_name) == 1:
                     return items_match_name[0]
+                if len(items_match_name) == 0:
+                    raise ResourceNotFoundError(
+                        f"Requested packageManifest: {resource_name} with "
+                        f"selector: {selector} not found!"
+                    )
                 else:
                     return items_match_name
         return data
