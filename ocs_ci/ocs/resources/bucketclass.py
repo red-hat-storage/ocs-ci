@@ -4,7 +4,7 @@ from botocore.exceptions import ClientError
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
-from tests import helpers
+from ocs_ci.helpers import create_unique_resource_name
 
 log = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
             placement_policy = bucket_class_dict['placement']
         else:
             placement_policy = 'Spread'
-        bucket_class_name = helpers.create_unique_resource_name(
+        bucket_class_name = create_unique_resource_name(
             resource_description='bucketclass', resource_type=interface.lower()
         )
         interfaces[interface.lower()](
