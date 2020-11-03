@@ -860,7 +860,7 @@ class Deployment(object):
                 # TODO - add ocs uninstall validation function call
                 logger.info("OCS uninstalled succesfully")
             except Exception:
-                logger.warning(f"Failed to uninstall OCS: {Exception}")
+                logger.error(f"Failed to uninstall OCS. Exception is: {Exception}")
                 logger.log("resuming teardown")
             self.ocp_deployment.destroy(log_level)
 
