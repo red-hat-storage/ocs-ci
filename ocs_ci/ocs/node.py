@@ -1066,7 +1066,7 @@ def generate_node_names_for_vsphere(count, prefix="compute-"):
 
     Args:
         count (int): Number of node names to generate
-        prefix (str): prefix for node name
+        prefix (str): Prefix for node name
 
     Returns:
         list: List of node names

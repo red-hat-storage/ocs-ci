@@ -1186,7 +1186,7 @@ class VSPHERE(object):
         self, vm_name, template_name, datacenter_name, resource_pool_name,
         datastore_name, cluster_name, cpus=4, memory=8,
         root_disk_size=125829120, network_adapter="VM Network",
-        power_on=True
+        power_on=True, **kwargs
     ):
         """
         Clones the VM from template
@@ -1205,7 +1205,7 @@ class VSPHERE(object):
             power_on (bool): True to power on the VM after cloning
 
         """
-
+        data = kwargs
         datacenter = self.find_datacenter_by_name(datacenter_name)
         datastore = self.find_datastore_by_name(
             datastore_name,
@@ -1264,6 +1264,17 @@ class VSPHERE(object):
         clonespec_kwargs['config'].numCPUs = cpus
         clonespec_kwargs['config'].memoryMB = memory
 
+        # VM config specifications
+        vm_conf = vim.vm.ConfigSpec()
+        if data:
+            vm_conf.extraConfig = []
+            for index, param in enumerate(data):
+                option_value = vim.option.OptionValue()
+                option_value.key = param
+                option_value.value = data[param]
+                vm_conf.extraConfig.append(option_value)
+
+        clonespec_kwargs['config'].extraConfig = vm_conf.extraConfig
         clonespec = vim.vm.CloneSpec(**clonespec_kwargs)
 
         # get the folder to place the VM
@@ -1293,7 +1304,7 @@ class VSPHERE(object):
         task_done = False
         while not task_done:
             if task.info.state == "success":
-                logger.debug(f"Cloning VM completed successfully")
+                logger.debug("Cloning VM completed successfully")
                 return task.info.result
 
             if task.info.state == "error":
