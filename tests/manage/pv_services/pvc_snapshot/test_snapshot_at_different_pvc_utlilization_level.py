@@ -6,7 +6,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, tier1
 from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
-from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.helpers.helpers import wait_for_resource_state, get_snapshot_content_obj
 
 log = logging.getLogger(__name__)
 
@@ -153,9 +153,14 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
             pvc_obj.reload()
         log.info("Verified: Restored PVCs are Bound.")
 
-        # Delete volume snapshots
+        snapcontent_objs = []
+        # Get VolumeSnapshotContent form VolumeSnapshots and delete
+        # VolumeSnapshots
         log.info("Deleting snapshots")
         for snapshot in snapshots:
+            snapcontent_objs.append(
+                get_snapshot_content_obj(snap_obj=snapshot)
+            )
             snapshot.delete()
 
         # Verify volume snapshots are deleted
@@ -163,6 +168,12 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
         for snapshot in snapshots:
             snapshot.ocp.wait_for_delete(resource_name=snapshot.name)
         log.info("Verified: Snapshots are deleted")
+
+        # Verify VolumeSnapshotContents are deleted
+        for snapcontent_obj in snapcontent_objs:
+            snapcontent_obj.ocp.wait_for_delete(
+                resource_name=snapcontent_obj.name, timeout=180
+            )
 
         # Attach the restored PVCs to pods
         log.info("Attach the restored PVCs to pods")

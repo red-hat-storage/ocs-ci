@@ -117,6 +117,7 @@ PROXY = 'Proxy'
 MACHINECONFIGPOOL = "MachineConfigPool"
 VOLUMESNAPSHOTCLASS = "VolumeSnapshotClass"
 HPA = "horizontalpodautoscaler"
+VOLUMESNAPSHOTCONTENT = "VolumeSnapshotContent"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
