@@ -2989,7 +2989,7 @@ def get_ready_noobaa_endpoint_count(namespace):
     ready_count = 0
     for ep_info in pods_info:
         container_statuses = ep_info.get('status', {}).get('containerStatuses')
-        if container_statuses and container_statuses is not []:
+        if container_statuses is not None and len(container_statuses) > 0:
             if container_statuses[0].get('ready'):
                 ready_count += 1
     return ready_count
