@@ -2,6 +2,6 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: awscli-service-ca
-  namespace: default
+  namespace: openshift-storage
   annotations:
     service.beta.openshift.io/inject-cabundle: "true"
