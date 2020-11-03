@@ -1737,25 +1737,27 @@ def awscli_pod_fixture(request, scope_name):
     """
     # Create the service-ca configmap to be mounted upon pod creation
     service_ca_data = templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
-    service_ca_data['metadata']['name'] = create_unique_resource_name(
+    service_ca_configmap_name = create_unique_resource_name(
         constants.AWSCLI_SERVICE_CA_CONFIGMAP_NAME,
         scope_name
     )
+    service_ca_data['metadata']['name'] = service_ca_configmap_name
     log.info('Trying to create the AWS CLI service CA')
-    service_ca_configmap = helpers.create_resource(
-        **service_ca_data
-    )
+    service_ca_configmap = helpers.create_resource(**service_ca_data)
 
     arch = get_system_architecture()
     if arch.startswith('x86'):
         pod_dict_path = constants.AWSCLI_POD_YAML
     else:
         pod_dict_path = constants.AWSCLI_MULTIARCH_POD_YAML
-    awscli_pod_obj = helpers.create_pod(
-        namespace=constants.DEFAULT_NAMESPACE,
-        pod_dict_path=pod_dict_path,
-        pod_name=create_unique_resource_name(constants.AWSCLI_RELAY_POD_NAME, scope_name)
+
+    awscli_pod_dict = templating.load_yaml(pod_dict_path)
+    awscli_pod_dict['spec']['volumes']['configMap']['name'] = service_ca_configmap_name
+    awscli_pod_dict['metadata']['name'] = create_unique_resource_name(
+        constants.AWSCLI_RELAY_POD_NAME, scope_name
     )
+
+    awscli_pod_obj = helpers.create_resource(**awscli_pod_dict)
     OCP(namespace=constants.DEFAULT_NAMESPACE, kind='ConfigMap').wait_for_resource(
         resource_name=service_ca_configmap.name,
         column='DATA',
