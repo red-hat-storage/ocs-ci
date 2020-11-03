@@ -85,6 +85,31 @@ class VSPHERENode(object):
             _rc = True
         return _rc
 
+    def set_host_name(self, host_name):
+        """
+        Sets the host name
+
+        Args:
+            host_name (str): Name to set as host name
+
+        Returns:
+            tuple: tuple which contains command return code, output and error
+
+        """
+        cmd = f"sudo hostnamectl set-hostname {host_name}"
+        return self.vmnode.exec_cmd(cmd)
+
+    def reboot(self):
+        """
+        Reboots the node
+
+        Returns:
+            tuple: tuple which contains command return code, output and error
+
+        """
+        cmd = f"sudo reboot"
+        return self.vmnode.exec_cmd(cmd)
+
 
 def get_node_ips_from_module(module):
     """
