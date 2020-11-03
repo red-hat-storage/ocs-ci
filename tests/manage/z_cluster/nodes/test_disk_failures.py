@@ -351,10 +351,11 @@ class TestDiskFailures(ManageTest):
             osd_pv.delete()
             osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
 
-        # Delete the rook ceph operator pod to trigger reconciliation
-        rook_operator_pod = get_operator_pods()[0]
-        logger.info(f"deleting Rook Ceph operator pod {rook_operator_pod.name}")
-        rook_operator_pod.delete()
+        if ocp_veriopn < "4.6":
+            # Delete the rook ceph operator pod to trigger reconciliation
+            rook_operator_pod = get_operator_pods()[0]
+            logger.info(f"deleting Rook Ceph operator pod {rook_operator_pod.name}")
+            rook_operator_pod.delete()
 
         # Delete the OSD removal job
         logger.info(f"Deleting OSD removal job ocs-osd-removal-{osd_id}")
