@@ -1633,6 +1633,10 @@ class VSPHEREUPINode(VMWareNodes):
                     self.cluster_name,
                     self.datastore,
                     config.ENV_DATA['vsphere_cluster'],
+                    int(config.ENV_DATA['worker_num_cpus']),
+                    int(config.ENV_DATA['compute_memory']),
+                    125829120,
+                    config.ENV_DATA['network_adapter'],
                     power_on=True,
                 )
             logger.info("Sleeping for 120 sec to settle down the VMs")

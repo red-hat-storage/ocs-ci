@@ -1184,7 +1184,9 @@ class VSPHERE(object):
 
     def clone_vm(
         self, vm_name, template_name, datacenter_name, resource_pool_name,
-        datastore_name, cluster_name, power_on=True,
+        datastore_name, cluster_name, cpus=4, memory=8,
+        root_disk_size=125829120, network_adapter="VM Network",
+        power_on=True
     ):
         """
         Clones the VM from template
@@ -1203,6 +1205,7 @@ class VSPHERE(object):
             power_on (bool): True to power on the VM after cloning
 
         """
+
         datacenter = self.find_datacenter_by_name(datacenter_name)
         datastore = self.find_datastore_by_name(
             datastore_name,
@@ -1229,6 +1232,37 @@ class VSPHERE(object):
         clonespec_kwargs = {}
         clonespec_kwargs['location'] = relocate_spec
         clonespec_kwargs['powerOn'] = power_on
+
+        # update the root disk size
+        disks = [
+            x for x in template.config.hardware.device
+            if isinstance(x, vim.vm.device.VirtualDisk)
+        ]
+        diskspec = vim.vm.device.VirtualDeviceSpec()
+        diskspec.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
+        diskspec.device = disks[0]
+        diskspec.device.capacityInKB = root_disk_size
+        configspec = vim.vm.ConfigSpec()
+        clonespec_kwargs['config'] = configspec
+
+        # update the network adapter
+        devices = []
+        for device in template.config.hardware.device:
+            if hasattr(device, 'addressType'):
+                nic = vim.vm.device.VirtualDeviceSpec()
+                nic.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
+                nic.device = device
+                nic.device.deviceInfo.summary = network_adapter
+                device.backing.deviceName = network_adapter
+                devices.append(nic)
+        devices.append(diskspec)
+
+        # Update the spec with the added network adapter
+        clonespec_kwargs['config'].deviceChange = devices
+
+        # Update the spec with the cpus and memory
+        clonespec_kwargs['config'].numCPUs = cpus
+        clonespec_kwargs['config'].memoryMB = memory
 
         clonespec = vim.vm.CloneSpec(**clonespec_kwargs)
 
