@@ -52,7 +52,7 @@ from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
     get_rgw_pods, delete_deploymentconfig_pods,
-    get_pods_having_label
+    get_pods_having_label, Pod
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
@@ -1753,11 +1753,15 @@ def awscli_pod_fixture(request, scope_name):
 
     awscli_pod_dict = templating.load_yaml(pod_dict_path)
     awscli_pod_dict['spec']['volumes'][0]['configMap']['name'] = service_ca_configmap_name
-    awscli_pod_dict['metadata']['name'] = create_unique_resource_name(
+    awscli_pod_name = create_unique_resource_name(
         constants.AWSCLI_RELAY_POD_NAME, scope_name
     )
+    awscli_pod_dict['metadata']['name'] = awscli_pod_name
 
-    awscli_pod_obj = helpers.create_resource(**awscli_pod_dict)
+    awscli_pod_obj = Pod(**awscli_pod_dict)
+    assert awscli_pod_obj.create(do_reload=True), (
+        f"Failed to create Pod {awscli_pod_name}"
+    )
     OCP(
         namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind='ConfigMap'
     ).wait_for_resource(
