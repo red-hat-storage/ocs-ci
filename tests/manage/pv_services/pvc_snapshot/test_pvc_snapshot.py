@@ -84,7 +84,7 @@ class TestPvcSnapshot(ManageTest):
         )
         log.info(f"Verified IO on pod {self.pod_obj.name}.")
 
-        # Verfiy presence of the file
+        # Verify presence of the file
         file_path = pod.get_file_path(self.pod_obj, file_name)
         log.info(f"Actual file path on the pod {file_path}")
         assert pod.check_file_existence(self.pod_obj, file_path), (
@@ -179,3 +179,11 @@ class TestPvcSnapshot(ManageTest):
             orig_md5_sum
         ), 'Data integrity check failed'
         log.info("Data integrity check passed, md5sum are same")
+
+        log.info("Running IO on new pod")
+        # Run IO on new pod
+        restore_pod_obj.run_io(storage_type='fs', size='1G', runtime=20)
+
+        # Wait for fio to finish
+        restore_pod_obj.get_fio_results()
+        log.info("IO finished o new pod")
