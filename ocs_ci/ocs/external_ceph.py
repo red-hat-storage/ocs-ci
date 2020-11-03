@@ -512,7 +512,7 @@ class CephNode(object):
         return [ceph_demon for ceph_demon in self.get_ceph_objects(role) if
                 isinstance(ceph_demon, CephDemon) and ceph_demon.is_active]
 
-    def connect(self):
+    def connect(self, timeout=300):
         """
         connect to ceph instance using paramiko ssh protocol
         eg: self.connect()
@@ -523,7 +523,7 @@ class CephNode(object):
         logger.info('Connecting {host_name} / {ip_address}'.format(host_name=self.vmname, ip_address=self.ip_address))
 
         stdin, stdout, stderr = self.rssh().exec_command("dmesg")
-        self.rssh_transport().set_keepalive(15)
+        self.rssh_transport().set_keepalive(timeout)
         self.rssh().exec_command(
             "echo 120 > /proc/sys/net/ipv4/tcp_keepalive_time")
         self.rssh().exec_command(
@@ -531,7 +531,7 @@ class CephNode(object):
         self.rssh().exec_command(
             "echo 20 > /proc/sys/net/ipv4/tcp_keepalive_probes")
         self.exec_command(cmd="ls / ; uptime ; date")
-        self.ssh_transport().set_keepalive(15)
+        self.ssh_transport().set_keepalive(timeout)
         out, err = self.exec_command(cmd="hostname")
         self.hostname = out.read().strip().decode()
         shortname = self.hostname.split('.')
