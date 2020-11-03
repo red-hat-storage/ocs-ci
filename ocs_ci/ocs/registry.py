@@ -427,8 +427,10 @@ def validate_image_exists(namespace=None):
     Validate image exists on registries path
     Args:
         namespace (str): Namespace where the images/builds are created
+
     Returns:
         image_list (str): Dir/Files/Images are listed in string format
+
     Raises:
         Exceptions if dir/folders not found
     """
