@@ -47,6 +47,7 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state
 )
+from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox, collect_ocs_logs
 )
@@ -181,7 +182,7 @@ class Deployment(object):
         nodes = ocp.OCP(kind='node').get().get('items', [])
         worker_nodes = [
             node for node in nodes if "node-role.kubernetes.io/worker"
-            in node['metadata']['labels']
+                                      in node['metadata']['labels']
         ]
         if not worker_nodes:
             raise UnavailableResourceException("No worker node found!")
@@ -600,7 +601,7 @@ class Deployment(object):
             _ocp = ocp.OCP(kind='node')
             _ocp.exec_oc_cmd(
                 command=f"annotate namespace {defaults.ROOK_CLUSTER_NAMESPACE} "
-                f"{constants.NODE_SELECTOR_ANNOTATION}"
+                        f"{constants.NODE_SELECTOR_ANNOTATION}"
             )
 
     def deployment_with_ui(self):
@@ -854,6 +855,12 @@ class Deployment(object):
                 logger.info("Destroy of OCP not implemented yet.")
         else:
             self.ocp_deployment = self.OCPDeployment()
+            try:
+                uninstall_ocs()
+                # TODO - add ocs uninstall validation function call
+                logger.info("OCS uninstalled succesfully")
+            except Exception:
+                logger.warning("Failed to uninstall OCS, resuming teardown")
             self.ocp_deployment.destroy(log_level)
 
     def add_node(self):
