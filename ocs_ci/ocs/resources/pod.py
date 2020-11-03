@@ -1247,7 +1247,7 @@ def plugin_provisioner_leader(
         lease_cmd = (
             f"get leases {leader_types[leader_type]}-rbd-csi-ceph-com -o yaml"
         )
-    if interface == constants.CEPHFILESYSTEM:
+    elif interface == constants.CEPHFILESYSTEM:
         lease_cmd = (
             f"get leases {leader_types[leader_type]}-cephfs-csi-ceph-com "
             "-o yaml"
