@@ -182,7 +182,7 @@ class Deployment(object):
         nodes = ocp.OCP(kind='node').get().get('items', [])
         worker_nodes = [
             node for node in nodes if "node-role.kubernetes.io/worker"
-                                      in node['metadata']['labels']
+            in node['metadata']['labels']
         ]
         if not worker_nodes:
             raise UnavailableResourceException("No worker node found!")
@@ -601,7 +601,7 @@ class Deployment(object):
             _ocp = ocp.OCP(kind='node')
             _ocp.exec_oc_cmd(
                 command=f"annotate namespace {defaults.ROOK_CLUSTER_NAMESPACE} "
-                        f"{constants.NODE_SELECTOR_ANNOTATION}"
+                f"{constants.NODE_SELECTOR_ANNOTATION}"
             )
 
     def deployment_with_ui(self):
