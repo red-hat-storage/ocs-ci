@@ -50,7 +50,8 @@ from ocs_ci.ocs.node import check_nodes_specs
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods, get_pods_having_label
+from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods, \
+    get_pods_having_label
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
@@ -1713,15 +1714,15 @@ def mcg_obj_fixture(request, *args, **kwargs):
 
 @pytest.fixture()
 def awscli_pod(request):
-    return awscli_pod_fixture(request)
+    return awscli_pod_fixture(request, 'function')
 
 
 @pytest.fixture(scope='session')
 def awscli_pod_session(request):
-    return awscli_pod_fixture(request)
+    return awscli_pod_fixture(request, 'session')
 
 
-def awscli_pod_fixture(request):
+def awscli_pod_fixture(request, scope):
     """
     Creates a new AWSCLI pod for relaying commands
 
@@ -1731,32 +1732,27 @@ def awscli_pod_fixture(request):
     """
     # Create the service-ca configmap to be mounted upon pod creation
     try:
+        service_ca_data = templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
+        service_ca_data['metadata']['name'] = create_unique_resource_name(
+            constants.AWSCLI_SERVICE_CA_CONFIGMAP_NAME,
+            scope
+        )
         log.info('Trying to create the AWS CLI service CA')
         service_ca_configmap = helpers.create_resource(
-            **templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
+            **service_ca_data
         )
-    except CommandFailed as e:
-        if 'already exists' in str(e):
-            log.info('Leftover service CA configmap found. Trying to delete and recreate.')
-            ocp.OCP(
-                namespace=constants.DEFAULT_NAMESPACE, kind='configmap'
-            ).delete(resource_name=constants.AWSCLI_SERVICE_CA_CONFIGMAP_NAME)
-            service_ca_configmap = helpers.create_resource(
-                **templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
-            )
-
-    pod_dict_path = constants.AWSCLI_POD_YAML
+    except CommandFailed:
+        raise
 
     arch = get_system_architecture()
     if arch.startswith('x86'):
         pod_dict_path = constants.AWSCLI_POD_YAML
     else:
         pod_dict_path = constants.AWSCLI_MULTIARCH_POD_YAML
-
     awscli_pod_obj = helpers.create_pod(
         namespace=constants.DEFAULT_NAMESPACE,
         pod_dict_path=pod_dict_path,
-        pod_name=constants.AWSCLI_RELAY_POD_NAME
+        pod_name=create_unique_resource_name(constants.AWSCLI_RELAY_POD_NAME, scope)
     )
     OCP(namespace=constants.DEFAULT_NAMESPACE, kind='ConfigMap').wait_for_resource(
         resource_name=service_ca_configmap.name,
