@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
-    skipif_ocs_version, ManageTest, tier2, polarion_id
+    skipif_ocs_version, ManageTest, tier2, polarion_id, skipif_ocp_version
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.prometheus import PrometheusAPI, check_alert_list
@@ -15,6 +15,7 @@ log = logging.getLogger(__name__)
 
 @tier2
 @skipif_ocs_version('<4.6')
+@skipif_ocp_version('<4.6')
 @polarion_id('OCS-2353')
 class TestCloneWhenFull(ManageTest):
     """
