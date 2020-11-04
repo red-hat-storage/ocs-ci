@@ -26,7 +26,7 @@ class TestUpgradeOCP(ManageTest):
     5. monitor cluster health
     """
 
-    def test_upgrade_ocp(self, reduce_resume_cluster_load):
+    def test_upgrade_ocp(self, reduce_and_resume_cluster_load):
         """
         Tests OCS stability when upgrading OCP
 
