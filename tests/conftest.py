@@ -1284,7 +1284,7 @@ def reduce_cluster_load_implementation(request, pause, resume=True):
 @pytest.fixture()
 def pause_cluster_load(request):
     """
-    Pause the background cluster load
+    Pause the background cluster load without resuming it
 
     """
     reduce_cluster_load_implementation(request=request, pause=True, resume=False)
@@ -1293,7 +1293,7 @@ def pause_cluster_load(request):
 @pytest.fixture()
 def resume_cluster_load(request):
     """
-    Pause the background cluster load
+    Resume the background cluster load
 
     """
     if config.RUN.get('io_in_bg'):
@@ -1311,7 +1311,7 @@ def resume_cluster_load(request):
 @pytest.fixture()
 def pause_resume_cluster_load(request):
     """
-    Pause the background cluster load
+    Pause the background cluster load and resume it in teardown
 
     """
     reduce_cluster_load_implementation(request=request, pause=True)
@@ -1320,7 +1320,7 @@ def pause_resume_cluster_load(request):
 @pytest.fixture()
 def reduce_resume_cluster_load(request):
     """
-    Reduce the background cluster load to be 50% of what it is
+    Reduce the background cluster load to be 50% of what it is and resume the load in teardown
 
     """
     reduce_cluster_load_implementation(request=request, pause=False)

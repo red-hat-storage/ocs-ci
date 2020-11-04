@@ -36,7 +36,7 @@ def test_storage_pods_running(multiregion_mirror_setup_session):
 )
 @pre_upgrade
 @ignore_leftovers
-def test_start_pre_upgrade_pod_io(pre_upgrade_pods_running_io, pause_cluster_load):
+def test_start_pre_upgrade_pod_io(pause_cluster_load, pre_upgrade_pods_running_io):
     """
     Confirm that there are pods created before upgrade.
     """
