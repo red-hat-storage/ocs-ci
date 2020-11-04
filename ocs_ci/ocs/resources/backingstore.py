@@ -2,12 +2,16 @@ import logging
 
 from ocs_ci.ocs.bucket_utils import (
     oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
-    oc_create_pv_backingstore, oc_create_ibmcos_backingstore, cli_create_google_backingstore,
-    cli_create_azure_backingstore, cli_create_pv_backingstore, cli_create_ibmcos_backingstore,
-    cli_create_aws_backingstore
+    oc_create_s3comp_backingstore, oc_create_pv_backingstore, cli_create_aws_backingstore,
+    cli_create_google_backingstore, cli_create_azure_backingstore, cli_create_s3comp_backingstore,
+    cli_create_pv_backingstore
 )
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
+from ocs_ci.ocs.resources.pod import get_pods_having_label
+from ocs_ci.ocs.resources.pvc import get_all_pvcs
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import create_unique_resource_name
 
 log = logging.getLogger(__name__)
@@ -29,13 +33,50 @@ class BackingStore():
         log.info(f'Cleaning up backingstore {self.name}')
 
         OCP(
-            namespace=config.ENV_DATA['cluster_namespace']
+            namespace=config.ENV_DATA['cluster_namespace'],
+            kind='backingstore'
         ).delete(resource_name=self.name)
+        if 'pv-backingstore' in self.name.lower():
+            log.info(
+                f"Waiting for backingstore {self.name} resources to be deleted"
+            )
+            wait_for_pv_backingstore_resource_deleted(self.name)
 
-        log.info(
-            f"Verifying whether backingstore {self.name} exists after deletion"
-        )
-        # Todo: implement deletion assertion
+
+def wait_for_pv_backingstore_resource_deleted(backingstore_name, namespace=None):
+    """
+    wait for pv backing store resources to be deleted at the end of test teardown
+
+    Args:
+        backingstore_name (str): backingstore name
+        namespace (str): backing store's namespace
+
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    sample = TimeoutSampler(
+        timeout=120, sleep=15, func=check_resources_deleted,
+        backingstore_name=backingstore_name, namespace=namespace
+    )
+    if not sample.wait_for_func_status(result=True):
+        log.error(f'Unable to delete resources of {backingstore_name}')
+        raise TimeoutExpiredError
+
+
+def check_resources_deleted(backingstore_name, namespace=None):
+    """
+    check if resources of the pv pool backingstore deleted properly
+
+    Args:
+        backingstore_name (str): backingstore name
+        namespace (str): backing store's namespace
+
+    Returns:
+        bool: True if pvc(s) were deleted
+
+    """
+    pvcs = get_all_pvcs(namespace=namespace, selector=f'pool={backingstore_name}')
+    pods = get_pods_having_label(namespace=namespace, label=f'pool={backingstore_name}')
+    return True if len(pvcs['items']) == 0 and len(pods) == 0 else False
 
 
 def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
@@ -61,16 +102,16 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     cmdMap = {
         'oc': {
             'aws': oc_create_aws_backingstore,
-            'gcp': oc_create_google_backingstore,
+            'google': oc_create_google_backingstore,
             'azure': oc_create_azure_backingstore,
-            'ibmcos': oc_create_ibmcos_backingstore,
+            'ibmcos': oc_create_s3comp_backingstore,
             'pv': oc_create_pv_backingstore
         },
         'cli': {
             'aws': cli_create_aws_backingstore,
-            'gcp': cli_create_google_backingstore,
+            'google': cli_create_google_backingstore,
             'azure': cli_create_azure_backingstore,
-            'ibmcos': cli_create_ibmcos_backingstore,
+            'ibmcos': cli_create_s3comp_backingstore,
             'pv': cli_create_pv_backingstore
         }
     }
@@ -128,7 +169,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                             backingstore_name, vol_num, size, storagecluster
                         )
                 else:
-                    _, region = uls_tup
+                    region = uls_tup[1]
                     # Todo: Verify that the given cloud has an initialized client
                     uls_dict = cloud_uls_factory({cloud: [uls_tup]})
                     for uls_name in uls_dict[cloud.lower()]:
@@ -143,14 +184,9 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                                 uls_name=uls_name
                             )
                         )
-                        if method.lower() == 'cli':
-                            cmdMap[method.lower()][cloud.lower()](
-                                mcg_obj, cld_mgr, backingstore_name, uls_name, region
-                            )
-                        elif method.lower() == 'oc':
-                            cmdMap[method.lower()][cloud.lower()](
-                                cld_mgr, backingstore_name, uls_name, region
-                            )
+                        cmdMap[method.lower()][cloud.lower()](
+                            cld_mgr, backingstore_name, uls_name, region
+                        )
                         # Todo: Raise an exception in case the BS wasn't created
 
         return created_backingstores

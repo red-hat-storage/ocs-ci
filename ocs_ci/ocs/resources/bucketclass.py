@@ -4,7 +4,7 @@ from botocore.exceptions import ClientError
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
-from tests import helpers
+from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
 
