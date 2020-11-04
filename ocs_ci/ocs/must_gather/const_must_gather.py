@@ -266,8 +266,8 @@ GATHER_COMMANDS_OTHERS_4_6 = [
     'packagemanifests-v1-edit.yaml',
     'packagemanifests-v1-view.yaml',
     'packageserver-service-system:auth-delegator.yaml',
-    'pods'
-    'pods_-owide'
+    'pods',
+    'pods_-owide',
     'previous.log',
     'prometheus-adapter-view.yaml',
     'prometheus-adapter.yaml',

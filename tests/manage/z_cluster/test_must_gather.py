@@ -45,6 +45,7 @@ class TestMustGather(ManageTest):
             else:
                 return False
 
+<<<<<<< HEAD
         def finalizer():
             must_gather_pods = pod.get_all_pods(selector_label="app=must-gather")
             logger.info(f"must_gather_pods: {must_gather_pods} ")
@@ -70,6 +71,25 @@ class TestMustGather(ManageTest):
         request.addfinalizer(finalizer)
 
     def test_must_gather(self):
+=======
+class TestMustGather(ManageTest):
+    @tier1
+    @pytest.mark.parametrize(
+        argnames=['log_type'],
+        argvalues=[
+            pytest.param(
+                *['CEPH'], marks=pytest.mark.polarion_id("OCS-1583")
+            ),
+            pytest.param(
+                *['JSON'], marks=pytest.mark.polarion_id("OCS-1583")
+            ),
+            pytest.param(
+                *['OTHERS'], marks=pytest.mark.polarion_id("OCS-1583")
+            ),
+        ]
+    )
+    def test_must_gather(self, mustgather, log_type):
+>>>>>>> add polarion id
         """
         Tests functionality of: oc adm must-gather
 
