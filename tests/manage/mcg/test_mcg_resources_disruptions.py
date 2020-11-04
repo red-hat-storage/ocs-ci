@@ -122,7 +122,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         ]
     )
     def test_drain_mcg_pod_node(
-        self, node_drain_teardown, reduce_cluster_load,
+        self, node_drain_teardown, reduce_and_resume_cluster_load,
         pod_to_drain
     ):
         """
