@@ -4,7 +4,7 @@ from itertools import cycle
 
 from ocs_ci.ocs import constants, node
 from ocs_ci.framework.testlib import (
-    skipif_ocs_version, ManageTest, tier1, polarion_id
+    skipif_ocs_version, ManageTest, tier1, polarion_id, skipif_ocp_version
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import helpers
@@ -14,6 +14,7 @@ log = logging.getLogger(__name__)
 
 @tier1
 @skipif_ocs_version('<4.6')
+@skipif_ocp_version('<4.6')
 @polarion_id('OCS-2368')
 class TestCloneWithDifferentAccessMode(ManageTest):
     """

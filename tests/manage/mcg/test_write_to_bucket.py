@@ -71,29 +71,29 @@ class TestBucketIO(MCGTest):
     @pytest.mark.polarion_id("OCS-1949")
     @tier1
     @acceptance
-    def test_mcg_data_deduplication(self, mcg_obj, awscli_pod_session, bucket_factory):
+    def test_mcg_data_deduplication(self, mcg_obj, awscli_pod, bucket_factory):
         """
         Test data deduplication mechanics
         Args:
             mcg_obj (obj): An object representing the current state of the MCG in the cluster
-            awscli_pod_session (pod): A pod running the AWSCLI tools
+            awscli_pod (pod): A pod running the AWSCLI tools
             bucket_factory: Calling this fixture creates a new bucket(s)
         """
         download_dir = '/aws/deduplication/'
-        awscli_pod_session.exec_cmd_on_pod(
+        awscli_pod.exec_cmd_on_pod(
             command=craft_s3_command(
                 f'cp s3://{constants.TEST_FILES_BUCKET}/danny.webm {download_dir}danny.webm'
             ),
             out_yaml_format=False
         )
-        file_size = int(awscli_pod_session.exec_cmd_on_pod(
+        file_size = int(awscli_pod.exec_cmd_on_pod(
             command=f'stat -c %s {download_dir}danny.webm',
             out_yaml_format=False
         ))
         bucket = bucket_factory(amount=1)[0]
         bucketname = bucket.name
         for i in range(3):
-            awscli_pod_session.exec_cmd_on_pod(
+            awscli_pod.exec_cmd_on_pod(
                 command=craft_s3_command(
                     f'cp {download_dir}danny.webm s3://{bucketname}/danny{i}.webm',
                     mcg_obj=mcg_obj
@@ -105,16 +105,16 @@ class TestBucketIO(MCGTest):
     @pytest.mark.polarion_id("OCS-1949")
     @tier1
     @acceptance
-    def test_mcg_data_compression(self, mcg_obj, awscli_pod_session, bucket_factory):
+    def test_mcg_data_compression(self, mcg_obj, awscli_pod, bucket_factory):
         """
         Test data reduction mechanics
         Args:
             mcg_obj (obj): An object representing the current state of the MCG in the cluster
-            awscli_pod_session (pod): A pod running the AWSCLI tools
+            awscli_pod (pod): A pod running the AWSCLI tools
             bucket_factory: Calling this fixture creates a new bucket(s)
         """
         download_dir = '/aws/compression/'
-        awscli_pod_session.exec_cmd_on_pod(
+        awscli_pod.exec_cmd_on_pod(
             command=craft_s3_command(
                 f'cp s3://{constants.TEST_FILES_BUCKET}/enwik8 {download_dir}'
             ),
@@ -124,7 +124,7 @@ class TestBucketIO(MCGTest):
         bucketname = bucket.name
         full_object_path = f"s3://{bucketname}"
         sync_object_directory(
-            awscli_pod_session, download_dir, full_object_path, mcg_obj
+            awscli_pod, download_dir, full_object_path, mcg_obj
         )
         # For this test, enwik8 is used in conjunction with Snappy compression
         # utilized by NooBaa. Snappy consistently compresses 35MB of the file.

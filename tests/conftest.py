@@ -50,7 +50,10 @@ from ocs_ci.ocs.node import check_nodes_specs
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import get_rgw_pods, delete_deploymentconfig_pods, get_pods_having_label
+from ocs_ci.ocs.resources.pod import (
+    get_rgw_pods, delete_deploymentconfig_pods,
+    get_pods_having_label, Pod
+)
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
@@ -1713,39 +1716,34 @@ def mcg_obj_fixture(request, *args, **kwargs):
 
 @pytest.fixture()
 def awscli_pod(request):
-    return awscli_pod_fixture(request)
+    return awscli_pod_fixture(request, scope_name='function')
 
 
 @pytest.fixture(scope='session')
 def awscli_pod_session(request):
-    return awscli_pod_fixture(request)
+    return awscli_pod_fixture(request, scope_name='session')
 
 
-def awscli_pod_fixture(request):
+def awscli_pod_fixture(request, scope_name):
     """
     Creates a new AWSCLI pod for relaying commands
+    Args:
+        scope_name (str): The name of the fixture's scope,
+        used for giving a descriptive name to the pod and configmap
 
     Returns:
         pod: A pod running the AWS CLI
 
     """
     # Create the service-ca configmap to be mounted upon pod creation
-    try:
-        log.info('Trying to create the AWS CLI service CA')
-        service_ca_configmap = helpers.create_resource(
-            **templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
-        )
-    except CommandFailed as e:
-        if 'already exists' in str(e):
-            log.info('Leftover service CA configmap found. Trying to delete and recreate.')
-            ocp.OCP(
-                namespace=constants.DEFAULT_NAMESPACE, kind='configmap'
-            ).delete(resource_name=constants.AWSCLI_SERVICE_CA_CONFIGMAP_NAME)
-            service_ca_configmap = helpers.create_resource(
-                **templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
-            )
-
-    pod_dict_path = constants.AWSCLI_POD_YAML
+    service_ca_data = templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
+    service_ca_configmap_name = create_unique_resource_name(
+        constants.AWSCLI_SERVICE_CA_CONFIGMAP_NAME,
+        scope_name
+    )
+    service_ca_data['metadata']['name'] = service_ca_configmap_name
+    log.info('Trying to create the AWS CLI service CA')
+    service_ca_configmap = helpers.create_resource(**service_ca_data)
 
     arch = get_system_architecture()
     if arch.startswith('x86'):
@@ -1753,12 +1751,20 @@ def awscli_pod_fixture(request):
     else:
         pod_dict_path = constants.AWSCLI_MULTIARCH_POD_YAML
 
-    awscli_pod_obj = helpers.create_pod(
-        namespace=constants.DEFAULT_NAMESPACE,
-        pod_dict_path=pod_dict_path,
-        pod_name=constants.AWSCLI_RELAY_POD_NAME
+    awscli_pod_dict = templating.load_yaml(pod_dict_path)
+    awscli_pod_dict['spec']['volumes'][0]['configMap']['name'] = service_ca_configmap_name
+    awscli_pod_name = create_unique_resource_name(
+        constants.AWSCLI_RELAY_POD_NAME, scope_name
     )
-    OCP(namespace=constants.DEFAULT_NAMESPACE, kind='ConfigMap').wait_for_resource(
+    awscli_pod_dict['metadata']['name'] = awscli_pod_name
+
+    awscli_pod_obj = Pod(**awscli_pod_dict)
+    assert awscli_pod_obj.create(do_reload=True), (
+        f"Failed to create Pod {awscli_pod_name}"
+    )
+    OCP(
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind='ConfigMap'
+    ).wait_for_resource(
         resource_name=service_ca_configmap.name,
         column='DATA',
         condition='1'
@@ -2056,8 +2062,8 @@ def mcg_job_factory_session(
     )
 
 
-@pytest.fixture(scope='class')
-def backingstore_factory(request, cld_mgr, cloud_uls_factory):
+@pytest.fixture()
+def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
     """
         Create a Backing Store factory.
         Calling this fixture creates a new Backing Store(s).
@@ -2070,12 +2076,13 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
     return backingstore_factory_implementation(
         request,
         cld_mgr,
-        cloud_uls_factory
+        cloud_uls_factory,
+        mcg_obj
     )
 
 
 @pytest.fixture(scope='session')
-def backingstore_factory_session(request, cld_mgr, cloud_uls_factory_session):
+def backingstore_factory_session(request, cld_mgr, cloud_uls_factory_session, mcg_obj_session):
     """
         Create a Backing Store factory.
         Calling this fixture creates a new Backing Store(s).
@@ -2088,7 +2095,8 @@ def backingstore_factory_session(request, cld_mgr, cloud_uls_factory_session):
     return backingstore_factory_implementation(
         request,
         cld_mgr,
-        cloud_uls_factory_session
+        cloud_uls_factory_session,
+        mcg_obj_session
     )
 
 
@@ -2121,7 +2129,10 @@ def multiregion_resources_fixture(request, cld_mgr, mcg_obj):
 
 
 @pytest.fixture()
-def multiregion_mirror_setup(mcg_obj, multiregion_resources, backingstore_factory, bucket_factory):
+def multiregion_mirror_setup(
+    mcg_obj, multiregion_resources,
+    backingstore_factory, bucket_factory
+):
     return multiregion_mirror_setup_fixture(
         mcg_obj,
         multiregion_resources,
@@ -2762,7 +2773,7 @@ def node_drain_teardown(request):
         ]
         if scheduling_disabled_nodes:
             schedule_nodes(scheduling_disabled_nodes)
-        ceph_health_check()
+        ceph_health_check(tries=60)
 
     request.addfinalizer(finalizer)
 
@@ -2863,10 +2874,23 @@ def snapshot_factory(request):
         Delete the snapshots
 
         """
+        snapcontent_objs = []
+
+        # Get VolumeSnapshotContent form VolumeSnapshots and delete
+        # VolumeSnapshots
         for instance in instances:
             if not instance.is_deleted:
+                snapcontent_objs.append(
+                    helpers.get_snapshot_content_obj(snap_obj=instance)
+                )
                 instance.delete()
                 instance.ocp.wait_for_delete(instance.name)
+
+        # Wait for VolumeSnapshotContents to be deleted
+        for snapcontent_obj in snapcontent_objs:
+            snapcontent_obj.ocp.wait_for_delete(
+                resource_name=snapcontent_obj.name, timeout=240
+            )
 
     request.addfinalizer(finalizer)
     return factory
@@ -2983,8 +3007,10 @@ def get_ready_noobaa_endpoint_count(namespace):
     pods_info = get_pods_having_label(label=constants.NOOBAA_ENDPOINT_POD_LABEL, namespace=namespace)
     ready_count = 0
     for ep_info in pods_info:
-        if ep_info['status']['containerStatuses'][0]['ready']:
-            ready_count += 1
+        container_statuses = ep_info.get('status', {}).get('containerStatuses')
+        if container_statuses is not None and len(container_statuses) > 0:
+            if container_statuses[0].get('ready'):
+                ready_count += 1
     return ready_count
 
 
@@ -3005,7 +3031,6 @@ def nb_ensure_endpoint_count(request):
     if float(config.ENV_DATA['ocs_version']) < 4.6:
         noobaa = OCP(kind='noobaa', namespace=namespace)
         resource = noobaa.get()['items'][0]
-        resource_name = resource['metadata']['name']
         endpoints = resource.get('spec', {}).get('endpoints', {})
 
         if endpoints.get('minCount', -1) != min_ep_count:

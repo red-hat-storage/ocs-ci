@@ -8,10 +8,3 @@ metadata:
     app: noobaa
   finalizers:
     - noobaa.io/finalizer
-spec:
-  type: aws-s3
-  awsS3:
-    targetBucket: noobaa-aws1
-    region: region
-    secret:
-      name: backing-store-secret
