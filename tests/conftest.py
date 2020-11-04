@@ -1242,7 +1242,21 @@ def cluster_load(
         thread.start()
 
 
-def reduce_cluster_load_implementation(request, pause):
+def resume_cluster_load_implementation():
+    """
+    Resume cluster load implementation
+
+    """
+    config.RUN['load_status'] = 'to_be_resumed'
+    try:
+        for load_status in TimeoutSampler(300, 3, config.RUN.get, 'load_status'):
+            if load_status == 'running':
+                break
+    except TimeoutExpiredError:
+        log.error("Cluster load was not resumed successfully")
+
+
+def reduce_cluster_load_implementation(request, pause, resume=True):
     """
     Pause/reduce the background cluster load
 
@@ -1254,13 +1268,8 @@ def reduce_cluster_load_implementation(request, pause):
             Resume the cluster load
 
             """
-            config.RUN['load_status'] = 'to_be_resumed'
-            try:
-                for load_status in TimeoutSampler(300, 3, config.RUN.get, 'load_status'):
-                    if load_status == 'running':
-                        break
-            except TimeoutExpiredError:
-                log.error("Cluster load was not resumed successfully")
+            if resume:
+                resume_cluster_load_implementation()
         request.addfinalizer(finalizer)
 
         config.RUN['load_status'] = 'to_be_paused' if pause else 'to_be_reduced'
@@ -1278,11 +1287,38 @@ def pause_cluster_load(request):
     Pause the background cluster load
 
     """
+    reduce_cluster_load_implementation(request=request, pause=True, resume=False)
+
+
+@pytest.fixture()
+def resume_cluster_load(request):
+    """
+    Pause the background cluster load
+
+    """
+    if config.RUN.get('io_in_bg'):
+
+        def finalizer():
+            """
+            Resume the cluster load
+
+            """
+            resume_cluster_load_implementation()
+
+        request.addfinalizer(finalizer)
+
+
+@pytest.fixture()
+def pause_resume_cluster_load(request):
+    """
+    Pause the background cluster load
+
+    """
     reduce_cluster_load_implementation(request=request, pause=True)
 
 
 @pytest.fixture()
-def reduce_cluster_load(request):
+def reduce_resume_cluster_load(request):
     """
     Reduce the background cluster load to be 50% of what it is
 

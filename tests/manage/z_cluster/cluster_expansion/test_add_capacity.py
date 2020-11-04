@@ -59,7 +59,7 @@ class TestAddCapacity(ManageTest):
     """
     Automates adding variable capacity to the cluster
     """
-    def test_add_capacity(self, reduce_cluster_load):
+    def test_add_capacity(self, reduce_resume_cluster_load):
         """
         Test to add variable capacity to the OSD cluster while IOs running
         """
@@ -77,7 +77,7 @@ class TestAddCapacityPreUpgrade(ManageTest):
     """
     Automates adding variable capacity to the cluster pre upgrade
     """
-    def test_add_capacity_pre_upgrade(self, reduce_cluster_load):
+    def test_add_capacity_pre_upgrade(self, reduce_resume_cluster_load):
         """
         Test to add variable capacity to the OSD cluster while IOs running
         """

@@ -36,7 +36,7 @@ def test_storage_pods_running(multiregion_mirror_setup_session):
 )
 @pre_upgrade
 @ignore_leftovers
-def test_start_pre_upgrade_pod_io(pre_upgrade_pods_running_io):
+def test_start_pre_upgrade_pod_io(pre_upgrade_pods_running_io, pause_cluster_load):
     """
     Confirm that there are pods created before upgrade.
     """
@@ -59,7 +59,8 @@ def test_pod_io(
     post_upgrade_filesystem_pods,
     pre_upgrade_block_pods,
     post_upgrade_block_pods,
-    fio_project
+    fio_project,
+    resume_cluster_load
 ):
     """
     Test IO on multiple pods at the same time and finish IO on pods that were
