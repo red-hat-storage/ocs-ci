@@ -1621,7 +1621,7 @@ def list_of_nodes_running_pods(selector, namespace=defaults.ROOK_CLUSTER_NAMESPA
     return list(set(pods_running_nodes))
 
 
-def get_osd_removal_pod_name(osd_id, timeout=120):
+def get_osd_removal_pod_name(osd_id, timeout=60):
     """
     Get the osd removal pod name
 
