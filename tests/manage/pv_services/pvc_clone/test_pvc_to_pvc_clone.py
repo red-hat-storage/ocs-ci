@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
-    skipif_ocs_version, ManageTest, tier1
+    skipif_ocs_version, ManageTest, tier1, skipif_ocp_version
 )
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources import pod
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 @tier1
 @skipif_ocs_version('<4.6')
+@skipif_ocp_version('<4.6')
 @pytest.mark.parametrize(
     argnames=["interface_type"],
     argvalues=[
