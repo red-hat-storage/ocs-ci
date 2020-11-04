@@ -509,7 +509,7 @@ class Deployment(object):
                 ] = self.DEFAULT_STORAGECLASS
 
             ocs_version = float(config.ENV_DATA['ocs_version'])
-            ocp_version = get_ocp_version()
+            ocp_version = float(get_ocp_version())
 
             # StorageCluster tweaks for LSO
             if config.DEPLOYMENT.get('local_storage'):
