@@ -318,29 +318,45 @@ class TestDiskFailures(ManageTest):
         pattern = f"purged osd.{osd_id}"
         assert re.search(pattern, logs)
 
-        # Delete the OSD prepare job
-        logger.info(f"Deleting OSD prepare job {osd_prepare_job_name}")
-        osd_prepare_job.delete()
-        osd_prepare_job.ocp.wait_for_delete(
-            resource_name=osd_prepare_job_name, timeout=120
-        )
-
-        # Delete the OSD PVC
         osd_pvc_name = osd_pvc.name
-        logger.info(f"Deleting OSD PVC {osd_pvc_name}")
-        osd_pvc.delete()
-        osd_pvc.ocp.wait_for_delete(resource_name=osd_pvc_name)
 
-        # Delete the OSD deployment
-        logger.info(f"Verifying deletion of OSD deployment {osd_deployment_name}")
-        try:
-            osd_deployment.ocp.wait_for_delete(
-                resource_name=osd_deployment_name, timeout=30
+        if ocp_version < "4.6":
+            # Delete the OSD prepare job
+            logger.info(f"Deleting OSD prepare job {osd_prepare_job_name}")
+            osd_prepare_job.delete()
+            osd_prepare_job.ocp.wait_for_delete(
+                resource_name=osd_prepare_job_name, timeout=120
             )
-        except TimeoutError:
+
+            # Delete the OSD PVC
+            logger.info(f"Deleting OSD PVC {osd_pvc_name}")
+            osd_pvc.delete()
+            osd_pvc.ocp.wait_for_delete(resource_name=osd_pvc_name)
+
+            # Delete the OSD deployment
+            logger.info(f"Deleting OSD deployment {osd_deployment_name}")
             osd_deployment.delete()
             osd_deployment.ocp.wait_for_delete(
                 resource_name=osd_deployment_name, timeout=120
+            )
+        else:
+            logger.info(
+                f"Verifying deletion of OSD prepare job {osd_prepare_job_name}"
+            )
+            osd_prepare_job.ocp.wait_for_delete(
+                resource_name=osd_prepare_job_name, timeout=30
+            )
+            logger.info(
+                f"Verifying deletion of OSD PVC {osd_pvc_name}"
+            )
+            osd_pvc.ocp.wait_for_delete(
+                resource_name=osd_pvc_name, timeout=30
+            )
+            logger.info(
+                f"Verifying deletion of OSD deployment {osd_deployment_name}"
+            )
+            osd_deployment.ocp.wait_for_delete(
+                resource_name=osd_deployment_name, timeout=30
             )
 
         # Delete PV
