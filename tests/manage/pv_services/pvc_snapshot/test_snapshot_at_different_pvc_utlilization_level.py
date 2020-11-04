@@ -4,7 +4,9 @@ from copy import deepcopy
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, tier1
+from ocs_ci.framework.testlib import (
+    skipif_ocs_version, ManageTest, tier1, skipif_ocp_version
+)
 from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
 from ocs_ci.helpers.helpers import wait_for_resource_state, get_snapshot_content_obj
 
@@ -13,6 +15,7 @@ log = logging.getLogger(__name__)
 
 @tier1
 @skipif_ocs_version('<4.6')
+@skipif_ocp_version('<4.6')
 @pytest.mark.polarion_id('OCS-2318')
 class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
     """
