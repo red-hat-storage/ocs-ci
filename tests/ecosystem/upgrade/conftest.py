@@ -192,7 +192,7 @@ def fio_conf_fs():
         size={fio_size}G
         time_based
         runtime=24h
-        numjobs=10
+        numjobs=1
         """)
 
 
@@ -214,7 +214,7 @@ def fio_conf_block():
         size={fio_size}G
         time_based
         runtime=24h
-        numjobs=10
+        numjobs=1
         """)
 
 
