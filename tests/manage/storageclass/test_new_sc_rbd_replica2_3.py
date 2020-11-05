@@ -21,16 +21,16 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
         argnames=["replica", "compression"],
         argvalues=[
             pytest.param(
-                *[2, 'aggressive']
+                *[2, 'aggressive'], marks=pytest.mark.polarion_id('OCS-2400')
             ),
             pytest.param(
-                *[3, 'aggressive']
+                *[3, 'aggressive'], marks=pytest.mark.polarion_id('OCS-2397')
             ),
             pytest.param(
-                *[2, 'none']
+                *[2, 'none'], marks=pytest.mark.polarion_id('OCS-2401')
             ),
             pytest.param(
-                *[3, 'none']
+                *[3, 'none'], marks=pytest.mark.polarion_id('OCS-2406')
             ),
         ]
     )
