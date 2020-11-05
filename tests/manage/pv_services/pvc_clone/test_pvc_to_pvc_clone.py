@@ -128,3 +128,12 @@ class TestClone(ManageTest):
             orig_md5_sum
         ), 'Data integrity check failed'
         logger.info("Data integrity check passed, md5sum are same")
+
+        logger.info("Run IO on new pod")
+        clone_pod_obj.run_io(
+            storage_type='fs', size='100M', runtime=10
+        )
+
+        # Wait for IO to finish on the new pod
+        clone_pod_obj.get_fio_results()
+        logger.info(f"IO completed on pod {clone_pod_obj.name}")
