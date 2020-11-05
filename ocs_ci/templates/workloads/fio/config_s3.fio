@@ -32,3 +32,24 @@ size=64k
 # bs=4k
 # size=64k
 # io_size=4k
+
+[job1]
+iodepth=4
+rw=randrw
+bs=32k
+size=64m
+numjobs=4
+
+[job2]
+iodepth=16
+rw=randrw
+bs=64k
+size=512m
+numjobs=4
+
+[job3]
+iodepth=32
+rw=randrw
+bs=128k
+size=1024m
+numjobs=4

@@ -21,7 +21,8 @@ class TestEndpointAutoScale(MCGTest):
     def test_scaling_under_load(self, mcg_job_factory):
         self._assert_endpoint_count(1)
 
-        options = {}
+        options = {'create': [('name', 'job1'), ('name', 'job2'),
+                              ('name', 'job3'), ('runtime', '900')]}
         job = mcg_job_factory(custom_options=options)
         self._assert_endpoint_count(2)
 
@@ -37,5 +38,5 @@ class TestEndpointAutoScale(MCGTest):
             condition=constants.STATUS_RUNNING,
             selector=constants.NOOBAA_ENDPOINT_POD_LABEL,
             dont_allow_other_resources=True,
-            timeout=300,
+            timeout=500,
         )
