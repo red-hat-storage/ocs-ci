@@ -447,6 +447,8 @@ OLM_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "deploy-with-olm.yaml")
 
 CATALOG_SOURCE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "catalog-source.yaml")
 
+OCS_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "ocs-secret.yaml")
+
 STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "stageImageContentSourcePolicy.yaml"
 )
@@ -591,6 +593,7 @@ BAREMETAL_PLATFORM = "baremetal"
 IBM_POWER_PLATFORM = "powervs"
 BAREMETALPSI_PLATFORM = "baremetalpsi"
 RGW_PLATFORM = "rgw"
+IBMCLOUD_PLATFORM = "ibm_cloud"
 ON_PREM_PLATFORMS = [VSPHERE_PLATFORM, BAREMETAL_PLATFORM, BAREMETALPSI_PLATFORM]
 CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
 
@@ -659,7 +662,7 @@ VSAN = "vsan"
 TERRAFORM_HAPROXY_SERVICE = os.path.join(VSPHERE_DIR, "lb/haproxy.service")
 
 # Config related constants
-config_keys_patterns_to_censor = ["passw", "token", "secret"]
+config_keys_patterns_to_censor = ["passw", "token", "secret", "key", "credential"]
 
 # packages
 RHEL_POD_PACKAGES = ["openssh-clients", "openshift-ansible", "openshift-clients", "jq"]
@@ -742,6 +745,7 @@ RBD_NODE_SECRET = "rook-csi-rbd-node"
 CEPHFS_PROVISIONER_SECRET = "rook-csi-cephfs-provisioner"
 CEPHFS_NODE_SECRET = "rook-csi-cephfs-node"
 NOOBAA_OBJECTSTOREUSER_SECRET = "rook-ceph-object-user-ocs-storagecluster-cephobjectstore-noobaa-ceph-objectstore-user"
+OCS_SECRET = "ocs-secret"
 
 # JSON Schema
 OSD_TREE_ROOT = {

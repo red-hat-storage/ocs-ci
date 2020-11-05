@@ -852,7 +852,7 @@ class OCP(object):
         """
         self.check_function_supported(self._has_phase)
         self.check_name_is_specified()
-        sampler = TimeoutSampler(timeout, sleep, self.check_phase, phase=phase)
+        sampler = TimeoutSampler(timeout, sleep, func=self.check_phase, phase=phase)
         if not sampler.wait_for_func_status(True):
             raise ResourceInUnexpectedState(
                 f"Resource: {self.resource_name} is not in expected phase: " f"{phase}"

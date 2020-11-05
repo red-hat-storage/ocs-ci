@@ -49,13 +49,14 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, ibmcloud
 from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.localstorage import get_lso_channel
 from ocs_ci.utility.openshift_console import OpenshiftConsole
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
+    exec_cmd,
     get_latest_ds_olm_tag,
     get_ocp_version,
     is_cluster_running,
@@ -323,6 +324,12 @@ class Deployment(object):
         This method subscription manifest and subscribe to OCS operator.
 
         """
+        live_deployment = config.DEPLOYMENT.get("live_deployment")
+        if (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and not live_deployment
+        ):
+            link_all_sa_and_secret(constants.OCS_SECRET, self.namespace)
         operator_selector = get_selector_for_ocs_operator()
         # wait for package manifest
         package_manifest = PackageManifest(
@@ -358,6 +365,7 @@ class Deployment(object):
             subscription_yaml_data, subscription_manifest.name
         )
         run_cmd(f"oc create -f {subscription_manifest.name}")
+        logger.info("Sleeping for 15 seconds after subscribing OCS")
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
@@ -382,7 +390,12 @@ class Deployment(object):
             logger.info("Deployment of OCS via OCS operator")
             self.label_and_taint_nodes()
             logger.info("Creating namespace and operator group.")
-            run_cmd(f"oc create -f {constants.OLM_YAML}")
+            run_cmd(f"oc apply -f {constants.OLM_YAML}")
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+            ibmcloud.add_deployment_dependencies()
+            if not live_deployment:
+                create_ocs_secret(self.namespace)
+                create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         if not live_deployment:
             self.create_ocs_operator_source()
         self.subscribe_ocs()
@@ -397,6 +410,16 @@ class Deployment(object):
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
         csv_name = package_manifest.get_current_csv(channel=channel)
         csv = CSV(resource_name=csv_name, namespace=self.namespace)
+        if (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and not live_deployment
+        ):
+            csv.wait_for_phase("Installing", timeout=720)
+            logger.info("Sleeping for 30 seconds before applying SA")
+            time.sleep(30)
+            link_all_sa_and_secret(constants.OCS_SECRET, self.namespace)
+            logger.info("Deleting all pods in openshift-storage namespace")
+            exec_cmd(f"oc delete pod --all -n {self.namespace}")
         csv.wait_for_phase("Succeeded", timeout=720)
 
         # Modify the CSV with custom values if required
@@ -566,6 +589,19 @@ class Deployment(object):
         else:
             cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
 
+        if self.platform == constants.IBMCLOUD_PLATFORM:
+            mon_pvc_template = {
+                "spec": {
+                    "accessModes": ["ReadWriteOnce"],
+                    "resources": {"requests": {"storage": "20Gi"}},
+                    "storageClassName": self.DEFAULT_STORAGECLASS,
+                    "volumeMode": "Filesystem",
+                }
+            }
+            cluster_data["spec"]["monPVCTemplate"] = mon_pvc_template
+            # Need to check if it's needed for ibm cloud to set manageNodes
+            cluster_data["spec"]["manageNodes"] = False
+
         if config.ENV_DATA.get("encryption_at_rest"):
             if ocs_version < 4.6:
                 error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"
@@ -683,7 +719,6 @@ class Deployment(object):
         if config.DEPLOYMENT["external_mode"]:
             logger.info("Deploying OCS on external mode RHCS")
             return self.deploy_with_external_mode()
-
         self.deploy_ocs_via_operator()
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
         cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
@@ -849,6 +884,55 @@ class Deployment(object):
         )
 
 
+def create_ocs_secret(namespace):
+    """
+    Function for creation of pull secret for OCS. (Mostly for ibmcloud purpose)
+
+    Args:
+        namespace (str): namespace where to create the secret
+
+    """
+    secret_data = templating.load_yaml(constants.OCS_SECRET_YAML)
+    docker_config_json = config.DEPLOYMENT["ocs_secret_dockerconfigjson"]
+    secret_data["data"][".dockerconfigjson"] = docker_config_json
+    secret_manifest = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="ocs_secret", delete=False
+    )
+    templating.dump_data_to_temp_yaml(secret_data, secret_manifest.name)
+    exec_cmd(f"oc apply -f {secret_manifest.name} -n {namespace}", timeout=2400)
+
+
+def link_sa_and_secret(sa_name, secret_name, namespace):
+    """
+    Link service account and secret for pulling of images.
+
+    Args:
+        sa_name (str): service account name
+        secret_name (str): secret name
+        namespace (str): namespace name
+
+    """
+    exec_cmd(f"oc secrets link {sa_name} {secret_name} --for=pull -n {namespace}")
+
+
+def link_all_sa_and_secret(secret_name, namespace):
+    """
+    Link all service accounts in specified namespace with the secret for pulling
+    of images.
+
+    Args:
+        secret_name (str): secret name
+        namespace (str): namespace name
+
+    """
+    service_account = ocp.OCP(kind="serviceAccount", namespace=namespace)
+    service_accounts = service_account.get()
+    for sa in service_accounts.get("items", []):
+        sa_name = sa["metadata"]["name"]
+        logger.info(f"Linking secret: {secret_name} with SA: {sa_name}")
+        link_sa_and_secret(sa_name, secret_name, namespace)
+
+
 def create_catalog_source(image=None, ignore_upgrade=False):
     """
     This prepare catalog source manifest for deploy OCS operator from
@@ -859,6 +943,8 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         ignore_upgrade (bool): Ignore upgrade parameter.
 
     """
+    if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+        link_all_sa_and_secret(constants.OCS_SECRET, constants.MARKETPLACE_NAMESPACE)
     logger.info("Adding CatalogSource")
     if not image:
         image = config.DEPLOYMENT.get("ocs_registry_image", "")
@@ -910,7 +996,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         mode="w+", prefix="catalog_source_manifest", delete=False
     )
     templating.dump_data_to_temp_yaml(catalog_source_data, catalog_source_manifest.name)
-    run_cmd(f"oc create -f {catalog_source_manifest.name}", timeout=2400)
+    run_cmd(f"oc apply -f {catalog_source_manifest.name}", timeout=2400)
     catalog_source = CatalogSource(
         resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
         namespace=constants.MARKETPLACE_NAMESPACE,
