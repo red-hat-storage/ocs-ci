@@ -4,7 +4,9 @@ import pytest
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.testlib import ManageTest, tier2, skipif_ocs_version, skipif_ocp_version
+from ocs_ci.framework.testlib import (
+    ManageTest, tier2, skipif_ocs_version, skipif_ocp_version
+)
 
 log = logging.getLogger(__name__)
 
@@ -20,7 +22,8 @@ class TestExpansionSnapshotClone(ManageTest):
     """
     @pytest.fixture(autouse=True)
     def setup(
-        self, project_factory, snapshot_restore_factory, pvc_clone_factory, create_pvcs_and_pods
+        self, project_factory, snapshot_restore_factory, pvc_clone_factory,
+        create_pvcs_and_pods
     ):
         """
         Create PVCs and pods
@@ -62,7 +65,7 @@ class TestExpansionSnapshotClone(ManageTest):
         for pod_obj in self.pods:
             log.info(f"Running IO on pod {pod_obj.name}")
             pod_obj.run_io(
-                storage_type='fs',size='1G', runtime=20, fio_filename=filename
+                storage_type='fs', size='1G', runtime=20, fio_filename=filename
             )
         log.info(f"IO started on all pods")
 
@@ -221,7 +224,7 @@ class TestExpansionSnapshotClone(ManageTest):
         for pod_obj in restore_clone_pod_objs:
             log.info(f"Running IO on pod {pod_obj.name}")
             pod_obj.run_io(
-                storage_type='fs',size='1G', runtime=20,
+                storage_type='fs', size='1G', runtime=20,
                 fio_filename=filename_restore_clone
             )
         log.info(f"IO started on all pods")
@@ -340,7 +343,7 @@ class TestExpansionSnapshotClone(ManageTest):
             interface = constants.CEPHFILESYSTEM if (
                 constants.CEPHFS_INTERFACE in pvc_obj.backed_sc
             ) else constants.CEPHBLOCKPOOL
-            pod_obj = pod_factory(interface=interface, pvc=pvc_obj,status='')
+            pod_obj = pod_factory(interface=interface, pvc=pvc_obj, status='')
             log.info(
                 f"Attached the PVC {pvc_obj.name} to pod {pod_obj.name}"
             )
