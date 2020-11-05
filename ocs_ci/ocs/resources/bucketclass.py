@@ -4,7 +4,7 @@ from botocore.exceptions import ClientError
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import create_unique_resource_name
 
 log = logging.getLogger(__name__)
 
