@@ -290,8 +290,8 @@ class TestDiskFailures(ManageTest):
             osd_pod.ocp.wait_for_delete(resource_name=osd_pod_name)
 
         # Run ocs-osd-removal job
-        ocp_version = get_ocp_version()
-        if ocp_version >= "4.6":
+        ocp_version = float(get_ocp_version())
+        if ocp_version >= 4.6:
             cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_id} -o yaml"
         else:
             cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_id} -o yaml"
@@ -320,7 +320,7 @@ class TestDiskFailures(ManageTest):
 
         osd_pvc_name = osd_pvc.name
 
-        if ocp_version < "4.6":
+        if ocp_version < 4.6:
             # Delete the OSD prepare job
             logger.info(f"Deleting OSD prepare job {osd_prepare_job_name}")
             osd_prepare_job.delete()
@@ -369,7 +369,7 @@ class TestDiskFailures(ManageTest):
             osd_pv.delete()
             osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
 
-        if ocp_version < "4.6":
+        if ocp_version < 4.6:
             # Delete the rook ceph operator pod to trigger reconciliation
             rook_operator_pod = get_operator_pods()[0]
             logger.info(f"deleting Rook Ceph operator pod {rook_operator_pod.name}")
