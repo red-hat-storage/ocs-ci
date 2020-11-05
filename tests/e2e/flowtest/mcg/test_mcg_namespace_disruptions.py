@@ -49,7 +49,16 @@ def compare_directory(
     awscli_pod, original_dir=MCG_NS_RESULT_DIR,
     result_dir=MCG_NS_ORIGINAL_DIR, amount=2
 ):
-    # Checksum is compared between original and result object
+    """
+    Compares object checksums on original and result directories
+
+     Args:
+        awscli_pod (pod): A pod running the AWS CLI tools
+        original_dir (str): original directory name
+        result_dir (str): result directory name
+        amount (int): Number of test objects to create
+
+    """
     for i in range(amount):
         file_name = f"ObjKey-{i}"
         assert verify_s3_object_integrity(
@@ -77,7 +86,8 @@ class TestMcgNamespaceDisruptions(E2ETest):
     @flowtests
     def test_mcg_namespace_disruptions(
         self, mcg_obj, cld_mgr, awscli_pod,
-        ns_resource_factory, bucket_factory
+        ns_resource_factory, bucket_factory,
+        node_drain_teardown
     ):
         """
         Test MCG namespace disruption flow
@@ -215,7 +225,7 @@ class TestMcgNamespaceDisruptions(E2ETest):
             node_name = pod_obj.get()['spec']['nodeName']
 
             if awscli_node_name == node_name:
-                logger.info(f"Skipping since {awscli_node_name} == {node_name}")
+                logger.info(f"Skipping node drain since {awscli_node_name} == {node_name}")
                 continue
 
             # Drain the node
