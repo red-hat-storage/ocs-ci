@@ -358,18 +358,19 @@ class TestExpansionSnapshotClone(ManageTest):
         log.info("Verified: Pods reached Running state")
 
         # Expand PVCs
+        pvc_size_expand_4 = pvc_size_expand_3 + 2
         log.info(
-            f"Expanding restored and cloned PVCs to {pvc_size_expand_3 + 2}Gi"
+            f"Expanding restored and cloned PVCs to {pvc_size_expand_4}Gi"
         )
         for pvc_obj in restore_objs_new + clone_objs:
             log.info(
                 f"Expanding size of PVC {pvc_obj.name} to "
-                f"{pvc_size_expand_3 + 2}Gi"
+                f"{pvc_size_expand_4}Gi"
             )
-            pvc_obj.resize_pvc(pvc_size_expand_2, True)
+            pvc_obj.resize_pvc(pvc_size_expand_4, True)
         log.info(
             f"Verified: Size of all PVCs are expanded to "
-            f"{pvc_size_expand_3 + 2}Gi"
+            f"{pvc_size_expand_4}Gi"
         )
 
         # Verify md5sum of both files
