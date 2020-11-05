@@ -1,0 +1,27 @@
+
+# This is the basic config for IBM cloud usage
+---
+ENV_DATA:
+  platform: 'ibm_cloud'
+  deployment_type: 'managed'
+  region: 'eu-de'
+  zone: 'eu-de-3'
+  provider: "vpc-gen2"
+  worker_instance_type: "mx2.16x128"
+  worker_replicas: 3
+  # Following values needs to be set in separate config and passed to ocs-ci in
+  # order to deploy OCP/OCS cluster on IBM Cloud
+  # vpc_id: VPC ID PLACEHOLDER
+  # subnet_id: SUBNET ID PLACEHOLDER
+  # cos_instance: COS INSTANCE PLACEHOLDER
+#AUTH:
+#  ibmcloud:
+#    api_key: IBM CLOUD API KEY PLACEHOLDER
+#    account_id: ACCOUNT ID PLACEHOLDER
+#DEPLOYMENT:
+#  ocs_secret_dockerconfigjson: BASE64 OF QUAY SECRET PLACEHOLDER
+REPORTING:
+  # This is a W/A for as there is an issue to use internal image for must gather
+  #  and till the GA of 4.6, there is no live 4.6 image.
+  ocs_must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
+  ocs_must_gather_latest_tag: 'latest'

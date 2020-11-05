@@ -28,9 +28,13 @@ class OCPDeployment:
         self.deployment_type = config.ENV_DATA["deployment_type"].lower()
         if not hasattr(self, "flexy_deployment"):
             self.flexy_deployment = False
-        if not self.flexy_deployment:
+        if (
+            not self.flexy_deployment
+            and self.deployment_platform != constants.IBMCLOUD_PLATFORM
+        ):
             self.installer = self.download_installer()
         self.cluster_path = config.ENV_DATA["cluster_path"]
+        self.cluster_name = config.ENV_DATA["cluster_name"]
 
     def download_installer(self):
         """
@@ -110,7 +114,10 @@ class OCPDeployment:
                 "stored at: %s",
                 self.cluster_path,
             )
-        if not self.flexy_deployment:
+        if (
+            not self.flexy_deployment
+            and config.ENV_DATA["deployment_type"] != "managed"
+        ):
             self.create_config()
 
     def create_config(self):
