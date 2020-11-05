@@ -995,7 +995,7 @@ def setup_local_storage(storageclass):
         f"{constants.OPERATOR_NODE_LABEL}"
     )
 
-    ocp_version = float(get_ocp_version())
+    ocp_version = get_ocp_version()
     ocs_version = config.ENV_DATA.get('ocs_version')
     ocp_ga_version = get_ocp_ga_version(ocp_version)
     if not ocp_ga_version:
