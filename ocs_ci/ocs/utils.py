@@ -1024,7 +1024,11 @@ def reboot_node(ceph_node, timeout=300):
         timeout (int): Wait time for node to comeback
 
     """
-    ceph_node.exec_command(sudo=True, cmd='reboot', check_ec=False)
+    ceph_node.exec_command(
+        cmd='reboot',
+        check_ec=False,
+        long_running=True
+    )
 
     try:
         ceph_node.connect(timeout)
