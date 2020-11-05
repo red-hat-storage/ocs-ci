@@ -19,7 +19,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status, schedule_nodes
 from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount, gen_bucket_policy, HttpResponseParser
 from ocs_ci.ocs.resources import pod
-from tests.helpers import wait_for_resource_state
+from ocs_ci.helpers.helpers import wait_for_resource_state
 
 logger = logging.getLogger(__name__)
 
