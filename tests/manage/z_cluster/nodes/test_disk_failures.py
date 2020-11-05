@@ -340,6 +340,8 @@ class TestDiskFailures(ManageTest):
                 resource_name=osd_deployment_name, timeout=120
             )
         else:
+            # If ocp version is '4.6' and above the osd prepare job should
+            # delete the OSD prepare job, OSD PVC, OSD deployment
             logger.info(
                 f"Verifying deletion of OSD prepare job {osd_prepare_job_name}"
             )
