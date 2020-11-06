@@ -336,18 +336,19 @@ class TestNodesRestart(ManageTest):
 
         """
         pv_before_reset = get_pv_names()
-        worker_node = get_typed_nodes(
-            node_type=constants.WORKER_MACHINE, num_of_nodes=1
+        worker_nodes = get_typed_nodes(
+            node_type=constants.WORKER_MACHINE, num_of_nodes=3
         )
-        nodes.restart_nodes(nodes=worker_node, wait=False)
-        pv_after_reset = get_pv_names()
-        pv_diff = set(pv_after_reset) - set(pv_before_reset)
-        pv_new = []
         ocp_obj = OCP(kind=constants.PV)
-        for pv in pv_diff:
-            pv_obj = ocp_obj.get(resource_name=pv)
-            if pv_obj['spec']['storageClassName'] == 'localblock':
-                pv_new.append(pv)
-        assert not pv_new, (
-            f"Unexpected PV {pv_new} is created after node reboot"
-        )
+        for worker_node in worker_nodes:
+            nodes.restart_nodes(nodes=[worker_node], wait=True)
+            pv_after_reset = get_pv_names()
+            pv_diff = set(pv_after_reset) - set(pv_before_reset)
+            pv_new = []
+            for pv in pv_diff:
+                pv_obj = ocp_obj.get(resource_name=pv)
+                if pv_obj['spec']['storageClassName'] == 'localblock':
+                    pv_new.append(pv)
+            assert not pv_new, (
+                f"Unexpected PV {pv_new} is created after node reboot"
+            )
