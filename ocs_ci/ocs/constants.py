@@ -838,7 +838,7 @@ LATEST_TAGS = (
 )
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
-OCS_SUBSCRIPTION = "ocs-subscription"
+OCS_SUBSCRIPTION = "ocs-operator"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
