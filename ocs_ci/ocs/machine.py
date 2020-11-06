@@ -345,13 +345,21 @@ def create_infra_nodes(num_nodes):
     """
     ms_names = []
     zone_list = []
-    machinesets_obj = OCP(
-        kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
-    )
-    for machine in machinesets_obj.get()['items']:
-        aws_zone = machine.get('spec').get('template').get('spec').get(
-            'providerSpec').get('value').get('placement').get('availabilityZone')
-        zone_list.append(aws_zone[-1])
+
+    # If infra zones are provided then take it from conf else
+    # extract from workers
+    if config.ENV_DATA.get('infra_availability_zones'):
+        zone_list = (
+            [i[-1] for i in config.ENV_DATA['infra_availability_zones']]
+        )
+    else:
+        machinesets_obj = OCP(
+            kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+        )
+        for machine in machinesets_obj.get()['items']:
+            aws_zone = machine.get('spec').get('template').get('spec').get(
+                'providerSpec').get('value').get('placement').get('availabilityZone')
+            zone_list.append(aws_zone[-1])
 
     ms_names.extend(
         [
