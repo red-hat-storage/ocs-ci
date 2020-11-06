@@ -30,9 +30,9 @@ def setup_fixture(install_logging):
 
 
 @pytest.mark.skipif(
-    get_ocp_version() == "4.6",
+    get_ocp_version() == "4.7",
     reason=(
-        "Skipping logging tests on OCP 4.6 cause of issue: "
+        "Skipping logging tests on OCP 4.7 cause of issue: "
         "https://github.com/red-hat-storage/ocs-ci/issues/2823"
     )
 )

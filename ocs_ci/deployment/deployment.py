@@ -509,6 +509,7 @@ class Deployment(object):
                 ] = self.DEFAULT_STORAGECLASS
 
             ocs_version = float(config.ENV_DATA['ocs_version'])
+            ocp_version = float(get_ocp_version())
 
             # StorageCluster tweaks for LSO
             if config.DEPLOYMENT.get('local_storage'):
@@ -529,6 +530,10 @@ class Deployment(object):
                             'cpu': 1,
                             'memory': '5Gi'
                         }
+                    }
+                if (ocp_version >= 4.6) and (ocs_version >= 4.6):
+                    cluster_data['metadata']['annotations'] = {
+                        'cluster.ocs.openshift.io/local-devices': 'true'
                     }
 
             # Allow lower instance requests and limits for OCS deployment
@@ -859,9 +864,9 @@ class Deployment(object):
                 uninstall_ocs()
                 # TODO - add ocs uninstall validation function call
                 logger.info("OCS uninstalled succesfully")
-            except Exception:
-                logger.error(f"Failed to uninstall OCS. Exception is: {Exception}")
-                logger.log("resuming teardown")
+            except Exception as ex:
+                logger.error(f"Failed to uninstall OCS. Exception is: {ex}")
+                logger.info("resuming teardown")
             self.ocp_deployment.destroy(log_level)
 
     def add_node(self):
