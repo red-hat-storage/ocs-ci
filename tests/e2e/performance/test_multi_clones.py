@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 # to this dictionary.
 params = {'KUBECONFIG': None, 'CLONENUM': None, 'LOGPATH': None,
           'FILESIZE': None, 'NSPACE': None, 'INTERFACE': None,
-          'PODNAME': None, 'PVCNAME': None}
+          'PODNAME': None, 'PVCNAME': None, 'PVCSIZE': None, 'SCNAME': None}
 
 # Dictionary to hold the names of pods which holding logs of creation time
 log_names = {'start': None, 'end': []}
@@ -162,12 +162,14 @@ def get_env_args():
     params['path'] = results['spec']['containers'][0]['volumeMounts'][0]['mountPath']
     msg_logging(f"path - {params['path']}")
 
+    print(f"And now reading from {params['clone_yaml']}")
     # reading template of clone yaml file
     with open(params['clone_yaml'], 'r') as stream:
         try:
             clone_yaml = yaml.safe_load(stream)
-            clone_yaml['spec']['volumeSnapshotClassName'] = params["sc"]
-            clone_yaml['spec']['source']['persistentVolumeClaimName'] = params['PVCNAME']
+            clone_yaml['spec']['storageClassName'] = params["SCNAME"]
+            clone_yaml['spec']['dataSource']['name'] = params["PVCNAME"]
+            clone_yaml['spec']['resources']['requests']['storage'] = params["PVCSIZE"] + "Gi"
         except yaml.YAMLError as exc:
             log.error(f'Can not read template yaml file {exc}')
     msg_logging(
@@ -224,9 +226,10 @@ def get_log_names():
 
     """
     msg_logging('Looking for logs pod name')
+    #results contains all the pods of the relevant namespace
     results = get_csi_pod(namespace='openshift-cluster-storage-operator')
     for line in results:
-        if 'csi-snapshot-controller' in line and 'operator' not in line:
+        if 'csi-rbdplugin-provisioner' in line and 'operator' not in line:
             log_names['start'] = line.split()[0]
     msg_logging(f'The Start log pod is : {log_names["start"]}')
 
@@ -353,7 +356,7 @@ def create_clone(clone_num, clone_yaml):
         int: the creation time of the clone (in sec.)
 
     """
-    msg_logging(f'Taking sclone number {clone_num}')
+    msg_logging(f'Taking clone number {clone_num}')
     # Getting UTC time before test starting for log retrieve
     UTC_datetime = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     clone_name = f'pvc-clone-{clone_num}-'
@@ -372,13 +375,15 @@ def create_clone(clone_num, clone_yaml):
     timeout = 600
     while timeout > 0:
         res = run_oc_command(
-            f'get volumesnapshot {clone_name} -o yaml', params['NSPACE']
+            f'get pvc {clone_name} -o yaml', params['NSPACE']
         )
         if ERRMSG not in res[0]:
             res = yaml.safe_load('\n'.join(res))
-            if res['status']['readyToUse']:
+            msg_logging(f'Result yaml is {res}')
+            if res['status']['phase'] == 'Bound':
                 log.info(f'{clone_name} Created and ready to use')
-                clone_con_name = res['status']['boundVolumeSnapshotContentName']
+                # clone_con_name = res['status']['boundVolumeSnapshotContentName']
+                clone_con_name = "kuku"
                 break
             else:
                 log.info(
@@ -388,6 +393,8 @@ def create_clone(clone_num, clone_yaml):
                 timeout -= 5
         else:
             raise Exception(f'Can not get clone status {res}')
+    if (timeout <=0):
+        raise Exception(f'Clone {clone_name} was not created for {timeout} seconds')
     return get_creation_time(clone_name, clone_con_name, UTC_datetime)
 
 
@@ -401,20 +408,22 @@ def main():
     setup_fio_pod()
     # Building FIO command
     build_fio_command()
+    #writing to pod
+    run_io_on_pod()
+    time.sleep(10)
 
     # Running the test
     results = []
     for test_num in range(1, int(params['CLONENUM']) + 1):
         msg_logging(f'Starting test number {test_num}')
-        run_io_on_pod()
-        time.sleep(10)
+
         ct = create_clone(test_num, clone_yaml)
-        speed = params['dataset'] / ct
-        results.append({'Clone Num': test_num, 'time': ct, 'speed': speed})
-        msg_logging(
-            f'Results for clone number {test_num} are : '
-            f'Creation time is {ct} , Creation speed {speed}'
-        )
+        #speed = params['dataset'] / ct
+        #results.append({'Clone Num': test_num, 'time': ct, 'speed': speed})
+        #msg_logging(
+        #    f'Results for clone number {test_num} are : '
+        #    f'Creation time is {ct} , Creation speed {speed}'
+        #)
     msg_logging(f'All results are : {results}')
     return results
 

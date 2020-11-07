@@ -42,9 +42,9 @@ class TestPvcMultiClonePerformance(E2ETest):
 
         """
         # Number od snapshot for CephFS is 100 and for RBD is 512
-        num_of_clones = 100
+        num_of_clones = 1 #100
         if interface_iterate == constants.CEPHBLOCKPOOL:
-            num_of_clones = 512
+            num_of_clones = 1 #512
 
         # Getting the total Storage capacity
         ceph_cluster = CephCluster()
@@ -87,7 +87,8 @@ class TestPvcMultiClonePerformance(E2ETest):
         # Calculating the file size as 80% of the PVC size
         filesize = self.pvc_obj.size * 0.80
         # Change the file size to MB for the FIO function
-        file_size = f'{int(filesize * constants.GB2MB)}M'
+        #file_size = f'{int(filesize * constants.GB2MB)}M'
+        file_size = f'{int(filesize * 10)}M'
         file_name = self.pod_obj.name
 
         log.info(
@@ -104,6 +105,8 @@ class TestPvcMultiClonePerformance(E2ETest):
         os.environ["NSPACE"] = self.pvc_obj.namespace
         os.environ["PODNAME"] = self.pod_obj.name
         os.environ["PVCNAME"] = self.pvc_obj.name
+        os.environ["PVCSIZE"] = str(self.pvc_obj.size)
+        os.environ["SCNAME"] = self.pvc_obj.backed_sc
         os.environ["INTERFACE"] = self.interface
 
         main_script = "tests/e2e/performance/test_multi_clones.py"
