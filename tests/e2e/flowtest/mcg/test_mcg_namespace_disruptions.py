@@ -77,7 +77,6 @@ class TestMcgNamespaceDisruptions(E2ETest):
 
     labels_map = {
         'noobaa_core': constants.NOOBAA_CORE_POD_LABEL,
-        'noobaa_db': constants.NOOBAA_DB_LABEL,
         'noobaa_endpoint': constants.NOOBAA_ENDPOINT_POD_LABEL,
         'noobaa_operator': constants.NOOBAA_OPERATOR_POD_LABEL
     }
@@ -225,7 +224,11 @@ class TestMcgNamespaceDisruptions(E2ETest):
             node_name = pod_obj.get()['spec']['nodeName']
 
             if awscli_node_name == node_name:
-                logger.info(f"Skipping node drain since {awscli_node_name} == {node_name}")
+                logger.info(
+                    f"Skipping node drain since aws cli pod node: "
+                    f"{awscli_node_name} is same as {pod_to_drain} "
+                    f"pod node: {node_name}"
+                )
                 continue
 
             # Drain the node
@@ -244,8 +247,7 @@ class TestMcgNamespaceDisruptions(E2ETest):
 
             logger.info(
                 f"Downloading objects from ns bucket: {ns_bucket} "
-                f"after draining node: {node_name}, "
-                f"on which pod: {self.labels_map[pod_to_drain]}"
+                f"after draining node: {node_name} with pod {pod_to_drain}"
             )
             sync_object_directory(
                 awscli_pod,
@@ -256,7 +258,7 @@ class TestMcgNamespaceDisruptions(E2ETest):
 
             logger.info(
                 f"Verifying integrity of objects "
-                f"after draining node which resides: {self.labels_map[pod_to_drain]}"
+                f"after draining node with pod: {pod_to_drain}"
             )
             compare_directory(awscli_pod, amount=3)
 
