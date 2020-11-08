@@ -18,7 +18,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs, get_typed_nodes
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
+from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery, get_pv_names
 from ocs_ci.ocs.ocp import OCP
 
 
