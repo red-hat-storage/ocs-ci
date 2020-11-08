@@ -465,4 +465,4 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
 
     sc = get_storage_cluster()
     params = f'{{"spec":{{"managedResources":{{"storageClasses":{{"reconcileStrategy": "manage"}}}}}}}}'
-    sc.patch(resource_name=sc.get().get('metadata').get('name'), params=params, format_type='merge')
+    sc.patch(resource_name=sc.get().get('items')[0].get('metadata').get('name'), params=params, format_type='merge')
