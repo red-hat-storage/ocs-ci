@@ -20,7 +20,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator, PackageManifest,
 )
 from ocs_ci.ocs.resources.storage_cluster import (
-    get_osd_count, ocs_install_verification,
+    get_osd_count, ocs_install_verification, get_storage_cluster
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.utility.utils import (
@@ -462,3 +462,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         ocs_registry_image=upgrade_ocs.ocs_registry_image,
         post_upgrade_verification=True, version_before_upgrade=upgrade_ocs.version_before_upgrade
     )
+
+    sc = get_storage_cluster()
+    params = f'{{"spec":{{"managedResources":{{"storageClasses":{{"reconcileStrategy": "manage"}}}}}}}}'
+    sc.patch(resource_name=sc.get().get('metadata').get('name'), params=params, format_type='merge')
