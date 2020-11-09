@@ -276,21 +276,21 @@ def log_ocs_version(cluster):
 
 
 @pytest.fixture(scope='class')
-def ceph_pool_factory_class(request):
-    return ceph_pool_factory_fixture(request)
+def ceph_pool_factory_class(request, replica=3, compression=None):
+    return ceph_pool_factory_fixture(request, replica=replica, compression=compression)
 
 
 @pytest.fixture(scope='session')
-def ceph_pool_factory_session(request):
-    return ceph_pool_factory_fixture(request)
+def ceph_pool_factory_session(request, replica=3, compression=None):
+    return ceph_pool_factory_fixture(request, replica=replica, compression=compression)
 
 
 @pytest.fixture(scope='function')
-def ceph_pool_factory(request):
-    return ceph_pool_factory_fixture(request)
+def ceph_pool_factory(request, replica=3, compression=None):
+    return ceph_pool_factory_fixture(request, replica=replica, compression=compression)
 
 
-def ceph_pool_factory_fixture(request):
+def ceph_pool_factory_fixture(request, replica=3, compression=None):
     """
     Create a Ceph pool factory.
     Calling this fixture creates new Ceph pool instance.
@@ -299,9 +299,9 @@ def ceph_pool_factory_fixture(request):
     """
     instances = []
 
-    def factory(interface=constants.CEPHBLOCKPOOL):
+    def factory(interface=constants.CEPHBLOCKPOOL, replica=replica, compression=compression):
         if interface == constants.CEPHBLOCKPOOL:
-            ceph_pool_obj = helpers.create_ceph_block_pool()
+            ceph_pool_obj = helpers.create_ceph_block_pool(replica=replica, compression=compression)
         elif interface == constants.CEPHFILESYSTEM:
             cfs = ocp.OCP(
                 kind=constants.CEPHFILESYSTEM,
@@ -386,7 +386,10 @@ def storageclass_factory_fixture(
         secret=None,
         custom_data=None,
         sc_name=None,
-        reclaim_policy=constants.RECLAIM_POLICY_DELETE
+        reclaim_policy=constants.RECLAIM_POLICY_DELETE,
+        replica=3,
+        compression=None,
+        new_rbd_pool=False
     ):
         """
         Args:
@@ -398,6 +401,9 @@ def storageclass_factory_fixture(
                 by using these data. Parameters `block_pool` and `secret`
                 are not useds but references are set if provided.
             sc_name (str): Name of the storage class
+            replica (int): Replica size for a pool
+            compression (str): Compression type option for a pool
+            new_rbd_pool (bool): True if user wants to create new rbd pool for SC
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -408,7 +414,14 @@ def storageclass_factory_fixture(
         else:
             secret = secret or secret_factory(interface=interface)
             if interface == constants.CEPHBLOCKPOOL:
-                interface_name = helpers.default_ceph_block_pool()
+                if config.ENV_DATA.get('new_rbd_pool') or new_rbd_pool:
+                    pool_obj = ceph_pool_factory(
+                        interface=interface, replica=config.ENV_DATA.get('replica') or replica,
+                        compression=config.ENV_DATA.get('compression') or compression
+                    )
+                    interface_name = pool_obj.name
+                else:
+                    interface_name = helpers.default_ceph_block_pool()
             elif interface == constants.CEPHFILESYSTEM:
                 interface_name = helpers.get_cephfs_data_pool_name()
 
