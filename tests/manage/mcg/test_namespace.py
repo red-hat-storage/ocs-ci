@@ -13,6 +13,8 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources import pod
 
 logger = logging.getLogger(__name__)
@@ -158,12 +160,16 @@ class TestNamespace(MCGTest):
             pod for pod in noobaa_pods if pod.name.startswith(mcg_pod)
         ][0]
         pod_obj.delete(force=True)
+        logger.info(f'Wait for noobaa pods to come up')
         assert pod_obj.ocp.wait_for_resource(
             condition='Running',
             selector='app=noobaa',
             resource_count=len(noobaa_pods),
-            timeout=600
+            timeout=1000
         )
+        logger.info(f'Wait for noobaa health to be OK')
+        ceph_cluster_obj = CephCluster()
+        ceph_cluster_obj.wait_for_noobaa_health_ok()
 
         logger.info('Read files directly from AWS')
         self.download_files(mcg_obj, awscli_pod, bucket_to_read=target_bucket_name, s3_creds=s3_creds)
@@ -223,26 +229,34 @@ class TestNamespace(MCGTest):
         )
 
         logger.info('Create the namespace bucket')
-        bucket_factory(
+        rand_ns_bucket = bucket_factory(
             amount=1,
             interface='mcg-namespace',
             write_ns_resource=resource2[1],
             read_ns_resources=[resource1[1], resource2[1]]
-        )
+        )[0].name
 
         logger.info('Bring resource1 down')
         aws_client.toggle_aws_bucket_readwrite(resource1[0])
 
         logger.info('Read files directly from AWS')
         target_bucket_name = resource1[0]
-        self.download_files(mcg_obj, awscli_pod, bucket_to_read=target_bucket_name, s3_creds=s3_creds)
-
-        logger.info('Bring resource1 up')
-        aws_client.toggle_aws_bucket_readwrite(resource1[0], block=False)
-
-        logger.info('Compare between uploaded files and downloaded files')
-        assert self.compare_dirs(awscli_pod, amount=2)
-        assert not self.compare_dirs(awscli_pod, amount=3)
+        try:
+            self.download_files(mcg_obj, awscli_pod, bucket_to_read=rand_ns_bucket)
+        except CommandFailed:
+            logger.info('Attempt to read files failed as expected')
+            logger.info('Bring resource1 up')
+            aws_client.toggle_aws_bucket_readwrite(resource2[0], block=False)
+        else:
+            logger.info('Bring resource1 up')
+            aws_client.toggle_aws_bucket_readwrite(resource2[0], block=False)
+            msg = (
+                "It should not be possible to download from Namespace bucket "
+                "according to "
+                "https://bugzilla.redhat.com/show_bug.cgi?id=1887417#c2"
+            )
+            logger.error(msg)
+            assert False, msg
 
     def write_files_to_pod_and_upload(self, mcg_obj, awscli_pod, bucket_to_write, amount=1, s3_creds=None):
         """
