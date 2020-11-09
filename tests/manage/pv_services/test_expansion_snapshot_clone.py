@@ -67,7 +67,7 @@ class TestExpansionSnapshotClone(ManageTest):
             pod_obj.run_io(
                 storage_type='fs', size='1G', runtime=20, fio_filename=filename
             )
-        log.info(f"IO started on all pods")
+        log.info("IO started on all pods")
 
         log.info("Wait for IO completion on pods")
         for pod_obj in self.pods:
@@ -91,14 +91,14 @@ class TestExpansionSnapshotClone(ManageTest):
         )
 
         # Take snapshot of all PVCs
-        log.info(f"Creating snapshot of all PVCs")
+        log.info("Creating snapshot of all PVCs")
         for pvc_obj in self.pvcs:
             log.info(f"Creating snapshot of PVC {pvc_obj.name}")
             snap_obj = snapshot_factory(pvc_obj, wait=False)
             snap_obj.md5sum = pvc_obj.md5sum
             snapshots.append(snap_obj)
             log.info(f"Created snapshot of PVC {pvc_obj.name}")
-        log.info(f"Created snapshot of all PVCs")
+        log.info("Created snapshot of all PVCs")
 
         # Verify snapshots are ready
         log.info("Verify snapshots are ready")
@@ -123,7 +123,7 @@ class TestExpansionSnapshotClone(ManageTest):
         )
 
         # Clone PVCs
-        log.info(f"Creating clone of all PVCs")
+        log.info("Creating clone of all PVCs")
         clone_objs = []
         for pvc_obj in self.pvcs:
             log.info(f"Creating clone of PVC {pvc_obj.name}")
@@ -134,7 +134,7 @@ class TestExpansionSnapshotClone(ManageTest):
             clone_obj.md5sum = pvc_obj.md5sum
             clone_objs.append(clone_obj)
             log.info(f"Created clone of PVC {pvc_obj.name}")
-        log.info(f"Created clone of all PVCs")
+        log.info("Created clone of all PVCs")
 
         log.info("Wait for cloned PVcs to reach Bound state and verify size")
         for pvc_obj in clone_objs:
@@ -227,7 +227,7 @@ class TestExpansionSnapshotClone(ManageTest):
                 storage_type='fs', size='1G', runtime=20,
                 fio_filename=filename_restore_clone
             )
-        log.info(f"IO started on all pods")
+        log.info("IO started on all pods")
 
         log.info(
             "Waiting for IO completion on pods attached with cloned and "
@@ -258,7 +258,7 @@ class TestExpansionSnapshotClone(ManageTest):
         )
 
         # Clone the restored PVCs
-        log.info(f"Creating clone of restored PVCs")
+        log.info("Creating clone of restored PVCs")
         restored_clone_objs = []
         for pvc_obj in restore_objs:
             log.info(f"Creating clone of restored PVC {pvc_obj.name}")
@@ -270,7 +270,7 @@ class TestExpansionSnapshotClone(ManageTest):
             clone_obj.md5sum_new = pvc_obj.md5sum_new
             restored_clone_objs.append(clone_obj)
             log.info(f"Created clone of restored PVC {pvc_obj.name}")
-        log.info(f"Created clone of restored all PVCs")
+        log.info("Created clone of restored all PVCs")
 
         log.info("Wait for cloned PVcs to reach Bound state and verify size")
         for pvc_obj in restored_clone_objs:
@@ -288,7 +288,7 @@ class TestExpansionSnapshotClone(ManageTest):
 
         # Take snapshot of all cloned PVCs
         snapshots_new = []
-        log.info(f"Creating snapshot of all cloned PVCs")
+        log.info("Creating snapshot of all cloned PVCs")
         for pvc_obj in clone_objs + restored_clone_objs:
             log.info(
                 f"Creating snapshot of PVC {pvc_obj.name}"
@@ -298,7 +298,7 @@ class TestExpansionSnapshotClone(ManageTest):
             snap_obj.md5sum_new = pvc_obj.md5sum_new
             snapshots_new.append(snap_obj)
             log.info(f"Created snapshot of PVC {pvc_obj.name}")
-        log.info(f"Created snapshot of all cloned PVCs")
+        log.info("Created snapshot of all cloned PVCs")
 
         # Verify snapshots are ready
         log.info("Verify snapshots of cloned PVCs are Ready")
