@@ -1020,17 +1020,20 @@ def reboot_node(ceph_node, timeout=300):
     Reboot a node with given ceph_node object
 
     Args:
-        ceph_node (CephNode): ceph node object representing the node
-        timeout (int): Wait time for node to comeback
+        ceph_node (CephNode): Ceph node object representing the node.
+        timeout (int): Wait time in seconds for the node to comeback.
 
+    Raises:
+        SSHException: if not able to connect through ssh
     """
     ceph_node.exec_command(
         cmd='reboot',
         check_ec=False,
-        long_running=True
+        long_running=True,
     )
 
     try:
         ceph_node.connect(timeout)
     except SSHException:
         log.exception(f"Failed to connect to node {ceph_node.hostname}")
+        raise
