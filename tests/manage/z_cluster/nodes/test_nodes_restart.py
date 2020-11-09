@@ -343,14 +343,8 @@ class TestNodesRestart(ManageTest):
         for worker_node in worker_nodes:
             # Restart one worker node
             nodes.restart_nodes(nodes=[worker_node], wait=True)
-
-            # Checking cluster and Ceph health
-            self.sanity_helpers.health_check()
-
-            # Get pv names
-            pv_after_reset = get_pv_names()
-
             logger.info(f'Verify PV after reboot {worker_node}')
+            pv_after_reset = get_pv_names()
             pv_diff = set(pv_after_reset) - set(pv_before_reset)
             pv_new = []
             for pv in pv_diff:
@@ -360,3 +354,4 @@ class TestNodesRestart(ManageTest):
             assert not pv_new, (
                 f"Unexpected PV {pv_new} is created after reboot {worker_node}"
             )
+        pod.wait_for_storage_pods()
