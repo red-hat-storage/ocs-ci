@@ -368,7 +368,7 @@ def default_ceph_block_pool():
     return cbp_name if cbp_name else constants.DEFAULT_BLOCKPOOL
 
 
-def create_ceph_block_pool(pool_name=None, failure_domain=None, verify=True):
+def create_ceph_block_pool(pool_name=None, replica=3, compression=None, failure_domain=None, verify=True):
     """
     Create a Ceph block pool
     ** This method should not be used anymore **
@@ -379,6 +379,8 @@ def create_ceph_block_pool(pool_name=None, failure_domain=None, verify=True):
         failure_domain (str): Failure domain name
         verify (bool): True to verify the pool exists after creation,
                        False otherwise
+        replica (int): The replica size for a pool
+        compression (str): Compression type for a pool
 
     Returns:
         OCS: An OCS instance for the Ceph block pool
@@ -390,7 +392,13 @@ def create_ceph_block_pool(pool_name=None, failure_domain=None, verify=True):
         )
     )
     cbp_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    cbp_data['spec']['replicated']['size'] = replica
+
     cbp_data['spec']['failureDomain'] = failure_domain or get_failure_domin()
+
+    if compression:
+        cbp_data['spec']['parameters']['compression_mode'] = compression
+
     cbp_obj = create_resource(**cbp_data)
     cbp_obj.reload()
 

@@ -10,6 +10,10 @@ spec:
   # For a pool based on raw copies, specify the number of copies. A size of 1 indicates no redundancy.
   replicated:
     size: 3
+  parameters:
+    # Inline compression mode for the data pool
+    # Further reference: https://docs.ceph.com/docs/nautilus/rados/configuration/bluestore-config-ref/#inline-compression
+    compression_mode: none
   # A key/value list of annotations
   annotations:
   #  key: valueplica_size | default('3') }}
