@@ -1181,3 +1181,175 @@ class VSPHERE(object):
         """
         ds_obj = self.find_datastore_by_name(datastore_name, datacenter_name)
         return ds_obj.summary.freeSpace
+
+    def clone_vm(
+        self, vm_name, template_name, datacenter_name, resource_pool_name,
+        datastore_name, cluster_name, cpus=4, memory=8,
+        root_disk_size=125829120, network_adapter="VM Network",
+        power_on=True, **kwargs
+    ):
+        """
+        Clones the VM from template
+
+        Args:
+            vm_name (str): Name of the VM to create
+            template_name (str): Template name to clone
+            datacenter_name (str): Name of the Datacenter
+            resource_pool_name (str): Name of the Resource Pool
+            datastore_name (str): Name of the Datastore
+            cluster_name (str): Name of the Cluster in Datacenter
+            cpus (int): Number of CPU's
+            memory (int): Memory in MB
+            root_disk_size (int): Root Disk size in KB
+            network_adapter (str): Name of the Network Adapter
+            power_on (bool): True to power on the VM after cloning
+
+        """
+        data = kwargs
+        datacenter = self.find_datacenter_by_name(datacenter_name)
+        datastore = self.find_datastore_by_name(
+            datastore_name,
+            datacenter_name
+        )
+        dest_folder = datacenter.vmFolder
+
+        resource_pool = self.get_pool(
+            resource_pool_name, datacenter_name, cluster_name
+        )
+        template = self.find_object_by_name(
+            self.get_content,
+            template_name,
+            [vim.VirtualMachine],
+            dest_folder
+        )
+
+        # set relocate specification
+        relocate_spec = vim.vm.RelocateSpec()
+        relocate_spec.datastore = datastore
+        relocate_spec.pool = resource_pool
+
+        # clonespec arguments
+        clonespec_kwargs = {}
+        clonespec_kwargs['location'] = relocate_spec
+        clonespec_kwargs['powerOn'] = power_on
+
+        # update the root disk size
+        disks = [
+            x for x in template.config.hardware.device
+            if isinstance(x, vim.vm.device.VirtualDisk)
+        ]
+        diskspec = vim.vm.device.VirtualDeviceSpec()
+        diskspec.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
+        diskspec.device = disks[0]
+        diskspec.device.capacityInKB = root_disk_size
+        configspec = vim.vm.ConfigSpec()
+        clonespec_kwargs['config'] = configspec
+
+        # update the network adapter
+        devices = []
+        for device in template.config.hardware.device:
+            if hasattr(device, 'addressType'):
+                nic = vim.vm.device.VirtualDeviceSpec()
+                nic.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
+                nic.device = device
+                nic.device.deviceInfo.summary = network_adapter
+                device.backing.deviceName = network_adapter
+                devices.append(nic)
+        devices.append(diskspec)
+
+        # Update the spec with the added network adapter
+        clonespec_kwargs['config'].deviceChange = devices
+
+        # Update the spec with the cpus and memory
+        clonespec_kwargs['config'].numCPUs = cpus
+        clonespec_kwargs['config'].memoryMB = memory
+
+        # VM config specifications
+        vm_conf = vim.vm.ConfigSpec()
+        if data:
+            vm_conf.extraConfig = []
+            for index, param in enumerate(data):
+                option_value = vim.option.OptionValue()
+                option_value.key = param
+                option_value.value = data[param]
+                vm_conf.extraConfig.append(option_value)
+
+        clonespec_kwargs['config'].extraConfig = vm_conf.extraConfig
+        clonespec = vim.vm.CloneSpec(**clonespec_kwargs)
+
+        # get the folder to place the VM
+        vm_folder = datacenter.vmFolder
+        for each_folder in datacenter.vmFolder.childEntity:
+            if resource_pool_name in each_folder.name:
+                vm_folder = each_folder
+                break
+
+        # clone the template
+        logger.debug(f"Cloning VM with name {vm_name}")
+        task = template.Clone(folder=vm_folder, name=vm_name, spec=clonespec)
+        logger.debug("waiting for cloning to complete")
+        self.wait_for_task(task)
+
+    def wait_for_task(self, task):
+        """
+        Wait for a task to finish
+
+        Args:
+            task (instance): Instance for the task
+
+        Returns:
+            instance: VM instance
+
+        """
+        task_done = False
+        while not task_done:
+            if task.info.state == "success":
+                logger.debug("Cloning VM completed successfully")
+                return task.info.result
+
+            if task.info.state == "error":
+                logger.error(
+                    f"Error while cloning the VM : {task.info.error.msg}"
+                )
+                task_done = True
+
+    def find_resource_pool_by_name(self, resource_pool_name):
+        """
+        Fetches the Resource Pool
+
+        Args:
+            resource_pool_name (str): Name of the Resource Pool
+
+        Returns:
+            instance: Resource Pool instance
+
+        """
+        return self.find_object_by_name(
+            self.get_content,
+            resource_pool_name,
+            [vim.ResourcePool]
+        )
+
+    def find_ip_by_vm(
+        self, vm, datacenter_name, cluster_name, resource_pool_name
+    ):
+        """
+        Fetches the IP for the VM
+
+        Args:
+            vm (str): Name of VM
+            datacenter_name: Name of the Datacenter
+            cluster_name: Name of the cluster
+            resource_pool_name: Name of the Resource Pool
+
+        Returns:
+            str: IP of the VM
+
+        """
+        vm = self.get_vm_in_pool_by_name(
+            vm,
+            datacenter_name,
+            cluster_name,
+            resource_pool_name
+        )
+        return vm.summary.guest.ipAddress

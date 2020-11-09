@@ -137,6 +137,13 @@ ENV_DATA:
   # To enable rotational disk devices for LSO deployment we can set
   # local_storage_allow_rotational_disks to true
   local_storage_allow_rotational_disks: false
+  # Add node parameters
+  # The disk UUID on the VMs must be enabled, `disk.EnableUUID` value must be set to `True`.
+  # This step is necessary so that the VMDK always presents a consistent UUID
+  # to the VM, thus allowing the disk to be mounted properly.
+  disk_enable_uuid: 'TRUE'
+  # Encoding type for the ignition config
+  ignition_data_encoding: base64
 
 # This section is related to upgrade
 UPGRADE:

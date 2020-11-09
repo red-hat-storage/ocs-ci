@@ -1058,3 +1058,25 @@ def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
 
     log.info("Verification steps from the ceph side finish successfully")
     return True
+
+
+def generate_node_names_for_vsphere(count, prefix="compute-"):
+    """
+    Generate the node names for vsphere platform
+
+    Args:
+        count (int): Number of node names to generate
+        prefix (str): Prefix for node name
+
+    Returns:
+        list: List of node names
+
+    """
+    compute_node_names = get_compute_node_names()
+    log.info(f"Current node names: {compute_node_names}")
+    compute_node_names.sort()
+    current_compute_suffix = int(compute_node_names[-1].split("-")[-1])
+    return [
+        f"{prefix}{current_compute_suffix + node_count}"
+        for node_count in range(1, count + 1)
+    ]
