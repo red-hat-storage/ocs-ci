@@ -112,7 +112,7 @@ class TestPvcSnapshotPerformance(E2ETest):
         # Wait until the snapshot is bound and ready to use
         self.snap_obj.ocp.wait_for_resource(
             condition="true", resource_name=self.snap_obj.name,
-            column=constants.STATUS_READYTOUSE, timeout=60
+            column=constants.STATUS_READYTOUSE, timeout=600
         )
 
         # Getting the snapshot content name
@@ -429,7 +429,8 @@ class TestPvcSnapshotPerformance(E2ETest):
                     pvc_name = item["persistentVolumeClaim"]["claimName"]
                     break
             log.info(f"Benchmark PVC name is : {pvc_name}")
-            timeout = 3600
+            # Creation of 4M files on CephFS can take a lot of time
+            timeout = 7200
             while timeout >= 0:
                 logs = bench_pod.get_logs(name=small_file_client_pod)
                 if "RUN STATUS DONE" in logs:
