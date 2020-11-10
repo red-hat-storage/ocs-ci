@@ -308,6 +308,28 @@ def get_all_pvcs_in_storageclass(storage_class):
     return out
 
 
+def get_all_pvs_in_storageclass(storage_class):
+    """
+    This function return all the PVs in a given storage class
+
+    Args:
+        storage_class (str): name of the storage class
+
+    Returns:
+        out: list of PV objects
+
+    """
+    ocp_pv_obj = OCP(kind=constants.PV)
+    pv_list = ocp_pv_obj.get(all_namespaces=True)['items']
+    out = []
+    for pvc in pv_list:
+        pv_obj = PVC(**pvc)
+        if pv_obj.backed_sc == storage_class:
+            out.append(pv_obj)
+
+    return out
+
+
 def get_deviceset_pvcs():
     """
     Get the deviceset PVCs
