@@ -11,7 +11,7 @@ from ocs_ci.ocs.bucket_utils import (
     sync_object_directory, put_bucket_policy,
     get_bucket_policy, s3_put_object,
     s3_get_object, namespace_bucket_update,
-    rm_object_recursive, verify_s3_object_integrity
+    rm_object_recursive, setup_base_objects, compare_directory
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
@@ -20,51 +20,12 @@ from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status, schedule_nodes
 from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount, gen_bucket_policy, HttpResponseParser
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.ocs.resources.pod import wait_for_storage_pods
 
 logger = logging.getLogger(__name__)
 
 MCG_NS_RESULT_DIR = '/result'
 MCG_NS_ORIGINAL_DIR = '/original'
-
-
-def setup_base_objects(awscli_pod, amount=2):
-    """
-    Prepares two directories and populate one of them with objects
-
-     Args:
-        awscli_pod (Pod): A pod running the AWS CLI tools
-        amount (Int): Number of test objects to create
-
-    """
-    awscli_pod.exec_cmd_on_pod(command=f'mkdir {MCG_NS_ORIGINAL_DIR} {MCG_NS_RESULT_DIR}')
-
-    for i in range(amount):
-        object_key = f"ObjKey-{i}"
-        awscli_pod.exec_cmd_on_pod(
-            f"dd if=/dev/urandom of={MCG_NS_ORIGINAL_DIR}/{object_key} bs=1M count=1 status=none"
-        )
-
-
-def compare_directory(
-    awscli_pod, original_dir=MCG_NS_RESULT_DIR,
-    result_dir=MCG_NS_ORIGINAL_DIR, amount=2
-):
-    """
-    Compares object checksums on original and result directories
-
-     Args:
-        awscli_pod (pod): A pod running the AWS CLI tools
-        original_dir (str): original directory name
-        result_dir (str): result directory name
-        amount (int): Number of test objects to create
-
-    """
-    for i in range(amount):
-        file_name = f"ObjKey-{i}"
-        assert verify_s3_object_integrity(
-            original_object_path=f'{original_dir}/{file_name}',
-            result_object_path=f'{result_dir}/{file_name}', awscli_pod=awscli_pod
-        ), 'Checksum comparision between original and result object failed'
 
 
 @skipif_aws_creds_are_missing
@@ -117,7 +78,7 @@ class TestMcgNamespaceDisruptions(E2ETest):
         email = user_name + "@mail.com"
 
         logger.info("Setting up test files for upload, to the bucket/resources")
-        setup_base_objects(awscli_pod, amount=3)
+        setup_base_objects(awscli_pod, MCG_NS_ORIGINAL_DIR, MCG_NS_RESULT_DIR, amount=3)
 
         # Create the namespace resource and verify health
         aws_res = ns_resource_factory()
@@ -170,7 +131,7 @@ class TestMcgNamespaceDisruptions(E2ETest):
                 f"Verifying integrity of objects "
                 f"after re-spinning: {self.labels_map[pod_to_respin]}"
             )
-            compare_directory(awscli_pod, amount=3)
+            compare_directory(awscli_pod, MCG_NS_ORIGINAL_DIR, MCG_NS_RESULT_DIR, amount=3)
 
         # S3 account
         user = NoobaaAccount(mcg_obj, name=user_name, email=email, buckets=[ns_bucket])
@@ -245,6 +206,9 @@ class TestMcgNamespaceDisruptions(E2ETest):
             )
             wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=120)
 
+            # Verify all storage pods are running
+            wait_for_storage_pods()
+
             logger.info(
                 f"Downloading objects from ns bucket: {ns_bucket} "
                 f"after draining node: {node_name} with pod {pod_to_drain}"
@@ -260,7 +224,7 @@ class TestMcgNamespaceDisruptions(E2ETest):
                 f"Verifying integrity of objects "
                 f"after draining node with pod: {pod_to_drain}"
             )
-            compare_directory(awscli_pod, amount=3)
+            compare_directory(awscli_pod, MCG_NS_ORIGINAL_DIR, MCG_NS_RESULT_DIR, amount=3)
 
         logger.info(f"Editing the namespace resource bucket: {ns_bucket}")
         namespace_bucket_update(
