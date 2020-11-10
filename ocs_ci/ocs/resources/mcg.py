@@ -504,19 +504,18 @@ class MCG:
         Returns:
             str: The name of the created target_bucket_name (cloud uls)
         """
-        # Create External connection to AWS
-        assert self.create_new_aws_connection(cld_mgr, conn_name), "Failed to create a new AWS connection"
-
         # Create the actual target bucket on AWS
         uls_dict = cloud_uls_factory({'aws': [(1, region)]})
         target_bucket_name = list(uls_dict['aws'])[0]
 
         # Create namespace resource
-        self.send_rpc_query('pool_api', 'create_namespace_resource', {
+        result = self.send_rpc_query('pool_api', 'create_namespace_resource', {
             'name': ns_resource_name,
             'connection': conn_name,
             'target_bucket': target_bucket_name}
         )
+        logger.info(f"result from RPC call: {result}")
+
         return target_bucket_name
 
     def check_ns_resource_validity(self, ns_resource_name, target_bucket_name, endpoint):
