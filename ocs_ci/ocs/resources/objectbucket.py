@@ -454,7 +454,10 @@ class MCGNamespaceBucket(ObjectBucket):
         ns_properties = match_buckets[0].get('namespace')
         actual_read_resources = ns_properties.get('read_resources')
         actual_write_resource = ns_properties.get('write_resource')
-        return set(actual_read_resources) == set(self.read_ns_resources) and set(actual_write_resource) == set(self.write_ns_resource)
+        return (
+            set(actual_read_resources) == set(self.read_ns_resources)
+            and set(actual_write_resource) == set(self.write_ns_resource)
+        )
 
     def internal_verify_deletion(self):
         # Retrieve the NooBaa system information

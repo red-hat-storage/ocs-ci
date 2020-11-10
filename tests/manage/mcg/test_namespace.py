@@ -160,14 +160,14 @@ class TestNamespace(MCGTest):
             pod for pod in noobaa_pods if pod.name.startswith(mcg_pod)
         ][0]
         pod_obj.delete(force=True)
-        logger.info(f'Wait for noobaa pods to come up')
+        logger.info('Wait for noobaa pods to come up')
         assert pod_obj.ocp.wait_for_resource(
             condition='Running',
             selector='app=noobaa',
             resource_count=len(noobaa_pods),
             timeout=1000
         )
-        logger.info(f'Wait for noobaa health to be OK')
+        logger.info('Wait for noobaa health to be OK')
         ceph_cluster_obj = CephCluster()
         ceph_cluster_obj.wait_for_noobaa_health_ok()
 
@@ -240,19 +240,18 @@ class TestNamespace(MCGTest):
         aws_client.toggle_aws_bucket_readwrite(resource1[0])
 
         logger.info('Read files directly from AWS')
-        target_bucket_name = resource1[0]
         try:
             self.download_files(mcg_obj, awscli_pod, bucket_to_read=rand_ns_bucket)
         except CommandFailed:
             logger.info('Attempt to read files failed as expected')
             logger.info('Bring resource1 up')
-            aws_client.toggle_aws_bucket_readwrite(resource2[0], block=False)
+            aws_client.toggle_aws_bucket_readwrite(resource1[0], block=False)
         else:
             logger.info('Bring resource1 up')
-            aws_client.toggle_aws_bucket_readwrite(resource2[0], block=False)
+            aws_client.toggle_aws_bucket_readwrite(resource1[0], block=False)
             msg = (
                 "It should not be possible to download from Namespace bucket "
-                "according to "
+                "in current state according to "
                 "https://bugzilla.redhat.com/show_bug.cgi?id=1887417#c2"
             )
             logger.error(msg)
