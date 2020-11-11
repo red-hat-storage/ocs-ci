@@ -1538,7 +1538,7 @@ class VSPHEREUPINode(VMWareNodes):
                     int(config.ENV_DATA["worker_num_cpus"]),
                     int(config.ENV_DATA["compute_memory"]),
                     125829120,
-                    config.ENV_DATA["network_adapter"],
+                    config.ENV_DATA["vm_network"],
                     power_on=True,
                     **data,
                 )
