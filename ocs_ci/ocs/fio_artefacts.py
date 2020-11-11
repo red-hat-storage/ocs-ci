@@ -56,7 +56,7 @@ def get_mcg_conf(mcg_obj, workload_bucket, custom_options=None):
     # add or overwrite custom values
     if custom_options:
         for section in custom_options:
-            if section is not 'create':
+            if not config.has_section(section):
                 config.add_section(section)
             for configuration in custom_options[section]:
                 config.set(section, configuration[0], configuration[1])
