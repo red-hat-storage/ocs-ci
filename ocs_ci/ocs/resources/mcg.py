@@ -453,29 +453,45 @@ class MCG:
 
         return creds_request, aws_access_key_id, aws_access_key
 
-    def create_new_aws_connection(self, cld_mgr, conn_name=None):
+    def create_connection(self, cld_mgr, conn_name=None, platform=constants.AWS_PLATFORM):
         """
         Creates a new NooBaa connection to an AWS backend
 
         Args:
-            cld_mgr: A cloud manager instance
-            conn_name: The connection name to be used
+            cld_mgr (obj): A cloud manager instance
+            conn_name (str): The connection name to be used
+                If None provided then the name will be generated
+            platform (str): Platform to use for new connection
+                AWS platform is used as default
 
         Returns:
             bool: False if the connection creation failed
 
         """
         if conn_name is None:
-            conn_name = create_unique_resource_name('awsconnection', 'mcgconn')
+            conn_name = create_unique_resource_name(
+                f'{platform}-connection', 'mcgconn'
+            )
 
-        params = {
-            "auth_method": "AWS_V4",
-            "endpoint": "https://s3.amazonaws.com",
-            "endpoint_type": "AWS",
-            "identity": cld_mgr.aws_client.access_key,
-            "name": conn_name,
-            "secret": cld_mgr.aws_client.secret_key
-        }
+        if platform == constants.AWS_PLATFORM:
+            params = {
+                "auth_method": "AWS_V4",
+                "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+                "endpoint_type": "AWS",
+                "identity": cld_mgr.aws_client.access_key,
+                "name": conn_name,
+                "secret": cld_mgr.aws_client.secret_key
+            }
+        elif platform == constants.AZURE_PLATFORM:
+            params = {
+                "endpoint": constants.MCG_NS_AZURE_ENDPOINT,
+                "endpoint_type": "AZURE",
+                "identity": cld_mgr.azure_client.account_name,
+                "name": conn_name,
+                "secret": cld_mgr.azure_client.credential
+            }
+        else:
+            raise UnsupportedPlatformError(f"Unsupported Platform: {platform}")
 
         try:
             for resp in TimeoutSampler(
@@ -485,7 +501,7 @@ class MCG:
                     logger.info(f'Connection {conn_name} created successfully')
                     return True
                 else:
-                    logger.info('AWS IAM did not yet propagate')
+                    logger.info(f'{platform} IAM {conn_name} did not yet propagate: {resp.text}')
         except TimeoutExpiredError:
             logger.error(f'Could not create connection {conn_name}')
             assert False
