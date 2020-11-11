@@ -347,10 +347,22 @@ class TestPvcSnapshotPerformance(E2ETest):
         the time it takes.
         the test will run 3 time to check consistency.
 
+        Args:
+            ripsaw : benchmark operator fixture which will run the workload
+            file_size (int): the size of the file to be create - in KiB
+            files (int): number of files each thread will create
+            threads (int): number of threads will be used in the workload
+            interface (str): the volume interface that will be used
+                             CephBlockPool / CephFileSystem
+
+        Raises:
+            TimeoutError : in case of creation files take too long time
+                           more then 2 Hours
+
         """
 
         # Loading the main template yaml file for the benchmark and update some
-        # fields with new valus
+        # fields with new values
         sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
 
         if interface == constants.CEPHBLOCKPOOL:
