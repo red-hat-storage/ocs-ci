@@ -82,7 +82,7 @@ class TestPvcSnapshotPerformance(E2ETest):
             status=constants.STATUS_RUNNING
         )
 
-    def create_snapshot(self, pvc_name, snap_name, interface):
+    def measure_create_snapshot_time(self, pvc_name, snap_name, interface):
         """
         Creation volume snapshot, and measure the creation time
 
@@ -212,7 +212,7 @@ class TestPvcSnapshotPerformance(E2ETest):
             )
             log.info(f"Taking snapshot of the PVC {snap_name}")
 
-            test_results["create"]["time"] = self.create_snapshot(
+            test_results["create"]["time"] = self.measure_create_snapshot_time(
                 pvc_name=self.pvc_obj.name, snap_name=snap_name,
                 interface=self.interface
             )
@@ -457,7 +457,7 @@ class TestPvcSnapshotPerformance(E2ETest):
             snap_name = pvc_name.replace("claim", "snapshot-")
             log.info(f"Taking snapshot of the PVC {pvc_name}")
             log.info(f"Snapshot name : {snap_name}")
-            creation_time = self.create_snapshot(
+            creation_time = self.measure_create_snapshot_time(
                 pvc_name=pvc_name, snap_name=snap_name, interface=interface
             )
             log.info(f"Snapshot creation time is {creation_time} seconds")
