@@ -935,3 +935,42 @@ def namespace_bucket_update(mcg_obj, bucket_name, read_resource, write_resource)
             }
         }
     )
+
+
+def setup_base_objects(awscli_pod, original_dir, result_dir, amount=2):
+    """
+    Prepares two directories and populate one of them with objects
+
+     Args:
+        awscli_pod (Pod): A pod running the AWS CLI tools
+        original_dir (str): original directory name
+        result_dir (str): result directory name
+        amount (Int): Number of test objects to create
+
+    """
+    awscli_pod.exec_cmd_on_pod(command=f'mkdir {original_dir} {result_dir}')
+
+    for i in range(amount):
+        object_key = f"ObjKey-{i}"
+        awscli_pod.exec_cmd_on_pod(
+            f"dd if=/dev/urandom of={original_dir}/{object_key} bs=1M count=1 status=none"
+        )
+
+
+def compare_directory(awscli_pod, original_dir, result_dir, amount=2):
+    """
+    Compares object checksums on original and result directories
+
+     Args:
+        awscli_pod (pod): A pod running the AWS CLI tools
+        original_dir (str): original directory name
+        result_dir (str): result directory name
+        amount (int): Number of test objects to create
+
+    """
+    for i in range(amount):
+        file_name = f"ObjKey-{i}"
+        assert verify_s3_object_integrity(
+            original_object_path=f'{original_dir}/{file_name}',
+            result_object_path=f'{result_dir}/{file_name}', awscli_pod=awscli_pod
+        ), 'Checksum comparision between original and result object failed'
