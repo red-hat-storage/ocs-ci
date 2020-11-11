@@ -312,7 +312,7 @@ class PrometheusAPI(object):
         """
         if config.ENV_DATA['platform'].lower() == 'ibm_cloud':
             self._user = user or 'apikey'
-            self._password = password or config.AUTH.get('ibm_apikey')
+            self._password = password or config.AUTH["ibmcloud"]['api_key']
         else:
             self._user = user or config.RUN['username']
             if not password:
