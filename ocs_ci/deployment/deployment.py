@@ -1017,12 +1017,22 @@ def setup_local_storage(storageclass):
     # Get the worker nodes
     workers = get_nodes(node_type="worker")
     worker_names = [worker.name for worker in workers]
-    worker_names_str = " ".join(worker_names)
-    logger.debug("Workers: %s", workers)
+    logger.debug("Workers: %s", worker_names)
 
     # Label the worker nodes
     logger.info("Labeling worker nodes")
-    run_cmd(f"oc label nodes {worker_names_str} " f"{constants.OPERATOR_NODE_LABEL}")
+    to_label = config.DEPLOYMENT.get('ocs_operator_nodes_to_label', 3)
+    worker_count = len(worker_names)
+    if worker_count < to_label:
+        raise UnavailableResourceException(
+            f"Not enough worker nodes: {worker_count} to label: "
+            f"{to_label} "
+        )
+    worker_names_str = " ".join(worker_names[:to_label])
+    run_cmd(
+        f"oc label nodes {worker_names_str} "
+        f"{constants.OPERATOR_NODE_LABEL}"
+    )
 
     ocp_version = get_ocp_version()
     ocs_version = config.ENV_DATA.get("ocs_version")
