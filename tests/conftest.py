@@ -2883,9 +2883,9 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
                                                                config.ENV_DATA['region'], cld_mgr, cloud_uls_factory)
 
         log.info(f"Check validity of NS resource {rand_ns_resource}")
-        if platform ==constants.AWS_PLATFORM:
+        if platform == constants.AWS_PLATFORM:
             endpoint = constants.MCG_NS_AWS_ENDPOINT
-        elif platform ==constants.AZURE_PLATFORM:
+        elif platform == constants.AZURE_PLATFORM:
             endpoint = constants.MCG_NS_AZURE_ENDPOINT
         else:
             raise UnsupportedPlatformError(f"Unsupported Platform: {platform}")

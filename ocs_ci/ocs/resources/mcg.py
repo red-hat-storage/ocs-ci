@@ -11,7 +11,9 @@ from botocore.client import ClientError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
-from ocs_ci.ocs.exceptions import CommandFailed, CredReqSecretNotFound, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import (
+    CommandFailed, CredReqSecretNotFound, TimeoutExpiredError, UnsupportedPlatformError
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import cal_md5sum
