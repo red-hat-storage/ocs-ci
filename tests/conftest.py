@@ -2874,7 +2874,7 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
         # Create random connection_name and random namespace resource name
         if platform not in created_connections:
             rand_connection = create_unique_resource_name(constants.MCG_CONNECTION, platform)
-            mcg_obj.create_connection(cld_mgr, rand_connection, platform)
+            mcg_obj.create_connection(cld_mgr, platform, rand_connection)
             created_connections[platform] = rand_connection
 
         # Create the actual namespace resource

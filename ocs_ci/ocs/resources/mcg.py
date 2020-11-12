@@ -455,16 +455,15 @@ class MCG:
 
         return creds_request, aws_access_key_id, aws_access_key
 
-    def create_connection(self, cld_mgr, conn_name=None, platform=constants.AWS_PLATFORM):
+    def create_connection(self, cld_mgr, platform, conn_name=None):
         """
         Creates a new NooBaa connection to an AWS backend
 
         Args:
             cld_mgr (obj): A cloud manager instance
+            platform (str): Platform to use for new connection
             conn_name (str): The connection name to be used
                 If None provided then the name will be generated
-            platform (str): Platform to use for new connection
-                AWS platform is used as default
 
         Returns:
             bool: False if the connection creation failed
