@@ -30,7 +30,8 @@ from ocs_ci.ocs import (
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import (
     CommandFailed, TimeoutExpiredError,
-    CephHealthException, ResourceWrongStatusException
+    CephHealthException, ResourceWrongStatusException,
+    UnsupportedPlatformError
 )
 from ocs_ci.ocs.mcg_workload import (
     mcg_job_factory as mcg_job_factory_implementation
@@ -2867,21 +2868,33 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
 
     """
     created_ns_resources = []
-    created_ns_connections = []
+    created_connections = {}
 
-    def _create_ns_resources():
+    def _create_ns_resources(platform=constants.AWS_PLATFORM):
         # Create random connection_name and random namespace resource name
-        rand_ns_resource = create_unique_resource_name(constants.MCG_NS_RESOURCE, 'aws')
-        if not created_ns_connections:
-            rand_connection = create_unique_resource_name(constants.MCG_NS_AWS_CONNECTION, 'aws')
-            mcg_obj.create_new_aws_connection(cld_mgr, rand_connection)
-            created_ns_connections.append(rand_connection)
+        if platform not in created_connections:
+            rand_connection = create_unique_resource_name(constants.MCG_CONNECTION, platform)
+            mcg_obj.create_connection(cld_mgr, platform, rand_connection)
+            created_connections[platform] = rand_connection
 
         # Create the actual namespace resource
-        target_bucket_name = mcg_obj.create_namespace_resource(rand_ns_resource, created_ns_connections[0],
+        rand_ns_resource = create_unique_resource_name(constants.MCG_NS_RESOURCE, platform)
+        target_bucket_name = mcg_obj.create_namespace_resource(rand_ns_resource, created_connections[platform],
                                                                config.ENV_DATA['region'], cld_mgr, cloud_uls_factory)
-        mcg_obj.check_ns_resource_validity(rand_ns_resource,
-                                           target_bucket_name, constants.MCG_NS_AWS_ENDPOINT)
+
+        log.info(f"Check validity of NS resource {rand_ns_resource}")
+        if platform == constants.AWS_PLATFORM:
+            endpoint = constants.MCG_NS_AWS_ENDPOINT
+        elif platform == constants.AZURE_PLATFORM:
+            endpoint = constants.MCG_NS_AZURE_ENDPOINT
+        else:
+            raise UnsupportedPlatformError(f"Unsupported Platform: {platform}")
+
+        mcg_obj.check_ns_resource_validity(
+            rand_ns_resource,
+            target_bucket_name,
+            endpoint
+        )
 
         created_ns_resources.append(rand_ns_resource)
         return target_bucket_name, rand_ns_resource
@@ -2890,8 +2903,8 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
         for ns_resource in created_ns_resources:
             mcg_obj.delete_ns_resource(ns_resource)
 
-        for ns_connection in created_ns_connections:
-            mcg_obj.delete_ns_connection(ns_connection)
+        for platform in created_connections:
+            mcg_obj.delete_ns_connection(created_connections[platform])
 
     request.addfinalizer(ns_resources_and_connections_cleanup)
 
