@@ -13,8 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class Ceph(object):
-
-    def __init__(self, name='ceph', node_list=None):
+    def __init__(self, name="ceph", node_list=None):
         """
         Ceph cluster representation. Contains list of cluster nodes.
         Args:
@@ -25,7 +24,7 @@ class Ceph(object):
         self.node_list = node_list
 
     def __eq__(self, ceph_cluster):
-        if hasattr(ceph_cluster, 'node_list'):
+        if hasattr(ceph_cluster, "node_list"):
             if all(atomic_node in ceph_cluster for atomic_node in self.node_list):
                 return True
             else:
@@ -132,11 +131,14 @@ class Ceph(object):
         """
         ceph_demon_counter = {}
         for demon in self.get_ceph_demons():
-            if demon.role == 'mgr':
+            if demon.role == "mgr":
                 continue
             increment = 1
-            ceph_demon_counter[demon.role] = ceph_demon_counter[demon.role] + increment if ceph_demon_counter.get(
-                demon.role) else increment
+            ceph_demon_counter[demon.role] = (
+                ceph_demon_counter[demon.role] + increment
+                if ceph_demon_counter.get(demon.role)
+                else increment
+            )
         return ceph_demon_counter
 
     def get_metadata_list(self, role, client=None):
@@ -152,11 +154,13 @@ class Ceph(object):
 
         """
         if not client:
-            client = self.get_ceph_object('client') if self.get_ceph_object('client') else self.get_ceph_object('mon')
+            client = (
+                self.get_ceph_object("client")
+                if self.get_ceph_object("client")
+                else self.get_ceph_object("mon")
+            )
 
-        out, _ = client.exec_command(
-            f'sudo ceph {role} metadata -f json-pretty'
-        )
+        out, _ = client.exec_command(f"sudo ceph {role} metadata -f json-pretty")
 
         return json.loads(out.read().decode())
 
@@ -188,9 +192,9 @@ class Ceph(object):
                  }
 
         """
-        metadata_list = self.get_metadata_list('osd', client)
+        metadata_list = self.get_metadata_list("osd", client)
         for metadata in metadata_list:
-            if metadata.get('id') == osd_id:
+            if metadata.get("id") == osd_id:
                 return metadata
         return None
 
@@ -217,10 +221,14 @@ class Ceph(object):
                 empty
 
         """
-        hostname = self.get_osd_metadata(osd_id).get('hostname')
+        hostname = self.get_osd_metadata(osd_id).get("hostname")
         node = self.get_node_by_hostname(hostname)
         osd_device = self.get_osd_device(osd_id)
-        osd_demon_list = [osd_demon for osd_demon in node.get_ceph_objects('osd') if osd_demon.device == osd_device]
+        osd_demon_list = [
+            osd_demon
+            for osd_demon in node.get_ceph_objects("osd")
+            if osd_demon.device == osd_device
+        ]
         return osd_demon_list[0] if len(osd_demon_list) > 0 else None
 
     def get_osd_service_name(self, osd_id, client=None):
@@ -236,12 +244,12 @@ class Ceph(object):
         """
         osd_demon = self.get_osd_by_id(osd_id, client)
         if osd_demon is None:
-            raise RuntimeError(f'Unable to locate osd@{osd_id} demon')
+            raise RuntimeError(f"Unable to locate osd@{osd_id} demon")
         if not osd_demon.containerized:
             osd_service_id = osd_id
         else:
             osd_service_id = self.get_osd_device(osd_id)
-        osd_service_name = f'ceph-osd@{osd_service_id}'
+        osd_service_name = f"ceph-osd@{osd_service_id}"
         return osd_service_name
 
     def get_osd_device(self, osd_id, client=None):
@@ -256,14 +264,12 @@ class Ceph(object):
 
         """
         osd_metadata = self.get_osd_metadata(osd_id, client)
-        if osd_metadata.get('osd_objectstore') == 'filestore':
-            osd_device = osd_metadata.get('backend_filestore_dev_node')
-        elif osd_metadata.get('osd_objectstore') == 'bluestore':
-            osd_device = osd_metadata.get('bluefs_db_dev_node')
+        if osd_metadata.get("osd_objectstore") == "filestore":
+            osd_device = osd_metadata.get("backend_filestore_dev_node")
+        elif osd_metadata.get("osd_objectstore") == "bluestore":
+            osd_device = osd_metadata.get("bluefs_db_dev_node")
         else:
-            raise RuntimeError(
-                f'Unable to detect filestore type for osd #{osd_id}'
-            )
+            raise RuntimeError(f"Unable to detect filestore type for osd #{osd_id}")
         return osd_device
 
     def get_node_by_hostname(self, hostname):
@@ -293,13 +299,15 @@ class Ceph(object):
 
         """
         osd_metadata = self.get_osd_metadata(osd_id, client)
-        osd_data = osd_metadata.get('osd_data')
+        osd_data = osd_metadata.get("osd_data")
         osd_object = self.get_osd_by_id(osd_id, client)
-        out, err = osd_object.exec_command('ceph-volume simple scan {osd_data} --stdout'.format(osd_data=osd_data),
-                                           check_ec=False)
+        out, err = osd_object.exec_command(
+            "ceph-volume simple scan {osd_data} --stdout".format(osd_data=osd_data),
+            check_ec=False,
+        )
         simple_scan = out.read().decode()
-        simple_scan = json.loads(simple_scan[simple_scan.index('{')::])
-        return simple_scan.get('data').get('path')
+        simple_scan = json.loads(simple_scan[simple_scan.index("{") : :])
+        return simple_scan.get("data").get("path")
 
     def get_osd_data_partition(self, osd_id, client=None):
         """
@@ -314,7 +322,7 @@ class Ceph(object):
 
         """
         osd_partition_path = self.get_osd_data_partition_path(osd_id, client)
-        return osd_partition_path[osd_partition_path.rfind('/') + 1::]
+        return osd_partition_path[osd_partition_path.rfind("/") + 1 : :]
 
     def role_to_node_mapping(self):
         """
@@ -333,11 +341,11 @@ class RolesContainer(object):
 
     """
 
-    def __init__(self, role='pool'):
+    def __init__(self, role="pool"):
         if isinstance(role, str):
             self.role_list = [str(role)]
         else:
-            self.role_list = role if len(role) > 0 else ['pool']
+            self.role_list = role if len(role) > 0 else ["pool"]
 
     def __eq__(self, role):
         if isinstance(role, str):
@@ -349,7 +357,7 @@ class RolesContainer(object):
         return not self.__eq__(role)
 
     def equals(self, other):
-        if getattr(other, 'role_list') == self.role_list:
+        if getattr(other, "role_list") == self.role_list:
             return True
         else:
             return False
@@ -380,24 +388,26 @@ class RolesContainer(object):
         self.role_list = list(set(self.role_list))
 
     def update_role(self, roles_list):
-        if 'pool' in self.role_list:
-            self.role_list.remove('pool')
+        if "pool" in self.role_list:
+            self.role_list.remove("pool")
         self.extend(roles_list)
 
     def clear(self):
-        self.role_list = ['pool']
+        self.role_list = ["pool"]
 
 
 class NodeVolume(object):
-    FREE = 'free'
-    ALLOCATED = 'allocated'
+    FREE = "free"
+    ALLOCATED = "allocated"
 
     def __init__(self, status):
         self.status = status
 
 
 class SSHConnectionManager(object):
-    def __init__(self, ip_address, username, password, look_for_keys=False, outage_timeout=300):
+    def __init__(
+        self, ip_address, username, password, look_for_keys=False, outage_timeout=300
+    ):
         self.ip_address = ip_address
         self.username = username
         self.password = password
@@ -426,14 +436,17 @@ class SSHConnectionManager(object):
                     self.ip_address,
                     username=self.username,
                     password=self.password,
-                    look_for_keys=self.look_for_keys
+                    look_for_keys=self.look_for_keys,
                 )
                 break
             except Exception as e:
-                logger.warning('Connection outage: \n{error}'.format(error=e))
+                logger.warning("Connection outage: \n{error}".format(error=e))
                 if not self._outage_start_time:
                     self._outage_start_time = datetime.datetime.now()
-                if datetime.datetime.now() - self._outage_start_time > self.outage_timeout:
+                if (
+                    datetime.datetime.now() - self._outage_start_time
+                    > self.outage_timeout
+                ):
                     raise e
                 sleep(10)
         self._outage_start_time = None
@@ -448,13 +461,12 @@ class SSHConnectionManager(object):
 
     def __getstate__(self):
         pickle_dict = self.__dict__.copy()
-        del pickle_dict['_SSHConnectionManager__transport']
-        del pickle_dict['_SSHConnectionManager__client']
+        del pickle_dict["_SSHConnectionManager__transport"]
+        del pickle_dict["_SSHConnectionManager__client"]
         return pickle_dict
 
 
 class CephNode(object):
-
     def __init__(self, **kw):
         """
         Initialize a CephNode in a libcloud environment
@@ -464,27 +476,40 @@ class CephNode(object):
                     no_of_volumes=3, ceph_vmnode='ref_to_libcloudvm')
 
         """
-        self.username = kw['username']
-        self.password = kw['password']
+        self.username = kw["username"]
+        self.password = kw["password"]
         self.root_passwd = self.password
         self.root_login = self.username
-        self.ip_address = kw['ip_address']
-        self.vmname = kw['hostname']
-        vmshortname = self.vmname.split('.')
+        self.ip_address = kw["ip_address"]
+        self.vmname = kw["hostname"]
+        vmshortname = self.vmname.split(".")
         self.vmshortname = vmshortname[0]
         self.volume_list = []
-        if kw.get('no_of_volumes', 3):
-            self.volume_list = [NodeVolume(NodeVolume.FREE) for vol_id in range(kw['no_of_volumes'])]
+        if kw.get("no_of_volumes", 3):
+            self.volume_list = [
+                NodeVolume(NodeVolume.FREE) for vol_id in range(kw["no_of_volumes"])
+            ]
 
-        self.ceph_object_list = [CephObjectFactory(self).create_ceph_object(role) for role in kw['role'] if
-                                 role != 'pool']
-        while len(self.get_ceph_objects('osd')) > 0 and len(self.get_free_volumes()) > 0:
-            self.ceph_object_list.append(CephObjectFactory(self).create_ceph_object('osd'))
+        self.ceph_object_list = [
+            CephObjectFactory(self).create_ceph_object(role)
+            for role in kw["role"]
+            if role != "pool"
+        ]
+        while (
+            len(self.get_ceph_objects("osd")) > 0 and len(self.get_free_volumes()) > 0
+        ):
+            self.ceph_object_list.append(
+                CephObjectFactory(self).create_ceph_object("osd")
+            )
 
-        if kw.get('ceph_vmnode'):
-            self.vm_node = kw['ceph_vmnode']
-        self.root_connection = SSHConnectionManager(self.ip_address, 'root', self.root_passwd)
-        self.connection = SSHConnectionManager(self.ip_address, self.username, self.password)
+        if kw.get("ceph_vmnode"):
+            self.vm_node = kw["ceph_vmnode"]
+        self.root_connection = SSHConnectionManager(
+            self.ip_address, "root", self.root_passwd
+        )
+        self.connection = SSHConnectionManager(
+            self.ip_address, self.username, self.password
+        )
         self.rssh = self.root_connection.get_client
         self.rssh_transport = self.root_connection.get_transport
         self.ssh = self.connection.get_client
@@ -493,24 +518,35 @@ class CephNode(object):
 
     @property
     def role(self):
-        return RolesContainer([ceph_demon.role for ceph_demon in self.ceph_object_list if ceph_demon])
+        return RolesContainer(
+            [ceph_demon.role for ceph_demon in self.ceph_object_list if ceph_demon]
+        )
 
     def get_free_volumes(self):
-        return [volume for volume in self.volume_list if volume.status == NodeVolume.FREE]
+        return [
+            volume for volume in self.volume_list if volume.status == NodeVolume.FREE
+        ]
 
     def get_allocated_volumes(self):
-        return [volume for volume in self.volume_list if volume.status == NodeVolume.ALLOCATED]
+        return [
+            volume
+            for volume in self.volume_list
+            if volume.status == NodeVolume.ALLOCATED
+        ]
 
     def get_ceph_demons(self, role=None):
         """
-         Get Ceph demons list. Only active (those which will be part of the cluster) demons are shown.
+        Get Ceph demons list. Only active (those which will be part of the cluster) demons are shown.
 
-         Returns:
-             list: list of CephDemon
+        Returns:
+            list: list of CephDemon
 
-         """
-        return [ceph_demon for ceph_demon in self.get_ceph_objects(role) if
-                isinstance(ceph_demon, CephDemon) and ceph_demon.is_active]
+        """
+        return [
+            ceph_demon
+            for ceph_demon in self.get_ceph_objects(role)
+            if isinstance(ceph_demon, CephDemon) and ceph_demon.is_active
+        ]
 
     def connect(self, timeout=300):
         """
@@ -520,31 +556,33 @@ class CephNode(object):
         - set up hostname and shortname as attributes for tests to query
 
         """
-        logger.info('Connecting {host_name} / {ip_address}'.format(host_name=self.vmname, ip_address=self.ip_address))
+        logger.info(
+            "Connecting {host_name} / {ip_address}".format(
+                host_name=self.vmname, ip_address=self.ip_address
+            )
+        )
 
         stdin, stdout, stderr = self.rssh().exec_command("dmesg")
         self.rssh_transport().set_keepalive(timeout)
-        self.rssh().exec_command(
-            "echo 120 > /proc/sys/net/ipv4/tcp_keepalive_time")
-        self.rssh().exec_command(
-            "echo 60 > /proc/sys/net/ipv4/tcp_keepalive_intvl")
-        self.rssh().exec_command(
-            "echo 20 > /proc/sys/net/ipv4/tcp_keepalive_probes")
+        self.rssh().exec_command("echo 120 > /proc/sys/net/ipv4/tcp_keepalive_time")
+        self.rssh().exec_command("echo 60 > /proc/sys/net/ipv4/tcp_keepalive_intvl")
+        self.rssh().exec_command("echo 20 > /proc/sys/net/ipv4/tcp_keepalive_probes")
         self.exec_command(cmd="ls / ; uptime ; date")
         self.ssh_transport().set_keepalive(timeout)
         out, err = self.exec_command(cmd="hostname")
         self.hostname = out.read().strip().decode()
-        shortname = self.hostname.split('.')
+        shortname = self.hostname.split(".")
         self.shortname = shortname[0]
-        logger.info("hostname and shortname set to %s and %s", self.hostname,
-                    self.shortname)
+        logger.info(
+            "hostname and shortname set to %s and %s", self.hostname, self.shortname
+        )
         self.set_internal_ip()
         self.exec_command(cmd="echo 'TMOUT=600' >> ~/.bashrc")
-        self.exec_command(cmd='[ -f /etc/redhat-release ]', check_ec=False)
+        self.exec_command(cmd="[ -f /etc/redhat-release ]", check_ec=False)
         if self.exit_status == 0:
-            self.pkg_type = 'rpm'
+            self.pkg_type = "rpm"
         else:
-            self.pkg_type = 'deb'
+            self.pkg_type = "deb"
         logger.info("finished connect")
         self.run_once = True
 
@@ -554,7 +592,8 @@ class CephNode(object):
 
         """
         out, _ = self.exec_command(
-            cmd="/sbin/ifconfig eth0 | grep 'inet ' | awk '{ print $2}'")
+            cmd="/sbin/ifconfig eth0 | grep 'inet ' | awk '{ print $2}'"
+        )
         self.internal_ip = out.read().strip().decode()
 
     def set_eth_interface(self, eth_interface):
@@ -577,27 +616,27 @@ class CephNode(object):
 
         """
 
-        if kw.get('sudo'):
+        if kw.get("sudo"):
             ssh = self.rssh
         else:
             ssh = self.ssh
 
-        if kw.get('timeout'):
-            timeout = kw['timeout']
+        if kw.get("timeout"):
+            timeout = kw["timeout"]
         else:
             timeout = 120
-        logger.info("Running command %s on %s", kw['cmd'], self.ip_address)
+        logger.info("Running command %s on %s", kw["cmd"], self.ip_address)
         stdin = None
         stdout = None
         stderr = None
         if self.run_once:
             self.ssh_transport().set_keepalive(15)
             self.rssh_transport().set_keepalive(15)
-        if kw.get('long_running'):
+        if kw.get("long_running"):
             logger.info("long running command --")
             channel = ssh().get_transport().open_session()
-            channel.exec_command(kw['cmd'])
-            read = ''
+            channel.exec_command(kw["cmd"])
+            read = ""
             while True:
                 if channel.exit_status_ready():
                     ec = channel.recv_exit_status()
@@ -613,38 +652,43 @@ class CephNode(object):
                     logger.info(data.decode())
             return read, ec
         try:
-            stdin, stdout, stderr = ssh().exec_command(
-                kw['cmd'], timeout=timeout)
+            stdin, stdout, stderr = ssh().exec_command(kw["cmd"], timeout=timeout)
         except SSHException as e:
             logger.error("Exception during cmd %s", str(e))
-            if 'Timeout openning channel' in str(e):
+            if "Timeout openning channel" in str(e):
                 logger.error("channel reset error")
         exit_status = stdout.channel.recv_exit_status()
         self.exit_status = exit_status
-        if kw.get('check_ec', True):
+        if kw.get("check_ec", True):
             if exit_status == 0:
                 logger.info("Command completed successfully")
             else:
                 logger.error("Error during cmd %s, timeout %d", exit_status, timeout)
-                raise CommandFailed(kw['cmd'] + " Error:  " + str(stderr.read().decode()) + ' ' + str(self.ip_address))
+                raise CommandFailed(
+                    kw["cmd"]
+                    + " Error:  "
+                    + str(stderr.read().decode())
+                    + " "
+                    + str(self.ip_address)
+                )
             return stdout, stderr
         else:
             return stdout, stderr
 
     def write_file(self, **kw):
-        if kw.get('sudo'):
+        if kw.get("sudo"):
             client = self.rssh
         else:
             client = self.ssh
-        file_name = kw['file_name']
-        file_mode = kw['file_mode']
+        file_name = kw["file_name"]
+        file_mode = kw["file_mode"]
         ftp = client().open_sftp()
         remote_file = ftp.file(file_name, file_mode, -1)
         return remote_file
 
     def _keep_alive(self):
         while True:
-            self.exec_command(cmd='uptime', check_ec=False)
+            self.exec_command(cmd="uptime", check_ec=False)
             sleep(60)
 
     def reconnect(self):
@@ -652,19 +696,23 @@ class CephNode(object):
 
     def __getstate__(self):
         node_info = dict(self.__dict__)
-        del node_info['vm_node']
-        del node_info['rssh']
-        del node_info['ssh']
-        del node_info['rssh_transport']
-        del node_info['ssh_transport']
-        del node_info['root_connection']
-        del node_info['connection']
+        del node_info["vm_node"]
+        del node_info["rssh"]
+        del node_info["ssh"]
+        del node_info["rssh_transport"]
+        del node_info["ssh_transport"]
+        del node_info["root_connection"]
+        del node_info["connection"]
         return node_info
 
     def __setstate__(self, pickle_dict):
         self.__dict__.update(pickle_dict)
-        self.root_connection = SSHConnectionManager(self.ip_address, 'root', self.root_passwd)
-        self.connection = SSHConnectionManager(self.ip_address, self.username, self.password)
+        self.root_connection = SSHConnectionManager(
+            self.ip_address, "root", self.root_passwd
+        )
+        self.connection = SSHConnectionManager(
+            self.ip_address, self.username, self.password
+        )
         self.rssh = self.root_connection.get_client
         self.ssh = self.connection.get_client
         self.rssh_transport = self.root_connection.get_transport
@@ -681,7 +729,11 @@ class CephNode(object):
             list: ceph objects
 
         """
-        return [ceph_demon for ceph_demon in self.ceph_object_list if ceph_demon.role == role or not role]
+        return [
+            ceph_demon
+            for ceph_demon in self.ceph_object_list
+            if ceph_demon.role == role or not role
+        ]
 
     def create_ceph_object(self, role):
         """
@@ -707,7 +759,7 @@ class CephNode(object):
 
         """
         self.ceph_object_list.remove(ceph_object)
-        if ceph_object.role == 'osd':
+        if ceph_object.role == "osd":
             self.get_allocated_volumes()[0].status = NodeVolume.FREE
 
     def search_ethernet_interface(self, ceph_node_list):
@@ -721,9 +773,13 @@ class CephNode(object):
             eth_interface (str): returns None if no suitable interface found
 
         """
-        logger.info('Searching suitable ethernet interface on {node}'.format(node=self.ip_address))
-        out, err = self.exec_command(cmd='sudo ls /sys/class/net | grep -v lo')
-        eth_interface_list = out.read().strip().decode().split('\n')
+        logger.info(
+            "Searching suitable ethernet interface on {node}".format(
+                node=self.ip_address
+            )
+        )
+        out, err = self.exec_command(cmd="sudo ls /sys/class/net | grep -v lo")
+        eth_interface_list = out.read().strip().decode().split("\n")
         for eth_interface in eth_interface_list:
             try:
                 for ceph_node in ceph_node_list:
@@ -731,24 +787,20 @@ class CephNode(object):
                         logger.info("Skipping ping check on localhost")
                         continue
                     self.exec_command(
-                        cmd='sudo ping -I {interface} -c 3 {ceph_node}'.format(
-                            interface=eth_interface,
-                            ceph_node=ceph_node.shortname
+                        cmd="sudo ping -I {interface} -c 3 {ceph_node}".format(
+                            interface=eth_interface, ceph_node=ceph_node.shortname
                         )
                     )
                 logger.info(
-                    'Suitable ethernet interface {eth_interface} found on {node}'.format(
-                        eth_interface=eth_interface,
-                        node=ceph_node.ip_address
+                    "Suitable ethernet interface {eth_interface} found on {node}".format(
+                        eth_interface=eth_interface, node=ceph_node.ip_address
                     )
                 )
                 return eth_interface
             except Exception as e:
                 logger.warning(e)
                 continue
-        logger.info(
-            f'No suitable ethernet interface found on {ceph_node.ip_address}'
-        )
+        logger.info(f"No suitable ethernet interface found on {ceph_node.ip_address}")
         return None
 
     def obtain_root_permissions(self, path):
@@ -759,7 +811,7 @@ class CephNode(object):
             path(str): file path
 
         """
-        self.exec_command(cmd='sudo chown -R $USER:$USER {path}'.format(path=path))
+        self.exec_command(cmd="sudo chown -R $USER:$USER {path}".format(path=path))
 
 
 class CephObject(object):
@@ -824,8 +876,15 @@ class CephDemon(CephObject):
 
     @property
     def container_name(self):
-        return ('ceph-{role}-{host}'.format(role=self.role, host=self.node.hostname)
-                if not self._custom_container_name else self._custom_container_name) if self.containerized else ''
+        return (
+            (
+                "ceph-{role}-{host}".format(role=self.role, host=self.node.hostname)
+                if not self._custom_container_name
+                else self._custom_container_name
+            )
+            if self.containerized
+            else ""
+        )
 
     @container_name.setter
     def container_name(self, name):
@@ -833,8 +892,13 @@ class CephDemon(CephObject):
 
     @property
     def container_prefix(self):
-        return 'sudo docker exec {container_name}'.format(
-            container_name=self.container_name) if self.containerized else ''
+        return (
+            "sudo docker exec {container_name}".format(
+                container_name=self.container_name
+            )
+            if self.containerized
+            else ""
+        )
 
     def exec_command(self, cmd, **kw):
         """
@@ -851,7 +915,7 @@ class CephDemon(CephObject):
         return self.node.exec_command(cmd=cmd, **kw)
 
     def ceph_demon_by_container_name(self, container_name):
-        self.exec_command(cmd='sudo docker info')
+        self.exec_command(cmd="sudo docker info")
 
 
 class CephOsd(CephDemon):
@@ -864,12 +928,16 @@ class CephOsd(CephDemon):
             device (str): device, can be left unset but must be set during inventory file configuration
 
         """
-        super(CephOsd, self).__init__('osd', node)
+        super(CephOsd, self).__init__("osd", node)
         self.device = device
 
     @property
     def container_name(self):
-        return 'ceph-{role}-{device}'.format(role=self.role, device=self.device) if self.containerized else ''
+        return (
+            "ceph-{role}-{device}".format(role=self.role, device=self.device)
+            if self.containerized
+            else ""
+        )
 
     @property
     def is_active(self):
@@ -894,8 +962,8 @@ class CephClient(CephObject):
 
 
 class CephObjectFactory(object):
-    DEMON_ROLES = ['mon', 'osd', 'mgr', 'rgw', 'mds', 'nfs']
-    CLIENT_ROLES = ['client']
+    DEMON_ROLES = ["mon", "osd", "mgr", "rgw", "mds", "nfs"]
+    CLIENT_ROLES = ["client"]
 
     def __init__(self, node):
         """
@@ -920,14 +988,14 @@ class CephObjectFactory(object):
         """
         if role == self.CLIENT_ROLES:
             return CephClient(role, self.node)
-        if role == 'osd':
+        if role == "osd":
             free_volume_list = self.node.get_free_volumes()
             if len(free_volume_list) > 0:
                 free_volume_list[0].status = NodeVolume.ALLOCATED
             else:
-                raise RuntimeError('Insufficient of free volumes')
+                raise RuntimeError("Insufficient of free volumes")
             return CephOsd(self.node)
         if role in self.DEMON_ROLES:
             return CephDemon(role, self.node)
-        if role != 'pool':
+        if role != "pool":
             return CephObject(role, self.node)

@@ -13,8 +13,8 @@ from ocs_ci.framework.testlib import ManageTest, tier2
         ),
         pytest.param(
             constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-1285")
-        )
-    ]
+        ),
+    ],
 )
 class TestRunIOMultipleDcPods(ManageTest):
     """
@@ -39,6 +39,7 @@ class TestRunIOMultipleDcPods(ManageTest):
 
         Note:- Step 1,2,3,7 are not required if we deploy dc in openshift-storage namespace
     """
+
     num_of_pvcs = 10
     pvc_size = 5
 
@@ -64,7 +65,7 @@ class TestRunIOMultipleDcPods(ManageTest):
         Run IO on multiple dc pods in parallel
         """
         for dc_pod in dc_pods:
-            dc_pod.run_io('fs', f'{self.pvc_size - 1}G')
+            dc_pod.run_io("fs", f"{self.pvc_size - 1}G")
 
         for dc_pod in dc_pods:
             get_fio_rw_iops(dc_pod)

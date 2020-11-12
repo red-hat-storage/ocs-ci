@@ -33,7 +33,7 @@ def test_start_fio_job(
     it running even after the test finishes.
     """
     # creating project directly to set it's name and prevent it's deletion
-    project = ocp.OCP(kind='Project', namespace=TEST_NS)
+    project = ocp.OCP(kind="Project", namespace=TEST_NS)
     project.new_project(TEST_NS)
 
     # size of the volume for fio
@@ -47,7 +47,8 @@ def test_start_fio_job(
     # day (we expect that the other test will stop it), only 1/2 of the volume
     # is used, we don't need to utilize the PV 100%
     fio_size = int(pvc_size / 2)  # GiB
-    fio_conf = textwrap.dedent(f"""
+    fio_conf = textwrap.dedent(
+        f"""
         [readwrite]
         readwrite=randrw
         buffered=1
@@ -57,7 +58,8 @@ def test_start_fio_job(
         size={fio_size}G
         time_based
         runtime=24h
-        """)
+        """
+    )
 
     # put the dicts together into yaml file of the Job
     fio_configmap_dict["data"]["workload.fio"] = fio_conf
@@ -73,10 +75,8 @@ def test_start_fio_job(
     ocp_pod = ocp.OCP(kind="Pod", namespace=project.namespace)
     try:
         ocp_pod.wait_for_resource(
-            resource_count=1,
-            condition=constants.STATUS_RUNNING,
-            timeout=300,
-            sleep=30)
+            resource_count=1, condition=constants.STATUS_RUNNING, timeout=300, sleep=30
+        )
     except TimeoutExpiredError:
         logger.error("pod for fio job wasn't deployed properly")
         raise
@@ -91,10 +91,8 @@ def test_stop_fio_job():
     ocp_pod = ocp.OCP(kind="Pod", namespace=TEST_NS)
     try:
         ocp_pod.wait_for_resource(
-            resource_count=1,
-            condition=constants.STATUS_RUNNING,
-            timeout=300,
-            sleep=30)
+            resource_count=1, condition=constants.STATUS_RUNNING, timeout=300, sleep=30
+        )
     except TimeoutExpiredError:
         logger.error("pod for fio job wasn't deployed properly")
         raise
@@ -103,4 +101,4 @@ def test_stop_fio_job():
     # prometheus query (make sure it was really running)
 
     # TODO: delete the project properly
-    run_cmd(cmd=f'oc delete project/{TEST_NS}', timeout=600)
+    run_cmd(cmd=f"oc delete project/{TEST_NS}", timeout=600)

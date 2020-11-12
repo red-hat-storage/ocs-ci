@@ -10,7 +10,7 @@ from ocs_ci.helpers.helpers import default_storage_class
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def test_fixture_amq(request):
 
     amq = AMQ()
@@ -30,7 +30,7 @@ class TestAMQBasics(E2ETest):
             pytest.param(
                 constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-1279")
             )
-        ]
+        ],
     )
     def test_install_amq_backed_by_ocs(self, interface, test_fixture_amq):
         """

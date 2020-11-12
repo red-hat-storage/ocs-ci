@@ -46,7 +46,7 @@ def to_nice_yaml(a, indent=2, *args, **kw):
         indent=indent,
         allow_unicode=True,
         default_flow_style=False,
-        **kw
+        **kw,
     )
     return transformed
 
@@ -78,11 +78,8 @@ class Templating:
         Returns: rendered template
 
         """
-        j2_env = Environment(
-            loader=FileSystemLoader(self._base_path),
-            trim_blocks=True
-        )
-        j2_env.filters['to_nice_yaml'] = to_nice_yaml
+        j2_env = Environment(loader=FileSystemLoader(self._base_path), trim_blocks=True)
+        j2_env.filters["to_nice_yaml"] = to_nice_yaml
         j2_template = j2_env.get_template(template_path)
         return j2_template.render(**data)
 
@@ -120,7 +117,7 @@ def generate_yaml_from_jinja2_template_with_data(file_, **kwargs):
     Examples:
         generate_yaml_from_template(file_='path/to/file/name', pv_data_dict')
     """
-    with open(file_, 'r') as stream:
+    with open(file_, "r") as stream:
         data = stream.read()
     template = Template(data)
     out = template.render(**kwargs)
@@ -133,9 +130,9 @@ def dump_to_temp_yaml(src_file, dst_file, **kwargs):
      Args:
         src_file (str): Template Yaml file path
         dst_file: the path to the destination Yaml file
-     """
+    """
     data = generate_yaml_from_jinja2_template_with_data(src_file, **kwargs)
-    with open(dst_file, 'w') as yaml_file:
+    with open(dst_file, "w") as yaml_file:
         yaml.dump(data, yaml_file)
 
 
@@ -155,10 +152,10 @@ def load_yaml(file, multi_document=False):
 
     """
     loader = yaml.safe_load_all if multi_document else yaml.safe_load
-    if file.startswith('http'):
+    if file.startswith("http"):
         return loader(get_url_content(file))
     else:
-        with open(file, 'r') as fs:
+        with open(file, "r") as fs:
             return loader(fs.read())
 
 
@@ -199,14 +196,12 @@ def dump_data_to_temp_yaml(data, temp_yaml):
     """
     dumper = yaml.dump if isinstance(data, dict) else yaml.dump_all
     yaml_data = dumper(data)
-    with open(temp_yaml, 'w') as yaml_file:
+    with open(temp_yaml, "w") as yaml_file:
         yaml_file.write(yaml_data)
     if isinstance(data, dict):
         yaml_data_censored = dumper(censor_values(deepcopy(data)))
     else:
-        yaml_data_censored = [
-            dumper(censor_values(deepcopy(doc))) for doc in data
-        ]
+        yaml_data_censored = [dumper(censor_values(deepcopy(doc))) for doc in data]
     logger.info(yaml_data_censored)
     return yaml_data
 
@@ -220,7 +215,7 @@ def dump_data_to_json(data, json_file):
         json_file (str): file path to json file
 
     """
-    with open(json_file, 'w') as fd:
+    with open(json_file, "w") as fd:
         json.dump(data, fd)
 
 
@@ -235,5 +230,5 @@ def json_to_dict(json_file):
          dict: JSON data in dictionary format
 
     """
-    with open(json_file, 'r') as fd:
+    with open(json_file, "r") as fd:
         return json.loads(fd.read())

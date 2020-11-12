@@ -14,6 +14,7 @@ class Connection(object):
     """
     A class that connects to remote server
     """
+
     def __init__(self, host, user=None, private_key=None):
         """
         Initialize all required variables
@@ -44,11 +45,7 @@ class Connection(object):
         try:
             client = SSHClient()
             client.set_missing_host_key_policy(AutoAddPolicy())
-            client.connect(
-                self.host,
-                username=self.user,
-                key_filename=self.private_key
-            )
+            client.connect(self.host, username=self.user, key_filename=self.private_key)
         except AuthenticationException as authException:
             logger.error(f"Authentication failed: {authException}")
             raise authException
@@ -72,8 +69,8 @@ class Connection(object):
         logger.info(f"Executing cmd: {cmd} on {self.host}")
         _, out, err = self.client.exec_command(cmd)
         retcode = out.channel.recv_exit_status()
-        stdout = out.read().decode('ascii').strip("\n")
-        stderr = err.read().decode('ascii').strip("\n")
+        stdout = out.read().decode("ascii").strip("\n")
+        stderr = err.read().decode("ascii").strip("\n")
         logger.debug(f"retcode: {retcode}")
         logger.debug(f"stdout: {stdout}")
         logger.debug(f"stderr: {stderr}")

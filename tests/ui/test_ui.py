@@ -26,6 +26,7 @@ class TestUI(ManageTest):
         )
         ocp_console = OpenshiftConsole(constants.CHROME_BROWSER)
         ocp_console.run_openshift_console(
-            suite="ceph-storage-tests", log_suffix="ui-tests-chrome",
+            suite="ceph-storage-tests",
+            log_suffix="ui-tests-chrome",
             timeout=3600,
         )

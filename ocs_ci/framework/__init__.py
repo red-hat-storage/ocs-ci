@@ -59,7 +59,8 @@ class Config:
             if k not in field_names:
                 raise ValueError(
                     f"{k} is not a valid config section. "
-                    f"Valid sections: {field_names}")
+                    f"Valid sections: {field_names}"
+                )
             if v is None:
                 continue
             section = getattr(self, k)
@@ -70,9 +71,7 @@ class Config:
         # to create copies of fields - meaning changes to the return value of
         # this method will not be reflected in the field themselves.
         field_names = [f.name for f in fields(self)]
-        return {
-            name: getattr(self, name) for name in field_names
-        }
+        return {name: getattr(self, name) for name in field_names}
 
 
 def merge_dict(orig: dict, new: dict) -> dict:

@@ -19,24 +19,19 @@ def cloud_uls_factory(request, cld_mgr):
             an Underlying Storage factory
 
     """
-    all_created_uls = {
-        'aws': set(),
-        'gcp': set(),
-        'azure': set(),
-        'ibmcos': set()
-    }
+    all_created_uls = {"aws": set(), "gcp": set(), "azure": set(), "ibmcos": set()}
     try:
         ulsMap = {
-            'aws': cld_mgr.aws_client,
-            'gcp': cld_mgr.gcp_client,
-            'azure': cld_mgr.azure_client,
-            'ibmcos': cld_mgr.ibmcos_client
+            "aws": cld_mgr.aws_client,
+            "gcp": cld_mgr.gcp_client,
+            "azure": cld_mgr.azure_client,
+            "ibmcos": cld_mgr.ibmcos_client,
         }
     except AttributeError as e:
         raise Exception(
-            '{} was not initialized, '
-            'please verify the needed credentials '
-            'were set in auth.yaml'.format(str(e).split("'")[3])
+            "{} was not initialized, "
+            "please verify the needed credentials "
+            "were set in auth.yaml".format(str(e).split("'")[3])
         )
 
     def _create_uls(uls_dict):
@@ -56,30 +51,30 @@ def cloud_uls_factory(request, cld_mgr):
 
         """
         current_call_created_uls = {
-            'aws': set(),
-            'gcp': set(),
-            'azure': set(),
-            'ibmcos': set()
+            "aws": set(),
+            "gcp": set(),
+            "azure": set(),
+            "ibmcos": set(),
         }
 
         for cloud, params in uls_dict.items():
             if cloud.lower() not in ulsMap:
                 raise RuntimeError(
-                    f'Invalid interface type received: {cloud}. '
+                    f"Invalid interface type received: {cloud}. "
                     f'available types: {", ".join(ulsMap.keys())}'
                 )
-            log.info(f'Creating uls for cloud {cloud.lower()}')
+            log.info(f"Creating uls for cloud {cloud.lower()}")
             for amount, region in params:
                 for _ in range(amount):
                     uls_name = create_unique_resource_name(
-                        resource_description='uls', resource_type=cloud.lower()
+                        resource_description="uls", resource_type=cloud.lower()
                     )
                     try:
                         ulsMap[cloud.lower()].create_uls(uls_name, region)
                     except AttributeError as e:
                         raise Exception(
-                            f'{cloud} was initialized as None, '
-                            'please verify the needed credentials were set in auth.yaml'
+                            f"{cloud} was initialized as None, "
+                            "please verify the needed credentials were set in auth.yaml"
                         ).with_traceback(e.__traceback__)
                     all_created_uls[cloud].add(uls_name)
                     current_call_created_uls[cloud.lower()].add(uls_name)
@@ -93,10 +88,10 @@ def cloud_uls_factory(request, cld_mgr):
                 all_existing_uls = client.get_all_uls_names()
                 for uls in uls_set:
                     if uls in all_existing_uls:
-                        log.info(f'Cleaning up uls {uls}')
+                        log.info(f"Cleaning up uls {uls}")
                         client.delete_uls(uls)
                     else:
-                        log.warning(f'Underlying Storage {uls} not found.')
+                        log.warning(f"Underlying Storage {uls} not found.")
 
     request.addfinalizer(uls_cleanup)
 

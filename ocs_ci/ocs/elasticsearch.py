@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 
 class ElasticSearch(object):
     """
-      ElasticSearch Environment
+    ElasticSearch Environment
     """
 
     def __init__(self):
@@ -32,7 +32,7 @@ class ElasticSearch(object):
         Initializer function
 
         """
-        log.info('Initializing the Elastic-Search environment object')
+        log.info("Initializing the Elastic-Search environment object")
         self.namespace = "elastic-system"
         self.eck_path = "https://download.elastic.co/downloads/eck/1.1.2"
         self.eck_file = "all-in-one.yaml"
@@ -42,19 +42,15 @@ class ElasticSearch(object):
 
         # Creating some different types of OCP objects
         self.ocp = OCP(
-            kind="pod",
-            resource_name="elastic-operator-0",
-            namespace=self.namespace
+            kind="pod", resource_name="elastic-operator-0", namespace=self.namespace
         )
-        self.ns_obj = OCP(kind='namespace', namespace=self.namespace)
-        self.es = OCP(
-            resource_name="quickstart-es-http", namespace=self.namespace
-        )
-        self.elasticsearch = OCP(namespace=self.namespace, kind='elasticsearch')
+        self.ns_obj = OCP(kind="namespace", namespace=self.namespace)
+        self.es = OCP(resource_name="quickstart-es-http", namespace=self.namespace)
+        self.elasticsearch = OCP(namespace=self.namespace, kind="elasticsearch")
         self.password = OCP(
-            kind='secret',
-            resource_name='quickstart-es-elastic-user',
-            namespace=self.namespace
+            kind="secret",
+            resource_name="quickstart-es-elastic-user",
+            namespace=self.namespace,
         )
 
         # Fetch the all-in-one.yaml from the official repository
@@ -68,11 +64,11 @@ class ElasticSearch(object):
         timeout = 600
         while timeout > 0:
             if self.get_health():
-                log.info('The ElasticSearch server is ready !')
+                log.info("The ElasticSearch server is ready !")
                 break
             else:
-                log.warning('The ElasticSearch server is not ready yet')
-                log.info('going to sleep for 30 sec. before next check')
+                log.warning("The ElasticSearch server is not ready yet")
+                log.info("going to sleep for 30 sec. before next check")
                 time.sleep(30)
                 timeout -= 30
 
@@ -93,14 +89,14 @@ class ElasticSearch(object):
 
         """
 
-        self.dir = tempfile.mkdtemp(prefix='elastic-system_')
-        src_file = f'{self.eck_path}/{self.eck_file}'
-        trg_file = f'{self.dir}/{self.eck_file}'
-        log.info(f'Retrieving the ECK CR file from {src_file} into {trg_file}')
+        self.dir = tempfile.mkdtemp(prefix="elastic-system_")
+        src_file = f"{self.eck_path}/{self.eck_file}"
+        trg_file = f"{self.dir}/{self.eck_file}"
+        log.info(f"Retrieving the ECK CR file from {src_file} into {trg_file}")
         try:
             urllib.request.urlretrieve(src_file, trg_file)
         except urllib.error.HTTPError as e:
-            log.error(f'Can not connect to {src_file} : {e}')
+            log.error(f"Can not connect to {src_file} : {e}")
             raise e
 
     def _deploy_eck(self):
@@ -110,19 +106,19 @@ class ElasticSearch(object):
 
         """
 
-        log.info('Deploying the ECK environment for the ES cluster')
-        self.ocp.apply(f'{self.dir}/{self.eck_file}')
+        log.info("Deploying the ECK environment for the ES cluster")
+        self.ocp.apply(f"{self.dir}/{self.eck_file}")
 
         for es_pod in TimeoutSampler(
-            300, 10, get_pod_name_by_pattern, 'elastic-operator', self.namespace
+            300, 10, get_pod_name_by_pattern, "elastic-operator", self.namespace
         ):
             try:
                 if es_pod[0] is not None:
                     self.eckpod = es_pod[0]
-                    log.info(f'The ECK pod {self.eckpod} is ready !')
+                    log.info(f"The ECK pod {self.eckpod} is ready !")
                     break
             except IndexError:
-                log.info('ECK operator pod not ready yet')
+                log.info("ECK operator pod not ready yet")
 
     def get_ip(self):
         """
@@ -146,32 +142,32 @@ class ElasticSearch(object):
         return self.es.get()["spec"]["ports"][0]["port"]
 
     def _deploy_es(self):
-        log.info('Deploy the PVC for the ElasticSearch cluster')
+        log.info("Deploy the PVC for the ElasticSearch cluster")
         self.ocp.apply(self.pvc)
 
-        log.info('Deploy the ElasticSearch cluster')
+        log.info("Deploy the ElasticSearch cluster")
         self.ocp.apply(self.crd)
 
         for es_pod in TimeoutSampler(
-            300, 20, get_pod_name_by_pattern, 'quickstart-es-default', self.namespace
+            300, 20, get_pod_name_by_pattern, "quickstart-es-default", self.namespace
         ):
             try:
                 if es_pod[0] is not None:
                     self.espod = es_pod[0]
-                    log.info(f'The ElasticSearch pod {self.espod} Started')
+                    log.info(f"The ElasticSearch pod {self.espod} Started")
                     break
             except IndexError:
-                log.info('elasticsearch pod not ready yet')
+                log.info("elasticsearch pod not ready yet")
 
-        es_pod = OCP(kind='pod', namespace=self.namespace)
-        log.info('Waiting for ElasticSearch to Run')
+        es_pod = OCP(kind="pod", namespace=self.namespace)
+        log.info("Waiting for ElasticSearch to Run")
         assert es_pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             resource_name=self.espod,
             sleep=30,
-            timeout=600
+            timeout=600,
         )
-        log.info('Elastic Search is ready !!!')
+        log.info("Elastic Search is ready !!!")
 
     def get_health(self):
         """
@@ -181,7 +177,7 @@ class ElasticSearch(object):
             bool : True if the status is green (OK) otherwise - False
 
         """
-        return self.elasticsearch.get()['items'][0]['status']['health'] == 'green'
+        return self.elasticsearch.get()["items"][0]["status"]["health"] == "green"
 
     def get_password(self):
         """
@@ -191,7 +187,7 @@ class ElasticSearch(object):
             str : The password as text
 
         """
-        return base64.b64decode(self.password.get()['data']['elastic']).decode('utf-8')
+        return base64.b64decode(self.password.get()["data"]["elastic"]).decode("utf-8")
 
     def cleanup(self):
         """
@@ -199,12 +195,12 @@ class ElasticSearch(object):
         port forwarding process.
 
         """
-        log.info('Teardown the Elasticsearch environment')
-        log.info(f'Killing the local server process ({self.lspid})')
+        log.info("Teardown the Elasticsearch environment")
+        log.info(f"Killing the local server process ({self.lspid})")
         os.kill(self.lspid, signal.SIGKILL)
-        log.info('Deleting all resources')
-        subprocess.run(f'oc delete -f {self.crd}', shell=True)
-        subprocess.run(f'oc delete -f {self.eck_file}', shell=True, cwd=self.dir)
+        log.info("Deleting all resources")
+        subprocess.run(f"oc delete -f {self.crd}", shell=True)
+        subprocess.run(f"oc delete -f {self.eck_file}", shell=True, cwd=self.dir)
         self.ns_obj.wait_for_delete(resource_name=self.namespace)
 
     def local_server(self):
@@ -213,11 +209,11 @@ class ElasticSearch(object):
         outside the open-shift cluster into the Elasticsearch server.
 
         """
-        cmd = f'oc -n {self.namespace } '
-        cmd += f'port-forward service/quickstart-es-http {self.get_port()}'
-        log.info(f'Going to run : {cmd}')
+        cmd = f"oc -n {self.namespace } "
+        cmd += f"port-forward service/quickstart-es-http {self.get_port()}"
+        log.info(f"Going to run : {cmd}")
         proc = subprocess.Popen(cmd, shell=True)
-        log.info(f'Starting LocalServer with PID of {proc.pid}')
+        log.info(f"Starting LocalServer with PID of {proc.pid}")
         self.lspid = proc.pid
 
     def _es_connect(self):
@@ -232,9 +228,9 @@ class ElasticSearch(object):
 
         """
         try:
-            es = Elasticsearch([{'host': 'localhost', 'port': self.get_port()}])
+            es = Elasticsearch([{"host": "localhost", "port": self.get_port()}])
         except esexp.ConnectionError:
-            log.error('Can not connect to ES server in the LocalServer')
+            log.error("Can not connect to ES server in the LocalServer")
             raise
         return es
 
@@ -262,17 +258,17 @@ class ElasticSearch(object):
 
         """
 
-        query = {'size': 1000, 'query': {'match_all': {}}}
+        query = {"size": 1000, "query": {"match_all": {}}}
         for ind in self.get_indices():
-            log.info(f'Reading {ind} from internal ES server')
+            log.info(f"Reading {ind} from internal ES server")
             try:
                 result = self.con.search(index=ind, body=query)
             except esexp.NotFoundError:
-                log.warning(f'{ind} Not found in the Internal ES.')
+                log.warning(f"{ind} Not found in the Internal ES.")
                 continue
 
-            log.debug(f'The results from internal ES for {ind} are :{result}')
-            log.info(f'Writing {ind} into main ES server')
-            for doc in result['hits']['hits']:
-                log.debug(f'Going to write : {doc}')
-                es.index(index=ind, doc_type='_doc', body=doc['_source'])
+            log.debug(f"The results from internal ES for {ind} are :{result}")
+            log.info(f"Writing {ind} into main ES server")
+            for doc in result["hits"]["hits"]:
+                log.debug(f"Going to write : {doc}")
+                es.index(index=ind, doc_type="_doc", body=doc["_source"])

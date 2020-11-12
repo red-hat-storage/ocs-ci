@@ -29,9 +29,9 @@ class CloudDeploymentBase(Deployment):
         Any cloud platform deployment requires region and cluster name.
         """
         super(CloudDeploymentBase, self).__init__()
-        self.region = config.ENV_DATA['region']
-        if config.ENV_DATA.get('cluster_name'):
-            self.cluster_name = config.ENV_DATA['cluster_name']
+        self.region = config.ENV_DATA["region"]
+        if config.ENV_DATA.get("cluster_name"):
+            self.cluster_name = config.ENV_DATA["cluster_name"]
         else:
             self.cluster_name = get_cluster_name(self.cluster_path)
         # dict of cluster prefixes with special handling rules (for existence
@@ -49,7 +49,7 @@ class CloudDeploymentBase(Deployment):
         """
         raise NotImplementedError()
 
-    def deploy_ocp(self, log_cli_level='DEBUG'):
+    def deploy_ocp(self, log_cli_level="DEBUG"):
         """
         Deployment specific to OCP cluster on a cloud platform.
 
@@ -58,7 +58,7 @@ class CloudDeploymentBase(Deployment):
                 (default: "DEBUG")
 
         """
-        if not config.DEPLOYMENT.get('force_deploy_multiple_clusters'):
+        if not config.DEPLOYMENT.get("force_deploy_multiple_clusters"):
             cluster_name_parts = self.cluster_name.split("-")
             prefix = cluster_name_parts[0]
             if prefix.lower() in self.cluster_prefixes_special_rules:
@@ -88,12 +88,12 @@ class IPIOCPDeployment(BaseOCPDeployment):
         prerequisites for cloud IPI here.
         """
         super(IPIOCPDeployment, self).deploy_prereq()
-        if config.DEPLOYMENT['preserve_bootstrap_node']:
+        if config.DEPLOYMENT["preserve_bootstrap_node"]:
             logger.info("Setting ENV VAR to preserve bootstrap node")
-            os.environ['OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP'] = 'True'
-            assert os.getenv('OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP') == 'True'
+            os.environ["OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP"] = "True"
+            assert os.getenv("OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP") == "True"
 
-    def deploy(self, log_cli_level='DEBUG'):
+    def deploy(self, log_cli_level="DEBUG"):
         """
         Deployment specific to OCP cluster on a cloud platform.
 
@@ -102,7 +102,7 @@ class IPIOCPDeployment(BaseOCPDeployment):
                 (default: "DEBUG")
         """
         logger.info("Deploying OCP cluster")
-        install_timeout = config.DEPLOYMENT.get('openshift_install_timeout')
+        install_timeout = config.DEPLOYMENT.get("openshift_install_timeout")
         logger.info(
             f"running openshift-install with '{log_cli_level}' log level "
             f"and {install_timeout} second timeout"
@@ -112,7 +112,7 @@ class IPIOCPDeployment(BaseOCPDeployment):
                 f"{self.installer} create cluster "
                 f"--dir {self.cluster_path} "
                 f"--log-level {log_cli_level}",
-                timeout=install_timeout
+                timeout=install_timeout,
             )
         except (exceptions.CommandFailed, subprocess.TimeoutExpired) as e:
             if constants.GATHER_BOOTSTRAP_PATTERN in str(e):

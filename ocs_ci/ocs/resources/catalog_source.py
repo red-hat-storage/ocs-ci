@@ -18,9 +18,7 @@ class CatalogSource(OCP):
     methods we need to do with it.
     """
 
-    def __init__(
-        self, resource_name="", namespace=None, *args, **kwargs
-    ):
+    def __init__(self, resource_name="", namespace=None, *args, **kwargs):
         """
         Initializer function for CatalogSource class
 
@@ -30,8 +28,11 @@ class CatalogSource(OCP):
 
         """
         super(CatalogSource, self).__init__(
-            resource_name=resource_name, namespace=namespace,
-            kind='CatalogSource', *args, **kwargs,
+            resource_name=resource_name,
+            namespace=namespace,
+            kind="CatalogSource",
+            *args,
+            **kwargs,
         )
 
     def get_image_name(self):
@@ -47,11 +48,9 @@ class CatalogSource(OCP):
         try:
             data = self.get()
         except CommandFailed:
-            logger.warning(
-                f"Cannot find CatalogSource object {self.resource_name}"
-            )
+            logger.warning(f"Cannot find CatalogSource object {self.resource_name}")
             return None
-        return data['spec']['image'].split(":")[1]
+        return data["spec"]["image"].split(":")[1]
 
     def get_image_url(self):
         """
@@ -65,11 +64,9 @@ class CatalogSource(OCP):
         try:
             data = self.get()
         except CommandFailed:
-            logger.warning(
-                f"Cannot find CatalogSource object {self.resource_name}"
-            )
+            logger.warning(f"Cannot find CatalogSource object {self.resource_name}")
             return None
-        return data['spec']['image'].split(":")[0]
+        return data["spec"]["image"].split(":")[0]
 
     def check_state(self, state):
         """
@@ -87,17 +84,12 @@ class CatalogSource(OCP):
         try:
             data = self.get()
         except CommandFailed:
-            logger.info(
-                f"Cannot find CatalogSource object {self.resource_name}"
-            )
+            logger.info(f"Cannot find CatalogSource object {self.resource_name}")
             return False
         try:
-            current_state = data['status']['connectionState'][
-                'lastObservedState'
-            ]
+            current_state = data["status"]["connectionState"]["lastObservedState"]
             logger.info(
-                f"Catalog source {self.resource_name} is in state: "
-                f"{current_state}!"
+                f"Catalog source {self.resource_name} is in state: " f"{current_state}!"
             )
             return current_state == state
         except KeyError:
@@ -124,9 +116,7 @@ class CatalogSource(OCP):
 
         """
         self.check_name_is_specified()
-        sampler = TimeoutSampler(
-            timeout, sleep, self.check_state, state=state
-        )
+        sampler = TimeoutSampler(timeout, sleep, self.check_state, state=state)
         if not sampler.wait_for_func_status(True):
             raise ResourceInUnexpectedState(
                 f"Catalog source: {self.resource_name} is not in expected "

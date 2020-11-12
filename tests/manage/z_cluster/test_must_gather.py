@@ -1,6 +1,6 @@
 import os
 import logging
-import re   # This is part of workaround for BZ-1766646, to be removed when fixed
+import re  # This is part of workaround for BZ-1766646, to be removed when fixed
 
 import pytest
 
@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 @tier1
 @pytest.mark.polarion_id("OCS-1583")
 class TestMustGather(ManageTest):
-
     @pytest.fixture(autouse=True)
     def init_ocp(self):
         """
@@ -27,8 +26,8 @@ class TestMustGather(ManageTest):
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         def check_for_must_gather_project():
-            projects = ocp.OCP(kind='Namespace').get().get('items')
-            namespaces = [each.get('metadata').get('name') for each in projects]
+            projects = ocp.OCP(kind="Namespace").get().get("items")
+            namespaces = [each.get("metadata").get("name") for each in projects]
             logger.info(f"namespaces: {namespaces}")
             for project in namespaces:
                 logger.info(f"project: {project}")
@@ -38,9 +37,7 @@ class TestMustGather(ManageTest):
             return False
 
         def check_for_must_gather_pod():
-            must_gather_pods = pod.get_all_pods(
-                selector_label='app=must-gather'
-            )
+            must_gather_pods = pod.get_all_pods(selector_label="app=must-gather")
             if must_gather_pods:
                 logger.info(f"must_gather pods: {must_gather_pods}")
                 logger.info("pod still exist")
@@ -49,15 +46,17 @@ class TestMustGather(ManageTest):
                 return False
 
         def finalizer():
-            must_gather_pods = pod.get_all_pods(
-                selector_label='app=must-gather'
-            )
+            must_gather_pods = pod.get_all_pods(selector_label="app=must-gather")
             logger.info(f"must_gather_pods: {must_gather_pods} ")
             sample_pods = TimeoutSampler(
-                timeout=30, sleep=3, func=check_for_must_gather_pod,
+                timeout=30,
+                sleep=3,
+                func=check_for_must_gather_pod,
             )
             sample_namespace = TimeoutSampler(
-                timeout=30, sleep=3, func=check_for_must_gather_project,
+                timeout=30,
+                sleep=3,
+                func=check_for_must_gather_project,
             )
             if sample_pods.wait_for_func_status(result=True):
                 for must_gather_pod in must_gather_pods:
@@ -76,7 +75,7 @@ class TestMustGather(ManageTest):
 
         """
         # Fetch pod details
-        pods = pod.get_all_pods(namespace='openshift-storage')
+        pods = pod.get_all_pods(namespace="openshift-storage")
         pods = [each.name for each in pods]
 
         # Make logs root directory
@@ -90,12 +89,12 @@ class TestMustGather(ManageTest):
         logger.info("Collecting logs - Done!")
 
         # Compare running pods list to "/pods" subdirectories
-        must_gather_helper = re.compile(r'must-gather-.*.-helper')
+        must_gather_helper = re.compile(r"must-gather-.*.-helper")
         logger.info("Checking logs tree")
         logs = [
-            logs for logs in self.get_log_directories(directory) if not (
-                must_gather_helper.match(logs)
-            )
+            logs
+            for logs in self.get_log_directories(directory)
+            if not (must_gather_helper.match(logs))
         ]
         logger.info(f"Logs: {logs}")
         logger.info(f"pods list: {pods}")
@@ -106,27 +105,21 @@ class TestMustGather(ManageTest):
 
         # 2nd test: Verify logs file are not empty
         logs_dir_list = self.search_log_files(directory)
-        assert self.check_file_size(logs_dir_list), (
-            "One or more log file are empty"
-        )
+        assert self.check_file_size(logs_dir_list), "One or more log file are empty"
 
         # Find must_gather_commands directory for verification
         for dir_root, dirs, files in os.walk(directory + "_ocs_logs"):
-            if os.path.basename(dir_root) == 'must_gather_commands':
-                logger.info(
-                    f"Found must_gather_commands directory - {dir_root}"
-                )
-                assert 'json_output' in dirs, (
+            if os.path.basename(dir_root) == "must_gather_commands":
+                logger.info(f"Found must_gather_commands directory - {dir_root}")
+                assert "json_output" in dirs, (
                     "json_output directory is not present in "
                     "must_gather_commands directory."
                 )
-                assert files, (
-                    "No files present in must_gather_commands directory."
-                )
+                assert files, "No files present in must_gather_commands directory."
                 cmd_files_path = [
                     os.path.join(dir_root, file_name) for file_name in files
                 ]
-                json_output_dir = os.path.join(dir_root, 'json_output')
+                json_output_dir = os.path.join(dir_root, "json_output")
                 break
 
         # Verify that command output files are present as expected
@@ -135,9 +128,7 @@ class TestMustGather(ManageTest):
             f"Actual: {files}\nExpected: {constants.MUST_GATHER_COMMANDS}"
         )
         if sorted(constants.MUST_GATHER_COMMANDS_JSON) != sorted(files):
-            logger.warning(
-                "There are more actual must gather commands than expected"
-            )
+            logger.warning("There are more actual must gather commands than expected")
 
         # Verify that files for command output in json are present as expected
         commands_json = os.listdir(json_output_dir)
@@ -147,9 +138,7 @@ class TestMustGather(ManageTest):
             f"Expected: {constants.MUST_GATHER_COMMANDS_JSON}"
         )
         if sorted(constants.MUST_GATHER_COMMANDS_JSON) != sorted(commands_json):
-            logger.warning(
-                "There are more actual must gather commands than expected"
-            )
+            logger.warning("There are more actual must gather commands than expected")
 
         # Verify that command output files are not empty
         empty_files = []
@@ -178,8 +167,7 @@ class TestMustGather(ManageTest):
 
         try:
             os.path.exists(directory)
-            logger.info(f'Directory created successfully'
-                        f'in path {directory}')
+            logger.info(f"Directory created successfully" f"in path {directory}")
             return directory
         except FileNotFoundError:
             logger.error("Failed to create logs directory")
@@ -213,11 +201,11 @@ class TestMustGather(ManageTest):
 
         """
         for dir_name, subdir_list, files_list in os.walk(root_directory + "_ocs_logs"):
-            logger.debug(f'dir_name: {dir_name}')
+            logger.debug(f"dir_name: {dir_name}")
             if dir_name[-4:] == "pods":
                 return dir_name
 
-        logger.info("could not find \'pods\' directory")
+        logger.info("could not find 'pods' directory")
 
     def search_log_files(self, directory):
         """
@@ -251,9 +239,9 @@ class TestMustGather(ManageTest):
         """
         # Workaround for BZ-1766646 Beginning:
         known_missing_logs = [
-            re.compile(r'.*rook-ceph-osd-prepare-ocs-deviceset.*blkdevmapper'),
-            re.compile(r'.*rook-ceph-osd-\d-.*blkdevmapper'),
-            re.compile(r'.*rook-ceph-drain-canary-.*sleep')
+            re.compile(r".*rook-ceph-osd-prepare-ocs-deviceset.*blkdevmapper"),
+            re.compile(r".*rook-ceph-osd-\d-.*blkdevmapper"),
+            re.compile(r".*rook-ceph-drain-canary-.*sleep"),
         ]
         for log_dir in logs_dir_list:
             log_file = log_dir + "/current.log"

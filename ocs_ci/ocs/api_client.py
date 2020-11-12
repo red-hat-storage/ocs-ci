@@ -27,16 +27,13 @@ def get_api_client(client_name):
     Returns:
         api client object
     """
-    res = filter(
-        lambda x: x.__name__ == client_name,
-        APIClientBase.__subclasses__()
-    )
+    res = filter(lambda x: x.__name__ == client_name, APIClientBase.__subclasses__())
 
     try:
         cls = next(res)
         return cls()
     except StopIteration:
-        logger.error(f'Could not find api-client {client_name}')
+        logger.error(f"Could not find api-client {client_name}")
         raise
 
 
@@ -107,7 +104,7 @@ class APIClientBase(metaclass=ABCMeta):
 
         Returns:
            dict: Labels associated with pod
-            """
+        """
 
         raise NotImplementedError("get_labels method is not implemented")
 
@@ -156,7 +153,7 @@ class OCRESTClient(APIClientBase):
         resource = self.rest_client.pods
 
         try:
-            kwargs.update({'resource': resource})
+            kwargs.update({"resource": resource})
             pod_data = self.api_get(**kwargs)
         except exceptions.NotFoundError:
             logger.error("Failed to get pods: resource not found")
@@ -196,7 +193,7 @@ class OCRESTClient(APIClientBase):
             logger.error("Unexpected error")
             raise
 
-        data = pod_meta['metadata']['labels']
+        data = pod_meta["metadata"]["labels"]
         pod_labels = {k: v for k, v in data.items()}
         return pod_labels
 
@@ -208,11 +205,11 @@ class OCRESTClient(APIClientBase):
         Returns:
             ResourceInstance
         """
-        if 'body' not in kw:
+        if "body" not in kw:
             logger.error("create must have body ")
 
         resource = self.rest_client.services
-        kw.update({'resource': resource})
+        kw.update({"resource": resource})
         return self.api_create(**kw)
 
     def api_get(self, **kw):

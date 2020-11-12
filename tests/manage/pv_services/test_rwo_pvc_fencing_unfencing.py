@@ -6,10 +6,17 @@ from time import sleep
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    skipif_aws_i3, skipif_lso, skipif_bm
+    skipif_aws_i3,
+    skipif_lso,
+    skipif_bm,
 )
 from ocs_ci.framework.testlib import (
-    ignore_leftovers, ManageTest, tier4, tier4a, tier4b, tier4c
+    ignore_leftovers,
+    ManageTest,
+    tier4,
+    tier4a,
+    tier4b,
+    tier4c,
 )
 from ocs_ci.ocs import constants, machine, node, ocp
 from ocs_ci.ocs.cluster import CephCluster
@@ -28,6 +35,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
     """
     KNIP-677 OCS support for Automated fencing/unfencing RWO PV
     """
+
     pvc_size = 10  # size in Gi
 
     # Pods of each interface type to be run on nodes which are going to fail
@@ -39,8 +47,15 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
     @pytest.fixture()
     def setup(
-        self, request, scenario, num_of_nodes, num_of_fail_nodes,
-        disrupt_provisioner, project_factory, multi_pvc_factory, dc_pod_factory
+        self,
+        request,
+        scenario,
+        num_of_nodes,
+        num_of_fail_nodes,
+        disrupt_provisioner,
+        project_factory,
+        multi_pvc_factory,
+        dc_pod_factory,
     ):
         """
         Identify the nodes and start DeploymentConfig based app pods using
@@ -61,9 +76,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             tuple: containing the params used in test cases
 
         """
-        ocs_nodes, non_ocs_nodes = self.identify_and_add_nodes(
-            scenario, num_of_nodes
-        )
+        ocs_nodes, non_ocs_nodes = self.identify_and_add_nodes(scenario, num_of_nodes)
         test_nodes = ocs_nodes if (scenario == "colocated") else non_ocs_nodes
         logger.info(f"Using nodes {test_nodes} for running test")
 
@@ -81,30 +94,37 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         # Bug 1778273 - [RFE]: Configure 5 MONs for OCS cluster with 5 or more nodes
         # This wait is required for some of the previous OCS versions (< 4.5)
         current_mon_count = int(
-            ceph_cluster.CEPHCLUSTER.get_resource(resource_name='', column='MONCOUNT')
+            ceph_cluster.CEPHCLUSTER.get_resource(resource_name="", column="MONCOUNT")
         )
         assert ceph_cluster.POD.wait_for_resource(
-            condition=constants.STATUS_RUNNING, selector=constants.MON_APP_LABEL,
-            resource_count=current_mon_count, timeout=900
+            condition=constants.STATUS_RUNNING,
+            selector=constants.MON_APP_LABEL,
+            resource_count=current_mon_count,
+            timeout=900,
         )
         ceph_cluster.mons = []
         ceph_cluster.scan_cluster()
 
         # Select nodes for running app pods and inducing network failure later
         app_pod_nodes = self.select_nodes_for_app_pods(
-            scenario, ceph_cluster, ocs_nodes, non_ocs_nodes,
-            num_of_fail_nodes
+            scenario, ceph_cluster, ocs_nodes, non_ocs_nodes, num_of_fail_nodes
         )
 
         # Create multiple RBD and CephFS backed PVCs with RWO accessmode
         num_of_pvcs = self.num_of_app_pods_per_node * num_of_fail_nodes
         rbd_pvcs = multi_pvc_factory(
-            interface=constants.CEPHBLOCKPOOL, project=project, size=self.pvc_size,
-            access_modes=[constants.ACCESS_MODE_RWO], num_of_pvc=num_of_pvcs
+            interface=constants.CEPHBLOCKPOOL,
+            project=project,
+            size=self.pvc_size,
+            access_modes=[constants.ACCESS_MODE_RWO],
+            num_of_pvc=num_of_pvcs,
         )
         cephfs_pvcs = multi_pvc_factory(
-            interface=constants.CEPHFILESYSTEM, project=project, size=self.pvc_size,
-            access_modes=[constants.ACCESS_MODE_RWO], num_of_pvc=num_of_pvcs
+            interface=constants.CEPHFILESYSTEM,
+            project=project,
+            size=self.pvc_size,
+            access_modes=[constants.ACCESS_MODE_RWO],
+            num_of_pvc=num_of_pvcs,
         )
 
         # Create deploymentconfig based pods
@@ -113,29 +133,30 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         for node_name in app_pod_nodes:
             logger.info(f"Starting app pods on the node {node_name}")
             helpers.label_worker_node(
-                node_list=[node_name], label_key="nodetype",
-                label_value="app-pod"
+                node_list=[node_name], label_key="nodetype", label_value="app-pod"
             )
 
             for num in range(self.num_of_app_pods_per_node):
                 dc_pods.append(
                     dc_pod_factory(
-                        interface=constants.CEPHBLOCKPOOL, pvc=rbd_pvcs.pop(0),
-                        node_selector={'nodetype': 'app-pod'}
+                        interface=constants.CEPHBLOCKPOOL,
+                        pvc=rbd_pvcs.pop(0),
+                        node_selector={"nodetype": "app-pod"},
                     )
                 )
-                assert pod.verify_node_name(dc_pods[-1], node_name), (
-                    f"Pod {dc_pods[-1].name} is not running on labeled node {node_name}"
-                )
+                assert pod.verify_node_name(
+                    dc_pods[-1], node_name
+                ), f"Pod {dc_pods[-1].name} is not running on labeled node {node_name}"
                 dc_pods.append(
                     dc_pod_factory(
-                        interface=constants.CEPHFILESYSTEM, pvc=cephfs_pvcs.pop(0),
-                        node_selector={'nodetype': 'app-pod'}
+                        interface=constants.CEPHFILESYSTEM,
+                        pvc=cephfs_pvcs.pop(0),
+                        node_selector={"nodetype": "app-pod"},
                     )
                 )
-                assert pod.verify_node_name(dc_pods[-1], node_name), (
-                    f"Pod {dc_pods[-1].name} is not running on labeled node {node_name}"
-                )
+                assert pod.verify_node_name(
+                    dc_pods[-1], node_name
+                ), f"Pod {dc_pods[-1].name} is not running on labeled node {node_name}"
             helpers.remove_label_from_worker_node(
                 node_list=[node_name], label_key="nodetype"
             )
@@ -150,7 +171,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         # Recovery steps for MON and OSDS not required from OCS 4.4 onwards
         # Refer to BZ 1830015 and BZ 1835908
         ceph_pods = []
-        if float(config.ENV_DATA['ocs_version']) < 4.4 and (
+        if float(config.ENV_DATA["ocs_version"]) < 4.4 and (
             scenario == "colocated" and len(test_nodes) > 3
         ):
             pods_to_check = ceph_cluster.osds
@@ -179,6 +200,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         change them back to 'Ready' state by restarting the nodes
 
         """
+
         def finalizer():
             # Start the powered off nodes
             nodes.restart_nodes_by_stop_and_start_teardown()
@@ -187,8 +209,9 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             except ResourceWrongStatusException:
                 # Restart the nodes if in NotReady state
                 not_ready_nodes = [
-                    n for n in node.get_node_objs() if n
-                    .ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
+                    n
+                    for n in node.get_node_objs()
+                    if n.ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
                 ]
                 if not_ready_nodes:
                     logger.info(
@@ -223,52 +246,55 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         ocs_nodes = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
         non_ocs_nodes = list(set(initial_worker_nodes) - set(ocs_nodes))
 
-        if 'colocated' in scenario and len(ocs_nodes) < num_of_nodes:
+        if "colocated" in scenario and len(ocs_nodes) < num_of_nodes:
             nodes_to_add = num_of_nodes - len(initial_worker_nodes)
 
-        if 'dedicated' in scenario and len(non_ocs_nodes) < num_of_nodes:
+        if "dedicated" in scenario and len(non_ocs_nodes) < num_of_nodes:
             nodes_to_add = num_of_nodes - len(non_ocs_nodes)
 
         if nodes_to_add > 0:
             logger.info(f"{nodes_to_add} extra workers nodes needed")
 
-            if config.ENV_DATA['deployment_type'] == 'ipi':
+            if config.ENV_DATA["deployment_type"] == "ipi":
                 machine_name = machine.get_machine_from_node_name(
                     random.choice(initial_worker_nodes)
                 )
-                machineset_name = machine.get_machineset_from_machine_name(
-                    machine_name
-                )
-                machineset_replica_count = machine.get_replica_count(
-                    machineset_name
-                )
+                machineset_name = machine.get_machineset_from_machine_name(machine_name)
+                machineset_replica_count = machine.get_replica_count(machineset_name)
                 machine.add_node(
-                    machineset_name,
-                    count=machineset_replica_count + nodes_to_add
+                    machineset_name, count=machineset_replica_count + nodes_to_add
                 )
                 logger.info("Waiting for the new node(s) to be in ready state")
                 machine.wait_for_new_node_to_be_ready(machineset_name)
             else:
-                if config.ENV_DATA.get('platform').lower() == constants.VSPHERE_PLATFORM:
+                if (
+                    config.ENV_DATA.get("platform").lower()
+                    == constants.VSPHERE_PLATFORM
+                ):
                     pytest.skip(
                         "Skipping add node in VSPHERE due to https://bugzilla.redhat.com/show_bug.cgi?id=1844521"
                     )
-                is_rhel = config.ENV_DATA.get('rhel_workers') or config.ENV_DATA.get('rhel_user')
+                is_rhel = config.ENV_DATA.get("rhel_workers") or config.ENV_DATA.get(
+                    "rhel_user"
+                )
                 node_type = constants.RHEL_OS if is_rhel else constants.RHCOS
                 node.add_new_node_and_label_upi(
-                    node_type=node_type, num_nodes=nodes_to_add,
-                    mark_for_ocs_label=False
+                    node_type=node_type,
+                    num_nodes=nodes_to_add,
+                    mark_for_ocs_label=False,
                 )
 
             new_worker_nodes = node.get_worker_nodes()
             new_nodes_added = list(set(new_worker_nodes) - set(initial_worker_nodes))
-            assert len(new_nodes_added) == nodes_to_add, 'Extra nodes not added in the cluster'
+            assert (
+                len(new_nodes_added) == nodes_to_add
+            ), "Extra nodes not added in the cluster"
             non_ocs_nodes += new_nodes_added
 
-        if 'colocated' in scenario and len(ocs_nodes) < num_of_nodes:
-            logger.info('Adding OCS storage label to Non-OCS workers')
+        if "colocated" in scenario and len(ocs_nodes) < num_of_nodes:
+            logger.info("Adding OCS storage label to Non-OCS workers")
             node_obj = ocp.OCP(kind=constants.NODE)
-            nodes_to_label = non_ocs_nodes[0:(num_of_nodes - len(ocs_nodes))]
+            nodes_to_label = non_ocs_nodes[0 : (num_of_nodes - len(ocs_nodes))]
             for node_name in nodes_to_label:
                 node_obj.add_label(
                     resource_name=node_name, label=constants.OPERATOR_NODE_LABEL
@@ -310,9 +336,9 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 az_count = get_az_count()
                 logger.info(f"AZ count: {az_count}")
                 if az_count == 1:
-                    label_to_search = 'topology.rook.io/rack'
+                    label_to_search = "topology.rook.io/rack"
                 else:
-                    label_to_search = 'failure-domain.beta.kubernetes.io/zone'
+                    label_to_search = "failure-domain.beta.kubernetes.io/zone"
 
                 mon_pod_nodes = [
                     pod.get_pod_node(pod_obj).name for pod_obj in ceph_cluster.mons
@@ -329,14 +355,13 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 fd_worker_nodes = {}
                 nodes_objs = node.get_node_objs(ocs_nodes)
                 for wnode in nodes_objs:
-                    fd = wnode.get().get('metadata').get('labels').get(label_to_search)
+                    fd = wnode.get().get("metadata").get("labels").get(label_to_search)
                     fd_node_list = fd_worker_nodes.get(fd, [])
                     fd_node_list.append(wnode.name)
                     fd_worker_nodes[fd] = fd_node_list
 
                 fd_sorted = sorted(
-                    fd_worker_nodes, key=lambda k: len(fd_worker_nodes[k]),
-                    reverse=True
+                    fd_worker_nodes, key=lambda k: len(fd_worker_nodes[k]), reverse=True
                 )
 
                 worker_nodes = fd_worker_nodes.get(fd_sorted[0])
@@ -361,26 +386,29 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                             worker_nodes = worker_nodes[1:]
                         available_nodes += worker_nodes
 
-                    logger.info(f"Selecting {num_of_nodes - 1} OCS node from {available_nodes}")
+                    logger.info(
+                        f"Selecting {num_of_nodes - 1} OCS node from {available_nodes}"
+                    )
                     preferred_nodes = list(set(available_nodes) - set(osd_pod_nodes))
                     if len(preferred_nodes) < (num_of_nodes - 1):
-                        preferred_nodes += list(set(available_nodes) - set(preferred_nodes))
+                        preferred_nodes += list(
+                            set(available_nodes) - set(preferred_nodes)
+                        )
 
-                    selected_nodes += preferred_nodes[0:num_of_nodes - 1]
-                    logger.info(f"Selected {num_of_nodes - 1} OCS node {selected_nodes[1:]}")
+                    selected_nodes += preferred_nodes[0 : num_of_nodes - 1]
+                    logger.info(
+                        f"Selected {num_of_nodes - 1} OCS node {selected_nodes[1:]}"
+                    )
 
         else:
             logger.info(f"Selecting {num_of_nodes} non-OCS node from {non_ocs_nodes}")
             selected_nodes += non_ocs_nodes[0:num_of_nodes]
 
-        logger.info(
-            f"Selected nodes for running app pods: {selected_nodes}"
-        )
+        logger.info(f"Selected nodes for running app pods: {selected_nodes}")
         return selected_nodes
 
     def run_and_verify_io(
-        self, pod_list, fio_filename='io_file', return_md5sum=True,
-        run_io_in_bg=False
+        self, pod_list, fio_filename="io_file", return_md5sum=True, run_io_in_bg=False
     ):
         """
         Start IO on the pods and verify IO results
@@ -405,8 +433,11 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             for pod_obj in pod_list:
                 logger.info(f"Starting IO on pod {pod_obj.name}")
                 executor.submit(
-                    pod_obj.run_io, storage_type='fs', size='1G', runtime=30,
-                    fio_filename=fio_filename
+                    pod_obj.run_io,
+                    storage_type="fs",
+                    size="1G",
+                    runtime=30,
+                    fio_filename=fio_filename,
                 )
         logger.info(f"IO started on all {len(pod_list)} app pods")
 
@@ -415,18 +446,16 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             pod.get_fio_rw_iops(pod_obj)
 
         if run_io_in_bg:
-            logger.info(
-                f"Starting IO in background on {len(pod_list)} app pods"
-            )
+            logger.info(f"Starting IO in background on {len(pod_list)} app pods")
             for pod_obj in pod_list:
                 logger.info(f"Starting IO on pod {pod_obj.name}")
                 pod_obj.run_io(
-                    storage_type='fs', size='256M', runtime=500,
-                    fio_filename='bg_io_file'
+                    storage_type="fs",
+                    size="256M",
+                    runtime=500,
+                    fio_filename="bg_io_file",
                 )
-            logger.info(
-                f"IO started in background on all {len(pod_list)} app pods"
-            )
+            logger.info(f"IO started in background on all {len(pod_list)} app pods")
 
         # Calculate md5sum of io files
         md5sum_data = []
@@ -458,9 +487,9 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             node_name = pod.get_pod_node(provisioner_pod).name
             if node_name not in node_list:
                 if interface == constants.CEPHBLOCKPOOL:
-                    provisioner_resource.append('rbdplugin_provisioner')
+                    provisioner_resource.append("rbdplugin_provisioner")
                 else:
-                    provisioner_resource.append('cephfsplugin_provisioner')
+                    provisioner_resource.append("cephfsplugin_provisioner")
 
         disruptor = []
         for resource in provisioner_resource:
@@ -483,28 +512,20 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         """
         new_pods = []
         for pod_obj in pod_list:
-            if any(str in pod_obj.name for str in ['mon', 'osd']):
-                pod_label = pod_obj.labels.get('pod-template-hash')
-                label_selector = f'pod-template-hash={pod_label}'
+            if any(str in pod_obj.name for str in ["mon", "osd"]):
+                pod_label = pod_obj.labels.get("pod-template-hash")
+                label_selector = f"pod-template-hash={pod_label}"
             else:
-                pod_label = pod_obj.labels.get('deploymentconfig')
-                label_selector = f'deploymentconfig={pod_label}'
+                pod_label = pod_obj.labels.get("deploymentconfig")
+                label_selector = f"deploymentconfig={pod_label}"
 
-            pods_data = pod.get_pods_having_label(
-                label_selector, pod_obj.namespace
-            )
+            pods_data = pod.get_pods_having_label(label_selector, pod_obj.namespace)
             for pod_data in pods_data:
-                pod_name = pod_data.get('metadata').get('name')
-                if '-deploy' not in pod_name and pod_name not in pod_obj.name:
-                    new_pods.append(
-                        pod.get_pod_obj(pod_name, pod_obj.namespace)
-                    )
-        logger.info(
-            f"Previous pods: {[pod_obj.name for pod_obj in pod_list]}"
-        )
-        logger.info(
-            f"Respun pods: {[pod_obj.name for pod_obj in new_pods]}"
-        )
+                pod_name = pod_data.get("metadata").get("name")
+                if "-deploy" not in pod_name and pod_name not in pod_obj.name:
+                    new_pods.append(pod.get_pod_obj(pod_name, pod_obj.namespace))
+        logger.info(f"Previous pods: {[pod_obj.name for pod_obj in pod_list]}")
+        logger.info(f"Respun pods: {[pod_obj.name for pod_obj in new_pods]}")
         return new_pods
 
     @retry(UnexpectedBehaviour, tries=10, delay=10, backoff=1)
@@ -522,7 +543,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             UnexpectedBehaviour: If Multi-Attach Error not found in describe command
 
         """
-        failure_str = 'Multi-Attach error for volume'
+        failure_str = "Multi-Attach error for volume"
         for pod_obj in pod_list:
             if failure_str in pod_obj.describe():
                 logger.info(
@@ -540,35 +561,33 @@ class TestRwoPVCFencingUnfencing(ManageTest):
     @tier4a
     @pytest.mark.parametrize(
         argnames=[
-            "scenario", "num_of_nodes", "num_of_fail_nodes",
-            "disrupt_provisioner"
+            "scenario",
+            "num_of_nodes",
+            "num_of_fail_nodes",
+            "disrupt_provisioner",
         ],
         argvalues=[
             pytest.param(
-                *['colocated', 3, 1, False],
-                marks=[pytest.mark.polarion_id("OCS-1423"), skipif_aws_i3]
+                *["colocated", 3, 1, False],
+                marks=[pytest.mark.polarion_id("OCS-1423"), skipif_aws_i3],
             ),
             pytest.param(
-                *['dedicated', 2, 1, False],
-                marks=pytest.mark.polarion_id("OCS-1428")
+                *["dedicated", 2, 1, False], marks=pytest.mark.polarion_id("OCS-1428")
             ),
             pytest.param(
-                *['dedicated', 4, 3, True],
-                marks=pytest.mark.polarion_id("OCS-1434")
+                *["dedicated", 4, 3, True], marks=pytest.mark.polarion_id("OCS-1434")
             ),
             pytest.param(
-                *['colocated', 4, 1, False],
-                marks=[pytest.mark.polarion_id("OCS-1426"), skipif_aws_i3]
+                *["colocated", 4, 1, False],
+                marks=[pytest.mark.polarion_id("OCS-1426"), skipif_aws_i3],
             ),
             pytest.param(
-                *['colocated', 5, 3, True],
-                marks=[pytest.mark.polarion_id("OCS-1424"), skipif_aws_i3]
-            )
-        ]
+                *["colocated", 5, 3, True],
+                marks=[pytest.mark.polarion_id("OCS-1424"), skipif_aws_i3],
+            ),
+        ],
     )
-    def test_rwo_pvc_fencing_node_short_network_failure(
-        self, nodes, setup, teardown
-    ):
+    def test_rwo_pvc_fencing_node_short_network_failure(self, nodes, setup, teardown):
         """
         OCS-1423/OCS-1428/OCS-1426:
         - Start DeploymentConfig based app pods on 1 OCS/Non-OCS node
@@ -598,7 +617,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
         # Run IO on pods
         md5sum_data = self.run_and_verify_io(
-            pod_list=dc_pods, fio_filename='io_file1', run_io_in_bg=True
+            pod_list=dc_pods, fio_filename="io_file1", run_io_in_bg=True
         )
 
         # OCS-1424/OCS-1434
@@ -612,20 +631,22 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         sleep(self.short_nw_fail_time)
 
         # Wait for pods to be rescheduled
-        for pod_obj in (dc_pods + ceph_pods):
+        for pod_obj in dc_pods + ceph_pods:
             pod_obj.ocp.wait_for_resource(
                 condition=constants.STATUS_TERMINATING,
-                resource_name=pod_obj.name, timeout=600, sleep=30
+                resource_name=pod_obj.name,
+                timeout=600,
+                sleep=30,
             )
 
         # Fetch info of new pods and verify Multi-Attach error
         new_dc_pods = self.get_new_pods(dc_pods)
-        assert len(new_dc_pods) == len(dc_pods), 'Unexpected number of app pods'
+        assert len(new_dc_pods) == len(dc_pods), "Unexpected number of app pods"
         self.verify_multi_attach_error(new_dc_pods)
 
         if ceph_pods:
             new_ceph_pods = self.get_new_pods(ceph_pods)
-            assert len(new_ceph_pods) > 0, 'Unexpected number of osd pods'
+            assert len(new_ceph_pods) > 0, "Unexpected number of osd pods"
             self.verify_multi_attach_error(new_ceph_pods)
 
         # Reboot the unresponsive node(s)
@@ -638,24 +659,25 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         # Wait for new app pods to reach Running state
         for pod_obj in new_dc_pods:
             pod_obj.ocp.wait_for_resource(
-                condition=constants.STATUS_RUNNING, resource_name=pod_obj.name,
-                timeout=1200, sleep=30
-            ), (
-                f"App pod with name {pod_obj.name} did not reach Running state"
-            )
+                condition=constants.STATUS_RUNNING,
+                resource_name=pod_obj.name,
+                timeout=1200,
+                sleep=30,
+            ), (f"App pod with name {pod_obj.name} did not reach Running state")
 
         # Wait for mon and osd pods to reach Running state
         selectors_to_check = {
             constants.MON_APP_LABEL: ceph_cluster.mon_count,
-            constants.OSD_APP_LABEL: ceph_cluster.osd_count
+            constants.OSD_APP_LABEL: ceph_cluster.osd_count,
         }
         for selector, count in selectors_to_check.items():
             assert ceph_cluster.POD.wait_for_resource(
-                condition=constants.STATUS_RUNNING, selector=selector,
-                resource_count=count, timeout=1800, sleep=60
-            ), (
-                f"{count} expected pods with selector {selector} are not in Running state"
-            )
+                condition=constants.STATUS_RUNNING,
+                selector=selector,
+                resource_count=count,
+                timeout=1800,
+                sleep=60,
+            ), f"{count} expected pods with selector {selector} are not in Running state"
 
         assert ceph_health_check(), "Ceph cluster health is not OK"
         logger.info("Ceph cluster health is OK")
@@ -663,40 +685,39 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         # Verify data integrity from new pods
         for num, pod_obj in enumerate(new_dc_pods):
             assert pod.verify_data_integrity(
-                pod_obj=pod_obj, file_name='io_file1',
-                original_md5sum=md5sum_data[num]
-            ), 'Data integrity check failed'
+                pod_obj=pod_obj, file_name="io_file1", original_md5sum=md5sum_data[num]
+            ), "Data integrity check failed"
 
         # Run IO on new pods
         self.run_and_verify_io(
-            pod_list=new_dc_pods, fio_filename='io_file2', return_md5sum=False
+            pod_list=new_dc_pods, fio_filename="io_file2", return_md5sum=False
         )
 
     @skipif_bm
     @tier4b
     @pytest.mark.parametrize(
         argnames=[
-            "scenario", "num_of_nodes", "num_of_fail_nodes",
-            "disrupt_provisioner"
+            "scenario",
+            "num_of_nodes",
+            "num_of_fail_nodes",
+            "disrupt_provisioner",
         ],
         argvalues=[
             pytest.param(
-                *['dedicated', 2, 1, False],
-                marks=pytest.mark.polarion_id("OCS-1429")
+                *["dedicated", 2, 1, False], marks=pytest.mark.polarion_id("OCS-1429")
             ),
             pytest.param(
-                *['dedicated', 4, 3, True],
-                marks=pytest.mark.polarion_id("OCS-1435")
+                *["dedicated", 4, 3, True], marks=pytest.mark.polarion_id("OCS-1435")
             ),
             pytest.param(
-                *['colocated', 4, 1, False],
-                marks=[pytest.mark.polarion_id("OCS-1427"), skipif_lso]
+                *["colocated", 4, 1, False],
+                marks=[pytest.mark.polarion_id("OCS-1427"), skipif_lso],
             ),
             pytest.param(
-                *['colocated', 6, 3, True],
-                marks=[pytest.mark.polarion_id("OCS-1430"), skipif_lso]
-            )
-        ]
+                *["colocated", 6, 3, True],
+                marks=[pytest.mark.polarion_id("OCS-1430"), skipif_lso],
+            ),
+        ],
     )
     def test_rwo_pvc_fencing_node_prolonged_network_failure(
         self, nodes, setup, teardown
@@ -736,7 +757,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
         # Run IO on pods
         md5sum_data = self.run_and_verify_io(
-            pod_list=dc_pods, fio_filename='io_file1', run_io_in_bg=True
+            pod_list=dc_pods, fio_filename="io_file1", run_io_in_bg=True
         )
 
         # OCS-1430/OCS-1435
@@ -750,56 +771,54 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         sleep(self.prolong_nw_fail_time)
 
         # Wait for pods to be rescheduled
-        for pod_obj in (dc_pods + ceph_pods):
+        for pod_obj in dc_pods + ceph_pods:
             pod_obj.ocp.wait_for_resource(
-                condition=constants.STATUS_TERMINATING,
-                resource_name=pod_obj.name
+                condition=constants.STATUS_TERMINATING, resource_name=pod_obj.name
             )
 
         # Fetch info of new pods and verify Multi-Attach error
         new_dc_pods = self.get_new_pods(dc_pods)
-        assert len(new_dc_pods) == len(dc_pods), 'Unexpected number of app pods'
+        assert len(new_dc_pods) == len(dc_pods), "Unexpected number of app pods"
         self.verify_multi_attach_error(new_dc_pods)
 
         if ceph_pods:
             new_ceph_pods = self.get_new_pods(ceph_pods)
-            assert len(new_ceph_pods) > 0, 'Unexpected number of osd pods'
+            assert len(new_ceph_pods) > 0, "Unexpected number of osd pods"
             self.verify_multi_attach_error(new_ceph_pods)
 
         logger.info("Executing manual recovery steps")
         # Power off the unresponsive node(s)
-        logger.info(
-            f"Powering off the unresponsive node(s): {app_pod_nodes}"
-        )
+        logger.info(f"Powering off the unresponsive node(s): {app_pod_nodes}")
         nodes.stop_nodes(node.get_node_objs(app_pod_nodes))
 
         # Force delete the app pods and/or mon,osd pods on the unresponsive node
-        if ceph_cluster.mon_count == 5 and float(config.ENV_DATA['ocs_version']) < 4.4:
+        if ceph_cluster.mon_count == 5 and float(config.ENV_DATA["ocs_version"]) < 4.4:
             for pod_obj in ceph_cluster.mons:
                 if pod.get_pod_node(pod_obj).name in app_pod_nodes:
                     ceph_pods.append(pod_obj)
 
-        for pod_obj in (dc_pods + ceph_pods):
+        for pod_obj in dc_pods + ceph_pods:
             pod_obj.delete(force=True)
 
         # Wait for new app pods to reach Running state
         for pod_obj in new_dc_pods:
             pod_obj.ocp.wait_for_resource(
-                condition=constants.STATUS_RUNNING, resource_name=pod_obj.name,
-                timeout=1200, sleep=30
-            ), (
-                f"App pod with name {pod_obj.name} did not reach Running state"
-            )
+                condition=constants.STATUS_RUNNING,
+                resource_name=pod_obj.name,
+                timeout=1200,
+                sleep=30,
+            ), (f"App pod with name {pod_obj.name} did not reach Running state")
 
         # Wait for mon and osd pods to reach Running state
         selectors_to_check = [constants.MON_APP_LABEL, constants.OSD_APP_LABEL]
         for selector in selectors_to_check:
             assert ceph_cluster.POD.wait_for_resource(
-                condition=constants.STATUS_RUNNING, selector=selector,
-                resource_count=3, timeout=1800, sleep=60
-            ), (
-                f"3 expected pods with selector {selector} are not in Running state"
-            )
+                condition=constants.STATUS_RUNNING,
+                selector=selector,
+                resource_count=3,
+                timeout=1800,
+                sleep=60,
+            ), f"3 expected pods with selector {selector} are not in Running state"
 
         if ceph_cluster.mon_count == 3:
             # Check ceph health
@@ -815,32 +834,32 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         # Verify data integrity from new pods
         for num, pod_obj in enumerate(new_dc_pods):
             pod.verify_data_integrity(
-                pod_obj=pod_obj, file_name='io_file1',
-                original_md5sum=md5sum_data[num]
+                pod_obj=pod_obj, file_name="io_file1", original_md5sum=md5sum_data[num]
             )
 
         # Run IO on new pods
         self.run_and_verify_io(
-            pod_list=new_dc_pods, fio_filename='io_file2', return_md5sum=False
+            pod_list=new_dc_pods, fio_filename="io_file2", return_md5sum=False
         )
 
     @skipif_bm
     @tier4c
     @pytest.mark.parametrize(
         argnames=[
-            "scenario", "num_of_nodes", "num_of_fail_nodes",
-            "disrupt_provisioner"
+            "scenario",
+            "num_of_nodes",
+            "num_of_fail_nodes",
+            "disrupt_provisioner",
         ],
         argvalues=[
             pytest.param(
-                *['dedicated', 3, 1, True],
-                marks=pytest.mark.polarion_id("OCS-1436")
+                *["dedicated", 3, 1, True], marks=pytest.mark.polarion_id("OCS-1436")
             ),
             pytest.param(
-                *['colocated', 4, 1, True],
-                marks=[pytest.mark.polarion_id("OCS-1431"), skipif_lso]
-            )
-        ]
+                *["colocated", 4, 1, True],
+                marks=[pytest.mark.polarion_id("OCS-1431"), skipif_lso],
+            ),
+        ],
     )
     def test_rwo_pvc_fencing_node_prolonged_and_short_network_failure(
         self, nodes, setup, teardown
@@ -876,7 +895,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
         # Run IO on pods
         md5sum_data = self.run_and_verify_io(
-            pod_list=dc_pods, fio_filename='io_file1', run_io_in_bg=True
+            pod_list=dc_pods, fio_filename="io_file1", run_io_in_bg=True
         )
 
         # Disrupt leader plugin-provisioner pods, skip if running on node to be failed
@@ -889,52 +908,50 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         sleep(self.prolong_nw_fail_time)
 
         # Wait for pods to be rescheduled
-        for pod_obj in (dc_pods + ceph_pods):
+        for pod_obj in dc_pods + ceph_pods:
             pod_obj.ocp.wait_for_resource(
-                condition=constants.STATUS_TERMINATING,
-                resource_name=pod_obj.name
+                condition=constants.STATUS_TERMINATING, resource_name=pod_obj.name
             )
 
         # Fetch info of new pods and verify Multi-Attach error
         new_dc_pods = self.get_new_pods(dc_pods)
-        assert len(new_dc_pods) == len(dc_pods), 'Unexpected number of app pods'
+        assert len(new_dc_pods) == len(dc_pods), "Unexpected number of app pods"
         self.verify_multi_attach_error(new_dc_pods)
 
         new_ceph_pods = []
         if ceph_pods:
             new_ceph_pods = self.get_new_pods(ceph_pods)
-            assert len(new_ceph_pods) > 0, 'Unexpected number of osd pods'
+            assert len(new_ceph_pods) > 0, "Unexpected number of osd pods"
             self.verify_multi_attach_error(new_ceph_pods)
 
         logger.info("Executing manual recovery steps")
         # Power off the unresponsive node
-        logger.info(
-            f"Powering off the unresponsive node: {app_pod_nodes}"
-        )
+        logger.info(f"Powering off the unresponsive node: {app_pod_nodes}")
         nodes.stop_nodes(node.get_node_objs(app_pod_nodes))
 
         # Force delete the app pods and/or mon,osd pods on the unresponsive node
-        for pod_obj in (dc_pods + ceph_pods):
+        for pod_obj in dc_pods + ceph_pods:
             pod_obj.delete(force=True)
 
         # Wait for new app pods to reach Running state
         for pod_obj in new_dc_pods:
             pod_obj.ocp.wait_for_resource(
-                condition=constants.STATUS_RUNNING, resource_name=pod_obj.name,
-                timeout=1200, sleep=30
-            ), (
-                f"App pod with name {pod_obj.name} did not reach Running state"
-            )
+                condition=constants.STATUS_RUNNING,
+                resource_name=pod_obj.name,
+                timeout=1200,
+                sleep=30,
+            ), (f"App pod with name {pod_obj.name} did not reach Running state")
 
         # Wait for mon and osd pods to reach Running state
         selectors_to_check = [constants.MON_APP_LABEL, constants.OSD_APP_LABEL]
         for selector in selectors_to_check:
             assert ceph_cluster.POD.wait_for_resource(
-                condition=constants.STATUS_RUNNING, selector=selector,
-                resource_count=3, timeout=1800, sleep=60
-            ), (
-                f"3 expected pods with selector {selector} are not in Running state"
-            )
+                condition=constants.STATUS_RUNNING,
+                selector=selector,
+                resource_count=3,
+                timeout=1800,
+                sleep=60,
+            ), f"3 expected pods with selector {selector} are not in Running state"
 
         if ceph_cluster.mon_count == 3:
             # Check ceph health
@@ -950,13 +967,12 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         # Verify data integrity from new pods
         for num, pod_obj in enumerate(new_dc_pods):
             pod.verify_data_integrity(
-                pod_obj=pod_obj, file_name='io_file1',
-                original_md5sum=md5sum_data[num]
+                pod_obj=pod_obj, file_name="io_file1", original_md5sum=md5sum_data[num]
             )
 
         # Run IO on new pods
         md5sum_data2 = self.run_and_verify_io(
-            pod_list=new_dc_pods, fio_filename='io_file2', run_io_in_bg=True
+            pod_list=new_dc_pods, fio_filename="io_file2", run_io_in_bg=True
         )
 
         helpers.label_worker_node(
@@ -972,12 +988,14 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         for pod_obj in new_dc_pods:
             pod_obj.ocp.wait_for_resource(
                 condition=constants.STATUS_TERMINATING,
-                resource_name=pod_obj.name, timeout=600, sleep=30
+                resource_name=pod_obj.name,
+                timeout=600,
+                sleep=30,
             )
 
         # Fetch info of new pods and verify Multi-Attach error
         new_dc_pods2 = self.get_new_pods(new_dc_pods)
-        assert len(new_dc_pods2) == len(new_dc_pods), 'Unexpected number of app pods'
+        assert len(new_dc_pods2) == len(new_dc_pods), "Unexpected number of app pods"
         self.verify_multi_attach_error(new_dc_pods2)
 
         # Reboot the unresponsive node
@@ -990,20 +1008,21 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         # Wait for new app pods to reach Running state
         for pod_obj in new_dc_pods2:
             pod_obj.ocp.wait_for_resource(
-                condition=constants.STATUS_RUNNING, resource_name=pod_obj.name,
-                timeout=1200, sleep=30
-            ), (
-                f"App pod with name {pod_obj.name} did not reach Running state"
-            )
+                condition=constants.STATUS_RUNNING,
+                resource_name=pod_obj.name,
+                timeout=1200,
+                sleep=30,
+            ), (f"App pod with name {pod_obj.name} did not reach Running state")
 
         # Wait for mon and osd pods to reach Running state
         for selector in selectors_to_check:
             assert ceph_cluster.POD.wait_for_resource(
-                condition=constants.STATUS_RUNNING, selector=selector,
-                resource_count=3, timeout=1800, sleep=60
-            ), (
-                f"3 expected pods with selector {selector} are not in Running state"
-            )
+                condition=constants.STATUS_RUNNING,
+                selector=selector,
+                resource_count=3,
+                timeout=1800,
+                sleep=60,
+            ), f"3 expected pods with selector {selector} are not in Running state"
 
         if ceph_cluster.mon_count == 3:
             # Check ceph health
@@ -1013,17 +1032,15 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         # Verify data integrity from new pods
         for num, pod_obj in enumerate(new_dc_pods2):
             pod.verify_data_integrity(
-                pod_obj=pod_obj, file_name='io_file2',
-                original_md5sum=md5sum_data2[num]
+                pod_obj=pod_obj, file_name="io_file2", original_md5sum=md5sum_data2[num]
             )
 
         for num, pod_obj in enumerate(new_dc_pods2):
             pod.verify_data_integrity(
-                pod_obj=pod_obj, file_name='io_file1',
-                original_md5sum=md5sum_data[num]
+                pod_obj=pod_obj, file_name="io_file1", original_md5sum=md5sum_data[num]
             )
 
         # Run IO on new pods
         self.run_and_verify_io(
-            pod_list=new_dc_pods2, fio_filename='io_file3', return_md5sum=False
+            pod_list=new_dc_pods2, fio_filename="io_file3", return_md5sum=False
         )

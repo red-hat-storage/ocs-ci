@@ -38,7 +38,9 @@ class TestAddCapacityWithResourceDelete:
         d = Disruptions()
 
         for i in range(max_iterations):
-            logging.info(f"iteration {i}: Delete resource {resource_name} with id {resource_id}")
+            logging.info(
+                f"iteration {i}: Delete resource {resource_name} with id {resource_id}"
+            )
             d.set_resource(resource_name)
             d.delete_resource(resource_id)
             if self.new_pods_in_status_running:
@@ -46,7 +48,9 @@ class TestAddCapacityWithResourceDelete:
                 break
 
         if not self.new_pods_in_status_running:
-            logging.warning(f"New osd pods didn't reach status running after {max_iterations} iterations")
+            logging.warning(
+                f"New osd pods didn't reach status running after {max_iterations} iterations"
+            )
 
     def wait_for_osd_pods_to_be_running(self, storagedeviceset_count):
         """
@@ -58,15 +62,13 @@ class TestAddCapacityWithResourceDelete:
 
         """
         logging.info("starting function 'wait_for_osd_pods_to_be_running'")
-        pod = OCP(
-            kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
-        )
+        pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
 
         pod.wait_for_resource(
             timeout=420,
             condition=constants.STATUS_RUNNING,
-            selector='app=rook-ceph-osd',
-            resource_count=storagedeviceset_count * 3
+            selector="app=rook-ceph-osd",
+            resource_count=storagedeviceset_count * 3,
         )
         self.new_pods_in_status_running = True
 
@@ -75,21 +77,26 @@ class TestAddCapacityWithResourceDelete:
         argvalues=[
             pytest.param(
                 *[(0.11, True, 120), constants.OSD, 0, False],
-                marks=pytest.mark.polarion_id("OCS-1203")
+                marks=pytest.mark.polarion_id("OCS-1203"),
             ),
             pytest.param(
                 *[(0.11, True, 120), constants.ROOK_OPERATOR, 0, False],
-                marks=pytest.mark.polarion_id("OCS-1206")
+                marks=pytest.mark.polarion_id("OCS-1206"),
             ),
             pytest.param(
                 *[(0.11, True, 120), constants.MON_DAEMON, 0, True],
-                marks=pytest.mark.polarion_id("OCS-1207")
+                marks=pytest.mark.polarion_id("OCS-1207"),
             ),
         ],
         indirect=["workload_storageutilization_rbd"],
     )
-    def test_add_capacity_with_resource_delete(self, workload_storageutilization_rbd, resource_name,
-                                               resource_id, is_kill_resource_repeatedly):
+    def test_add_capacity_with_resource_delete(
+        self,
+        workload_storageutilization_rbd,
+        resource_name,
+        resource_id,
+        is_kill_resource_repeatedly,
+    ):
         """
         The function get the resource name, and id.
         The function adds capacity to the cluster, and then delete the resource while
@@ -103,7 +110,9 @@ class TestAddCapacityWithResourceDelete:
 
         """
         used_percentage = get_percent_used_capacity()
-        logging.info(f"storageutilization is completed. used capacity = {used_percentage}")
+        logging.info(
+            f"storageutilization is completed. used capacity = {used_percentage}"
+        )
 
         osd_pods_before = pod_helpers.get_osd_pods()
         number_of_osd_pods_before = len(osd_pods_before)
@@ -124,22 +133,26 @@ class TestAddCapacityWithResourceDelete:
         # After deleting the resource we expect that all the new osd's will be in status running,
         # and the delete resource will be also in status running.
         pod_helpers.wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before)
-        logging.info(f"Delete a {resource_name} pod while storage capacity is getting increased")
+        logging.info(
+            f"Delete a {resource_name} pod while storage capacity is getting increased"
+        )
         if is_kill_resource_repeatedly:
             with ThreadPoolExecutor() as executor:
-                executor.submit(self.kill_resource_repeatedly, resource_name, resource_id)
+                executor.submit(
+                    self.kill_resource_repeatedly, resource_name, resource_id
+                )
                 self.wait_for_osd_pods_to_be_running(storagedeviceset_count)
         else:
             d.delete_resource(resource_id)
             self.wait_for_osd_pods_to_be_running(storagedeviceset_count)
 
         self.new_pods_in_status_running = True
-        logging.info("Finished verifying add capacity when one of the pods gets deleted")
+        logging.info(
+            "Finished verifying add capacity when one of the pods gets deleted"
+        )
         logging.info("Waiting for ceph health check to finished...")
-        ceph_health_check(
-            namespace=config.ENV_DATA['cluster_namespace'], tries=90
-        )
+        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=90)
         ceph_cluster_obj = CephCluster()
-        assert ceph_cluster_obj.wait_for_rebalance(timeout=1800), (
-            "Data re-balance failed to complete"
-        )
+        assert ceph_cluster_obj.wait_for_rebalance(
+            timeout=1800
+        ), "Data re-balance failed to complete"

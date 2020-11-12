@@ -9,13 +9,14 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
 log = logging.getLogger(__name__)
 
-POD = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace'])
+POD = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
 
 
 class Disruptions:
     """
     This class contains methods of disrupt operations
     """
+
     resource = None
     resource_obj = None
     resource_count = 0
@@ -25,41 +26,37 @@ class Disruptions:
     def set_resource(self, resource):
         self.resource = resource
         resource_count = 0
-        if self.resource == 'mgr':
+        if self.resource == "mgr":
             self.resource_obj = pod.get_mgr_pods()
             self.selector = constants.MGR_APP_LABEL
-        if self.resource == 'mon':
+        if self.resource == "mon":
             self.resource_obj = pod.get_mon_pods()
             self.selector = constants.MON_APP_LABEL
-        if self.resource == 'osd':
+        if self.resource == "osd":
             self.resource_obj = pod.get_osd_pods()
             self.selector = constants.OSD_APP_LABEL
-        if self.resource == 'mds':
+        if self.resource == "mds":
             self.resource_obj = pod.get_mds_pods()
             self.selector = constants.MDS_APP_LABEL
-        if self.resource == 'cephfsplugin':
-            self.resource_obj = pod.get_plugin_pods(
-                interface=constants.CEPHFILESYSTEM
-            )
+        if self.resource == "cephfsplugin":
+            self.resource_obj = pod.get_plugin_pods(interface=constants.CEPHFILESYSTEM)
             self.selector = constants.CSI_CEPHFSPLUGIN_LABEL
-        if self.resource == 'rbdplugin':
-            self.resource_obj = pod.get_plugin_pods(
-                interface=constants.CEPHBLOCKPOOL
-            )
+        if self.resource == "rbdplugin":
+            self.resource_obj = pod.get_plugin_pods(interface=constants.CEPHBLOCKPOOL)
             self.selector = constants.CSI_RBDPLUGIN_LABEL
-        if self.resource == 'cephfsplugin_provisioner':
-            self.resource_obj = [pod.plugin_provisioner_leader(
-                interface=constants.CEPHFILESYSTEM
-            )]
+        if self.resource == "cephfsplugin_provisioner":
+            self.resource_obj = [
+                pod.plugin_provisioner_leader(interface=constants.CEPHFILESYSTEM)
+            ]
             self.selector = constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL
             resource_count = len(pod.get_cephfsplugin_provisioner_pods())
-        if self.resource == 'rbdplugin_provisioner':
-            self.resource_obj = [pod.plugin_provisioner_leader(
-                interface=constants.CEPHBLOCKPOOL
-            )]
+        if self.resource == "rbdplugin_provisioner":
+            self.resource_obj = [
+                pod.plugin_provisioner_leader(interface=constants.CEPHBLOCKPOOL)
+            ]
             self.selector = constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
             resource_count = len(pod.get_rbdfsplugin_provisioner_pods())
-        if self.resource == 'operator':
+        if self.resource == "operator":
             self.resource_obj = pod.get_operator_pods()
             self.selector = constants.OPERATOR_LABEL
 
@@ -68,8 +65,10 @@ class Disruptions:
     def delete_resource(self, resource_id=0):
         self.resource_obj[resource_id].delete(force=True)
         assert POD.wait_for_resource(
-            condition='Running', selector=self.selector,
-            resource_count=self.resource_count, timeout=300
+            condition="Running",
+            selector=self.selector,
+            resource_count=self.resource_count,
+            timeout=300,
         )
 
     @retry(AssertionError, tries=5, delay=3, backoff=1)
@@ -81,7 +80,9 @@ class Disruptions:
             node_name (str): Name of node in which the resource daemon has
                 to be selected.
         """
-        node_name = node_name or self.resource_obj[0].pod_data.get('spec').get('nodeName')
+        node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
+            "nodeName"
+        )
         awk_print = "'{print $1}'"
         pid_cmd = (
             f"oc debug node/{node_name} -- chroot /host ps ax | grep"
@@ -116,14 +117,15 @@ class Disruptions:
             check_new_pid (bool): True to check for new pid after killing the
                 daemon. False to skip the check.
         """
-        node_name = node_name or self.resource_obj[0].pod_data.get('spec').get('nodeName')
+        node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
+            "nodeName"
+        )
         if not self.daemon_pid:
             self.select_daemon(node_name=node_name)
 
         # Command to kill the daemon
         kill_cmd = (
-            f'oc debug node/{node_name} -- chroot /host  '
-            f'kill -9 {self.daemon_pid}'
+            f"oc debug node/{node_name} -- chroot /host  " f"kill -9 {self.daemon_pid}"
         )
         daemon_kill = run_cmd(kill_cmd)
 
@@ -141,9 +143,7 @@ class Disruptions:
                 f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
             )
             try:
-                for pid_proc in TimeoutSampler(
-                    60, 2, run_async, command=pid_cmd
-                ):
+                for pid_proc in TimeoutSampler(60, 2, run_async, command=pid_cmd):
                     ret, pid, err = pid_proc.async_communicate()
 
                     # Consider scenario where more than one self.resource pod
@@ -153,12 +153,10 @@ class Disruptions:
                     if len(pids) != len(self.pids):
                         continue
                     new_pid = [pid for pid in pids if pid not in self.pids]
-                    assert len(new_pid) == 1, 'Found more than one new pid.'
+                    assert len(new_pid) == 1, "Found more than one new pid."
                     new_pid = new_pid[0]
                     if new_pid.isdigit() and (new_pid != self.daemon_pid):
-                        log.info(
-                            f"New pid of ceph-{self.resource} is {new_pid}"
-                        )
+                        log.info(f"New pid of ceph-{self.resource} is {new_pid}")
                         break
             except TimeoutExpiredError:
                 raise TimeoutExpiredError(

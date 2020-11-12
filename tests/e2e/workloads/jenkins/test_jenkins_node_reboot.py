@@ -4,17 +4,13 @@ import pytest
 from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.jenkins import Jenkins
-from ocs_ci.framework.testlib import (
-    E2ETest, workloads, ignore_leftovers
-)
-from ocs_ci.ocs.constants import (
-    STATUS_COMPLETED, MASTER_MACHINE, WORKER_MACHINE
-)
+from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
+from ocs_ci.ocs.constants import STATUS_COMPLETED, MASTER_MACHINE, WORKER_MACHINE
 
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def jenkins(request, nodes):
 
     jenkins = Jenkins()
@@ -34,6 +30,7 @@ class TestJenkinsNodeReboot(E2ETest):
     """
     Test running Jenkins and Node Reboot
     """
+
     @pytest.fixture()
     def jenkins_setup(self, jenkins):
         """
@@ -46,7 +43,7 @@ class TestJenkinsNodeReboot(E2ETest):
         jenkins.create_ocs_jenkins_template()
 
     @pytest.mark.parametrize(
-        argnames=['node_type', 'num_projects', 'num_of_builds'],
+        argnames=["node_type", "num_projects", "num_of_builds"],
         argvalues=[
             pytest.param(
                 *[MASTER_MACHINE, 2, 15], marks=pytest.mark.polarion_id("OCS-2202")
@@ -54,7 +51,7 @@ class TestJenkinsNodeReboot(E2ETest):
             pytest.param(
                 *[WORKER_MACHINE, 2, 15], marks=pytest.mark.polarion_id("OCS-2178")
             ),
-        ]
+        ],
     )
     @pytest.mark.usefixtures(jenkins_setup.__name__)
     def test_run_jenkins_node_reboot(
@@ -94,7 +91,7 @@ class TestJenkinsNodeReboot(E2ETest):
             # Restart Node
             nodes.restart_nodes(get_node_objs(nodes_reboot))
         else:
-            log.info('No node was reboot')
+            log.info("No node was reboot")
 
         # Wait build reach 'Complete' state
         jenkins.wait_for_build_to_complete()

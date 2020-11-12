@@ -30,13 +30,13 @@ def setup(**kwargs):
     Returns:
         bool: True if setup succeeds else False
     """
-    io_pod = kwargs['pod']
+    io_pod = kwargs["pod"]
     # For first cut doing simple fio install
     distro = find_distro(io_pod)
     pkg_mgr = DISTROS[distro]
 
-    if distro == 'Debian':
-        cmd = f'{pkg_mgr} update'
+    if distro == "Debian":
+        cmd = f"{pkg_mgr} update"
         io_pod.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
     cmd = f"{pkg_mgr} -y install git"
@@ -50,9 +50,9 @@ def run(**kwargs):
     Returns:
         str: result of command
     """
-    io_pod = kwargs.pop('pod')
-    path = kwargs.pop('path')
-    git_repo = kwargs.get('repo', "https://github.com/ceph/ceph.git")
+    io_pod = kwargs.pop("pod")
+    path = kwargs.pop("path")
+    git_repo = kwargs.get("repo", "https://github.com/ceph/ceph.git")
     git_clone_cmd = f"git clone --recursive {git_repo} {path}"
     log.info(f"Running cmd: {git_clone_cmd}")
     return io_pod.exec_cmd_on_pod(git_clone_cmd, out_yaml_format=False)
