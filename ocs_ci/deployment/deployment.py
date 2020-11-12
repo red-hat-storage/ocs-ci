@@ -1027,6 +1027,17 @@ def setup_local_storage(storageclass):
     lso_data = list(templating.load_yaml(
         constants.LOCAL_STORAGE_OPERATOR, multi_document=True
     ))
+
+    # ensure namespace is correct
+    lso_namespace = config.ENV_DATA['local_storage_namespace']
+    for data in lso_data:
+        if data['kind'] == 'Namespace':
+            data['metadata']['name'] = lso_namespace
+        else:
+            data['metadata']['namespace'] = lso_namespace
+        if data['kind'] == 'OperatorGroup':
+            data['spec']['targetNamespaces'] = [lso_namespace]
+
     # Update local-storage-operator subscription data with channel
     for data in lso_data:
         if data['kind'] == 'Subscription':
@@ -1052,7 +1063,7 @@ def setup_local_storage(storageclass):
     run_cmd(f"oc create -f {lso_data_yaml.name}")
 
     local_storage_operator = ocp.OCP(
-        kind=constants.POD, namespace=config.ENV_DATA['local_storage_namespace']
+        kind=constants.POD, namespace=lso_namespace
     )
     assert local_storage_operator.wait_for_resource(
         condition=constants.STATUS_RUNNING,
@@ -1090,6 +1101,9 @@ def setup_local_storage(storageclass):
         lvd_data = templating.load_yaml(
             constants.LOCAL_VOLUME_DISCOVERY_YAML
         )
+        # Set local-volume-discovery namespace
+        lvd_data['metadata']['namespace'] = lso_namespace
+
         worker_nodes = get_compute_node_names(no_replace=True)
 
         # Update local volume discovery data with Worker node Names
@@ -1157,6 +1171,9 @@ def setup_local_storage(storageclass):
         lv_data = templating.load_yaml(
             constants.LOCAL_VOLUME_YAML
         )
+
+        # Set local-volume namespace
+        lv_data['metadata']['namespace'] = lso_namespace
 
         # Set storage class
         logger.info(

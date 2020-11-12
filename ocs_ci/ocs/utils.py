@@ -14,6 +14,7 @@ from libcloud.common.exceptions import BaseHTTPError
 from libcloud.common.types import LibcloudError
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
+from paramiko.ssh_exception import SSHException
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs import constants, defaults
@@ -1016,3 +1017,27 @@ def revive_osd_external(ceph_cluster, osd_id):
         except CommandFailed:
             log.error("Failed to revive osd")
             raise
+
+
+def reboot_node(ceph_node, timeout=300):
+    """
+    Reboot a node with given ceph_node object
+
+    Args:
+        ceph_node (CephNode): Ceph node object representing the node.
+        timeout (int): Wait time in seconds for the node to comeback.
+
+    Raises:
+        SSHException: if not able to connect through ssh
+    """
+    ceph_node.exec_command(
+        cmd='reboot',
+        check_ec=False,
+        long_running=True,
+    )
+
+    try:
+        ceph_node.connect(timeout)
+    except SSHException:
+        log.exception(f"Failed to connect to node {ceph_node.hostname}")
+        raise

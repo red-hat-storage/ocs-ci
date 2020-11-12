@@ -838,7 +838,7 @@ LATEST_TAGS = (
 )
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
-OCS_SUBSCRIPTION = "ocs-subscription"
+OCS_SUBSCRIPTION = "ocs-operator"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
@@ -1181,9 +1181,10 @@ BM_STATUS_RESPONSE_UPDATED = "UPDATED"
 
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = 'https://s3.amazonaws.com'
+MCG_NS_AZURE_ENDPOINT = 'https://blob.core.windows.net'
 MCG_NS_RESOURCE = 'ns_resource'
 MCG_NS_BUCKET = 'ns-bucket'
-MCG_NS_AWS_CONNECTION = 'aws_connection'
+MCG_CONNECTION = 'connection'
 
 # Cloud provider default endpoints
 # Upon use, utilize .format() to replace the curly braces where necessary

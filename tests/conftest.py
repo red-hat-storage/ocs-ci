@@ -30,7 +30,8 @@ from ocs_ci.ocs import (
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import (
     CommandFailed, TimeoutExpiredError,
-    CephHealthException, ResourceWrongStatusException
+    CephHealthException, ResourceWrongStatusException,
+    UnsupportedPlatformError
 )
 from ocs_ci.ocs.mcg_workload import (
     mcg_job_factory as mcg_job_factory_implementation
@@ -276,21 +277,21 @@ def log_ocs_version(cluster):
 
 
 @pytest.fixture(scope='class')
-def ceph_pool_factory_class(request):
-    return ceph_pool_factory_fixture(request)
+def ceph_pool_factory_class(request, replica=3, compression=None):
+    return ceph_pool_factory_fixture(request, replica=replica, compression=compression)
 
 
 @pytest.fixture(scope='session')
-def ceph_pool_factory_session(request):
-    return ceph_pool_factory_fixture(request)
+def ceph_pool_factory_session(request, replica=3, compression=None):
+    return ceph_pool_factory_fixture(request, replica=replica, compression=compression)
 
 
 @pytest.fixture(scope='function')
-def ceph_pool_factory(request):
-    return ceph_pool_factory_fixture(request)
+def ceph_pool_factory(request, replica=3, compression=None):
+    return ceph_pool_factory_fixture(request, replica=replica, compression=compression)
 
 
-def ceph_pool_factory_fixture(request):
+def ceph_pool_factory_fixture(request, replica=3, compression=None):
     """
     Create a Ceph pool factory.
     Calling this fixture creates new Ceph pool instance.
@@ -299,9 +300,9 @@ def ceph_pool_factory_fixture(request):
     """
     instances = []
 
-    def factory(interface=constants.CEPHBLOCKPOOL):
+    def factory(interface=constants.CEPHBLOCKPOOL, replica=replica, compression=compression):
         if interface == constants.CEPHBLOCKPOOL:
-            ceph_pool_obj = helpers.create_ceph_block_pool()
+            ceph_pool_obj = helpers.create_ceph_block_pool(replica=replica, compression=compression)
         elif interface == constants.CEPHFILESYSTEM:
             cfs = ocp.OCP(
                 kind=constants.CEPHFILESYSTEM,
@@ -386,7 +387,10 @@ def storageclass_factory_fixture(
         secret=None,
         custom_data=None,
         sc_name=None,
-        reclaim_policy=constants.RECLAIM_POLICY_DELETE
+        reclaim_policy=constants.RECLAIM_POLICY_DELETE,
+        replica=3,
+        compression=None,
+        new_rbd_pool=False
     ):
         """
         Args:
@@ -398,6 +402,9 @@ def storageclass_factory_fixture(
                 by using these data. Parameters `block_pool` and `secret`
                 are not useds but references are set if provided.
             sc_name (str): Name of the storage class
+            replica (int): Replica size for a pool
+            compression (str): Compression type option for a pool
+            new_rbd_pool (bool): True if user wants to create new rbd pool for SC
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -408,7 +415,14 @@ def storageclass_factory_fixture(
         else:
             secret = secret or secret_factory(interface=interface)
             if interface == constants.CEPHBLOCKPOOL:
-                interface_name = helpers.default_ceph_block_pool()
+                if config.ENV_DATA.get('new_rbd_pool') or new_rbd_pool:
+                    pool_obj = ceph_pool_factory(
+                        interface=interface, replica=config.ENV_DATA.get('replica') or replica,
+                        compression=config.ENV_DATA.get('compression') or compression
+                    )
+                    interface_name = pool_obj.name
+                else:
+                    interface_name = helpers.default_ceph_block_pool()
             elif interface == constants.CEPHFILESYSTEM:
                 interface_name = helpers.get_cephfs_data_pool_name()
 
@@ -2854,29 +2868,43 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
 
     """
     created_ns_resources = []
-    created_ns_connections = []
+    created_connections = {}
 
-    def _create_ns_resources():
+    def _create_ns_resources(platform=constants.AWS_PLATFORM):
         # Create random connection_name and random namespace resource name
-        rand_ns_resource = create_unique_resource_name(constants.MCG_NS_RESOURCE, 'aws')
-        rand_connection = create_unique_resource_name(constants.MCG_NS_AWS_CONNECTION, 'aws')
+        if platform not in created_connections:
+            rand_connection = create_unique_resource_name(constants.MCG_CONNECTION, platform)
+            mcg_obj.create_connection(cld_mgr, platform, rand_connection)
+            created_connections[platform] = rand_connection
 
         # Create the actual namespace resource
-        target_bucket_name = mcg_obj.create_namespace_resource(rand_ns_resource, rand_connection,
+        rand_ns_resource = create_unique_resource_name(constants.MCG_NS_RESOURCE, platform)
+        target_bucket_name = mcg_obj.create_namespace_resource(rand_ns_resource, created_connections[platform],
                                                                config.ENV_DATA['region'], cld_mgr, cloud_uls_factory)
-        mcg_obj.check_ns_resource_validity(rand_ns_resource,
-                                           target_bucket_name, constants.MCG_NS_AWS_ENDPOINT)
+
+        log.info(f"Check validity of NS resource {rand_ns_resource}")
+        if platform == constants.AWS_PLATFORM:
+            endpoint = constants.MCG_NS_AWS_ENDPOINT
+        elif platform == constants.AZURE_PLATFORM:
+            endpoint = constants.MCG_NS_AZURE_ENDPOINT
+        else:
+            raise UnsupportedPlatformError(f"Unsupported Platform: {platform}")
+
+        mcg_obj.check_ns_resource_validity(
+            rand_ns_resource,
+            target_bucket_name,
+            endpoint
+        )
 
         created_ns_resources.append(rand_ns_resource)
-        created_ns_connections.append(rand_connection)
         return target_bucket_name, rand_ns_resource
 
     def ns_resources_and_connections_cleanup():
         for ns_resource in created_ns_resources:
             mcg_obj.delete_ns_resource(ns_resource)
 
-        for ns_connection in created_ns_connections:
-            mcg_obj.delete_ns_connection(ns_connection)
+        for platform in created_connections:
+            mcg_obj.delete_ns_connection(created_connections[platform])
 
     request.addfinalizer(ns_resources_and_connections_cleanup)
 
@@ -3165,7 +3193,7 @@ def pvc_clone_factory(request):
         size = size or pvc_obj.get().get('spec').get('resources').get('requests').get('storage')
         storageclass = storageclass or pvc_obj.backed_sc
         access_mode = access_mode or pvc_obj.get_pvc_access_mode
-        volume_mode = volume_mode or pvc_obj.volume_mode
+        volume_mode = volume_mode or getattr(pvc_obj, 'volume_mode', None)
 
         # Create clone
         clone_pvc_obj = pvc.create_pvc_clone(
