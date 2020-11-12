@@ -12,7 +12,11 @@ from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.testlib import ManageTest, ignore_leftovers
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
-from ocs_ci.helpers.helpers import run_io_with_rados_bench, delete_cephblockpools, create_ceph_block_pool
+from ocs_ci.helpers.helpers import (
+    run_io_with_rados_bench,
+    delete_cephblockpools,
+    create_ceph_block_pool,
+)
 from ocs_ci.ocs.cluster import CephCluster
 
 
@@ -29,8 +33,11 @@ def verify_mon_pod_up(pods):
     """
     log.info("Verifying all mons pods are up and Running")
     ret = pods.wait_for_resource(
-        condition=constants.STATUS_RUNNING, selector='app=rook-ceph-mon',
-        resource_count=3, timeout=700)
+        condition=constants.STATUS_RUNNING,
+        selector="app=rook-ceph-mon",
+        resource_count=3,
+        timeout=700,
+    )
     log.info(f"waited for all mon pod to come up and running {ret}")
     return ret
 
@@ -42,14 +49,11 @@ def run_io_on_pool(pool_obj):
     Returns: A thread of I/O
     """
     tools_pod = pod.get_ceph_tools_pod()
-    tools_pod.add_role(role='client')
+    tools_pod.add_role(role="client")
 
     return run_io_with_rados_bench(
         ceph_pods=[tools_pod],
-        config={
-            'time': 45, 'cleanup': False,
-            'pool': pool_obj.name
-        }
+        config={"time": 45, "cleanup": False, "pool": pool_obj.name},
     )
 
 
@@ -71,15 +75,15 @@ class TestRemoveMonFromCluster(ManageTest):
         """
         ceph_cluster = CephCluster()
         pods = ocp.OCP(
-            kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
         )
         list_mons = ceph_cluster.get_mons_from_cluster()
         assert len(list_mons) > 1, pytest.skip(
             "INVALID: Mon count should be more than one to delete."
         )
         self.pool_obj = create_ceph_block_pool()
-        assert run_io_on_pool(self.pool_obj), 'Failed to run I/O on the pool'
-        assert delete_cephblockpools([self.pool_obj]), 'Failed to delete pool'
+        assert run_io_on_pool(self.pool_obj), "Failed to run I/O on the pool"
+        assert delete_cephblockpools([self.pool_obj]), "Failed to delete pool"
         ceph_cluster.cluster_health_check(timeout=0)
         ceph_cluster.remove_mon_from_cluster()
         assert verify_mon_pod_up(pods), "Mon pods are not up and running state"

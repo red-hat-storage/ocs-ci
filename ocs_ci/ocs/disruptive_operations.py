@@ -55,7 +55,9 @@ def worker_node_shutdown(abrupt):
 
     log.info("Sleeping 5 minutes")
     time.sleep(320)
-    assert wait_for_ct_pod_recovery(), "Ceph tools pod failed to come up on another node"
+    assert (
+        wait_for_ct_pod_recovery()
+    ), "Ceph tools pod failed to come up on another node"
     if abrupt:
         log.info("Abrupt Shutdown")
         if node_to_shutdown:

@@ -27,16 +27,17 @@ def change_registry_backend_to_ocs():
     """
     sc_name = f"{constants.DEFAULT_STORAGECLASS_CEPHFS}"
     pv_obj = helpers.create_pvc(
-        sc_name=sc_name, pvc_name='registry-cephfs-rwx-pvc',
-        namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE, size='100Gi',
-        access_mode=constants.ACCESS_MODE_RWX
+        sc_name=sc_name,
+        pvc_name="registry-cephfs-rwx-pvc",
+        namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
+        size="100Gi",
+        access_mode=constants.ACCESS_MODE_RWX,
     )
-    helpers.wait_for_resource_state(pv_obj, 'Bound')
+    helpers.wait_for_resource_state(pv_obj, "Bound")
     param_cmd = f'[{{"op": "add", "path": "/spec/storage", "value": {{"pvc": {{"claim": "{pv_obj.name}"}}}}}}]'
 
     run_cmd(
-        f"oc patch {constants.IMAGE_REGISTRY_CONFIG} -p "
-        f"'{param_cmd}' --type json"
+        f"oc patch {constants.IMAGE_REGISTRY_CONFIG} -p " f"'{param_cmd}' --type json"
     )
 
     # Validate registry pod status
@@ -45,10 +46,9 @@ def change_registry_backend_to_ocs():
     )()
 
     # Validate pvc mount in the registry pod
-    retry(
-        (CommandFailed, UnexpectedBehaviour, AssertionError),
-        tries=3, delay=15
-    )(validate_pvc_mount_on_registry_pod)()
+    retry((CommandFailed, UnexpectedBehaviour, AssertionError), tries=3, delay=15)(
+        validate_pvc_mount_on_registry_pod
+    )()
 
 
 def get_registry_pod_obj():
@@ -71,23 +71,25 @@ def get_registry_pod_obj():
         namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
         resource_name=constants.OPENSHIFT_IMAGE_REGISTRY_DEPLOYMENT,
     )
-    replicas = registry_deployment.data['spec'].get('replicas', 1)
+    replicas = registry_deployment.data["spec"].get("replicas", 1)
     registry_pods = ocp.OCP(
-        kind='pod', namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
+        kind="pod",
+        namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
         selector=constants.OPENSHIFT_IMAGE_SELECTOR,
     )
     registry_pods.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        timeout=400, resource_count=replicas, dont_allow_other_resources=True,
+        timeout=400,
+        resource_count=replicas,
+        dont_allow_other_resources=True,
     )
-    pod_objs = [pod.Pod(**data) for data in registry_pods.data['items']]
+    pod_objs = [pod.Pod(**data) for data in registry_pods.data["items"]]
     pod_objs_len = len(pod_objs)
     if pod_objs_len == 0:
         raise UnexpectedBehaviour("No image-registry pod is present!")
     elif pod_objs_len != replicas:
         raise UnexpectedBehaviour(
-            f"Expected {replicas} image-registry pod(s), but {pod_objs_len} "
-            f"found!"
+            f"Expected {replicas} image-registry pod(s), but {pod_objs_len} " f"found!"
         )
     return pod_objs
 
@@ -103,21 +105,20 @@ def get_oc_podman_login_cmd(skip_tls_verify=True):
         cmd_list (list): List of cmd for oc/podman login
 
     """
-    user = config.RUN['username']
+    user = config.RUN["username"]
     filename = os.path.join(
-        config.ENV_DATA['cluster_path'],
-        config.RUN['password_location']
+        config.ENV_DATA["cluster_path"], config.RUN["password_location"]
     )
     with open(filename) as f:
         password = f.read().strip()
-    cluster_name = config.ENV_DATA['cluster_name']
-    base_domain = config.ENV_DATA['base_domain']
+    cluster_name = config.ENV_DATA["cluster_name"]
+    base_domain = config.ENV_DATA["base_domain"]
     cmd_list = [
-        'export KUBECONFIG=/home/core/auth/kubeconfig',
+        "export KUBECONFIG=/home/core/auth/kubeconfig",
         f"oc login -u {user} -p {password} "
         f"https://api-int.{cluster_name}.{base_domain}:6443"
         f" --insecure-skip-tls-verify={skip_tls_verify}",
-        f"podman login -u {user} -p $(oc whoami -t) image-registry.openshift-image-registry.svc:5000"
+        f"podman login -u {user} -p $(oc whoami -t) image-registry.openshift-image-registry.svc:5000",
     ]
     master_list = node.get_master_nodes()
     helpers.rsync_kubeconf_to_node(node=master_list[0])
@@ -135,11 +136,10 @@ def validate_pvc_mount_on_registry_pod():
     pod_objs = get_registry_pod_obj()
     for pod_obj in pod_objs:
         mount_point = pod_obj.exec_cmd_on_pod(
-            command="mount", out_yaml_format=False,
+            command="mount",
+            out_yaml_format=False,
         )
-        assert "/registry" in mount_point, (
-            f"pvc is not mounted on pod {pod_obj.name}"
-        )
+        assert "/registry" in mount_point, f"pvc is not mounted on pod {pod_obj.name}"
         logger.info(f"Verified pvc is mounted on {pod_obj.name} pod")
 
 
@@ -149,9 +149,7 @@ def validate_registry_pod_status():
     """
     pod_objs = get_registry_pod_obj()
     for pod_obj in pod_objs:
-        helpers.wait_for_resource_state(
-            pod_obj, state=constants.STATUS_RUNNING
-        )
+        helpers.wait_for_resource_state(pod_obj, state=constants.STATUS_RUNNING)
 
 
 def get_default_route_name():
@@ -165,7 +163,7 @@ def get_default_route_name():
     ocp_obj = ocp.OCP()
     route_cmd = f"get route -n {constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE} -o yaml"
     route_dict = ocp_obj.exec_oc_cmd(command=route_cmd)
-    return route_dict.get('items')[0].get('spec').get('host')
+    return route_dict.get("items")[0].get("spec").get("host")
 
 
 def add_role_to_user(role_type, user, cluster_role=False, namespace=None):
@@ -183,12 +181,10 @@ def add_role_to_user(role_type, user, cluster_role=False, namespace=None):
 
     """
     ocp_obj = ocp.OCP()
-    cluster = 'cluster-' if cluster_role else ''
-    namespace = f'-n {namespace}' if namespace else ''
-    role_cmd = (
-        f"adm policy add-{cluster}role-to-user {role_type} {user} {namespace}"
-    )
-    assert ocp_obj.exec_oc_cmd(command=role_cmd), 'Adding role failed'
+    cluster = "cluster-" if cluster_role else ""
+    namespace = f"-n {namespace}" if namespace else ""
+    role_cmd = f"adm policy add-{cluster}role-to-user {role_type} {user} {namespace}"
+    assert ocp_obj.exec_oc_cmd(command=role_cmd), "Adding role failed"
     logger.info(f"Role_type {role_type} added to the user {user}")
 
 
@@ -207,12 +203,12 @@ def remove_role_from_user(role_type, user, cluster_role=False, namespace=None):
 
     """
     ocp_obj = ocp.OCP()
-    cluster = 'cluster-' if cluster_role else ''
-    namespace = f'-n {namespace}' if namespace else ''
+    cluster = "cluster-" if cluster_role else ""
+    namespace = f"-n {namespace}" if namespace else ""
     role_cmd = (
         f"adm policy remove-{cluster}role-from-user {role_type} {user} {namespace}"
     )
-    assert ocp_obj.exec_oc_cmd(command=role_cmd), 'Removing role failed'
+    assert ocp_obj.exec_oc_cmd(command=role_cmd), "Removing role failed"
     logger.info(f"Role_type {role_type} removed from user {user}")
 
 
@@ -230,25 +226,30 @@ def enable_route_and_create_ca_for_registry_access():
     )
     assert ocp_obj.patch(
         resource_name=constants.IMAGE_REGISTRY_RESOURCE_NAME,
-        params='{"spec": {"defaultRoute": true}}', format_type='merge'
+        params='{"spec": {"defaultRoute": true}}',
+        format_type="merge",
     ), "Registry pod defaultRoute enable is not success"
     logger.info("Enabled defaultRoute to true")
     ocp_obj = ocp.OCP()
-    crt_cmd = f"get secret {constants.DEFAULT_ROUTE_CRT} " \
-              f"-n {constants.OPENSHIFT_INGRESS_NAMESPACE} -o yaml"
+    crt_cmd = (
+        f"get secret {constants.DEFAULT_ROUTE_CRT} "
+        f"-n {constants.OPENSHIFT_INGRESS_NAMESPACE} -o yaml"
+    )
     crt_dict = ocp_obj.exec_oc_cmd(command=crt_cmd)
-    crt = crt_dict.get('data').get('tls.crt')
+    crt = crt_dict.get("data").get("tls.crt")
     route = get_default_route_name()
-    if not os.path.exists('/tmp/secret'):
-        run_cmd(cmd='mkdir /tmp/secret')
+    if not os.path.exists("/tmp/secret"):
+        run_cmd(cmd="mkdir /tmp/secret")
     with open(f"/tmp/secret/{route}.crt", "wb") as temp:
         temp.write(base64.b64decode(crt))
     master_list = node.get_master_nodes()
     ocp.rsync(
-        src="/tmp/secret/", dst='/etc/pki/ca-trust/source/anchors',
-        node=master_list[0], dst_node=True
+        src="/tmp/secret/",
+        dst="/etc/pki/ca-trust/source/anchors",
+        node=master_list[0],
+        dst_node=True,
     )
-    ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=['update-ca-trust enable'])
+    ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=["update-ca-trust enable"])
     logger.info("Created base64 secret, copied to source location and enabled ca-trust")
 
 
@@ -348,9 +349,7 @@ def check_image_exists_in_registry(image_url):
     return return_value
 
 
-def image_pull_and_push(
-    project_name, template, image='', pattern='', wait=True
-):
+def image_pull_and_push(project_name, template, image="", pattern="", wait=True):
     """
     Pull and push images running oc new-app command
 
@@ -362,7 +361,7 @@ def image_pull_and_push(
         wait (bool): If true waits till the image pull and push completes.
 
     """
-    if config.DEPLOYMENT.get('disconnected'):
+    if config.DEPLOYMENT.get("disconnected"):
         mirror_image(image=image)
     else:
         cmd = f"new-app --template={template} -n {project_name}"
@@ -374,39 +373,40 @@ def image_pull_and_push(
             wait_time = 300
             logger.info(f"Wait for {wait_time} seconds for build to come up")
             time.sleep(300)
-            build_list = get_build_name_by_pattern(pattern=pattern, namespace=project_name)
+            build_list = get_build_name_by_pattern(
+                pattern=pattern, namespace=project_name
+            )
             if build_list is None:
                 raise Exception("Build is not created")
-            build_obj = ocp.OCP(kind='Build', namespace=project_name)
+            build_obj = ocp.OCP(kind="Build", namespace=project_name)
             for build in build_list:
-                build_obj.wait_for_resource(condition='Complete', resource_name=build, timeout=900)
+                build_obj.wait_for_resource(
+                    condition="Complete", resource_name=build, timeout=900
+                )
 
 
-def get_build_name_by_pattern(
-    pattern='',
-    namespace=None
-):
+def get_build_name_by_pattern(pattern="", namespace=None):
     """
-        In a given namespace find names of the builds that match
-        the given pattern
+    In a given namespace find names of the builds that match
+    the given pattern
 
-        Args:
-            pattern (str): name of the build with given pattern
-            namespace (str): Namespace value
+    Args:
+        pattern (str): name of the build with given pattern
+        namespace (str): Namespace value
 
-        Returns:
-            build_list (list): List of build names matching the pattern
+    Returns:
+        build_list (list): List of build names matching the pattern
 
     """
-    namespace = namespace if namespace else config.ENV_DATA['cluster_namespace']
-    ocp_obj = ocp.OCP(kind='Build', namespace=namespace)
-    build_names = ocp_obj.exec_oc_cmd('get builds -o name', out_yaml_format=False)
-    build_names = build_names.split('\n')
+    namespace = namespace if namespace else config.ENV_DATA["cluster_namespace"]
+    ocp_obj = ocp.OCP(kind="Build", namespace=namespace)
+    build_names = ocp_obj.exec_oc_cmd("get builds -o name", out_yaml_format=False)
+    build_names = build_names.split("\n")
     build_list = []
     for name in build_names:
         if re.search(pattern, name):
-            _, name = name.split('/')
-            logger.info(f'pod name match found appending {name}')
+            _, name = name.split("/")
+            logger.info(f"pod name match found appending {name}")
             build_list.append(name)
     return build_list
 
@@ -426,14 +426,16 @@ def validate_image_exists(namespace=None):
 
     """
 
-    if not config.DEPLOYMENT.get('disconnected'):
+    if not config.DEPLOYMENT.get("disconnected"):
         pod_list = get_pod_name_by_pattern(
-            pattern="image-registry", namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+            pattern="image-registry",
+            namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
         )
         for pod_name in pod_list:
             if "cluster" not in pod_name:
                 pod_obj = pod.get_pod_obj(
-                    name=pod_name, namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+                    name=pod_name,
+                    namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
                 )
                 return pod_obj.exec_cmd_on_pod(
                     command=f"find /registry/docker/registry/v2/repositories/{namespace}"
@@ -454,23 +456,28 @@ def modify_registry_pod_count(count):
         TimeoutExpiredError: When number of image registry pods doesn't match the count
 
     """
-    params = ('{\"spec\":{\"replicas\":%d}}' % count)
+    params = '{"spec":{"replicas":%d}}' % count
     ocp_obj = ocp.OCP(
         kind=constants.IMAGE_REGISTRY_CONFIG,
-        namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+        namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
     )
-    ocp_obj.patch(params=params, format_type='merge'), (
+    ocp_obj.patch(params=params, format_type="merge"), (
         "Failed to run patch command to increase number of image registry pod"
     )
 
     # Validate number of image registry pod should match the count
     for pod_list in TimeoutSampler(
-        300, 10, get_pod_name_by_pattern,
-        'image-registry', constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+        300,
+        10,
+        get_pod_name_by_pattern,
+        "image-registry",
+        constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
     ):
         try:
             if pod_list is not None and len(pod_list) == count + 1:
                 return True
         except IndexError as ie:
-            logger.error(f"Number of image registry pod doesn't match the count. Error: {ie}")
+            logger.error(
+                f"Number of image registry pod doesn't match the count. Error: {ie}"
+            )
             return False

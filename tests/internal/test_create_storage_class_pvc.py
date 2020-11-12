@@ -8,7 +8,7 @@ from ocs_ci.helpers import helpers
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def test_fixture_rbd(request):
     request.addfinalizer(teardown_rbd)
     setup_rbd()
@@ -29,7 +29,7 @@ def setup_rbd():
     RBD_SC_OBJ = helpers.create_storage_class(
         interface_type=constants.CEPHBLOCKPOOL,
         interface_name=RBD_POOL.name,
-        secret_name=RBD_SECRET_OBJ.name
+        secret_name=RBD_SECRET_OBJ.name,
     )
 
 
@@ -39,7 +39,7 @@ def teardown_rbd():
     Deleting pod,replicated pool,pvc,storageclass,secret of rbd
     """
     global RBD_PVC_OBJ, RBD_POD_OBJ
-    log.info('deleting rbd pod')
+    log.info("deleting rbd pod")
     RBD_POD_OBJ.delete()
     log.info("Deleting RBD PVC")
     RBD_PVC_OBJ.delete()
@@ -52,7 +52,7 @@ def teardown_rbd():
     RBD_SC_OBJ.delete()
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def test_fixture_cephfs(request):
 
     request.addfinalizer(teardown_fs)
@@ -69,15 +69,15 @@ def setup_fs():
     CEPHFS_SC_OBJ = helpers.create_storage_class(
         constants.CEPHFILESYSTEM,
         helpers.get_cephfs_data_pool_name(),
-        CEPHFS_SECRET_OBJ.name
+        CEPHFS_SECRET_OBJ.name,
     )
 
 
 def teardown_fs():
     global CEPHFS_PVC_OBJ, CEPHFS_POD_OBJ
-    log.info('deleting cephfs pod')
+    log.info("deleting cephfs pod")
     CEPHFS_POD_OBJ.delete()
-    log.info('deleting cephfs pvc')
+    log.info("deleting cephfs pvc")
     CEPHFS_PVC_OBJ.delete()
     assert helpers.validate_pv_delete(CEPHFS_PVC_OBJ.backed_pv)
     log.info("Deleting CEPHFS Secret")
@@ -94,13 +94,9 @@ class TestOSCBasics(ManageTest):
         storage class creation,pvc and pod with rbd
         """
         global RBD_PVC_OBJ, RBD_POD_OBJ
-        log.info('creating pvc for RBD ')
-        pvc_name = helpers.create_unique_resource_name(
-            'test-rbd', 'pvc'
-        )
-        RBD_PVC_OBJ = helpers.create_pvc(
-            sc_name=RBD_SC_OBJ.name, pvc_name=pvc_name
-        )
+        log.info("creating pvc for RBD ")
+        pvc_name = helpers.create_unique_resource_name("test-rbd", "pvc")
+        RBD_PVC_OBJ = helpers.create_pvc(sc_name=RBD_SC_OBJ.name, pvc_name=pvc_name)
         helpers.wait_for_resource_state(RBD_PVC_OBJ, constants.STATUS_BOUND)
         RBD_PVC_OBJ.reload()
         if RBD_PVC_OBJ.backed_pv is None:
@@ -118,16 +114,14 @@ class TestOSCBasics(ManageTest):
          storage class creation, pvc and pod with cephfs
         """
         global CEPHFS_PVC_OBJ, CEPHFS_POD_OBJ
-        log.info('creating pvc for CephFS ')
-        pvc_name = helpers.create_unique_resource_name(
-            'test-cephfs', 'pvc'
-        )
+        log.info("creating pvc for CephFS ")
+        pvc_name = helpers.create_unique_resource_name("test-cephfs", "pvc")
         CEPHFS_PVC_OBJ = helpers.create_pvc(
             sc_name=CEPHFS_SC_OBJ.name, pvc_name=pvc_name
         )
         helpers.wait_for_resource_state(CEPHFS_PVC_OBJ, constants.STATUS_BOUND)
         CEPHFS_PVC_OBJ.reload()
-        log.info('creating cephfs pod')
+        log.info("creating cephfs pod")
         CEPHFS_POD_OBJ = helpers.create_pod(
             interface_type=constants.CEPHFILESYSTEM, pvc_name=CEPHFS_PVC_OBJ.name
         )

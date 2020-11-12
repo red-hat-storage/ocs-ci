@@ -63,17 +63,19 @@ def test_workload_rbd(workload_storageutilization_50p_rbd):
     # Asking for values of `ceph_osd_stat_bytes_used` for every 15s in
     # when the workload fixture was utilizing 50% of the OCS storage.
     result_used = prometheus.query_range(
-        query='ceph_osd_stat_bytes_used',
-        start=workload_storageutilization_50p_rbd['start'],
-        end=workload_storageutilization_50p_rbd['stop'],
-        step=15)
+        query="ceph_osd_stat_bytes_used",
+        start=workload_storageutilization_50p_rbd["start"],
+        end=workload_storageutilization_50p_rbd["stop"],
+        step=15,
+    )
     # This time, we are asking for total OCS capacity, in the same format
     # as in previous case (for each OSD).
     result_total = prometheus.query_range(
-        query='ceph_osd_stat_bytes',
-        start=workload_storageutilization_50p_rbd['start'],
-        end=workload_storageutilization_50p_rbd['stop'],
-        step=15)
+        query="ceph_osd_stat_bytes",
+        start=workload_storageutilization_50p_rbd["start"],
+        end=workload_storageutilization_50p_rbd["stop"],
+        step=15,
+    )
     # Check test assumption that ceph_osd_stat_bytes hasn't changed for each
     # OSD, and that each OSD has the same size.
     osd_stat_bytes = []
@@ -86,13 +88,13 @@ def test_workload_rbd(workload_storageutilization_50p_rbd):
     assert all(value == osd_stat_bytes[0] for value in osd_stat_bytes)
     # Compute expected value of'ceph_osd_stat_bytes_used, based on percentage
     # utilized by the fixture.
-    percentage = workload_storageutilization_50p_rbd['result']['target_p']
+    percentage = workload_storageutilization_50p_rbd["result"]["target_p"]
     expected_value = int(osd_stat_bytes[0]) * percentage
     # Now we can check the actual usage values from Prometheus.
     at_least_one_value_out_of_range = False
     for metric in result_used:
-        name = metric['metric']['__name__']
-        daemon = metric['metric']['ceph_daemon']
+        name = metric["metric"]["__name__"]
+        daemon = metric["metric"]["ceph_daemon"]
         logger.info(f"metric {name} from {daemon}")
         # We are skipping the 1st 10% of the values, as it could take some
         # additional time for all the data to be written everywhere, and
@@ -108,12 +110,14 @@ def test_workload_rbd(workload_storageutilization_50p_rbd):
             dt = datetime.utcfromtimestamp(ts)
             # checking the value, with 10% error margin in each direction
             if expected_value * 0.90 <= value <= expected_value * 1.10:
-                logger.info(
-                    f"value {value} B at {dt} is withing expected range")
+                logger.info(f"value {value} B at {dt} is withing expected range")
             else:
-                logger.error((
-                    f"value {value} B at {dt} is outside of expected range"
-                    f" {expected_value} B +- 10%"))
+                logger.error(
+                    (
+                        f"value {value} B at {dt} is outside of expected range"
+                        f" {expected_value} B +- 10%"
+                    )
+                )
                 at_least_one_value_out_of_range = True
     assert not at_least_one_value_out_of_range
 
@@ -139,8 +143,7 @@ def test_workload_cephfs(workload_storageutilization_50p_cephfs):
 
 @pytest.mark.libtest
 def test_workload_rbd_cephfs(
-    workload_storageutilization_50p_rbd,
-    workload_storageutilization_50p_cephfs
+    workload_storageutilization_50p_rbd, workload_storageutilization_50p_cephfs
 ):
     """
     When this test case is executed as the only test case in pytest test run,
@@ -153,8 +156,7 @@ def test_workload_rbd_cephfs(
 
 @pytest.mark.libtest
 def test_workload_rbd_cephfs_minimal(
-    workload_storageutilization_05p_rbd,
-    workload_storageutilization_05p_cephfs
+    workload_storageutilization_05p_rbd, workload_storageutilization_05p_cephfs
 ):
     """
     Similar to test_workload_rbd_cephfs, but using only 5% of total OCS
@@ -171,8 +173,7 @@ def test_workload_rbd_cephfs_minimal(
 @tier1
 @pytest.mark.polarion_id("OCS-2125")
 def test_workload_rbd_cephfs_10g(
-    workload_storageutilization_10g_rbd,
-    workload_storageutilization_10g_cephfs
+    workload_storageutilization_10g_rbd, workload_storageutilization_10g_cephfs
 ):
     """
     Test of a workload utilization with constant 10 GiB target.
@@ -185,21 +186,22 @@ def test_workload_rbd_cephfs_10g(
     """
     logger.info("checking fio report results as provided by workload fixtures")
     msg = "workload results should be recorded and provided to the test"
-    assert workload_storageutilization_10g_rbd['result'] is not None, msg
-    assert workload_storageutilization_10g_cephfs['result'] is not None, msg
+    assert workload_storageutilization_10g_rbd["result"] is not None, msg
+    assert workload_storageutilization_10g_cephfs["result"] is not None, msg
 
     fio_reports = (
-        ('rbd', workload_storageutilization_10g_rbd['result']['fio']),
-        ('cephfs', workload_storageutilization_10g_cephfs['result']['fio']),
+        ("rbd", workload_storageutilization_10g_rbd["result"]["fio"]),
+        ("cephfs", workload_storageutilization_10g_cephfs["result"]["fio"]),
     )
     for vol_type, fio in fio_reports:
         logger.info("starting to check fio run on %s volume", vol_type)
         msg = "single fio job should be executed in each workload run"
-        assert len(fio['jobs']) == 1, msg
+        assert len(fio["jobs"]) == 1, msg
         logger.info(
             "fio (version %s) executed %s job on %s volume",
-            fio['fio version'],
-            fio['jobs'][0]['jobname'],
-            vol_type)
+            fio["fio version"],
+            fio["jobs"][0]["jobname"],
+            vol_type,
+        )
         msg = f"no errors should be reported by fio writing on {vol_type} volume"
-        assert fio['jobs'][0]['error'] == 0, msg
+        assert fio["jobs"][0]["error"] == 0, msg

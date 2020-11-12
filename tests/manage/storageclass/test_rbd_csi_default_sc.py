@@ -10,7 +10,8 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceLeftoversException
 from tests.fixtures import (
-    create_ceph_block_pool, create_rbd_secret,
+    create_ceph_block_pool,
+    create_rbd_secret,
 )
 
 log = logging.getLogger(__name__)
@@ -19,16 +20,16 @@ log = logging.getLogger(__name__)
 @pytest.fixture()
 def resources(request):
     """
-       Delete the resources created during the test
-       Returns:
-           tuple: empty lists of resources
+    Delete the resources created during the test
+    Returns:
+        tuple: empty lists of resources
     """
     pod, pvc, storageclass = ([] for _ in range(3))
 
     def finalizer():
         """
-            Delete the resources created during the test
-            """
+        Delete the resources created during the test
+        """
         failed_to_delete = []
         for resource_type in pod, pvc, storageclass:
             for resource in resource_type:
@@ -79,12 +80,11 @@ class TestBasicPVCOperations(ManageTest):
         for pvc_obj in pvc:
             helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
             pvc_obj.reload()
-        log.info(
-            f"Creating a pod on with pvc {pvc[0].name}"
-        )
+        log.info(f"Creating a pod on with pvc {pvc[0].name}")
         pod_obj = helpers.create_pod(
-            interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc[0].name,
-            pod_dict_path=constants.NGINX_POD_YAML
+            interface_type=constants.CEPHBLOCKPOOL,
+            pvc_name=pvc[0].name,
+            pod_dict_path=constants.NGINX_POD_YAML,
         )
         pod.append(pod_obj)
         helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)

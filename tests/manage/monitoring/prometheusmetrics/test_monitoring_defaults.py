@@ -9,7 +9,9 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import metrics_for_external_mode_required
+from ocs_ci.framework.pytest_customization.marks import (
+    metrics_for_external_mode_required,
+)
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs import metrics
@@ -35,7 +37,7 @@ def test_monitoring_enabled():
 
     if (
         storagecluster_independent_check()
-        and float(config.ENV_DATA['ocs_version']) < 4.6
+        and float(config.ENV_DATA["ocs_version"]) < 4.6
     ):
         logger.info(
             f"Skipping ceph metrics because it is not enabled for external "
@@ -45,27 +47,28 @@ def test_monitoring_enabled():
     else:
         # ask for values of ceph_pool_stored metric
         logger.info("Checking that ceph data are provided in OCS monitoring")
-        result = prometheus.query('ceph_pool_stored')
+        result = prometheus.query("ceph_pool_stored")
         msg = "check that we actually received some values for a ceph query"
         assert len(result) > 0, msg
         for metric in result:
-            _, value = metric['value']
+            _, value = metric["value"]
             assert_msg = "number of bytes in a pool isn't a positive integer or zero"
             assert int(value) >= 0, assert_msg
         # additional check that values makes at least some sense
         logger.info(
-            "Checking that size of ceph_pool_stored result matches number of pools")
+            "Checking that size of ceph_pool_stored result matches number of pools"
+        )
         ct_pod = pod.get_ceph_tools_pod()
         ceph_pools = ct_pod.exec_ceph_cmd("ceph osd pool ls")
         assert len(result) == len(ceph_pools)
 
     # again for a noobaa metric
     logger.info("Checking that MCG/NooBaa data are provided in OCS monitoring")
-    result = prometheus.query('NooBaa_bucket_status')
+    result = prometheus.query("NooBaa_bucket_status")
     msg = "check that we actually received some values for a MCG/NooBaa query"
     assert len(result) > 0, msg
     for metric in result:
-        _, value = metric['value']
+        _, value = metric["value"]
         assert int(value) >= 0, "bucket status isn't a positive integer or zero"
 
 
@@ -79,31 +82,29 @@ def test_ceph_mgr_dashboard_not_deployed():
     .. _`ceph mgr dashboard`: https://rook.io/docs/rook/v1.0/ceph-dashboard.html
     """
     logger.info("Checking that there is no ceph mgr dashboard pod deployed")
-    ocp_pod = ocp.OCP(
-        kind=constants.POD,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp_pod = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     # if there is no "items" in the reply, OCS is very broken
-    ocs_pods = ocp_pod.get()['items']
+    ocs_pods = ocp_pod.get()["items"]
     for pod_item in ocs_pods:
         # just making the assumptions explicit
-        assert pod_item['kind'] == constants.POD
-        pod_name = pod_item['metadata']['name']
+        assert pod_item["kind"] == constants.POD
+        pod_name = pod_item["metadata"]["name"]
         msg = "ceph mgr dashboard should not be deployed as part of OCS"
         assert "dashboard" not in pod_name, msg
         assert "ceph-mgr-dashboard" not in pod_name, msg
 
     logger.info("Checking that there is no ceph mgr dashboard route")
     ocp_route = ocp.OCP(kind=constants.ROUTE)
-    for route in ocp_route.get(all_namespaces=True)['items']:
+    for route in ocp_route.get(all_namespaces=True)["items"]:
         # just making the assumptions explicit
-        assert route['kind'] == constants.ROUTE
-        route_name = route['metadata']['name']
+        assert route["kind"] == constants.ROUTE
+        route_name = route["metadata"]["name"]
         msg = "ceph mgr dashboard route should not be deployed as part of OCS"
         assert "ceph-mgr-dashboard" not in route_name, msg
 
 
 @pytest.mark.skip(reason="BZ 1779336 was closed as NOTABUG")
-@skipif_ocs_version('<4.6')
+@skipif_ocs_version("<4.6")
 @metrics_for_external_mode_required
 @tier1
 @pytest.mark.bugzilla("1779336")
@@ -115,10 +116,12 @@ def test_ceph_rbd_metrics_available():
     """
     prometheus = PrometheusAPI()
     list_of_metrics_without_results = metrics.get_missing_metrics(
-        prometheus, metrics.ceph_rbd_metrics)
+        prometheus, metrics.ceph_rbd_metrics
+    )
     msg = (
         "OCS Monitoring should provide some value(s) for tested rbd metrics, "
-        "so that the list of metrics without results is empty.")
+        "so that the list of metrics without results is empty."
+    )
     assert list_of_metrics_without_results == [], msg
 
 
@@ -138,10 +141,12 @@ def test_ceph_metrics_available():
     list_of_metrics_without_results = metrics.get_missing_metrics(
         prometheus,
         metrics.ceph_metrics,
-        current_platform=config.ENV_DATA['platform'].lower())
+        current_platform=config.ENV_DATA["platform"].lower(),
+    )
     msg = (
         "OCS Monitoring should provide some value(s) for all tested metrics, "
-        "so that the list of metrics without results is empty.")
+        "so that the list of metrics without results is empty."
+    )
     assert list_of_metrics_without_results == [], msg
 
 
@@ -159,60 +164,63 @@ def test_monitoring_reporting_ok_when_idle(workload_idle):
     prometheus = PrometheusAPI()
 
     health_result = prometheus.query_range(
-        query='ceph_health_status',
-        start=workload_idle['start'],
-        end=workload_idle['stop'],
-        step=15)
+        query="ceph_health_status",
+        start=workload_idle["start"],
+        end=workload_idle["stop"],
+        step=15,
+    )
     health_validation = check_query_range_result_enum(
-        result=health_result,
-        good_values=[0],
-        bad_values=[1],
-        exp_metric_num=1)
+        result=health_result, good_values=[0], bad_values=[1], exp_metric_num=1
+    )
     health_msg = "ceph_health_status {} report 0 (health ok) as expected"
     if health_validation:
-        health_msg = health_msg.format('does')
+        health_msg = health_msg.format("does")
         logger.info(health_msg)
     else:
-        health_msg = health_msg.format('should')
+        health_msg = health_msg.format("should")
         logger.error(health_msg)
 
     mon_result = prometheus.query_range(
-        query='ceph_mon_quorum_status',
-        start=workload_idle['start'],
-        end=workload_idle['stop'],
-        step=15)
+        query="ceph_mon_quorum_status",
+        start=workload_idle["start"],
+        end=workload_idle["stop"],
+        step=15,
+    )
     mon_validation = check_query_range_result_enum(
         result=mon_result,
         good_values=[1],
         bad_values=[0],
-        exp_metric_num=workload_idle['result']['mon_num'])
+        exp_metric_num=workload_idle["result"]["mon_num"],
+    )
     mon_msg = "ceph_mon_quorum_status {} indicate no problems with quorum"
     if mon_validation:
-        mon_msg = mon_msg.format('does')
+        mon_msg = mon_msg.format("does")
         logger.info(mon_msg)
     else:
-        mon_msg = mon_msg.format('should')
+        mon_msg = mon_msg.format("should")
         logger.error(mon_msg)
 
     osd_validations = []
     for metric in ("ceph_osd_up", "ceph_osd_in"):
         osd_result = prometheus.query_range(
             query=metric,
-            start=workload_idle['start'],
-            end=workload_idle['stop'],
-            step=15)
+            start=workload_idle["start"],
+            end=workload_idle["stop"],
+            step=15,
+        )
         osd_validation = check_query_range_result_enum(
             result=osd_result,
             good_values=[1],
             bad_values=[0],
-            exp_metric_num=workload_idle['result']['osd_num'])
+            exp_metric_num=workload_idle["result"]["osd_num"],
+        )
         osd_validations.append(osd_validation)
         osd_msg = "{} metric {} indicate no problems with OSDs"
         if osd_validation:
-            osd_msg = osd_msg.format(metric, 'does')
+            osd_msg = osd_msg.format(metric, "does")
             logger.info(osd_msg)
         else:
-            osd_msg = osd_msg.format(metric, 'should')
+            osd_msg = osd_msg.format(metric, "should")
             logger.error(osd_msg)
 
     # after logging everything properly, make the test fail if necessary

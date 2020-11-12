@@ -8,8 +8,9 @@ from ocs_ci.ocs.exceptions import ResourceLeftoversException
 from ocs_ci.framework.testlib import ManageTest, tier2, skipif_external_mode
 from tests.fixtures import (
     create_ceph_block_pool,
-    create_rbd_secret, create_cephfs_secret,
-    create_project
+    create_rbd_secret,
+    create_cephfs_secret,
+    create_project,
 )
 
 log = logging.getLogger(__name__)
@@ -18,16 +19,16 @@ log = logging.getLogger(__name__)
 @pytest.fixture()
 def resources(request):
     """
-       Delete the resources created during the test
-       Returns:
-           tuple: empty lists of resources
-       """
+    Delete the resources created during the test
+    Returns:
+        tuple: empty lists of resources
+    """
     pods, pvcs, storageclasses = ([] for i in range(3))
 
     def finalizer():
         """
-            Delete the resources created during the test
-            """
+        Delete the resources created during the test
+        """
         failed_to_delete = []
         for resource_type in pods, pvcs, storageclasses:
             for resource in resource_type:
@@ -59,24 +60,19 @@ class TestCreateMultipleScWithSamePoolName(ManageTest):
     """
     Create Multiple Storage Class with same pool name
     """
+
     @pytest.mark.parametrize(
         argnames="interface_type",
         argvalues=[
             pytest.param(
-                *[
-                    constants.CEPHBLOCKPOOL
-                ], marks=pytest.mark.polarion_id("OCS-622")
+                *[constants.CEPHBLOCKPOOL], marks=pytest.mark.polarion_id("OCS-622")
             ),
             pytest.param(
-                *[
-                    constants.CEPHFILESYSTEM
-                ], marks=pytest.mark.polarion_id("OCS-623")
-            )
-        ]
+                *[constants.CEPHFILESYSTEM], marks=pytest.mark.polarion_id("OCS-623")
+            ),
+        ],
     )
-    def test_create_multiple_sc_with_same_pool_name(
-            self, interface_type, resources
-    ):
+    def test_create_multiple_sc_with_same_pool_name(self, interface_type, resources):
         """
         This test function does below,
         *. Creates multiple Storage Classes with same pool name
@@ -101,7 +97,7 @@ class TestCreateMultipleScWithSamePoolName(ManageTest):
                 helpers.create_storage_class(
                     interface_type=interface_type,
                     interface_name=interface_name,
-                    secret_name=secret
+                    secret_name=secret,
                 )
             )
             log.info(
@@ -112,9 +108,7 @@ class TestCreateMultipleScWithSamePoolName(ManageTest):
         # Create PVCs using each SC
         for i in range(3):
             log.info(f"Creating a PVC using {storageclasses[i].name}")
-            pvcs.append(
-                helpers.create_pvc(storageclasses[i].name)
-            )
+            pvcs.append(helpers.create_pvc(storageclasses[i].name))
         for pvc in pvcs:
             helpers.wait_for_resource_state(pvc, constants.STATUS_BOUND)
             pvc.reload()
@@ -124,22 +118,22 @@ class TestCreateMultipleScWithSamePoolName(ManageTest):
             log.info(f"Creating an app pod and mount {pvcs[i].name}")
             pods.append(
                 helpers.create_pod(
-                    interface_type=interface_type, pvc_name=pvcs[i].name,
-                    namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                    interface_type=interface_type,
+                    pvc_name=pvcs[i].name,
+                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
                 )
             )
             for pod in pods:
                 helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
                 pod.reload()
             log.info(
-                f"{pods[i].name} created successfully and "
-                f"mounted {pvcs[i].name}"
+                f"{pods[i].name} created successfully and " f"mounted {pvcs[i].name}"
             )
 
         # Run IO on each app pod for sometime
         for pod in pods:
             log.info(f"Running FIO on {pod.name}")
-            pod.run_io('fs', size='2G')
+            pod.run_io("fs", size="2G")
 
         for pod in pods:
             get_fio_rw_iops(pod)

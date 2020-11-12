@@ -10,7 +10,7 @@ from ocs_ci.helpers.helpers import default_storage_class
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def test_fixture_amq(request):
 
     amq = AMQ()
@@ -31,7 +31,7 @@ class TestAMQBasics(E2ETest):
             pytest.param(
                 constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-424")
             )
-        ]
+        ],
     )
     def test_install_amq_scale(self, interface, test_fixture_amq):
         """
@@ -49,7 +49,9 @@ class TestAMQBasics(E2ETest):
             num_of_messages = 10000 * i
             # Run open messages
             test_fixture_amq.create_messaging_on_amq(
-                num_of_producer_pods=i * 3, num_of_consumer_pods=i * 3, value=str(num_of_messages)
+                num_of_producer_pods=i * 3,
+                num_of_consumer_pods=i * 3,
+                value=str(num_of_messages),
             )
 
             # Wait for some time to generate msg

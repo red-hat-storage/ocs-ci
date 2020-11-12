@@ -8,18 +8,17 @@ from ocs_ci.framework.testlib import ManageTest, tier2
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[
-        pytest.param(
-            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-692")
-        ),
+        pytest.param(constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-692")),
         pytest.param(
             constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-693")
-        )
-    ]
+        ),
+    ],
 )
 class TestIOMultiplePods(ManageTest):
     """
     Run IO on multiple pods in parallel
     """
+
     num_of_pvcs = 10
     pvc_size = 5
 
@@ -46,7 +45,7 @@ class TestIOMultiplePods(ManageTest):
         Run IO on multiple pods in parallel
         """
         for pod in pods:
-            pod.run_io('fs', f'{self.pvc_size - 1}G')
+            pod.run_io("fs", f"{self.pvc_size - 1}G")
 
         for pod in pods:
             get_fio_rw_iops(pod)
