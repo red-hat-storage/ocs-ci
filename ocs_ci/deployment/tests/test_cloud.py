@@ -16,6 +16,7 @@ class TestCloudDeployment(CloudDeploymentBase):
     define it's mandatory attributes. Instantiating sheer CloudDeploymentBase
     will fail (which is expected for such base class).
     """
+
     # avoid raising NotImplementedError so that testing base class is possible
     DEFAULT_STORAGECLASS = "cloudstorage"
 
@@ -27,7 +28,7 @@ def test_clouddeploymentbase_init(clusterdir):
     cluster name is loaded from cluster dir properly.
     """
     cloud = TestCloudDeployment()
-    assert cloud.cluster_name == clusterdir['clusterName']
+    assert cloud.cluster_name == clusterdir["clusterName"]
 
 
 def test_clouddeploymentbase_init_withname(clusterdir):
@@ -51,7 +52,7 @@ def test_clouddeploymentbase_deploy_ocp_with_taken_cluster_name(clusterdir):
     # monkey patch test implementation of check_cluster_existence() method,
     # which is not implemented in CloudDeploymentBase base class, so that
     # current cluster name is considered as already taken
-    cloud.check_cluster_existence = lambda pr: pr in clusterdir['clusterName']
+    cloud.check_cluster_existence = lambda pr: pr in clusterdir["clusterName"]
     # trying to deploy with already taken cluster name
     with pytest.raises(exceptions.SameNamePrefixClusterAlreadyExistsException):
         cloud.deploy_ocp()

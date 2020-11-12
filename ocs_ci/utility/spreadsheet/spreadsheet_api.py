@@ -15,16 +15,15 @@ class GoogleSpreadSheetAPI(object):
     """
     A class to interact with Google Spreadsheet
     """
+
     def __init__(self, sheet_name, sheet_index):
         # use creds to create a client to interact with the Google Drive API
         scope = [
-            'https://spreadsheets.google.com/feeds',
-            'https://www.googleapis.com/auth/drive'
+            "https://spreadsheets.google.com/feeds",
+            "https://www.googleapis.com/auth/drive",
         ]
-        google_api = os.path.expanduser(config.RUN['google_api_secret'])
-        creds = ServiceAccountCredentials.from_json_keyfile_name(
-            google_api, scope
-        )
+        google_api = os.path.expanduser(config.RUN["google_api_secret"])
+        creds = ServiceAccountCredentials.from_json_keyfile_name(google_api, scope)
         client = gspread.authorize(creds)
         self.sheet = client.open(sheet_name).get_worksheet(sheet_index)
 

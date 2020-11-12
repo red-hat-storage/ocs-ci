@@ -16,10 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 class OpenshiftConsole:
-
     def __init__(self, browser=constants.CHROME_BROWSER):
         self.browser = browser
-        self.console_path = config.RUN['openshift_console_path']
+        self.console_path = config.RUN["openshift_console_path"]
         self.env_vars = {}
         self.setup_console_prereq()
 
@@ -67,13 +66,11 @@ class OpenshiftConsole:
             )
             with open(patch_htpasswd_yaml) as fd_patch_htpasswd:
                 content_patch_htpasswd_yaml = fd_patch_htpasswd.read()
-            run_cmd(
-                f"oc apply -f {password_secret_yaml}", cwd=self.console_path
-            )
+            run_cmd(f"oc apply -f {password_secret_yaml}", cwd=self.console_path)
             run_cmd(
                 f"oc patch oauths cluster --patch "
-                f"\"{content_patch_htpasswd_yaml}\" --type=merge",
-                cwd=self.console_path
+                f'"{content_patch_htpasswd_yaml}" --type=merge',
+                cwd=self.console_path,
             )
         self.bridge_base_address = run_cmd(
             "oc get consoles.config.openshift.io cluster -o"
@@ -90,9 +87,7 @@ class OpenshiftConsole:
             self.env_vars[key] = value
         self.env_vars.update(os.environ)
 
-    def run_openshift_console(
-        self, suite, env_vars=None, timeout=1500, log_suffix=""
-    ):
+    def run_openshift_console(self, suite, env_vars=None, timeout=1500, log_suffix=""):
         """
         Run openshift console suite
 
@@ -106,26 +101,24 @@ class OpenshiftConsole:
 
         """
         if not suite:
-            raise OpenshiftConsoleSuiteNotDefined(
-                "Please specify suite to run!"
-            )
+            raise OpenshiftConsoleSuiteNotDefined("Please specify suite to run!")
         env_vars = env_vars if env_vars else {}
         combined_env_vars = {**self.env_vars, **env_vars}
 
         ui_deploy_output = run_cmd(
-            f"./test-gui.sh {suite}", cwd=self.console_path,
-            env=combined_env_vars, timeout=timeout,
+            f"./test-gui.sh {suite}",
+            cwd=self.console_path,
+            env=combined_env_vars,
+            timeout=timeout,
         )
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         ui_deploy_log_file = os.path.expanduser(
             os.path.join(
-                config.RUN['log_dir'],
-                f"openshift-console-{log_suffix}{timestamp}.log"
+                config.RUN["log_dir"], f"openshift-console-{log_suffix}{timestamp}.log"
             )
         )
         logger.info(
-            f"Log from test-gui.sh will be located here: "
-            f"{ui_deploy_log_file}"
+            f"Log from test-gui.sh will be located here: " f"{ui_deploy_log_file}"
         )
         with open(ui_deploy_log_file, "w+") as log_fd:
             log_fd.write(ui_deploy_output)

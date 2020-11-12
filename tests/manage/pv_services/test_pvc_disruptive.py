@@ -3,9 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import (
-    ManageTest, tier4, tier4a, ignore_leftover_label
-)
+from ocs_ci.framework.testlib import ManageTest, tier4, tier4a, ignore_leftover_label
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
@@ -26,182 +24,160 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
     argnames=["interface", "operation_to_disrupt", "resource_to_delete"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'create_pvc', 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-568")
+            *[constants.CEPHBLOCKPOOL, "create_pvc", "mgr"],
+            marks=pytest.mark.polarion_id("OCS-568"),
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'create_pod', 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-569")
+            *[constants.CEPHBLOCKPOOL, "create_pod", "mgr"],
+            marks=pytest.mark.polarion_id("OCS-569"),
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'run_io', 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-570")
+            *[constants.CEPHBLOCKPOOL, "run_io", "mgr"],
+            marks=pytest.mark.polarion_id("OCS-570"),
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'create_pvc', 'mon'],
-            marks=pytest.mark.polarion_id("OCS-561")
+            *[constants.CEPHBLOCKPOOL, "create_pvc", "mon"],
+            marks=pytest.mark.polarion_id("OCS-561"),
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'create_pod', 'mon'],
-            marks=pytest.mark.polarion_id("OCS-562")
+            *[constants.CEPHBLOCKPOOL, "create_pod", "mon"],
+            marks=pytest.mark.polarion_id("OCS-562"),
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'run_io', 'mon'],
-            marks=pytest.mark.polarion_id("OCS-563")
+            *[constants.CEPHBLOCKPOOL, "run_io", "mon"],
+            marks=pytest.mark.polarion_id("OCS-563"),
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'create_pvc', 'osd'],
-            marks=pytest.mark.polarion_id("OCS-565")
+            *[constants.CEPHBLOCKPOOL, "create_pvc", "osd"],
+            marks=pytest.mark.polarion_id("OCS-565"),
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'create_pod', 'osd'],
-            marks=pytest.mark.polarion_id("OCS-554")
+            *[constants.CEPHBLOCKPOOL, "create_pod", "osd"],
+            marks=pytest.mark.polarion_id("OCS-554"),
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'run_io', 'osd'],
-            marks=pytest.mark.polarion_id("OCS-566")
+            *[constants.CEPHBLOCKPOOL, "run_io", "osd"],
+            marks=pytest.mark.polarion_id("OCS-566"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'create_pvc', 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-555")
+            *[constants.CEPHFILESYSTEM, "create_pvc", "mgr"],
+            marks=pytest.mark.polarion_id("OCS-555"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'create_pod', 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-558")
+            *[constants.CEPHFILESYSTEM, "create_pod", "mgr"],
+            marks=pytest.mark.polarion_id("OCS-558"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'run_io', 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-559")
+            *[constants.CEPHFILESYSTEM, "run_io", "mgr"],
+            marks=pytest.mark.polarion_id("OCS-559"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'create_pvc', 'mon'],
-            marks=pytest.mark.polarion_id("OCS-560")
+            *[constants.CEPHFILESYSTEM, "create_pvc", "mon"],
+            marks=pytest.mark.polarion_id("OCS-560"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'create_pod', 'mon'],
-            marks=pytest.mark.polarion_id("OCS-550")
+            *[constants.CEPHFILESYSTEM, "create_pod", "mon"],
+            marks=pytest.mark.polarion_id("OCS-550"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'run_io', 'mon'],
-            marks=pytest.mark.polarion_id("OCS-551")
+            *[constants.CEPHFILESYSTEM, "run_io", "mon"],
+            marks=pytest.mark.polarion_id("OCS-551"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'create_pvc', 'osd'],
-            marks=pytest.mark.polarion_id("OCS-552")
+            *[constants.CEPHFILESYSTEM, "create_pvc", "osd"],
+            marks=pytest.mark.polarion_id("OCS-552"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'create_pod', 'osd'],
-            marks=pytest.mark.polarion_id("OCS-553")
+            *[constants.CEPHFILESYSTEM, "create_pod", "osd"],
+            marks=pytest.mark.polarion_id("OCS-553"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'run_io', 'osd'],
-            marks=pytest.mark.polarion_id("OCS-549")
+            *[constants.CEPHFILESYSTEM, "run_io", "osd"],
+            marks=pytest.mark.polarion_id("OCS-549"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'create_pvc', 'mds'],
-            marks=pytest.mark.polarion_id("OCS-564")
+            *[constants.CEPHFILESYSTEM, "create_pvc", "mds"],
+            marks=pytest.mark.polarion_id("OCS-564"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'create_pod', 'mds'],
-            marks=pytest.mark.polarion_id("OCS-567")
+            *[constants.CEPHFILESYSTEM, "create_pod", "mds"],
+            marks=pytest.mark.polarion_id("OCS-567"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'run_io', 'mds'],
-            marks=pytest.mark.polarion_id("OCS-556")
+            *[constants.CEPHFILESYSTEM, "run_io", "mds"],
+            marks=pytest.mark.polarion_id("OCS-556"),
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'run_io', 'rbdplugin'],
-            marks=[pytest.mark.polarion_id("OCS-1014"), pytest.mark.bugzilla(
-                '1752487'
-            )]
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, 'run_io', 'cephfsplugin'],
-            marks=pytest.mark.polarion_id("OCS-1017")
-        ),
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'create_pvc', 'rbdplugin_provisioner'],
-            marks=pytest.mark.polarion_id("OCS-941")
-        ),
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'create_pod', 'rbdplugin_provisioner'],
-            marks=pytest.mark.polarion_id("OCS-940")
-        ),
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'run_io', 'rbdplugin_provisioner'],
-            marks=pytest.mark.polarion_id("OCS-942")
-        ),
-        pytest.param(
-            *[
-                constants.CEPHFILESYSTEM, 'create_pvc',
-                'cephfsplugin_provisioner'
+            *[constants.CEPHBLOCKPOOL, "run_io", "rbdplugin"],
+            marks=[
+                pytest.mark.polarion_id("OCS-1014"),
+                pytest.mark.bugzilla("1752487"),
             ],
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, "run_io", "cephfsplugin"],
+            marks=pytest.mark.polarion_id("OCS-1017"),
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, "create_pvc", "rbdplugin_provisioner"],
+            marks=pytest.mark.polarion_id("OCS-941"),
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, "create_pod", "rbdplugin_provisioner"],
+            marks=pytest.mark.polarion_id("OCS-940"),
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, "run_io", "rbdplugin_provisioner"],
+            marks=pytest.mark.polarion_id("OCS-942"),
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, "create_pvc", "cephfsplugin_provisioner"],
             marks=[
                 pytest.mark.polarion_id("OCS-948"),
                 pytest.mark.bugzilla("1806419"),
                 pytest.mark.bugzilla("1793387"),
-                pytest.mark.bugzilla('1860891')
-            ]
-        ),
-        pytest.param(
-            *[
-                constants.CEPHFILESYSTEM, 'create_pod',
-                'cephfsplugin_provisioner'
+                pytest.mark.bugzilla("1860891"),
             ],
-            marks=pytest.mark.polarion_id("OCS-947")
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'run_io', 'cephfsplugin_provisioner'],
-            marks=pytest.mark.polarion_id("OCS-949")
+            *[constants.CEPHFILESYSTEM, "create_pod", "cephfsplugin_provisioner"],
+            marks=pytest.mark.polarion_id("OCS-947"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'create_pvc', 'operator'],
-            marks=[
-                pytest.mark.polarion_id("OCS-927"),
-                pytest.mark.bugzilla('1815078')
-            ]
+            *[constants.CEPHFILESYSTEM, "run_io", "cephfsplugin_provisioner"],
+            marks=pytest.mark.polarion_id("OCS-949"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'create_pod', 'operator'],
-            marks=[
-                pytest.mark.polarion_id("OCS-925"),
-                pytest.mark.bugzilla('1815078')
-            ]
+            *[constants.CEPHFILESYSTEM, "create_pvc", "operator"],
+            marks=[pytest.mark.polarion_id("OCS-927"), pytest.mark.bugzilla("1815078")],
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'run_io', 'operator'],
-            marks=[
-                pytest.mark.polarion_id("OCS-928"),
-                pytest.mark.bugzilla('1815078')
-            ]
+            *[constants.CEPHFILESYSTEM, "create_pod", "operator"],
+            marks=[pytest.mark.polarion_id("OCS-925"), pytest.mark.bugzilla("1815078")],
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'create_pvc', 'operator'],
-            marks=[
-                pytest.mark.polarion_id("OCS-937"),
-                pytest.mark.bugzilla('1815078')
-            ]
+            *[constants.CEPHFILESYSTEM, "run_io", "operator"],
+            marks=[pytest.mark.polarion_id("OCS-928"), pytest.mark.bugzilla("1815078")],
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'create_pod', 'operator'],
-            marks=[
-                pytest.mark.polarion_id("OCS-936"),
-                pytest.mark.bugzilla('1815078')
-            ]
+            *[constants.CEPHBLOCKPOOL, "create_pvc", "operator"],
+            marks=[pytest.mark.polarion_id("OCS-937"), pytest.mark.bugzilla("1815078")],
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'run_io', 'operator'],
-            marks=[
-                pytest.mark.polarion_id("OCS-938"),
-                pytest.mark.bugzilla('1815078')
-            ]
-        )
-    ]
+            *[constants.CEPHBLOCKPOOL, "create_pod", "operator"],
+            marks=[pytest.mark.polarion_id("OCS-936"), pytest.mark.bugzilla("1815078")],
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, "run_io", "operator"],
+            marks=[pytest.mark.polarion_id("OCS-938"), pytest.mark.bugzilla("1815078")],
+        ),
+    ],
 )
 class TestPVCDisruption(ManageTest):
     """
     Base class for PVC related disruption tests
     """
+
     @pytest.fixture(autouse=True)
     def setup(self, project_factory):
         """
@@ -213,8 +189,12 @@ class TestPVCDisruption(ManageTest):
         self.proj_obj = project_factory()
 
     def test_pvc_disruptive(
-        self, interface, operation_to_disrupt, resource_to_delete,
-        multi_pvc_factory, pod_factory
+        self,
+        interface,
+        operation_to_disrupt,
+        resource_to_delete,
+        multi_pvc_factory,
+        pod_factory,
     ):
         """
         Base function for PVC disruptive tests.
@@ -222,17 +202,15 @@ class TestPVCDisruption(ManageTest):
         'operation_to_disrupt' is progressing.
         """
         pod_functions = {
-            'mds': partial(pod.get_mds_pods), 'mon': partial(pod.get_mon_pods),
-            'mgr': partial(pod.get_mgr_pods), 'osd': partial(pod.get_osd_pods),
-            'rbdplugin': partial(pod.get_plugin_pods, interface=interface),
-            'cephfsplugin': partial(pod.get_plugin_pods, interface=interface),
-            'cephfsplugin_provisioner': partial(
-                pod.get_cephfsplugin_provisioner_pods
-            ),
-            'rbdplugin_provisioner': partial(
-                pod.get_rbdfsplugin_provisioner_pods
-            ),
-            'operator': partial(pod.get_operator_pods)
+            "mds": partial(pod.get_mds_pods),
+            "mon": partial(pod.get_mon_pods),
+            "mgr": partial(pod.get_mgr_pods),
+            "osd": partial(pod.get_osd_pods),
+            "rbdplugin": partial(pod.get_plugin_pods, interface=interface),
+            "cephfsplugin": partial(pod.get_plugin_pods, interface=interface),
+            "cephfsplugin_provisioner": partial(pod.get_cephfsplugin_provisioner_pods),
+            "rbdplugin_provisioner": partial(pod.get_rbdfsplugin_provisioner_pods),
+            "operator": partial(pod.get_operator_pods),
         }
 
         # Get number of pods of type 'resource_to_delete'
@@ -243,9 +221,7 @@ class TestPVCDisruption(ManageTest):
 
         # Fetch the number of Pods and PVCs
         initial_num_of_pods = len(pod.get_all_pods(namespace=namespace))
-        initial_num_of_pvc = len(
-            get_all_pvcs(namespace=namespace)['items']
-        )
+        initial_num_of_pvc = len(get_all_pvcs(namespace=namespace)["items"])
 
         executor = ThreadPoolExecutor(max_workers=(2 * num_of_pvc))
 
@@ -260,30 +236,32 @@ class TestPVCDisruption(ManageTest):
         if interface == constants.CEPHBLOCKPOOL:
             access_modes.extend(
                 [
-                    f'{constants.ACCESS_MODE_RWO}-Block',
-                    f'{constants.ACCESS_MODE_RWX}-Block'
+                    f"{constants.ACCESS_MODE_RWO}-Block",
+                    f"{constants.ACCESS_MODE_RWX}-Block",
                 ]
             )
 
         # Start creation of PVCs
         bulk_pvc_create = executor.submit(
-            multi_pvc_factory, interface=interface,
-            project=self.proj_obj, size=5,
+            multi_pvc_factory,
+            interface=interface,
+            project=self.proj_obj,
+            size=5,
             access_modes=access_modes,
-            access_modes_selection='distribute_random',
-            status=constants.STATUS_BOUND, num_of_pvc=num_of_pvc,
-            wait_each=False, timeout=90
+            access_modes_selection="distribute_random",
+            status=constants.STATUS_BOUND,
+            num_of_pvc=num_of_pvc,
+            wait_each=False,
+            timeout=90,
         )
 
-        if operation_to_disrupt == 'create_pvc':
+        if operation_to_disrupt == "create_pvc":
             # Ensure PVCs are being created before deleting the resource
             ret = helpers.wait_for_resource_count_change(
-                get_all_pvcs, initial_num_of_pvc, namespace, 'increase'
+                get_all_pvcs, initial_num_of_pvc, namespace, "increase"
             )
             assert ret, "Wait timeout: PVCs are not being created."
-            logger.info(
-                "PVCs creation has started."
-            )
+            logger.info("PVCs creation has started.")
             DISRUPTION_OPS.delete_resource()
 
         pvc_objs = bulk_pvc_create.result()
@@ -301,15 +279,13 @@ class TestPVCDisruption(ManageTest):
             helpers.create_pods, pvc_objs, pod_factory, interface, 2
         )
 
-        if operation_to_disrupt == 'create_pod':
+        if operation_to_disrupt == "create_pod":
             # Ensure that pods are being created before deleting the resource
             ret = helpers.wait_for_resource_count_change(
-                pod.get_all_pods, initial_num_of_pods, namespace, 'increase'
+                pod.get_all_pods, initial_num_of_pods, namespace, "increase"
             )
             assert ret, "Wait timeout: Pods are not being created."
-            logger.info(
-                "Pods creation has started."
-            )
+            logger.info("Pods creation has started.")
             DISRUPTION_OPS.delete_resource()
 
         pod_objs = bulk_pod_create.result()
@@ -326,24 +302,19 @@ class TestPVCDisruption(ManageTest):
         logger.info("Setting up pods for running IO.")
         for pod_obj in pod_objs:
             pvc_info = pod_obj.pvc.get()
-            if pvc_info['spec']['volumeMode'] == 'Block':
-                storage_type = 'block'
+            if pvc_info["spec"]["volumeMode"] == "Block":
+                storage_type = "block"
             else:
-                storage_type = 'fs'
+                storage_type = "fs"
             executor.submit(pod_obj.workload_setup, storage_type=storage_type)
 
         # Wait for setup on pods to complete
         for pod_obj in pod_objs:
-            logger.info(
-                f"Waiting for IO setup to complete on pod {pod_obj.name}"
-            )
-            for sample in TimeoutSampler(
-                180, 2, getattr, pod_obj, 'wl_setup_done'
-            ):
+            logger.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
+            for sample in TimeoutSampler(180, 2, getattr, pod_obj, "wl_setup_done"):
                 if sample:
                     logger.info(
-                        f"Setup for running IO is completed on pod "
-                        f"{pod_obj.name}."
+                        f"Setup for running IO is completed on pod " f"{pod_obj.name}."
                     )
                     break
         logger.info("Setup for running IO is completed on all pods.")
@@ -351,26 +322,28 @@ class TestPVCDisruption(ManageTest):
         # Start IO on each pod
         for pod_obj in pod_objs:
             pvc_info = pod_obj.pvc.get()
-            if pvc_info['spec']['volumeMode'] == 'Block':
-                storage_type = 'block'
+            if pvc_info["spec"]["volumeMode"] == "Block":
+                storage_type = "block"
             else:
-                storage_type = 'fs'
+                storage_type = "fs"
             pod_obj.run_io(
-                storage_type=storage_type, size='1G', runtime=10,
-                fio_filename=f'{pod_obj.name}_io_file1'
+                storage_type=storage_type,
+                size="1G",
+                runtime=10,
+                fio_filename=f"{pod_obj.name}_io_file1",
             )
         logger.info("FIO started on all pods.")
 
-        if operation_to_disrupt == 'run_io':
+        if operation_to_disrupt == "run_io":
             DISRUPTION_OPS.delete_resource()
 
         logger.info("Fetching FIO results.")
         for pod_obj in pod_objs:
             fio_result = pod_obj.get_fio_results()
-            err_count = fio_result.get('jobs')[0].get('error')
-            assert err_count == 0, (
-                f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
-            )
+            err_count = fio_result.get("jobs")[0].get("error")
+            assert (
+                err_count == 0
+            ), f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
         logger.info("Verified FIO result on pods.")
 
         # Delete pods
@@ -393,22 +366,24 @@ class TestPVCDisruption(ManageTest):
         # Run IO on each of the new pods
         for pod_obj in pod_objs:
             pvc_info = pod_obj.pvc.get()
-            if pvc_info['spec']['volumeMode'] == 'Block':
-                storage_type = 'block'
+            if pvc_info["spec"]["volumeMode"] == "Block":
+                storage_type = "block"
             else:
-                storage_type = 'fs'
+                storage_type = "fs"
             pod_obj.run_io(
-                storage_type=storage_type, size='1G', runtime=10,
-                fio_filename=f'{pod_obj.name}_io_file2'
+                storage_type=storage_type,
+                size="1G",
+                runtime=10,
+                fio_filename=f"{pod_obj.name}_io_file2",
             )
 
         logger.info("Fetching FIO results from new pods")
         for pod_obj in pod_objs:
             fio_result = pod_obj.get_fio_results()
-            err_count = fio_result.get('jobs')[0].get('error')
-            assert err_count == 0, (
-                f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
-            )
+            err_count = fio_result.get("jobs")[0].get("error")
+            assert (
+                err_count == 0
+            ), f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
         logger.info("Verified FIO result on new pods.")
 
         # Verify number of pods of type 'resource_to_delete'
@@ -421,5 +396,5 @@ class TestPVCDisruption(ManageTest):
         )
 
         # Check ceph status
-        ceph_health_check(namespace=config.ENV_DATA['cluster_namespace'])
+        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"])
         logger.info("Ceph cluster health is OK")

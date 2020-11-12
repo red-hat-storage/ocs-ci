@@ -6,8 +6,9 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import (
-    wait_for_resource_state, verify_volume_deleted_in_backend,
-    default_ceph_block_pool
+    wait_for_resource_state,
+    verify_volume_deleted_in_backend,
+    default_ceph_block_pool,
 )
 
 log = logging.getLogger(__name__)
@@ -15,30 +16,31 @@ log = logging.getLogger(__name__)
 
 @tier1
 @pytest.mark.parametrize(
-    argnames=['interface', 'reclaim_policy'],
+    argnames=["interface", "reclaim_policy"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'Delete'],
-            marks=pytest.mark.polarion_id("OCS-939")
+            *[constants.CEPHBLOCKPOOL, "Delete"],
+            marks=pytest.mark.polarion_id("OCS-939"),
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'Retain'],
-            marks=pytest.mark.polarion_id("OCS-962")
+            *[constants.CEPHBLOCKPOOL, "Retain"],
+            marks=pytest.mark.polarion_id("OCS-962"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'Delete'],
-            marks=pytest.mark.polarion_id("OCS-963")
+            *[constants.CEPHFILESYSTEM, "Delete"],
+            marks=pytest.mark.polarion_id("OCS-963"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'Retain'],
-            marks=pytest.mark.polarion_id("OCS-964")
-        )
-    ]
+            *[constants.CEPHFILESYSTEM, "Retain"],
+            marks=pytest.mark.polarion_id("OCS-964"),
+        ),
+    ],
 )
 class TestChangeReclaimPolicyOfPv(ManageTest):
     """
     This test class consists of tests to update reclaim policy of PV
     """
+
     pvc_objs = None
     pod_objs = None
     sc_obj = None
@@ -47,16 +49,19 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
 
     @pytest.fixture(autouse=True)
     def setup(
-        self, interface, reclaim_policy, storageclass_factory,
-        multi_pvc_factory, pod_factory
+        self,
+        interface,
+        reclaim_policy,
+        storageclass_factory,
+        multi_pvc_factory,
+        pod_factory,
     ):
         """
         Create pvc and pod
         """
         # Create storage class
         self.sc_obj = storageclass_factory(
-            interface=interface,
-            reclaim_policy=reclaim_policy
+            interface=interface, reclaim_policy=reclaim_policy
         )
 
         # Create PVCs
@@ -67,18 +72,14 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
             size=5,
             status=constants.STATUS_BOUND,
             num_of_pvc=self.num_of_pvc,
-            wait_each=False
+            wait_each=False,
         )
 
         # Create pods
         self.pod_objs = []
         for pvc_obj in self.pvc_objs:
             self.pod_objs.append(
-                pod_factory(
-                    interface=interface,
-                    pvc=pvc_obj,
-                    status=None
-                )
+                pod_factory(interface=interface, pvc=pvc_obj, status=None)
             )
         for pod in self.pod_objs:
             wait_for_resource_state(pod, constants.STATUS_RUNNING)
@@ -97,13 +98,11 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
             # Do setup on pods for running IO
             log.info("Setting up pods for running IO.")
             for pod_obj in pods_list:
-                self.executor.submit(pod_obj.workload_setup, storage_type='fs')
+                self.executor.submit(pod_obj.workload_setup, storage_type="fs")
 
             # Wait for setup on pods to complete
             for pod_obj in pods_list:
-                for sample in TimeoutSampler(
-                    180, 2, getattr, pod_obj, 'wl_setup_done'
-                ):
+                for sample in TimeoutSampler(180, 2, getattr, pod_obj, "wl_setup_done"):
                     if sample:
                         log.info(
                             f"Setup for running IO is completed on pod "
@@ -115,35 +114,29 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
         # Run IO on pods
         for pod_obj in pods_list:
             pod_obj.run_io(
-                storage_type='fs', size='1G', runtime=30,
-                fio_filename=f'{pod_obj.name}_io_file1'
+                storage_type="fs",
+                size="1G",
+                runtime=30,
+                fio_filename=f"{pod_obj.name}_io_file1",
             )
         log.info("Ran IO on pods.")
 
         # Verify IO results
         for pod_obj in pods_list:
             fio_result = pod_obj.get_fio_results()
-            err_num = fio_result.get('jobs')[0].get('error')
-            assert err_num == 0, (
-                f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
-            )
+            err_num = fio_result.get("jobs")[0].get("error")
+            assert (
+                err_num == 0
+            ), f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
             log.info(f"IOPs after FIO on pod {pod_obj.name}:")
-            log.info(
-                f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
-            )
-            log.info(
-                f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
-            )
+            log.info(f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}")
+            log.info(f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}")
 
-    def test_change_reclaim_policy_of_pv(
-        self, interface, reclaim_policy, pod_factory
-    ):
+    def test_change_reclaim_policy_of_pv(self, interface, reclaim_policy, pod_factory):
         """
         This test case tests update of reclaim policy of PV
         """
-        reclaim_policy_to = 'Delete' if reclaim_policy == 'Retain' else (
-            'Retain'
-        )
+        reclaim_policy_to = "Delete" if reclaim_policy == "Retain" else ("Retain")
 
         # Fetch name of PVs
         pvs = [pvc_obj.backed_pv_obj for pvc_obj in self.pvc_objs]
@@ -169,7 +162,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
                 f'"{reclaim_policy_to}"}}}}'
             )
             assert pv_obj.ocp.patch(
-                resource_name=pv_name, params=patch_param, format_type='strategic'
+                resource_name=pv_name, params=patch_param, format_type="strategic"
             ), (
                 f"Failed to change persistentVolumeReclaimPolicy of pv "
                 f"{pv_name} to {reclaim_policy_to}"
@@ -184,10 +177,8 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
 
         # Verify reclaim policy of all PVs
         for pv_obj in pvs:
-            policy = pv_obj.get().get('spec').get(
-                'persistentVolumeReclaimPolicy'
-            )
-            retain_pvs.append(pv_obj) if policy == 'Retain' else (
+            policy = pv_obj.get().get("spec").get("persistentVolumeReclaimPolicy")
+            retain_pvs.append(pv_obj) if policy == "Retain" else (
                 delete_pvs.append(pv_obj)
             )
             if pv_obj in changed_pvs:
@@ -221,11 +212,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
         new_pod_objs = []
         for pvc_obj in self.pvc_objs:
             new_pod_objs.append(
-                pod_factory(
-                    interface=interface,
-                    pvc=pvc_obj,
-                    status=None
-                )
+                pod_factory(interface=interface, pvc=pvc_obj, status=None)
             )
         for pod in new_pod_objs:
             wait_for_resource_state(pod, constants.STATUS_RUNNING)
@@ -258,15 +245,11 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
         # PVs having reclaim policy 'Delete' will be deleted
         for pv_obj in delete_pvs:
             pv_obj.ocp.wait_for_delete(pv_obj.name, 300)
-        log.info(
-            "Verified: All PVs having reclaim policy 'Delete' are deleted."
-        )
+        log.info("Verified: All PVs having reclaim policy 'Delete' are deleted.")
 
         # PVs having reclaim policy 'Retain' will be in Released state
         for pv_obj in retain_pvs:
-            wait_for_resource_state(
-                resource=pv_obj, state=constants.STATUS_RELEASED
-            )
+            wait_for_resource_state(resource=pv_obj, state=constants.STATUS_RELEASED)
         log.info(
             "Verified: All PVs having reclaim policy 'Retain' are "
             "in 'Released' state."
@@ -277,7 +260,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
             pv_name = pv_obj.name
             patch_param = '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
             assert pv_obj.ocp.patch(
-                resource_name=pv_name, params=patch_param, format_type='strategic'
+                resource_name=pv_name, params=patch_param, format_type="strategic"
             ), (
                 f"Failed to change persistentVolumeReclaimPolicy "
                 f"for pv {pv_name} to Delete"
@@ -294,7 +277,9 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
         )
 
         # Verify PV using ceph toolbox. Wait for Image/Subvolume to be deleted.
-        pool_name = default_ceph_block_pool() if interface == constants.CEPHBLOCKPOOL else None
+        pool_name = (
+            default_ceph_block_pool() if interface == constants.CEPHBLOCKPOOL else None
+        )
         for pvc_name, uuid in pvc_uuid_map.items():
             assert verify_volume_deleted_in_backend(
                 interface=interface, image_uuid=uuid, pool_name=pool_name

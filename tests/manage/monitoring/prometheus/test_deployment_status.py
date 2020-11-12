@@ -22,21 +22,20 @@ def test_ceph_manager_stopped(measure_stop_ceph_mgr):
     api = prometheus.PrometheusAPI()
 
     # get alerts from time when manager deployment was scaled down
-    alerts = measure_stop_ceph_mgr.get('prometheus_alerts')
+    alerts = measure_stop_ceph_mgr.get("prometheus_alerts")
     target_label = constants.ALERT_MGRISABSENT
-    target_msg = 'Storage metrics collector service not available anymore.'
-    states = ['pending', 'firing']
+    target_msg = "Storage metrics collector service not available anymore."
+    states = ["pending", "firing"]
 
     prometheus.check_alert_list(
         label=target_label,
         msg=target_msg,
         alerts=alerts,
         states=states,
-        severity='critical'
+        severity="critical",
     )
     api.check_alert_cleared(
-        label=target_label,
-        measure_end_time=measure_stop_ceph_mgr.get('stop')
+        label=target_label, measure_end_time=measure_stop_ceph_mgr.get("stop")
     )
 
 
@@ -52,31 +51,30 @@ def test_ceph_monitor_stopped(measure_stop_ceph_mon):
     api = prometheus.PrometheusAPI()
 
     # get alerts from time when manager deployment was scaled down
-    alerts = measure_stop_ceph_mon.get('prometheus_alerts')
+    alerts = measure_stop_ceph_mon.get("prometheus_alerts")
     for target_label, target_msg, target_states, target_severity in [
         (
             constants.ALERT_MONQUORUMATRISK,
-            'Storage quorum at risk',
-            ['pending'],
-            'error'
+            "Storage quorum at risk",
+            ["pending"],
+            "error",
         ),
         (
             constants.ALERT_CLUSTERWARNINGSTATE,
-            'Storage cluster is in degraded state',
-            ['pending', 'firing'],
-            'warning'
-        )
+            "Storage cluster is in degraded state",
+            ["pending", "firing"],
+            "warning",
+        ),
     ]:
         prometheus.check_alert_list(
             label=target_label,
             msg=target_msg,
             alerts=alerts,
             states=target_states,
-            severity=target_severity
+            severity=target_severity,
         )
         api.check_alert_cleared(
-            label=target_label,
-            measure_end_time=measure_stop_ceph_mon.get('stop')
+            label=target_label, measure_end_time=measure_stop_ceph_mon.get("stop")
         )
 
 
@@ -91,29 +89,29 @@ def test_ceph_osd_stopped(measure_stop_ceph_osd):
     api = prometheus.PrometheusAPI()
 
     # get alerts from time when manager deployment was scaled down
-    alerts = measure_stop_ceph_osd.get('prometheus_alerts')
+    alerts = measure_stop_ceph_osd.get("prometheus_alerts")
     for target_label, target_msg, target_states, target_severity, ignore in [
         (
             constants.ALERT_OSDDISKNOTRESPONDING,
-            'Disk not responding',
-            ['pending', 'firing'],
-            'error',
-            False
+            "Disk not responding",
+            ["pending", "firing"],
+            "error",
+            False,
         ),
         (
             constants.ALERT_DATARECOVERYTAKINGTOOLONG,
-            'Data recovery is slow',
-            ['pending'],
-            'warning',
-            True
+            "Data recovery is slow",
+            ["pending"],
+            "warning",
+            True,
         ),
         (
             constants.ALERT_CLUSTERWARNINGSTATE,
-            'Storage cluster is in degraded state',
-            ['pending', 'firing'],
-            'warning',
-            False
-        )
+            "Storage cluster is in degraded state",
+            ["pending", "firing"],
+            "warning",
+            False,
+        ),
     ]:
         prometheus.check_alert_list(
             label=target_label,
@@ -121,15 +119,15 @@ def test_ceph_osd_stopped(measure_stop_ceph_osd):
             alerts=alerts,
             states=target_states,
             severity=target_severity,
-            ignore_more_occurences=ignore
+            ignore_more_occurences=ignore,
         )
         # the time to wait is increased because it takes more time for osd pod
         # to be ready than for other pods
         osd_up_wait = 360
         api.check_alert_cleared(
             label=target_label,
-            measure_end_time=measure_stop_ceph_osd.get('stop'),
-            time_min=osd_up_wait
+            measure_end_time=measure_stop_ceph_osd.get("stop"),
+            time_min=osd_up_wait,
         )
 
 

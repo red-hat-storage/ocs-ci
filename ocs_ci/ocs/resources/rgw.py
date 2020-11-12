@@ -10,7 +10,9 @@ class RGW(object):
     """
 
     def __init__(self, namespace=None):
-        self.namespace = namespace if namespace else config.ENV_DATA['cluster_namespace']
+        self.namespace = (
+            namespace if namespace else config.ENV_DATA["cluster_namespace"]
+        )
 
         if storagecluster_independent_check():
             sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW
@@ -18,11 +20,12 @@ class RGW(object):
             sc_name = constants.DEFAULT_STORAGECLASS_RGW
 
         self.storageclass = OCP(
-            kind='storageclass', namespace=namespace,
-            resource_name=sc_name
+            kind="storageclass", namespace=namespace, resource_name=sc_name
         )
-        self.s3_internal_endpoint = self.storageclass.get().get('parameters').get('endpoint')
-        self.region = self.storageclass.get().get('parameters').get('region')
+        self.s3_internal_endpoint = (
+            self.storageclass.get().get("parameters").get("endpoint")
+        )
+        self.region = self.storageclass.get().get("parameters").get("region")
         # Todo: Implement retrieval in cases where CephObjectStoreUser is available
         self.key_id = None
         self.secret_key = None

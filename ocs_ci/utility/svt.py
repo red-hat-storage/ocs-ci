@@ -26,11 +26,15 @@ def svt_create_venv_setup():
 
     run_cmd("virtualenv -p /bin/python2 /tmp/venv")
     run_cmd("/bin/sh -c 'source /tmp/venv/bin/activate && python --version'")
-    run_cmd("/bin/sh -c 'source /tmp/venv/bin/activate && pip install -r registry_requirement.txt'")
+    run_cmd(
+        "/bin/sh -c 'source /tmp/venv/bin/activate && pip install -r registry_requirement.txt'"
+    )
 
 
-def svt_cluster_loader(clusterload_file="/tmp/svt/openshift_scalability/config/master-vert.yaml"):
-    KUBECONFIG = os.getenv('KUBECONFIG')
+def svt_cluster_loader(
+    clusterload_file="/tmp/svt/openshift_scalability/config/master-vert.yaml",
+):
+    KUBECONFIG = os.getenv("KUBECONFIG")
     """
     This function can be used to create an environment on top of an OpenShift installation.
     So, basically you can create any number of projects,
@@ -46,7 +50,7 @@ def svt_cluster_loader(clusterload_file="/tmp/svt/openshift_scalability/config/m
     """
 
     cwd = os.getcwd()
-    os.chdir('/tmp/svt/openshift_scalability/')
+    os.chdir("/tmp/svt/openshift_scalability/")
     cmd = (
         "/bin/sh -c 'source /tmp/venv/bin/activate && python /tmp/svt/openshift_scalability/cluster-loader.py "
         f"-f {clusterload_file} --kubeconfig {KUBECONFIG}'"
@@ -70,9 +74,9 @@ def svt_setup(iterations):
     log.info(f"Running command {cmd}")
     build = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE)
     stdout, stderr = build.communicate()
-    out = stderr.split('\n'.encode())[-10].split()[-1]
+    out = stderr.split("\n".encode())[-10].split()[-1]
     log.info(stderr)
-    assert (int(out) == 0), 'Failed builds found'
+    assert int(out) == 0, "Failed builds found"
 
 
 def svt_cleanup():
@@ -87,10 +91,10 @@ def svt_cleanup():
         bool: True if No exceptions, False otherwise
 
     """
-    ns_obj = ocp.OCP(kind='namespace')
+    ns_obj = ocp.OCP(kind="namespace")
     try:
-        shutil.rmtree('/tmp/svt')
-        shutil.rmtree('/tmp/venv')
+        shutil.rmtree("/tmp/svt")
+        shutil.rmtree("/tmp/venv")
     except BaseException:
         log.error("Error while cleaning SVT project")
 
@@ -102,12 +106,12 @@ def svt_cleanup():
             "eap64-mysql0",
             "nodejs-mongodb0",
             "rails-postgresql0",
-            "tomcat8-mongodb0"
+            "tomcat8-mongodb0",
         ]
         # Reset namespace to default
         ocp.switch_to_default_rook_cluster_project()
         for project in project_list:
-            run_cmd(f'oc delete project {project}')
+            run_cmd(f"oc delete project {project}")
             ns_obj.wait_for_delete(resource_name=project)
 
         return True

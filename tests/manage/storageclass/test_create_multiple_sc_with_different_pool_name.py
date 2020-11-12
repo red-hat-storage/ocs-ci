@@ -4,9 +4,7 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.testlib import ManageTest, tier2, skipif_external_mode
-from tests.fixtures import (
-    create_rbd_secret, create_project
-)
+from tests.fixtures import create_rbd_secret, create_project
 
 log = logging.getLogger(__name__)
 
@@ -23,9 +21,7 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
     Create Multiple Storage Class with different pool name
     """
 
-    def test_create_multiple_sc_with_different_pool_name(
-        self, teardown_factory
-    ):
+    def test_create_multiple_sc_with_different_pool_name(self, teardown_factory):
         """
         This test function does below,
         *. Creates multiple Storage Classes with different pool name
@@ -40,17 +36,13 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
         for i in range(2):
             log.info("Creating cephblockpool")
             cbp_obj = helpers.create_ceph_block_pool()
-            log.info(
-                f"{cbp_obj.name} created successfully"
-            )
-            log.info(
-                f"Creating a RBD storage class using {cbp_obj.name}"
-            )
+            log.info(f"{cbp_obj.name} created successfully")
+            log.info(f"Creating a RBD storage class using {cbp_obj.name}")
             cbp_list.append(cbp_obj)
             sc_obj = helpers.create_storage_class(
                 interface_type=constants.CEPHBLOCKPOOL,
                 interface_name=cbp_obj.name,
-                secret_name=self.rbd_secret_obj.name
+                secret_name=self.rbd_secret_obj.name,
             )
 
             log.info(
@@ -67,8 +59,7 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
             log.info(f"Creating a PVC using {sc_list[i].name}")
             pvc_obj = helpers.create_pvc(sc_list[i].name)
             log.info(
-                f"PVC: {pvc_obj.name} created successfully using "
-                f"{sc_list[i].name}"
+                f"PVC: {pvc_obj.name} created successfully using " f"{sc_list[i].name}"
             )
             pvc_list.append(pvc_obj)
             teardown_factory(pvc_obj)
@@ -95,7 +86,7 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
         # Run IO on each app pod for sometime
         for pod in pod_list:
             log.info(f"Running FIO on {pod.name}")
-            pod.run_io('fs', size='2G')
+            pod.run_io("fs", size="2G")
 
         for pod in pod_list:
             get_fio_rw_iops(pod)

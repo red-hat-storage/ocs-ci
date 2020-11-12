@@ -17,31 +17,30 @@ log = logging.getLogger(__name__)
 
 @tier2
 @pytest.mark.parametrize(
-    argnames='interface',
+    argnames="interface",
     argvalues=[
         pytest.param(
             *[constants.CEPHBLOCKPOOL],
             marks=[
-                pytest.mark.polarion_id('OCS-896'),
-            ]
+                pytest.mark.polarion_id("OCS-896"),
+            ],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM],
             marks=[
-                pytest.mark.polarion_id('OCS-897'),
-            ]
-        )
-    ]
+                pytest.mark.polarion_id("OCS-897"),
+            ],
+        ),
+    ],
 )
 class TestVerifyRwoUsingReplicatedPod(ManageTest):
     """
     This test class consists of tests to verify RWO volume is exclusively
     mounted.
     """
+
     @pytest.fixture(autouse=True)
-    def setup(
-        self, interface, pvc_factory, service_account_factory, teardown_factory
-    ):
+    def setup(self, interface, pvc_factory, service_account_factory, teardown_factory):
         """
         Create dc pod with replica 5
         """
@@ -49,21 +48,25 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
         pvc_obj = pvc_factory(interface=interface, size=3)
         sa_obj = service_account_factory(project=pvc_obj.project)
         pod1 = create_pod(
-            interface_type=interface, pvc_name=pvc_obj.name,
-            namespace=pvc_obj.namespace, sa_name=sa_obj.name,
-            dc_deployment=True, replica_count=self.replica_count,
-            deploy_pod_status=constants.STATUS_RUNNING
+            interface_type=interface,
+            pvc_name=pvc_obj.name,
+            namespace=pvc_obj.namespace,
+            sa_name=sa_obj.name,
+            dc_deployment=True,
+            replica_count=self.replica_count,
+            deploy_pod_status=constants.STATUS_RUNNING,
         )
-        self.name = pod1.labels['name']
+        self.name = pod1.labels["name"]
         self.namespace = pod1.namespace
 
         dc_obj = OCP(
-            kind=constants.DEPLOYMENTCONFIG, namespace=self.namespace,
-            resource_name=self.name
+            kind=constants.DEPLOYMENTCONFIG,
+            namespace=self.namespace,
+            resource_name=self.name,
         )
-        dc_info = dc_obj.get(
-            resource_name=self.name, selector=f'app={self.name}'
-        )['items'][0]
+        dc_info = dc_obj.get(resource_name=self.name, selector=f"app={self.name}")[
+            "items"
+        ][0]
 
         dc_obj = OCS(**dc_info)
         teardown_factory(dc_obj)
@@ -74,8 +77,12 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
         """
         # Wait for pods
         for pods in TimeoutSampler(
-            360, 2, func=pod.get_all_pods, namespace=self.namespace,
-            selector=[self.name], selector_label='name'
+            360,
+            2,
+            func=pod.get_all_pods,
+            namespace=self.namespace,
+            selector=[self.name],
+            selector_label="name",
         ):
             if len(pods) == self.replica_count:
                 break
@@ -86,7 +93,7 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
         curr_pod = next(pods_iter)
         sampler = TimeoutSampler(360, 2, curr_pod.get)
         for pod_info in sampler:
-            if pod_info['status']['phase'] == constants.STATUS_RUNNING:
+            if pod_info["status"]["phase"] == constants.STATUS_RUNNING:
                 self.running_pod = curr_pod
                 log.info(f"Pod {curr_pod.name} reached state Running.")
                 break
@@ -94,17 +101,14 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
             sampler.func = curr_pod.get
 
         pods.remove(self.running_pod)
-        pod_running_node = self.running_pod.get()['spec']['nodeName']
+        pod_running_node = self.running_pod.get()["spec"]["nodeName"]
         # Verify the other pods are not coming up Running
         for pod_obj in pods:
             try:
                 wait_for_resource_state(
-                    resource=pod_obj, state=constants.STATUS_RUNNING,
-                    timeout=10
+                    resource=pod_obj, state=constants.STATUS_RUNNING, timeout=10
                 )
-                assert (
-                    pod_obj.get()['spec']['nodeName'] == pod_running_node
-                ), (
+                assert pod_obj.get()["spec"]["nodeName"] == pod_running_node, (
                     f"Unexpected: Pod {pod_obj.name} is in Running state. "
                     f"RWO PVC is mounted on pods which are on different nodes."
                 )
@@ -114,10 +118,7 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
                     f"{pod_running_node}"
                 )
             except ResourceWrongStatusException:
-                log.info(
-                    f"Verified: Pod {pod_obj.name} is not in "
-                    f"running state."
-                )
+                log.info(f"Verified: Pod {pod_obj.name} is not in " f"running state.")
 
     def test_verify_rwo_using_replicated_pod(self):
         """

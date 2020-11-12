@@ -16,36 +16,34 @@ class TestConfig(object):
             assert section == framework.config.get_defaults()[section_name]
 
     def test_defaults_specific(self):
-        assert framework.config.ENV_DATA[
-            'cluster_namespace'
-        ] == 'openshift-storage'
-        assert framework.config.REPORTING['email']['address'] == 'ocs-ci@redhat.com'
-        assert framework.config.RUN['bin_dir'] == './bin'
+        assert framework.config.ENV_DATA["cluster_namespace"] == "openshift-storage"
+        assert framework.config.REPORTING["email"]["address"] == "ocs-ci@redhat.com"
+        assert framework.config.RUN["bin_dir"] == "./bin"
 
     def test_custom_conf(self):
         user_dict = dict(
-            REPORTING=dict(email='unit@test.com'),
-            RUN=dict(log_dir='/dev/null'),
+            REPORTING=dict(email="unit@test.com"),
+            RUN=dict(log_dir="/dev/null"),
         )
         framework.config.update(user_dict)
-        assert framework.config.REPORTING['email'] == 'unit@test.com'
-        assert framework.config.RUN['log_dir'] == '/dev/null'
-        default_bin_dir = framework.config.get_defaults()['RUN']['bin_dir']
-        assert framework.config.RUN['bin_dir'] == default_bin_dir
+        assert framework.config.REPORTING["email"] == "unit@test.com"
+        assert framework.config.RUN["log_dir"] == "/dev/null"
+        default_bin_dir = framework.config.get_defaults()["RUN"]["bin_dir"]
+        assert framework.config.RUN["bin_dir"] == default_bin_dir
 
     def test_layered_conf(self):
-        orig_client = framework.config.get_defaults()['RUN']['client_version']
-        assert framework.config.RUN['client_version'] == orig_client
-        first = dict(RUN=dict(client_version='1'))
+        orig_client = framework.config.get_defaults()["RUN"]["client_version"]
+        assert framework.config.RUN["client_version"] == orig_client
+        first = dict(RUN=dict(client_version="1"))
         framework.config.update(first)
-        assert framework.config.RUN['client_version'] == '1'
+        assert framework.config.RUN["client_version"] == "1"
         second = dict(
-            RUN=dict(client_version='2'),
-            DEPLOYMENT=dict(installer_version='1'),
+            RUN=dict(client_version="2"),
+            DEPLOYMENT=dict(installer_version="1"),
         )
         framework.config.update(second)
-        assert framework.config.RUN['client_version'] == '2'
-        assert framework.config.DEPLOYMENT['installer_version'] == '1'
+        assert framework.config.RUN["client_version"] == "2"
+        assert framework.config.DEPLOYMENT["installer_version"] == "1"
 
 
 class TestMergeDict:
@@ -62,7 +60,7 @@ class TestMergeDict:
                 a_third_string="salutations",
             ),
             a_list=[1, 2, 3],
-            a_string='string',
+            a_string="string",
         )
         expected = dict(
             a_dict=dict(
@@ -71,7 +69,7 @@ class TestMergeDict:
                 a_third_string="salutations",
             ),
             a_list=[1, 2, 3],
-            a_string='string',
+            a_string="string",
         )
         result = framework.merge_dict(objA, objB)
         assert objA is result

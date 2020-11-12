@@ -14,11 +14,11 @@ def pytest_collection_modifyitems(items):
 
     """
     skip_list = [
-        'test_scale_pvc_expand',
-        'test_ceph_pod_respin_in_scaled_cluster',
-        'test_scale_osds_fill_75%_reboot_workers'
+        "test_scale_pvc_expand",
+        "test_ceph_pod_respin_in_scaled_cluster",
+        "test_scale_osds_fill_75%_reboot_workers",
     ]
-    if config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
+    if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
         for item in items.copy():
             for testname in skip_list:
                 if testname in str(item.fspath):

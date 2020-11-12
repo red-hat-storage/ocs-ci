@@ -41,7 +41,7 @@ class Sanity:
         logger.info("Checking cluster and Ceph health")
         node.wait_for_nodes_status(timeout=300)
 
-        ceph_health_check(namespace=config.ENV_DATA['cluster_namespace'], tries=tries)
+        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=tries)
         if cluster_check:
             self.ceph_cluster.cluster_health_check(timeout=60)
 
@@ -55,7 +55,9 @@ class Sanity:
             run_io (bool): True for run IO, False otherwise
 
         """
-        logger.info("Creating resources and running IO as a sanity functional validation")
+        logger.info(
+            "Creating resources and running IO as a sanity functional validation"
+        )
 
         for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
             pvc_obj = pvc_factory(interface)
@@ -63,7 +65,7 @@ class Sanity:
             self.pod_objs.append(pod_factory(pvc=pvc_obj, interface=interface))
         if run_io:
             for pod in self.pod_objs:
-                pod.run_io('fs', '1G', runtime=30)
+                pod.run_io("fs", "1G", runtime=30)
             for pod in self.pod_objs:
                 get_fio_rw_iops(pod)
         self.create_obc()
@@ -74,57 +76,42 @@ class Sanity:
         OBC creation for RGW and Nooba
 
         """
-        if config.ENV_DATA['platform'] in constants.ON_PREM_PLATFORMS:
-            obc_rgw = templating.load_yaml(
-                constants.RGW_OBC_YAML
-            )
+        if config.ENV_DATA["platform"] in constants.ON_PREM_PLATFORMS:
+            obc_rgw = templating.load_yaml(constants.RGW_OBC_YAML)
             obc_rgw_data_yaml = tempfile.NamedTemporaryFile(
-                mode='w+', prefix='obc_rgw_data', delete=False
+                mode="w+", prefix="obc_rgw_data", delete=False
             )
-            templating.dump_data_to_temp_yaml(
-                obc_rgw, obc_rgw_data_yaml.name
-            )
+            templating.dump_data_to_temp_yaml(obc_rgw, obc_rgw_data_yaml.name)
             logger.info("Creating OBC for rgw")
             run_cmd(f"oc create -f {obc_rgw_data_yaml.name}", timeout=2400)
-            self.obc_rgw = obc_rgw['metadata']['name']
+            self.obc_rgw = obc_rgw["metadata"]["name"]
 
-        obc_nooba = templating.load_yaml(
-            constants.MCG_OBC_YAML
-        )
+        obc_nooba = templating.load_yaml(constants.MCG_OBC_YAML)
         obc_mcg_data_yaml = tempfile.NamedTemporaryFile(
-            mode='w+', prefix='obc_mcg_data', delete=False
+            mode="w+", prefix="obc_mcg_data", delete=False
         )
-        templating.dump_data_to_temp_yaml(
-            obc_nooba, obc_mcg_data_yaml.name
-        )
+        templating.dump_data_to_temp_yaml(obc_nooba, obc_mcg_data_yaml.name)
         logger.info("create OBC for mcg")
         run_cmd(f"oc create -f {obc_mcg_data_yaml.name}", timeout=2400)
-        self.obc_mcg = obc_nooba['metadata']['name']
+        self.obc_mcg = obc_nooba["metadata"]["name"]
 
     def delete_obc(self):
         """
         Clenaup OBC resources created above
 
         """
-        if config.ENV_DATA['platform'] in constants.ON_PREM_PLATFORMS:
+        if config.ENV_DATA["platform"] in constants.ON_PREM_PLATFORMS:
             logger.info(f"Deleting rgw obc {self.obc_rgw}")
-            obcrgw = OCP(
-                kind='ObjectBucketClaim',
-                resource_name=f'{self.obc_rgw}'
-            )
+            obcrgw = OCP(kind="ObjectBucketClaim", resource_name=f"{self.obc_rgw}")
             run_cmd(f"oc delete obc/{self.obc_rgw}")
-            obcrgw.wait_for_delete(
-                resource_name=f'{self.obc_rgw}',
-                timeout=300
-            )
+            obcrgw.wait_for_delete(resource_name=f"{self.obc_rgw}", timeout=300)
 
         logger.info(f"Deleting mcg obc {self.obc_mcg}")
-        obcmcg = OCP(kind='ObjectBucketClaim', resource_name=f'{self.obc_mcg}')
+        obcmcg = OCP(kind="ObjectBucketClaim", resource_name=f"{self.obc_mcg}")
         run_cmd(
-            f"oc delete obc/{self.obc_mcg} -n "
-            f"{defaults.ROOK_CLUSTER_NAMESPACE}"
+            f"oc delete obc/{self.obc_mcg} -n " f"{defaults.ROOK_CLUSTER_NAMESPACE}"
         )
-        obcmcg.wait_for_delete(resource_name=f'{self.obc_mcg}', timeout=300)
+        obcmcg.wait_for_delete(resource_name=f"{self.obc_mcg}", timeout=300)
 
     def verify_obc(self):
         """
@@ -160,14 +147,20 @@ class Sanity:
         """
         # Create rbd pvcs
         pvc_objs_rbd = create_pvcs(
-            multi_pvc_factory=multi_pvc_factory, interface='CephBlockPool',
-            project=project, status="", storageclass=None
+            multi_pvc_factory=multi_pvc_factory,
+            interface="CephBlockPool",
+            project=project,
+            status="",
+            storageclass=None,
         )
 
         # Create cephfs pvcs
         pvc_objs_cephfs = create_pvcs(
-            multi_pvc_factory=multi_pvc_factory, interface='CephFileSystem',
-            project=project, status="", storageclass=None
+            multi_pvc_factory=multi_pvc_factory,
+            interface="CephFileSystem",
+            project=project,
+            status="",
+            storageclass=None,
         )
 
         all_pvc_to_delete = pvc_objs_rbd + pvc_objs_cephfs
@@ -192,15 +185,21 @@ class Sanity:
         Creates bucket then writes, reads and deletes objects
 
         """
-        bucket_name = bucket_factory(amount=1, interface='OC')[0].name
+        bucket_name = bucket_factory(amount=1, interface="OC")[0].name
         self.obj_data = "A string data"
 
         for i in range(0, 30):
-            key = 'Object-key-' + f"{i}"
+            key = "Object-key-" + f"{i}"
             logger.info(f"Write, read and delete object with key: {key}")
-            assert s3_put_object(mcg_obj, bucket_name, key, self.obj_data), f"Failed: Put object, {key}"
-            assert s3_get_object(mcg_obj, bucket_name, key), f"Failed: Get object, {key}"
-            assert s3_delete_object(mcg_obj, bucket_name, key), f"Failed: Delete object, {key}"
+            assert s3_put_object(
+                mcg_obj, bucket_name, key, self.obj_data
+            ), f"Failed: Put object, {key}"
+            assert s3_get_object(
+                mcg_obj, bucket_name, key
+            ), f"Failed: Get object, {key}"
+            assert s3_delete_object(
+                mcg_obj, bucket_name, key
+            ), f"Failed: Delete object, {key}"
 
 
 class SanityExternalCluster(Sanity):

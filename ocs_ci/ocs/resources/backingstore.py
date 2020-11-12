@@ -1,10 +1,16 @@
 import logging
 
 from ocs_ci.ocs.bucket_utils import (
-    oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
-    oc_create_pv_backingstore, oc_create_ibmcos_backingstore, cli_create_google_backingstore,
-    cli_create_azure_backingstore, cli_create_pv_backingstore, cli_create_ibmcos_backingstore,
-    cli_create_aws_backingstore
+    oc_create_aws_backingstore,
+    oc_create_google_backingstore,
+    oc_create_azure_backingstore,
+    oc_create_pv_backingstore,
+    oc_create_ibmcos_backingstore,
+    cli_create_google_backingstore,
+    cli_create_azure_backingstore,
+    cli_create_pv_backingstore,
+    cli_create_ibmcos_backingstore,
+    cli_create_aws_backingstore,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
@@ -13,29 +19,25 @@ from ocs_ci.helpers.helpers import create_unique_resource_name
 log = logging.getLogger(__name__)
 
 
-class BackingStore():
+class BackingStore:
     """
     A class that represents BackingStore objects
 
     """
+
     def __init__(self, name, uls_name, secret_name=None):
         self.name = name
         self.uls_name = uls_name
         self.secret_name = secret_name
 
     def delete(self):
-        log.info(f'Cleaning up backingstore {self.name}')
+        log.info(f"Cleaning up backingstore {self.name}")
 
-        OCP(
-            namespace=config.ENV_DATA['cluster_namespace']
-        ).exec_oc_cmd(
-            command=f'delete backingstore {self.name}',
-            out_yaml_format=False
+        OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
+            command=f"delete backingstore {self.name}", out_yaml_format=False
         )
 
-        log.info(
-            f"Verifying whether backingstore {self.name} exists after deletion"
-        )
+        log.info(f"Verifying whether backingstore {self.name} exists after deletion")
         # Todo: implement deletion assertion
 
 
@@ -58,20 +60,20 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
     created_backingstores = []
 
     cmdMap = {
-        'oc': {
-            'aws': oc_create_aws_backingstore,
-            'gcp': oc_create_google_backingstore,
-            'azure': oc_create_azure_backingstore,
-            'ibmcos': oc_create_ibmcos_backingstore,
-            'pv': oc_create_pv_backingstore
+        "oc": {
+            "aws": oc_create_aws_backingstore,
+            "gcp": oc_create_google_backingstore,
+            "azure": oc_create_azure_backingstore,
+            "ibmcos": oc_create_ibmcos_backingstore,
+            "pv": oc_create_pv_backingstore,
         },
-        'cli': {
-            'aws': cli_create_aws_backingstore,
-            'gcp': cli_create_google_backingstore,
-            'azure': cli_create_azure_backingstore,
-            'ibmcos': cli_create_ibmcos_backingstore,
-            'pv': cli_create_pv_backingstore
-        }
+        "cli": {
+            "aws": cli_create_aws_backingstore,
+            "gcp": cli_create_google_backingstore,
+            "azure": cli_create_azure_backingstore,
+            "ibmcos": cli_create_ibmcos_backingstore,
+            "pv": cli_create_pv_backingstore,
+        },
     }
 
     def _create_backingstore(method, uls_dict):
@@ -93,7 +95,7 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
         """
         if method.lower() not in cmdMap:
             raise RuntimeError(
-                f'Invalid method type received: {method}. '
+                f"Invalid method type received: {method}. "
                 f'available types: {", ".join(cmdMap.keys())}'
             )
         for cloud, uls_lst in uls_dict.items():
@@ -101,13 +103,13 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
                 # Todo: Replace multiple .append calls, create names in advance, according to amountoc
                 if cloud.lower() not in cmdMap[method.lower()]:
                     raise RuntimeError(
-                        f'Invalid cloud type received: {cloud}. '
+                        f"Invalid cloud type received: {cloud}. "
                         f'available types: {", ".join(cmdMap[method.lower()].keys())}'
                     )
-                if cloud == 'pv':
+                if cloud == "pv":
                     vol_num, size, storage_class = uls_tup
                     backingstore_name = create_unique_resource_name(
-                        resource_description='backingstore', resource_type=cloud.lower()
+                        resource_description="backingstore", resource_type=cloud.lower()
                     )
                     # removing characters from name (pod name length bellow 64 characters issue)
                     backingstore_name = backingstore_name[:-16]
@@ -121,21 +123,19 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
                     uls_dict = cloud_uls_factory({cloud: [uls_tup]})
                     for uls_name in uls_dict[cloud.lower()]:
                         backingstore_name = create_unique_resource_name(
-                            resource_description='backingstore', resource_type=cloud.lower()
+                            resource_description="backingstore",
+                            resource_type=cloud.lower(),
                         )
                         # removing characters from name (pod name length bellow 64 characters issue)
                         backingstore_name = backingstore_name[:-16]
                         created_backingstores.append(
-                            BackingStore(
-                                name=backingstore_name,
-                                uls_name=uls_name
-                            )
+                            BackingStore(name=backingstore_name, uls_name=uls_name)
                         )
-                        if method.lower() == 'cli':
+                        if method.lower() == "cli":
                             cmdMap[method.lower()][cloud.lower()](
                                 mcg_obj, cld_mgr, backingstore_name, uls_name, region
                             )
-                        elif method.lower() == 'oc':
+                        elif method.lower() == "oc":
                             cmdMap[method.lower()][cloud.lower()](
                                 cld_mgr, backingstore_name, uls_name, region
                             )

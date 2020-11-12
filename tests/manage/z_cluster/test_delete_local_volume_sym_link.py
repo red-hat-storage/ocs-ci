@@ -25,13 +25,14 @@ class TestDeleteLocalVolumeSymLink(E2ETest):
     on LSO Cluster
 
     """
+
     def test_delete_local_volume_sym_link(self):
         """
         Delete sym link on LSO Cluster
         """
         # Get rook-ceph-crashcollector pod objects
         crashcollector_pods = get_pod_name_by_pattern(
-            pattern='rook-ceph-crashcollector', namespace=ROOK_CLUSTER_NAMESPACE
+            pattern="rook-ceph-crashcollector", namespace=ROOK_CLUSTER_NAMESPACE
         )
         crashcollector_pods_objs = []
         for crashcollector_pod in crashcollector_pods:
@@ -44,14 +45,14 @@ class TestDeleteLocalVolumeSymLink(E2ETest):
 
         # Get Sym link
         osd_pvcs = get_deviceset_pvcs()
-        pv_name = osd_pvcs[0].data['spec']['volumeName']
+        pv_name = osd_pvcs[0].data["spec"]["volumeName"]
         ocp_obj = ocp.OCP(namespace=ROOK_CLUSTER_NAMESPACE, kind=constants.PV)
         pv_obj = ocp_obj.get(resource_name=pv_name)
-        path = pv_obj['spec']['local']['path']
+        path = pv_obj["spec"]["local"]["path"]
 
         log.info("Delete sym link")
         oc_cmd = ocp.OCP(namespace=ROOK_CLUSTER_NAMESPACE)
-        cmd = f'rm -rfv {path}'
+        cmd = f"rm -rfv {path}"
         oc_cmd.exec_oc_debug_cmd(node=node_obj.name, cmd_list=[cmd])
 
         log.info("Waiting for rook-ceph-crashcollector pods to be reach Running state")
@@ -64,4 +65,4 @@ class TestDeleteLocalVolumeSymLink(E2ETest):
         wait_for_storage_pods()
 
         # Check ceph status
-        ceph_health_check(namespace=config.ENV_DATA['cluster_namespace'])
+        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"])
