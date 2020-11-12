@@ -1,6 +1,8 @@
 from os import environ
 from ocs_ci.framework.pytest_customization.marks import (
-    post_ocs_upgrade, post_upgrade, ocs_upgrade
+    post_ocs_upgrade,
+    post_upgrade,
+    ocs_upgrade,
 )
 
 
@@ -17,7 +19,7 @@ def test_1():
     Any order changes will cause the environment variable to differ.
     """
 
-    assert environ['RH'] != "Red Hat"
+    assert environ["RH"] != "Red Hat"
 
 
 @post_ocs_upgrade
@@ -27,7 +29,7 @@ def test_2():
     final verification done in test_1.
     """
 
-    environ['RH'] += "T"
+    environ["RH"] += "T"
 
 
 @ocs_upgrade
@@ -37,4 +39,4 @@ def test_3():
     final verification done in test_1.
     """
 
-    environ['RH'] += "a"
+    environ["RH"] += "a"

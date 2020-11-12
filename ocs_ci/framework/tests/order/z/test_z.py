@@ -1,6 +1,5 @@
 from os import environ
-from ocs_ci.framework.pytest_customization.marks import (
-    pre_ocp_upgrade, pre_upgrade)
+from ocs_ci.framework.pytest_customization.marks import pre_ocp_upgrade, pre_upgrade
 
 
 @pre_ocp_upgrade
@@ -10,7 +9,7 @@ def test_7():
     final verification done in test_1 in upper level folder 'a'.
     """
 
-    environ['RH'] += "e"
+    environ["RH"] += "e"
 
 
 @pre_upgrade
@@ -20,4 +19,4 @@ def test_8():
     final verification done in test_1 in upper level folder 'a'.
     """
 
-    environ['RH'] = "R"
+    environ["RH"] = "R"
