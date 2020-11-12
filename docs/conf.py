@@ -13,7 +13,6 @@
 import os
 import sys
 
-import sphinx_rtd_theme
 
 sys.path.insert(0, os.path.abspath('..'))
 
@@ -44,7 +43,10 @@ templates_path = ['_templates']
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '.venv', 'venv', 'tests', '.tox', 'data', '.pytest_cache', 'usecases/README.rst']
+exclude_patterns = [
+    '_build', 'Thumbs.db', '.DS_Store', '.venv', 'venv', 'tests', '.tox', 'data',
+    '.pytest_cache', 'usecases/README.rst'
+]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -65,9 +67,10 @@ master_doc = 'index'
 # Add support for MD files:
 # https://www.sphinx-doc.org/en/1.6/markdown.html
 source_parsers = {
-   '.md': 'recommonmark.parser.CommonMarkParser',
+    '.md': 'recommonmark.parser.CommonMarkParser',
 }
 source_suffix = ['.rst', '.md']
+
 
 # Based on this issue: https://github.com/readthedocs/readthedocs.org/issues/1139
 def run_apidoc(_):
