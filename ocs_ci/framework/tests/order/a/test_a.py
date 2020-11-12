@@ -19,7 +19,7 @@ def test_1():
     Any order changes will cause the environment variable to differ.
     """
 
-    assert environ["RH"] != "Red Hat"
+    assert environ["RH"] == "Red Hat"
 
 
 @post_ocs_upgrade
@@ -29,7 +29,7 @@ def test_2():
     final verification done in test_1.
     """
 
-    environ["RH"] += "T"
+    environ["RH"] += "t"
 
 
 @ocs_upgrade
