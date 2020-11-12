@@ -109,9 +109,15 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
         old_images, selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
         count=2
     )
-    verify_pods_upgraded(old_images, selector=constants.MON_APP_LABEL, count=3)
+    # This timeout is as W/A for BZ:
+    # https://bugzilla.redhat.com/show_bug.cgi?id=1895402
+    # Issue: https://github.com/red-hat-storage/ocs-ci/issues/3309
+    timeout = 720 if upgrade_version < parse_version('4.6') else 1440
+    verify_pods_upgraded(
+        old_images, selector=constants.MON_APP_LABEL, count=3, timeout=timeout,
+    )
     verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
-    osd_timeout = 600 if upgrade_version >= parse_version('4.5') else 750
+    osd_timeout = timeout if upgrade_version >= parse_version('4.5') else 750
     verify_pods_upgraded(
         old_images, selector=constants.OSD_APP_LABEL, count=osd_count,
         timeout=osd_timeout * osd_count,
@@ -121,7 +127,10 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
         # RGW count is 1 if the cluster was upgraded from <= 4.4
         # Related bug - https://bugzilla.redhat.com/show_bug.cgi?id=1857802
         rgw_count = 2 if float(version_before_upgrade) >= 4.5 else 1
-        verify_pods_upgraded(old_images, selector=constants.RGW_APP_LABEL, count=rgw_count)
+        verify_pods_upgraded(
+            old_images, selector=constants.RGW_APP_LABEL, count=rgw_count,
+            timeout=timeout,
+        )
 
     # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
     if config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM:
@@ -130,7 +139,10 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
                 version_before_upgrade) < 4.5
         ):
             rgw_count = 1
-            verify_pods_upgraded(old_images, selector=constants.RGW_APP_LABEL, count=rgw_count)
+            verify_pods_upgraded(
+                old_images, selector=constants.RGW_APP_LABEL, count=rgw_count,
+                timeout=timeout,
+            )
 
 
 class OCSUpgrade(object):
