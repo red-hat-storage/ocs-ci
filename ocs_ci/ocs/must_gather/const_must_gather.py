@@ -88,7 +88,7 @@ GATHER_COMMANDS_OTHERS = [
     'ocs-storagecluster-cephfilesystem.yaml', 'openshift-storage.yaml',
     'persistentvolumeclaims.yaml', 'pods.yaml', 'pools_rbd_ocs-storagecluster-cephblockpool',
     'registry-cephfs-rwx-pvc.yaml', 'replicasets.yaml',
-    'replicationcontrollers.yaml', 'rook-ceph-mon-a.yaml', 'rook-ceph-mon-b.yaml',
+    'replicationcontrollers.yaml', 'rook-ceph-mon-a.yaml',
     'rook-ceph-mon-c.yaml', 'routes.yaml', 'secrets.yaml', 'services.yaml',
     'statefulsets.yaml', 'storagecluster.yaml',
 ]
