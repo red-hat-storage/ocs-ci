@@ -41,17 +41,20 @@ class TestNamespace(MCGTest):
         # Create the namespace resource and verify health
         ns_resource_factory()
 
-    # Test is skipped for other platforms due to
-    # https://github.com/red-hat-storage/ocs-ci/issues/2774
-    @aws_platform_required
-    @pytest.mark.polarion_id("OCS-2256")
     @tier1
-    def test_namespace_bucket_creation(self, ns_resource_factory, bucket_factory):
+    @pytest.mark.parametrize(
+        argnames=["platform"],
+        argvalues=[
+            pytest.param(constants.AWS_PLATFORM, marks=pytest.mark.polarion_id("OCS-2256")),
+            pytest.param(constants.AZURE_PLATFORM, marks=pytest.mark.polarion_id("OCS-2409"))
+        ]
+    )
+    def test_namespace_bucket_creation(self, ns_resource_factory, bucket_factory, platform):
         """
         Test namespace bucket creation using the MCG RPC.
         """
         # Create the namespace resource and verify health
-        ns_resource_name = ns_resource_factory()[1]
+        ns_resource_name = ns_resource_factory(platform=platform)[1]
 
         # Create the namespace bucket on top of the namespace resource
         bucket_factory(amount=1, interface='mcg-namespace', write_ns_resource=ns_resource_name, read_ns_resources=[
