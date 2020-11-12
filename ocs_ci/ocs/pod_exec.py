@@ -29,14 +29,11 @@ from kubernetes.stream import stream
 
 logger = logging.getLogger(__name__)
 
-""" This dict holds a mapping of stringified class name to class
-
-Used by factory function to dynamically find the class to be instantiated
-
-"""
+# This dict holds a mapping of stringified class name to class
+# Used by factory function to dynamically find the class to be instantiated
 _clsmap = dict()
 
-"""Packing all elements required for execution """
+# Packing all elements required for execution
 CmdObj = namedtuple('CmdObj', [
     'cmd',
     'timeout',

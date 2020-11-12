@@ -1,18 +1,4 @@
 # -*- coding: utf8 -*-
-
-
-import logging
-
-from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier2, pre_upgrade, post_upgrade
-from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs import fiojob
-from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
-
-
-logger = logging.getLogger(__name__)
-
-
 """
 Test cases test_workload_with_checksum and test_workload_with_checksum_verify
 were originaly proposed for testing metrics and (partial) cluster shutdown, but
@@ -43,6 +29,17 @@ with the same parameters, and executes the checksum verification.
 The original idea was to use fio verification feature, but testing showed that
 when this fails for some reason or gets stuck, it's hard to debug.
 """
+
+import logging
+
+from ocs_ci.framework import config
+from ocs_ci.framework.testlib import tier2, pre_upgrade, post_upgrade
+from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import fiojob
+from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
+
+
+logger = logging.getLogger(__name__)
 
 
 @pre_upgrade
