@@ -78,6 +78,7 @@ class MustGather(object):
 
         """
         self.search_file_path()
+        self.verify_noobaa_diagnostics()
         for file, file_path in self.files_path.items():
             if not Path(file_path).is_file():
                 self.files_not_exist.append(file)
@@ -114,18 +115,6 @@ class MustGather(object):
             f"directories list of pods: {pod_names} list of log directories: {pod_files}"
         )
 
-    def cleanup(self):
-        """
-        Delete temporary folder.
-
-        """
-        if re.search('_ocs_logs$', self.root):
-            shutil.rmtree(
-                path=self.root,
-                ignore_errors=False,
-                onerror=None
-            )
-
     def print_invalid_files(self):
         """
         Print Invalid Files
@@ -142,6 +131,22 @@ class MustGather(object):
             self.files_content_issue = list()
             raise Exception(error)
 
+    def verify_noobaa_diagnostics(self):
+        """
+        Verify noobaa_diagnostics folder exist
+
+        """
+        if self.type_log == 'OTHERS' and get_ocs_parsed_version() >= 4.6:
+            flag = False
+            logger.info('Verify noobaa_diagnostics folder exist')
+            for path, subdirs, files in os.walk(self.root):
+                for file in files:
+                    if re.search(r'noobaa_diagnostics_.*.tar.gz', file):
+                        flag = True
+            if not flag:
+                logger.error('noobaa_diagnostics.tar.gz does not exist')
+                self.files_not_exist.append('noobaa_diagnostics.tar.gz')
+
     def validate_must_gather(self):
         """
         Validate must_gather
@@ -151,3 +156,16 @@ class MustGather(object):
         self.validate_expected_files()
         self.print_invalid_files()
         self.compare_running_pods()
+
+    def cleanup(self):
+        """
+        Delete temporary folder.
+
+        """
+        logger.info(f'Delete must gather folder {self.root}')
+        if re.search('_ocs_logs$', self.root):
+            shutil.rmtree(
+                path=self.root,
+                ignore_errors=False,
+                onerror=None
+            )
