@@ -17,9 +17,7 @@ class InstallPlan(OCP):
     functionality.
     """
 
-    def __init__(
-        self, resource_name="", namespace=None, *args, **kwargs
-    ):
+    def __init__(self, resource_name="", namespace=None, *args, **kwargs):
         """
         Initializer function for InstallPlan class
 
@@ -29,8 +27,11 @@ class InstallPlan(OCP):
 
         """
         super(InstallPlan, self).__init__(
-            resource_name=resource_name, namespace=namespace,
-            kind='InstallPlan', *args, **kwargs,
+            resource_name=resource_name,
+            namespace=namespace,
+            kind="InstallPlan",
+            *args,
+            **kwargs,
         )
 
     def approve(self):
@@ -38,7 +39,7 @@ class InstallPlan(OCP):
         Approve install plan.
         """
         self.check_name_is_specified()
-        self.patch(params='{"spec": {"approved": true}}', format_type='merge')
+        self.patch(params='{"spec": {"approved": true}}', format_type="merge")
 
 
 def get_install_plans_for_approve(namespace, raise_exception=False):
@@ -60,10 +61,11 @@ def get_install_plans_for_approve(namespace, raise_exception=False):
     """
 
     install_plan = InstallPlan(namespace=namespace)
-    install_plans = install_plan.get()['items']
+    install_plans = install_plan.get()["items"]
     install_plans_for_approve = [
-        InstallPlan(ip['metadata']['name'], namespace) for ip
-        in install_plans if ip['spec']['approved'] is False
+        InstallPlan(ip["metadata"]["name"], namespace)
+        for ip in install_plans
+        if ip["spec"]["approved"] is False
     ]
     if raise_exception and not install_plans_for_approve:
         raise NoInstallPlanForApproveFoundException(
@@ -86,8 +88,11 @@ def wait_for_install_plan_and_approve(namespace, timeout=960):
 
     """
     sampler = TimeoutSampler(
-        timeout, sleep=10, func=get_install_plans_for_approve,
-        namespace=namespace, raise_exception=True
+        timeout,
+        sleep=10,
+        func=get_install_plans_for_approve,
+        namespace=namespace,
+        raise_exception=True,
     )
     for install_plans in sampler:
         if install_plans:

@@ -3,11 +3,15 @@ import pytest
 import time
 
 from ocs_ci.framework.testlib import (
-    skipif_ocs_version, skipif_ocp_version,
-    E2ETest, tier2
+    skipif_ocs_version,
+    skipif_ocp_version,
+    E2ETest,
+    tier2,
 )
 from ocs_ci.ocs.constants import (
-    RIPSAW_NAMESPACE, STATUS_COMPLETED, VOLUME_MODE_FILESYSTEM
+    RIPSAW_NAMESPACE,
+    STATUS_COMPLETED,
+    VOLUME_MODE_FILESYSTEM,
 )
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -16,8 +20,8 @@ log = logging.getLogger(__name__)
 
 
 @tier2
-@skipif_ocs_version('<4.6')
-@skipif_ocp_version('<4.6')
+@skipif_ocs_version("<4.6")
+@skipif_ocp_version("<4.6")
 @pytest.mark.polarion_id("OCS-2342")
 class TestPvcCloneOfWorkloads(E2ETest):
     """
@@ -25,11 +29,7 @@ class TestPvcCloneOfWorkloads(E2ETest):
     """
 
     @pytest.fixture(autouse=True)
-    def pgsql_teardown(
-        self, request, pgsql_factory_fixture,
-        pvc_clone_factory
-    ):
-
+    def pgsql_teardown(self, request, pgsql_factory_fixture, pvc_clone_factory):
         def teardown():
 
             # Delete created postgres and pgbench pods
@@ -39,9 +39,7 @@ class TestPvcCloneOfWorkloads(E2ETest):
 
         request.addfinalizer(teardown)
 
-    def test_pvc_clone(
-        self, pgsql_factory_fixture, pvc_clone_factory
-    ):
+    def test_pvc_clone(self, pgsql_factory_fixture, pvc_clone_factory):
         """
         1. Deploy PGSQL workload
         2. Create multiple clone of same PVC when the PVC usage is different
@@ -64,15 +62,17 @@ class TestPvcCloneOfWorkloads(E2ETest):
 
             # Create clone of pgsql pvc
             log.info("Creating clone of the Postgres PVCs")
-            cloned_pvcs = [pvc_clone_factory(
-                pvc_obj, volume_mode=VOLUME_MODE_FILESYSTEM
-            ) for pvc_obj in postgres_pvcs_obj]
+            cloned_pvcs = [
+                pvc_clone_factory(pvc_obj, volume_mode=VOLUME_MODE_FILESYSTEM)
+                for pvc_obj in postgres_pvcs_obj
+            ]
             log.info("Created clone of the PVCs and all cloned PVCs are in Bound state")
 
             # Attach to new postgres pod
             self.pgsql_obj_list = pgsql.attach_pgsql_pod_to_claim_pvc(
-                pvc_objs=cloned_pvcs, postgres_name=f'postgres-cloned-{i}',
-                run_benchmark=False
+                pvc_objs=cloned_pvcs,
+                postgres_name=f"postgres-cloned-{i}",
+                run_benchmark=False,
             )
             self.sset_list.extend(self.pgsql_obj_list)
 
@@ -81,19 +81,30 @@ class TestPvcCloneOfWorkloads(E2ETest):
 
             # Validate cloned pvcs file space matches with parent
             cloned_pods_list = get_pod_name_by_pattern(
-                pattern=f'postgres-cloned-{i}', namespace=RIPSAW_NAMESPACE
+                pattern=f"postgres-cloned-{i}", namespace=RIPSAW_NAMESPACE
             )
             cloned_pods_obj = [
-                get_pod_obj(name=pods, namespace=RIPSAW_NAMESPACE) for pods in cloned_pods_list
+                get_pod_obj(name=pods, namespace=RIPSAW_NAMESPACE)
+                for pods in cloned_pods_list
             ]
             cloned_obj = pgsql.get_postgres_used_file_space(cloned_pods_obj)
             for pod_obj in parent_pods_obj:
-                if pod_obj.filespace != cloned_obj[parent_pods_obj.index(pod_obj)].filespace:
+                if (
+                    pod_obj.filespace
+                    != cloned_obj[parent_pods_obj.index(pod_obj)].filespace
+                ):
                     # ToDo: Before clone need to check data is synced
-                    if not abs(
-                        int(pod_obj.filespace.strip('M')) - int(
-                            cloned_obj[parent_pods_obj.index(pod_obj)].filespace.strip('M'))
-                    ) < 2:
+                    if (
+                        not abs(
+                            int(pod_obj.filespace.strip("M"))
+                            - int(
+                                cloned_obj[
+                                    parent_pods_obj.index(pod_obj)
+                                ].filespace.strip("M")
+                            )
+                        )
+                        < 2
+                    ):
                         raise Exception(
                             f"Parent pvc {pod_obj.name} used file space is {pod_obj.filespace}. "
                             f"And for cloned pvc {cloned_obj[parent_pods_obj.index(pod_obj)].name} "
@@ -107,7 +118,9 @@ class TestPvcCloneOfWorkloads(E2ETest):
             log.info("All cloned PVC matches the parent PVC data")
 
             # Run benchmark on parent PVC
-            pgsql.create_pgbench_benchmark(replicas=3, pgbench_name=f'pgbench-{i}', wait=False)
+            pgsql.create_pgbench_benchmark(
+                replicas=3, pgbench_name=f"pgbench-{i}", wait=False
+            )
 
             # Wait till pgbench client pods up
             wait_time = 180

@@ -39,8 +39,10 @@ class PVC(OCS):
         Returns:
             int: PVC size
         """
-        unformatted_size = self.data.get('spec').get('resources').get('requests').get('storage')
-        return convert_device_size(unformatted_size, 'GB')
+        unformatted_size = (
+            self.data.get("spec").get("resources").get("requests").get("storage")
+        )
+        return convert_device_size(unformatted_size, "GB")
 
     @property
     def status(self):
@@ -50,7 +52,7 @@ class PVC(OCS):
         Returns:
             str: PVC status
         """
-        return self.data.get('status').get('phase')
+        return self.data.get("status").get("phase")
 
     @property
     def backed_pv(self):
@@ -60,7 +62,7 @@ class PVC(OCS):
         Returns:
             str: PV name
         """
-        return self.data.get('spec').get('volumeName')
+        return self.data.get("spec").get("volumeName")
 
     @property
     def backed_pv_obj(self):
@@ -72,11 +74,9 @@ class PVC(OCS):
         """
         self.reload()
         data = dict()
-        data['api_version'] = self.api_version
-        data['kind'] = 'PersistentVolume'
-        data['metadata'] = {
-            'name': self.backed_pv, 'namespace': self.namespace
-        }
+        data["api_version"] = self.api_version
+        data["kind"] = "PersistentVolume"
+        data["metadata"] = {"name": self.backed_pv, "namespace": self.namespace}
         pv_obj = OCS(**data)
         pv_obj.reload()
         return pv_obj
@@ -92,7 +92,7 @@ class PVC(OCS):
         spec_volhandle = "'{.spec.csi.volumeHandle}'"
         cmd = f"oc get pv/{self.backed_pv} -o jsonpath={spec_volhandle}"
         out = run_cmd(cmd=cmd)
-        image_uuid = "-".join(out.split('-')[-5:])
+        image_uuid = "-".join(out.split("-")[-5:])
         return image_uuid
 
     @property
@@ -103,7 +103,7 @@ class PVC(OCS):
         Returns:
             (str): The accessModes Value of pvc_obj
         """
-        return self.data.get('spec').get('accessModes')[0]
+        return self.data.get("spec").get("accessModes")[0]
 
     @property
     def backed_sc(self):
@@ -113,7 +113,7 @@ class PVC(OCS):
         Returns:
             str: Storage class name
         """
-        return self.data.get('spec').get('storageClassName')
+        return self.data.get("spec").get("storageClassName")
 
     @property
     def reclaim_policy(self):
@@ -123,14 +123,12 @@ class PVC(OCS):
         Returns:
             str: Reclaim policy. eg: Reclaim, Delete
         """
-        return self.backed_pv_obj.get().get('spec').get(
-            'persistentVolumeReclaimPolicy'
-        )
+        return self.backed_pv_obj.get().get("spec").get("persistentVolumeReclaimPolicy")
 
     @property
     def provisioner(self):
-        return self.get()['metadata']['annotations'][
-            'volume.beta.kubernetes.io/storage-provisioner'
+        return self.get()["metadata"]["annotations"][
+            "volume.beta.kubernetes.io/storage-provisioner"
         ]
 
     def resize_pvc(self, new_size, verify=False):
@@ -148,14 +146,14 @@ class PVC(OCS):
         patch_param = f'{{"spec": {{"resources": {{"requests": {{"storage": "{new_size}Gi"}}}}}}}}'
 
         # Modify size of PVC
-        assert self.ocp.patch(resource_name=self.name, params=patch_param), (
-            f"Patch command to modify size of PVC {self.name} has failed."
-        )
+        assert self.ocp.patch(
+            resource_name=self.name, params=patch_param
+        ), f"Patch command to modify size of PVC {self.name} has failed."
 
         if verify:
             for pvc_data in TimeoutSampler(240, 2, self.get):
-                capacity = pvc_data.get('status').get('capacity').get('storage')
-                if capacity == f'{new_size}Gi':
+                capacity = pvc_data.get("status").get("capacity").get("storage")
+                if capacity == f"{new_size}Gi":
                     break
                 log.info(
                     f"Capacity of PVC {self.name} is not {new_size}Gi as "
@@ -177,6 +175,7 @@ class PVC(OCS):
         """
         # Importing from pod inside, because of unsolvable import loop
         from ocs_ci.ocs.resources.pod import get_all_pods, get_pvc_name
+
         attached_pods = []
         all_pods = get_all_pods()
         for pod_obj in all_pods:
@@ -200,27 +199,28 @@ class PVC(OCS):
             OCS: Kind Snapshot
 
         """
-        assert self.provisioner in constants.OCS_PROVISIONERS, (
-            "Unknown provisioner"
-        )
-        if self.provisioner == 'openshift-storage.rbd.csi.ceph.com':
+        assert self.provisioner in constants.OCS_PROVISIONERS, "Unknown provisioner"
+        if self.provisioner == "openshift-storage.rbd.csi.ceph.com":
             snap_yaml = constants.CSI_RBD_SNAPSHOT_YAML
             snapshotclass = helpers.default_volumesnapshotclass(
                 constants.CEPHBLOCKPOOL
             ).name
-        elif self.provisioner == 'openshift-storage.cephfs.csi.ceph.com':
+        elif self.provisioner == "openshift-storage.cephfs.csi.ceph.com":
             snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
             snapshotclass = helpers.default_volumesnapshotclass(
                 constants.CEPHFILESYSTEM
             ).name
         snapshot_name = snapshot_name or f"{self.name}-snapshot-{uuid4().hex}"
         snapshot_obj = create_pvc_snapshot(
-            pvc_name=self.name, snap_yaml=snap_yaml, snap_name=snapshot_name,
-            sc_name=snapshotclass, wait=wait
+            pvc_name=self.name,
+            snap_yaml=snap_yaml,
+            snap_name=snapshot_name,
+            sc_name=snapshotclass,
+            wait=wait,
         )
         snapshot_obj.parent_access_mode = self.get_pvc_access_mode
         snapshot_obj.parent_sc = self.backed_sc
-        snapshot_obj.parent_volume_mode = self.get()['spec']['volumeMode']
+        snapshot_obj.parent_volume_mode = self.get()["spec"]["volumeMode"]
         return snapshot_obj
 
 
@@ -257,12 +257,10 @@ def get_all_pvcs(namespace=None, selector=None):
     Returns:
          dict: Dict of all pvc in namespaces
     """
-    all_ns = True if namespace == 'all-namespaces' else False
+    all_ns = True if namespace == "all-namespaces" else False
     if not namespace:
-        namespace = config.ENV_DATA['cluster_namespace']
-    ocp_pvc_obj = OCP(
-        kind=constants.PVC, namespace=namespace
-    )
+        namespace = config.ENV_DATA["cluster_namespace"]
+    ocp_pvc_obj = OCP(kind=constants.PVC, namespace=namespace)
 
     out = ocp_pvc_obj.get(selector=selector, all_namespaces=all_ns)
     return out
@@ -285,7 +283,7 @@ def get_all_pvc_objs(namespace=None, selector=None):
     if selector:
         err_msg = err_msg + f" and selector {selector}"
     assert all_pvcs, err_msg
-    return [PVC(**pvc) for pvc in all_pvcs['items']]
+    return [PVC(**pvc) for pvc in all_pvcs["items"]]
 
 
 def get_all_pvcs_in_storageclass(storage_class):
@@ -300,7 +298,7 @@ def get_all_pvcs_in_storageclass(storage_class):
 
     """
     ocp_pvc_obj = OCP(kind=constants.PVC)
-    pvc_list = ocp_pvc_obj.get(all_namespaces=True)['items']
+    pvc_list = ocp_pvc_obj.get(all_namespaces=True)["items"]
     out = []
     for pvc in pvc_list:
         pvc_obj = PVC(**pvc)
@@ -321,9 +319,7 @@ def get_deviceset_pvcs():
         AssertionError: In case the deviceset PVCs are not found
 
     """
-    ocs_pvc_obj = get_all_pvc_objs(
-        namespace=config.ENV_DATA['cluster_namespace']
-    )
+    ocs_pvc_obj = get_all_pvc_objs(namespace=config.ENV_DATA["cluster_namespace"])
     deviceset_pvcs = []
     for pvc_obj in ocs_pvc_obj:
         if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME):
@@ -347,9 +343,7 @@ def get_deviceset_pvs():
     return [pvc.backed_pv_obj for pvc in deviceset_pvcs]
 
 
-def create_pvc_snapshot(
-    pvc_name, snap_yaml, snap_name, sc_name=None, wait=False
-):
+def create_pvc_snapshot(pvc_name, snap_yaml, snap_name, sc_name=None, wait=False):
     """
     Create snapshot of a PVC
 
@@ -364,26 +358,32 @@ def create_pvc_snapshot(
         OCS object
     """
     snapshot_data = templating.load_yaml(snap_yaml)
-    snapshot_data['metadata']['name'] = snap_name
+    snapshot_data["metadata"]["name"] = snap_name
     if sc_name:
-        snapshot_data['spec']['volumeSnapshotClassName'] = sc_name
-    snapshot_data['spec']['source']['persistentVolumeClaimName'] = pvc_name
+        snapshot_data["spec"]["volumeSnapshotClassName"] = sc_name
+    snapshot_data["spec"]["source"]["persistentVolumeClaimName"] = pvc_name
     ocs_obj = OCS(**snapshot_data)
     created_snap = ocs_obj.create(do_reload=True)
     assert created_snap, f"Failed to create snapshot {snap_name}"
     if wait:
         ocs_obj.ocp.wait_for_resource(
-            condition='true', resource_name=ocs_obj.name,
-            column=constants.STATUS_READYTOUSE, timeout=60
+            condition="true",
+            resource_name=ocs_obj.name,
+            column=constants.STATUS_READYTOUSE,
+            timeout=60,
         )
     return ocs_obj
 
 
 def create_restore_pvc(
-    sc_name, snap_name, namespace, size,
-    pvc_name, volume_mode=None,
+    sc_name,
+    snap_name,
+    namespace,
+    size,
+    pvc_name,
+    volume_mode=None,
     restore_pvc_yaml=constants.CSI_RBD_PVC_RESTORE_YAML,
-    access_mode=constants.ACCESS_MODE_RWO
+    access_mode=constants.ACCESS_MODE_RWO,
 ):
     """
     Create PVC from snapshot
@@ -403,15 +403,15 @@ def create_restore_pvc(
         PVC: PVC instance
     """
     pvc_data = templating.load_yaml(restore_pvc_yaml)
-    pvc_data['metadata']['name'] = pvc_name
-    pvc_data['metadata']['namespace'] = namespace
-    pvc_data['spec']['storageClassName'] = sc_name
-    pvc_data['spec']['resources']['requests']['storage'] = size
+    pvc_data["metadata"]["name"] = pvc_name
+    pvc_data["metadata"]["namespace"] = namespace
+    pvc_data["spec"]["storageClassName"] = sc_name
+    pvc_data["spec"]["resources"]["requests"]["storage"] = size
     if volume_mode:
-        pvc_data['spec']['volumeMode'] = volume_mode
-    pvc_data['spec']['dataSource']['name'] = snap_name
+        pvc_data["spec"]["volumeMode"] = volume_mode
+    pvc_data["spec"]["dataSource"]["name"] = snap_name
     if access_mode:
-        pvc_data['spec']['accessModes'] = [access_mode]
+        pvc_data["spec"]["accessModes"] = [access_mode]
     pvc_obj = PVC(**pvc_data)
     created_pvc = pvc_obj.create(do_reload=True)
     assert created_pvc, f"Failed to create resource {pvc_name}"
@@ -419,8 +419,14 @@ def create_restore_pvc(
 
 
 def create_pvc_clone(
-    sc_name, parent_pvc, clone_yaml, pvc_name=None, do_reload=True,
-    storage_size=None, access_mode=None, volume_mode=None
+    sc_name,
+    parent_pvc,
+    clone_yaml,
+    pvc_name=None,
+    do_reload=True,
+    storage_size=None,
+    access_mode=None,
+    volume_mode=None,
 ):
     """
     Create a cloned pvc from existing pvc
@@ -442,19 +448,19 @@ def create_pvc_clone(
 
     """
     pvc_data = templating.load_yaml(clone_yaml)
-    pvc_data['metadata']['name'] = (
-        pvc_name if pvc_name else helpers.create_unique_resource_name(
-            parent_pvc, 'clone'
-        )
+    pvc_data["metadata"]["name"] = (
+        pvc_name
+        if pvc_name
+        else helpers.create_unique_resource_name(parent_pvc, "clone")
     )
-    pvc_data['spec']['storageClassName'] = sc_name
-    pvc_data['spec']['dataSource']['name'] = parent_pvc
+    pvc_data["spec"]["storageClassName"] = sc_name
+    pvc_data["spec"]["dataSource"]["name"] = parent_pvc
     if storage_size:
-        pvc_data['spec']['resources']['requests']['storage'] = storage_size
+        pvc_data["spec"]["resources"]["requests"]["storage"] = storage_size
     if volume_mode:
-        pvc_data['spec']['volumeMode'] = volume_mode
+        pvc_data["spec"]["volumeMode"] = volume_mode
     if access_mode:
-        pvc_data['spec']['accessModes'] = [access_mode]
+        pvc_data["spec"]["accessModes"] = [access_mode]
     ocs_obj = PVC(**pvc_data)
     created_pvc = ocs_obj.create(do_reload=do_reload)
     assert created_pvc, f"Failed to create resource {pvc_name}"

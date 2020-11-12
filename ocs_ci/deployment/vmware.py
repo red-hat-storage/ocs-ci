@@ -19,13 +19,14 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.exceptions import CommandFailed, RDMDiskNotFound
 from ocs_ci.ocs.node import (
-    get_node_ips, get_typed_worker_nodes, remove_nodes, wait_for_nodes_status
+    get_node_ips,
+    get_typed_worker_nodes,
+    remove_nodes,
+    wait_for_nodes_status,
 )
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.bootstrap import gather_bootstrap
-from ocs_ci.utility.csr import (
-    approve_pending_csr, wait_for_all_nodes_csr_and_approve
-)
+from ocs_ci.utility.csr import approve_pending_csr, wait_for_all_nodes_csr_and_approve
 from ocs_ci.utility.load_balancer import LoadBalancer
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.templating import (
@@ -34,11 +35,20 @@ from ocs_ci.utility.templating import (
     json_to_dict,
 )
 from ocs_ci.utility.utils import (
-    clone_repo, convert_yaml2tfvars, create_directory_path, read_file_as_str,
-    replace_content_in_file, run_cmd, upload_file, wait_for_co,
-    get_ocp_version, get_terraform, set_aws_region,
+    clone_repo,
+    convert_yaml2tfvars,
+    create_directory_path,
+    read_file_as_str,
+    replace_content_in_file,
+    run_cmd,
+    upload_file,
+    wait_for_co,
+    get_ocp_version,
+    get_terraform,
+    set_aws_region,
     configure_chrony_and_wait_for_machineconfig_status,
-    get_terraform_ignition_provider, get_ocp_upgrade_history,
+    get_terraform_ignition_provider,
+    get_ocp_upgrade_history,
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from semantic_version import Version
@@ -48,7 +58,7 @@ logger = logging.getLogger(__name__)
 
 
 # As of now only UPI
-__all__ = ['VSPHEREUPI']
+__all__ = ["VSPHEREUPI"]
 
 
 class VSPHEREBASE(Deployment):
@@ -61,35 +71,29 @@ class VSPHEREBASE(Deployment):
         This would be base for both IPI and UPI deployment
         """
         super(VSPHEREBASE, self).__init__()
-        self.region = config.ENV_DATA['region']
-        self.server = config.ENV_DATA['vsphere_server']
-        self.user = config.ENV_DATA['vsphere_user']
-        self.password = config.ENV_DATA['vsphere_password']
-        self.cluster = config.ENV_DATA['vsphere_cluster']
-        self.datacenter = config.ENV_DATA['vsphere_datacenter']
-        self.datastore = config.ENV_DATA['vsphere_datastore']
+        self.region = config.ENV_DATA["region"]
+        self.server = config.ENV_DATA["vsphere_server"]
+        self.user = config.ENV_DATA["vsphere_user"]
+        self.password = config.ENV_DATA["vsphere_password"]
+        self.cluster = config.ENV_DATA["vsphere_cluster"]
+        self.datacenter = config.ENV_DATA["vsphere_datacenter"]
+        self.datastore = config.ENV_DATA["vsphere_datastore"]
         self.vsphere = VSPHEREUtil(self.server, self.user, self.password)
-        self.upi_repo_path = os.path.join(
-            constants.EXTERNAL_DIR,
-            'installer'
-        )
+        self.upi_repo_path = os.path.join(constants.EXTERNAL_DIR, "installer")
         self.upi_scale_up_repo_path = os.path.join(
-            constants.EXTERNAL_DIR,
-            'openshift-misc'
+            constants.EXTERNAL_DIR, "openshift-misc"
         )
         self.cluster_launcer_repo_path = os.path.join(
-            constants.EXTERNAL_DIR,
-            'cluster-launcher'
+            constants.EXTERNAL_DIR, "cluster-launcher"
         )
-        os.environ['TF_LOG'] = config.ENV_DATA.get('TF_LOG_LEVEL', "TRACE")
-        os.environ['TF_LOG_PATH'] = os.path.join(
-            config.ENV_DATA.get('cluster_path'),
-            config.ENV_DATA.get('TF_LOG_FILE')
+        os.environ["TF_LOG"] = config.ENV_DATA.get("TF_LOG_LEVEL", "TRACE")
+        os.environ["TF_LOG_PATH"] = os.path.join(
+            config.ENV_DATA.get("cluster_path"), config.ENV_DATA.get("TF_LOG_FILE")
         )
 
         # pre-checks for the vSphere environment
         # skip pre-checks for destroying cluster
-        teardown = config.RUN['cli_params'].get('teardown')
+        teardown = config.RUN["cli_params"].get("teardown")
         if not teardown:
             vsphere_prechecks = VSpherePreChecks()
             vsphere_prechecks.get_all_checks()
@@ -107,18 +111,13 @@ class VSPHEREBASE(Deployment):
 
         """
         vms = self.vsphere.get_all_vms_in_pool(
-            config.ENV_DATA.get("cluster_name"),
-            self.datacenter,
-            self.cluster
+            config.ENV_DATA.get("cluster_name"), self.datacenter, self.cluster
         )
         # Add disks to all worker nodes
         for vm in vms:
             if "compute" in vm.name:
                 self.vsphere.add_disks(
-                    config.ENV_DATA.get("extra_disks", 1),
-                    vm,
-                    size,
-                    disk_type
+                    config.ENV_DATA.get("extra_disks", 1), vm, size, disk_type
                 )
 
     def add_nodes(self):
@@ -129,39 +128,31 @@ class VSPHEREBASE(Deployment):
         scaleup_terraform_data_dir = os.path.join(
             self.cluster_path,
             constants.TERRAFORM_DATA_DIR,
-            constants.SCALEUP_TERRAFORM_DATA_DIR
+            constants.SCALEUP_TERRAFORM_DATA_DIR,
         )
         create_directory_path(scaleup_terraform_data_dir)
-        logger.info(
-            f"scale-up terraform data directory: {scaleup_terraform_data_dir}"
-        )
+        logger.info(f"scale-up terraform data directory: {scaleup_terraform_data_dir}")
 
         # git clone repo from openshift-misc
-        clone_repo(
-            constants.VSPHERE_SCALEUP_REPO, self.upi_scale_up_repo_path
-        )
+        clone_repo(constants.VSPHERE_SCALEUP_REPO, self.upi_scale_up_repo_path)
 
         # git clone repo from cluster-launcher
-        clone_repo(
-            constants.VSPHERE_CLUSTER_LAUNCHER, self.cluster_launcer_repo_path
-        )
+        clone_repo(constants.VSPHERE_CLUSTER_LAUNCHER, self.cluster_launcer_repo_path)
 
         helpers = VSPHEREHELPERS()
         helpers.modify_scaleup_repo()
 
-        config.ENV_DATA['vsphere_resource_pool'] = config.ENV_DATA.get(
-            "cluster_name"
-        )
+        config.ENV_DATA["vsphere_resource_pool"] = config.ENV_DATA.get("cluster_name")
 
         # sync guest time with host
         sync_time_with_host_file = constants.SCALEUP_VSPHERE_MACHINE_CONF
-        if config.ENV_DATA['folder_structure']:
+        if config.ENV_DATA["folder_structure"]:
             sync_time_with_host_file = os.path.join(
                 constants.CLUSTER_LAUNCHER_VSPHERE_DIR,
                 f"aos-{get_ocp_version(seperator='_')}",
-                constants.CLUSTER_LAUNCHER_MACHINE_CONF
+                constants.CLUSTER_LAUNCHER_MACHINE_CONF,
             )
-        if config.ENV_DATA.get('sync_time_with_host'):
+        if config.ENV_DATA.get("sync_time_with_host"):
             sync_time_with_host(sync_time_with_host_file, True)
 
         # get the RHCOS worker list
@@ -169,8 +160,8 @@ class VSPHEREBASE(Deployment):
         logger.info(f"RHCOS IP's: {json.dumps(rhcos_ips)}")
 
         # generate terraform variable for scaling nodes
-        self.scale_up_terraform_var = (
-            helpers.generate_terraform_vars_for_scaleup(rhcos_ips)
+        self.scale_up_terraform_var = helpers.generate_terraform_vars_for_scaleup(
+            rhcos_ips
         )
 
         # choose the vsphere_dir based on OCP version
@@ -178,11 +169,11 @@ class VSPHEREBASE(Deployment):
         # for OCP version greater than 4.4
         vsphere_dir = constants.SCALEUP_VSPHERE_DIR
         rhel_module = "rhel-worker"
-        if Version.coerce(self.ocp_version) >= Version.coerce('4.5'):
+        if Version.coerce(self.ocp_version) >= Version.coerce("4.5"):
             vsphere_dir = os.path.join(
                 constants.CLUSTER_LAUNCHER_VSPHERE_DIR,
                 f"aos-{get_ocp_version('_')}",
-                "vsphere"
+                "vsphere",
             )
             helpers.generate_cluster_info()
             helpers.generate_config_yaml()
@@ -195,17 +186,13 @@ class VSPHEREBASE(Deployment):
         scaleup_terraform.initialize()
         scaleup_terraform.apply(self.scale_up_terraform_var)
         scaleup_terraform_tfstate = os.path.join(
-            scaleup_terraform_data_dir,
-            "terraform.tfstate"
+            scaleup_terraform_data_dir, "terraform.tfstate"
         )
-        out = scaleup_terraform.output(
-            scaleup_terraform_tfstate,
-            rhel_module
-        )
-        if config.ENV_DATA['folder_structure']:
-            rhel_worker_nodes = out.strip().replace("\"", '').split(",")
+        out = scaleup_terraform.output(scaleup_terraform_tfstate, rhel_module)
+        if config.ENV_DATA["folder_structure"]:
+            rhel_worker_nodes = out.strip().replace('"', "").split(",")
         else:
-            rhel_worker_nodes = json.loads(out)['value']
+            rhel_worker_nodes = json.loads(out)["value"]
 
         logger.info(f"RHEL worker nodes: {rhel_worker_nodes}")
         os.chdir(previous_dir)
@@ -245,18 +232,12 @@ class VSPHEREBASE(Deployment):
 
         """
         if self.vsphere.is_resource_pool_exist(
-            config.ENV_DATA['cluster_name'],
-            self.datacenter,
-            self.cluster
+            config.ENV_DATA["cluster_name"], self.datacenter, self.cluster
         ):
             vms = self.vsphere.get_all_vms_in_pool(
-                config.ENV_DATA.get("cluster_name"),
-                dc,
-                cluster
+                config.ENV_DATA.get("cluster_name"), dc, cluster
             )
-            return [
-                vm for vm in vms if "compute" in vm.name or "rhel" in vm.name
-            ]
+            return [vm for vm in vms if "compute" in vm.name or "rhel" in vm.name]
 
     def add_rdm_disks(self):
         """
@@ -268,8 +249,7 @@ class VSPHEREBASE(Deployment):
         """
         logger.info("Adding RDM disk to all compute nodes")
         datastore_type = self.vsphere.get_datastore_type_by_name(
-            self.datastore,
-            self.datacenter
+            self.datastore, self.datacenter
         )
 
         compute_vms = self.get_compute_vms(self.datacenter, self.cluster)
@@ -277,8 +257,7 @@ class VSPHEREBASE(Deployment):
             host = self.vsphere.get_host(vm)
             logger.info(f"{vm.name} belongs to host {host.name}")
             devices_available = self.vsphere.available_storage_devices(
-                host,
-                datastore_type=datastore_type
+                host, datastore_type=datastore_type
             )
             if not devices_available:
                 raise RDMDiskNotFound
@@ -306,20 +285,13 @@ class VSPHEREBASE(Deployment):
         """
         Post destroy checks on cluster
         """
-        pool = config.ENV_DATA['cluster_name']
-        if self.vsphere.is_resource_pool_exist(
-            pool,
-            self.datacenter,
-            self.cluster
-        ):
-            logger.warning(
-                f"Resource pool {pool} exists even after destroying cluster"
-            )
+        pool = config.ENV_DATA["cluster_name"]
+        if self.vsphere.is_resource_pool_exist(pool, self.datacenter, self.cluster):
+            logger.warning(f"Resource pool {pool} exists even after destroying cluster")
             self.vsphere.destroy_pool(pool, self.datacenter, self.cluster)
         else:
             logger.info(
-                f"Resource pool {pool} does not exist in "
-                f"cluster {self.cluster}"
+                f"Resource pool {pool} does not exist in " f"cluster {self.cluster}"
             )
 
         # destroy the folder in templates
@@ -342,7 +314,9 @@ class VSPHEREBASE(Deployment):
             cluster_name_pattern, self.datacenter, self.cluster
         )
         if rp_exist:
-            logger.error(f"Resource pool with the prefix of {cluster_name_prefix} was found")
+            logger.error(
+                f"Resource pool with the prefix of {cluster_name_prefix} was found"
+            )
             return True
         else:
             return False
@@ -352,21 +326,19 @@ class VSPHEREUPI(VSPHEREBASE):
     """
     A class to handle vSphere UPI specific deployment
     """
+
     def __init__(self):
         super(VSPHEREUPI, self).__init__()
-        self.ipam = config.ENV_DATA.get('ipam')
-        self.token = config.ENV_DATA.get('ipam_token')
-        self.cidr = config.ENV_DATA.get('machine_cidr')
-        self.vm_network = config.ENV_DATA.get('vm_network')
+        self.ipam = config.ENV_DATA.get("ipam")
+        self.token = config.ENV_DATA.get("ipam_token")
+        self.cidr = config.ENV_DATA.get("machine_cidr")
+        self.vm_network = config.ENV_DATA.get("vm_network")
 
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
             super(VSPHEREUPI.OCPDeployment, self).__init__()
             self.public_key = {}
-            self.upi_repo_path = os.path.join(
-                constants.EXTERNAL_DIR,
-                'installer'
-            )
+            self.upi_repo_path = os.path.join(constants.EXTERNAL_DIR, "installer")
             self.previous_dir = os.getcwd()
 
             # get OCP version
@@ -374,21 +346,20 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # create terraform_data directory
             self.terraform_data_dir = os.path.join(
-                self.cluster_path,
-                constants.TERRAFORM_DATA_DIR
+                self.cluster_path, constants.TERRAFORM_DATA_DIR
             )
             create_directory_path(self.terraform_data_dir)
 
             # Download terraform binary based on ocp version and
             # update the installer path in ENV_DATA
             # use "0.11.14" for releases below OCP 4.5
-            terraform_version = config.DEPLOYMENT['terraform_version']
+            terraform_version = config.DEPLOYMENT["terraform_version"]
             terraform_installer = get_terraform(version=terraform_version)
-            config.ENV_DATA['terraform_installer'] = terraform_installer
+            config.ENV_DATA["terraform_installer"] = terraform_installer
 
             # Download terraform ignition provider
             # ignition provider dependancy from OCP 4.6
-            if Version.coerce(ocp_version) >= Version.coerce('4.6'):
+            if Version.coerce(ocp_version) >= Version.coerce("4.6"):
                 get_terraform_ignition_provider(self.terraform_data_dir)
 
             # Initialize Terraform
@@ -396,9 +367,9 @@ class VSPHEREUPI(VSPHEREBASE):
             self.terraform = Terraform(self.terraform_work_dir)
 
             self.folder_structure = False
-            if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+            if Version.coerce(ocp_version) >= Version.coerce("4.5"):
                 self.folder_structure = True
-                config.ENV_DATA['folder_structure'] = self.folder_structure
+                config.ENV_DATA["folder_structure"] = self.folder_structure
 
         def deploy_prereq(self):
             """
@@ -408,13 +379,12 @@ class VSPHEREUPI(VSPHEREBASE):
             # create ignitions
             self.create_ignitions()
             self.kubeconfig = os.path.join(
-                self.cluster_path,
-                config.RUN.get('kubeconfig_location')
+                self.cluster_path, config.RUN.get("kubeconfig_location")
             )
             self.terraform_var = os.path.join(
-                config.ENV_DATA['cluster_path'],
+                config.ENV_DATA["cluster_path"],
                 constants.TERRAFORM_DATA_DIR,
-                "terraform.tfvars"
+                "terraform.tfvars",
             )
 
             # git clone repo from openshift installer
@@ -425,10 +395,11 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # sync guest time with host
             vm_file = (
-                constants.VM_MAIN if self.folder_structure
+                constants.VM_MAIN
+                if self.folder_structure
                 else constants.INSTALLER_MACHINE_CONF
             )
-            if config.ENV_DATA.get('sync_time_with_host'):
+            if config.ENV_DATA.get("sync_time_with_host"):
                 sync_time_with_host(vm_file, True)
 
         def create_config(self):
@@ -450,8 +421,8 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # Parse the rendered YAML so that we can manipulate the object directly
             install_config_obj = yaml.safe_load(install_config_str)
-            install_config_obj['pullSecret'] = self.get_pull_secret()
-            install_config_obj['sshKey'] = self.get_ssh_key()
+            install_config_obj["pullSecret"] = self.get_pull_secret()
+            install_config_obj["sshKey"] = self.get_ssh_key()
             install_config_str = yaml.safe_dump(install_config_obj)
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
             with open(install_config, "w") as f:
@@ -473,14 +444,14 @@ class VSPHEREUPI(VSPHEREBASE):
             Configures storage for the image registry
             """
             logger.info("configuring storage for image registry")
-            patch = " '{\"spec\":{\"storage\":{\"emptyDir\":{}}}}' "
+            patch = ' \'{"spec":{"storage":{"emptyDir":{}}}}\' '
             run_cmd(
                 f"oc --kubeconfig {kubeconfig} patch "
                 f"configs.imageregistry.operator.openshift.io "
                 f"cluster --type merge --patch {patch}"
             )
 
-        def deploy(self, log_cli_level='DEBUG'):
+        def deploy(self, log_cli_level="DEBUG"):
             """
             Deployment specific to OCP cluster on this platform
 
@@ -490,9 +461,7 @@ class VSPHEREUPI(VSPHEREBASE):
 
             """
             logger.info("Deploying OCP cluster for vSphere platform")
-            logger.info(
-                f"Openshift-installer will be using loglevel:{log_cli_level}"
-            )
+            logger.info(f"Openshift-installer will be using loglevel:{log_cli_level}")
             os.chdir(self.terraform_data_dir)
             self.terraform.initialize()
             self.terraform.apply(self.terraform_var)
@@ -503,7 +472,7 @@ class VSPHEREUPI(VSPHEREBASE):
                     f"{self.installer} wait-for bootstrap-complete "
                     f"--dir {self.cluster_path} "
                     f"--log-level {log_cli_level}",
-                    timeout=3600
+                    timeout=3600,
                 )
             except CommandFailed as e:
                 if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
@@ -524,18 +493,15 @@ class VSPHEREUPI(VSPHEREBASE):
                 lb.restart_haproxy()
 
             # remove bootstrap node
-            if not config.DEPLOYMENT['preserve_bootstrap_node']:
+            if not config.DEPLOYMENT["preserve_bootstrap_node"]:
                 logger.info("removing bootstrap node")
                 os.chdir(self.terraform_data_dir)
                 if self.folder_structure:
                     self.terraform.destroy_module(
-                        self.terraform_var,
-                        constants.BOOTSTRAP_MODULE
+                        self.terraform_var, constants.BOOTSTRAP_MODULE
                     )
                 else:
-                    self.terraform.apply(
-                        self.terraform_var, bootstrap_complete=True
-                    )
+                    self.terraform.apply(self.terraform_var, bootstrap_complete=True)
                 os.chdir(self.previous_dir)
 
             OCP.set_kubeconfig(self.kubeconfig)
@@ -544,7 +510,7 @@ class VSPHEREUPI(VSPHEREBASE):
             # From OCP version 4.4 and above, we have to approve CSR manually
             # for all the nodes
             ocp_version = get_ocp_version()
-            if Version.coerce(ocp_version) >= Version.coerce('4.4'):
+            if Version.coerce(ocp_version) >= Version.coerce("4.4"):
                 wait_for_all_nodes_csr_and_approve(timeout=1200, sleep=30)
 
             # wait for image registry to show-up
@@ -560,7 +526,7 @@ class VSPHEREUPI(VSPHEREBASE):
                 f"{self.installer} wait-for install-complete "
                 f"--dir {self.cluster_path} "
                 f"--log-level {log_cli_level}",
-                timeout=1800
+                timeout=1800,
             )
 
             # Approving CSRs here in-case if any exists
@@ -568,7 +534,7 @@ class VSPHEREUPI(VSPHEREBASE):
 
             self.test_cluster()
 
-    def deploy_ocp(self, log_cli_level='DEBUG'):
+    def deploy_ocp(self, log_cli_level="DEBUG"):
         """
         Deployment specific to OCP cluster on vSphere platform
 
@@ -581,7 +547,7 @@ class VSPHEREUPI(VSPHEREBASE):
         prefix = cluster_name_parts[0]
         if not (
             prefix.startswith(tuple(constants.PRODUCTION_JOBS_PREFIX))
-            or config.DEPLOYMENT.get('force_deploy_multiple_clusters')
+            or config.DEPLOYMENT.get("force_deploy_multiple_clusters")
         ):
             if self.check_cluster_existence(prefix):
                 raise exceptions.SameNamePrefixClusterAlreadyExistsException(
@@ -590,15 +556,12 @@ class VSPHEREUPI(VSPHEREBASE):
                     f"deployment"
                 )
         super(VSPHEREUPI, self).deploy_ocp(log_cli_level)
-        if config.ENV_DATA.get('scale_up'):
+        if config.ENV_DATA.get("scale_up"):
             logger.info("Adding extra nodes to cluster")
             self.add_nodes()
 
         # remove RHCOS compute nodes
-        if (
-            config.ENV_DATA.get('scale_up')
-            and not config.ENV_DATA.get('mixed_cluster')
-        ):
+        if config.ENV_DATA.get("scale_up") and not config.ENV_DATA.get("mixed_cluster"):
             rhcos_nodes = get_typed_worker_nodes()
             logger.info(
                 f"RHCOS compute nodes to delete: "
@@ -610,8 +573,7 @@ class VSPHEREUPI(VSPHEREBASE):
         # get datastore type and configure chrony for all nodes ONLY if
         # datstore type is vsan
         datastore_type = self.vsphere.get_datastore_type_by_name(
-            self.datastore,
-            self.datacenter
+            self.datastore, self.datacenter
         )
         if datastore_type != constants.VMFS:
             configure_chrony_and_wait_for_machineconfig_status(
@@ -631,34 +593,31 @@ class VSPHEREUPI(VSPHEREBASE):
         # Download terraform binary based on terraform version
         # in terraform.log
         terraform_log_path = os.path.join(
-            config.ENV_DATA.get('cluster_path'),
-            config.ENV_DATA.get('TF_LOG_FILE')
+            config.ENV_DATA.get("cluster_path"), config.ENV_DATA.get("TF_LOG_FILE")
         )
 
         # check for terraform.log, this check is for partially
         # deployed clusters
         try:
-            with open(terraform_log_path, 'r') as fd:
-                logger.debug(
-                    f"Reading terraform version from {terraform_log_path}"
-                )
+            with open(terraform_log_path, "r") as fd:
+                logger.debug(f"Reading terraform version from {terraform_log_path}")
                 version_line = fd.readline()
                 terraform_version = version_line.split()[-1]
         except FileNotFoundError:
             logger.debug(f"{terraform_log_path} file not found")
-            terraform_version = config.DEPLOYMENT['terraform_version']
+            terraform_version = config.DEPLOYMENT["terraform_version"]
 
         terraform_installer = get_terraform(version=terraform_version)
-        config.ENV_DATA['terraform_installer'] = terraform_installer
+        config.ENV_DATA["terraform_installer"] = terraform_installer
 
         # getting OCP version here since we run destroy job as
         # separate job in jenkins
         ocp_version = get_ocp_version()
         self.folder_structure = False
-        if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+        if Version.coerce(ocp_version) >= Version.coerce("4.5"):
             set_aws_region()
             self.folder_structure = True
-            config.ENV_DATA['folder_structure'] = self.folder_structure
+            config.ENV_DATA["folder_structure"] = self.folder_structure
 
         # delete the extra disks
         self.delete_disks()
@@ -667,41 +626,44 @@ class VSPHEREUPI(VSPHEREBASE):
         scale_up_terraform_data_dir = os.path.join(
             self.cluster_path,
             constants.TERRAFORM_DATA_DIR,
-            constants.SCALEUP_TERRAFORM_DATA_DIR
+            constants.SCALEUP_TERRAFORM_DATA_DIR,
         )
         scale_up_terraform_var = os.path.join(
-            scale_up_terraform_data_dir,
-            "scale_up_terraform.tfvars"
+            scale_up_terraform_data_dir, "scale_up_terraform.tfvars"
         )
         if os.path.exists(scale_up_terraform_var):
             os.chdir(scale_up_terraform_data_dir)
             self.destroy_scaleup_nodes(
-                scale_up_terraform_data_dir,
-                scale_up_terraform_var
+                scale_up_terraform_data_dir, scale_up_terraform_var
             )
             os.chdir(previous_dir)
 
-        terraform_data_dir = os.path.join(self.cluster_path, constants.TERRAFORM_DATA_DIR)
+        terraform_data_dir = os.path.join(
+            self.cluster_path, constants.TERRAFORM_DATA_DIR
+        )
         upi_repo_path = os.path.join(
-            constants.EXTERNAL_DIR, 'installer',
+            constants.EXTERNAL_DIR,
+            "installer",
         )
         tfvars = os.path.join(
-            config.ENV_DATA.get('cluster_path'),
+            config.ENV_DATA.get("cluster_path"),
             constants.TERRAFORM_DATA_DIR,
-            constants.TERRAFORM_VARS
+            constants.TERRAFORM_VARS,
         )
 
         clone_openshift_installer()
-        if (
-            os.path.exists(f"{constants.VSPHERE_MAIN}.backup")
-            and os.path.exists(f"{constants.VSPHERE_MAIN}.json")
+        if os.path.exists(f"{constants.VSPHERE_MAIN}.backup") and os.path.exists(
+            f"{constants.VSPHERE_MAIN}.json"
         ):
-            os.rename(f"{constants.VSPHERE_MAIN}.json", f"{constants.VSPHERE_MAIN}.json.backup")
+            os.rename(
+                f"{constants.VSPHERE_MAIN}.json",
+                f"{constants.VSPHERE_MAIN}.json.backup",
+            )
 
         # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
-        if Version.coerce(ocp_version) >= Version.coerce('4.6'):
+        if Version.coerce(ocp_version) >= Version.coerce("4.6"):
             # Download terraform ignition provider. For OCP upgrade clusters,
             # ignition provider doesn't exist, so downloading in destroy job
             # as well
@@ -709,7 +671,7 @@ class VSPHEREUPI(VSPHEREBASE):
             terraform_ignition_provider_path = os.path.join(
                 terraform_data_dir,
                 terraform_plugins_path,
-                "terraform-provider-ignition"
+                "terraform-provider-ignition",
             )
 
             # check the upgrade history of cluster and checkout to the
@@ -727,15 +689,15 @@ class VSPHEREUPI(VSPHEREBASE):
                         f"release-{original_installed_ocp_version[0:3]}"
                     )
                     clone_repo(
-                        constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
-                        installer_release_branch
+                        constants.VSPHERE_INSTALLER_REPO,
+                        upi_repo_path,
+                        installer_release_branch,
                     )
             except Exception as ex:
                 logger.error(ex)
 
             if not (
-                os.path.exists(terraform_ignition_provider_path)
-                or is_cluster_upgraded
+                os.path.exists(terraform_ignition_provider_path) or is_cluster_upgraded
             ):
                 get_terraform_ignition_provider(terraform_data_dir)
             terraform.initialize()
@@ -747,7 +709,9 @@ class VSPHEREUPI(VSPHEREBASE):
         # post destroy checks
         self.post_destroy_checks()
 
-    def destroy_scaleup_nodes(self, scale_up_terraform_data_dir, scale_up_terraform_var):
+    def destroy_scaleup_nodes(
+        self, scale_up_terraform_data_dir, scale_up_terraform_var
+    ):
         """
         Destroy the scale-up nodes
 
@@ -758,24 +722,20 @@ class VSPHEREUPI(VSPHEREBASE):
                 terraform.tfvars file
 
         """
-        clone_repo(
-            constants.VSPHERE_SCALEUP_REPO, self.upi_scale_up_repo_path
-        )
+        clone_repo(constants.VSPHERE_SCALEUP_REPO, self.upi_scale_up_repo_path)
         # git clone repo from cluster-launcher
-        clone_repo(
-            constants.VSPHERE_CLUSTER_LAUNCHER, self.cluster_launcer_repo_path
-        )
+        clone_repo(constants.VSPHERE_CLUSTER_LAUNCHER, self.cluster_launcer_repo_path)
 
         # modify scale-up repo
         helpers = VSPHEREHELPERS()
         helpers.modify_scaleup_repo()
 
         vsphere_dir = constants.SCALEUP_VSPHERE_DIR
-        if Version.coerce(self.ocp_version) >= Version.coerce('4.5'):
+        if Version.coerce(self.ocp_version) >= Version.coerce("4.5"):
             vsphere_dir = os.path.join(
                 constants.CLUSTER_LAUNCHER_VSPHERE_DIR,
                 f"aos-{get_ocp_version('_')}",
-                "vsphere"
+                "vsphere",
             )
 
         terraform_scale_up = Terraform(vsphere_dir)
@@ -793,13 +753,11 @@ def change_vm_root_disk_size(machine_file):
          machine_file (str): machine file to change the disk size
     """
     disk_size_prefix = "size             = "
-    current_vm_root_disk_size = f"{disk_size_prefix}{constants.CURRENT_VM_ROOT_DISK_SIZE}"
-    vm_root_disk_size = f"{disk_size_prefix}{constants.VM_ROOT_DISK_SIZE}"
-    replace_content_in_file(
-        machine_file,
-        current_vm_root_disk_size,
-        vm_root_disk_size
+    current_vm_root_disk_size = (
+        f"{disk_size_prefix}{constants.CURRENT_VM_ROOT_DISK_SIZE}"
     )
+    vm_root_disk_size = f"{disk_size_prefix}{constants.VM_ROOT_DISK_SIZE}"
+    replace_content_in_file(machine_file, current_vm_root_disk_size, vm_root_disk_size)
 
 
 def sync_time_with_host(machine_file, enable=False):
@@ -814,13 +772,9 @@ def sync_time_with_host(machine_file, enable=False):
     # terraform will support only lowercase bool
     enable = str(enable).lower()
     to_change = 'enable_disk_uuid = "true"'
-    sync_time = f"{to_change}\n sync_time_with_host = \"{enable}\""
+    sync_time = f'{to_change}\n sync_time_with_host = "{enable}"'
 
-    replace_content_in_file(
-        machine_file,
-        to_change,
-        sync_time
-    )
+    replace_content_in_file(machine_file, to_change, sync_time)
 
 
 def clone_openshift_installer():
@@ -834,26 +788,22 @@ def clone_openshift_installer():
     # with the changes.
     # Note: Currently use release-4.3 branch for the ocp versions
     # which is greater than 4.3
-    upi_repo_path = os.path.join(
-        constants.EXTERNAL_DIR,
-        'installer'
-    )
+    upi_repo_path = os.path.join(constants.EXTERNAL_DIR, "installer")
     ocp_version = get_ocp_version()
     # supporting folder structure from ocp4.5
-    if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+    if Version.coerce(ocp_version) >= Version.coerce("4.5"):
         clone_repo(
-            constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
-            f'release-{ocp_version}'
+            constants.VSPHERE_INSTALLER_REPO, upi_repo_path, f"release-{ocp_version}"
         )
-    elif Version.coerce(ocp_version) == Version.coerce('4.4'):
+    elif Version.coerce(ocp_version) == Version.coerce("4.4"):
         clone_repo(
-            constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
-            constants.VSPHERE_INSTALLER_BRANCH
+            constants.VSPHERE_INSTALLER_REPO,
+            upi_repo_path,
+            constants.VSPHERE_INSTALLER_BRANCH,
         )
     else:
         clone_repo(
-            constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
-            f'release-{ocp_version}'
+            constants.VSPHERE_INSTALLER_REPO, upi_repo_path, f"release-{ocp_version}"
         )
 
 
@@ -861,26 +811,21 @@ def change_mem_and_cpu():
     """
     Increase CPUs and memory for nodes
     """
-    worker_num_cpus = config.ENV_DATA.get('worker_num_cpus')
-    master_num_cpus = config.ENV_DATA.get('master_num_cpus')
-    worker_memory = config.ENV_DATA.get('compute_memory')
-    master_memory = config.ENV_DATA.get('master_memory')
-    if (
-        worker_num_cpus
-        or master_num_cpus
-        or master_memory
-        or worker_memory
-    ):
-        with open(constants.VSPHERE_MAIN, 'r') as fd:
+    worker_num_cpus = config.ENV_DATA.get("worker_num_cpus")
+    master_num_cpus = config.ENV_DATA.get("master_num_cpus")
+    worker_memory = config.ENV_DATA.get("compute_memory")
+    master_memory = config.ENV_DATA.get("master_memory")
+    if worker_num_cpus or master_num_cpus or master_memory or worker_memory:
+        with open(constants.VSPHERE_MAIN, "r") as fd:
             obj = hcl.load(fd)
             if worker_num_cpus:
-                obj['module']['compute']['num_cpu'] = worker_num_cpus
+                obj["module"]["compute"]["num_cpu"] = worker_num_cpus
             if master_num_cpus:
-                obj['module']['control_plane']['num_cpu'] = master_num_cpus
+                obj["module"]["control_plane"]["num_cpu"] = master_num_cpus
             if worker_memory:
-                obj['module']['compute']['memory'] = worker_memory
+                obj["module"]["compute"]["memory"] = worker_memory
             if master_memory:
-                obj['module']['control_plane']['memory'] = master_memory
+                obj["module"]["control_plane"]["memory"] = master_memory
         # Dump data to json file since hcl module
         # doesn't support dumping of data in HCL format
         dump_data_to_json(obj, f"{constants.VSPHERE_MAIN}.json")
@@ -897,11 +842,9 @@ def update_gw(str_to_replace, config_file):
 
     """
     # update gateway
-    if config.ENV_DATA.get('gateway'):
+    if config.ENV_DATA.get("gateway"):
         replace_content_in_file(
-            config_file,
-            str_to_replace,
-            f"{config.ENV_DATA.get('gateway')}"
+            config_file, str_to_replace, f"{config.ENV_DATA.get('gateway')}"
         )
 
 
@@ -910,11 +853,11 @@ def update_dns():
     Updates the DNS
     """
     # update DNS
-    if config.ENV_DATA.get('dns'):
+    if config.ENV_DATA.get("dns"):
         replace_content_in_file(
             constants.INSTALLER_IGNITION,
             constants.INSTALLER_DEFAULT_DNS,
-            f"{config.ENV_DATA.get('dns')}"
+            f"{config.ENV_DATA.get('dns')}",
         )
 
 
@@ -923,8 +866,8 @@ def update_zone():
     Updates the zone in constants.INSTALLER_ROUTE53
     """
     # update the zone in route
-    if config.ENV_DATA.get('region'):
-        def_zone = 'provider "aws" { region = "%s" } \n' % config.ENV_DATA.get('region')
+    if config.ENV_DATA.get("region"):
+        def_zone = 'provider "aws" { region = "%s" } \n' % config.ENV_DATA.get("region")
         replace_content_in_file(constants.INSTALLER_ROUTE53, "xyz", def_zone)
 
 
@@ -935,9 +878,7 @@ def update_path():
     logger.debug(f"Updating path to var.folder in {constants.VSPHERE_MAIN}")
     replace_str = "path          = var.cluster_id"
     replace_content_in_file(
-        constants.VSPHERE_MAIN,
-        replace_str,
-        "path          = var.folder"
+        constants.VSPHERE_MAIN, replace_str, "path          = var.folder"
     )
 
 
@@ -956,8 +897,8 @@ def add_var_folder():
     with open(constants.VSPHERE_VAR, "w+") as fd:
         fd.write(var_data)
         fd.write('\nvariable "folder" {\n')
-        fd.write('  type    = string\n')
-        fd.write('}\n')
+        fd.write("  type    = string\n")
+        fd.write("}\n")
 
 
 def update_machine_conf(folder_structure=True):
@@ -1006,7 +947,7 @@ def generate_terraform_vars_and_update_machine_conf():
     """
     ocp_version = get_ocp_version()
     folder_structure = False
-    if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+    if Version.coerce(ocp_version) >= Version.coerce("4.5"):
 
         folder_structure = True
         # export AWS_REGION
@@ -1018,7 +959,7 @@ def generate_terraform_vars_and_update_machine_conf():
         # update the machine configurations
         update_machine_conf(folder_structure)
 
-        if Version.coerce(ocp_version) >= Version.coerce('4.5'):
+        if Version.coerce(ocp_version) >= Version.coerce("4.5"):
             modify_haproxyservice()
     else:
         # generate terraform variable file
@@ -1038,45 +979,35 @@ def generate_terraform_vars_with_folder():
         f"{config.ENV_DATA.get('cluster_name')}."
         f"{config.ENV_DATA.get('base_domain')}"
     )
-    config.ENV_DATA['cluster_domain'] = cluster_domain
+    config.ENV_DATA["cluster_domain"] = cluster_domain
 
     # Form the ignition paths
     bootstrap_ignition_path = os.path.join(
-        config.ENV_DATA['cluster_path'],
-        constants.BOOTSTRAP_IGN
+        config.ENV_DATA["cluster_path"], constants.BOOTSTRAP_IGN
     )
     control_plane_ignition_path = os.path.join(
-        config.ENV_DATA['cluster_path'],
-        constants.MASTER_IGN
+        config.ENV_DATA["cluster_path"], constants.MASTER_IGN
     )
     compute_ignition_path = os.path.join(
-        config.ENV_DATA['cluster_path'],
-        constants.WORKER_IGN
+        config.ENV_DATA["cluster_path"], constants.WORKER_IGN
     )
 
     # Update ignition paths to ENV_DATA
-    config.ENV_DATA['bootstrap_ignition_path'] = bootstrap_ignition_path
-    config.ENV_DATA['control_plane_ignition_path'] = (
-        control_plane_ignition_path
-    )
-    config.ENV_DATA['compute_ignition_path'] = compute_ignition_path
+    config.ENV_DATA["bootstrap_ignition_path"] = bootstrap_ignition_path
+    config.ENV_DATA["control_plane_ignition_path"] = control_plane_ignition_path
+    config.ENV_DATA["compute_ignition_path"] = compute_ignition_path
 
     # Copy DNS address to vm_dns_addresses
-    config.ENV_DATA['vm_dns_addresses'] = config.ENV_DATA['dns']
+    config.ENV_DATA["vm_dns_addresses"] = config.ENV_DATA["dns"]
 
     # Get the infra ID from metadata.json and update in ENV_DATA
-    metadata_path = os.path.join(
-        config.ENV_DATA['cluster_path'],
-        "metadata.json"
-    )
+    metadata_path = os.path.join(config.ENV_DATA["cluster_path"], "metadata.json")
     metadata_dct = json_to_dict(metadata_path)
-    config.ENV_DATA['folder'] = metadata_dct['infraID']
+    config.ENV_DATA["folder"] = metadata_dct["infraID"]
 
     # expand ssh_public_key_path and update in ENV_DATA
-    ssh_public_key_path = os.path.expanduser(
-        config.DEPLOYMENT['ssh_key']
-    )
-    config.ENV_DATA['ssh_public_key_path'] = ssh_public_key_path
+    ssh_public_key_path = os.path.expanduser(config.DEPLOYMENT["ssh_key"])
+    config.ENV_DATA["ssh_public_key_path"] = ssh_public_key_path
 
     create_terraform_var_file("terraform_4_5.tfvars.j2")
 
@@ -1090,17 +1021,15 @@ def create_terraform_var_file(terraform_var_template):
 
     """
     _templating = Templating()
-    terraform_var_template_path = os.path.join(
-        "ocp-deployment", terraform_var_template
-    )
+    terraform_var_template_path = os.path.join("ocp-deployment", terraform_var_template)
     terraform_config_str = _templating.render_template(
         terraform_var_template_path, config.ENV_DATA
     )
 
     terraform_var_yaml = os.path.join(
-        config.ENV_DATA['cluster_path'],
+        config.ENV_DATA["cluster_path"],
         constants.TERRAFORM_DATA_DIR,
-        "terraform.tfvars.yaml"
+        "terraform.tfvars.yaml",
     )
     with open(terraform_var_yaml, "w") as f:
         f.write(terraform_config_str)
@@ -1116,19 +1045,18 @@ def generate_terraform_vars_with_out_folder():
 
     # upload bootstrap ignition to public access server
     bootstrap_path = os.path.join(
-        config.ENV_DATA.get('cluster_path'),
-        constants.BOOTSTRAP_IGN
+        config.ENV_DATA.get("cluster_path"), constants.BOOTSTRAP_IGN
     )
     remote_path = os.path.join(
-        config.ENV_DATA.get('path_to_upload'),
-        f"{config.RUN.get('run_id')}_{constants.BOOTSTRAP_IGN}"
+        config.ENV_DATA.get("path_to_upload"),
+        f"{config.RUN.get('run_id')}_{constants.BOOTSTRAP_IGN}",
     )
     upload_file(
-        config.ENV_DATA.get('httpd_server'),
+        config.ENV_DATA.get("httpd_server"),
         bootstrap_path,
         remote_path,
-        config.ENV_DATA.get('httpd_server_user'),
-        config.ENV_DATA.get('httpd_server_password')
+        config.ENV_DATA.get("httpd_server_user"),
+        config.ENV_DATA.get("httpd_server_password"),
     )
 
     # generate bootstrap ignition url
@@ -1138,28 +1066,26 @@ def generate_terraform_vars_with_out_folder():
         f"{path_to_bootstrap_on_remote}"
     )
     logger.info(f"bootstrap_ignition_url: {bootstrap_ignition_url}")
-    config.ENV_DATA['bootstrap_ignition_url'] = bootstrap_ignition_url
+    config.ENV_DATA["bootstrap_ignition_url"] = bootstrap_ignition_url
 
     # load master and worker ignitions to variables
     master_ignition_path = os.path.join(
-        config.ENV_DATA.get('cluster_path'),
-        constants.MASTER_IGN
+        config.ENV_DATA.get("cluster_path"), constants.MASTER_IGN
     )
     master_ignition = read_file_as_str(f"{master_ignition_path}")
-    config.ENV_DATA['control_plane_ignition'] = master_ignition
+    config.ENV_DATA["control_plane_ignition"] = master_ignition
 
     worker_ignition_path = os.path.join(
-        config.ENV_DATA.get('cluster_path'),
-        constants.WORKER_IGN
+        config.ENV_DATA.get("cluster_path"), constants.WORKER_IGN
     )
     worker_ignition = read_file_as_str(f"{worker_ignition_path}")
-    config.ENV_DATA['compute_ignition'] = worker_ignition
+    config.ENV_DATA["compute_ignition"] = worker_ignition
 
     cluster_domain = (
         f"{config.ENV_DATA.get('cluster_name')}."
         f"{config.ENV_DATA.get('base_domain')}"
     )
-    config.ENV_DATA['cluster_domain'] = cluster_domain
+    config.ENV_DATA["cluster_domain"] = cluster_domain
 
     # generate terraform variables from template
     create_terraform_var_file("terraform.tfvars.j2")
@@ -1171,22 +1097,14 @@ def comment_bootstrap_in_lb_module():
     """
     logger.debug(f"Commenting bootstrap module in {constants.VSPHERE_MAIN}")
     replace_str = "module.ipam_bootstrap.ip_addresses[0]"
-    replace_content_in_file(
-        constants.VSPHERE_MAIN,
-        replace_str,
-        f"//{replace_str}"
-    )
+    replace_content_in_file(constants.VSPHERE_MAIN, replace_str, f"//{replace_str}")
 
 
 def modify_haproxyservice():
     """
     Add ExecStop in haproxy service
     """
-    to_change = 'TimeoutStartSec=0'
+    to_change = "TimeoutStartSec=0"
     execstop = f"{to_change}\nExecStop=/bin/podman rm -f haproxy"
 
-    replace_content_in_file(
-        constants.TERRAFORM_HAPROXY_SERVICE,
-        to_change,
-        execstop
-    )
+    replace_content_in_file(constants.TERRAFORM_HAPROXY_SERVICE, to_change, execstop)

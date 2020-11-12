@@ -11,29 +11,30 @@ log = logging.getLogger(__name__)
 
 @tier1
 @pytest.mark.parametrize(
-    argnames='interface',
+    argnames="interface",
     argvalues=[
         pytest.param(
             *[constants.CEPHBLOCKPOOL],
             marks=[
                 pytest.mark.polarion_id("OCS-1177"),
-                pytest.mark.bugzilla("1772990")
-            ]
+                pytest.mark.bugzilla("1772990"),
+            ],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM],
             marks=[
                 pytest.mark.polarion_id("OCS-1179"),
-                pytest.mark.bugzilla("1772990")
-            ]
-        )
-    ]
+                pytest.mark.bugzilla("1772990"),
+            ],
+        ),
+    ],
 )
 class TestRwoUsingMultiplePods(ManageTest):
     """
     This test class consists of tests to verify RWO access mode by using
     RWO PVC in multiple pods
     """
+
     @pytest.fixture(autouse=True)
     def setup(self, interface, pvc_factory, pod_factory):
         """
@@ -47,7 +48,7 @@ class TestRwoUsingMultiplePods(ManageTest):
             size=5,
             access_mode=constants.ACCESS_MODE_RWO,
             custom_data=None,
-            status=constants.STATUS_BOUND
+            status=constants.STATUS_BOUND,
         )
 
         # Create a pod
@@ -55,7 +56,7 @@ class TestRwoUsingMultiplePods(ManageTest):
             interface=interface,
             pvc=self.pvc_obj,
             custom_data=None,
-            status=constants.STATUS_RUNNING
+            status=constants.STATUS_RUNNING,
         )
 
     def test_verify_rwo_using_multiple_pods(self, interface, pod_factory):
@@ -70,29 +71,23 @@ class TestRwoUsingMultiplePods(ManageTest):
         # Create 5 new pods using same PVC
         for _ in range(5):
             pod_obj = pod_factory(
-                interface=interface,
-                pvc=self.pvc_obj,
-                custom_data=None,
-                status=""
+                interface=interface, pvc=self.pvc_obj, custom_data=None, status=""
             )
             pod_objs_not_running.append(pod_obj)
 
         # Check the status of pods, delete running pod and verify new pod is
         # coming up running
         while pod_objs_running:
-            pod_running_node = pod_objs_running[0].get()['spec']['nodeName']
+            pod_running_node = pod_objs_running[0].get()["spec"]["nodeName"]
 
             # Verify status of pods
             log.info("Check the status of pods")
             for pod_obj in pod_objs_not_running:
                 try:
                     wait_for_resource_state(
-                        resource=pod_obj, state=constants.STATUS_RUNNING,
-                        timeout=60
+                        resource=pod_obj, state=constants.STATUS_RUNNING, timeout=60
                     )
-                    assert (
-                        pod_obj.get()['spec']['nodeName'] == pod_running_node
-                    ), (
+                    assert pod_obj.get()["spec"]["nodeName"] == pod_running_node, (
                         f"Unexpected: Pod {pod_obj} is in Running state. "
                         f"RWO PVC {self.pvc_obj.name} is mounted on pods "
                         f"which are on different nodes."
@@ -106,9 +101,9 @@ class TestRwoUsingMultiplePods(ManageTest):
                 except ResourceWrongStatusException:
                     log.info(f"Verified: Pod {pod_obj.name} is not Running")
 
-            pod_objs_not_running = [pod for pod in pod_objs_not_running if (
-                pod not in pod_objs_running
-            )]
+            pod_objs_not_running = [
+                pod for pod in pod_objs_not_running if (pod not in pod_objs_running)
+            ]
 
             if not pod_objs_not_running:
                 log.info("Verified all pods.")
@@ -131,8 +126,7 @@ class TestRwoUsingMultiplePods(ManageTest):
             for pod_obj in pod_objs_not_running:
                 try:
                     wait_for_resource_state(
-                        resource=pod_obj, state=constants.STATUS_RUNNING,
-                        timeout=120
+                        resource=pod_obj, state=constants.STATUS_RUNNING, timeout=120
                     )
                     pod_objs_running.append(pod_obj)
                     break
@@ -142,6 +136,6 @@ class TestRwoUsingMultiplePods(ManageTest):
                         f"of other nodes."
                     )
 
-            pod_objs_not_running = [pod for pod in pod_objs_not_running if (
-                pod not in pod_objs_running
-            )]
+            pod_objs_not_running = [
+                pod for pod in pod_objs_not_running if (pod not in pod_objs_running)
+            ]

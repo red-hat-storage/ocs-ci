@@ -20,7 +20,7 @@ def fio_json_output():
     Example of fio --output-format=json output. Based on actual test run.
     """
     filename = os.path.join(HERE, "fio.output")
-    with open(filename, 'r') as fio_output:
+    with open(filename, "r") as fio_output:
         content = fio_output.read()
     return content
 
@@ -33,7 +33,8 @@ def fio_json_output_with_error(fio_json_output):
     """
     err_line = (
         "fio: io_u error on file /mnt/target/simple-write.0.0: "
-        "No space left on device: write offset=90280222720, buflen=4096")
+        "No space left on device: write offset=90280222720, buflen=4096"
+    )
     return err_line + "\n" + fio_json_output
 
 
@@ -42,14 +43,16 @@ def fio_json_output_broken():
     """
     Example of broken, unparseable json output.
     """
-    fio_out = textwrap.dedent("""
+    fio_out = textwrap.dedent(
+        """
         {
           "fio version" : "fio-3.7",
           "timestamp" : 1584531581,
           "timestamp_ms" : 1584531581691,
           "time" : "Wed Mar 18 11:39:41 2020",
           "jobs" : [
-        """)
+        """
+    )
     return fio_out
 
 
@@ -60,13 +63,13 @@ def test_fio_to_dict_empty():
 def test_fio_to_dict_without_error(fio_json_output):
     fio_dict = fiojob.fio_to_dict(fio_json_output)
     assert type(fio_dict) == dict
-    assert len(fio_dict['jobs']) == 1
+    assert len(fio_dict["jobs"]) == 1
 
 
 def test_fio_to_dict_with_error(fio_json_output_with_error):
     fio_dict = fiojob.fio_to_dict(fio_json_output_with_error)
     assert type(fio_dict) == dict
-    assert len(fio_dict['jobs']) == 1
+    assert len(fio_dict["jobs"]) == 1
 
 
 def test_fio_to_dict_output_broken(fio_json_output_broken, caplog):
@@ -83,7 +86,8 @@ def ceph_df_json_output_clusterempty():
     Based on actual test run:
     jnk-ai3c33-t1/jnk-ai3c33-t1_20200318T095635/logs/ocs-ci-logs-1584528704
     """
-    ceph_df_out = textwrap.dedent("""
+    ceph_df_out = textwrap.dedent(
+        """
         {
             "stats": {
                 "total_bytes": 6593848541184,
@@ -142,13 +146,12 @@ def ceph_df_json_output_clusterempty():
                 }
             ]
         }
-        """)
+        """
+    )
     return yaml.safe_load(ceph_df_out)
 
 
-def test_get_storageutilization_size_empty100percent(
-    ceph_df_json_output_clusterempty
-):
+def test_get_storageutilization_size_empty100percent(ceph_df_json_output_clusterempty):
     """
     Checking that when asking for 100% target utilization on an empty cluster,
     the pvc_size matches MAX AVAIL value.
@@ -164,8 +167,8 @@ def test_get_storageutilization_size_empty100percent(
         # with 100% utilization target and an empty cluster, the pvc size
         # necessary to utilize all storage space on the cluster should match
         # the value of MAX AVAIL
-        pool_stats = ceph_df_json_output_clusterempty['pools'][2]['stats']
-        expected_pvc_size = int(pool_stats['max_avail'] / 2**30)  # GiB
+        pool_stats = ceph_df_json_output_clusterempty["pools"][2]["stats"]
+        expected_pvc_size = int(pool_stats["max_avail"] / 2 ** 30)  # GiB
         assert pvc_size == expected_pvc_size
 
 
@@ -173,6 +176,6 @@ def test_get_timeout_basic():
     """
     Writing on 1 GiB volume with 1 GiB/s should give us 1s timeout
     """
-    fio_min_mbps = 2**10  # MiB/s
+    fio_min_mbps = 2 ** 10  # MiB/s
     pvc_size = 1  # GiB
     assert fiojob.get_timeout(fio_min_mbps, pvc_size) == 1

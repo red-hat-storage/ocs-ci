@@ -2,18 +2,24 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import (
-    tier4, tier4b, ManageTest, aws_platform_required,
-    ipi_deployment_required, ignore_leftovers)
+    tier4,
+    tier4b,
+    ManageTest,
+    aws_platform_required,
+    ipi_deployment_required,
+    ignore_leftovers,
+)
 from ocs_ci.ocs import machine, constants, ocp
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.helpers.helpers import (
-    label_worker_node, remove_label_from_worker_node)
+from ocs_ci.helpers.helpers import label_worker_node, remove_label_from_worker_node
 from ocs_ci.ocs.node import (
-    get_osd_running_nodes, get_app_pod_running_nodes,
-    get_both_osd_and_app_pod_running_node, get_node_objs,
+    get_osd_running_nodes,
+    get_app_pod_running_nodes,
+    get_both_osd_and_app_pod_running_node,
+    get_node_objs,
     node_network_failure,
-    get_worker_nodes
+    get_worker_nodes,
 )
 
 
@@ -29,9 +35,9 @@ class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement - AWS-IPI-Reactive
     """
+
     @pytest.fixture(autouse=True)
     def teardown(self, request):
-
         def finalizer():
             worker_nodes = get_worker_nodes()
             # Removing created label on all worker nodes
@@ -51,26 +57,22 @@ class TestNodeReplacement(ManageTest):
         argnames=["interface", "failure"],
         argvalues=[
             pytest.param(
-                *['rbd', 'power off'],
-                marks=pytest.mark.polarion_id("OCS-2118")
+                *["rbd", "power off"], marks=pytest.mark.polarion_id("OCS-2118")
             ),
             pytest.param(
-                *['rbd', 'network failure'],
-                marks=pytest.mark.polarion_id("OCS-2120")
+                *["rbd", "network failure"], marks=pytest.mark.polarion_id("OCS-2120")
             ),
             pytest.param(
-                *['cephfs', 'power off'],
-                marks=pytest.mark.polarion_id("OCS-2119")
+                *["cephfs", "power off"], marks=pytest.mark.polarion_id("OCS-2119")
             ),
             pytest.param(
-                *['cephfs', 'network failure'],
-                marks=pytest.mark.polarion_id("OCS-2121")
+                *["cephfs", "network failure"],
+                marks=pytest.mark.polarion_id("OCS-2121"),
             ),
-        ]
+        ],
     )
     def test_node_replacement_reactive_aws_ipi(
-        self, nodes, pvc_factory, pod_factory, dc_pod_factory,
-        failure, interface
+        self, nodes, pvc_factory, pod_factory, dc_pod_factory, failure, interface
     ):
         """
         Knip-894 Node replacement - AWS-IPI-Reactive
@@ -84,18 +86,17 @@ class TestNodeReplacement(ManageTest):
         log.info(f"OSDs are running on nodes {osd_running_nodes}")
 
         # Label osd nodes with fedora app
-        label_worker_node(osd_running_nodes, label_key='dc', label_value='fedora')
+        label_worker_node(osd_running_nodes, label_key="dc", label_value="fedora")
 
         # Create DC app pods
         log.info("Creating DC based app pods")
-        if interface == 'rbd':
+        if interface == "rbd":
             interface = constants.CEPHBLOCKPOOL
-        elif interface == 'cephfs':
+        elif interface == "cephfs":
             interface = constants.CEPHFILESYSTEM
         dc_pod_obj = []
         for i in range(2):
-            dc_pod = dc_pod_factory(
-                interface=interface, node_selector={'dc': 'fedora'})
+            dc_pod = dc_pod_factory(interface=interface, node_selector={"dc": "fedora"})
             pod.run_io_in_bg(dc_pod, fedora_dc=True)
             dc_pod_obj.append(dc_pod)
 
@@ -114,12 +115,8 @@ class TestNodeReplacement(ManageTest):
         log.info(f"{common_nodes[0]} associated machine is {machine_name}")
 
         # Get the machineset name using machine name
-        machineset_name = machine.get_machineset_from_machine_name(
-            machine_name
-        )
-        log.info(
-            f"{common_nodes[0]} associated machineset is {machineset_name}"
-        )
+        machineset_name = machine.get_machineset_from_machine_name(machine_name)
+        log.info(f"{common_nodes[0]} associated machineset is {machineset_name}")
 
         # Get the failure node obj
         failure_node_obj = get_node_objs(node_names=[common_nodes[0]])
@@ -150,26 +147,19 @@ class TestNodeReplacement(ManageTest):
 
         # Get the node name of new spun node
         nodes_after_new_spun_node = get_worker_nodes()
-        new_spun_node = list(
-            set(nodes_after_new_spun_node) - set(initial_nodes)
-        )
+        new_spun_node = list(set(nodes_after_new_spun_node) - set(initial_nodes))
         log.info(f"New spun node is {new_spun_node}")
 
         # Label it
-        node_obj = ocp.OCP(kind='node')
+        node_obj = ocp.OCP(kind="node")
         node_obj.add_label(
-            resource_name=new_spun_node[0],
-            label=constants.OPERATOR_NODE_LABEL
+            resource_name=new_spun_node[0], label=constants.OPERATOR_NODE_LABEL
         )
-        log.info(
-            f"Successfully labeled {new_spun_node} with OCS storage label"
-        )
+        log.info(f"Successfully labeled {new_spun_node} with OCS storage label")
 
         # DC app pods on the failed node will get automatically created on other
         # running node. Waiting for all dc app pod to reach running state
-        pod.wait_for_dc_app_pods_to_reach_running_state(
-            dc_pod_obj, timeout=1200
-        )
+        pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj, timeout=1200)
         log.info("All the dc pods reached running state")
 
         pod.wait_for_storage_pods()

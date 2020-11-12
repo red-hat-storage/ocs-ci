@@ -1,22 +1,21 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import (
-    E2ETest, workloads
-)
+from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.constants import STATUS_COMPLETED
 
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def jenkins(request):
 
     jenkins = Jenkins()
 
     def teardown():
         jenkins.cleanup()
+
     request.addfinalizer(teardown)
     return jenkins
 
@@ -27,6 +26,7 @@ class TestJenkinsWorkload(E2ETest):
     """
     Test running Jenkins
     """
+
     @pytest.fixture()
     def jenkins_setup(self, jenkins):
         """

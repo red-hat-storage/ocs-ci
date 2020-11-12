@@ -18,12 +18,18 @@ class TestPVCFillup(BaseTest):
     """
 
     @pytest.mark.parametrize(
-        argnames=["size", "percentage"],
-        argvalues=[pytest.param(*['10', '50'])]
+        argnames=["size", "percentage"], argvalues=[pytest.param(*["10", "50"])]
     )
-    def test_fillup_fs(self, size, percentage,
-                       teardown_factory, storageclass_factory, interface_iterate,
-                       pod_factory, pvc_factory):
+    def test_fillup_fs(
+        self,
+        size,
+        percentage,
+        teardown_factory,
+        storageclass_factory,
+        interface_iterate,
+        pod_factory,
+        pvc_factory,
+    ):
         """
         Test Fill up the filesystem
         """
@@ -33,30 +39,30 @@ class TestPVCFillup(BaseTest):
 
         # Creating PVC
         self.pvc_obj = pvc_factory(
-            interface=self.interface,
-            size=size,
-            status=constants.STATUS_BOUND
+            interface=self.interface, size=size, status=constants.STATUS_BOUND
         )
         self.pvc_obj.reload()
         teardown_factory(self.pvc_obj)
 
         # Creating POD which will connect to the PVC
         self.pod_obj = pod_factory(
-            interface=self.interface,
-            pvc=self.pvc_obj,
-            status=constants.STATUS_RUNNING
+            interface=self.interface, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
         )
 
         # Calculation the amount of data to write
         filesize = int(pvc_size * 1024 * (int(percentage) / 100))
 
-        logging.info(f'Going to run on PVC of {pvc_size} GB and will fill up {percentage} %')
-        logging.info(f'the filesize will be {filesize} MB')
-        self.pod_obj.fillup_fs(size=filesize,)
+        logging.info(
+            f"Going to run on PVC of {pvc_size} GB and will fill up {percentage} %"
+        )
+        logging.info(f"the filesize will be {filesize} MB")
+        self.pod_obj.fillup_fs(
+            size=filesize,
+        )
         logging.info("Waiting for results")
 
         # Getting the FIO output and verify all data was written
         fio_result = self.pod_obj.get_fio_results()
-        writes = int(fio_result.get('jobs')[0].get('write').get('io_kbytes') / 1024)
+        writes = int(fio_result.get("jobs")[0].get("write").get("io_kbytes") / 1024)
         logging.info(f"Total Write: {writes} MB")
         assert filesize <= writes, "Not all required data was written"

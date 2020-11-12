@@ -43,25 +43,24 @@ class GetIPError(Exception):
 
 
 class CephVMNode(object):
-
     def __init__(self, **kw):
-        self.image_name = kw['image-name']
-        self.node_name = kw['node-name']
-        self.vm_size = kw['vm-size']
-        self.role = kw['role']
+        self.image_name = kw["image-name"]
+        self.node_name = kw["node-name"]
+        self.vm_size = kw["vm-size"]
+        self.role = kw["role"]
         self.no_of_volumes = None
-        if kw.get('no-of-volumes'):
-            self.no_of_volumes = kw['no-of-volumes']
-            self.size_of_disk = kw['size-of-disks']
-        self.cloud_data = kw['cloud-data']
-        self.username = kw['username']
-        self.password = kw['password']
-        self.auth_url = kw['auth-url']
-        self.auth_version = kw['auth-version']
-        self.tenant_name = kw['tenant-name']
-        self.service_region = kw['service-region']
-        self.keypair = kw['keypair']
-        self.root_login = kw['root-login']
+        if kw.get("no-of-volumes"):
+            self.no_of_volumes = kw["no-of-volumes"]
+            self.size_of_disk = kw["size-of-disks"]
+        self.cloud_data = kw["cloud-data"]
+        self.username = kw["username"]
+        self.password = kw["password"]
+        self.auth_url = kw["auth-url"]
+        self.auth_version = kw["auth-version"]
+        self.tenant_name = kw["tenant-name"]
+        self.service_region = kw["service-region"]
+        self.keypair = kw["keypair"]
+        self.root_login = kw["root-login"]
         self.create_node()
         sleep(10)
 
@@ -73,7 +72,7 @@ class CephVMNode(object):
             ex_force_auth_version=self.auth_version,
             ex_tenant_name=self.tenant_name,
             ex_force_service_region=self.service_region,
-            ex_domain_name='redhat.com'
+            ex_domain_name="redhat.com",
         )
         return self.driver
 
@@ -84,33 +83,35 @@ class CephVMNode(object):
         sizes = driver.list_sizes()
         networks = driver.ex_list_networks()
         available_sizes = [s for s in sizes if s.name == self.vm_size]
-        network = [n for n in networks if n.name == 'provider_net_cci_4']
+        network = [n for n in networks if n.name == "provider_net_cci_4"]
         if not available_sizes:
             logger.error(
-                "provider does not have a matching 'size' for %s",
-                self.vm_size)
+                "provider does not have a matching 'size' for %s", self.vm_size
+            )
             logger.error(
                 "no vm will be created. Ensure that '%s' is an available size and that it exists",
-                self.vm_size)
+                self.vm_size,
+            )
             return
         vm_size = available_sizes[0]
         image = [i for i in images if i.name == self.image_name][0]
 
         try:
             new_node = driver.create_node(
-                name=name, image=image, size=vm_size,
+                name=name,
+                image=image,
+                size=vm_size,
                 ex_userdata=self.cloud_data,
                 networks=[network[0]],
             )
         except SSLError:
             new_node = None
             logger.error(
-                "failed to connect to provider, probably a timeout was reached")
+                "failed to connect to provider, probably a timeout was reached"
+            )
 
         if not new_node:
-            logger.error(
-                "provider could not create node with details: %s",
-                str(kw))
+            logger.error("provider could not create node with details: %s", str(kw))
             return
         self.node = new_node
         logger.info("created node: %s", new_node)
@@ -118,18 +119,28 @@ class CephVMNode(object):
         logger.info("Waiting for node %s to become available", name)
         sleep(15)
         all_nodes = driver.list_nodes()
-        new_node_state = [node.state for node in all_nodes if node.uuid == new_node.uuid]
+        new_node_state = [
+            node.state for node in all_nodes if node.uuid == new_node.uuid
+        ]
         timeout = datetime.timedelta(seconds=240)
         starttime = datetime.datetime.now()
         while True:
             logger.info("Waiting for node %s to become available", name)
             all_nodes = driver.list_nodes()
-            new_node_state = [node.state for node in all_nodes if node.uuid == new_node.uuid]
-            if new_node_state[0] == 'running':
+            new_node_state = [
+                node.state for node in all_nodes if node.uuid == new_node.uuid
+            ]
+            if new_node_state[0] == "running":
                 break
             if datetime.datetime.now() - starttime > timeout:
-                logger.info("Failed to bring the node in running state in {timeout}s".format(timeout=timeout))
-                raise NodeErrorState("Failed to bring up the node in Running state " + self.name)
+                logger.info(
+                    "Failed to bring the node in running state in {timeout}s".format(
+                        timeout=timeout
+                    )
+                )
+                raise NodeErrorState(
+                    "Failed to bring up the node in Running state " + self.name
+                )
             sleep(30)
         new_node_list = [node for node in all_nodes if node.uuid == new_node.uuid]
         new_node = new_node_list[0]
@@ -139,11 +150,17 @@ class CephVMNode(object):
                 ip_address = str(new_node.private_ips[0])
             except IndexError:
                 if datetime.datetime.now() - starttime > timeout:
-                    logger.info("Failed to get host ip_address in {timeout}s".format(timeout=timeout))
+                    logger.info(
+                        "Failed to get host ip_address in {timeout}s".format(
+                            timeout=timeout
+                        )
+                    )
                     raise GetIPError("Unable to get IP for " + self.name)
                 else:
                     sleep(10)
-                    new_node_list = [node for node in all_nodes if node.uuid == new_node.uuid]
+                    new_node_list = [
+                        node for node in all_nodes if node.uuid == new_node.uuid
+                    ]
                     new_node = new_node_list[0]
             if ip_address is not None:
                 break
@@ -160,11 +177,9 @@ class CephVMNode(object):
                 new_volume = driver.create_volume(size, name)
                 # wait for the new volume to become available
                 logger.info("Waiting for volume %s to become available", name)
-                self._wait_until_volume_available(
-                    new_volume, maybe_in_use=True)
+                self._wait_until_volume_available(new_volume, maybe_in_use=True)
                 logger.info("Attaching volume %s...", name)
-                if driver.attach_volume(
-                        new_node, new_volume, device=None) is not True:
+                if driver.attach_volume(new_node, new_volume, device=None) is not True:
                     raise RuntimeError("Could not attach volume %s" % name)
                 logger.info("Successfully attached volume %s", name)
                 self.volumes.append(new_volume)
@@ -177,11 +192,11 @@ class CephVMNode(object):
         this volume from an old node that you've very recently
         destroyed.
         """
-        ok_states = ['creating']  # it's ok to wait if the volume is in this
+        ok_states = ["creating"]  # it's ok to wait if the volume is in this
         tries = 0
         if maybe_in_use:
-            ok_states.append('in_use')
-        logger.info('Volume: %s is in state: %s', volume.name, volume.state)
+            ok_states.append("in_use")
+        logger.info("Volume: %s is in state: %s", volume.name, volume.state)
         while volume.state in ok_states:
             sleep(3)
             volume = self.get_volume(volume.name)
@@ -189,20 +204,18 @@ class CephVMNode(object):
             if tries > 10:
                 logger.info("Maximum amount of tries reached..")
                 break
-            if volume.state == 'notfound':
-                logger.error('no volume was found for: %s', volume.name)
+            if volume.state == "notfound":
+                logger.error("no volume was found for: %s", volume.name)
                 break
-            logger.info(' ... %s', volume.state)
-        if volume.state != 'available':
+            logger.info(" ... %s", volume.state)
+        if volume.state != "available":
             # OVH uses a non-standard state of 3 to indicate an available
             # volume
+            logger.info("Volume %s is %s (not available)", volume.name, volume.state)
             logger.info(
-                'Volume %s is %s (not available)',
+                "The volume %s is not available, but will continue anyway...",
                 volume.name,
-                volume.state)
-            logger.info(
-                'The volume %s is not available, but will continue anyway...',
-                volume.name)
+            )
         return True
 
     def get_private_ip(self):
@@ -210,7 +223,7 @@ class CephVMNode(object):
         Workaround. self.node.private_ips returns empty list.
         """
         node_detail = self.driver.ex_get_node_details(self.node)
-        private_ip = node_detail.private_ips[0].encode('ascii', 'ignore')
+        private_ip = node_detail.private_ips[0].encode("ascii", "ignore")
         return private_ip
 
     def get_volume(self, name):
@@ -252,13 +265,17 @@ class CephVMNode(object):
         host = None
         timeout = datetime.timedelta(seconds=timeout)
         starttime = datetime.datetime.now()
-        logger.info("Trying gethostbyaddr with {timeout}s timeout".format(timeout=timeout))
+        logger.info(
+            "Trying gethostbyaddr with {timeout}s timeout".format(timeout=timeout)
+        )
         while True:
             try:
                 host, _, _ = socket.gethostbyaddr(self.ip_address)
             except Exception:
                 if datetime.datetime.now() - starttime > timeout:
-                    logger.info("Failed to get hostbyaddr in {timeout}s".format(timeout=timeout))
+                    logger.info(
+                        "Failed to get hostbyaddr in {timeout}s".format(timeout=timeout)
+                    )
                     raise InvalidHostName("Invalid hostname for " + self.ip_address)
                 else:
                     sleep(1)

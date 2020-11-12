@@ -1,7 +1,7 @@
-'''
+"""
 A test program for instantiating an api-client and
 perform a basic functionality check using api-client
-'''
+"""
 
 
 import logging
@@ -41,6 +41,6 @@ def test_create_simple_service():
     """
 
     service_data = yaml.safe_load(service)
-    res = client.create_service(body=service_data, namespace='default')
+    res = client.create_service(body=service_data, namespace="default")
     log.info(res)
     log.info(f"Created service: {res['metadata']['name']}")

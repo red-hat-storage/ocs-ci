@@ -11,7 +11,7 @@ import subprocess
 
 from ocs_ci.ocs import constants
 
-ERRMSG = 'Error in command'
+ERRMSG = "Error in command"
 
 log = logging.getLogger(__name__)
 
@@ -19,17 +19,24 @@ log = logging.getLogger(__name__)
 # variables.
 # After all variables are read an validate, some more variables can be added
 # to this dictionary.
-params = {'KUBECONFIG': None, 'SNAPNUM': None, 'LOGPATH': None,
-          'FILESIZE': None, 'NSPACE': None, 'INTERFACE': None,
-          'PODNAME': None, 'PVCNAME': None}
+params = {
+    "KUBECONFIG": None,
+    "SNAPNUM": None,
+    "LOGPATH": None,
+    "FILESIZE": None,
+    "NSPACE": None,
+    "INTERFACE": None,
+    "PODNAME": None,
+    "PVCNAME": None,
+}
 
 # Dictionary to hold the names of pods which holding logs of creation time
-log_names = {'start': None, 'end': []}
+log_names = {"start": None, "end": []}
 
 snap_yaml = None  # define this parameter as global
-format = '%H:%M:%S.%f'
+format = "%H:%M:%S.%f"
 
-log_file_name = os.path.basename(__file__).replace('.py', '.log')
+log_file_name = os.path.basename(__file__).replace(".py", ".log")
 
 
 def msg_logging(msg):
@@ -64,23 +71,23 @@ def run_command(cmd):
     else:
         return ERRMSG
 
-    msg_logging(f'Going to run {cmd}')
+    msg_logging(f"Going to run {cmd}")
     cp = subprocess.run(
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         stdin=subprocess.PIPE,
-        timeout=600
+        timeout=600,
     )
     output = cp.stdout.decode()
     err = cp.stderr.decode()
     # exit code is not zero
     if cp.returncode:
-        log.error(f'Command finished with non zero ({cp.returncode}) {err}')
-        print(f'Command finished with non zero ({cp.returncode}) {err}')
-        output += f'{ERRMSG} {err}'
+        log.error(f"Command finished with non zero ({cp.returncode}) {err}")
+        print(f"Command finished with non zero ({cp.returncode}) {err}")
+        output += f"{ERRMSG} {err}"
 
-    output = output.split('\n')  # convert output to list
+    output = output.split("\n")  # convert output to list
     output.pop()  # remove last empty element from the list
     return output
 
@@ -97,7 +104,7 @@ def run_oc_command(cmd, namespace):
         list : the results of the command as list of lines
 
     """
-    command = (f'oc --kubeconfig {params["KUBECONFIG"]} -n {namespace} {cmd}')
+    command = f'oc --kubeconfig {params["KUBECONFIG"]} -n {namespace} {cmd}'
     return run_command(command)
 
 
@@ -113,8 +120,8 @@ def run_cmd_on_pod(command, pod_name):
         list: the command output as list of lines
 
     """
-    rsh_cmd = f'rsh {pod_name} {command}'
-    return run_oc_command(rsh_cmd, params['NSPACE'])
+    rsh_cmd = f"rsh {pod_name} {command}"
+    return run_oc_command(rsh_cmd, params["NSPACE"])
 
 
 def get_env_args():
@@ -123,17 +130,17 @@ def get_env_args():
     variables
 
     """
-    print(f'Validating arguments : {params.keys()}')
+    print(f"Validating arguments : {params.keys()}")
     error = 0
     for key in params.keys():
         params[key] = os.getenv(key)
         if params[key] is None:
             error = 1
-            print(f'Error: {key} is not define !')
+            print(f"Error: {key} is not define !")
         else:
-            print(f'{key} - {params[key]}')
+            print(f"{key} - {params[key]}")
     if error:
-        print('Not all variables defined !')
+        print("Not all variables defined !")
         sys.exit(error)
 
     full_log = f'{params["LOGPATH"]}/{log_file_name}'
@@ -141,38 +148,37 @@ def get_env_args():
         filename=full_log, level=logging.INFO, format=constants.LOG_FORMAT
     )
 
-    params['dataset'] = int(params['FILESIZE'].replace('M', ''))
+    params["dataset"] = int(params["FILESIZE"].replace("M", ""))
 
-    params['snap_yaml'] = constants.CSI_CEPHFS_SNAPSHOT_YAML
-    params['sc'] = constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
-    params['fs_type'] = 'cephfs'
-    if params['INTERFACE'] == constants.CEPHBLOCKPOOL:
-        params['fs_type'] = 'rbd'
-        params['snap_yaml'] = constants.CSI_RBD_SNAPSHOT_YAML
-        params['sc'] = constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+    params["snap_yaml"] = constants.CSI_CEPHFS_SNAPSHOT_YAML
+    params["sc"] = constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+    params["fs_type"] = "cephfs"
+    if params["INTERFACE"] == constants.CEPHBLOCKPOOL:
+        params["fs_type"] = "rbd"
+        params["snap_yaml"] = constants.CSI_RBD_SNAPSHOT_YAML
+        params["sc"] = constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
 
     msg_logging(
-        f"fs_type - {params['fs_type']}"
-        f"Getting storage class {params['sc']}"
+        f"fs_type - {params['fs_type']}" f"Getting storage class {params['sc']}"
     )
     output = run_oc_command(
-        cmd=f'get pod {params["PODNAME"]} -o yaml', namespace=params['NSPACE']
+        cmd=f'get pod {params["PODNAME"]} -o yaml', namespace=params["NSPACE"]
     )
-    results = yaml.safe_load('\n'.join(output))
-    params['path'] = results['spec']['containers'][0]['volumeMounts'][0]['mountPath']
+    results = yaml.safe_load("\n".join(output))
+    params["path"] = results["spec"]["containers"][0]["volumeMounts"][0]["mountPath"]
     msg_logging(f"path - {params['path']}")
 
     # reading template of snapshot yaml file
-    with open(params['snap_yaml'], 'r') as stream:
+    with open(params["snap_yaml"], "r") as stream:
         try:
             snap_yaml = yaml.safe_load(stream)
-            snap_yaml['spec']['volumeSnapshotClassName'] = params["sc"]
-            snap_yaml['spec']['source']['persistentVolumeClaimName'] = params['PVCNAME']
+            snap_yaml["spec"]["volumeSnapshotClassName"] = params["sc"]
+            snap_yaml["spec"]["source"]["persistentVolumeClaimName"] = params["PVCNAME"]
         except yaml.YAMLError as exc:
-            log.error(f'Can not read template yaml file {exc}')
+            log.error(f"Can not read template yaml file {exc}")
     msg_logging(
         f'Snapshot yaml file : {params["snap_yaml"]} '
-        f'Content of snapshot yaml file {snap_yaml}'
+        f"Content of snapshot yaml file {snap_yaml}"
     )
     return snap_yaml
 
@@ -182,21 +188,21 @@ def setup_fio_pod():
     Installing FIO on Debian based pod (nginx)
 
     """
-    msg_logging('Installing FIO on the tested pod - Debian')
+    msg_logging("Installing FIO on the tested pod - Debian")
 
     # Updating the pkg manager
-    cmd = 'apt-get update'
-    res = run_cmd_on_pod(cmd, params['PODNAME'])
+    cmd = "apt-get update"
+    res = run_cmd_on_pod(cmd, params["PODNAME"])
     if ERRMSG in res:
-        msg_logging(f'Updating pkg manager results {res}')
-        raise Exception(f'Can not update pod - {res}')
+        msg_logging(f"Updating pkg manager results {res}")
+        raise Exception(f"Can not update pod - {res}")
     time.sleep(15)
 
     cmd = "apt-get -y install fio"
-    res = run_cmd_on_pod(cmd, params['PODNAME'])
+    res = run_cmd_on_pod(cmd, params["PODNAME"])
     if ERRMSG in res:
-        msg_logging(f'Installing FIO results {res}')
-        raise Exception(f'Can not update pod - {res}')
+        msg_logging(f"Installing FIO results {res}")
+        raise Exception(f"Can not update pod - {res}")
 
 
 def get_csi_pod(namespace):
@@ -210,9 +216,9 @@ def get_csi_pod(namespace):
         list : list of lines from the output of the command.
 
     """
-    results = run_oc_command(cmd='get pod', namespace=namespace)
+    results = run_oc_command(cmd="get pod", namespace=namespace)
     if ERRMSG in results:
-        raise Exception('Can not get csi controller pod')
+        raise Exception("Can not get csi controller pod")
     return results
 
 
@@ -223,17 +229,17 @@ def get_log_names():
     the end time is in the provisioner pod (csi-snapshotter container)
 
     """
-    msg_logging('Looking for logs pod name')
-    results = get_csi_pod(namespace='openshift-cluster-storage-operator')
+    msg_logging("Looking for logs pod name")
+    results = get_csi_pod(namespace="openshift-cluster-storage-operator")
     for line in results:
-        if 'csi-snapshot-controller' in line and 'operator' not in line:
-            log_names['start'] = line.split()[0]
+        if "csi-snapshot-controller" in line and "operator" not in line:
+            log_names["start"] = line.split()[0]
     msg_logging(f'The Start log pod is : {log_names["start"]}')
 
-    results = get_csi_pod(namespace='openshift-storage')
+    results = get_csi_pod(namespace="openshift-storage")
     for line in results:
-        if 'prov' in line and params['fs_type'] in line:
-            log_names['end'].append(line.split()[0])
+        if "prov" in line and params["fs_type"] in line:
+            log_names["end"].append(line.split()[0])
     msg_logging(f'The end log pods is : {log_names["end"]}')
 
 
@@ -242,31 +248,30 @@ def build_fio_command():
     Building the FIO command that will be run on the pod before each snapshot
 
     """
-    with open(constants.FIO_IO_FILLUP_PARAMS_YAML, 'r') as stream:
+    with open(constants.FIO_IO_FILLUP_PARAMS_YAML, "r") as stream:
         try:
             fio_yaml = yaml.safe_load(stream)
         except yaml.YAMLError as exc:
-            print(f'Error: can not load FIO yaml file {exc}')
-            log.error(f'Error: can not load FIO yaml file {exc}')
+            print(f"Error: can not load FIO yaml file {exc}")
+            log.error(f"Error: can not load FIO yaml file {exc}")
             raise exc
-    fio_yaml.pop('size')
-    params['fio_cmd'] = "fio"
+    fio_yaml.pop("size")
+    params["fio_cmd"] = "fio"
     args = ""
     for k, v in fio_yaml.items():
-        if k == 'filename':
-            if params['path']:
+        if k == "filename":
+            if params["path"]:
                 args = args + f" --{k}={params['path']}/{v}"
             else:
                 # For raw block device
                 args = args + f" --{k}={params['path']}"
         else:
             args = args + f" --{k}={v}"
-    params['fio_cmd'] += args
-    params['fio_cmd'] += f" --size={params['FILESIZE']}"
-    params['fio_cmd'] += " --output-format=json"
+    params["fio_cmd"] += args
+    params["fio_cmd"] += f" --size={params['FILESIZE']}"
+    params["fio_cmd"] += " --output-format=json"
     msg_logging(
-        f'the FIO template is {fio_yaml}'
-        f'The FIO command is : {params["fio_cmd"]}'
+        f"the FIO template is {fio_yaml}" f'The FIO command is : {params["fio_cmd"]}'
     )
 
 
@@ -276,15 +281,15 @@ def run_io_on_pod():
 
     """
     msg_logging(f'Running : {params["fio_cmd"]} on {params["PODNAME"]}')
-    res = run_cmd_on_pod(params['fio_cmd'], params['PODNAME'])
+    res = run_cmd_on_pod(params["fio_cmd"], params["PODNAME"])
     if res:
-        res = yaml.safe_load('\n'.join(res))
-        err = res['jobs'][0]['error']
+        res = yaml.safe_load("\n".join(res))
+        err = res["jobs"][0]["error"]
         if err:
-            print(f'FIO finished with errors ({err})')
-            log.error(f'FIO finished with errors ({err})')
+            print(f"FIO finished with errors ({err})")
+            log.error(f"FIO finished with errors ({err})")
     else:
-        msg_logging('FIO failed on timeout (10Min.)')
+        msg_logging("FIO failed on timeout (10Min.)")
 
 
 def get_creation_time(snap_name, content_name, start_time):
@@ -306,36 +311,38 @@ def get_creation_time(snap_name, content_name, start_time):
     """
 
     # Getting start creation time
-    logs = run_oc_command(f'logs {log_names["start"]} --since-time={start_time}',
-                          'openshift-cluster-storage-operator')
+    logs = run_oc_command(
+        f'logs {log_names["start"]} --since-time={start_time}',
+        "openshift-cluster-storage-operator",
+    )
     st = None
     et = None
     for line in logs:
-        if snap_name in line and 'Creating content for snapshot' in line:
-            st = line.split(' ')[1]
+        if snap_name in line and "Creating content for snapshot" in line:
+            st = line.split(" ")[1]
             st = datetime.datetime.strptime(st, format)
     if st is None:
-        log.error(f'Can not find start time of {snap_name}')
-        raise Exception('Can not find start time of {snap_name}')
+        log.error(f"Can not find start time of {snap_name}")
+        raise Exception("Can not find start time of {snap_name}")
 
     # Getting end creation time
     logs = []
     for l in log_names["end"]:
         logs.append(
             run_oc_command(
-                f'logs {l} -c csi-snapshotter --since-time={start_time}',
-                'openshift-storage'
+                f"logs {l} -c csi-snapshotter --since-time={start_time}",
+                "openshift-storage",
             )
         )
     for sublog in logs:
         for line in sublog:
-            if content_name in line and 'readyToUse true' in line:
-                et = line.split(' ')[1]
+            if content_name in line and "readyToUse true" in line:
+                et = line.split(" ")[1]
                 et = datetime.datetime.strptime(et, format)
 
     if et is None:
-        log.error(f'Can not find end time of {snap_name}')
-        raise Exception('Can not find end time of {snap_name}')
+        log.error(f"Can not find end time of {snap_name}")
+        raise Exception("Can not find end time of {snap_name}")
 
     results = (et - st).total_seconds()
 
@@ -353,47 +360,45 @@ def create_snapshot(snap_num, snap_yaml):
         int: the creation time of the snapshot (in sec.)
 
     """
-    msg_logging(f'Taking snapshot number {snap_num}')
+    msg_logging(f"Taking snapshot number {snap_num}")
     # Getting UTC time before test starting for log retrieve
     UTC_datetime = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-    snap_name = f'pvc-snap-{snap_num}-'
-    snap_name += params['PVCNAME'].split('-')[-1]
-    snap_yaml['metadata']['name'] = snap_name
+    snap_name = f"pvc-snap-{snap_num}-"
+    snap_name += params["PVCNAME"].split("-")[-1]
+    snap_yaml["metadata"]["name"] = snap_name
 
-    fd, tmpfile = tempfile.mkstemp(suffix='.yaml', prefix='Snap')
-    msg_logging(f'Going to create {tmpfile}')
-    with open(tmpfile, 'w') as f:
+    fd, tmpfile = tempfile.mkstemp(suffix=".yaml", prefix="Snap")
+    msg_logging(f"Going to create {tmpfile}")
+    with open(tmpfile, "w") as f:
         yaml.dump(snap_yaml, f, default_flow_style=False)
-    msg_logging(f'Snapshot yaml file is {snap_yaml}')
-    res = run_oc_command(f'create -f {tmpfile}', params['NSPACE'])
+    msg_logging(f"Snapshot yaml file is {snap_yaml}")
+    res = run_oc_command(f"create -f {tmpfile}", params["NSPACE"])
     if ERRMSG in res[0]:
-        raise Exception(f'Can not create snapshot : {res}')
+        raise Exception(f"Can not create snapshot : {res}")
     # wait until snapshot is ready
     timeout = 600
     while timeout > 0:
         res = run_oc_command(
-            f'get volumesnapshot {snap_name} -o yaml', params['NSPACE']
+            f"get volumesnapshot {snap_name} -o yaml", params["NSPACE"]
         )
         if ERRMSG not in res[0]:
-            res = yaml.safe_load('\n'.join(res))
-            if res['status']['readyToUse']:
-                log.info(f'{snap_name} Created and ready to use')
-                snap_con_name = res['status']['boundVolumeSnapshotContentName']
+            res = yaml.safe_load("\n".join(res))
+            if res["status"]["readyToUse"]:
+                log.info(f"{snap_name} Created and ready to use")
+                snap_con_name = res["status"]["boundVolumeSnapshotContentName"]
                 break
             else:
-                log.info(
-                    f'{snap_name} is not ready yet, sleep 5 sec before re-check'
-                )
+                log.info(f"{snap_name} is not ready yet, sleep 5 sec before re-check")
                 time.sleep(5)
                 timeout -= 5
         else:
-            raise Exception(f'Can not get snapshot status {res}')
+            raise Exception(f"Can not get snapshot status {res}")
     return get_creation_time(snap_name, snap_con_name, UTC_datetime)
 
 
 def main():
 
-    print('Going to create Snapshots.....')
+    print("Going to create Snapshots.....")
 
     snap_yaml = get_env_args()
     get_log_names()
@@ -404,18 +409,18 @@ def main():
 
     # Running the test
     results = []
-    for test_num in range(1, int(params['SNAPNUM']) + 1):
-        msg_logging(f'Starting test number {test_num}')
+    for test_num in range(1, int(params["SNAPNUM"]) + 1):
+        msg_logging(f"Starting test number {test_num}")
         run_io_on_pod()
         time.sleep(10)
         ct = create_snapshot(test_num, snap_yaml)
-        speed = params['dataset'] / ct
-        results.append({'Snap Num': test_num, 'time': ct, 'speed': speed})
+        speed = params["dataset"] / ct
+        results.append({"Snap Num": test_num, "time": ct, "speed": speed})
         msg_logging(
-            f'Results for snapsot number {test_num} are : '
-            f'Creation time is {ct} , Creation speed {speed}'
+            f"Results for snapsot number {test_num} are : "
+            f"Creation time is {ct} , Creation speed {speed}"
         )
-    msg_logging(f'All results are : {results}')
+    msg_logging(f"All results are : {results}")
     return results
 
 

@@ -14,14 +14,17 @@ logger = logging.getLogger(__name__)
     argnames=["interface"],
     argvalues=[
         pytest.param(constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-371")),
-        pytest.param(constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-1318"))
-    ]
+        pytest.param(
+            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-1318")
+        ),
+    ],
 )
 class TestDeletePVCWhileRunningIO(ManageTest):
     """
     Delete PVC while IO is in progress
 
     """
+
     pvc_obj = None
     pod_obj = None
 

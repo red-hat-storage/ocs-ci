@@ -10,26 +10,22 @@ class TestPVC:
     b) Test using 2 or more Resources
     c) Tests needing to create N number of PVC (or OCS objects)
     """
+
     def test_one_pvc(self, cls_pvc):
         logger.info(
-            f"This test is using one pvc: {cls_pvc.name} created in fixture "
-            f"setup"
+            f"This test is using one pvc: {cls_pvc.name} created in fixture " f"setup"
         )
         # use cls_pvc inside your test to do operations on pvc object
         # same concept can be applied to other OCS objects
 
-    def test_use_same_one_pvc_plus_storage_class(
-        self, cls_pvc, storage_class
-    ):
+    def test_use_same_one_pvc_plus_storage_class(self, cls_pvc, storage_class):
         """
         In this test cls_pvc and storage_class are provided from conftest.py
         the fxitures objects can then be used inside the test to perform
         required operations on those objects.
         """
         logger.info(f"This test is using same one pvc:  {cls_pvc.name}")
-        logger.info(
-            f"Storage class is: {storage_class.name}"
-        )
+        logger.info(f"Storage class is: {storage_class.name}")
         # make use of cls_pvc and storage_class objects
 
     def test_need_n_pvc(self, pvc_factory):
@@ -59,13 +55,10 @@ class TestPVCsCreatedInSetup:
 
     Same concept can be applied to other OCS objects
     """
+
     def test_precreate_pvc(self, test_pre_create_n_pvc):
-        logger.info(
-            f"Pre-creating some number of PVC objects"
-        )
+        logger.info(f"Pre-creating some number of PVC objects")
         pvc = test_pre_create_n_pvc[1]
         logger.info(f"Will delete PVC {pvc.name} as part of test")
         pvc.delete()
-        logger.info(
-            "Test finished, the rest of PVCs will be deleted in finalizer"
-        )
+        logger.info("Test finished, the rest of PVCs will be deleted in finalizer")
