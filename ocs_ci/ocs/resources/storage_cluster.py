@@ -9,10 +9,9 @@ from jsonschema import validate
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.exceptions import ResourceNotFoundError
-from ocs_ci.ocs.node import get_compute_node_names
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
-from ocs_ci.ocs.resources.pod import get_pods_having_label
+from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
 from ocs_ci.utility import localstorage, utils
 from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.ocs.exceptions import UnsupportedFeatureError
@@ -278,8 +277,8 @@ def ocs_install_verification(
             "in the output."
         )
 
-        if config.DEPLOYMENT.get("local_storage"):
-            deviceset_pvcs = get_compute_node_names()
+        if (config.DEPLOYMENT.get('local_storage')):
+            deviceset_pvcs = [osd.get_node() for osd in get_osd_pods()]
         else:
             deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
 
