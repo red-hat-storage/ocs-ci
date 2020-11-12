@@ -1,4 +1,3 @@
-import pytest
 import logging
 
 logger = logging.getLogger(__name__)
@@ -44,6 +43,8 @@ class TestPVC:
         pvc_2 = pvc_factory()
         # and so on - or use a loop
         # use the pvc
+        print(pvc_1.project.namespace)
+        print(pvc_2.project.namespace)
         # perform rest of the test
 
 
