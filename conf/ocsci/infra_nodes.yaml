@@ -9,6 +9,8 @@ ENV_DATA:
   master_replicas: 3
   worker_replicas: 3
   infra_replicas: 3
+  infra_instance_type: 'm5.4xlarge'
+
 
 DEPLOYMENT:
   infra_nodes: True

@@ -183,7 +183,8 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
 def create_custom_machineset(
     role='app',
     instance_type='m4.xlarge',
-    label='app-scale',
+    labels=None,
+    taints=None,
     zone='a',
 ):
     """
@@ -194,7 +195,8 @@ def create_custom_machineset(
     Args:
         role (str): Role type to be added for node eg: it will be app,worker
         instance_type (str): Type of aws instance
-        label (str): Label to be added to the node
+        label (list of tuples): List of Labels (key, val) to be added to the node
+        taints (list of dict): List of taints to be applied
         zone (str): Machineset zone for node creation.
 
     Returns:
@@ -272,17 +274,14 @@ def create_custom_machineset(
                 machineset_yaml["spec"]["template"]["metadata"]["labels"][
                     "machine.openshift.io/cluster-api-machineset"
                 ] = f"{cls_id}-{role}-{aws_zone}"
-                machineset_yaml["spec"]["template"]["spec"]["metadata"]["labels"][
-                    f"node-role.kubernetes.io/{role}"
-                ] = f"{label}"
-                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
-                    "ami"
-                ]["id"] = ami_id
-                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
-                    "iamInstanceProfile"
-                ]["id"] = f"{cls_id}-worker-profile"
-                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
-                    "instanceType"
+                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
+                    'ami'
+                ]['id'] = ami_id
+                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
+                    'iamInstanceProfile'
+                ]['id'] = f"{cls_id}-worker-profile"
+                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
+                    'instanceType'
                 ] = instance_type
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "placement"
@@ -300,25 +299,21 @@ def create_custom_machineset(
                     "tags"
                 ][0]["name"] = f"kubernetes.io/cluster/{cls_id}"
 
-                # if we have infra nodes to be added then we need
-                # taint and extra label
-                if role == 'infra':
-                    taint_dict = {
-                        'effect': 'NoSchedule',
-                        'key': 'node.ocs.openshift.io/storage',
-                        'value': 'true',
-                    }
-                    machineset_yaml['spec']['template']['spec'].update({'taints': list()})
+                # Apply the labels
+                if labels:
+                    for label in labels:
+                        machineset_yaml['spec']['template']['spec'][
+                            'metadata'
+                        ]['labels'][label[0]] = label[1]
 
-                    machineset_yaml['spec']['template']['spec'][
-                        'taints'
-                    ].append(taint_dict)
-                    machineset_yaml['spec']['template']['spec']['metadata'][
-                        'labels'
-                    ]['node-role.kubernetes.io/infra'] = ""
-                    machineset_yaml['spec']['template']['spec']['metadata'][
-                        'labels'
-                    ]['cluster.ocs.openshift.io/openshift-storage'] = ""
+                # Apply the Taints
+                # ex taint list looks like:
+                # [ {'effect': 'NoSchedule',
+                #    'key': 'node.ocs.openshift.io/storage',
+                #    'value': 'true',
+                #  }, {'effect': 'Schedule', 'key': 'xyz', 'value': 'False'} ]
+                if taints:
+                    machineset_yaml['spec']['template']['spec'].update({'taints': taints})
 
                 # Create new custom machineset
                 ms_obj = OCS(**machineset_yaml)
@@ -332,7 +327,7 @@ def create_custom_machineset(
         raise UnsupportedPlatformError("Functionality not supported in UPI")
 
 
-def create_infra_nodes(num_nodes):
+def create_ocs_infra_nodes(num_nodes):
     """
     Create infra node instances
 
@@ -345,6 +340,18 @@ def create_infra_nodes(num_nodes):
     """
     ms_names = []
     zone_list = []
+    labels = [
+        ('node-role.kubernetes.io/infra', ''),
+        ('cluster.ocs.openshift.io/openshift-storage', ''),
+    ]
+    taints = [
+        {
+            'effect': 'NoSchedule',
+            'key': 'node.ocs.openshift.io/storage',
+            'value': 'true',
+        }
+    ]
+    instance_type = config.ENV_DATA.get('infra_instance_type', 'm5.4xlarge')
 
     # If infra zones are provided then take it from conf else
     # extract from workers
@@ -365,7 +372,10 @@ def create_infra_nodes(num_nodes):
         [
             create_custom_machineset(
                 role='infra',
-                zone=zone_list[i % len(zone_list)]
+                instance_type=instance_type,
+                labels=labels,
+                taints=taints,
+                zone=zone_list[i % len(zone_list)],
             ) for i in range(num_nodes)
         ]
     )

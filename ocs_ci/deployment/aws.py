@@ -182,8 +182,8 @@ class AWSIPI(AWSBase):
                 (default: "DEBUG")
         """
         super(AWSIPI, self).deploy_ocp(log_cli_level)
-        if config.DEPLOYMENT['infra_nodes']:
-            num_nodes = config.ENV_DATA['infra_replicas']
+        if config.DEPLOYMENT.get('infra_nodes'):
+            num_nodes = config.ENV_DATA.get('infra_replicas', 3)
             ms_list = machine.create_infra_nodes(num_nodes)
             for node in ms_list:
                 machine.wait_for_new_node_to_be_ready(node)

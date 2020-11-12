@@ -231,7 +231,7 @@ class Deployment(object):
                 )
             ]
             if (
-                config.DEPLOYMENT["infra_nodes"]
+                config.DEPLOYMENT.get("infra_nodes")
                 and not config.ENV_DATA.get('infra_replicas')
             ):
                 logger.info(
