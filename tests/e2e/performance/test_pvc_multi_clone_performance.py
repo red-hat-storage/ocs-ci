@@ -1,6 +1,6 @@
 import os
 import logging
-from ocs_ci.ocs.resources import  pod
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility.utils import ocsci_log_path
@@ -46,7 +46,7 @@ class TestPvcMultiClonePerformance(E2ETest):
         """
         num_of_clones = 512
         if interface_iterate == constants.CEPHBLOCKPOOL:
-            num_of_clones = 512 # bz_1896831
+            num_of_clones = 512  # bz_1896831
 
         # Getting the total Storage capacity
         ceph_cluster = CephCluster()
@@ -124,7 +124,7 @@ class TestPvcMultiClonePerformance(E2ETest):
             log.info(f"Clone number {r['Clone Num']} creation speed is {r['speed']} MB/sec.")
 
     def build_params(self):
-        log.info(f"Start building params")
+        log.info("Start building params")
 
         self.params["nspace"] = self.pvc_obj.namespace
         self.params["pvcname"] = self.pvc_obj.name
@@ -195,7 +195,6 @@ class TestPvcMultiClonePerformance(E2ETest):
         )
         log.info(f"File {file_name} exists in {self.pod_obj.name}.")
 
-
     def create_clone(self, clone_num, clone_yaml):
         """
         Creating clone for pvc, measure the creation time
@@ -241,7 +240,7 @@ class TestPvcMultiClonePerformance(E2ETest):
                     timeout -= 5
             else:
                 raise Exception(f'Can not get clone status {res}')
-        if (timeout <=0):
+        if timeout <= 0:
             raise Exception(f"Clone {clone_name}  for {self.interface} interface was not created for 600 seconds")
 
         create_time = helpers.measure_pvc_creation_time(self.interface, clone_name)
@@ -287,7 +286,6 @@ class TestPvcMultiClonePerformance(E2ETest):
         output.pop()  # remove last empty element from the list
         return output
 
-
     def run_oc_command(self, cmd, namespace):
         """
         Running an 'oc' command
@@ -300,7 +298,6 @@ class TestPvcMultiClonePerformance(E2ETest):
             list : the results of the command as list of lines
 
         """
-        #command = (f'oc --kubeconfig {self.params["KUBECONFIG"]} -n {namespace} {cmd}')
 
         cluster_dir_kubeconfig = os.path.join(
             config.ENV_DATA['cluster_path'],
