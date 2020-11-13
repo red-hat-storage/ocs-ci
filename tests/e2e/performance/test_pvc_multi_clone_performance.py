@@ -1,7 +1,5 @@
 import os
 import logging
-import subprocess
-from ocs_ci.framework import config
 from ocs_ci.ocs.resources import  pod
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.cluster import CephCluster
@@ -9,6 +7,12 @@ from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.framework.testlib import (
     skipif_ocs_version, skipif_ocp_version, E2ETest, performance
 )
+import yaml
+import time
+from ocs_ci.helpers import helpers
+import tempfile
+import subprocess
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +46,7 @@ class TestPvcMultiClonePerformance(E2ETest):
         """
         num_of_clones = 512
         if interface_iterate == constants.CEPHBLOCKPOOL:
-            num_of_clones = 450 # bz_1896831
+            num_of_clones = 512 # bz_1896831
 
         # Getting the total Storage capacity
         ceph_cluster = CephCluster()
@@ -95,39 +99,82 @@ class TestPvcMultiClonePerformance(E2ETest):
             f'File size to be written is : {file_size} '
             f'with the name of {file_name}'
         )
+        self.params = {}
+        self.params["clonenum"] = f'{num_of_clones}'
+        self.params["filesize"] = file_size
 
-        os.environ["CLONENUM"] = f'{num_of_clones}'
-        os.environ["LOGPATH"] = f'{ocsci_log_path()}'
-        os.environ["FILESIZE"] = file_size
-        os.environ["NSPACE"] = self.pvc_obj.namespace
-        os.environ["PODNAME"] = self.pod_obj.name
-        os.environ["PVCNAME"] = self.pvc_obj.name
-        os.environ["PVCSIZE"] = str(self.pvc_obj.size)
-        os.environ["SCNAME"] = self.pvc_obj.backed_sc
-        os.environ["INTERFACE"] = self.interface
-        os.environ["CLUSTERPATH"] = config.ENV_DATA['cluster_path']
-
+        clone_yaml = self.build_params()
         self.run_fio_on_pod(file_size)
 
-        main_script = "tests/e2e/performance/test_multi_clones.py"
-        result = subprocess.run([main_script], stdout=subprocess.PIPE)
-        log.info(f"Results from main script : {result.stdout.decode('utf-8')}")
+        # Running the test
+        results = []
+        for test_num in range(1, int(self.params['clonenum']) + 1):
+            log.info(f'Starting test number {test_num}')
 
-        if 'All results are' not in result.stdout.decode('utf-8'):
-            log.error('Test was not completed')
-            raise Exception('Test was not completed')
+            ct = self.create_clone(test_num, clone_yaml)
+            speed = self.params['datasize'] / ct
+            results.append({'Clone Num': test_num, 'time': ct, 'speed': speed})
+            log.info(
+                f'Results for clone number {test_num} are : '
+                f'Creation time is {ct} secs, Creation speed {speed} MB/sec'
+            )
 
-        # TODO: push all results to elasticsearch server
+        for r in results:
+            log.info(f"Clone number {r['Clone Num']} creation time is {r['time']} secs.")
+            log.info(f"Clone number {r['Clone Num']} creation speed is {r['speed']} MB/sec.")
+
+    def build_params(self):
+        log.info(f"Start building params")
+
+        self.params["nspace"] = self.pvc_obj.namespace
+        self.params["pvcname"] = self.pvc_obj.name
+        self.params['ERRMSG'] = 'Error in command'
+
+        log_file_name = os.path.basename(__file__).replace('.py', '.log')
+
+        full_log = f'{ocsci_log_path()}/{log_file_name}'
+        logging.basicConfig(
+            filename=full_log, level=logging.INFO, format=constants.LOG_FORMAT
+        )
+
+        self.params['datasize'] = int(self.params['filesize'].replace('M', ''))
+
+        self.params['clone_yaml'] = constants.CSI_CEPHFS_PVC_CLONE_YAML
+        if self.interface == constants.CEPHBLOCKPOOL:
+            self.params['clone_yaml'] = constants.CSI_RBD_PVC_CLONE_YAML
+
+        output = self.run_oc_command(
+            cmd=f'get pod {self.pod_obj.name} -o yaml', namespace=self.params['nspace']
+        )
+
+        results = yaml.safe_load('\n'.join(output))
+        self.params['path'] = results['spec']['containers'][0]['volumeMounts'][0]['mountPath']
+        log.info(f"path - {self.params['path']}")
+
+        # reading template of clone yaml file
+        with open(self.params['clone_yaml'], 'r') as stream:
+            try:
+                clone_yaml = yaml.safe_load(stream)
+                clone_yaml['spec']['storageClassName'] = self.pvc_obj.backed_sc
+                clone_yaml['spec']['dataSource']['name'] = self.params["pvcname"]
+                clone_yaml['spec']['resources']['requests']['storage'] = str(self.pvc_obj.size) + "Gi"
+            except yaml.YAMLError as exc:
+                log.error(f'Can not read template yaml file {exc}')
+        log.info(
+            f'Clone yaml file : {self.params["clone_yaml"]} '
+            f'Content of clone yaml file {clone_yaml}'
+        )
+
+        return clone_yaml
 
     def run_fio_on_pod(self, file_size):
         """
         Args:
-         file_size (str): Size of file to write in MB, e.g. 200M or 50000M
+        file_size (str): Size of file to write in MB, e.g. 200M or 50000M
 
         """
         file_name = self.pod_obj.name
         log.info(f'Starting IO on the POD {self.pod_obj.name}')
-        print(f'Starting IO on the POD {self.pod_obj.name}')
         # Going to run only write IO to fill the PVC for the before creating a clone
         self.pod_obj.fillup_fs(size=file_size, fio_filename=file_name)
 
@@ -139,7 +186,6 @@ class TestPvcMultiClonePerformance(E2ETest):
             f"FIO result: {fio_result}."
         )
         log.info('IO on the PVC Finished')
-        print('IO on the PVC Finished')
 
         # Verify presence of the file on pvc
         file_path = pod.get_file_path(self.pod_obj, file_name)
@@ -148,3 +194,124 @@ class TestPvcMultiClonePerformance(E2ETest):
             f"File {file_name} does not exist"
         )
         log.info(f"File {file_name} exists in {self.pod_obj.name}.")
+
+
+    def create_clone(self, clone_num, clone_yaml):
+        """
+        Creating clone for pvc, measure the creation time
+
+        Args:
+            clone_num (int) the number of clones to create
+
+        Returns:
+            int: the creation time of the clone (in sec.)
+
+        """
+        log.info(f"Creating clone number {clone_num} for interface {self.interface}")
+
+        clone_name = f'pvc-clone-{clone_num}-'
+        clone_name += self.params['pvcname'].split('-')[-1]
+        clone_yaml['metadata']['name'] = clone_name
+
+        fd, tmpfile = tempfile.mkstemp(suffix='.yaml', prefix='Clone')
+        log.info(f'Going to create {tmpfile}')
+        with open(tmpfile, 'w') as f:
+            yaml.dump(clone_yaml, f, default_flow_style=False)
+        log.info(f'Clone yaml file is {clone_yaml}')
+        res = self.run_oc_command(f'create -f {tmpfile}', self.params['nspace'])
+        if self.params['ERRMSG'] in res[0]:
+            raise Exception(f'Can not create clone : {res}')
+        # wait until clone is ready
+        timeout = 600
+        while timeout > 0:
+            res = self.run_oc_command(
+                f'get pvc {clone_name} -o yaml', self.params['nspace']
+            )
+            if self.params['ERRMSG'] not in res[0]:
+                res = yaml.safe_load('\n'.join(res))
+                log.info(f'Result yaml is {res}')
+                if res['status']['phase'] == 'Bound':
+                    log.info(f'{clone_name} Created and ready to use')
+                    break
+                else:
+                    log.info(
+                        f'{clone_name} is not ready yet, sleep 5 sec before re-check'
+                    )
+                    time.sleep(5)
+                    timeout -= 5
+            else:
+                raise Exception(f'Can not get clone status {res}')
+        if (timeout <=0):
+            raise Exception(f"Clone {clone_name}  for {self.interface} interface was not created for 600 seconds")
+
+        create_time = helpers.measure_pvc_creation_time(self.interface, clone_name)
+        log.info(f"Creation time of clone {clone_name} is {create_time} secs.")
+
+        return create_time
+
+    def run_command(self, cmd):
+        """
+        Running command on the OS and return the STDOUT & STDERR outputs
+        in case of argument is not string or list, return error message
+
+        Args:
+            cmd (str/list): the command to execute
+
+        Returns:
+            list : all STDOUT / STDERR output as list of lines
+
+        """
+        if isinstance(cmd, str):
+            command = cmd.split()
+        elif isinstance(cmd, list):
+            command = cmd
+        else:
+            return self.params['ERRMSG']
+
+        log.info(f'Going to run {cmd}')
+        cp = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+            timeout=600
+        )
+        output = cp.stdout.decode()
+        err = cp.stderr.decode()
+        # exit code is not zero
+        if cp.returncode:
+            log.error(f'Command finished with non zero ({cp.returncode}) {err}')
+            output += f"{self.params['ERRMSG']} {err}"
+
+        output = output.split('\n')  # convert output to list
+        output.pop()  # remove last empty element from the list
+        return output
+
+
+    def run_oc_command(self, cmd, namespace):
+        """
+        Running an 'oc' command
+
+        Args:
+            cmd (str): the command to run
+            namespace (str): the namespace where to run the command
+
+        Returns:
+            list : the results of the command as list of lines
+
+        """
+        #command = (f'oc --kubeconfig {self.params["KUBECONFIG"]} -n {namespace} {cmd}')
+
+        cluster_dir_kubeconfig = os.path.join(
+            config.ENV_DATA['cluster_path'],
+            config.RUN.get('kubeconfig_location')
+        )
+        if os.getenv('KUBECONFIG'):
+            kubeconfig = os.getenv('KUBECONFIG')
+        elif os.path.exists(cluster_dir_kubeconfig):
+            kubeconfig = cluster_dir_kubeconfig
+        else:
+            kubeconfig = None
+
+        command = (f'oc --kubeconfig {kubeconfig} -n {namespace} {cmd}')
+        return self.run_command(command)
