@@ -1,1 +1,2 @@
+-e git+https://github.com/vasukulkarni/agent-python-pytest@v1.10.2#egg=pytest-reportportal
 -e .
