@@ -1004,7 +1004,10 @@ def add_squad_analysis_to_email(session, soup):
                         if result.skipped:
                             if squad not in skipped:
                                 skipped[squad] = []
-                            skipped_message = result.longrepr[2]
+                            try:
+                                skipped_message = result.longrepr[2][8:]
+                            except TypeError:
+                                skipped_message = "--unknown--"
                             skipped[squad].append((result.nodeid, skipped_message))
                             unassigned = False
             if unassigned:
@@ -1015,6 +1018,10 @@ def add_squad_analysis_to_email(session, soup):
                 if result.skipped:
                     if "UNASSIGNED" not in skipped:
                         skipped["UNASSIGNED"] = []
+                    try:
+                        skipped_message = result.longrepr[2][8:]
+                    except TypeError:
+                        skipped_message = "--unknown--"
                     skipped["UNASSIGNED"].append((result.nodeid, skipped_message))
 
     # no failed or skipped tests - exist the function
@@ -1112,7 +1119,7 @@ def add_squad_analysis_to_email(session, soup):
                 skips_li_tag.append(skips_test_span_tag)
                 skips_li_tag.append(soup.new_tag("br"))
                 skips_reason_em_tag = soup.new_tag("em")
-                skips_reason_em_tag.string = f"Reason: {test[1][8:]}"
+                skips_reason_em_tag.string = f"Reason: {test[1]}"
                 skips_li_tag.append(skips_reason_em_tag)
                 skips_ul_tag.append(skips_li_tag)
 
