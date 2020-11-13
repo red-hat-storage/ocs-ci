@@ -17,7 +17,9 @@ LOG_FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(messag
 # Directories
 TOP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CONF_DIR = os.path.join(TOP_DIR, "conf")
-OCP_VERSION_CONF_DIR = os.path.join(CONF_DIR, "ocp_version")
+FRAMEWORK_CONF_DIR = os.path.join(TOP_DIR, "ocs_ci", "framework", "conf")
+OCP_VERSION_CONF_DIR = os.path.join(FRAMEWORK_CONF_DIR, "ocp_version")
+OCS_VERSION_CONF_DIR = os.path.join(FRAMEWORK_CONF_DIR, "ocs_version")
 TEMPLATE_DIR = os.path.join(TOP_DIR, "ocs_ci", "templates")
 TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
