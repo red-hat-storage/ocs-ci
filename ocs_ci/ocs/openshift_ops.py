@@ -18,25 +18,26 @@ class OCP(object):
     with OpenShift
 
     """
+
     def __init__(self):
 
         k8s_client = config.new_client_from_config()
         dyn_client = DynamicClient(k8s_client)
 
         self.v1_service_list = dyn_client.resources.get(
-            api_version='v1', kind='ServiceList'
+            api_version="v1", kind="ServiceList"
         )
         self.v1_projects = dyn_client.resources.get(
-            api_version='project.openshift.io/v1', kind='Project'
+            api_version="project.openshift.io/v1", kind="Project"
         )
         self.pods = dyn_client.resources.get(
-            api_version=default.API_VERSION, kind='Pod'
+            api_version=default.API_VERSION, kind="Pod"
         )
         self.deployments = dyn_client.resources.get(
-            api_version=default.API_VERSION, kind='Deployment'
+            api_version=default.API_VERSION, kind="Deployment"
         )
         self.services = dyn_client.resources.get(
-            api_version=default.API_VERSION, kind='Service'
+            api_version=default.API_VERSION, kind="Service"
         )
 
     @staticmethod
@@ -52,7 +53,7 @@ class OCP(object):
             ResourceInstance object
         """
         # Get the resource type on which we want to operate
-        resource = kw.pop('resource')
+        resource = kw.pop("resource")
 
         if method == "GET":
             return resource.get(**kw)
@@ -119,7 +120,7 @@ class OCP(object):
             log.error("Unexpected error")
             raise
 
-        data = pod_meta['metadata']['labels']
+        data = pod_meta["metadata"]["labels"]
         pod_labels = {k: v for k, v in data.items()}
 
         return pod_labels
@@ -139,11 +140,9 @@ class OCP(object):
         # Test cluster access
         log.info("Testing access to cluster with %s", kubeconfig_path)
         if not os.path.isfile(kubeconfig_path):
-            log.warning(
-                "The kubeconfig file %s doesn't exist!", kubeconfig_path
-            )
+            log.warning("The kubeconfig file %s doesn't exist!", kubeconfig_path)
             return False
-        os.environ['KUBECONFIG'] = kubeconfig_path
+        os.environ["KUBECONFIG"] = kubeconfig_path
         try:
             run_cmd("oc cluster-info")
         except CommandFailed as ex:
@@ -173,10 +172,7 @@ class OCP(object):
 
         """
         ret = self.v1_service_list.get()
-        services = {
-            each.metadata.namespace: each.metadata.name for each in
-            ret.items
-        }
+        services = {each.metadata.namespace: each.metadata.name for each in ret.items}
 
         return services
 
@@ -204,9 +200,9 @@ class OCP(object):
         """
         _rc = False
         body = {
-            'kind': 'Project',
-            'apiVersion': 'project.openshift.io/v1',
-            'metadata': {'name': project},
+            "kind": "Project",
+            "apiVersion": "project.openshift.io/v1",
+            "metadata": {"name": project},
         }
         try:
             self.v1_projects.create(body)

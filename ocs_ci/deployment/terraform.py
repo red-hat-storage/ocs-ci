@@ -15,6 +15,7 @@ class Terraform(object):
     """
     Wrapper for terraform
     """
+
     def __init__(self, path, bin_path=None):
         """
         Initialize required variables needed for terraform
@@ -26,7 +27,7 @@ class Terraform(object):
         """
         self.path = path
         self.terraform_installer = bin_path or os.path.expanduser(
-            config.ENV_DATA['terraform_installer']
+            config.ENV_DATA["terraform_installer"]
         )
 
     def initialize(self, upgrade=False):
@@ -95,13 +96,10 @@ class Terraform(object):
         """
         if json_format:
             cmd = (
-                f"{self.terraform_installer} output -json -state={tfstate}"
-                f" {module}"
+                f"{self.terraform_installer} output -json -state={tfstate}" f" {module}"
             )
         else:
-            cmd = (
-                f"{self.terraform_installer} output -state={tfstate} {module}"
-            )
+            cmd = f"{self.terraform_installer} output -state={tfstate} {module}"
         return run_cmd(cmd)
 
     def destroy_module(self, tfvars, module):

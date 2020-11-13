@@ -12,7 +12,7 @@ from ocs_ci.ocs import node
 logger = logging.getLogger(__name__)
 
 
-def raw_block_io(raw_blk_pod, size='10G'):
+def raw_block_io(raw_blk_pod, size="10G"):
     """
     Runs the block ios on pod baased raw block pvc
     Args:
@@ -20,7 +20,7 @@ def raw_block_io(raw_blk_pod, size='10G'):
         size(str): IO size
 
     """
-    raw_blk_pod.run_io(storage_type='block', size=size)
+    raw_blk_pod.run_io(storage_type="block", size=size)
 
 
 def cluster_copy_ops(copy_pod):
@@ -73,7 +73,9 @@ def cluster_copy_ops(copy_pod):
     logger.info(f"#### md5sum obtained for pod: {copy_pod.name} is {md5sum_val_got}")
     logger.info(f"#### Expected was: {md5sum_val_expected}")
     if md5sum_val_got != md5sum_val_expected:
-        logging.info(f"***** md5sum check FAILED. expected: {md5sum_val_expected}, but got {md5sum_val_got}")
+        logging.info(
+            f"***** md5sum check FAILED. expected: {md5sum_val_expected}, but got {md5sum_val_got}"
+        )
         cmd = "" + "ls -lR /mnt" + ""
         output = copy_pod.exec_sh_cmd_on_pod(cmd, sh="bash")
         logging.info(f"ls -lR /mnt output = {output}")
@@ -89,11 +91,12 @@ def cluster_copy_ops(copy_pod):
     return True
 
 
-class ClusterFiller():
+class ClusterFiller:
     """
     Class for performing IOs on the pods
 
     """
+
     concurrent_copies = 5
 
     def __init__(self, pods_to_fill, percent_required_filled, namespace):
@@ -117,21 +120,38 @@ class ClusterFiller():
             target_dir_name = "/mnt/cluster_fillup0_" + uuid4().hex
             mkdir_cmd = "" + "mkdir " + target_dir_name + ""
             fill_pod.exec_sh_cmd_on_pod(mkdir_cmd, sh="bash")
-            logging.info(f"#### Created the dir {target_dir_name} on pod {fill_pod.name}")
-            tee_cmd = "" + " tee " + target_dir_name + \
-                "/ceph.tar.gz{1..30} < /mnt/ceph.tar.gz >/dev/null &" + ""
-            logging.info(f"#### Executing {tee_cmd} to fill the cluster space from pod {fill_pod.name}")
+            logging.info(
+                f"#### Created the dir {target_dir_name} on pod {fill_pod.name}"
+            )
+            tee_cmd = (
+                ""
+                + " tee "
+                + target_dir_name
+                + "/ceph.tar.gz{1..30} < /mnt/ceph.tar.gz >/dev/null &"
+                + ""
+            )
+            logging.info(
+                f"#### Executing {tee_cmd} to fill the cluster space from pod {fill_pod.name}"
+            )
             fill_pod.exec_sh_cmd_on_pod(tee_cmd, sh="bash")
             logging.info(f"#### Executed command {tee_cmd}")
 
     def cluster_filler(self):
-        curl_cmd = f""" curl {constants.REMOTE_FILE_URL} --output {constants.FILE_PATH} """
-        logging.info('downloading......')
+        curl_cmd = (
+            f""" curl {constants.REMOTE_FILE_URL} --output {constants.FILE_PATH} """
+        )
+        logging.info("downloading......")
         run_cmd(cmd=curl_cmd)
-        logging.info('finished')
+        logging.info("finished")
         with ThreadPoolExecutor() as executor:
             for pod in self.pods_to_fill:
-                executor.submit(pod_helpers.upload, pod.name, constants.FILE_PATH, '/mnt/', namespace=self.namespace)
+                executor.submit(
+                    pod_helpers.upload,
+                    pod.name,
+                    constants.FILE_PATH,
+                    "/mnt/",
+                    namespace=self.namespace,
+                )
                 logging.info(f"### initiated downloader for {pod.name}")
 
         filler_executor = ThreadPoolExecutor()
@@ -142,18 +162,21 @@ class ClusterFiller():
                     logging.info(f"### used capacity %age = {self.used_capacity}")
                     if self.used_capacity <= self.percent_required_filled:
                         filler_executor.submit(self.filler, each_pod)
-                        logging.info(f"#### Ran copy operation on pod {each_pod.name}. copy_iter # {copy_iter}")
+                        logging.info(
+                            f"#### Ran copy operation on pod {each_pod.name}. copy_iter # {copy_iter}"
+                        )
                     else:
-                        logging.info(f"############ Cluster filled to the expected capacity "
-                                     f"{self.percent_required_filled}"
-                                     )
+                        logging.info(
+                            f"############ Cluster filled to the expected capacity "
+                            f"{self.percent_required_filled}"
+                        )
                         self.cluster_filled = True
                         break
                 if self.cluster_filled:
                     return True
 
 
-class BackgroundOps():
+class BackgroundOps:
     EXPANSION_COMPLETED = False
 
     def wrap(self, func, *args, **kwargs):
@@ -163,12 +186,14 @@ class BackgroundOps():
         Returns:
             bool : True if function runs successfully
         """
-        iterations = kwargs.get('iterations', 1)
+        iterations = kwargs.get("iterations", 1)
         func_name = func.__name__
-        del kwargs['iterations']
+        del kwargs["iterations"]
         for i in range(iterations):
             if BackgroundOps.EXPANSION_COMPLETED:
-                logger.info(f"{func_name}: Done with execution. Stopping the thread. In iteration {i}")
+                logger.info(
+                    f"{func_name}: Done with execution. Stopping the thread. In iteration {i}"
+                )
                 break
             else:
                 func(*args, **kwargs)
@@ -181,8 +206,5 @@ def check_nodes_status():
     This function runs in a loop to check the status of nodes. If the node(s) are in NotReady state then an
     exception is raised. Note: this function needs to be run as a background thread during the execution of a test
     """
-    node.wait_for_nodes_status(
-        node_names=None,
-        status=constants.NODE_READY,
-        timeout=5)
+    node.wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=5)
     logger.info("All master and worker nodes are in Ready state.")

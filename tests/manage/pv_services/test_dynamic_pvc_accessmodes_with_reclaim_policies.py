@@ -22,12 +22,11 @@ class TestDynamicPvc(ManageTest):
     OCS-529 - CephFS Based RWX Dynamic PVC creation with Reclaim policy set to Delete
 
     """
+
     pvc_size = 10  # size in Gi
 
     @pytest.fixture()
-    def setup(
-        self, interface_type, reclaim_policy, storageclass_factory
-    ):
+    def setup(self, interface_type, reclaim_policy, storageclass_factory):
         """
         Creates storage class with specified interface and reclaim policy.
         Fetches all worker nodes
@@ -57,19 +56,15 @@ class TestDynamicPvc(ManageTest):
         Checks for the expected failure event message in oc describe command
 
         """
-        logger.info(
-            "Check expected failure event message in oc describe command"
-        )
+        logger.info("Check expected failure event message in oc describe command")
         if failure_str in ocs_obj.describe():
             logger.info(
-                f"Failure string {failure_str} is present in oc describe"
-                f" command"
+                f"Failure string {failure_str} is present in oc describe" f" command"
             )
             return True
         else:
             raise UnexpectedBehaviour(
-                f"Failure string {failure_str} is not found in oc describe"
-                f" command"
+                f"Failure string {failure_str} is not found in oc describe" f" command"
             )
 
     @acceptance
@@ -81,16 +76,16 @@ class TestDynamicPvc(ManageTest):
                 *[constants.CEPHBLOCKPOOL, constants.RECLAIM_POLICY_RETAIN],
                 marks=[
                     pytest.mark.polarion_id("OCS-530"),
-                    pytest.mark.bugzilla("1772990")
-                ]
+                    pytest.mark.bugzilla("1772990"),
+                ],
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL, constants.RECLAIM_POLICY_DELETE],
                 marks=[
                     pytest.mark.polarion_id("OCS-533"),
                     pytest.mark.bugzilla("1750916"),
-                    pytest.mark.bugzilla("1772990")
-                ]
+                    pytest.mark.bugzilla("1772990"),
+                ],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_RETAIN],
@@ -98,8 +93,8 @@ class TestDynamicPvc(ManageTest):
                     pytest.mark.polarion_id("OCS-525"),
                     pytest.mark.bugzilla("1751866"),
                     pytest.mark.bugzilla("1750916"),
-                    pytest.mark.bugzilla("1772990")
-                ]
+                    pytest.mark.bugzilla("1772990"),
+                ],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],
@@ -107,10 +102,10 @@ class TestDynamicPvc(ManageTest):
                     pytest.mark.polarion_id("OCS-526"),
                     pytest.mark.bugzilla("1751866"),
                     pytest.mark.bugzilla("1750916"),
-                    pytest.mark.bugzilla("1772990")
-                ]
-            )
-        ]
+                    pytest.mark.bugzilla("1772990"),
+                ],
+            ),
+        ],
     )
     def test_rwo_dynamic_pvc(
         self, interface_type, reclaim_policy, setup, pvc_factory, pod_factory
@@ -120,8 +115,8 @@ class TestDynamicPvc(ManageTest):
 
         """
         access_mode = constants.ACCESS_MODE_RWO
-        expected_failure_str = 'Multi-Attach error for volume'
-        storage_type = 'fs'
+        expected_failure_str = "Multi-Attach error for volume"
+        storage_type = "fs"
         sc_obj, worker_nodes_list = setup
 
         logger.info(f"Creating PVC with {access_mode} access mode")
@@ -130,7 +125,7 @@ class TestDynamicPvc(ManageTest):
             storageclass=sc_obj,
             size=self.pvc_size,
             access_mode=access_mode,
-            status=constants.STATUS_BOUND
+            status=constants.STATUS_BOUND,
         )
 
         logger.info(
@@ -142,7 +137,7 @@ class TestDynamicPvc(ManageTest):
             pvc=pvc_obj,
             status=constants.STATUS_RUNNING,
             node_name=worker_nodes_list[0],
-            pod_dict_path=constants.NGINX_POD_YAML
+            pod_dict_path=constants.NGINX_POD_YAML,
         )
 
         logger.info(
@@ -154,22 +149,18 @@ class TestDynamicPvc(ManageTest):
             pvc=pvc_obj,
             status=constants.STATUS_CONTAINER_CREATING,
             node_name=worker_nodes_list[1],
-            pod_dict_path=constants.NGINX_POD_YAML
+            pod_dict_path=constants.NGINX_POD_YAML,
         )
 
-        node_pod1 = pod_obj1.get().get('spec').get('nodeName')
-        node_pod2 = pod_obj2.get().get('spec').get('nodeName')
-        assert node_pod1 != node_pod2, 'Both pods are on the same node'
+        node_pod1 = pod_obj1.get().get("spec").get("nodeName")
+        node_pod2 = pod_obj2.get().get("spec").get("nodeName")
+        assert node_pod1 != node_pod2, "Both pods are on the same node"
 
         logger.info(f"Running IO on first pod {pod_obj1.name}")
         file_name = pod_obj1.name
-        pod_obj1.run_io(
-            storage_type=storage_type, size='1G', fio_filename=file_name
-        )
+        pod_obj1.run_io(storage_type=storage_type, size="1G", fio_filename=file_name)
         pod.get_fio_rw_iops(pod_obj1)
-        md5sum_pod1_data = pod.cal_md5sum(
-            pod_obj=pod_obj1, file_name=file_name
-        )
+        md5sum_pod1_data = pod.cal_md5sum(pod_obj=pod_obj1, file_name=file_name)
 
         # Verify that second pod is still in ContainerCreating state and not
         # able to attain Running state due to expected failure
@@ -194,26 +185,20 @@ class TestDynamicPvc(ManageTest):
             resource=pod_obj2, state=constants.STATUS_RUNNING, timeout=240
         )
 
-        logger.info(
-            f"Verify data from second pod {pod_obj2.name}"
-        )
+        logger.info(f"Verify data from second pod {pod_obj2.name}")
         pod.verify_data_integrity(
-            pod_obj=pod_obj2, file_name=file_name,
-            original_md5sum=md5sum_pod1_data
+            pod_obj=pod_obj2, file_name=file_name, original_md5sum=md5sum_pod1_data
         )
 
         pod_obj2.run_io(
-            storage_type=storage_type, size='1G', fio_filename=pod_obj2.name
+            storage_type=storage_type, size="1G", fio_filename=pod_obj2.name
         )
         pod.get_fio_rw_iops(pod_obj2)
 
         # Again verify data integrity
-        logger.info(
-            f"Again verify data from second pod {pod_obj2.name}"
-        )
+        logger.info(f"Again verify data from second pod {pod_obj2.name}")
         pod.verify_data_integrity(
-            pod_obj=pod_obj2, file_name=file_name,
-            original_md5sum=md5sum_pod1_data
+            pod_obj=pod_obj2, file_name=file_name, original_md5sum=md5sum_pod1_data
         )
 
     @acceptance
@@ -225,13 +210,13 @@ class TestDynamicPvc(ManageTest):
         argvalues=[
             pytest.param(
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_RETAIN],
-                marks=pytest.mark.polarion_id("OCS-542")
+                marks=pytest.mark.polarion_id("OCS-542"),
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],
-                marks=pytest.mark.polarion_id("OCS-529")
-            )
-        ]
+                marks=pytest.mark.polarion_id("OCS-529"),
+            ),
+        ],
     )
     def test_rwx_dynamic_pvc(
         self, interface_type, reclaim_policy, setup, pvc_factory, pod_factory
@@ -241,7 +226,7 @@ class TestDynamicPvc(ManageTest):
 
         """
         access_mode = constants.ACCESS_MODE_RWX
-        storage_type = 'fs'
+        storage_type = "fs"
         sc_obj, worker_nodes_list = setup
 
         logger.info("CephFS RWX test")
@@ -251,7 +236,7 @@ class TestDynamicPvc(ManageTest):
             storageclass=sc_obj,
             size=self.pvc_size,
             access_mode=access_mode,
-            status=constants.STATUS_BOUND
+            status=constants.STATUS_BOUND,
         )
 
         logger.info(
@@ -263,7 +248,7 @@ class TestDynamicPvc(ManageTest):
             pvc=pvc_obj,
             status=constants.STATUS_RUNNING,
             node_name=worker_nodes_list[0],
-            pod_dict_path=constants.NGINX_POD_YAML
+            pod_dict_path=constants.NGINX_POD_YAML,
         )
 
         logger.info(
@@ -276,49 +261,39 @@ class TestDynamicPvc(ManageTest):
             pvc=pvc_obj,
             status=constants.STATUS_RUNNING,
             node_name=worker_nodes_list[1],
-            pod_dict_path=constants.NGINX_POD_YAML
+            pod_dict_path=constants.NGINX_POD_YAML,
         )
 
-        node_pod1 = pod_obj1.get().get('spec').get('nodeName')
-        node_pod2 = pod_obj2.get().get('spec').get('nodeName')
+        node_pod1 = pod_obj1.get().get("spec").get("nodeName")
+        node_pod2 = pod_obj2.get().get("spec").get("nodeName")
 
-        assert node_pod1 != node_pod2, 'Both pods are on the same node'
+        assert node_pod1 != node_pod2, "Both pods are on the same node"
 
         # Run IO on both the pods
         logger.info(f"Running IO on pod {pod_obj1.name}")
         file_name1 = pod_obj1.name
         logger.info(file_name1)
-        pod_obj1.run_io(
-            storage_type=storage_type, size='1G', fio_filename=file_name1
-        )
+        pod_obj1.run_io(storage_type=storage_type, size="1G", fio_filename=file_name1)
 
         logger.info(f"Running IO on pod {pod_obj2.name}")
         file_name2 = pod_obj2.name
-        pod_obj2.run_io(
-            storage_type=storage_type, size='1G', fio_filename=file_name2
-        )
+        pod_obj2.run_io(storage_type=storage_type, size="1G", fio_filename=file_name2)
 
         # Check IO and calculate md5sum of files
         pod.get_fio_rw_iops(pod_obj1)
-        md5sum_pod1_data = pod.cal_md5sum(
-            pod_obj=pod_obj1, file_name=file_name1
-        )
+        md5sum_pod1_data = pod.cal_md5sum(pod_obj=pod_obj1, file_name=file_name1)
 
         pod.get_fio_rw_iops(pod_obj2)
-        md5sum_pod2_data = pod.cal_md5sum(
-            pod_obj=pod_obj2, file_name=file_name2
-        )
+        md5sum_pod2_data = pod.cal_md5sum(pod_obj=pod_obj2, file_name=file_name2)
 
         logger.info("verify data from alternate pods")
 
         pod.verify_data_integrity(
-            pod_obj=pod_obj2, file_name=file_name1,
-            original_md5sum=md5sum_pod1_data
+            pod_obj=pod_obj2, file_name=file_name1, original_md5sum=md5sum_pod1_data
         )
 
         pod.verify_data_integrity(
-            pod_obj=pod_obj1, file_name=file_name2,
-            original_md5sum=md5sum_pod2_data
+            pod_obj=pod_obj1, file_name=file_name2, original_md5sum=md5sum_pod2_data
         )
 
         # Verify that data is mutable from any pod
@@ -328,28 +303,28 @@ class TestDynamicPvc(ManageTest):
         file_path2 = pod.get_file_path(pod_obj2, file_name2)
         logger.info(file_path2)
         pod_obj1.exec_cmd_on_pod(
-            command=f"bash -c \"mv {file_path2} {file_path2}-renamed\"",
-            out_yaml_format=False
+            command=f'bash -c "mv {file_path2} {file_path2}-renamed"',
+            out_yaml_format=False,
         )
 
         # Access and rename file written by pod-1 from pod-2
         file_path1 = pod.get_file_path(pod_obj1, file_name1)
         logger.info(file_path1)
         pod_obj2.exec_cmd_on_pod(
-            command=f"bash -c \"mv {file_path1} {file_path1}-renamed\"",
-            out_yaml_format=False
+            command=f'bash -c "mv {file_path1} {file_path1}-renamed"',
+            out_yaml_format=False,
         )
 
         logger.info("Verify presence of renamed files from both pods")
         file_names = [f"{file_path1}-renamed", f"{file_path2}-renamed"]
         for file in file_names:
-            assert pod.check_file_existence(pod_obj1, file), (
-                f"File {file} doesn't exist"
-            )
+            assert pod.check_file_existence(
+                pod_obj1, file
+            ), f"File {file} doesn't exist"
             logger.info(f"File {file} exists in {pod_obj1.name} ")
-            assert pod.check_file_existence(pod_obj2, file), (
-                f"File {file} doesn't exist"
-            )
+            assert pod.check_file_existence(
+                pod_obj2, file
+            ), f"File {file} doesn't exist"
             logger.info(f"File {file} exists in {pod_obj2.name}")
 
 

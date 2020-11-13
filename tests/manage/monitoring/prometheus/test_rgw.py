@@ -22,24 +22,23 @@ def test_rgw_unavailable(measure_stop_rgw):
     api = prometheus.PrometheusAPI()
 
     # get alerts from time when manager deployment was scaled down
-    alerts = measure_stop_rgw.get('prometheus_alerts')
+    alerts = measure_stop_rgw.get("prometheus_alerts")
     target_label = constants.ALERT_CLUSTEROBJECTSTORESTATE
     target_msg = (
-        'Cluster Object Store is in unhealthy state for more than 15s. '
-        'Please check Ceph cluster health or RGW connection.'
+        "Cluster Object Store is in unhealthy state for more than 15s. "
+        "Please check Ceph cluster health or RGW connection."
     )
-    states = ['pending', 'firing']
+    states = ["pending", "firing"]
 
     prometheus.check_alert_list(
         label=target_label,
         msg=target_msg,
         alerts=alerts,
         states=states,
-        severity='error'
+        severity="error",
     )
     api.check_alert_cleared(
-        label=target_label,
-        measure_end_time=measure_stop_rgw.get('stop')
+        label=target_label, measure_end_time=measure_stop_rgw.get("stop")
     )
 
 

@@ -11,14 +11,18 @@ from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import utils, templating
 from ocs_ci.ocs.exceptions import (
-    UnexpectedBehaviour, CommandFailed,
-    ResourceWrongStatusException
+    UnexpectedBehaviour,
+    CommandFailed,
+    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from subprocess import CalledProcessError
 from ocs_ci.ocs.resources.pod import (
-    get_all_pods, get_pod_obj, get_operator_pods, get_file_path
+    get_all_pods,
+    get_pod_obj,
+    get_operator_pods,
+    get_file_path,
 )
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.helpers.helpers import wait_for_resource_state, create_unique_resource_name
@@ -65,16 +69,10 @@ class Postgresql(RipSaw):
         """
         log.info("Deploying postgres database")
         try:
-            pgsql_service = templating.load_yaml(
-                constants.PGSQL_SERVICE_YAML
-            )
-            pgsql_cmap = templating.load_yaml(
-                constants.PGSQL_CONFIGMAP_YAML
-            )
-            pgsql_sset = templating.load_yaml(
-                constants.PGSQL_STATEFULSET_YAML
-            )
-            pgsql_sset['spec']['replicas'] = replicas
+            pgsql_service = templating.load_yaml(constants.PGSQL_SERVICE_YAML)
+            pgsql_cmap = templating.load_yaml(constants.PGSQL_CONFIGMAP_YAML)
+            pgsql_sset = templating.load_yaml(constants.PGSQL_STATEFULSET_YAML)
+            pgsql_sset["spec"]["replicas"] = replicas
             self.pgsql_service = OCS(**pgsql_service)
             self.pgsql_service.create()
             self.pgsql_cmap = OCS(**pgsql_cmap)
@@ -82,22 +80,28 @@ class Postgresql(RipSaw):
             self.pgsql_sset = OCS(**pgsql_sset)
             self.pgsql_sset.create()
             self.pod_obj.wait_for_resource(
-                condition='Running',
-                selector='app=postgres',
+                condition="Running",
+                selector="app=postgres",
                 resource_count=replicas,
-                timeout=3600
+                timeout=3600,
             )
         except (CommandFailed, CalledProcessError) as cf:
-            log.error('Failed during setup of PostgreSQL server')
+            log.error("Failed during setup of PostgreSQL server")
             raise cf
         self.pgsql_is_setup = True
         log.info("Successfully deployed postgres database")
 
     def create_pgbench_benchmark(
-        self, replicas, pgbench_name=None, postgres_name=None,
-        clients=None, threads=None,
-        transactions=None, scaling_factor=None,
-        timeout=None, wait=True
+        self,
+        replicas,
+        pgbench_name=None,
+        postgres_name=None,
+        clients=None,
+        threads=None,
+        transactions=None,
+        scaling_factor=None,
+        timeout=None,
+        wait=True,
     ):
         """
         Create pgbench benchmark pods
@@ -118,28 +122,24 @@ class Postgresql(RipSaw):
 
         """
         pg_obj_list = []
-        pgbench_name = pgbench_name if pgbench_name else 'pgbench-benchmark'
-        postgres_name = postgres_name if postgres_name else 'postgres'
+        pgbench_name = pgbench_name if pgbench_name else "pgbench-benchmark"
+        postgres_name = postgres_name if postgres_name else "postgres"
         for i in range(replicas):
             log.info("Create resource file for pgbench workload")
             pg_data = templating.load_yaml(constants.PGSQL_BENCHMARK_YAML)
-            pg_data['metadata']['name'] = f'{pgbench_name}' + f"{i}"
-            pg_data['spec']['workload']['args']['databases'][0][
-                'host'
-            ] = f"{postgres_name}-" + f"{i}" + ".postgres"
+            pg_data["metadata"]["name"] = f"{pgbench_name}" + f"{i}"
+            pg_data["spec"]["workload"]["args"]["databases"][0]["host"] = (
+                f"{postgres_name}-" + f"{i}" + ".postgres"
+            )
 
             if clients is not None:
-                pg_data['spec']['workload']['args']['clients'][0] = clients
+                pg_data["spec"]["workload"]["args"]["clients"][0] = clients
             if threads is not None:
-                pg_data['spec']['workload']['args']['threads'] = threads
+                pg_data["spec"]["workload"]["args"]["threads"] = threads
             if transactions is not None:
-                pg_data[
-                    'spec'
-                ]['workload']['args']['transactions'] = transactions
+                pg_data["spec"]["workload"]["args"]["transactions"] = transactions
             if scaling_factor is not None:
-                pg_data[
-                    'spec'
-                ]['workload']['args']['scaling_factor'] = scaling_factor
+                pg_data["spec"]["workload"]["args"]["scaling_factor"] = scaling_factor
             pg_obj = OCS(**pg_data)
             pg_obj_list.append(pg_obj)
             pg_obj.create()
@@ -149,20 +149,22 @@ class Postgresql(RipSaw):
             log.info("Searching the pgbench pods by its name pattern")
             timeout = timeout if timeout else 300
             for pgbench_pods in TimeoutSampler(
-                timeout, replicas, get_pod_name_by_pattern,
-                'pgbench-1-dbs-client', RIPSAW_NAMESPACE
+                timeout,
+                replicas,
+                get_pod_name_by_pattern,
+                "pgbench-1-dbs-client",
+                RIPSAW_NAMESPACE,
             ):
                 try:
                     if len(pgbench_pods) == replicas:
                         log.info(
-                            f"Expected number of pgbench pods are "
-                            f"found: {replicas}"
+                            f"Expected number of pgbench pods are " f"found: {replicas}"
                         )
                         break
                 except IndexError:
                     log.info(
-                        f'Expected number of pgbench pods are {replicas} '
-                        f'but only found {len(pgbench_pods)}'
+                        f"Expected number of pgbench pods are {replicas} "
+                        f"but only found {len(pgbench_pods)}"
                     )
         return pg_obj_list
 
@@ -173,9 +175,7 @@ class Postgresql(RipSaw):
         Returns:
              List: postgres pvc objects list
         """
-        return get_all_pvc_objs(
-            namespace=RIPSAW_NAMESPACE
-        )
+        return get_all_pvc_objs(namespace=RIPSAW_NAMESPACE)
 
     def get_postgres_pods(self):
         """
@@ -183,9 +183,7 @@ class Postgresql(RipSaw):
         Returns:
             List: postgres pod objects list
         """
-        return get_all_pods(
-            namespace=RIPSAW_NAMESPACE, selector=['postgres']
-        )
+        return get_all_pods(namespace=RIPSAW_NAMESPACE, selector=["postgres"])
 
     def get_pgbench_pods(self):
         """
@@ -196,9 +194,8 @@ class Postgresql(RipSaw):
 
         """
         return [
-            get_pod_obj(
-                pod, RIPSAW_NAMESPACE
-            ) for pod in get_pod_name_by_pattern('pgbench', RIPSAW_NAMESPACE)
+            get_pod_obj(pod, RIPSAW_NAMESPACE)
+            for pod in get_pod_name_by_pattern("pgbench", RIPSAW_NAMESPACE)
         ]
 
     def delete_pgbench_pods(self, pg_obj_list):
@@ -223,9 +220,10 @@ class Postgresql(RipSaw):
         """
         pod_objs = self.get_pgbench_pods()
         for pod in pod_objs:
-            if pod.get().get(
-                'status'
-            ).get('containerStatuses')[0].get('state') == 'running':
+            if (
+                pod.get().get("status").get("containerStatuses")[0].get("state")
+                == "running"
+            ):
                 log.info("One or more pgbench pods are in running state")
                 return True
             else:
@@ -244,17 +242,15 @@ class Postgresql(RipSaw):
 
         """
         pod_obj = get_pod_obj(pgbench_pod_name, namespace=RIPSAW_NAMESPACE)
-        status = pod_obj.get().get(
-            'status'
-        ).get('containerStatuses')[0].get('state')
+        status = pod_obj.get().get("status").get("containerStatuses")[0].get("state")
 
-        return 'running' if list(status.keys())[0] == 'running' else status[
-            'terminated'
-        ]['reason']
+        return (
+            "running"
+            if list(status.keys())[0] == "running"
+            else status["terminated"]["reason"]
+        )
 
-    def wait_for_postgres_status(
-        self, status=constants.STATUS_RUNNING, timeout=300
-    ):
+    def wait_for_postgres_status(self, status=constants.STATUS_RUNNING, timeout=300):
         """
         Wait for postgres pods status to reach running/completed
 
@@ -296,8 +292,8 @@ class Postgresql(RipSaw):
                     resource=pgbench_pod_obj, state=status, timeout=timeout
                 )
             except ResourceWrongStatusException:
-                output = run_cmd(f'oc logs {pgbench_pod_obj.name}')
-                error_msg = f'{pgbench_pod_obj.name} did not reach to {status} state after {timeout} sec\n{output}'
+                output = run_cmd(f"oc logs {pgbench_pod_obj.name}")
+                error_msg = f"{pgbench_pod_obj.name} did not reach to {status} state after {timeout} sec\n{output}"
                 log.error(error_msg)
                 raise UnexpectedBehaviour(error_msg)
 
@@ -315,20 +311,16 @@ class Postgresql(RipSaw):
         all_pgbench_pods_output = []
         for pgbench_pod in pgbench_pods:
             log.info(f"pgbench_client_pod===={pgbench_pod.name}====")
-            output = run_cmd(f'oc logs {pgbench_pod.name} -n {RIPSAW_NAMESPACE}')
+            output = run_cmd(f"oc logs {pgbench_pod.name} -n {RIPSAW_NAMESPACE}")
             pg_output = utils.parse_pgsql_logs(output)
-            log.info(
-                "*******PGBench output log*********\n"
-                f"{pg_output}"
-            )
+            log.info("*******PGBench output log*********\n" f"{pg_output}")
             # for data in all_pgbench_pods_output:
             for data in pg_output:
                 run_id = list(data.keys())
-                latency_avg = data[run_id[0]]['latency_avg']
+                latency_avg = data[run_id[0]]["latency_avg"]
                 if not latency_avg:
                     raise UnexpectedBehaviour(
-                        "PGBench failed to run, "
-                        "no data found on latency_avg"
+                        "PGBench failed to run, " "no data found on latency_avg"
                     )
             log.info(f"PGBench on {pgbench_pod.name} completed successfully")
             all_pgbench_pods_output.append((pg_output, pgbench_pod.name))
@@ -336,22 +328,35 @@ class Postgresql(RipSaw):
         if print_table:
             pgbench_pod_table = PrettyTable()
             pgbench_pod_table.field_names = [
-                'pod_name', 'scaling_factor', 'num_clients', 'num_threads',
-                'trans_client', 'actually_trans', 'latency_avg', 'lat_stddev',
-                'tps_incl', 'tps_excl'
+                "pod_name",
+                "scaling_factor",
+                "num_clients",
+                "num_threads",
+                "trans_client",
+                "actually_trans",
+                "latency_avg",
+                "lat_stddev",
+                "tps_incl",
+                "tps_excl",
             ]
             for pgbench_pod_out in all_pgbench_pods_output:
                 for pod_output in pgbench_pod_out[0]:
                     for pod in pod_output.values():
                         pgbench_pod_table.add_row(
-                            [pgbench_pod_out[1], pod['scaling_factor'],
-                             pod['num_clients'], pod['num_threads'],
-                             pod['number_of_transactions_per_client'],
-                             pod['number_of_transactions_actually_processed'],
-                             pod['latency_avg'], pod['lat_stddev'],
-                             pod['tps_incl'], pod['tps_excl']]
+                            [
+                                pgbench_pod_out[1],
+                                pod["scaling_factor"],
+                                pod["num_clients"],
+                                pod["num_threads"],
+                                pod["number_of_transactions_per_client"],
+                                pod["number_of_transactions_actually_processed"],
+                                pod["latency_avg"],
+                                pod["lat_stddev"],
+                                pod["tps_incl"],
+                                pod["tps_excl"],
+                            ]
                         )
-            log.info(f'\n{pgbench_pod_table}\n')
+            log.info(f"\n{pgbench_pod_table}\n")
 
         return all_pgbench_pods_output
 
@@ -368,12 +373,12 @@ class Postgresql(RipSaw):
         )
         log.info("Create a list of nodes that contain a pgsql app pod")
         nodes_set = set()
-        for pod in pgsql_pod_objs['items']:
+        for pod in pgsql_pod_objs["items"]:
             log.info(
                 f"pod {pod['metadata']['name']} located on "
                 f"node {pod['spec']['nodeName']}"
             )
-            nodes_set.add(pod['spec']['nodeName'])
+            nodes_set.add(pod["spec"]["nodeName"])
         return list(nodes_set)
 
     def respin_pgsql_app_pod(self):
@@ -404,24 +409,37 @@ class Postgresql(RipSaw):
         """
         pgbench_pod_table = PrettyTable()
         pgbench_pod_table.field_names = [
-            'pod_name', 'scaling_factor', 'num_clients', 'num_threads',
-            'trans_client', 'actually_trans', 'latency_avg', 'lat_stddev',
-            'tps_incl', 'tps_excl'
+            "pod_name",
+            "scaling_factor",
+            "num_clients",
+            "num_threads",
+            "trans_client",
+            "actually_trans",
+            "latency_avg",
+            "lat_stddev",
+            "tps_incl",
+            "tps_excl",
         ]
         for pgbench_pod in pgbench_pods:
-            output = run_cmd(f'oc logs {pgbench_pod.name}')
+            output = run_cmd(f"oc logs {pgbench_pod.name}")
             pg_output = utils.parse_pgsql_logs(output)
             for pod_output in pg_output:
                 for pod in pod_output.values():
                     pgbench_pod_table.add_row(
-                        [pgbench_pod.name, pod['scaling_factor'],
-                         pod['num_clients'], pod['num_threads'],
-                         pod['number_of_transactions_per_client'],
-                         pod['number_of_transactions_actually_processed'],
-                         pod['latency_avg'], pod['lat_stddev'],
-                         pod['tps_incl'], pod['tps_excl']]
+                        [
+                            pgbench_pod.name,
+                            pod["scaling_factor"],
+                            pod["num_clients"],
+                            pod["num_threads"],
+                            pod["number_of_transactions_per_client"],
+                            pod["number_of_transactions_actually_processed"],
+                            pod["latency_avg"],
+                            pod["lat_stddev"],
+                            pod["tps_incl"],
+                            pod["tps_excl"],
+                        ]
                     )
-        log.info(f'\n{pgbench_pod_table}\n')
+        log.info(f"\n{pgbench_pod_table}\n")
 
     def export_pgoutput_to_googlesheet(self, pg_output, sheet_name, sheet_index):
         """
@@ -434,29 +452,24 @@ class Postgresql(RipSaw):
 
         """
         # Collect data and export to Google doc spreadsheet
-        g_sheet = GoogleSpreadSheetAPI(
-            sheet_name=sheet_name, sheet_index=sheet_index
-        )
+        g_sheet = GoogleSpreadSheetAPI(sheet_name=sheet_name, sheet_index=sheet_index)
         log.info("Exporting pgoutput data to google spreadsheet")
         for pgbench_pod in range(len(pg_output)):
             for run in range(len(pg_output[pgbench_pod][0])):
                 run_id = list(pg_output[pgbench_pod][0][run].keys())[0]
-                lat_avg = pg_output[
-                    pgbench_pod
-                ][0][run][run_id]['latency_avg']
-                lat_stddev = pg_output[
-                    pgbench_pod
-                ][0][run][run_id]['lat_stddev']
-                tps_incl = pg_output[
-                    pgbench_pod
-                ][0][run][run_id]['lat_stddev']
-                tps_excl = pg_output[pgbench_pod][0][run][run_id]['tps_excl']
+                lat_avg = pg_output[pgbench_pod][0][run][run_id]["latency_avg"]
+                lat_stddev = pg_output[pgbench_pod][0][run][run_id]["lat_stddev"]
+                tps_incl = pg_output[pgbench_pod][0][run][run_id]["lat_stddev"]
+                tps_excl = pg_output[pgbench_pod][0][run][run_id]["tps_excl"]
                 g_sheet.insert_row(
-                    [f"Pgbench-pod{pg_output[pgbench_pod][1]}-run-{run_id}",
-                     int(lat_avg),
-                     int(lat_stddev),
-                     int(tps_incl),
-                     int(tps_excl)], 2
+                    [
+                        f"Pgbench-pod{pg_output[pgbench_pod][1]}-run-{run_id}",
+                        int(lat_avg),
+                        int(lat_stddev),
+                        int(tps_incl),
+                        int(tps_excl),
+                    ],
+                    2,
                 )
         g_sheet.insert_row(
             ["", "latency_avg", "lat_stddev", "lat_stddev", "tps_excl"], 2
@@ -464,10 +477,13 @@ class Postgresql(RipSaw):
 
         # Capturing versions(OCP, OCS and Ceph) and test run name
         g_sheet.insert_row(
-            [f"ocp_version:{utils.get_cluster_version()}",
-             f"ocs_build_number:{utils.get_ocs_build_number()}",
-             f"ceph_version:{utils.get_ceph_version()}",
-             f"test_run_name:{utils.get_testrun_name()}"], 2
+            [
+                f"ocp_version:{utils.get_cluster_version()}",
+                f"ocs_build_number:{utils.get_ocs_build_number()}",
+                f"ceph_version:{utils.get_ceph_version()}",
+                f"test_run_name:{utils.get_testrun_name()}",
+            ],
+            2,
         )
 
     def cleanup(self):
@@ -507,31 +523,40 @@ class Postgresql(RipSaw):
         pgsql_obj_list = []
         for pvc_obj in pvc_objs:
             try:
-                pgsql_sset = templating.load_yaml(
-                    constants.PGSQL_STATEFULSET_YAML
+                pgsql_sset = templating.load_yaml(constants.PGSQL_STATEFULSET_YAML)
+                del pgsql_sset["spec"]["volumeClaimTemplates"]
+                pgsql_sset["metadata"]["name"] = (
+                    f"{postgres_name}" + f"{pvc_objs.index(pvc_obj)}"
                 )
-                del pgsql_sset['spec']['volumeClaimTemplates']
-                pgsql_sset['metadata']['name'] = f"{postgres_name}" + f"{pvc_objs.index(pvc_obj)}"
-                pgsql_sset['spec']['template']['spec']['containers'][0][
-                    'volumeMounts'][0]['name'] = pvc_obj.name
-                pgsql_sset['spec']['template']['spec']['volumes'] = [
-                    {'name': f'{pvc_obj.name}', 'persistentVolumeClaim': {
-                        'claimName': f'{pvc_obj.name}'}
-                     }
+                pgsql_sset["spec"]["template"]["spec"]["containers"][0]["volumeMounts"][
+                    0
+                ]["name"] = pvc_obj.name
+                pgsql_sset["spec"]["template"]["spec"]["volumes"] = [
+                    {
+                        "name": f"{pvc_obj.name}",
+                        "persistentVolumeClaim": {"claimName": f"{pvc_obj.name}"},
+                    }
                 ]
                 pgsql_sset = OCS(**pgsql_sset)
                 pgsql_sset.create()
                 pgsql_obj_list.append(pgsql_sset)
 
-                self.wait_for_postgres_status(status=constants.STATUS_RUNNING, timeout=300)
+                self.wait_for_postgres_status(
+                    status=constants.STATUS_RUNNING, timeout=300
+                )
 
                 if run_benchmark:
                     pg_data = templating.load_yaml(constants.PGSQL_BENCHMARK_YAML)
-                    pg_data['metadata']['name'] = f"{pgbench_name}" + f"{pvc_objs.index(pvc_obj)}" if \
-                        pgbench_name else create_unique_resource_name('benchmark', 'pgbench')
-                    pg_data['spec']['workload']['args']['databases'][0][
-                        'host'
-                    ] = f"{postgres_name}" + f"{pvc_objs.index(pvc_obj)}-0" + ".postgres"
+                    pg_data["metadata"]["name"] = (
+                        f"{pgbench_name}" + f"{pvc_objs.index(pvc_obj)}"
+                        if pgbench_name
+                        else create_unique_resource_name("benchmark", "pgbench")
+                    )
+                    pg_data["spec"]["workload"]["args"]["databases"][0]["host"] = (
+                        f"{postgres_name}"
+                        + f"{pvc_objs.index(pvc_obj)}-0"
+                        + ".postgres"
+                    )
                     pg_obj = OCS(**pg_data)
                     pg_obj.create()
                     pgsql_obj_list.append(pg_obj)
@@ -541,12 +566,14 @@ class Postgresql(RipSaw):
                     time.sleep(wait_time)
 
             except (CommandFailed, CalledProcessError) as cf:
-                log.error('Failed during creation of postgres pod')
+                log.error("Failed during creation of postgres pod")
                 raise cf
 
         if run_benchmark:
             log.info("Checking all pgbench benchmark reached Completed state")
-            self.wait_for_pgbench_status(status=constants.STATUS_COMPLETED, timeout=1800)
+            self.wait_for_pgbench_status(
+                status=constants.STATUS_COMPLETED, timeout=1800
+            )
 
         return pgsql_obj_list
 
@@ -563,7 +590,7 @@ class Postgresql(RipSaw):
         """
         # Get the used file space on a mount point
         for pod_obj in pod_obj_list:
-            filepath = get_file_path(pod_obj, 'pgdata')
+            filepath = get_file_path(pod_obj, "pgdata")
             filespace = pod_obj.exec_cmd_on_pod(
                 command=f"du -sh {filepath}", out_yaml_format=False
             )

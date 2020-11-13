@@ -36,12 +36,12 @@ def test_no_resource_found_for_packagemanifest():
     # based on value of _data attribute when packagemanifest data are missing
     # as reported in https://github.com/red-hat-storage/ocs-ci/issues/1338
     data_with_no_item = {
-        'apiVersion': 'v1',
-        'items': [],
-        'kind': 'List',
-        'metadata': {'resourceVersion': '', 'selfLink': ''}
+        "apiVersion": "v1",
+        "items": [],
+        "kind": "List",
+        "metadata": {"resourceVersion": "", "selfLink": ""},
     }
     with patch("ocs_ci.ocs.ocp.OCP.get", return_value=data_with_no_item):
-        pm = PackageManifest(resource_name='foo', selector='bar')
+        pm = PackageManifest(resource_name="foo", selector="bar")
         with pytest.raises(ResourceNotFoundError):
             pm.get_default_channel()

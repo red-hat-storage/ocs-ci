@@ -21,8 +21,8 @@ log = logging.getLogger(__name__)
 
 class PillowFight(object):
     """
-      Workload operation using PillowFight
-      This class was modelled after the RipSaw class in this directory.
+    Workload operation using PillowFight
+    This class was modelled after the RipSaw class in this directory.
     """
 
     WAIT_FOR_TIME = 1800
@@ -53,11 +53,10 @@ class PillowFight(object):
 
         """
         self.args = kwargs
-        self.namespace = self.args.get(
-            'namespace', 'couchbase-operator-namespace')
+        self.namespace = self.args.get("namespace", "couchbase-operator-namespace")
         self.ocp = OCP()
         self.up_check = OCP(namespace=constants.COUCHBASE_OPERATOR)
-        self.logs = tempfile.mkdtemp(prefix='pf_logs_')
+        self.logs = tempfile.mkdtemp(prefix="pf_logs_")
 
     def run_pillowfights(self, replicas=1, num_items=None, num_threads=None):
         """
@@ -77,20 +76,22 @@ class PillowFight(object):
         for i in range(self.replicas):
             for pf_yaml in pf_files:
                 pf_fullpath = join(constants.TEMPLATE_PILLOWFIGHT_DIR, pf_yaml)
-                if not pf_fullpath.endswith('.yaml'):
+                if not pf_fullpath.endswith(".yaml"):
                     continue
                 if not isfile(pf_fullpath):
                     continue
 
                 # for basic-fillowfight.yaml
                 pfight = templating.load_yaml(pf_fullpath)
-                pfight['metadata']['name'] = 'pillowfight-rbd-simple' + f"{i}"
+                pfight["metadata"]["name"] = "pillowfight-rbd-simple" + f"{i}"
                 # num of items
-                pfight['spec']['template']['spec']['containers'][0]['command'][4] = str(
-                    num_items) if num_items else '20000'
+                pfight["spec"]["template"]["spec"]["containers"][0]["command"][4] = (
+                    str(num_items) if num_items else "20000"
+                )
                 # num of threads
-                pfight['spec']['template']['spec']['containers'][0]['command'][13] = str(
-                    num_threads) if num_threads else '20'
+                pfight["spec"]["template"]["spec"]["containers"][0]["command"][13] = (
+                    str(num_threads) if num_threads else "20"
+                )
                 lpillowfight = OCS(**pfight)
                 lpillowfight.create()
         self.pods_info = {}
@@ -99,22 +100,20 @@ class PillowFight(object):
             self.WAIT_FOR_TIME,
             9,
             get_pod_name_by_pattern,
-            'pillowfight',
-            constants.COUCHBASE_OPERATOR
+            "pillowfight",
+            constants.COUCHBASE_OPERATOR,
         ):
             try:
                 counter = 0
                 for pf_pod in pillowfight_pods:
-                    pod_info = self.up_check.exec_oc_cmd(
-                        f"get pods {pf_pod} -o json"
-                    )
-                    pf_status = pod_info['status']['containerStatuses'][0]['state']
-                    if 'terminated' in pf_status:
-                        pf_completion_info = pf_status['terminated']['reason']
+                    pod_info = self.up_check.exec_oc_cmd(f"get pods {pf_pod} -o json")
+                    pf_status = pod_info["status"]["containerStatuses"][0]["state"]
+                    if "terminated" in pf_status:
+                        pf_completion_info = pf_status["terminated"]["reason"]
                         if pf_completion_info == constants.STATUS_COMPLETED:
                             counter += 1
                             self.pods_info.update({pf_pod: pf_completion_info})
-                    elif 'running' in pf_status:
+                    elif "running" in pf_status:
                         pass
                 if counter == self.replicas:
                     break
@@ -124,21 +123,18 @@ class PillowFight(object):
         logging.info(self.pods_info)
         pf_yaml = pf_files[0]  # for  basic-fillowfight.yaml
         for pod, pf_completion_info in self.pods_info.items():
-            if pf_completion_info == 'Completed':
-                pf_endlog = f'{pod}.log'
+            if pf_completion_info == "Completed":
+                pf_endlog = f"{pod}.log"
                 pf_log = join(self.logs, pf_endlog)
                 data_from_log = ocp_local.exec_oc_cmd(
-                    f"logs -f {pod} --ignore-errors",
-                    out_yaml_format=False
+                    f"logs -f {pod} --ignore-errors", out_yaml_format=False
                 )
-                data_from_log = data_from_log.replace('\x00', '')
-                with open(pf_log, 'w') as fd:
+                data_from_log = data_from_log.replace("\x00", "")
+                with open(pf_log, "w") as fd:
                     fd.write(data_from_log)
 
-            elif pf_completion_info == 'Error':
-                raise Exception(
-                    f"Pillowfight {pf_yaml} failed to complete"
-                )
+            elif pf_completion_info == "Error":
+                raise Exception(f"Pillowfight {pf_yaml} failed to complete")
 
     def analyze_all(self):
         """
@@ -147,8 +143,8 @@ class PillowFight(object):
         """
         for path in listdir(self.logs):
             full_path = join(self.logs, path)
-            logging.info(f'Analyzing {full_path}')
-            with open(full_path, 'r') as fdesc:
+            logging.info(f"Analyzing {full_path}")
+            with open(full_path, "r") as fdesc:
                 data_from_log = fdesc.read()
             log_data = self.parse_pillowfight_log(data_from_log)
             self.sanity_check(log_data)
@@ -159,16 +155,12 @@ class PillowFight(object):
         within an acceptable range.
 
         """
-        stat1 = min(stats['opspersec'])
+        stat1 = min(stats["opspersec"])
         if stat1 < self.MIN_ACCEPTABLE_OPS_PER_SEC:
-            raise Exception(
-                f"Worst OPS/SEC value reported is {stat1}"
-            )
-        stat2 = max(stats['resptimes'].keys()) / 1000
+            raise Exception(f"Worst OPS/SEC value reported is {stat1}")
+        stat2 = max(stats["resptimes"].keys()) / 1000
         if stat2 > self.MAX_ACCEPTABLE_RESPONSE_TIME:
-            raise Exception(
-                f"Worst response time reported is {stat2} milliseconds"
-            )
+            raise Exception(f"Worst response time reported is {stat2} milliseconds")
 
     def parse_pillowfight_log(self, data_from_log):
         """
@@ -201,10 +193,7 @@ class PillowFight(object):
 
         ops_per_sec = []
         resp_hist = {}
-        log.info(
-            "*******Couchbase raw output log*********\n"
-            f"{data_from_log}"
-        )
+        log.info("*******Couchbase raw output log*********\n" f"{data_from_log}")
         lines = data_from_log.split("\n")
         for dline in lines:
             try:
@@ -212,19 +201,19 @@ class PillowFight(object):
                     dfields = dline.split(" ")
                     dnumb = int(dfields[-1].strip())
                     ops_per_sec.append(dnumb)
-                if re.match('^\\[\\d+ +- \\d+ *\\][um]s \\|#* - \\d+', dline):
+                if re.match("^\\[\\d+ +- \\d+ *\\][um]s \\|#* - \\d+", dline):
                     for element in ["[", "]", "|", "-", "#"]:
                         dline = dline.replace(element, " ")
                     parts = dline.split()
                     i1 = int(parts[0])
                     i2 = int(parts[1])
-                    if parts[2] == 'ms':
+                    if parts[2] == "ms":
                         i1 *= 1000
                         i2 *= 1000
-                    resp_hist[i2] = {'minindx': i1, 'number': int(parts[3])}
+                    resp_hist[i2] = {"minindx": i1, "number": int(parts[3])}
             except ValueError:
                 log.info(f"{dline} -- contains invalid data")
-        ret_data = {'opspersec': ops_per_sec, 'resptimes': resp_hist}
+        ret_data = {"opspersec": ops_per_sec, "resptimes": resp_hist}
         return ret_data
 
     def export_pfoutput_to_googlesheet(self, sheet_name, sheet_index):
@@ -237,27 +226,33 @@ class PillowFight(object):
 
         """
         # Collect data and export to Google doc spreadsheet
-        g_sheet = GoogleSpreadSheetAPI(
-            sheet_name=sheet_name, sheet_index=sheet_index
-        )
+        g_sheet = GoogleSpreadSheetAPI(sheet_name=sheet_name, sheet_index=sheet_index)
         logging.info("Exporting pf data to google spreadsheet")
         for path in listdir(self.logs):
             full_path = join(self.logs, path)
-            with open(full_path, 'r') as fdesc:
+            with open(full_path, "r") as fdesc:
                 data_from_log = fdesc.read()
             log_data = self.parse_pillowfight_log(data_from_log)
 
-            g_sheet.insert_row([f"{path}", min(log_data['opspersec']),
-                                max(log_data['resptimes'].keys()) / 1000], 2
-                               )
+            g_sheet.insert_row(
+                [
+                    f"{path}",
+                    min(log_data["opspersec"]),
+                    max(log_data["resptimes"].keys()) / 1000,
+                ],
+                2,
+            )
         g_sheet.insert_row(["", "opspersec", "resptimes"], 2)
 
         # Capturing versions(OCP, OCS and Ceph) and test run name
         g_sheet.insert_row(
-            [f"ocp_version:{utils.get_cluster_version()}",
-             f"ocs_build_number:{utils.get_ocs_build_number()}",
-             f"ceph_version:{utils.get_ceph_version()}",
-             f"test_run_name:{utils.get_testrun_name()}"], 2
+            [
+                f"ocp_version:{utils.get_cluster_version()}",
+                f"ocs_build_number:{utils.get_ocs_build_number()}",
+                f"ceph_version:{utils.get_ceph_version()}",
+                f"test_run_name:{utils.get_testrun_name()}",
+            ],
+            2,
         )
 
     def cleanup(self):

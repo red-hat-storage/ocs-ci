@@ -21,24 +21,20 @@ class TestCreateStorageClassandMakeItAsDefault(ManageTest):
     can be successfully used to create an app pod and
     run IOs from it.
     """
+
     @pytest.mark.parametrize(
         argnames="interface_type",
         argvalues=[
             pytest.param(
-                *[
-                    constants.CEPHBLOCKPOOL
-                ], marks=pytest.mark.polarion_id("OCS-626")
+                *[constants.CEPHBLOCKPOOL], marks=pytest.mark.polarion_id("OCS-626")
             ),
             pytest.param(
-                *[
-                    constants.CEPHFILESYSTEM
-                ], marks=pytest.mark.polarion_id("OCS-627")
-            )
-        ]
+                *[constants.CEPHFILESYSTEM], marks=pytest.mark.polarion_id("OCS-627")
+            ),
+        ],
     )
     def test_create_sc_and_make_it_as_a_default(
-        self, interface_type, storageclass_factory,
-        pvc_factory, pod_factory
+        self, interface_type, storageclass_factory, pvc_factory, pod_factory
     ):
         """
         Test function which verifies the above class
@@ -49,47 +45,32 @@ class TestCreateStorageClassandMakeItAsDefault(ManageTest):
         # Create a Storage Class
         sc_obj = storageclass_factory(interface=interface_type)
         log.info(
-            f"{interface_type}StorageClass: {sc_obj.name} "
-            f"created successfully"
+            f"{interface_type}StorageClass: {sc_obj.name} " f"created successfully"
         )
 
         # Change the above created StorageClass to default
-        log.info(
-            f"Changing the default StorageClass to {sc_obj.name}"
-        )
+        log.info(f"Changing the default StorageClass to {sc_obj.name}")
         helpers.change_default_storageclass(scname=sc_obj.name)
         # Confirm that the default StorageClass is changed
         tmp_default_sc = helpers.get_default_storage_class()
-        assert len(
-            tmp_default_sc
-        ) == 1, "More than 1 default storage class exist"
+        assert len(tmp_default_sc) == 1, "More than 1 default storage class exist"
         log.info(f"Current Default StorageClass is:{tmp_default_sc[0]}")
-        assert tmp_default_sc[0] == sc_obj.name, (
-            "Failed to change default StorageClass"
-        )
-        log.info(
-            f"Successfully changed the default StorageClass to "
-            f"{sc_obj.name}"
-        )
+        assert tmp_default_sc[0] == sc_obj.name, "Failed to change default StorageClass"
+        log.info(f"Successfully changed the default StorageClass to " f"{sc_obj.name}")
 
         # Create a PVC using the default StorageClass
         log.info(f"Creating a PVC using {sc_obj.name}")
         pvc_obj = pvc_factory(interface=interface_type)
-        log.info(
-            f"PVC: {pvc_obj.name} created successfully using "
-            f"{sc_obj.name}"
-        )
+        log.info(f"PVC: {pvc_obj.name} created successfully using " f"{sc_obj.name}")
 
         # Create app pod and mount each PVC
         log.info(f"Creating an app pod and mount {pvc_obj.name}")
         pod_obj = pod_factory(interface=interface_type)
-        log.info(
-            f"{pod_obj.name} created successfully and mounted {pvc_obj.name}"
-        )
+        log.info(f"{pod_obj.name} created successfully and mounted {pvc_obj.name}")
 
         # Run IO on each app pod for sometime
         log.info(f"Running FIO on {pod_obj.name}")
-        pod_obj.run_io('fs', size='2G')
+        pod_obj.run_io("fs", size="2G")
         get_fio_rw_iops(pod_obj)
 
         # Switch back to initial default storageclass
@@ -102,17 +83,19 @@ class TestCreateStorageClassandMakeItAsDefault(ManageTest):
             # Confirm that the default StorageClass is changed
             end_default_sc = helpers.get_default_storage_class()
             log.info(f"Current Default StorageClass is:{tmp_default_sc[0]}")
-            assert end_default_sc[0] == initial_default_sc[0], (
-                "Failed to change back to default StorageClass"
-            )
+            assert (
+                end_default_sc[0] == initial_default_sc[0]
+            ), "Failed to change back to default StorageClass"
             log.info(
                 f"Successfully changed back to default StorageClass "
                 f"{end_default_sc[0]}"
             )
         ocp_obj = ocp.OCP()
-        patch = " '{\"metadata\": {\"annotations\":" \
-                "{\"storageclass.kubernetes.io/is-default-class\"" \
-                ":\"false\"}}}' "
+        patch = (
+            ' \'{"metadata": {"annotations":'
+            '{"storageclass.kubernetes.io/is-default-class"'
+            ':"false"}}}\' '
+        )
         patch_cmd = f"patch storageclass {tmp_default_sc[0]} -p" + patch
         ocp_obj.exec_oc_cmd(command=patch_cmd)
         log.info(

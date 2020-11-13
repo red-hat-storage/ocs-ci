@@ -27,7 +27,7 @@ class ResourceLeftoversException(Exception):
 
 
 class TimeoutExpiredError(Exception):
-    message = 'Timed Out'
+    message = "Timed Out"
 
     def __init__(self, *value):
         self.value = value
@@ -61,7 +61,6 @@ class PerformanceException(Exception):
 
 
 class ResourceWrongStatusException(Exception):
-
     def __init__(self, resource_name, describe_out):
         self.resource_name = resource_name
         self.describe_out = describe_out

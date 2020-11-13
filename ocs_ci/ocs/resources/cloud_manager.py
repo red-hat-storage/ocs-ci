@@ -30,41 +30,40 @@ class CloudManager(ABC):
     Class containing all client types
 
     """
+
     def __init__(self):
         cloud_map = {
-            'AWS': S3Client,
-            'GCP': GoogleClient,
-            'AZURE': AzureClient,
-            'IBMCOS': S3Client
+            "AWS": S3Client,
+            "GCP": GoogleClient,
+            "AZURE": AzureClient,
+            "IBMCOS": S3Client,
         }
         try:
             logger.info(
-                'Trying to load credentials from ocs-ci-data. '
-                'This flow is only relevant when running under OCS-QE environments.'
+                "Trying to load credentials from ocs-ci-data. "
+                "This flow is only relevant when running under OCS-QE environments."
             )
-            cred_dict = update_config_from_s3().get('AUTH')
+            cred_dict = update_config_from_s3().get("AUTH")
         except AttributeError:
             logger.warn(
-                'Failed to load credentials from ocs-ci-data. '
-                'Loading from local auth.yaml'
+                "Failed to load credentials from ocs-ci-data. "
+                "Loading from local auth.yaml"
             )
-            cred_dict = load_auth_config().get('AUTH', {})
+            cred_dict = load_auth_config().get("AUTH", {})
 
         for cloud_name in cred_dict:
             if cloud_name in cloud_map:
                 if any(value is None for value in cred_dict[cloud_name].values()):
                     logger.warn(
-                        f'{cloud_name} credentials not found '
-                        'no client will be instantiated'
+                        f"{cloud_name} credentials not found "
+                        "no client will be instantiated"
                     )
-                    setattr(
-                        self, f'{cloud_name.lower()}_client',
-                        None
-                    )
+                    setattr(self, f"{cloud_name.lower()}_client", None)
                 else:
                     setattr(
-                        self, f'{cloud_name.lower()}_client',
-                        cloud_map[cloud_name](auth_dict=cred_dict[cloud_name])
+                        self,
+                        f"{cloud_name.lower()}_client",
+                        cloud_map[cloud_name](auth_dict=cred_dict[cloud_name]),
                     )
 
 
@@ -73,6 +72,7 @@ class CloudClient(ABC):
     Base abstract class for Cloud based API calls
 
     """
+
     client = None
 
     def __init__(self, *args, **kwargs):
@@ -116,24 +116,31 @@ class S3Client(CloudClient):
     Implementation of a S3 Client using the S3 API
 
     """
+
     def __init__(
-        self, auth_dict, verify=True,
-        endpoint="https://s3.amazonaws.com", *args, **kwargs
+        self,
+        auth_dict,
+        verify=True,
+        endpoint="https://s3.amazonaws.com",
+        *args,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
 
-        secret_prefix = auth_dict.get('SECRET_PREFIX', 'AWS')
-        key_id = auth_dict.get(f'{secret_prefix}_ACCESS_KEY_ID')
-        access_key = auth_dict.get(f'{secret_prefix}_SECRET_ACCESS_KEY')
-        self.endpoint = auth_dict.get('ENDPOINT') or endpoint
-        self.region = auth_dict.get('REGION')
+        secret_prefix = auth_dict.get("SECRET_PREFIX", "AWS")
+        key_id = auth_dict.get(f"{secret_prefix}_ACCESS_KEY_ID")
+        access_key = auth_dict.get(f"{secret_prefix}_SECRET_ACCESS_KEY")
+        self.endpoint = auth_dict.get("ENDPOINT") or endpoint
+        self.region = auth_dict.get("REGION")
         self.access_key = key_id
         self.secret_key = access_key
 
         self.client = boto3.resource(
-            's3', verify=verify, endpoint_url=self.endpoint,
+            "s3",
+            verify=verify,
+            endpoint_url=self.endpoint,
             aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key
+            aws_secret_access_key=self.secret_key,
         )
 
         self.secret = self.create_s3_secret(secret_prefix)
@@ -155,10 +162,7 @@ class S3Client(CloudClient):
             self.client.create_bucket(Bucket=name)
         else:
             self.client.create_bucket(
-                Bucket=name,
-                CreateBucketConfiguration={
-                    'LocationConstraint': region
-                }
+                Bucket=name, CreateBucketConfiguration={"LocationConstraint": region}
             )
 
     def internal_delete_uls(self, name):
@@ -169,6 +173,7 @@ class S3Client(CloudClient):
            name (str): The Underlying Storage name to be deleted
 
         """
+
         def _exec_uls_deletion(self, name):
             """
             Try to delete Underlying Storage by name if exists
@@ -184,46 +189,45 @@ class S3Client(CloudClient):
                 try:
                     # TODO: Check why bucket policy deletion fails on IBM COS
                     # when bucket have no policy set
-                    if 'aws' in name:
-                        self.client.meta.client.delete_bucket_policy(
-                            Bucket=name
-                        )
+                    if "aws" in name:
+                        self.client.meta.client.delete_bucket_policy(Bucket=name)
                     self.client.Bucket(name).objects.all().delete()
                     self.client.Bucket(name).delete()
                     return True
                 except ClientError:
-                    logger.info(f'Deletion of Underlying Storage {name} failed.')
+                    logger.info(f"Deletion of Underlying Storage {name} failed.")
                     return False
             else:
-                logger.warning(f'Underlying Storage {name} does not exist, and was not deleted.')
+                logger.warning(
+                    f"Underlying Storage {name} does not exist, and was not deleted."
+                )
                 return True
 
         try:
-            for deletion_result in TimeoutSampler(60, 5, _exec_uls_deletion, self, name):
+            for deletion_result in TimeoutSampler(
+                60, 5, _exec_uls_deletion, self, name
+            ):
                 if deletion_result:
-                    logger.info('ULS deleted.')
+                    logger.info("ULS deleted.")
                     break
 
         except TimeoutExpiredError:
-            logger.error(
-                'Failed to delete ULS.'
-            )
+            logger.error("Failed to delete ULS.")
             assert False
 
         # Todo: rename client to resource (or find an alternative)
         sample = TimeoutSampler(
-            timeout=180, sleep=15, func=self.verify_uls_exists,
-            uls_name=name
+            timeout=180, sleep=15, func=self.verify_uls_exists, uls_name=name
         )
         if not sample.wait_for_func_status(result=False):
             logger.error(
-                f'Deletion of Underlying Storage {name} timed out. Unable to delete {name}'
+                f"Deletion of Underlying Storage {name} timed out. Unable to delete {name}"
             )
             logger.warning(
-                f'AWS S3 bucket {name} still found after 3 minutes, and might require manual removal.'
+                f"AWS S3 bucket {name} still found after 3 minutes, and might require manual removal."
             )
         else:
-            logger.info(f'Underlying Storage {name} deleted successfully.')
+            logger.info(f"Underlying Storage {name} deleted successfully.")
 
     def get_all_uls_names(self):
         """
@@ -268,29 +272,21 @@ class S3Client(CloudClient):
                 "Statement": [
                     {
                         "Effect": "Deny",
-                        "Principal": {
-                            "AWS": "*"
-                        },
-                        "Action": [
-                            "s3:GetObject",
-                            "s3:PutObject",
-                            "s3:ListBucket"
-                        ],
+                        "Principal": {"AWS": "*"},
+                        "Action": ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
                         "Resource": [
                             f"arn:aws:s3:::{aws_bucket_name}/*",
-                            f"arn:aws:s3:::{aws_bucket_name}"
-                        ]
+                            f"arn:aws:s3:::{aws_bucket_name}",
+                        ],
                     }
-                ]
+                ],
             }
             bucket_policy = json.dumps(bucket_policy)
             self.client.meta.client.put_bucket_policy(
                 Bucket=aws_bucket_name, Policy=bucket_policy
             )
         else:
-            self.client.meta.client.delete_bucket_policy(
-                Bucket=aws_bucket_name
-            )
+            self.client.meta.client.delete_bucket_policy(Bucket=aws_bucket_name)
 
     def create_s3_secret(self, secret_prefix):
         """
@@ -299,15 +295,15 @@ class S3Client(CloudClient):
         """
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
         secret_name_prefix = secret_prefix.lower()
-        secret_name_prefix = secret_name_prefix.replace('_', '-')
-        bs_secret_data['metadata']['name'] = f'cldmgr-{secret_name_prefix}-secret'
-        bs_secret_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
-        bs_secret_data['data'][f'{secret_prefix}_ACCESS_KEY_ID'] = base64.urlsafe_b64encode(
-            self.access_key.encode('UTF-8')
-        ).decode('ascii')
-        bs_secret_data['data'][f'{secret_prefix}_SECRET_ACCESS_KEY'] = base64.urlsafe_b64encode(
-            self.secret_key.encode('UTF-8')
-        ).decode('ascii')
+        secret_name_prefix = secret_name_prefix.replace("_", "-")
+        bs_secret_data["metadata"]["name"] = f"cldmgr-{secret_name_prefix}-secret"
+        bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+        bs_secret_data["data"][
+            f"{secret_prefix}_ACCESS_KEY_ID"
+        ] = base64.urlsafe_b64encode(self.access_key.encode("UTF-8")).decode("ascii")
+        bs_secret_data["data"][
+            f"{secret_prefix}_SECRET_ACCESS_KEY"
+        ] = base64.urlsafe_b64encode(self.secret_key.encode("UTF-8")).decode("ascii")
 
         return create_resource(**bs_secret_data)
 
@@ -321,21 +317,19 @@ class GoogleClient(CloudClient):
     def __init__(self, auth_dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.cred_dict_string = base64.b64decode(
-            auth_dict.get('CREDENTIALS_JSON_BASE64')
-        ).decode('utf-8')
+            auth_dict.get("CREDENTIALS_JSON_BASE64")
+        ).decode("utf-8")
         cred_dict = json.loads(self.cred_dict_string)
-        credentials = service_account.Credentials.from_service_account_info(
-            cred_dict
-        )
+        credentials = service_account.Credentials.from_service_account_info(cred_dict)
 
-        with open(constants.GOOGLE_CREDS_JSON_PATH, 'w') as cred_dump:
+        with open(constants.GOOGLE_CREDS_JSON_PATH, "w") as cred_dump:
             cred_dump.write(self.cred_dict_string)
 
         self.secret = self.create_gcp_secret()
 
         try:
             self.client = GCPStorageClient(
-                project=cred_dict['project_id'], credentials=credentials
+                project=cred_dict["project_id"], credentials=credentials
             )
         except DefaultCredentialsError:
             raise
@@ -370,7 +364,9 @@ class GoogleClient(CloudClient):
                 bucket.delete()
                 break
             except ClientError:  # TODO: Find relevant exception
-                logger.info(f'Deletion of Underlying Storage {name} failed. Retrying...')
+                logger.info(
+                    f"Deletion of Underlying Storage {name} failed. Retrying..."
+                )
                 sleep(3)
 
     def get_all_uls_names(self):
@@ -403,11 +399,13 @@ class GoogleClient(CloudClient):
 
         """
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
-        bs_secret_data['metadata']['name'] = 'cldmgr-gcp-secret'
-        bs_secret_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
-        bs_secret_data['data']['GoogleServiceAccountPrivateKeyJson'] = base64.urlsafe_b64encode(
-            self.cred_dict_string.encode('UTF-8')
-        ).decode('ascii')
+        bs_secret_data["metadata"]["name"] = "cldmgr-gcp-secret"
+        bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+        bs_secret_data["data"][
+            "GoogleServiceAccountPrivateKeyJson"
+        ] = base64.urlsafe_b64encode(self.cred_dict_string.encode("UTF-8")).decode(
+            "ascii"
+        )
 
         return create_resource(**bs_secret_data)
 
@@ -419,13 +417,12 @@ class AzureClient(CloudClient):
     """
 
     def __init__(
-        self, account_name=None, credential=None,
-        auth_dict=None, *args, **kwargs
+        self, account_name=None, credential=None, auth_dict=None, *args, **kwargs
     ):
         super().__init__(*args, **kwargs)
         if auth_dict:
-            account_name = auth_dict.get('STORAGE_ACCOUNT_NAME')
-            credential = auth_dict.get('STORAGE_ACCOUNT_KEY')
+            account_name = auth_dict.get("STORAGE_ACCOUNT_NAME")
+            credential = auth_dict.get("STORAGE_ACCOUNT_KEY")
         if account_name and credential:
             self.account_name = account_name
             self.credential = credential
@@ -433,8 +430,7 @@ class AzureClient(CloudClient):
 
             account_url = constants.AZURE_BLOB_ENDPOINT_TEMPLATE.format(account_name)
             self.blob_service_client = BlobServiceClient(
-                account_url=account_url,
-                credential=credential
+                account_url=account_url, credential=credential
             )
 
     def internal_create_uls(self, name, region):
@@ -463,7 +459,8 @@ class AzureClient(CloudClient):
 
         """
         return {
-            container['name'] for container in self.blob_service_client.list_containers()
+            container["name"]
+            for container in self.blob_service_client.list_containers()
         }
 
     def verify_uls_exists(self, uls_name):
@@ -478,7 +475,9 @@ class AzureClient(CloudClient):
 
         """
         try:
-            self.blob_service_client.get_container_client(uls_name).get_container_properties()
+            self.blob_service_client.get_container_client(
+                uls_name
+            ).get_container_properties()
             return True
         except ResourceExistsError:
             return False
@@ -489,13 +488,13 @@ class AzureClient(CloudClient):
 
         """
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
-        bs_secret_data['metadata']['name'] = 'cldmgr-azure-secret'
-        bs_secret_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
-        bs_secret_data['data']['AccountKey'] = base64.urlsafe_b64encode(
-            self.credential.encode('UTF-8')
-        ).decode('ascii')
-        bs_secret_data['data']['AccountName'] = base64.urlsafe_b64encode(
-            self.account_name.encode('UTF-8')
-        ).decode('ascii')
+        bs_secret_data["metadata"]["name"] = "cldmgr-azure-secret"
+        bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+        bs_secret_data["data"]["AccountKey"] = base64.urlsafe_b64encode(
+            self.credential.encode("UTF-8")
+        ).decode("ascii")
+        bs_secret_data["data"]["AccountName"] = base64.urlsafe_b64encode(
+            self.account_name.encode("UTF-8")
+        ).decode("ascii")
 
         return create_resource(**bs_secret_data)

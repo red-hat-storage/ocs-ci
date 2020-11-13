@@ -17,7 +17,7 @@ from ocs_ci.utility.gcp import GoogleCloudUtil
 logger = logging.getLogger(__name__)
 
 
-__all__ = ['GCPIPI']
+__all__ = ["GCPIPI"]
 
 
 class GCPBase(CloudDeploymentBase):
@@ -50,17 +50,19 @@ class GCPBase(CloudDeploymentBase):
 
         """
         logger.info(
-            "checking existence of GCP cluster with prefix %s",
-            cluster_name_prefix
+            "checking existence of GCP cluster with prefix %s", cluster_name_prefix
         )
         non_term_cluster_nodes = []
         for node in self.util.compute_driver.list_nodes():
-            if node.name.startswith(cluster_name_prefix) and node.state != NodeState.TERMINATED:
+            if (
+                node.name.startswith(cluster_name_prefix)
+                and node.state != NodeState.TERMINATED
+            ):
                 non_term_cluster_nodes.append(node)
         if len(non_term_cluster_nodes) > 0:
             logger.warning(
                 "Non terminated nodes with the same name prefix were found: %s",
-                non_term_cluster_nodes
+                non_term_cluster_nodes,
             )
             return True
         return False
@@ -75,8 +77,7 @@ class GCPIPI(GCPBase):
     # uses a custom storageclass, which is created prior creating
     # StorageCluster CR during OCS installation
     CUSTOM_STORAGE_CLASS_PATH = os.path.join(
-        TEMPLATE_DEPLOYMENT_DIR,
-        "storageclass.gcp.yaml"
+        TEMPLATE_DEPLOYMENT_DIR, "storageclass.gcp.yaml"
     )
 
     OCPDeployment = IPIOCPDeployment

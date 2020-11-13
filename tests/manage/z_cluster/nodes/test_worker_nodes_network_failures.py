@@ -23,13 +23,19 @@ class TestWorkerNodesFailure(ManageTest):
     """
     Test all worker nodes simultaneous abrupt network failure for ~300 seconds
     """
+
     pvc_size = 10  # size in Gi
     short_nw_fail_time = 300  # Duration in seconds for short network failure
 
     @pytest.fixture()
     def setup(
-        self, request, scenario, nodes, multi_pvc_factory,
-        service_account_factory, dc_pod_factory
+        self,
+        request,
+        scenario,
+        nodes,
+        multi_pvc_factory,
+        service_account_factory,
+        dc_pod_factory,
     ):
         """
         Identify the nodes and start multiple dc pods for the test
@@ -60,18 +66,23 @@ class TestWorkerNodesFailure(ManageTest):
 
         request.addfinalizer(finalizer)
 
-        if (scenario == 'dedicated') and len(non_ocs_nodes) == 0:
-            if config.ENV_DATA.get('deployment_type').lower() == 'ipi':
+        if (scenario == "dedicated") and len(non_ocs_nodes) == 0:
+            if config.ENV_DATA.get("deployment_type").lower() == "ipi":
                 machines = machine.get_machinesets()
                 node.add_new_node_and_label_it(
                     machines[0], num_nodes=1, mark_for_ocs_label=False
                 )
             else:
-                if config.ENV_DATA.get('platform').lower() == constants.VSPHERE_PLATFORM:
+                if (
+                    config.ENV_DATA.get("platform").lower()
+                    == constants.VSPHERE_PLATFORM
+                ):
                     pytest.skip(
                         "Skipping add node in VSPHERE due to https://bugzilla.redhat.com/show_bug.cgi?id=1844521"
                     )
-                is_rhel = config.ENV_DATA.get('rhel_workers') or config.ENV_DATA.get('rhel_user')
+                is_rhel = config.ENV_DATA.get("rhel_workers") or config.ENV_DATA.get(
+                    "rhel_user"
+                )
                 node_type = constants.RHEL_OS if is_rhel else constants.RHCOS
                 node.add_new_node_and_label_upi(
                     node_type=node_type, num_nodes=1, mark_for_ocs_label=False
@@ -86,32 +97,36 @@ class TestWorkerNodesFailure(ManageTest):
         )
 
         access_modes_rbd = [
-            constants.ACCESS_MODE_RWO, f'{constants.ACCESS_MODE_RWX}-Block'
+            constants.ACCESS_MODE_RWO,
+            f"{constants.ACCESS_MODE_RWX}-Block",
         ]
 
-        access_modes_cephfs = [
-            constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX
-        ]
+        access_modes_cephfs = [constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
 
         pvcs_rbd = multi_pvc_factory(
-            interface=constants.CEPHBLOCKPOOL, size=self.pvc_size,
+            interface=constants.CEPHBLOCKPOOL,
+            size=self.pvc_size,
             access_modes=access_modes_rbd,
-            status=constants.STATUS_BOUND, num_of_pvc=len(access_modes_rbd)
+            status=constants.STATUS_BOUND,
+            num_of_pvc=len(access_modes_rbd),
         )
 
         project = pvcs_rbd[0].project
 
         pvcs_cephfs = multi_pvc_factory(
-            interface=constants.CEPHFILESYSTEM, project=project,
-            size=self.pvc_size, access_modes=access_modes_cephfs,
-            status=constants.STATUS_BOUND, num_of_pvc=len(access_modes_cephfs)
+            interface=constants.CEPHFILESYSTEM,
+            project=project,
+            size=self.pvc_size,
+            access_modes=access_modes_cephfs,
+            status=constants.STATUS_BOUND,
+            num_of_pvc=len(access_modes_cephfs),
         )
 
         pvcs = pvcs_cephfs + pvcs_rbd
         # Set volume mode on PVC objects
         for pvc_obj in pvcs:
             pvc_info = pvc_obj.get()
-            setattr(pvc_obj, 'volume_mode', pvc_info['spec']['volumeMode'])
+            setattr(pvc_obj, "volume_mode", pvc_info["spec"]["volumeMode"])
 
         sa_obj = service_account_factory(project=project)
         pods = []
@@ -128,10 +143,11 @@ class TestWorkerNodesFailure(ManageTest):
             for _ in range(num_pods):
                 pods.append(
                     dc_pod_factory(
-                        interface=interface, pvc=pvc_obj,
-                        node_selector={'nodetype': 'app-pod'},
-                        raw_block_pv=pvc_obj.volume_mode == 'Block',
-                        sa_obj=sa_obj
+                        interface=interface,
+                        pvc=pvc_obj,
+                        node_selector={"nodetype": "app-pod"},
+                        raw_block_pv=pvc_obj.volume_mode == "Block",
+                        sa_obj=sa_obj,
                     )
                 )
 
@@ -144,13 +160,9 @@ class TestWorkerNodesFailure(ManageTest):
     @pytest.mark.parametrize(
         argnames=["scenario"],
         argvalues=[
-            pytest.param(
-                *['colocated'], marks=pytest.mark.polarion_id("OCS-1432")
-            ),
-            pytest.param(
-                *['dedicated'], marks=pytest.mark.polarion_id("OCS-1433")
-            )
-        ]
+            pytest.param(*["colocated"], marks=pytest.mark.polarion_id("OCS-1432")),
+            pytest.param(*["dedicated"], marks=pytest.mark.polarion_id("OCS-1433")),
+        ],
     )
     def test_all_worker_nodes_short_network_failure(
         self, nodes, setup, node_restart_teardown
@@ -171,12 +183,13 @@ class TestWorkerNodesFailure(ManageTest):
         with ThreadPoolExecutor() as executor:
             for pod_obj in pod_objs:
                 logger.info(f"Starting IO on pod {pod_obj.name}")
-                storage_type = (
-                    'block' if pod_obj.pvc.volume_mode == 'Block' else 'fs'
-                )
+                storage_type = "block" if pod_obj.pvc.volume_mode == "Block" else "fs"
                 executor.submit(
-                    pod_obj.run_io, storage_type=storage_type, size='2G',
-                    runtime=30, fio_filename=f'{pod_obj.name}_io_f1'
+                    pod_obj.run_io,
+                    storage_type=storage_type,
+                    size="2G",
+                    runtime=30,
+                    fio_filename=f"{pod_obj.name}_io_f1",
                 )
 
         logger.info(f"IO started on all {len(pod_objs)} app pods")
@@ -217,15 +230,16 @@ class TestWorkerNodesFailure(ManageTest):
         # Get current info of app pods
         new_pod_objs = list()
         for pod_obj in pod_objs:
-            pod_label = pod_obj.labels.get('deploymentconfig')
+            pod_label = pod_obj.labels.get("deploymentconfig")
             pods_data = pod.get_pods_having_label(
-                f'deploymentconfig={pod_label}', pod_obj.namespace
+                f"deploymentconfig={pod_label}", pod_obj.namespace
             )
             current_pods = [
-                pod_data.get('metadata').get('name') for pod_data in pods_data
-                if '-deploy' not in pod_data.get('metadata').get('name')
+                pod_data.get("metadata").get("name")
+                for pod_data in pods_data
+                if "-deploy" not in pod_data.get("metadata").get("name")
             ]
-            logger.info(f'Pods with label {pod_label}: {current_pods}')
+            logger.info(f"Pods with label {pod_label}: {current_pods}")
 
             # Remove the older pod from the list if pod is rescheduled
             if len(current_pods) > 1:
@@ -239,7 +253,9 @@ class TestWorkerNodesFailure(ManageTest):
         for pod_obj in new_pod_objs:
             pod_obj.ocp.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
-                resource_name=pod_obj.name, timeout=720, sleep=20
+                resource_name=pod_obj.name,
+                timeout=720,
+                sleep=20,
             )
         logger.info("All the app pods reached running state")
 
@@ -248,12 +264,13 @@ class TestWorkerNodesFailure(ManageTest):
             for pod_obj in new_pod_objs:
                 logger.info(f"Starting IO on pod {pod_obj.name}")
                 pod_obj.wl_setup_done = False
-                storage_type = (
-                    'block' if pod_obj.pvc.volume_mode == 'Block' else 'fs'
-                )
+                storage_type = "block" if pod_obj.pvc.volume_mode == "Block" else "fs"
                 executor.submit(
-                    pod_obj.run_io, storage_type=storage_type, size='1G',
-                    runtime=30, fio_filename=f'{pod_obj.name}_io_f2'
+                    pod_obj.run_io,
+                    storage_type=storage_type,
+                    size="1G",
+                    runtime=30,
+                    fio_filename=f"{pod_obj.name}_io_f2",
                 )
 
         for pod_obj in new_pod_objs:

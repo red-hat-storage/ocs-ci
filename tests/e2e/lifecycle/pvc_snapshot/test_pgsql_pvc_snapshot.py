@@ -1,15 +1,13 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import (
-    skipif_ocs_version, E2ETest, tier2
-)
+from ocs_ci.framework.testlib import skipif_ocs_version, E2ETest, tier2
 
 log = logging.getLogger(__name__)
 
 
 @tier2
-@skipif_ocs_version('<4.6')
+@skipif_ocs_version("<4.6")
 @pytest.mark.polarion_id("OCS-2302")
 class TestPvcSnapshotOfWorkloads(E2ETest):
     """
@@ -18,10 +16,8 @@ class TestPvcSnapshotOfWorkloads(E2ETest):
 
     @pytest.fixture(autouse=True)
     def pgsql_teardown(
-        self, request, pgsql_factory_fixture,
-        snapshot_factory, snapshot_restore_factory
+        self, request, pgsql_factory_fixture, snapshot_factory, snapshot_restore_factory
     ):
-
         def teardown():
 
             # Delete created postgres and pgbench pods
@@ -32,8 +28,7 @@ class TestPvcSnapshotOfWorkloads(E2ETest):
         request.addfinalizer(teardown)
 
     def test_pvc_snapshot(
-        self, pgsql_factory_fixture,
-        snapshot_factory, snapshot_restore_factory
+        self, pgsql_factory_fixture, snapshot_factory, snapshot_restore_factory
     ):
         """
         1. Deploy PGSQL workload
@@ -55,10 +50,10 @@ class TestPvcSnapshotOfWorkloads(E2ETest):
         log.info("Creating snapshot of all postgres PVCs")
         snapshots = []
         for pvc_obj in postgres_pvcs_obj:
-            log.info(
-                f"Creating snapshot of PVC {pvc_obj.name}"
+            log.info(f"Creating snapshot of PVC {pvc_obj.name}")
+            snap_obj = snapshot_factory(
+                pvc_obj=pvc_obj, snapshot_name=f"{pvc_obj.name}-snap"
             )
-            snap_obj = snapshot_factory(pvc_obj=pvc_obj, snapshot_name=f"{pvc_obj.name}-snap")
             snapshots.append(snap_obj)
         log.info("Snapshots creation completed and in Ready state")
 
@@ -71,17 +66,17 @@ class TestPvcSnapshotOfWorkloads(E2ETest):
                 snapshot_obj=snapshot,
                 restore_pvc_name=f"{snapshot.name}-restored",
                 volume_mode=snapshot.parent_volume_mode,
-                access_mode=snapshot.parent_access_mode
+                access_mode=snapshot.parent_access_mode,
             )
 
             log.info(
-                f"Created PVC {restore_pvc_obj.name} from snapshot "
-                f"{snapshot.name}"
+                f"Created PVC {restore_pvc_obj.name} from snapshot " f"{snapshot.name}"
             )
             restore_pvc_objs.append(restore_pvc_obj)
         log.info("Created new PVCs from all the snapshots and in Bound state")
 
         self.pgsql_obj_list = pgsql.attach_pgsql_pod_to_claim_pvc(
-            pvc_objs=restore_pvc_objs, postgres_name='postgres-snap',
-            pgbench_name='pgbench-snap'
+            pvc_objs=restore_pvc_objs,
+            postgres_name="postgres-snap",
+            pgbench_name="pgbench-snap",
         )

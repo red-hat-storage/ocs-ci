@@ -3,7 +3,11 @@ import logging
 from abc import ABC, abstractmethod
 
 import boto3
-from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name, storagecluster_independent_check
+from ocs_ci.helpers.helpers import (
+    create_resource,
+    create_unique_resource_name,
+    storagecluster_independent_check,
+)
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -23,9 +27,15 @@ class OBC(object):
     """
 
     (
-        s3_resource, s3_endpoint, obc_name,
-        ob_name, bucket_name, obc_account,
-        access_key_id, access_key, namespace
+        s3_resource,
+        s3_endpoint,
+        obc_name,
+        ob_name,
+        bucket_name,
+        obc_account,
+        access_key_id,
+        access_key,
+        namespace,
     ) = (None,) * 9
 
     def __init__(self, obc_name):
@@ -36,51 +46,72 @@ class OBC(object):
             obc_name (str): Name of the Object Bucket Claim
         """
         self.obc_name = obc_name
-        self.namespace = config.ENV_DATA['cluster_namespace']
-        obc_resource = OCP(namespace=self.namespace, kind='ObjectBucketClaim', resource_name=self.obc_name).get()
-        self.ob_name = obc_resource.get('spec').get('ObjectBucketName')
-        self.bucket_name = obc_resource.get('spec').get('bucketName')
-        ob_obj = OCP(namespace=self.namespace, kind='ObjectBucket', resource_name=self.ob_name).get()
-        self.obc_account = ob_obj.get('spec').get('additionalState').get('account')
-        secret_obc_obj = OCP(kind='secret', namespace=self.namespace, resource_name=self.obc_name).get()
+        self.namespace = config.ENV_DATA["cluster_namespace"]
+        obc_resource = OCP(
+            namespace=self.namespace,
+            kind="ObjectBucketClaim",
+            resource_name=self.obc_name,
+        ).get()
+        self.ob_name = obc_resource.get("spec").get("ObjectBucketName")
+        self.bucket_name = obc_resource.get("spec").get("bucketName")
+        ob_obj = OCP(
+            namespace=self.namespace, kind="ObjectBucket", resource_name=self.ob_name
+        ).get()
+        self.obc_account = ob_obj.get("spec").get("additionalState").get("account")
+        secret_obc_obj = OCP(
+            kind="secret", namespace=self.namespace, resource_name=self.obc_name
+        ).get()
 
-        obc_configmap = OCP(namespace=self.namespace, kind='ConfigMap', resource_name=self.obc_name).get()
-        obc_configmap_data = obc_configmap.get('data')
+        obc_configmap = OCP(
+            namespace=self.namespace, kind="ConfigMap", resource_name=self.obc_name
+        ).get()
+        obc_configmap_data = obc_configmap.get("data")
 
-        obc_provisioner = obc_resource.get('metadata').get('labels').get('bucket-provisioner')
+        obc_provisioner = (
+            obc_resource.get("metadata").get("labels").get("bucket-provisioner")
+        )
 
-        self.region = obc_configmap_data.get('BUCKET_REGION')
+        self.region = obc_configmap_data.get("BUCKET_REGION")
 
         self.access_key_id = base64.b64decode(
-            secret_obc_obj.get('data').get('AWS_ACCESS_KEY_ID')
-        ).decode('utf-8')
+            secret_obc_obj.get("data").get("AWS_ACCESS_KEY_ID")
+        ).decode("utf-8")
         self.access_key = base64.b64decode(
-            secret_obc_obj.get('data').get('AWS_SECRET_ACCESS_KEY')
-        ).decode('utf-8')
+            secret_obc_obj.get("data").get("AWS_SECRET_ACCESS_KEY")
+        ).decode("utf-8")
 
-        if 'noobaa' in obc_provisioner:
-            get_noobaa = OCP(kind='noobaa', namespace=self.namespace).get()
+        if "noobaa" in obc_provisioner:
+            get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get()
             self.s3_internal_endpoint = (
-                get_noobaa.get('items')[0].get('status').get('services')
-                .get('serviceS3').get('internalDNS')[0]
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceS3")
+                .get("internalDNS")[0]
             )
             self.s3_external_endpoint = (
-                get_noobaa.get('items')[0].get('status').get('services')
-                .get('serviceS3').get('externalDNS')[0]
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceS3")
+                .get("externalDNS")[0]
             )
             self.s3_resource = boto3.resource(
-                's3', verify=retrieve_verification_mode(),
+                "s3",
+                verify=retrieve_verification_mode(),
                 endpoint_url=self.s3_external_endpoint,
                 aws_access_key_id=self.access_key_id,
-                aws_secret_access_key=self.access_key
+                aws_secret_access_key=self.access_key,
             )
             self.s3_client = self.s3_resource.meta.client
 
-        elif 'rook' in obc_provisioner:
+        elif "rook" in obc_provisioner:
             # TODO: implement network forwarding to access the internal address
             self.s3_internal_endpoint = (
-                'http://' + obc_configmap_data.get('BUCKET_HOST') + ':'
-                + obc_configmap_data.get('BUCKET_PORT')
+                "http://"
+                + obc_configmap_data.get("BUCKET_HOST")
+                + ":"
+                + obc_configmap_data.get("BUCKET_PORT")
             )
 
 
@@ -89,6 +120,7 @@ class ObjectBucket(ABC):
     Base abstract class for MCG buckets
 
     """
+
     mcg, name = (None,) * 2
 
     def __init__(self, name, mcg=None, rgw=None, *args, **kwargs):
@@ -99,7 +131,7 @@ class ObjectBucket(ABC):
         self.name = name
         self.mcg = mcg
         self.rgw = rgw
-        self.namespace = config.ENV_DATA['cluster_namespace']
+        self.namespace = config.ENV_DATA["cluster_namespace"]
         logger.info(f"Creating bucket: {self.name}")
 
     def __hash__(self):
@@ -121,8 +153,8 @@ class ObjectBucket(ABC):
         try:
             self.internal_delete()
         except CommandFailed as e:
-            if 'not found' in str(e):
-                logger.warning(f'{self.name} was not found, or already deleted.')
+            if "not found" in str(e):
+                logger.warning(f"{self.name} was not found, or already deleted.")
                 return True
             else:
                 raise e
@@ -150,17 +182,17 @@ class ObjectBucket(ABC):
         """
         logger.info(f"Verifying deletion of {self.name}")
         try:
-            for del_check in TimeoutSampler(timeout, interval, self.internal_verify_deletion):
+            for del_check in TimeoutSampler(
+                timeout, interval, self.internal_verify_deletion
+            ):
                 if del_check:
-                    logger.info(f'{self.name} was deleted successfuly')
+                    logger.info(f"{self.name} was deleted successfuly")
                     return True
                 else:
-                    logger.info(f'{self.name} still exists. Retrying...')
+                    logger.info(f"{self.name} still exists. Retrying...")
         except TimeoutExpiredError:
-            logger.error(
-                f'{self.name} was not deleted within {timeout} seconds.'
-            )
-            assert False, f'{self.name} was not deleted within {timeout} seconds.'
+            logger.error(f"{self.name} was not deleted within {timeout} seconds.")
+            assert False, f"{self.name} was not deleted within {timeout} seconds."
 
     def verify_health(self, timeout=60, interval=5):
         """
@@ -176,19 +208,23 @@ class ObjectBucket(ABC):
             (bool): True if the bucket is healthy, False otherwise
 
         """
-        logger.info(f'Waiting for {self.name} to be healthy')
+        logger.info(f"Waiting for {self.name} to be healthy")
         try:
-            for health_check in TimeoutSampler(timeout, interval, self.internal_verify_health):
+            for health_check in TimeoutSampler(
+                timeout, interval, self.internal_verify_health
+            ):
                 if health_check:
-                    logger.info(f'{self.name} is healthy')
+                    logger.info(f"{self.name} is healthy")
                     return True
                 else:
-                    logger.info(f'{self.name} is unhealthy. Rechecking.')
+                    logger.info(f"{self.name} is unhealthy. Rechecking.")
         except TimeoutExpiredError:
             logger.error(
-                f'{self.name} did not reach a healthy state within {timeout} seconds.'
+                f"{self.name} did not reach a healthy state within {timeout} seconds."
             )
-            assert False, f'{self.name} did not reach a healthy state within {timeout} seconds.'
+            assert (
+                False
+            ), f"{self.name} did not reach a healthy state within {timeout} seconds."
 
     """
     The following methods are abstract, internal methods.
@@ -201,6 +237,7 @@ class ObjectBucket(ABC):
     Thus, the internal_status methods only return the status message, and the general status method
     logs it and returns it further if needed.
     """
+
     @abstractmethod
     def internal_delete(self):
         """
@@ -241,14 +278,16 @@ class MCGCLIBucket(ObjectBucket):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        bc = f" --bucketclass={kwargs['bucketclass']}" if 'bucketclass' in kwargs else ''
-        self.mcg.exec_mcg_cmd(f'obc create --exact {self.name}{bc}')
+        bc = (
+            f" --bucketclass={kwargs['bucketclass']}" if "bucketclass" in kwargs else ""
+        )
+        self.mcg.exec_mcg_cmd(f"obc create --exact {self.name}{bc}")
 
     def internal_delete(self):
         """
         Deletes the bucket using the NooBaa CLI
         """
-        self.mcg.exec_mcg_cmd(f'obc delete {self.name}')
+        self.mcg.exec_mcg_cmd(f"obc delete {self.name}")
 
     @property
     def internal_status(self):
@@ -259,7 +298,7 @@ class MCGCLIBucket(ObjectBucket):
             str: OBC status
 
         """
-        return self.mcg.exec_mcg_cmd(f'obc status {self.name}')
+        return self.mcg.exec_mcg_cmd(f"obc status {self.name}")
 
     def internal_verify_health(self):
         """
@@ -269,11 +308,12 @@ class MCGCLIBucket(ObjectBucket):
             bool: True if the bucket is healthy, False otherwise
 
         """
-        return (
-            all(
-                healthy_mark in self.status.stdout.replace(' ', '') for healthy_mark
-                in [constants.HEALTHY_OB_CLI_MODE, constants.HEALTHY_OBC_CLI_PHASE]
-            )
+        return all(
+            healthy_mark in self.status.stdout.replace(" ", "")
+            for healthy_mark in [
+                constants.HEALTHY_OB_CLI_MODE,
+                constants.HEALTHY_OBC_CLI_PHASE,
+            ]
         )
 
     def internal_verify_deletion(self):
@@ -305,7 +345,7 @@ class MCGS3Bucket(ObjectBucket):
             str: The bucket's mode
 
         """
-        return self.mcg.get_bucket_info(self.name).get('mode')
+        return self.mcg.get_bucket_info(self.name).get("mode")
 
     def internal_verify_health(self):
         """
@@ -329,7 +369,7 @@ class OCBucket(ObjectBucket):
         """
         Deletes the bucket using the OC CLI
         """
-        OCP(kind='obc', namespace=self.namespace).delete(resource_name=self.name)
+        OCP(kind="obc", namespace=self.namespace).delete(resource_name=self.name)
 
     @property
     def internal_status(self):
@@ -340,9 +380,9 @@ class OCBucket(ObjectBucket):
             str: OBC phase
 
         """
-        return OCP(
-            kind='obc', namespace=self.namespace, resource_name=self.name
-        ).get()['status']['phase']
+        return OCP(kind="obc", namespace=self.namespace, resource_name=self.name).get()[
+            "status"
+        ]["phase"]
 
     def internal_verify_health(self):
         """
@@ -367,15 +407,15 @@ class MCGOCBucket(OCBucket):
         super().__init__(*args, **kwargs)
         obc_data = templating.load_yaml(constants.MCG_OBC_YAML)
         if self.name is None:
-            self.name = create_unique_resource_name('oc', 'obc')
-        obc_data['metadata']['name'] = self.name
-        obc_data['spec']['bucketName'] = self.name
-        obc_data['spec']['storageClassName'] = self.namespace + '.noobaa.io'
-        obc_data['metadata']['namespace'] = self.namespace
-        if 'bucketclass' in kwargs:
-            obc_data.setdefault('spec', {}).setdefault('additionalConfig', {}).setdefault(
-                'bucketclass', kwargs['bucketclass']
-            )
+            self.name = create_unique_resource_name("oc", "obc")
+        obc_data["metadata"]["name"] = self.name
+        obc_data["spec"]["bucketName"] = self.name
+        obc_data["spec"]["storageClassName"] = self.namespace + ".noobaa.io"
+        obc_data["metadata"]["namespace"] = self.namespace
+        if "bucketclass" in kwargs:
+            obc_data.setdefault("spec", {}).setdefault(
+                "additionalConfig", {}
+            ).setdefault("bucketclass", kwargs["bucketclass"])
         create_resource(**obc_data)
 
 
@@ -388,14 +428,16 @@ class RGWOCBucket(OCBucket):
         super().__init__(*args, **kwargs)
         obc_data = templating.load_yaml(constants.MCG_OBC_YAML)
         if self.name is None:
-            self.name = create_unique_resource_name('oc', 'obc')
-        obc_data['metadata']['name'] = self.name
-        obc_data['spec']['bucketName'] = self.name
+            self.name = create_unique_resource_name("oc", "obc")
+        obc_data["metadata"]["name"] = self.name
+        obc_data["spec"]["bucketName"] = self.name
         if storagecluster_independent_check():
-            obc_data['spec']['storageClassName'] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW
+            obc_data["spec"][
+                "storageClassName"
+            ] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW
         else:
-            obc_data['spec']['storageClassName'] = constants.DEFAULT_STORAGECLASS_RGW
-        obc_data['metadata']['namespace'] = self.namespace
+            obc_data["spec"]["storageClassName"] = constants.DEFAULT_STORAGECLASS_RGW
+        obc_data["metadata"]["namespace"] = self.namespace
         create_resource(**obc_data)
 
 
@@ -406,21 +448,25 @@ class MCGNamespaceBucket(ObjectBucket):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.read_ns_resources = kwargs.get('read_ns_resources')
-        self.write_ns_resource = kwargs.get('write_ns_resource')
-        self.mcg.send_rpc_query('bucket_api', 'create_bucket', {
-            'name': self.name,
-            'namespace': {
-                'write_resource': self.write_ns_resource,
-                'read_resources': self.read_ns_resources
-            }
-        })
+        self.read_ns_resources = kwargs.get("read_ns_resources")
+        self.write_ns_resource = kwargs.get("write_ns_resource")
+        self.mcg.send_rpc_query(
+            "bucket_api",
+            "create_bucket",
+            {
+                "name": self.name,
+                "namespace": {
+                    "write_resource": self.write_ns_resource,
+                    "read_resources": self.read_ns_resources,
+                },
+            },
+        )
 
     def internal_delete(self):
         """
         Deletes the bucket using the S3 API
         """
-        self.mcg.send_rpc_query('bucket_api', 'delete_bucket', {'name': self.name})
+        self.mcg.send_rpc_query("bucket_api", "delete_bucket", {"name": self.name})
 
     @property
     def internal_status(self):
@@ -431,7 +477,7 @@ class MCGNamespaceBucket(ObjectBucket):
             str: The bucket's mode
 
         """
-        return self.mcg.get_bucket_info(self.name).get('mode')
+        return self.mcg.get_bucket_info(self.name).get("mode")
 
     def internal_verify_health(self):
         """
@@ -446,18 +492,18 @@ class MCGNamespaceBucket(ObjectBucket):
 
         # Retrieve the correct namespace bucket info
         match_buckets = [
-            ns_bucket for ns_bucket in system_state
-            .get('buckets') if ns_bucket.get('name') == self.name
+            ns_bucket
+            for ns_bucket in system_state.get("buckets")
+            if ns_bucket.get("name") == self.name
         ]
         if not match_buckets:
             return False
-        ns_properties = match_buckets[0].get('namespace')
-        actual_read_resources = ns_properties.get('read_resources')
-        actual_write_resource = ns_properties.get('write_resource')
-        return (
-            set(actual_read_resources) == set(self.read_ns_resources)
-            and set(actual_write_resource) == set(self.write_ns_resource)
-        )
+        ns_properties = match_buckets[0].get("namespace")
+        actual_read_resources = ns_properties.get("read_resources")
+        actual_write_resource = ns_properties.get("write_resource")
+        return set(actual_read_resources) == set(self.read_ns_resources) and set(
+            actual_write_resource
+        ) == set(self.write_ns_resource)
 
     def internal_verify_deletion(self):
         # Retrieve the NooBaa system information
@@ -465,16 +511,17 @@ class MCGNamespaceBucket(ObjectBucket):
 
         # Retrieve the correct namespace bucket info
         match_buckets = [
-            ns_bucket for ns_bucket in system_state
-            .get('buckets') if ns_bucket.get('name') == self.name
+            ns_bucket
+            for ns_bucket in system_state.get("buckets")
+            if ns_bucket.get("name") == self.name
         ]
         return len(match_buckets) == 0
 
 
 BUCKET_MAP = {
-    's3': MCGS3Bucket,
-    'oc': MCGOCBucket,
-    'cli': MCGCLIBucket,
-    'rgw-oc': RGWOCBucket,
-    'mcg-namespace': MCGNamespaceBucket
+    "s3": MCGS3Bucket,
+    "oc": MCGOCBucket,
+    "cli": MCGCLIBucket,
+    "rgw-oc": RGWOCBucket,
+    "mcg-namespace": MCGNamespaceBucket,
 }

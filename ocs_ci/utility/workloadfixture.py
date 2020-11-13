@@ -21,11 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def measure_operation(
-    operation,
-    result_file,
-    minimal_time=None,
-    metadata=None,
-    measure_after=False
+    operation, result_file, minimal_time=None, metadata=None, measure_after=False
 ):
     """
     Get dictionary with keys 'start', 'stop', 'metadata' and 'result' that
@@ -62,6 +58,7 @@ def measure_operation(
                 }
 
     """
+
     def prometheus_log(info, alert_list):
         """
         Log all alerts from Prometheus API every 3 seconds.
@@ -73,58 +70,48 @@ def measure_operation(
 
         """
         prometheus = PrometheusAPI()
-        logger.info('Logging of all prometheus alerts started')
-        while info.get('run'):
+        logger.info("Logging of all prometheus alerts started")
+        while info.get("run"):
             alerts_response = prometheus.get(
-                'alerts',
-                payload={
-                    'silenced': False,
-                    'inhibited': False
-                }
+                "alerts", payload={"silenced": False, "inhibited": False}
             )
             msg = f"Request {alerts_response.request.url} failed"
             assert alerts_response.ok, msg
-            for alert in alerts_response.json().get('data').get('alerts'):
+            for alert in alerts_response.json().get("data").get("alerts"):
                 if alert not in alert_list:
                     logger.info(f"Adding {alert} to alert list")
                     alert_list.append(alert)
             time.sleep(3)
-        logger.info('Logging of all prometheus alerts stopped')
+        logger.info("Logging of all prometheus alerts stopped")
 
     # check if file with results for this operation already exists
     # if it exists then use it
     if os.path.isfile(result_file) and os.access(result_file, os.R_OK):
         logger.info(
-            f"File {result_file} already created."
-            f" Trying to use it for tests..."
+            f"File {result_file} already created." f" Trying to use it for tests..."
         )
         with open(result_file) as open_file:
             results = json.load(open_file)
             # indicate that we are not going to execute the workload, but
             # just reuse measurement from earlier run
-            results['first_run'] = False
-        logger.info(
-            f"File {result_file} loaded. Content of file:\n{results}"
-        )
+            results["first_run"] = False
+        logger.info(f"File {result_file} loaded. Content of file:\n{results}")
 
     # if there is no file with results from previous run
     # then perform operation measurement
     else:
-        logger.info(
-            f"File {result_file} not created yet. Starting measurement..."
-        )
+        logger.info(f"File {result_file} not created yet. Starting measurement...")
         if not measure_after:
             start_time = time.time()
 
         # init logging thread that checks for Prometheus alerts
         # while workload is running
         # based on https://docs.python.org/3/howto/logging-cookbook.html#logging-from-multiple-threads
-        info = {'run': True}
+        info = {"run": True}
         alert_list = []
 
         logging_thread = threading.Thread(
-            target=prometheus_log,
-            args=(info, alert_list)
+            target=prometheus_log, args=(info, alert_list)
         )
         logging_thread.start()
 
@@ -141,7 +128,7 @@ def measure_operation(
             minimal_time = 0
             # And make sure the exception is properly processed by pytest (it
             # would make the fixture fail).
-            raise(ex)
+            raise (ex)
         finally:
             if measure_after:
                 start_time = time.time()
@@ -149,22 +136,24 @@ def measure_operation(
             if minimal_time:
                 additional_time = minimal_time - passed_time
                 if additional_time > 0:
-                    logger.info(f"Starting {additional_time}s sleep for the purposes of measurement.")
+                    logger.info(
+                        f"Starting {additional_time}s sleep for the purposes of measurement."
+                    )
                     time.sleep(additional_time)
             # Dumping measurement results into result file.
             stop_time = time.time()
-            info['run'] = False
+            info["run"] = False
             logging_thread.join()
             results = {
-                'start': start_time,
-                'stop': stop_time,
-                'result': result,
-                'metadata': metadata,
-                'prometheus_alerts': alert_list,
-                'first_run': True,
+                "start": start_time,
+                "stop": stop_time,
+                "result": result,
+                "metadata": metadata,
+                "prometheus_alerts": alert_list,
+                "first_run": True,
             }
             logger.info(f"Results of measurement: {results}")
-            with open(result_file, 'w') as outfile:
+            with open(result_file, "w") as outfile:
                 logger.info(f"Dumping results of measurement into {result_file}")
                 json.dump(results, outfile)
     return results

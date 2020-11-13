@@ -85,7 +85,7 @@ class parallel(object):
         try:
             # raises if any greenlets exited with an exception
             for result in self:
-                log.debug('result is %s', repr(result))
+                log.debug("result is %s", repr(result))
                 pass
         except Exception:
             # Emit message here because traceback gets stomped when we re-raise

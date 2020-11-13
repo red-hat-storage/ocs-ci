@@ -13,13 +13,11 @@ log = logging.getLogger(__name__)
 
 @ignore_leftovers
 def test_ocs_monkey():
-    ocs_monkety_dir = '/tmp/ocs-monkey'
+    ocs_monkety_dir = "/tmp/ocs-monkey"
     # ocs-monkey run time in seconds
     run_time = 3200
     clone_repo(constants.OCS_MONKEY_REPOSITORY, ocs_monkety_dir)
-    run_cmd(
-        f"pip install -r {os.path.join(ocs_monkety_dir, 'requirements.txt')}"
-    )
+    run_cmd(f"pip install -r {os.path.join(ocs_monkety_dir, 'requirements.txt')}")
     workload_run_cmd = f"python workload_runner.py -t {run_time}"
 
     start_time = time.time()
@@ -28,7 +26,8 @@ def test_ocs_monkey():
         shlex.split(workload_run_cmd),
         stderr=subprocess.STDOUT,
         stdout=subprocess.PIPE,
-        encoding='utf-8', cwd=ocs_monkety_dir
+        encoding="utf-8",
+        cwd=ocs_monkety_dir,
     )
 
     while True:
