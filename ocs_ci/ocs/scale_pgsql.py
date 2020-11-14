@@ -105,7 +105,7 @@ def add_worker_node(instance_type=None):
         and config.ENV_DATA["platform"].lower() == "aws"
     ):
         log.info("Adding worker nodes on the current cluster")
-        labels = [('node-role.kubernetes.io/app', 'app-scale')]
+        labels = [("node-role.kubernetes.io/app", "app-scale")]
         # Create machineset for app worker nodes on each zone
         for obj in machine.get_machineset_objs():
             if "app" in obj.name:
@@ -129,7 +129,7 @@ def add_worker_node(instance_type=None):
                     machine.create_custom_machineset(
                         instance_type=instance_type,
                         labels=labels,
-                        zone='a',
+                        zone="a",
                     )
                 )
             for ms in ms_name:

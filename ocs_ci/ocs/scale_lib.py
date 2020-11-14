@@ -715,7 +715,7 @@ def check_and_add_enough_worker(worker_count):
             # Create machineset for app worker nodes on each aws zone
             # Each zone will have one app worker node
             ms_name = list()
-            labels = [('node-role.kubernetes.io/app', 'app-scale')]
+            labels = [("node-role.kubernetes.io/app", "app-scale")]
             for obj in machine.get_machineset_objs():
                 if "app" in obj.name:
                     ms_name.append(obj.name)
@@ -724,7 +724,7 @@ def check_and_add_enough_worker(worker_count):
                     for zone in ["a", "b", "c"]:
                         ms_name.append(
                             machine.create_custom_machineset(
-                                instance_type='m5.4xlarge',
+                                instance_type="m5.4xlarge",
                                 labels=labels,
                                 zone=zone,
                             )
@@ -732,9 +732,9 @@ def check_and_add_enough_worker(worker_count):
                 else:
                     ms_name.append(
                         machine.create_custom_machineset(
-                            instance_type='m5.4xlarge',
+                            instance_type="m5.4xlarge",
                             labels=labels,
-                            zone='a',
+                            zone="a",
                         )
                     )
                 for ms in ms_name:

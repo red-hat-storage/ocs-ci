@@ -181,11 +181,11 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
 
 
 def create_custom_machineset(
-    role='app',
-    instance_type='m4.xlarge',
+    role="app",
+    instance_type="m4.xlarge",
     labels=None,
     taints=None,
-    zone='a',
+    zone="a",
 ):
     """
     Function to create custom machineset works only for AWS
@@ -274,14 +274,14 @@ def create_custom_machineset(
                 machineset_yaml["spec"]["template"]["metadata"]["labels"][
                     "machine.openshift.io/cluster-api-machineset"
                 ] = f"{cls_id}-{role}-{aws_zone}"
-                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
-                    'ami'
-                ]['id'] = ami_id
-                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
-                    'iamInstanceProfile'
-                ]['id'] = f"{cls_id}-worker-profile"
-                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
-                    'instanceType'
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "ami"
+                ]["id"] = ami_id
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "iamInstanceProfile"
+                ]["id"] = f"{cls_id}-worker-profile"
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "instanceType"
                 ] = instance_type
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "placement"
@@ -302,9 +302,9 @@ def create_custom_machineset(
                 # Apply the labels
                 if labels:
                     for label in labels:
-                        machineset_yaml['spec']['template']['spec'][
-                            'metadata'
-                        ]['labels'][label[0]] = label[1]
+                        machineset_yaml["spec"]["template"]["spec"]["metadata"][
+                            "labels"
+                        ][label[0]] = label[1]
 
                 # Apply the Taints
                 # ex taint list looks like:
@@ -313,7 +313,9 @@ def create_custom_machineset(
                 #    'value': 'true',
                 #  }, {'effect': 'Schedule', 'key': 'xyz', 'value': 'False'} ]
                 if taints:
-                    machineset_yaml['spec']['template']['spec'].update({'taints': taints})
+                    machineset_yaml["spec"]["template"]["spec"].update(
+                        {"taints": taints}
+                    )
 
                 # Create new custom machineset
                 ms_obj = OCS(**machineset_yaml)
@@ -341,42 +343,49 @@ def create_ocs_infra_nodes(num_nodes):
     ms_names = []
     zone_list = []
     labels = [
-        ('node-role.kubernetes.io/infra', ''),
-        ('cluster.ocs.openshift.io/openshift-storage', ''),
+        ("node-role.kubernetes.io/infra", ""),
+        ("cluster.ocs.openshift.io/openshift-storage", ""),
     ]
     taints = [
         {
-            'effect': 'NoSchedule',
-            'key': 'node.ocs.openshift.io/storage',
-            'value': 'true',
+            "effect": "NoSchedule",
+            "key": "node.ocs.openshift.io/storage",
+            "value": "true",
         }
     ]
-    instance_type = config.ENV_DATA.get('infra_instance_type', 'm5.4xlarge')
+    instance_type = config.ENV_DATA.get("infra_instance_type", "m5.4xlarge")
 
     # If infra zones are provided then take it from conf else
     # extract from workers
-    if config.ENV_DATA.get('infra_availability_zones'):
-        zone_list = (
-            [i[-1] for i in config.ENV_DATA['infra_availability_zones']]
-        )
+    if config.ENV_DATA.get("infra_availability_zones"):
+        zone_list = [i[-1] for i in config.ENV_DATA["infra_availability_zones"]]
     else:
         machinesets_obj = OCP(
-            kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+            kind=constants.MACHINESETS,
+            namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
         )
-        for machine in machinesets_obj.get()['items']:
-            aws_zone = machine.get('spec').get('template').get('spec').get(
-                'providerSpec').get('value').get('placement').get('availabilityZone')
+        for machine in machinesets_obj.get()["items"]:
+            aws_zone = (
+                machine.get("spec")
+                .get("template")
+                .get("spec")
+                .get("providerSpec")
+                .get("value")
+                .get("placement")
+                .get("availabilityZone")
+            )
             zone_list.append(aws_zone[-1])
 
     ms_names.extend(
         [
             create_custom_machineset(
-                role='infra',
+                role="infra",
                 instance_type=instance_type,
                 labels=labels,
                 taints=taints,
                 zone=zone_list[i % len(zone_list)],
-            ) for i in range(num_nodes)
+            )
+            for i in range(num_nodes)
         ]
     )
 

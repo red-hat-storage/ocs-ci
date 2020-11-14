@@ -182,12 +182,12 @@ class AWSIPI(AWSBase):
                 (default: "DEBUG")
         """
         super(AWSIPI, self).deploy_ocp(log_cli_level)
-        if config.DEPLOYMENT.get('infra_nodes'):
-            num_nodes = config.ENV_DATA.get('infra_replicas', 3)
+        if config.DEPLOYMENT.get("infra_nodes"):
+            num_nodes = config.ENV_DATA.get("infra_replicas", 3)
             ms_list = machine.create_infra_nodes(num_nodes)
             for node in ms_list:
                 machine.wait_for_new_node_to_be_ready(node)
-        if config.DEPLOYMENT.get('host_network'):
+        if config.DEPLOYMENT.get("host_network"):
             self.host_network_update()
 
     def destroy_cluster(self, log_level="DEBUG"):
