@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import (
 )
 import yaml
 import time
-from ocs_ci.helpers import helpers
 import tempfile
 import subprocess
 import datetime
@@ -23,8 +22,8 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version('<4.6')
 class TestPvcMultiClonePerformance(E2ETest):
     """
-    Tests to measure PVC clones creation performance
-    The test is supposed to create the maximum number of snapshot for one PVC
+    Tests to measure PVC clones creation performance ( time and speed)
+    The test is supposed to create the maximum number of clones for one PVC
     """
 
     def test_pvc_multiple_clone_performance(
@@ -36,13 +35,13 @@ class TestPvcMultiClonePerformance(E2ETest):
            PVS size is calculated in the test and depends on the storage capacity, but not less then 1 GiB
            it will use ~75% capacity of the Storage, Min storage capacity 1 TiB
         2. Fill the PVC with 70% of data
-        3. Take a clone of the PVC and measure time and speed of creation.
-        4. repeat the previous step number of times (maximal num_of_clones is 512)
-           this will be run by outside script for low memory consumption
-        5. print all measured statistics for all the clones.
+        3. Take a clone of the PVC and measure time and speed of creation by reading start creation and end creation
+            times from relevant logs
+        4. Repeat the previous step number of times (maximal num_of_clones is 512)
+        5. Rrint all measured statistics for all the clones.
 
         Raises:
-            StorageNotSufficientException: in case of not enough capacity
+            StorageNotSufficientException: in case of not enough capacity on the cluster
 
         """
         num_of_clones = 512
@@ -174,7 +173,7 @@ class TestPvcMultiClonePerformance(E2ETest):
         """
         Finds names for log files pods in which logs for clone creation are located
         For CephFS: 2 pods that start with "csi-cephfsplugin-provisioner" prefix
-        For RBD:
+        For RBD: 2 pods that start with "csi-rbdplugin-provisioner" prefix
 
         """
         self.params['logs'] = []
@@ -204,7 +203,7 @@ class TestPvcMultiClonePerformance(E2ETest):
         # Going to run only write IO to fill the PVC for the before creating a clone
         self.pod_obj.fillup_fs(size=file_size, fio_filename=file_name)
 
-        # Wait for fio to finish
+        # Wait for fio to finish - non default timeout is needed for big pvc/clones
         fio_result = self.pod_obj.get_fio_results(timeout=18000)
         err_count = fio_result.get('jobs')[0].get('error')
         assert err_count == 0, (
@@ -227,9 +226,10 @@ class TestPvcMultiClonePerformance(E2ETest):
 
         Args:
             clone_num (int) the number of clones to create
+            clone_yaml : a template of clone yaml
 
         Returns:
-            int: the creation time of the clone (in sec.)
+            int: the creation time of the clone (in secs.)
 
         """
         log.info(f"Creating clone number {clone_num} for interface {self.interface}")
@@ -242,7 +242,7 @@ class TestPvcMultiClonePerformance(E2ETest):
         log.info(f'Going to create {tmpfile}')
         with open(tmpfile, 'w') as f:
             yaml.dump(clone_yaml, f, default_flow_style=False)
-        time_before_creation = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         log.info(f'Clone yaml file is {clone_yaml}')
         res = self.run_oc_command(f'create -f {tmpfile}', self.params['nspace'])
         if self.params['ERRMSG'] in res[0]:
@@ -270,7 +270,7 @@ class TestPvcMultiClonePerformance(E2ETest):
         if timeout <= 0:
             raise Exception(f"Clone {clone_name}  for {self.interface} interface was not created for 600 seconds")
 
-        create_time = self.measure_clone_creation_time(clone_name, time_before_creation)
+        create_time = self.measure_clone_creation_time(clone_name, start_time)
 
         log.info(f"Creation time of clone {clone_name} is {create_time} secs.")
 
@@ -343,12 +343,12 @@ class TestPvcMultiClonePerformance(E2ETest):
 
     def measure_clone_creation_time(self, clone_name, start_time):
         """
-
-
         Args:
+            clone_name: Name of the clone for which we measure the time
+            start_time: Time from which and on to search the relevant logs
 
         Returns:
-
+            creation time for each clone
 
         """
         logs = []
