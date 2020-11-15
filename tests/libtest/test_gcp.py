@@ -19,7 +19,7 @@ def test_assumptions():
     """
     Check basic consistency in platform handling.
     """
-    assert config.ENV_DATA['platform'] == constants.GCP_PLATFORM
+    assert config.ENV_DATA["platform"] == constants.GCP_PLATFORM
 
 
 @libtest

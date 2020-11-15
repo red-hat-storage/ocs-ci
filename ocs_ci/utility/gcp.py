@@ -55,8 +55,8 @@ def load_service_account_key_dict(filepath=SERVICE_ACCOUNT_KEY_FILEPATH):
         sa_dict = json.load(sa_file)
     logger.debug(
         "fetching GCP service account (for client %s) from %s file",
-        sa_dict.get('client_email'),
-        filepath
+        sa_dict.get("client_email"),
+        filepath,
     )
     return sa_dict
 
@@ -79,7 +79,7 @@ class GoogleCloudUtil:
                 not specified, the value is loaded from ocs-ci config file.
 
         """
-        self._region_name = region_name or config.ENV_DATA['region']
+        self._region_name = region_name or config.ENV_DATA["region"]
 
     @property
     def service_account(self):
@@ -99,13 +99,13 @@ class GoogleCloudUtil:
         """
         if self._compute_driver is not None:
             return self._compute_driver
-        service_account_username = self.service_account['client_email']
-        project_id = self.service_account['project_id']
+        service_account_username = self.service_account["client_email"]
+        project_id = self.service_account["project_id"]
         Driver = get_driver(Provider.GCE)
         self._compute_driver = Driver(
             service_account_username,
             SERVICE_ACCOUNT_KEY_FILEPATH,
             project=project_id,
-            datacenter=self._region_name
+            datacenter=self._region_name,
         )
         return self._compute_driver

@@ -37,17 +37,15 @@ def setup(**kwargs):
     Returns:
         bool: True if setup succeeds else False
     """
-    io_pod = kwargs['pod']
+    io_pod = kwargs["pod"]
     # For first cut doing simple fio install
     distro = find_distro(io_pod)
     pkg_mgr = DISTROS[distro]
 
-    if distro == 'Debian':
-        cmd = f'{pkg_mgr} update'
+    if distro == "Debian":
+        cmd = f"{pkg_mgr} update"
         io_pod.exec_cmd_on_pod(cmd, out_yaml_format=False)
-        log.info(
-            "Sleep 5 seconds after update to make sure the lock is released"
-        )
+        log.info("Sleep 5 seconds after update to make sure the lock is released")
         sleep(5)
 
     cmd = f"{pkg_mgr} -y install fio"
@@ -67,28 +65,26 @@ def run(**kwargs):
     Result:
         result of command
     """
-    io_pod = kwargs.pop('pod')
-    st_type = kwargs.pop('type')
-    path = kwargs.pop('path')
+    io_pod = kwargs.pop("pod")
+    st_type = kwargs.pop("type")
+    path = kwargs.pop("path")
     timeout = 600  # default timeout for the FIO test
 
     fio_cmd = "fio"
     args = ""
     for k, v in kwargs.items():
-        if k == 'filename':
-            if st_type == 'fs':
+        if k == "filename":
+            if st_type == "fs":
                 args = args + f" --{k}={path}/{v}"
             else:
                 # For raw block device
                 args = args + f" --{k}={path}"
         else:
             args = args + f" --{k}={v}"
-        if k == 'runtime' and v > timeout:
+        if k == "runtime" and v > timeout:
             timeout = v  # for FIO with longer runtime, change the timeout
     fio_cmd = fio_cmd + args
     fio_cmd += " --output-format=json"
     log.info(f"Running cmd: {fio_cmd}")
 
-    return io_pod.exec_cmd_on_pod(
-        fio_cmd, out_yaml_format=False, timeout=timeout
-    )
+    return io_pod.exec_cmd_on_pod(fio_cmd, out_yaml_format=False, timeout=timeout)

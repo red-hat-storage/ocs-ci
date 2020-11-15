@@ -16,19 +16,20 @@ class DeploymentFactory(object):
     """
     A factory class to get specific platform object
     """
+
     def __init__(self):
         # A map all existing deployments and respective classes
         # should be put here
         self.cls_map = {
-            'aws_ipi': AWSIPI,
-            'aws_upi': AWSUPI,
-            'aws_upi_flexy': AWSUPIFlexy,
-            'azure_ipi': AZUREIPI,
-            'vsphere_upi': VSPHEREUPI,
-            'baremetalpsi_upi_flexy': BaremetalPSIUPI,
-            'baremetal_upi': BAREMETALUPI,
-            'gcp_ipi': GCPIPI,
-            'powervs_upi': IBMDeployment,
+            "aws_ipi": AWSIPI,
+            "aws_upi": AWSUPI,
+            "aws_upi_flexy": AWSUPIFlexy,
+            "azure_ipi": AZUREIPI,
+            "vsphere_upi": VSPHEREUPI,
+            "baremetalpsi_upi_flexy": BaremetalPSIUPI,
+            "baremetal_upi": BAREMETALUPI,
+            "gcp_ipi": GCPIPI,
+            "powervs_upi": IBMDeployment,
         }
 
     def get_deployment(self):
@@ -38,13 +39,11 @@ class DeploymentFactory(object):
         deployment_platform may look like 'aws', 'vmware', 'baremetal'
         deployment_type may be like 'ipi' or 'upi'
         """
-        deployment_platform = config.ENV_DATA['platform']
-        deployment_type = config.ENV_DATA['deployment_type']
-        flexy_deployment = config.ENV_DATA['flexy_deployment']
+        deployment_platform = config.ENV_DATA["platform"]
+        deployment_type = config.ENV_DATA["deployment_type"]
+        flexy_deployment = config.ENV_DATA["flexy_deployment"]
         deployment_cls_key = (
-            f"{deployment_platform.lower()}"
-            f"_"
-            f"{deployment_type.lower()}"
+            f"{deployment_platform.lower()}" f"_" f"{deployment_type.lower()}"
         )
         if flexy_deployment:
             deployment_cls_key = f"{deployment_cls_key}_flexy"

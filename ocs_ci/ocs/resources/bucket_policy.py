@@ -13,6 +13,7 @@ class HttpResponseParser(object):
     """
     A simple class for parsing HTTP responses
     """
+
     def __init__(self, http_response):
         """
         Initializer function
@@ -20,33 +21,46 @@ class HttpResponseParser(object):
         Args:
             http_response (dict): HTTP response
         """
-        logger.info('http response:\n%s' % http_response)
+        logger.info("http response:\n%s" % http_response)
 
-        self.metadata = http_response['ResponseMetadata']
-        logger.info(f'metadata: {self.metadata}')
+        self.metadata = http_response["ResponseMetadata"]
+        logger.info(f"metadata: {self.metadata}")
 
-        self.headers = self.metadata['HTTPHeaders']
-        logger.info(f'headers: {self.headers}')
+        self.headers = self.metadata["HTTPHeaders"]
+        logger.info(f"headers: {self.headers}")
 
-        self.status_code = self.metadata['HTTPStatusCode']
-        logger.info(f'status code: {self.status_code}')
+        self.status_code = self.metadata["HTTPStatusCode"]
+        logger.info(f"status code: {self.status_code}")
 
-        self.error = http_response.get('Error', None)
-        logger.info(f'Error: {self.error}')
+        self.error = http_response.get("Error", None)
+        logger.info(f"Error: {self.error}")
 
 
 class NoobaaAccount(object):
     """
     Class for Noobaa account
     """
+
     (
-        s3_resource, s3_endpoint, account_name,
-        email_id, token, access_key_id, access_key
+        s3_resource,
+        s3_endpoint,
+        account_name,
+        email_id,
+        token,
+        access_key_id,
+        access_key,
     ) = (None,) * 7
 
     def __init__(
-        self, mcg, name, email, buckets, admin_access=False, s3_access=True,
-        full_bucket_access=True, backingstore_name=constants.DEFAULT_NOOBAA_BACKINGSTORE
+        self,
+        mcg,
+        name,
+        email,
+        buckets,
+        admin_access=False,
+        s3_access=True,
+        full_bucket_access=True,
+        backingstore_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
     ):
         """
         Initializer function
@@ -75,29 +89,35 @@ class NoobaaAccount(object):
                 "default_pool": backingstore_name,
                 "allowed_buckets": {
                     "full_permission": full_bucket_access,
-                    "permission_list": buckets
-                }
-            }
+                    "permission_list": buckets,
+                },
+            },
         ).json()
-        self.access_key_id = response['reply']['access_keys'][0]['access_key']
-        self.access_key = response['reply']['access_keys'][0]['secret_key']
+        self.access_key_id = response["reply"]["access_keys"][0]["access_key"]
+        self.access_key = response["reply"]["access_keys"][0]["secret_key"]
         self.s3_endpoint = mcg.s3_endpoint
-        self.token = response['reply']['token']
+        self.token = response["reply"]["token"]
 
         self.s3_resource = boto3.resource(
-            's3', verify=retrieve_verification_mode(), endpoint_url=self.s3_endpoint,
+            "s3",
+            verify=retrieve_verification_mode(),
+            endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
-            aws_secret_access_key=self.access_key
+            aws_secret_access_key=self.access_key,
         )
 
         self.s3_client = boto3.client(
-            's3', verify=retrieve_verification_mode(), endpoint_url=self.s3_endpoint,
+            "s3",
+            verify=retrieve_verification_mode(),
+            endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
-            aws_secret_access_key=self.access_key
+            aws_secret_access_key=self.access_key,
         )
 
 
-def gen_bucket_policy(user_list, actions_list, resources_list, effect="Allow", sid="statement"):
+def gen_bucket_policy(
+    user_list, actions_list, resources_list, effect="Allow", sid="statement"
+):
     """
     Function prepares bucket policy parameters in syntax and format provided by AWS bucket policy
 
@@ -113,22 +133,29 @@ def gen_bucket_policy(user_list, actions_list, resources_list, effect="Allow", s
     """
     principals = user_list
     actions = list(map(lambda action: "s3:%s" % action, actions_list))
-    resources = list(map(lambda bucket_name: "arn:aws:s3:::%s" % bucket_name, resources_list))
+    resources = list(
+        map(lambda bucket_name: "arn:aws:s3:::%s" % bucket_name, resources_list)
+    )
     version = datetime.date.today().strftime("%Y-%m-%d")
 
-    logger.info(f'version: {version}')
-    logger.info(f'principal_list: {principals}')
-    logger.info(f'actions_list: {actions_list}')
-    logger.info(f'resource: {resources_list}')
-    logger.info(f'effect: {effect}')
-    logger.info(f'sid: {sid}')
-    bucket_policy = {"Version": version,
-                     "Statement": [{
-                         "Action": actions,
-                         "Principal": principals,
-                         "Resource": resources,
-                         "Effect": effect,
-                         "Sid": sid}]}
+    logger.info(f"version: {version}")
+    logger.info(f"principal_list: {principals}")
+    logger.info(f"actions_list: {actions_list}")
+    logger.info(f"resource: {resources_list}")
+    logger.info(f"effect: {effect}")
+    logger.info(f"sid: {sid}")
+    bucket_policy = {
+        "Version": version,
+        "Statement": [
+            {
+                "Action": actions,
+                "Principal": principals,
+                "Resource": resources,
+                "Effect": effect,
+                "Sid": sid,
+            }
+        ],
+    }
 
-    logger.info(f'bucket_policy: {bucket_policy}')
+    logger.info(f"bucket_policy: {bucket_policy}")
     return bucket_policy

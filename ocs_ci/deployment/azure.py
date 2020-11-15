@@ -14,7 +14,7 @@ from ocs_ci.utility.azure_utils import AZURE as AzureUtil
 logger = logging.getLogger(__name__)
 
 
-__all__ = ['AZUREIPI']
+__all__ = ["AZUREIPI"]
 
 
 class AZUREBase(CloudDeploymentBase):
@@ -45,8 +45,7 @@ class AZUREBase(CloudDeploymentBase):
             bool: True if a cluster with the same name prefix already exists,
                 False otherwise
         """
-        logger.info(
-            "checking existence of cluster with prefix %s", cluster_name_prefix)
+        logger.info("checking existence of cluster with prefix %s", cluster_name_prefix)
         # ask about all azure resource groups, and filter it by cluster name
         # prefix (there is azure resource group for each cluster, which
         # contains all other azure resources of the cluster)
@@ -56,11 +55,12 @@ class AZUREBase(CloudDeploymentBase):
                 logger.info(
                     "For given cluster name prefix %s, there is a resource group %s already.",
                     cluster_name_prefix,
-                    rg.name)
+                    rg.name,
+                )
                 return True
         logger.info(
             "For given cluster name prefix %s, there is no resource group.",
-            cluster_name_prefix
+            cluster_name_prefix,
         )
         return False
 

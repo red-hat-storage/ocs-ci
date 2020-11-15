@@ -15,6 +15,7 @@ class TestCreateLargeSizedPVCWhileIOInProgress(ManageTest):
     Create large sized PVC while IO is in progress
 
     """
+
     @pytest.mark.parametrize(
         argnames=["interface"],
         argvalues=[
@@ -23,8 +24,8 @@ class TestCreateLargeSizedPVCWhileIOInProgress(ManageTest):
             ),
             pytest.param(
                 constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2088")
-            )
-        ]
+            ),
+        ],
     )
     def test_create_large_sized_pvc_while_io_in_progress(
         self, interface, pvc_factory, pod_factory
@@ -41,6 +42,6 @@ class TestCreateLargeSizedPVCWhileIOInProgress(ManageTest):
         # Repeating the above flow for 5 times
         for i in range(5):
             log.info(f"Creating {interface} based PVC")
-            pvc_obj = pvc_factory(interface=interface, size='500')
+            pvc_obj = pvc_factory(interface=interface, size="500")
             pod_obj = pod_factory(pvc=pvc_obj, interface=interface)
             pod.run_io_in_bg(pod_obj)

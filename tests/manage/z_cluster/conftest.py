@@ -10,16 +10,17 @@ from ocs_ci.ocs.fiojob import workload_fio_storageutilization
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def workload_storageutilization_rbd(
-        request,
-        project,
-        fio_pvc_dict,
-        fio_job_dict,
-        fio_configmap_dict,
-        measurement_dir,
-        tmp_path,
-        supported_configuration):
+    request,
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
+    supported_configuration,
+):
     """
     In order to use this fixture you need to pass 3 indirect parameters:
     target_percentage (float): the percentage storage utilization(from 0.01 to 0.99).
@@ -52,16 +53,17 @@ def workload_storageutilization_rbd(
     return measured_op
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def workload_storageutilization_cephfs(
-        request,
-        project,
-        fio_pvc_dict,
-        fio_job_dict,
-        fio_configmap_dict,
-        measurement_dir,
-        tmp_path,
-        supported_configuration):
+    request,
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
+    supported_configuration,
+):
     """
     In order to use this fixture you need to pass 3 indirect parameters:
     target_percentage (float): the percentage storage utilization(from 0.01 to 0.99).

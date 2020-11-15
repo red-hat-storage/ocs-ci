@@ -7,8 +7,11 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier4a
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
-    tier4, ManageTest, ignore_leftovers, aws_platform_required,
-    ipi_deployment_required
+    tier4,
+    ManageTest,
+    ignore_leftovers,
+    aws_platform_required,
+    ipi_deployment_required,
 )
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.cluster import CephCluster
@@ -48,22 +51,22 @@ def delete_and_create_osd_node(osd_node_name):
         f"results of this test run are all invalid."
     )
     # TODO: refactor this so that AWS is not a "special" platform
-    if config.ENV_DATA['platform'].lower() == constants.AWS_PLATFORM:
-        if config.ENV_DATA['deployment_type'] == 'ipi':
+    if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+        if config.ENV_DATA["deployment_type"] == "ipi":
             new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
 
-        elif config.ENV_DATA['deployment_type'] == 'upi':
+        elif config.ENV_DATA["deployment_type"] == "upi":
             new_node_name = node.delete_and_create_osd_node_aws_upi(osd_node_name)
         else:
             log.error(msg_invalid)
             pytest.fail(msg_invalid)
-    elif config.ENV_DATA['platform'].lower() in constants.CLOUD_PLATFORMS:
-        if config.ENV_DATA['deployment_type'] == 'ipi':
+    elif config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS:
+        if config.ENV_DATA["deployment_type"] == "ipi":
             new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
         else:
             log.error(msg_invalid)
             pytest.fail(msg_invalid)
-    elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
+    elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
         worker_nodes_not_in_ocs = node.get_worker_nodes_not_in_ocs()
         if not worker_nodes_not_in_ocs:
             pytest.skip(
@@ -123,13 +126,17 @@ class TestNodeReplacementWithIO(ManageTest):
         log.info("Creating dc pod backed with rbd pvc and running io in bg")
         for worker_node in worker_node_list:
             if worker_node != osd_node_name:
-                rbd_dc_pod = dc_pod_factory(interface=constants.CEPHBLOCKPOOL, node_name=worker_node, size=20)
+                rbd_dc_pod = dc_pod_factory(
+                    interface=constants.CEPHBLOCKPOOL, node_name=worker_node, size=20
+                )
                 pod.run_io_in_bg(rbd_dc_pod, expect_to_fail=False, fedora_dc=True)
 
         log.info("Creating dc pod backed with cephfs pvc and running io in bg")
         for worker_node in worker_node_list:
             if worker_node != osd_node_name:
-                cephfs_dc_pod = dc_pod_factory(interface=constants.CEPHFILESYSTEM, node_name=worker_node, size=20)
+                cephfs_dc_pod = dc_pod_factory(
+                    interface=constants.CEPHFILESYSTEM, node_name=worker_node, size=20
+                )
                 pod.run_io_in_bg(cephfs_dc_pod, expect_to_fail=False, fedora_dc=True)
 
         delete_and_create_osd_node(osd_node_name)
@@ -174,6 +181,6 @@ class TestNodeReplacement(ManageTest):
         log.info("Verifying All resources are Running and matches expected result")
         self.sanity_helpers.health_check(tries=90)
         ceph_cluster_obj = CephCluster()
-        assert ceph_cluster_obj.wait_for_rebalance(timeout=1800), (
-            "Data re-balance failed to complete"
-        )
+        assert ceph_cluster_obj.wait_for_rebalance(
+            timeout=1800
+        ), "Data re-balance failed to complete"

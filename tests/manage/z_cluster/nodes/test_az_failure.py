@@ -30,6 +30,7 @@ class TestAvailabilityZones(ManageTest):
     5. restore availability zone access
     6. validate - cluster functionality and health
     """
+
     @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
@@ -40,12 +41,17 @@ class TestAvailabilityZones(ManageTest):
 
     @pytest.fixture()
     def teardown(self, request, ec2_instances, aws_obj):
-
         def finalizer():
-            current_sg = aws_obj.store_security_groups_for_instances(self.instances_in_az)
+            current_sg = aws_obj.store_security_groups_for_instances(
+                self.instances_in_az
+            )
             if self.original_sgs != current_sg:
-                aws_obj.restore_instances_access(self.security_group_id, self.original_sgs)
-                logger.info(f"Access to EC2 instances {self.instances_in_az} has been restored")
+                aws_obj.restore_instances_access(
+                    self.security_group_id, self.original_sgs
+                )
+                logger.info(
+                    f"Access to EC2 instances {self.instances_in_az} has been restored"
+                )
 
             if self.security_group_id in aws_obj.get_all_security_groups():
                 logger.info(f"Deleting: {self.security_group_id}")
@@ -63,15 +69,23 @@ class TestAvailabilityZones(ManageTest):
         """
 
         # Select instances in randomly chosen availability zone:
-        self.instances_in_az = self.random_availability_zone_selector(aws_obj, ec2_instances)
+        self.instances_in_az = self.random_availability_zone_selector(
+            aws_obj, ec2_instances
+        )
         logger.info(f"AZ selected, Instances: {self.instances_in_az} to be blocked")
 
         # Storing current security groups for selected instances:
-        self.original_sgs = aws_obj.store_security_groups_for_instances(self.instances_in_az)
-        logger.info(f"Original security groups of selected instances: {self.original_sgs}")
+        self.original_sgs = aws_obj.store_security_groups_for_instances(
+            self.instances_in_az
+        )
+        logger.info(
+            f"Original security groups of selected instances: {self.original_sgs}"
+        )
 
         # Blocking instances:
-        self.security_group_id = self.block_aws_availability_zone(aws_obj, self.instances_in_az)
+        self.security_group_id = self.block_aws_availability_zone(
+            aws_obj, self.instances_in_az
+        )
         logger.info(f"Access to EC2 instances {self.instances_in_az} has been blocked")
 
         # Check cluster's health, need to be unhealthy at that point
@@ -112,7 +126,9 @@ class TestAvailabilityZones(ManageTest):
 
         """
         random_az_selector = random.choice(list(ec2_instances.keys()))
-        random_az_selected = aws_obj.get_availability_zone_id_by_instance_id(random_az_selector)
+        random_az_selected = aws_obj.get_availability_zone_id_by_instance_id(
+            random_az_selector
+        )
         instances_in_az = list()
         for instance in ec2_instances.keys():
             az = aws_obj.get_availability_zone_id_by_instance_id(instance)
@@ -136,12 +152,16 @@ class TestAvailabilityZones(ManageTest):
 
         """
         group_name = "TEST_SEC_GROUP"
-        dict_permissions = {'IpProtocol': 'tcp',
-                            'FromPort': 80,
-                            'ToPort': 80,
-                            'IpRanges': [{'CidrIp': '1.1.1.1/32'}]}
+        dict_permissions = {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "IpRanges": [{"CidrIp": "1.1.1.1/32"}],
+        }
         vpc_id = aws_obj.get_vpc_id_by_instance_id(instances_in_az[0])
-        security_group_id = aws_obj.create_security_group(group_name, dict_permissions, vpc_id)
+        security_group_id = aws_obj.create_security_group(
+            group_name, dict_permissions, vpc_id
+        )
         aws_obj.block_instances_access(security_group_id, instances_in_az)
 
         return security_group_id

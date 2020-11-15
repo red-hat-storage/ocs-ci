@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 SC_OBJ = None
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture(scope="class")
 def test_fixture(request):
     """
     This fixture defines the teardown function.
@@ -26,13 +26,9 @@ def teardown():
     Tearing down the environment
 
     """
-    log.info(
-        f"Deleting created storage class: {SC_OBJ.name}"
-    )
+    log.info(f"Deleting created storage class: {SC_OBJ.name}")
     SC_OBJ.delete()
-    log.info(
-        f"Storage class: {SC_OBJ.name} deleted successfully"
-    )
+    log.info(f"Storage class: {SC_OBJ.name} deleted successfully")
 
 
 def create_storageclass(sc_name, expect_fail=False):
@@ -52,8 +48,8 @@ def create_storageclass(sc_name, expect_fail=False):
 
     # Create a storage class
     sc_data = templating.load_yaml(constants.CSI_RBD_STORAGECLASS_YAML)
-    sc_data['metadata']['name'] = sc_name
-    sc_data['parameters']['clusterID'] = defaults.ROOK_CLUSTER_NAMESPACE
+    sc_data["metadata"]["name"] = sc_name
+    sc_data["parameters"]["clusterID"] = defaults.ROOK_CLUSTER_NAMESPACE
 
     global SC_OBJ
     SC_OBJ = OCS(**sc_data)
@@ -61,12 +57,8 @@ def create_storageclass(sc_name, expect_fail=False):
     # Check for expected failure with duplicate SC name
     try:
         SC_OBJ.create()
-        assert not expect_fail, (
-            "SC creation with same name passed. Expected to fail !"
-        )
-        log.info(
-            f"Storage class: {SC_OBJ.name} created successfully !"
-        )
+        assert not expect_fail, "SC creation with same name passed. Expected to fail !"
+        log.info(f"Storage class: {SC_OBJ.name} created successfully !")
         log.debug(sc_data)
 
     except CommandFailed as ecf:

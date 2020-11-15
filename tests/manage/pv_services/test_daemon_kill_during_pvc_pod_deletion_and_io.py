@@ -8,15 +8,24 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
 from ocs_ci.ocs.resources.pod import (
-    get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_all_pods,
-    get_fio_rw_iops, get_plugin_pods, get_rbdfsplugin_provisioner_pods,
-    get_cephfsplugin_provisioner_pods, get_operator_pods
+    get_mds_pods,
+    get_mon_pods,
+    get_mgr_pods,
+    get_osd_pods,
+    get_all_pods,
+    get_fio_rw_iops,
+    get_plugin_pods,
+    get_rbdfsplugin_provisioner_pods,
+    get_cephfsplugin_provisioner_pods,
+    get_operator_pods,
 )
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from ocs_ci.helpers.helpers import (
-    verify_volume_deleted_in_backend, wait_for_resource_state,
-    wait_for_resource_count_change, verify_pv_mounted_on_node,
-    default_ceph_block_pool
+    verify_volume_deleted_in_backend,
+    wait_for_resource_state,
+    wait_for_resource_count_change,
+    verify_pv_mounted_on_node,
+    default_ceph_block_pool,
 )
 from ocs_ci.helpers import disruption_helpers
 
@@ -26,49 +35,45 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4b
 @pytest.mark.parametrize(
-    argnames=['interface', 'resource_name'],
+    argnames=["interface", "resource_name"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-1136")
+            *[constants.CEPHBLOCKPOOL, "mgr"], marks=pytest.mark.polarion_id("OCS-1136")
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'mon'],
-            marks=pytest.mark.polarion_id("OCS-1122")
+            *[constants.CEPHBLOCKPOOL, "mon"], marks=pytest.mark.polarion_id("OCS-1122")
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'osd'],
-            marks=pytest.mark.polarion_id("OCS-1129")
+            *[constants.CEPHBLOCKPOOL, "osd"], marks=pytest.mark.polarion_id("OCS-1129")
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-1108")
+            *[constants.CEPHFILESYSTEM, "mgr"],
+            marks=pytest.mark.polarion_id("OCS-1108"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'mon'],
-            marks=pytest.mark.polarion_id("OCS-1093")
+            *[constants.CEPHFILESYSTEM, "mon"],
+            marks=pytest.mark.polarion_id("OCS-1093"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'osd'],
-            marks=pytest.mark.polarion_id("OCS-1101")
+            *[constants.CEPHFILESYSTEM, "osd"],
+            marks=pytest.mark.polarion_id("OCS-1101"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'mds'],
-            marks=pytest.mark.polarion_id("OCS-1115")
-        )
-    ]
+            *[constants.CEPHFILESYSTEM, "mds"],
+            marks=pytest.mark.polarion_id("OCS-1115"),
+        ),
+    ],
 )
 class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
     """
     Kill ceph daemon while deletion of PVCs, pods and IO are progressing
     """
+
     num_of_pvcs = 30
     pvc_size = 3
 
     @pytest.fixture()
-    def setup_base(
-        self, interface, multi_pvc_factory, pod_factory
-    ):
+    def setup_base(self, interface, multi_pvc_factory, pod_factory):
         """
         Create PVCs and pods
         """
@@ -81,8 +86,8 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         if interface == constants.CEPHBLOCKPOOL:
             access_modes.extend(
                 [
-                    f'{constants.ACCESS_MODE_RWO}-Block',
-                    f'{constants.ACCESS_MODE_RWX}-Block'
+                    f"{constants.ACCESS_MODE_RWO}-Block",
+                    f"{constants.ACCESS_MODE_RWX}-Block",
                 ]
             )
 
@@ -92,10 +97,10 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
             storageclass=None,
             size=self.pvc_size,
             access_modes=access_modes,
-            access_modes_selection='distribute_random',
+            access_modes_selection="distribute_random",
             status=constants.STATUS_BOUND,
             num_of_pvc=self.num_of_pvcs,
-            wait_each=False
+            wait_each=False,
         )
 
         pod_objs = []
@@ -104,29 +109,33 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         # Create one pod using each RWO PVC and two pods using each RWX PVC
         for pvc_obj in pvc_objs:
             pvc_info = pvc_obj.get()
-            if pvc_info['spec']['volumeMode'] == 'Block':
+            if pvc_info["spec"]["volumeMode"] == "Block":
                 pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
                 raw_block_pv = True
             else:
                 raw_block_pv = False
-                pod_dict = ''
+                pod_dict = ""
             if pvc_obj.access_mode == constants.ACCESS_MODE_RWX:
                 pod_obj = pod_factory(
-                    interface=interface, pvc=pvc_obj, status="",
-                    pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
+                    interface=interface,
+                    pvc=pvc_obj,
+                    status="",
+                    pod_dict_path=pod_dict,
+                    raw_block_pv=raw_block_pv,
                 )
                 rwx_pod_objs.append(pod_obj)
             pod_obj = pod_factory(
-                interface=interface, pvc=pvc_obj, status="",
-                pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
+                interface=interface,
+                pvc=pvc_obj,
+                status="",
+                pod_dict_path=pod_dict,
+                raw_block_pv=raw_block_pv,
             )
             pod_objs.append(pod_obj)
 
         # Wait for pods to be in Running state
         for pod_obj in pod_objs + rwx_pod_objs:
-            wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING
-            )
+            wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
             pod_obj.reload()
         log.info(f"Created {len(pod_objs) + len(rwx_pod_objs)} pods.")
 
@@ -148,22 +157,23 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         # size accordingly
         for pod_obj in pod_objs:
             pvc_info = pod_obj.pvc.get()
-            if pvc_info['spec']['volumeMode'] == 'Block':
-                storage_type = 'block'
+            if pvc_info["spec"]["volumeMode"] == "Block":
+                storage_type = "block"
             else:
-                storage_type = 'fs'
+                storage_type = "fs"
             if pod_obj.pvc.access_mode == constants.ACCESS_MODE_RWX:
                 io_size = int((self.pvc_size - 1) / 2)
             else:
                 io_size = self.pvc_size - 1
             pod_obj.run_io(
-                storage_type=storage_type, size=f'{io_size}G', runtime=30,
-                fio_filename=f'{pod_obj.name}_io'
+                storage_type=storage_type,
+                size=f"{io_size}G",
+                runtime=30,
+                fio_filename=f"{pod_obj.name}_io",
             )
 
     def test_daemon_kill_during_pvc_pod_deletion_and_io(
-        self, interface, resource_name,
-        setup_base
+        self, interface, resource_name, setup_base
     ):
         """
         Kill 'resource_name' daemon while PVCs deletion, pods deletion
@@ -178,26 +188,37 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         # Select pods to be deleted
         pods_to_delete = pod_objs[:num_of_pods_to_delete]
         pods_to_delete.extend(
-            [pod for pod in rwx_pod_objs for pod_obj in pods_to_delete if (
-                pod_obj.pvc == pod.pvc
-            )]
+            [
+                pod
+                for pod in rwx_pod_objs
+                for pod_obj in pods_to_delete
+                if (pod_obj.pvc == pod.pvc)
+            ]
         )
 
         # Select pods to run IO
-        io_pods = pod_objs[num_of_pods_to_delete:num_of_pods_to_delete + num_of_io_pods]
+        io_pods = pod_objs[
+            num_of_pods_to_delete : num_of_pods_to_delete + num_of_io_pods
+        ]
         io_pods.extend(
-            [pod for pod in rwx_pod_objs for pod_obj in io_pods if (
-                pod_obj.pvc == pod.pvc
-            )]
+            [
+                pod
+                for pod in rwx_pod_objs
+                for pod_obj in io_pods
+                if (pod_obj.pvc == pod.pvc)
+            ]
         )
 
         # Select pods which are having PVCs to delete
-        pods_for_pvc = pod_objs[num_of_pods_to_delete + num_of_io_pods:]
+        pods_for_pvc = pod_objs[num_of_pods_to_delete + num_of_io_pods :]
         pvcs_to_delete = [pod_obj.pvc for pod_obj in pods_for_pvc]
         pods_for_pvc.extend(
-            [pod for pod in rwx_pod_objs for pod_obj in pods_for_pvc if (
-                pod_obj.pvc == pod.pvc
-            )]
+            [
+                pod
+                for pod in rwx_pod_objs
+                for pod_obj in pods_for_pvc
+                if (pod_obj.pvc == pod.pvc)
+            ]
         )
 
         log.info(
@@ -218,31 +239,27 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         )
 
         pod_functions = {
-            'mds': partial(get_mds_pods), 'mon': partial(get_mon_pods),
-            'mgr': partial(get_mgr_pods), 'osd': partial(get_osd_pods),
-            'rbdplugin': partial(get_plugin_pods, interface=interface),
-            'cephfsplugin': partial(get_plugin_pods, interface=interface),
-            'cephfsplugin_provisioner': partial(
-                get_cephfsplugin_provisioner_pods
-            ),
-            'rbdplugin_provisioner': partial(get_rbdfsplugin_provisioner_pods),
-            'operator': partial(get_operator_pods)
+            "mds": partial(get_mds_pods),
+            "mon": partial(get_mon_pods),
+            "mgr": partial(get_mgr_pods),
+            "osd": partial(get_osd_pods),
+            "rbdplugin": partial(get_plugin_pods, interface=interface),
+            "cephfsplugin": partial(get_plugin_pods, interface=interface),
+            "cephfsplugin_provisioner": partial(get_cephfsplugin_provisioner_pods),
+            "rbdplugin_provisioner": partial(get_rbdfsplugin_provisioner_pods),
+            "operator": partial(get_operator_pods),
         }
 
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=resource_name)
-        executor = ThreadPoolExecutor(
-            max_workers=len(pod_objs) + len(rwx_pod_objs)
-        )
+        executor = ThreadPoolExecutor(max_workers=len(pod_objs) + len(rwx_pod_objs))
 
         # Get number of pods of type 'resource_name'
         num_of_resource_pods = len(pod_functions[resource_name]())
 
         # Fetch the number of Pods and PVCs
         initial_num_of_pods = len(get_all_pods(namespace=namespace))
-        initial_num_of_pvc = len(
-            get_all_pvcs(namespace=namespace)['items']
-        )
+        initial_num_of_pvc = len(get_all_pvcs(namespace=namespace)["items"])
 
         # Fetch PV names to verify after deletion
         pv_objs = []
@@ -254,8 +271,8 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         node_pv_dict = {}
         for pod_obj in pods_to_delete:
             pod_info = pod_obj.get()
-            node = pod_info['spec']['nodeName']
-            pvc = pod_info['spec']['volumes'][0]['persistentVolumeClaim']['claimName']
+            node = pod_info["spec"]["nodeName"]
+            pvc = pod_info["spec"]["volumes"][0]["persistentVolumeClaim"]["claimName"]
             for pvc_obj in pvc_objs:
                 if pvc_obj.name == pvc:
                     pvc_obj.reload()
@@ -276,22 +293,19 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         log.info("Setting up pods for running IO.")
         for pod_obj in pod_objs + rwx_pod_objs:
             pvc_info = pod_obj.pvc.get()
-            if pvc_info['spec']['volumeMode'] == 'Block':
-                storage_type = 'block'
+            if pvc_info["spec"]["volumeMode"] == "Block":
+                storage_type = "block"
             else:
-                storage_type = 'fs'
+                storage_type = "fs"
             executor.submit(pod_obj.workload_setup, storage_type=storage_type)
 
         # Wait for setup on pods to complete
         for pod_obj in pod_objs + rwx_pod_objs:
             log.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
-            for sample in TimeoutSampler(
-                180, 2, getattr, pod_obj, 'wl_setup_done'
-            ):
+            for sample in TimeoutSampler(180, 2, getattr, pod_obj, "wl_setup_done"):
                 if sample:
                     log.info(
-                        f"Setup for running IO is completed on pod "
-                        f"{pod_obj.name}."
+                        f"Setup for running IO is completed on pod " f"{pod_obj.name}."
                     )
                     break
         log.info("Setup for running IO is completed on all pods.")
@@ -307,9 +321,9 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         log.info("Verified IO result on pods having PVCs to delete.")
 
         # Delete pods having PVCs to delete.
-        assert self.delete_pods(pods_for_pvc), (
-            "Couldn't delete pods which are having PVCs to delete."
-        )
+        assert self.delete_pods(
+            pods_for_pvc
+        ), "Couldn't delete pods which are having PVCs to delete."
         for pod_obj in pods_for_pvc:
             pod_obj.ocp.wait_for_delete(pod_obj.name)
         log.info("Verified: Deleted pods which are having PVCs to delete.")
@@ -336,26 +350,32 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
 
         # Verify pvc deletion has started
         pvc_deleting = executor.submit(
-            wait_for_resource_count_change, func_to_use=get_all_pvcs,
-            previous_num=initial_num_of_pvc, namespace=namespace,
-            change_type='decrease', min_difference=1, timeout=30, interval=0.01
+            wait_for_resource_count_change,
+            func_to_use=get_all_pvcs,
+            previous_num=initial_num_of_pvc,
+            namespace=namespace,
+            change_type="decrease",
+            min_difference=1,
+            timeout=30,
+            interval=0.01,
         )
 
         # Verify pod deletion has started
         pod_deleting = executor.submit(
-            wait_for_resource_count_change, func_to_use=get_all_pods,
-            previous_num=initial_num_of_pods, namespace=namespace,
-            change_type='decrease', min_difference=1, timeout=30, interval=0.01
+            wait_for_resource_count_change,
+            func_to_use=get_all_pods,
+            previous_num=initial_num_of_pods,
+            namespace=namespace,
+            change_type="decrease",
+            min_difference=1,
+            timeout=30,
+            interval=0.01,
         )
 
-        assert pvc_deleting.result(), (
-            "Wait timeout: PVCs are not being deleted."
-        )
+        assert pvc_deleting.result(), "Wait timeout: PVCs are not being deleted."
         log.info("PVCs deletion has started.")
 
-        assert pod_deleting.result(), (
-            "Wait timeout: Pods are not being deleted."
-        )
+        assert pod_deleting.result(), "Wait timeout: Pods are not being deleted."
         log.info("Pods deletion has started.")
 
         # Kill daemon
@@ -377,8 +397,7 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
                 f"deleting the pods."
             )
         log.info(
-            "Verified: mount points are removed from nodes after deleting "
-            "the pods"
+            "Verified: mount points are removed from nodes after deleting " "the pods"
         )
 
         pvcs_deleted = pvc_bulk_delete.result()
@@ -399,25 +418,23 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         for pvc_name, uuid in pvc_uuid_map.items():
             if interface == constants.CEPHBLOCKPOOL:
                 ret = verify_volume_deleted_in_backend(
-                    interface=interface, image_uuid=uuid,
-                    pool_name=pool_name
+                    interface=interface, image_uuid=uuid, pool_name=pool_name
                 )
             if interface == constants.CEPHFILESYSTEM:
                 ret = verify_volume_deleted_in_backend(
                     interface=interface, image_uuid=uuid
                 )
             assert ret, (
-                f"Volume associated with PVC {pvc_name} still exists "
-                f"in backend"
+                f"Volume associated with PVC {pvc_name} still exists " f"in backend"
             )
 
         log.info("Fetching IO results from the pods.")
         for pod_obj in io_pods:
             fio_result = pod_obj.get_fio_results()
-            err_count = fio_result.get('jobs')[0].get('error')
-            assert err_count == 0, (
-                f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
-            )
+            err_count = fio_result.get("jobs")[0].get("error")
+            assert (
+                err_count == 0
+            ), f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
         log.info("Verified IO result on pods.")
 
         # Verify number of pods of type 'resource_name'
@@ -430,5 +447,5 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         )
 
         # Check ceph status
-        ceph_health_check(namespace=config.ENV_DATA['cluster_namespace'])
+        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"])
         log.info("Ceph cluster health is OK")

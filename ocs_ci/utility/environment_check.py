@@ -22,13 +22,13 @@ NS = ocp.OCP(kind=constants.NAMESPACE)
 
 KINDS = [POD, SC, CEPHFILESYSTEM, CEPHBLOCKPOOL, PV, PVC, NS]
 ENV_STATUS_DICT = {
-    'pod': None,
-    'sc': None,
-    'cephfs': None,
-    'cephbp': None,
-    'pv': None,
-    'pvc': None,
-    'namespace': None,
+    "pod": None,
+    "sc": None,
+    "cephfs": None,
+    "cephbp": None,
+    "pv": None,
+    "pvc": None,
+    "namespace": None,
 }
 ENV_STATUS_PRE = copy.deepcopy(ENV_STATUS_DICT)
 ENV_STATUS_POST = copy.deepcopy(ENV_STATUS_DICT)
@@ -48,35 +48,33 @@ def compare_dicts(before, after):
     added = []
     removed = []
     uid_before = [
-        uid.get('metadata').get(
-            'generateName', uid.get('metadata').get('name')
-        ) for uid in before
+        uid.get("metadata").get("generateName", uid.get("metadata").get("name"))
+        for uid in before
     ]
     uid_after = [
-        uid.get('metadata').get(
-            'generateName', uid.get('metadata').get('name')
-        ) for uid in after
+        uid.get("metadata").get("generateName", uid.get("metadata").get("name"))
+        for uid in after
     ]
     diff_added = [val for val in uid_after if val not in uid_before]
     diff_removed = [val for val in uid_before if val not in uid_after]
     if diff_added:
         added = [
-            val for val in after if val.get('metadata').get(
-                'generateName', val.get('metadata').get('name')
-            ) in [v for v in diff_added]
+            val
+            for val in after
+            if val.get("metadata").get("generateName", val.get("metadata").get("name"))
+            in [v for v in diff_added]
         ]
     if diff_removed:
         removed = [
-            val for val in before if val.get('metadata').get(
-                'generateName', val.get('metadata').get('name')
-            ) in [v for v in diff_removed]
+            val
+            for val in before
+            if val.get("metadata").get("generateName", val.get("metadata").get("name"))
+            in [v for v in diff_removed]
         ]
     return [added, removed]
 
 
-def assign_get_values(
-    env_status_dict, key, kind=None, exclude_labels=None
-):
+def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
     """
     Assigning kind status into env_status_dict
 
@@ -87,24 +85,26 @@ def assign_get_values(
         kind (OCP obj): OCP object for a resource
         exclude_labels (list): App labels to ignore leftovers
     """
-    items = kind.get(all_namespaces=True)['items']
+    items = kind.get(all_namespaces=True)["items"]
     items_filtered = []
     for item in items:
-        ns = item.get('metadata', {}).get('namespace')
-        if item.get('kind') == constants.PV:
-            ns = item.get('spec').get('claimRef').get('namespace')
-        app_label = item.get('metadata', {}).get('labels', {}).get('app')
-        if (ns is not None
-                and ns.startswith(("openshift-", defaults.BG_LOAD_NAMESPACE))
-                and ns != defaults.ROOK_CLUSTER_NAMESPACE):
+        ns = item.get("metadata", {}).get("namespace")
+        if item.get("kind") == constants.PV:
+            ns = item.get("spec").get("claimRef").get("namespace")
+        app_label = item.get("metadata", {}).get("labels", {}).get("app")
+        if (
+            ns is not None
+            and ns.startswith(("openshift-", defaults.BG_LOAD_NAMESPACE))
+            and ns != defaults.ROOK_CLUSTER_NAMESPACE
+        ):
             log.debug("ignoring item in %s namespace: %s", ns, item)
             continue
         if app_label in exclude_labels:
             log.debug("ignoring item with app label %s: %s", app_label, item)
             continue
-        if item.get('kind') == constants.NAMESPACE:
-            name = item.get('metadata').get('generateName')
-            if name == 'openshift-must-gather-':
+        if item.get("kind") == constants.NAMESPACE:
+            name = item.get("metadata").get("generateName")
+            if name == "openshift-must-gather-":
                 log.debug(f"ignoring item: {constants.NAMESPACE} with name {name}")
                 continue
         items_filtered.append(item)
@@ -126,8 +126,7 @@ def get_environment_status(env_dict, exclude_labels=None):
     with ThreadPoolExecutor(max_workers=len(KINDS)) as executor:
         for key, kind in zip(env_dict.keys(), KINDS):
             executor.submit(
-                assign_get_values, env_dict, key, kind,
-                exclude_labels=exclude_labels
+                assign_get_values, env_dict, key, kind, exclude_labels=exclude_labels
             )
 
 
@@ -155,49 +154,33 @@ def get_status_after_execution(exclude_labels=None):
     """
     get_environment_status(ENV_STATUS_POST, exclude_labels=exclude_labels)
 
-    pod_diff = compare_dicts(
-        ENV_STATUS_PRE['pod'], ENV_STATUS_POST['pod']
-    )
-    sc_diff = compare_dicts(
-        ENV_STATUS_PRE['sc'], ENV_STATUS_POST['sc']
-    )
-    cephfs_diff = compare_dicts(
-        ENV_STATUS_PRE['cephfs'], ENV_STATUS_POST['cephfs']
-    )
-    cephbp_diff = compare_dicts(
-        ENV_STATUS_PRE['cephbp'], ENV_STATUS_POST['cephbp']
-    )
-    pv_diff = compare_dicts(
-        ENV_STATUS_PRE['pv'], ENV_STATUS_POST['pv']
-    )
-    pvc_diff = compare_dicts(
-        ENV_STATUS_PRE['pvc'], ENV_STATUS_POST['pvc']
-    )
+    pod_diff = compare_dicts(ENV_STATUS_PRE["pod"], ENV_STATUS_POST["pod"])
+    sc_diff = compare_dicts(ENV_STATUS_PRE["sc"], ENV_STATUS_POST["sc"])
+    cephfs_diff = compare_dicts(ENV_STATUS_PRE["cephfs"], ENV_STATUS_POST["cephfs"])
+    cephbp_diff = compare_dicts(ENV_STATUS_PRE["cephbp"], ENV_STATUS_POST["cephbp"])
+    pv_diff = compare_dicts(ENV_STATUS_PRE["pv"], ENV_STATUS_POST["pv"])
+    pvc_diff = compare_dicts(ENV_STATUS_PRE["pvc"], ENV_STATUS_POST["pvc"])
     namespace_diff = compare_dicts(
-        ENV_STATUS_PRE['namespace'], ENV_STATUS_POST['namespace']
+        ENV_STATUS_PRE["namespace"], ENV_STATUS_POST["namespace"]
     )
     diffs_dict = {
-        'pods': pod_diff,
-        'storageClasses': sc_diff,
-        'cephfs': cephfs_diff,
-        'cephbp': cephbp_diff,
-        'pvs': pv_diff,
-        'pvcs': pvc_diff,
-        'namespaces': namespace_diff,
+        "pods": pod_diff,
+        "storageClasses": sc_diff,
+        "cephfs": cephfs_diff,
+        "cephbp": cephbp_diff,
+        "pvs": pv_diff,
+        "pvcs": pvc_diff,
+        "namespaces": namespace_diff,
     }
     leftover_detected = False
 
-    leftovers = {'Leftovers added': [], 'Leftovers removed': []}
+    leftovers = {"Leftovers added": [], "Leftovers removed": []}
     for kind, kind_diff in diffs_dict.items():
         if kind_diff[0]:
-            leftovers[
-                'Leftovers added'
-            ].append({f"***{kind}***": kind_diff[0]})
+            leftovers["Leftovers added"].append({f"***{kind}***": kind_diff[0]})
             leftover_detected = True
         if kind_diff[1]:
-            leftovers[
-                'Leftovers removed'
-            ].append({f"***{kind}***": kind_diff[1]})
+            leftovers["Leftovers removed"].append({f"***{kind}***": kind_diff[1]})
             leftover_detected = True
     if leftover_detected:
         raise exceptions.ResourceLeftoversException(

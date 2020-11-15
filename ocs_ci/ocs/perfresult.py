@@ -31,18 +31,15 @@ class PerfResult:
         self.uuid = uuid
 
         # Initialize the Elastic-search server parameters
-        self.server = crd['spec']['elasticsearch']['server']
-        self.port = crd['spec']['elasticsearch']['port']
+        self.server = crd["spec"]["elasticsearch"]["server"]
+        self.port = crd["spec"]["elasticsearch"]["port"]
         self.index = None  # place holder for the ES index name
         self.new_index = None  # place holder for the ES full result index name
         self.all_results = {}
         self.es = None  # place holder for the elastic-search connection
 
         # Creating full results dictionary
-        self.results = {
-            'clustername': crd['spec']['clustername'],
-            'uuid': uuid
-        }
+        self.results = {"clustername": crd["spec"]["clustername"], "uuid": uuid}
 
     def es_connect(self):
         """
@@ -55,18 +52,20 @@ class PerfResult:
         """
 
         # Creating the connection to the elastic-search
-        log.info(f'Connecting to ES {self.server} on port {self.port}')
+        log.info(f"Connecting to ES {self.server} on port {self.port}")
         try:
-            self.es = Elasticsearch([{'host': self.server, 'port': self.port}])
+            self.es = Elasticsearch([{"host": self.server, "port": self.port}])
         except ESExp.ConnectionError:
-            log.error('can not connect to ES server {}:{}'.format(
-                self.server, self.port))
+            log.error(
+                "can not connect to ES server {}:{}".format(self.server, self.port)
+            )
             raise
 
         # Testing the connection to the elastic-search
         if not self.es.ping():
-            log.error('can not connect to ES server {}:{}'.format(
-                self.server, self.port))
+            log.error(
+                "can not connect to ES server {}:{}".format(self.server, self.port)
+            )
             raise ValueError("Connection failed")
 
     def es_read(self):
@@ -81,10 +80,10 @@ class PerfResult:
 
         """
 
-        query = {"query": {"match": {'uuid': self.uuid}}}
+        query = {"query": {"match": {"uuid": self.uuid}}}
         results = self.es.search(index=self.index, body=query)
-        assert results['hits']['hits'], 'Results not found in Elasticsearch'
-        return results['hits']['hits']
+        assert results["hits"]["hits"], "Results not found in Elasticsearch"
+        return results["hits"]["hits"]
 
     def es_write(self):
         """
@@ -95,19 +94,18 @@ class PerfResult:
 
         """
 
-        log.info('Writing all data to ES server')
-        self.add_key('all_results', self.all_results)
+        log.info("Writing all data to ES server")
+        self.add_key("all_results", self.all_results)
         log.info(
-            f'Params : index={self.new_index}, '
-            f'doc_type=_doc, body={self.results}, id={self.uuid}'
+            f"Params : index={self.new_index}, "
+            f"doc_type=_doc, body={self.results}, id={self.uuid}"
         )
         try:
-            self.es.index(index=self.new_index,
-                          doc_type='_doc',
-                          body=self.results,
-                          id=self.uuid)
+            self.es.index(
+                index=self.new_index, doc_type="_doc", body=self.results, id=self.uuid
+            )
         except ESExp.RequestError as e:
-            log.error(f'Failed writhing data with {e}')
+            log.error(f"Failed writhing data with {e}")
             raise
 
     def add_key(self, key, value):
@@ -132,6 +130,6 @@ class PerfResult:
 
         """
 
-        res_link = f'http://{self.server}:{self.port}/{self.new_index}/'
-        res_link += f'_search?q=uuid:{self.uuid}'
+        res_link = f"http://{self.server}:{self.port}/{self.new_index}/"
+        res_link += f"_search?q=uuid:{self.uuid}"
         return res_link

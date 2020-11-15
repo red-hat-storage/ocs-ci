@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 SC_OBJ = None
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture(scope="class")
 def test_fixture(request):
     """
     This is a test fixture
@@ -24,6 +24,7 @@ def test_fixture(request):
 
     def finalizer():
         teardown()
+
     request.addfinalizer(finalizer)
     setup(self)
 
@@ -34,11 +35,9 @@ def setup(self):
     """
     # Create a storage class
     log.info("Creating a Storage Class")
-    self.sc_data = templating.load_yaml(
-        constants.CSI_RBD_STORAGECLASS_YAML
-    )
-    self.sc_data['metadata']['name'] = helpers.create_unique_resource_name(
-        'test', 'csi-rbd'
+    self.sc_data = templating.load_yaml(constants.CSI_RBD_STORAGECLASS_YAML)
+    self.sc_data["metadata"]["name"] = helpers.create_unique_resource_name(
+        "test", "csi-rbd"
     )
     global SC_OBJ
     SC_OBJ = OCS(**self.sc_data)
@@ -64,12 +63,13 @@ class TestPvcCreationInvalidInputs(ManageTest):
     """
     PVC creation with invaid inputs in pvc yaml
     """
+
     def test_pvccreation_invalid_inputs(self):
         """
         Calling functions for pvc invalid name and size
         """
-        create_pvc_invalid_name(pvcname='@123')
-        create_pvc_invalid_size(pvcsize='t@st')
+        create_pvc_invalid_name(pvcname="@123")
+        create_pvc_invalid_size(pvcsize="t@st")
 
 
 def create_pvc_invalid_name(pvcname):
@@ -83,8 +83,8 @@ def create_pvc_invalid_name(pvcname):
         None
     """
     pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
-    pvc_data['metadata']['name'] = pvcname
-    pvc_data['spec']['storageClassName'] = SC_OBJ.name
+    pvc_data["metadata"]["name"] = pvcname
+    pvc_data["spec"]["storageClassName"] = SC_OBJ.name
     pvc_obj = PVC(**pvc_data)
     log.info(f"Creating a pvc with name {pvcname}")
     try:
@@ -101,10 +101,7 @@ def create_pvc_invalid_name(pvcname):
                 "invalid pvc name is provided. EXPECTED"
             )
         else:
-            assert (
-                "PVC creation with invalid name succeeded : "
-                "NOT expected"
-            )
+            assert "PVC creation with invalid name succeeded : " "NOT expected"
 
 
 def create_pvc_invalid_size(pvcsize):
@@ -118,9 +115,9 @@ def create_pvc_invalid_size(pvcsize):
         None
     """
     pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
-    pvc_data['metadata']['name'] = "auto"
-    pvc_data['spec']['resources']['requests']['storage'] = pvcsize
-    pvc_data['spec']['storageClassName'] = SC_OBJ.name
+    pvc_data["metadata"]["name"] = "auto"
+    pvc_data["spec"]["resources"]["requests"]["storage"] = pvcsize
+    pvc_data["spec"]["storageClassName"] = SC_OBJ.name
     pvc_obj = PVC(**pvc_data)
     log.info(f"Creating a PVC with size {pvcsize}")
     try:
@@ -136,7 +133,4 @@ def create_pvc_invalid_size(pvcsize):
                 "invalid pvc size is provided. EXPECTED"
             )
         else:
-            assert (
-                "PVC creation with invalid size succeeded : "
-                "NOT expected"
-            )
+            assert "PVC creation with invalid size succeeded : " "NOT expected"
