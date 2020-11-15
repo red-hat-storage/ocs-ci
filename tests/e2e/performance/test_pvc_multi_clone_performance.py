@@ -12,6 +12,7 @@ import time
 from ocs_ci.helpers import helpers
 import tempfile
 import subprocess
+import datetime
 from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
@@ -102,8 +103,10 @@ class TestPvcMultiClonePerformance(E2ETest):
         self.params = {}
         self.params["clonenum"] = f'{num_of_clones}'
         self.params["filesize"] = file_size
+        self.params['ERRMSG'] = 'Error in command'
 
         clone_yaml = self.build_params()
+        self.get_log_names()
         self.run_fio_on_pod(file_size)
 
         # Running the test
@@ -123,12 +126,12 @@ class TestPvcMultiClonePerformance(E2ETest):
             log.info(f"Clone number {r['Clone Num']} creation time is {r['time']} secs.")
             log.info(f"Clone number {r['Clone Num']} creation speed is {r['speed']} MB/sec.")
 
+
     def build_params(self):
         log.info("Start building params")
 
         self.params["nspace"] = self.pvc_obj.namespace
         self.params["pvcname"] = self.pvc_obj.name
-        self.params['ERRMSG'] = 'Error in command'
 
         log_file_name = os.path.basename(__file__).replace('.py', '.log')
 
@@ -166,6 +169,29 @@ class TestPvcMultiClonePerformance(E2ETest):
         )
 
         return clone_yaml
+
+    def get_log_names(self):
+        """
+        Finds names for log files pods in which logs for clone creation are located
+        For CephFS: 2 pods that start with "csi-cephfsplugin-provisioner" prefix
+        For RBD:
+
+        """
+        self.params['logs'] = []
+
+        pods = self.run_oc_command(cmd="get pod", namespace="openshift-storage")
+        if self.params['ERRMSG'] in pods:
+            raise Exception("Can not get csi controller pod")
+
+        provisioning_name = "csi-cephfsplugin-provisioner"
+        if self.interface == constants.CEPHBLOCKPOOL:
+            provisioning_name = "csi-rbdplugin-provisioner"
+
+        for line in pods:
+            if provisioning_name in line:
+                self.params['logs'].append(line.split()[0])
+        log.info(f'The logs pods are : {self.params["logs"]}')
+
 
     def run_fio_on_pod(self, file_size):
         """
@@ -216,6 +242,7 @@ class TestPvcMultiClonePerformance(E2ETest):
         log.info(f'Going to create {tmpfile}')
         with open(tmpfile, 'w') as f:
             yaml.dump(clone_yaml, f, default_flow_style=False)
+        time_before_creation = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         log.info(f'Clone yaml file is {clone_yaml}')
         res = self.run_oc_command(f'create -f {tmpfile}', self.params['nspace'])
         if self.params['ERRMSG'] in res[0]:
@@ -243,7 +270,8 @@ class TestPvcMultiClonePerformance(E2ETest):
         if timeout <= 0:
             raise Exception(f"Clone {clone_name}  for {self.interface} interface was not created for 600 seconds")
 
-        create_time = helpers.measure_pvc_creation_time(self.interface, clone_name)
+        create_time = self.measure_clone_creation_time(clone_name, time_before_creation)
+
         log.info(f"Creation time of clone {clone_name} is {create_time} secs.")
 
         return create_time
@@ -312,3 +340,49 @@ class TestPvcMultiClonePerformance(E2ETest):
 
         command = (f'oc --kubeconfig {kubeconfig} -n {namespace} {cmd}')
         return self.run_command(command)
+
+    def measure_clone_creation_time(self, clone_name, start_time):
+        """
+
+
+        Args:
+
+        Returns:
+
+
+        """
+        logs = []
+        for l in self.params['logs']:
+            logs.append(
+                self.run_oc_command(
+                    f"logs {l} -c csi-provisioner --since-time={start_time}",
+                    "openshift-storage",
+                )
+            )
+
+        format = "%H:%M:%S.%f"
+
+        st = None
+        et = None
+        for sublog in logs:
+            for line in sublog:
+                if st is None and "provision" in line and clone_name in line and "started" in line:
+                    st = line.split(" ")[1]
+                    st = datetime.datetime.strptime(st, format)
+                elif et is None and "provision" in line and clone_name in line and "succeeded" in line:
+                    et = line.split(" ")[1]
+                    et = datetime.datetime.strptime(et, format)
+                if (st is not None and et is not None):
+                    break;
+            if (st is not None and et is not None):
+                break;
+
+        if st is None:
+            log.error(f"Can not find start time of {clone_name}")
+            raise Exception(f"Can not find start time of {clone_name}")
+
+        if et is None:
+            log.error(f"Can not find end time of {clone_name}")
+            raise Exception(f"Can not find end time of {clone_name}")
+
+        return (et - st).total_seconds()
