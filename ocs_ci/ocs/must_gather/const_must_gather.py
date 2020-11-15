@@ -1,3 +1,19 @@
+"""
+The Procedure to add new version:
+1.New Version created
+2.Add the new version to GATHER_COMMANDS_VERSION dictionary
+3.Ask the developer about new files on new version
+4.Add file names to relevant list
+
+OCS4.6 Link:
+https://github.com/openshift/ocs-operator/blob/fefc8a0e04e314801809df2e5292a20fae8456b8/must-gather/collection-scripts/
+
+OCS4.5 Link:
+https://github.com/openshift/ocs-operator/blob/de48c9c00f8964f0f8813d7b3ddd25f7bc318449/must-gather/collection-scripts/
+
+"""
+
+
 GATHER_COMMANDS_CEPH = [
     'ceph-volume_raw_list', 'ceph_auth_list', 'ceph_balancer_status',
     'ceph_config-key_ls', 'ceph_config_dump', 'ceph_crash_stat',
