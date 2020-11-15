@@ -28,7 +28,10 @@ class BackingStore:
     A class that represents BackingStore objects
 
     """
-    def __init__(self, name, uls_name=None, secret_name=None, vol_num=None, vol_size=None):
+
+    def __init__(
+        self, name, uls_name=None, secret_name=None, vol_num=None, vol_size=None
+    ):
         self.name = name
         self.uls_name = uls_name
         self.secret_name = secret_name
@@ -38,14 +41,11 @@ class BackingStore:
     def delete(self):
         log.info(f"Cleaning up backingstore {self.name}")
 
-        OCP(
-            namespace=config.ENV_DATA['cluster_namespace'],
-            kind='backingstore'
-        ).delete(resource_name=self.name)
-        if 'pv-backingstore' in self.name.lower():
-            log.info(
-                f"Waiting for backingstore {self.name} resources to be deleted"
-            )
+        OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="backingstore").delete(
+            resource_name=self.name
+        )
+        if "pv-backingstore" in self.name.lower():
+            log.info(f"Waiting for backingstore {self.name} resources to be deleted")
             wait_for_pv_backingstore_resource_deleted(self.name)
 
 
@@ -58,13 +58,16 @@ def wait_for_pv_backingstore_resource_deleted(backingstore_name, namespace=None)
         namespace (str): backing store's namespace
 
     """
-    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     sample = TimeoutSampler(
-        timeout=120, sleep=15, func=check_resources_deleted,
-        backingstore_name=backingstore_name, namespace=namespace
+        timeout=120,
+        sleep=15,
+        func=check_resources_deleted,
+        backingstore_name=backingstore_name,
+        namespace=namespace,
     )
     if not sample.wait_for_func_status(result=True):
-        log.error(f'Unable to delete resources of {backingstore_name}')
+        log.error(f"Unable to delete resources of {backingstore_name}")
         raise TimeoutExpiredError
 
 
@@ -80,9 +83,9 @@ def check_resources_deleted(backingstore_name, namespace=None):
         bool: True if pvc(s) were deleted
 
     """
-    pvcs = get_all_pvcs(namespace=namespace, selector=f'pool={backingstore_name}')
-    pods = get_pods_having_label(namespace=namespace, label=f'pool={backingstore_name}')
-    return True if len(pvcs['items']) == 0 and len(pods) == 0 else False
+    pvcs = get_all_pvcs(namespace=namespace, selector=f"pool={backingstore_name}")
+    pods = get_pods_having_label(namespace=namespace, label=f"pool={backingstore_name}")
+    return True if len(pvcs["items"]) == 0 and len(pods) == 0 else False
 
 
 def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
@@ -152,7 +155,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                         f"Invalid cloud type received: {cloud}. "
                         f'available types: {", ".join(cmdMap[method.lower()].keys())}'
                     )
-                if cloud == 'pv':
+                if cloud == "pv":
                     vol_num, size, storagecluster = uls_tup
                     backingstore_name = create_unique_resource_name(
                         resource_description="backingstore", resource_type=cloud.lower()
@@ -161,12 +164,10 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                     backingstore_name = backingstore_name[:-16]
                     created_backingstores.append(
                         BackingStore(
-                            name=backingstore_name,
-                            vol_num=vol_num,
-                            vol_size=size
+                            name=backingstore_name, vol_num=vol_num, vol_size=size
                         )
                     )
-                    if method.lower() == 'cli':
+                    if method.lower() == "cli":
                         cmdMap[method.lower()][cloud.lower()](
                             mcg_obj, backingstore_name, vol_num, size, storagecluster
                         )

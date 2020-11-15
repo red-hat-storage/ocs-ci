@@ -29,11 +29,11 @@ class TestBucketCreation(MCGTest):
         argnames="amount,interface,bucketclass_dict",
         argvalues=[
             pytest.param(
-                *[3, 'S3', None],
-                marks=[pytest.mark.polarion_id("OCS-1298"), tier1, acceptance]
+                *[3, "S3", None],
+                marks=[pytest.mark.polarion_id("OCS-1298"), tier1, acceptance],
             ),
             pytest.param(
-                *[100, 'S3', None],
+                *[100, "S3", None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
@@ -41,7 +41,7 @@ class TestBucketCreation(MCGTest):
                 ],
             ),
             pytest.param(
-                *[1000, 'S3', None],
+                *[1000, "S3", None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
@@ -49,11 +49,11 @@ class TestBucketCreation(MCGTest):
                 ],
             ),
             pytest.param(
-                *[3, 'OC', None],
-                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1298")]
+                *[3, "OC", None],
+                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1298")],
             ),
             pytest.param(
-                *[100, 'OC', None],
+                *[100, "OC", None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
@@ -61,7 +61,7 @@ class TestBucketCreation(MCGTest):
                 ],
             ),
             pytest.param(
-                *[1000, 'OC', None],
+                *[1000, "OC", None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
@@ -69,11 +69,11 @@ class TestBucketCreation(MCGTest):
                 ],
             ),
             pytest.param(
-                *[3, 'CLI', None],
-                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1298")]
+                *[3, "CLI", None],
+                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1298")],
             ),
             pytest.param(
-                *[100, 'CLI', None],
+                *[100, "CLI", None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
@@ -81,7 +81,7 @@ class TestBucketCreation(MCGTest):
                 ],
             ),
             pytest.param(
-                *[1000, 'CLI', None],
+                *[1000, "CLI", None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
@@ -89,24 +89,32 @@ class TestBucketCreation(MCGTest):
                 ],
             ),
             pytest.param(
-                *[1, 'OC', {
-                    'interface': 'OC',
-                    'backingstore_dict': {
-                        'pv': [(1, 50, DEFAULT_STORAGECLASS_RBD)]
-                    }
-                }],
-                marks=[tier1, pytest.mark.polarion_id("OCS-2331")]
+                *[
+                    1,
+                    "OC",
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {
+                            "pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]
+                        },
+                    },
+                ],
+                marks=[tier1, pytest.mark.polarion_id("OCS-2331")],
             ),
             pytest.param(
-                *[1, 'CLI', {
-                    'interface': 'CLI',
-                    'backingstore_dict': {
-                        'pv': [(1, 50, DEFAULT_STORAGECLASS_RBD)]
-                    }
-                }],
-                marks=[tier1, pytest.mark.polarion_id("OCS-2331")]
-            )
-        ]
+                *[
+                    1,
+                    "CLI",
+                    {
+                        "interface": "CLI",
+                        "backingstore_dict": {
+                            "pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]
+                        },
+                    },
+                ],
+                marks=[tier1, pytest.mark.polarion_id("OCS-2331")],
+            ),
+        ],
     )
     def test_bucket_creation(
         self, bucket_class_factory, bucket_factory, amount, interface, bucketclass_dict

@@ -278,8 +278,12 @@ class MCGCLIBucket(ObjectBucket):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        bc = f" --bucketclass={kwargs['bucketclass']}" if kwargs.get('bucketclass') else ''
-        self.mcg.exec_mcg_cmd(f'obc create --exact {self.name}{bc}')
+        bc = (
+            f" --bucketclass={kwargs['bucketclass']}"
+            if kwargs.get("bucketclass")
+            else ""
+        )
+        self.mcg.exec_mcg_cmd(f"obc create --exact {self.name}{bc}")
 
     def internal_delete(self):
         """
@@ -405,15 +409,15 @@ class MCGOCBucket(OCBucket):
         super().__init__(*args, **kwargs)
         obc_data = templating.load_yaml(constants.MCG_OBC_YAML)
         if self.name is None:
-            self.name = create_unique_resource_name('oc', 'obc')
-        obc_data['metadata']['name'] = self.name
-        obc_data['spec']['bucketName'] = self.name
-        obc_data['spec']['storageClassName'] = self.namespace + '.noobaa.io'
-        obc_data['metadata']['namespace'] = self.namespace
-        if kwargs.get('bucketclass'):
-            obc_data.setdefault('spec', {}).setdefault('additionalConfig', {}).setdefault(
-                'bucketclass', kwargs['bucketclass']
-            )
+            self.name = create_unique_resource_name("oc", "obc")
+        obc_data["metadata"]["name"] = self.name
+        obc_data["spec"]["bucketName"] = self.name
+        obc_data["spec"]["storageClassName"] = self.namespace + ".noobaa.io"
+        obc_data["metadata"]["namespace"] = self.namespace
+        if kwargs.get("bucketclass"):
+            obc_data.setdefault("spec", {}).setdefault(
+                "additionalConfig", {}
+            ).setdefault("bucketclass", kwargs["bucketclass"])
         create_resource(**obc_data)
 
 

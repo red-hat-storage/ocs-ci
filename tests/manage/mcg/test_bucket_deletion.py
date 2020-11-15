@@ -35,19 +35,19 @@ class TestBucketDeletion(MCGTest):
         argnames="amount,interface,bucketclass_dict",
         argvalues=[
             pytest.param(
-                *[3, 'S3', None],
-                marks=[pytest.mark.polarion_id("OCS-1939"), tier1, acceptance]
+                *[3, "S3", None],
+                marks=[pytest.mark.polarion_id("OCS-1939"), tier1, acceptance],
             ),
             pytest.param(
-                *[3, 'CLI', None],
-                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1940")]
+                *[3, "CLI", None],
+                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1940")],
             ),
             pytest.param(
-                *[3, 'OC', None],
-                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1299")]
+                *[3, "OC", None],
+                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1299")],
             ),
             pytest.param(
-                *[100, 'S3', None],
+                *[100, "S3", None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
@@ -55,7 +55,7 @@ class TestBucketDeletion(MCGTest):
                 ],
             ),
             pytest.param(
-                *[100, 'OC', None],
+                *[100, "OC", None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
@@ -63,7 +63,7 @@ class TestBucketDeletion(MCGTest):
                 ],
             ),
             pytest.param(
-                *[1000, 'S3', None],
+                *[1000, "S3", None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
@@ -71,7 +71,7 @@ class TestBucketDeletion(MCGTest):
                 ],
             ),
             pytest.param(
-                *[1000, 'OC', None],
+                *[1000, "OC", None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
@@ -79,28 +79,38 @@ class TestBucketDeletion(MCGTest):
                 ],
             ),
             pytest.param(
-                *[1, 'OC', {
-                    'interface': 'OC',
-                    'backingstores': {
-                        'pv': [(1, 50, DEFAULT_STORAGECLASS_RBD)]
-                    }
-                }],
-                marks=[tier1, pytest.mark.polarion_id("OCS-2354")]
+                *[
+                    1,
+                    "OC",
+                    {
+                        "interface": "OC",
+                        "backingstores": {"pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]},
+                    },
+                ],
+                marks=[tier1, pytest.mark.polarion_id("OCS-2354")],
             ),
             pytest.param(
-                *[1, 'CLI', {
-                    'interface': 'CLI',
-                    'backingstores': {
-                        'pv': [(1, 50, DEFAULT_STORAGECLASS_RBD)]
-                    }
-                }],
-                marks=[tier1, pytest.mark.polarion_id("OCS-2354")]
-            )
-        ]
+                *[
+                    1,
+                    "CLI",
+                    {
+                        "interface": "CLI",
+                        "backingstores": {"pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]},
+                    },
+                ],
+                marks=[tier1, pytest.mark.polarion_id("OCS-2354")],
+            ),
+        ],
     )
     def test_bucket_delete(
-        self, verify_rgw_restart_count, mcg_obj, bucket_class_factory,
-        bucket_factory, amount, interface, bucketclass_dict
+        self,
+        verify_rgw_restart_count,
+        mcg_obj,
+        bucket_class_factory,
+        bucket_factory,
+        amount,
+        interface,
+        bucketclass_dict,
     ):
         """
         Test deletion of bucket using the S3 SDK, MCG CLI and OC

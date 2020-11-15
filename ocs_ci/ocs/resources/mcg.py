@@ -676,7 +676,7 @@ class MCG:
 
         """
         bc = f" --backingstores={','.join(backingstores)} --placement={placement}"
-        self.exec_mcg_cmd(f'bucketclass create {name}{bc}')
+        self.exec_mcg_cmd(f"bucketclass create {name}{bc}")
 
     def check_if_mirroring_is_done(self, bucket_name, timeout=140):
         """
