@@ -2,17 +2,13 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import (
-<<<<<<< HEAD
     tier4,
     tier4a,
     ignore_leftovers,
     ManageTest,
     aws_platform_required,
     bugzilla,
-=======
-    tier4, tier4a, ignore_leftovers, ManageTest,
-    aws_platform_required, bugzilla, skipif_no_lso
->>>>>>> Create new test to verify unexpected PV is not created after node reboot on LSO cluster
+    skipif_no_lso,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs, get_typed_nodes
@@ -73,13 +69,8 @@ class TestNodesRestart(ManageTest):
         self.sanity_helpers.health_check()
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
-    @bugzilla('1754287')
-<<<<<<< HEAD
-    @bugzilla('1873938')
-    @pytest.mark.polarion_id('OCS-2015')
-=======
+    @bugzilla("1754287")
     @pytest.mark.polarion_id("OCS-2015")
->>>>>>> Create new test to verify unexpected PV is not created after node reboot on LSO cluster
     def test_rolling_nodes_restart(self, nodes, pvc_factory, pod_factory):
         """
         Test restart nodes one after the other and check health status in between
@@ -328,7 +319,7 @@ class TestNodesRestart(ManageTest):
         # Checking cluster and Ceph health
         self.sanity_helpers.health_check()
 
-    @bugzilla('1873938')
+    @bugzilla("1873938")
     @skipif_no_lso
     def test_pv_after_reboot_node(self, nodes):
         """
@@ -344,15 +335,15 @@ class TestNodesRestart(ManageTest):
             # Restart one worker node
             nodes.restart_nodes(nodes=[worker_node], wait=True)
             pod.wait_for_storage_pods()
-            logger.info(f'Verify PV after reboot {worker_node}')
+            logger.info(f"Verify PV after reboot {worker_node}")
             pv_after_reset = get_pv_names()
             pv_diff = set(pv_after_reset) - set(pv_before_reset)
             pv_new = []
             for pv in pv_diff:
                 pv_obj = ocp_obj.get(resource_name=pv)
-                if pv_obj['spec']['storageClassName'] == 'localblock':
+                if pv_obj["spec"]["storageClassName"] == "localblock":
                     pv_new.append(pv)
-            assert not pv_new, (
-                f"Unexpected PV {pv_new} is created after reboot {worker_node}"
-            )
-        logger.info('SUCCESS - No new PV was created.')
+            assert (
+                not pv_new
+            ), f"Unexpected PV {pv_new} is created after reboot {worker_node}"
+        logger.info("SUCCESS - No new PV was created.")
