@@ -2616,10 +2616,9 @@ def get_pv_names():
         list: list of pv names
 
     """
-
     ocp_obj = ocp.OCP(kind=constants.PV)
-    pv_objs = ocp_obj.get()['items']
-    return [pv_obj['metadata']['name'] for pv_obj in pv_objs]
+    pv_objs = ocp_obj.get()["items"]
+    return [pv_obj["metadata"]["name"] for pv_obj in pv_objs]
 
 
 def get_cluster_proxies():
