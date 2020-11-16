@@ -1,18 +1,20 @@
-import os
+import datetime
 import logging
-from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs import constants, exceptions
-from ocs_ci.ocs.cluster import CephCluster
-from ocs_ci.utility.utils import ocsci_log_path
+import os
+import subprocess
+import tempfile
+import time
+
+import yaml
+
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     skipif_ocs_version, skipif_ocp_version, E2ETest, performance
 )
-import yaml
-import time
-import tempfile
-import subprocess
-import datetime
-from ocs_ci.framework import config
+from ocs_ci.ocs import constants, exceptions
+from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.resources import pod
+from ocs_ci.utility.utils import ocsci_log_path
 
 log = logging.getLogger(__name__)
 
@@ -125,7 +127,6 @@ class TestPvcMultiClonePerformance(E2ETest):
             log.info(f"Clone number {r['Clone Num']} creation time is {r['time']} secs.")
             log.info(f"Clone number {r['Clone Num']} creation speed is {r['speed']} MB/sec.")
 
-
     def build_params(self):
         log.info("Start building params")
 
@@ -190,7 +191,6 @@ class TestPvcMultiClonePerformance(E2ETest):
             if provisioning_name in line:
                 self.params['logs'].append(line.split()[0])
         log.info(f'The logs pods are : {self.params["logs"]}')
-
 
     def run_fio_on_pod(self, file_size):
         """
@@ -373,9 +373,9 @@ class TestPvcMultiClonePerformance(E2ETest):
                     et = line.split(" ")[1]
                     et = datetime.datetime.strptime(et, format)
                 if (st is not None and et is not None):
-                    break;
+                    break
             if (st is not None and et is not None):
-                break;
+                break
 
         if st is None:
             log.error(f"Can not find start time of {clone_name}")
