@@ -88,7 +88,10 @@ class TestEndpointAutoScale(MCGTest):
     @tier4a
     @polarion_id("OCS-2422")
     def test_auto_scale_with_stop_and_start_node(self, mcg_job_factory, nodes, options):
-        """"""
+        """
+        Test auto scale with stop and start node
+
+        """
         cl_obj = cluster.CephCluster()
 
         self._assert_endpoint_count(1)
