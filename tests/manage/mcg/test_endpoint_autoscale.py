@@ -73,7 +73,7 @@ class TestEndpointAutoScale(MCGTest):
         job.ocp.wait_for_delete(resource_name=job.name, timeout=60)
         self._assert_endpoint_count(1)
 
-    def _assert_endpoint_count(self, desired_count):
+    def _assert_endpoint_count(self, desired_count, timeout=500):
         pod = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
 
         assert pod.wait_for_resource(
@@ -81,7 +81,7 @@ class TestEndpointAutoScale(MCGTest):
             condition=constants.STATUS_RUNNING,
             selector=constants.NOOBAA_ENDPOINT_POD_LABEL,
             dont_allow_other_resources=True,
-            timeout=500,
+            timeout=timeout,
         )
 
     @tier4
@@ -105,7 +105,8 @@ class TestEndpointAutoScale(MCGTest):
         ep_pod_obj = Pod(**ep_pod_objs[0])
         # Retrieve the node object on which the pod resides
         node = get_pod_node(ep_pod_obj)
-        # Drain the node
+
+        # Power off the node
         nodes.stop_nodes([node])
 
         wait_for_nodes_status(
@@ -125,7 +126,7 @@ class TestEndpointAutoScale(MCGTest):
         # Wait for 2 Noobaa endpoint pods to be started and reach running status
         logger.info("Waiting for 2 Noobaa endpoint pods to reach status Running")
 
-        self._assert_endpoint_count(2)
+        self._assert_endpoint_count(desired_count=2, timeout=900)
 
         logger.info("2 Noobaa endpoint pods failed to reach status Running")
         nodes.start_nodes([node])
