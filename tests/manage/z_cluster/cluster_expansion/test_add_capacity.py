@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     skipif_ocs_version,
     tier1,
+    acceptance,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -55,6 +56,7 @@ def add_capacity_test():
 
 @ignore_leftovers
 @tier1
+@acceptance
 @polarion_id("OCS-1191")
 @pytest.mark.last
 @skipif_aws_i3
