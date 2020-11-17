@@ -5,25 +5,32 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
-    ManageTest, tier2, skipif_ocs_version, skipif_ocp_version
+    ManageTest,
+    tier2,
+    skipif_ocs_version,
+    skipif_ocp_version,
 )
 
 log = logging.getLogger(__name__)
 
 
 @tier2
-@skipif_ocs_version('<4.6')
-@skipif_ocp_version('<4.6')
-@pytest.mark.polarion_id('OCS-2408')
+@skipif_ocs_version("<4.6")
+@skipif_ocp_version("<4.6")
+@pytest.mark.polarion_id("OCS-2408")
 class TestExpansionSnapshotClone(ManageTest):
     """
     Tests to verify snapshot, clone and expansion
 
     """
+
     @pytest.fixture(autouse=True)
     def setup(
-        self, project_factory, snapshot_restore_factory, pvc_clone_factory,
-        create_pvcs_and_pods
+        self,
+        project_factory,
+        snapshot_restore_factory,
+        pvc_clone_factory,
+        create_pvcs_and_pods,
     ):
         """
         Create PVCs and pods
@@ -33,12 +40,11 @@ class TestExpansionSnapshotClone(ManageTest):
         self.pvcs, self.pods = create_pvcs_and_pods(
             pvc_size=self.pvc_size,
             access_modes_rbd=[constants.ACCESS_MODE_RWO],
-            access_modes_cephfs=[constants.ACCESS_MODE_RWO]
+            access_modes_cephfs=[constants.ACCESS_MODE_RWO],
         )
 
     def test_expansion_snapshot_clone(
-        self, snapshot_factory, snapshot_restore_factory, pvc_clone_factory,
-        pod_factory
+        self, snapshot_factory, snapshot_restore_factory, pvc_clone_factory, pod_factory
     ):
         """
         This test performs the following operations :
@@ -53,8 +59,8 @@ class TestExpansionSnapshotClone(ManageTest):
         independent and any operation in one will not impact the other.
 
         """
-        filename = 'fio_file'
-        filename_restore_clone = 'fio_file_restore_clone'
+        filename = "fio_file"
+        filename_restore_clone = "fio_file_restore_clone"
         pvc_size_expand_1 = 4
         pvc_size_expand_2 = 6
         pvc_size_expand_3 = 8
@@ -65,7 +71,7 @@ class TestExpansionSnapshotClone(ManageTest):
         for pod_obj in self.pods:
             log.info(f"Running IO on pod {pod_obj.name}")
             pod_obj.run_io(
-                storage_type='fs', size='1G', runtime=20, fio_filename=filename
+                storage_type="fs", size="1G", runtime=20, fio_filename=filename
             )
         log.info("IO started on all pods")
 
@@ -81,14 +87,9 @@ class TestExpansionSnapshotClone(ManageTest):
         # Expand PVCs
         log.info(f"Expanding PVCs to {pvc_size_expand_1}Gi")
         for pvc_obj in self.pvcs:
-            log.info(
-                f"Expanding size of PVC {pvc_obj.name} to "
-                f"{pvc_size_expand_1}Gi"
-            )
+            log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expand_1}Gi")
             pvc_obj.resize_pvc(pvc_size_expand_1, True)
-        log.info(
-            f"Verified: Size of all PVCs are expanded to {pvc_size_expand_1}Gi"
-        )
+        log.info(f"Verified: Size of all PVCs are expanded to {pvc_size_expand_1}Gi")
 
         # Take snapshot of all PVCs
         log.info("Creating snapshot of all PVCs")
@@ -104,8 +105,10 @@ class TestExpansionSnapshotClone(ManageTest):
         log.info("Verify snapshots are ready")
         for snap_obj in snapshots:
             snap_obj.ocp.wait_for_resource(
-                condition='true', resource_name=snap_obj.name,
-                column=constants.STATUS_READYTOUSE, timeout=180
+                condition="true",
+                resource_name=snap_obj.name,
+                column=constants.STATUS_READYTOUSE,
+                timeout=180,
             )
             snap_obj.reload()
         log.info("Verified: Snapshots are Ready")
@@ -113,14 +116,9 @@ class TestExpansionSnapshotClone(ManageTest):
         # Expand PVCs
         log.info(f"Expanding PVCs to {pvc_size_expand_2}Gi")
         for pvc_obj in self.pvcs:
-            log.info(
-                f"Expanding size of PVC {pvc_obj.name} to "
-                f"{pvc_size_expand_2}Gi"
-            )
+            log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expand_2}Gi")
             pvc_obj.resize_pvc(pvc_size_expand_2, True)
-        log.info(
-            f"Verified: Size of all PVCs are expanded to {pvc_size_expand_2}Gi"
-        )
+        log.info(f"Verified: Size of all PVCs are expanded to {pvc_size_expand_2}Gi")
 
         # Clone PVCs
         log.info("Creating clone of all PVCs")
@@ -128,8 +126,7 @@ class TestExpansionSnapshotClone(ManageTest):
         for pvc_obj in self.pvcs:
             log.info(f"Creating clone of PVC {pvc_obj.name}")
             clone_obj = pvc_clone_factory(
-                pvc_obj=pvc_obj, status='',
-                volume_mode=constants.VOLUME_MODE_FILESYSTEM
+                pvc_obj=pvc_obj, status="", volume_mode=constants.VOLUME_MODE_FILESYSTEM
             )
             clone_obj.md5sum = pvc_obj.md5sum
             clone_objs.append(clone_obj)
@@ -154,24 +151,19 @@ class TestExpansionSnapshotClone(ManageTest):
         log.info("Verify restore size of snapshots")
         for snapshot_obj in snapshots:
             snapshot_info = snapshot_obj.get()
-            assert snapshot_info['status']['restoreSize'] == (
-                f'{pvc_size_expand_1}Gi'
+            assert snapshot_info["status"]["restoreSize"] == (
+                f"{pvc_size_expand_1}Gi"
             ), (
                 f"Restore size mismatch in snapshot {snapshot_obj.name}\n"
                 f"{snapshot_info}"
             )
-        log.info(
-            f"Verified: Restore size of all snapshots are "
-            f"{pvc_size_expand_1}Gi"
-        )
+        log.info(f"Verified: Restore size of all snapshots are {pvc_size_expand_1}Gi")
 
         # Restore snapshots
         log.info("Restore snapshots")
         restore_objs = []
         for snap_obj in snapshots:
-            restore_obj = snapshot_restore_factory(
-                snapshot_obj=snap_obj, status=''
-            )
+            restore_obj = snapshot_restore_factory(snapshot_obj=snap_obj, status="")
             restore_obj.md5sum = snap_obj.md5sum
             restore_objs.append(restore_obj)
 
@@ -187,13 +179,13 @@ class TestExpansionSnapshotClone(ManageTest):
         log.info("Attach the restored and cloned PVCs to pods")
         restore_clone_pod_objs = []
         for pvc_obj in restore_objs + clone_objs:
-            interface = constants.CEPHFILESYSTEM if (
-                constants.CEPHFS_INTERFACE in pvc_obj.backed_sc
-            ) else constants.CEPHBLOCKPOOL
-            pod_obj = pod_factory(interface=interface, pvc=pvc_obj, status='')
-            log.info(
-                f"Attached the PVC {pvc_obj.name} to pod {pod_obj.name}"
+            interface = (
+                constants.CEPHFILESYSTEM
+                if (constants.CEPHFS_INTERFACE in pvc_obj.backed_sc)
+                else constants.CEPHBLOCKPOOL
             )
+            pod_obj = pod_factory(interface=interface, pvc=pvc_obj, status="")
+            log.info(f"Attached the PVC {pvc_obj.name} to pod {pod_obj.name}")
             restore_clone_pod_objs.append(pod_obj)
 
         log.info("Verify pods are Running")
@@ -205,9 +197,7 @@ class TestExpansionSnapshotClone(ManageTest):
         log.info("Verified: Pods reached Running state")
 
         # Expand cloned and restored PVCs
-        log.info(
-            f"Expanding cloned and restored PVCs to {pvc_size_expand_3}Gi"
-        )
+        log.info(f"Expanding cloned and restored PVCs to {pvc_size_expand_3}Gi")
         for pvc_obj in clone_objs + restore_objs:
             log.info(
                 f"Expanding size of PVC {pvc_obj.name} to "
@@ -224,8 +214,10 @@ class TestExpansionSnapshotClone(ManageTest):
         for pod_obj in restore_clone_pod_objs:
             log.info(f"Running IO on pod {pod_obj.name}")
             pod_obj.run_io(
-                storage_type='fs', size='1G', runtime=20,
-                fio_filename=filename_restore_clone
+                storage_type="fs",
+                size="1G",
+                runtime=20,
+                fio_filename=filename_restore_clone,
             )
         log.info("IO started on all pods")
 
@@ -263,8 +255,7 @@ class TestExpansionSnapshotClone(ManageTest):
         for pvc_obj in restore_objs:
             log.info(f"Creating clone of restored PVC {pvc_obj.name}")
             clone_obj = pvc_clone_factory(
-                pvc_obj=pvc_obj, status='',
-                volume_mode=constants.VOLUME_MODE_FILESYSTEM
+                pvc_obj=pvc_obj, status="", volume_mode=constants.VOLUME_MODE_FILESYSTEM
             )
             clone_obj.md5sum = pvc_obj.md5sum
             clone_obj.md5sum_new = pvc_obj.md5sum_new
@@ -290,9 +281,7 @@ class TestExpansionSnapshotClone(ManageTest):
         snapshots_new = []
         log.info("Creating snapshot of all cloned PVCs")
         for pvc_obj in clone_objs + restored_clone_objs:
-            log.info(
-                f"Creating snapshot of PVC {pvc_obj.name}"
-            )
+            log.info(f"Creating snapshot of PVC {pvc_obj.name}")
             snap_obj = snapshot_factory(pvc_obj, wait=False)
             snap_obj.md5sum = pvc_obj.md5sum
             snap_obj.md5sum_new = pvc_obj.md5sum_new
@@ -304,8 +293,10 @@ class TestExpansionSnapshotClone(ManageTest):
         log.info("Verify snapshots of cloned PVCs are Ready")
         for snap_obj in snapshots_new:
             snap_obj.ocp.wait_for_resource(
-                condition='true', resource_name=snap_obj.name,
-                column=constants.STATUS_READYTOUSE, timeout=180
+                condition="true",
+                resource_name=snap_obj.name,
+                column=constants.STATUS_READYTOUSE,
+                timeout=180,
             )
             snap_obj.reload()
         log.info("Verified: Snapshots of cloned PVCs are Ready")
@@ -314,7 +305,7 @@ class TestExpansionSnapshotClone(ManageTest):
         log.info("Restoring snapshots of cloned PVCs")
         restore_objs_new = []
         for snap_obj in snapshots_new:
-            restore_obj = snapshot_restore_factory(snap_obj, status='')
+            restore_obj = snapshot_restore_factory(snap_obj, status="")
             restore_obj.md5sum = snap_obj.md5sum
             restore_obj.md5sum_new = snap_obj.md5sum_new
             restore_objs_new.append(restore_obj)
@@ -340,13 +331,13 @@ class TestExpansionSnapshotClone(ManageTest):
         log.info("Attach the restored and cloned PVCs to new pods")
         restore_clone_pod_objs.clear()
         for pvc_obj in restore_objs_new + clone_objs:
-            interface = constants.CEPHFILESYSTEM if (
-                constants.CEPHFS_INTERFACE in pvc_obj.backed_sc
-            ) else constants.CEPHBLOCKPOOL
-            pod_obj = pod_factory(interface=interface, pvc=pvc_obj, status='')
-            log.info(
-                f"Attached the PVC {pvc_obj.name} to pod {pod_obj.name}"
+            interface = (
+                constants.CEPHFILESYSTEM
+                if (constants.CEPHFS_INTERFACE in pvc_obj.backed_sc)
+                else constants.CEPHBLOCKPOOL
             )
+            pod_obj = pod_factory(interface=interface, pvc=pvc_obj, status="")
+            log.info(f"Attached the PVC {pvc_obj.name} to pod {pod_obj.name}")
             restore_clone_pod_objs.append(pod_obj)
 
         log.info("Verify pods are Running")
@@ -359,28 +350,16 @@ class TestExpansionSnapshotClone(ManageTest):
 
         # Expand PVCs
         pvc_size_expand_4 = pvc_size_expand_3 + 2
-        log.info(
-            f"Expanding restored and cloned PVCs to {pvc_size_expand_4}Gi"
-        )
+        log.info(f"Expanding restored and cloned PVCs to {pvc_size_expand_4}Gi")
         for pvc_obj in restore_objs_new + clone_objs:
-            log.info(
-                f"Expanding size of PVC {pvc_obj.name} to "
-                f"{pvc_size_expand_4}Gi"
-            )
+            log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expand_4}Gi")
             pvc_obj.resize_pvc(pvc_size_expand_4, True)
-        log.info(
-            f"Verified: Size of all PVCs are expanded to "
-            f"{pvc_size_expand_4}Gi"
-        )
+        log.info(f"Verified: Size of all PVCs are expanded to {pvc_size_expand_4}Gi")
 
         # Verify md5sum of both files
-        log.info(
-            f"Verify md5sum of files {filename} and {filename_restore_clone}"
-        )
+        log.info(f"Verify md5sum of files {filename} and {filename_restore_clone}")
         for pod_obj in restore_clone_pod_objs:
-            pod.verify_data_integrity(
-                pod_obj, filename, pod_obj.pvc.md5sum
-            )
+            pod.verify_data_integrity(pod_obj, filename, pod_obj.pvc.md5sum)
             log.info(
                 f"Verified: md5sum of {filename} on pod {pod_obj.name} "
                 f"matches with the original md5sum"
