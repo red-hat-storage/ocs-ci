@@ -21,7 +21,7 @@ def test_ocs_monkey():
         f"pip install -r {os.path.join(ocs_monkety_dir, 'requirements.txt')}"
     )
     workload_run_cmd = f"python workload_runner.py -t {run_time}"
-    chaos_runner_cmd = f"python chaos_runner.py"
+    chaos_runner_cmd = "python chaos_runner.py"
 
     start_time = time.time()
     log.info("Starting workload runner")
