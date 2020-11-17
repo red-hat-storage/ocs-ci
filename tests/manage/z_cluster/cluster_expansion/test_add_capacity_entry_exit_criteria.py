@@ -25,18 +25,11 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize(
     argnames=["percent_to_fill"],
     argvalues=[
-        pytest.param(*[10], marks=pytest.mark.polarion_id("OCS-2131")),
+        pytest.param(*[85], marks=pytest.mark.polarion_id("OCS-2131")),
     ],
 )
 @ignore_leftovers
 @tier2
-@pytest.mark.skipif(
-    config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM,
-    reason=(
-        "Skipping add capacity test on vsphere cause of issue: "
-        "https://github.com/red-hat-storage/ocs-ci/issues/2356"
-    ),
-)
 class TestAddCapacity(ManageTest):
     def test_add_capacity(
         self,
