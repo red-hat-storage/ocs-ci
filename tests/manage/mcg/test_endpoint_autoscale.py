@@ -98,8 +98,6 @@ class TestEndpointAutoScale(MCGTest):
         job = mcg_job_factory(custom_options=options)
         self._assert_endpoint_count(2)
 
-        nodes.stop_nodes()
-
         ep_pod_objs = get_pods_having_label(
             label=constants.NOOBAA_ENDPOINT_POD_LABEL,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
