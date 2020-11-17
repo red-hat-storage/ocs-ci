@@ -96,6 +96,7 @@ CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
 CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
 CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
+NOOBAA_SC = "openshift-storage.noobaa.io"
 DEPLOYMENT = "Deployment"
 JOB = "Job"
 STORAGECLASS = "StorageClass"
@@ -1123,3 +1124,6 @@ CLOUD_MNGR_PLATFORMS = ["AWS", "GCP", "AZURE", "IBMCOS"]
 MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
 MCG_TESTS_MIN_NB_ENDPOINT_COUNT = 2
 MAX_NB_ENDPOINT_COUNT = 2
+
+OCS_TAINT = "node.ocs.openshift.io/storage"
+VOLUMESNAPSHOT = "volumesnapshot"
