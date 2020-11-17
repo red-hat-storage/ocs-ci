@@ -277,7 +277,7 @@ def ocs_install_verification(
             "in the output."
         )
 
-        if (config.DEPLOYMENT.get('local_storage')):
+        if config.DEPLOYMENT.get("local_storage"):
             deviceset_pvcs = [osd.get_node() for osd in get_osd_pods()]
         else:
             deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
