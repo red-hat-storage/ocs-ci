@@ -2893,6 +2893,7 @@ def snapshot_restore_factory(request):
                 constants.CEPHBLOCKPOOL
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
+            interface = constants.CEPHBLOCKPOOL
         elif snapshot_info["spec"]["volumeSnapshotClassName"] == (
             helpers.default_volumesnapshotclass(constants.CEPHFILESYSTEM).name
         ):
