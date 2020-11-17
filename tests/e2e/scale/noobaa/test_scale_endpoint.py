@@ -7,31 +7,58 @@ from ocs_ci.utility import utils
 log = logging.getLogger(__name__)
 
 option1 = {
-    'create': [('name', 'job1'), ('runtime', '900')],
-    'job1': [('iodepth', '4'), ('rw', 'randrw'), ('bs', '32k'), ('size', '64m'), ('numjobs', '4')]
-    }
+    "create": [("name", "job1"), ("runtime", "900")],
+    "job1": [
+        ("iodepth", "4"),
+        ("rw", "randrw"),
+        ("bs", "32k"),
+        ("size", "64m"),
+        ("numjobs", "4"),
+    ],
+}
 option2 = {
-    'create': [('name', 'job1'), ('name', 'job2'), ('name', 'job3'), ('runtime', '900')],
-    'job1': [('iodepth', '4'), ('rw', 'randrw'), ('bs', '32k'), ('size', '64m'), ('numjobs', '4')],
-    'job2': [('iodepth', '16'), ('rw', 'randrw'), ('bs', '64k'), ('size', '512m'), ('numjobs', '4')],
-    'job3': [('iodepth', '32'), ('rw', 'randrw'), ('bs', '128k'), ('size', '1024m'), ('numjobs', '4')]
-    }
+    "create": [
+        ("name", "job1"),
+        ("name", "job2"),
+        ("name", "job3"),
+        ("runtime", "900"),
+    ],
+    "job1": [
+        ("iodepth", "4"),
+        ("rw", "randrw"),
+        ("bs", "32k"),
+        ("size", "64m"),
+        ("numjobs", "4"),
+    ],
+    "job2": [
+        ("iodepth", "16"),
+        ("rw", "randrw"),
+        ("bs", "64k"),
+        ("size", "512m"),
+        ("numjobs", "4"),
+    ],
+    "job3": [
+        ("iodepth", "32"),
+        ("rw", "randrw"),
+        ("bs", "128k"),
+        ("size", "1024m"),
+        ("numjobs", "4"),
+    ],
+}
 
 
 @scale
-@skipif_ocs_version('<4.5')
+@skipif_ocs_version("<4.5")
 @pytest.mark.parametrize(
     argnames=[
-        "test_options", "endpoint1", "endpoint2",
+        "test_options",
+        "endpoint1",
+        "endpoint2",
     ],
     argvalues=[
-        pytest.param(
-            *[option1, 1, 1], marks=pytest.mark.polarion_id("OCS-2420")
-        ),
-        pytest.param(
-            *[option2, 1, 2], marks=pytest.mark.polarion_id("OCS-2402")
-        )
-    ]
+        pytest.param(*[option1, 1, 1], marks=pytest.mark.polarion_id("OCS-2420")),
+        pytest.param(*[option2, 1, 2], marks=pytest.mark.polarion_id("OCS-2402")),
+    ],
 )
 class TestScaleEndpointAutoScale(MCGTest):
     """
@@ -54,9 +81,7 @@ class TestScaleEndpointAutoScale(MCGTest):
             timeout=500,
         )
 
-    def test_scale_endpoint(
-        self, mcg_job_factory, test_options, endpoint1, endpoint2
-    ):
+    def test_scale_endpoint(self, mcg_job_factory, test_options, endpoint1, endpoint2):
         # Add workers node to cluster
         scale_pgsql.add_worker_node()
 
