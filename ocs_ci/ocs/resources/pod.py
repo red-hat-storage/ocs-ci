@@ -1219,9 +1219,9 @@ def get_plugin_pods(interface, namespace=None):
     return plugin_pods
 
 
-def plugin_provisioner_leader(interface, namespace=None, leader_type="provisioner"):
+def get_plugin_provisioner_leader(interface, namespace=None, leader_type="provisioner"):
     """
-    Find csi-cephfsplugin-provisioner or csi-rbdplugin-provisioner leader pod
+    Get csi-cephfsplugin-provisioner or csi-rbdplugin-provisioner leader pod
 
     Args:
         interface (str): Interface type. eg: CephBlockPool, CephFileSystem

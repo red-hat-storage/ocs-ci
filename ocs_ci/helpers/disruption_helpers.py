@@ -46,13 +46,13 @@ class Disruptions:
             self.selector = constants.CSI_RBDPLUGIN_LABEL
         if self.resource == "cephfsplugin_provisioner":
             self.resource_obj = [
-                pod.plugin_provisioner_leader(interface=constants.CEPHFILESYSTEM)
+                pod.get_plugin_provisioner_leader(interface=constants.CEPHFILESYSTEM)
             ]
             self.selector = constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL
             resource_count = len(pod.get_cephfsplugin_provisioner_pods())
         if self.resource == "rbdplugin_provisioner":
             self.resource_obj = [
-                pod.plugin_provisioner_leader(interface=constants.CEPHBLOCKPOOL)
+                pod.get_plugin_provisioner_leader(interface=constants.CEPHBLOCKPOOL)
             ]
             self.selector = constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
             resource_count = len(pod.get_rbdfsplugin_provisioner_pods())
