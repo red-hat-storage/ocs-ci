@@ -164,7 +164,7 @@ def drain_nodes(node_names):
         node_names (list): The names of the nodes
 
     Raises:
-        TimeoutExpired: in case drain command fails to complete
+        TimeoutExpired: in case drain command fails to complete in time
 
     """
     ocp = OCP(kind="node")
@@ -173,7 +173,8 @@ def drain_nodes(node_names):
     try:
         ocp.exec_oc_cmd(
             f"adm drain {node_names_str} --force=true --ignore-daemonsets "
-            f"--delete-local-data", timeout=1800
+            f"--delete-local-data",
+            timeout=1800,
         )
     except TimeoutExpired:
         ct_pod = pod.get_ceph_tools_pod()
