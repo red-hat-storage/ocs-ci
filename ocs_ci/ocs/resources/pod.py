@@ -450,6 +450,16 @@ class Pod(OCS):
         }
         return container_names_and_memory
 
+    def get_node(self):
+        """
+        Gets the node name
+
+        Returns:
+            str: Node name
+
+        """
+        return self.pod_data["spec"]["nodeName"]
+
 
 # Helper functions for Pods
 
