@@ -64,16 +64,16 @@ class TestEndpointAutoScale(MCGTest):
     @skipif_ocs_version("<4.5")
     @polarion_id("OCS-2402")
     def test_scaling_under_load(self, mcg_job_factory, options):
-        self._assert_endpoint_count(1)
+        self._assert_endpoint_count(desired_count=1)
 
         job = mcg_job_factory(custom_options=options)
-        self._assert_endpoint_count(2)
+        self._assert_endpoint_count(desired_count=2)
 
         job.delete()
         job.ocp.wait_for_delete(resource_name=job.name, timeout=60)
-        self._assert_endpoint_count(1)
+        self._assert_endpoint_count(desired_count=1)
 
-    def _assert_endpoint_count(self, desired_count, timeout=500):
+    def _assert_endpoint_count(self, desired_count):
         pod = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
 
         assert pod.wait_for_resource(
@@ -81,11 +81,14 @@ class TestEndpointAutoScale(MCGTest):
             condition=constants.STATUS_RUNNING,
             selector=constants.NOOBAA_ENDPOINT_POD_LABEL,
             dont_allow_other_resources=True,
-            timeout=timeout,
+            timeout=500,
         )
 
     @tier4
     @tier4a
+    @pytest.skip(
+        "Skipped because of the issue described in https://bugzilla.redhat.com/show_bug.cgi?id=1898969"
+    )
     @polarion_id("OCS-2422")
     def test_auto_scale_with_stop_and_start_node(self, mcg_job_factory, nodes, options):
         """
@@ -94,9 +97,9 @@ class TestEndpointAutoScale(MCGTest):
         """
         cl_obj = cluster.CephCluster()
 
-        self._assert_endpoint_count(1)
+        self._assert_endpoint_count(desired_count=1)
         job = mcg_job_factory(custom_options=options)
-        self._assert_endpoint_count(2)
+        self._assert_endpoint_count(desired_count=2)
 
         ep_pod_objs = get_pods_having_label(
             label=constants.NOOBAA_ENDPOINT_POD_LABEL,
@@ -126,14 +129,43 @@ class TestEndpointAutoScale(MCGTest):
         # Wait for 2 Noobaa endpoint pods to be started and reach running status
         logger.info("Waiting for 2 Noobaa endpoint pods to reach status Running")
 
-        self._assert_endpoint_count(desired_count=2, timeout=900)
+        self._assert_endpoint_count(desired_count=2)
 
-        logger.info("2 Noobaa endpoint pods failed to reach status Running")
         nodes.start_nodes([node])
 
         wait_for_nodes_status(
             [node.get().get("metadata").get("name")], status=constants.NODE_READY
         )
+
+        # Check the NB status to verify the system is healthy
+        cl_obj.wait_for_noobaa_health_ok()
+
+        job.delete()
+        job.ocp.wait_for_delete(resource_name=job.name, timeout=60)
+        self._assert_endpoint_count(1)
+
+    @tier4
+    @tier4a
+    @polarion_id("OCS-2425")
+    def test_auto_scale_with_restart_endpoint(self, mcg_job_factory, nodes, options):
+        """
+        Test auto scale with restart to one of the endpoint pods
+
+        """
+        cl_obj = cluster.CephCluster()
+
+        self._assert_endpoint_count(1)
+        job = mcg_job_factory(custom_options=options)
+        self._assert_endpoint_count(2)
+
+        ep_pod_objs = get_pods_having_label(
+            label=constants.NOOBAA_ENDPOINT_POD_LABEL,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        )
+        ep_pod_obj = Pod(**ep_pod_objs[0])
+        ep_pod_obj.delete(force=True)
+
+        self._assert_endpoint_count(desired_count=2)
 
         # Check the NB status to verify the system is healthy
         cl_obj.wait_for_noobaa_health_ok()
