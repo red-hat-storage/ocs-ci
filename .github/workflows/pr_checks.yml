@@ -1,9 +1,6 @@
 name: "PR Checks"
 # Triggers the workflow on pull request events
-on:
-  pull_request:
-    branches:
-      - master
+on: pull_request
 
 jobs:
   pr_checks:
