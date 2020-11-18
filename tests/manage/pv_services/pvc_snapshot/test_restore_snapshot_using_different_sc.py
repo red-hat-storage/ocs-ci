@@ -25,7 +25,13 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, project_factory, snapshot_restore_factory, create_pvcs_and_pods):
+    def setup(
+        self,
+        project_factory,
+        secret_factory,
+        snapshot_restore_factory,
+        create_pvcs_and_pods,
+    ):
         """
         Create PVCs and pods
 
