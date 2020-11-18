@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     acceptance,
     performance,
 )
+from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket, BUCKET_MAP
@@ -31,22 +32,22 @@ class TestBucketDeletion(MCGTest):
     """
 
     @pytest.mark.parametrize(
-        argnames="amount,interface",
+        argnames="amount,interface,bucketclass_dict",
         argvalues=[
             pytest.param(
-                *[3, "S3"],
+                *[3, "S3", None],
                 marks=[pytest.mark.polarion_id("OCS-1939"), tier1, acceptance],
             ),
             pytest.param(
-                *[3, "CLI"],
+                *[3, "CLI", None],
                 marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1940")],
             ),
             pytest.param(
-                *[3, "OC"],
+                *[3, "OC", None],
                 marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1299")],
             ),
             pytest.param(
-                *[100, "S3"],
+                *[100, "S3", None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
@@ -54,7 +55,7 @@ class TestBucketDeletion(MCGTest):
                 ],
             ),
             pytest.param(
-                *[100, "OC"],
+                *[100, "OC", None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
@@ -62,7 +63,7 @@ class TestBucketDeletion(MCGTest):
                 ],
             ),
             pytest.param(
-                *[1000, "S3"],
+                *[1000, "S3", None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
@@ -70,22 +71,56 @@ class TestBucketDeletion(MCGTest):
                 ],
             ),
             pytest.param(
-                *[1000, "OC"],
+                *[1000, "OC", None],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
                     pytest.mark.polarion_id("OCS-1916"),
                 ],
             ),
+            pytest.param(
+                *[
+                    1,
+                    "OC",
+                    {
+                        "interface": "OC",
+                        "backingstores": {"pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]},
+                    },
+                ],
+                marks=[tier1, pytest.mark.polarion_id("OCS-2354")],
+            ),
+            pytest.param(
+                *[
+                    1,
+                    "CLI",
+                    {
+                        "interface": "CLI",
+                        "backingstores": {"pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]},
+                    },
+                ],
+                marks=[tier1, pytest.mark.polarion_id("OCS-2354")],
+            ),
         ],
     )
     def test_bucket_delete(
-        self, verify_rgw_restart_count, mcg_obj, bucket_factory, amount, interface
+        self,
+        verify_rgw_restart_count,
+        mcg_obj,
+        bucket_class_factory,
+        bucket_factory,
+        amount,
+        interface,
+        bucketclass_dict,
     ):
         """
         Test deletion of bucket using the S3 SDK, MCG CLI and OC
         """
-        for bucket in bucket_factory(amount, interface):
+        if bucketclass_dict:
+            bucketclass = bucket_class_factory(bucketclass_dict)
+            buckets = bucket_factory(amount, interface, bucketclass=bucketclass.name)
+        else:
+            buckets = bucket_factory(amount, interface)
+        for bucket in buckets:
             logger.info(f"Deleting bucket: {bucket.name}")
             bucket.delete()
             assert not mcg_obj.s3_verify_bucket_exists(

@@ -39,6 +39,9 @@ from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
 )
+from ocs_ci.ocs.resources.bucketclass import (
+    bucket_class_factory as bucketclass_factory_implementation,
+)
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.cloud_uls import (
     cloud_uls_factory as cloud_uls_factory_implementation,
@@ -2003,7 +2006,7 @@ def mcg_job_factory_session(
 
 
 @pytest.fixture()
-def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
+def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     """
     Create a Backing Store factory.
     Calling this fixture creates a new Backing Store(s).
@@ -2014,13 +2017,13 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
 
     """
     return backingstore_factory_implementation(
-        request, cld_mgr, cloud_uls_factory, mcg_obj
+        request, cld_mgr, mcg_obj, cloud_uls_factory
     )
 
 
 @pytest.fixture(scope="session")
 def backingstore_factory_session(
-    request, cld_mgr, cloud_uls_factory_session, mcg_obj_session
+    request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
 ):
     """
     Create a Backing Store factory.
@@ -2032,7 +2035,39 @@ def backingstore_factory_session(
 
     """
     return backingstore_factory_implementation(
-        request, cld_mgr, cloud_uls_factory_session, mcg_obj_session
+        request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
+    )
+
+
+@pytest.fixture()
+def bucket_class_factory(request, mcg_obj, backingstore_factory):
+    """
+    Create a Bucket Class factory.
+    Calling this fixture creates a new Bucket Class.
+
+    Returns:
+        func: Factory method - each call to this function creates
+            a bucketclass
+
+    """
+    return bucketclass_factory_implementation(request, mcg_obj, backingstore_factory)
+
+
+@pytest.fixture(scope="session")
+def bucket_class_factory_session(
+    request, mcg_obj_session, backingstore_factory_session
+):
+    """
+    Create a Bucket Class factory.
+    Calling this fixture creates a new Bucket Class.
+
+    Returns:
+        func: Factory method - each call to this function creates
+            a bucketclass
+
+    """
+    return bucketclass_factory_implementation(
+        request, mcg_obj_session, backingstore_factory_session
     )
 
 

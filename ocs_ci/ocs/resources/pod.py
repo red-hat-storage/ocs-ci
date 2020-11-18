@@ -13,6 +13,7 @@ import calendar
 from threading import Thread
 import base64
 
+from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.ocp import OCP, verify_images_upgraded
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
@@ -160,6 +161,25 @@ class Pod(OCS):
         rsh_cmd += command
         return self.ocp.exec_oc_cmd(
             rsh_cmd, out_yaml_format, secrets=secrets, timeout=timeout, **kwargs
+        )
+
+    def exec_s3_cmd_on_pod(self, command, mcg_obj=None):
+        """
+        Execute an S3 command on a pod
+
+        Args:
+            mcg_obj (MCG): An MCG object containing the MCG S3 connection credentials
+            command (str): The command to execute on the given pod
+
+        Returns:
+            Munch Obj: This object represents a returned yaml file
+        """
+        return self.exec_cmd_on_pod(
+            craft_s3_command(command, mcg_obj),
+            out_yaml_format=False,
+            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+            if mcg_obj
+            else None,
         )
 
     def exec_sh_cmd_on_pod(self, command, sh="bash"):
