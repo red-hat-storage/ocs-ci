@@ -28,6 +28,17 @@ class TestEndpointAutoScale(MCGTest):
     MIN_ENDPOINT_COUNT = 1
     MAX_ENDPOINT_COUNT = 2
 
+    def teardown(self, request, nodes):
+        """
+        Make sure all nodes are up again
+
+        """
+
+        def finalizer():
+            nodes.restart_nodes_by_stop_and_start_teardown()
+
+        request.addfinalizer(finalizer)
+
     @pytest.fixture()
     def options(self):
         return {
@@ -87,7 +98,9 @@ class TestEndpointAutoScale(MCGTest):
     @tier4
     @tier4a
     @polarion_id("OCS-2422")
-    def test_auto_scale_with_stop_and_start_node(self, mcg_job_factory, nodes, options):
+    def test_auto_scale_with_stop_and_start_node(
+        self, mcg_job_factory, nodes, options, teardown
+    ):
         """
         Test auto scale with stop and start node
 
@@ -109,7 +122,7 @@ class TestEndpointAutoScale(MCGTest):
         )
         ep_pod_obj = None
         for pod_obj in ep_pod_objs:
-            if get_pod_node(pod_obj) is not get_pod_node(noobaa_db_pod):
+            if get_pod_node(Pod(**pod_obj)) is not get_pod_node(noobaa_db_pod):
                 ep_pod_obj = pod_obj
         ep_pod_obj = Pod(**ep_pod_obj)
         # Retrieve the node object on which the pod resides
