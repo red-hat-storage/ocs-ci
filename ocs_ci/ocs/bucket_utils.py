@@ -538,16 +538,20 @@ def wait_for_pv_backingstore(backingstore_name, namespace=None):
         logger.info(f"Backing Store {backingstore_name} created successfully")
 
 
-def check_pv_backingstore_status(backingstore_name, namespace=None):
+def check_pv_backingstore_status(
+    backingstore_name, namespace=None, desired_status=constants.HEALTHY_PV_BS
+):
     """
     check if existing pv backing store is in OPTIMAL state
 
     Args:
         backingstore_name (str): backingstore name
         namespace (str): backing store's namespace
+        desired_status (str): desired state for the backing store, if None is given then desired
+        is the Healthy status
 
     Returns:
-        bool: True if backing store is in OPTIMAL state
+        bool: True if backing store is in the desired state
 
     """
     kubeconfig = os.getenv("KUBECONFIG")
@@ -559,7 +563,7 @@ def check_pv_backingstore_status(backingstore_name, namespace=None):
         "-o=jsonpath=`{.status.mode.modeCode}`"
     )
     res = run_cmd(cmd=cmd)
-    return True if "OPTIMAL" in res else False
+    return True if res in desired_status else False
 
 
 def create_multipart_upload(s3_obj, bucketname, object_key):
