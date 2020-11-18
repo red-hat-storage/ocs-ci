@@ -136,19 +136,51 @@ class IBMDeployment(Deployment):
                 ocp.OCP().exec_oc_cmd(f"oc delete pv {pv_name}")
 
         # Section 3.1 Step 9
-        try:
-            ocp.OCP().exec_oc_cmd(
-                "delete crd backingstores.noobaa.io bucketclasses.noobaa.io "
-                "cephblockpools.ceph.rook.io cephclusters.ceph.rook.io "
-                "cephfilesystems.ceph.rook.io cephnfses.ceph.rook.io "
-                "cephobjectstores.ceph.rook.io cephobjectstoreusers.ceph.rook.io "
-                "noobaas.noobaa.io ocsinitializations.ocs.openshift.io  "
-                "storageclusterinitializations.ocs.openshift.io "
-                "storageclusters.ocs.openshift.io cephclients.ceph.rook.io "
-                "--wait=true --timeout=5m"
-            )
-        except CommandFailed:
-            pass
+        # Note that the below process differs from the documentation slightly.
+        # Instead of deleting all CRDs at once and calling the job done, we
+        # iterate over a list of them, noting which ones don't delete fully and
+        # applying the standard workaround of removing the finalizers from any
+        # CRs and also the CRD.
+        crd_types = [
+            "backingstores.noobaa.io",
+            "bucketclasses.noobaa.io",
+            "cephblockpools.ceph.rook.io",
+            "cephclients.ceph.rook.io",
+            "cephclusters.ceph.rook.io",
+            "cephfilesystems.ceph.rook.io",
+            "cephnfses.ceph.rook.io",
+            "cephobjectstores.ceph.rook.io",
+            "cephobjectstoreusers.ceph.rook.io",
+            "noobaas.noobaa.io",
+            "ocsinitializations.ocs.openshift.io",
+            "storageclusterinitializations.ocs.openshift.io",
+            "storageclusters.ocs.openshift.io",
+        ]
+        cr_patch = json.dumps(dict(finalizers=None))
+        crd_patch = json.dumps(dict(metadata=dict(finalizers=None)))
+        for crd_type in crd_types:
+            try:
+                ocp.OCP().exec_oc_cmd(
+                    f"delete crd {crd_type} --wait=true --timeout=30s",
+                    out_yaml_format=False,
+                )
+            except CommandFailed:
+                pass
+            crs = []
+            try:
+                crs = ocp.OCP(kind=crd_type).get(all_namespaces=True)["items"]
+            except CommandFailed:
+                continue
+            for cr in crs:
+                cr_md = cr["metadata"]
+                ocp.OCP().exec_oc_cmd(
+                    f"patch -n {cr_md['namespace']} {crd_type} {cr_md['name']} --type=merge -p '{cr_patch}'"
+                )
+            try:
+                crs = ocp.OCP(kind=crd_type).get(all_namespaces=True)["items"]
+            except CommandFailed:
+                continue
+            ocp.OCP().exec_oc_cmd(f"patch crd {crd_type} --type=merge -p '{crd_patch}'")
 
         # End sections from above documentation
         ocp.OCP().exec_oc_cmd(
