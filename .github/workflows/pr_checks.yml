@@ -1,5 +1,5 @@
 name: "PR Checks"
-# Triggers the workflow on push and pull request events
+# Triggers the workflow on pull request events
 on: [pull_request_review, pull_request]
 
 jobs:
