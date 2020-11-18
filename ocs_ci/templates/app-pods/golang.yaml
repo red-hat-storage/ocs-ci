@@ -1,0 +1,32 @@
+kind: DeploymentConfig
+apiVersion: apps.openshift.io/v1
+metadata:
+  name: hsbenchpod
+  labels:
+    app: hsbenchpod
+spec:
+  template:
+    metadata:
+      labels:
+        app: hsbenchpod
+    spec:
+      securityContext:
+        fsGroup: 2000
+      serviceAccountName: admin
+      restartPolicy: Always
+      volumes:
+      - name: hsbench-vol
+        persistentVolumeClaim:
+          claimName: hsbench-s3
+      containers:
+      - name: hsbench
+        image: golang
+        resources:
+          limits:
+            memory: "2048Mi"
+            cpu: "150m"
+        command: ["/bin/bash", "-ce", "tail -f /dev/null" ]
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - mountPath: /mnt
+          name: hsbench-vol
