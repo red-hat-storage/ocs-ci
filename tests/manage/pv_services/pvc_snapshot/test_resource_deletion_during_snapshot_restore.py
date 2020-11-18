@@ -170,7 +170,6 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
         # Get restored PVCs
         for snap_obj in snap_objs:
             restore_pvc_obj = snap_obj.restore_proc.result()
-            # restore_pvc_obj.md5sum = snap_obj.md5sum
             restore_pvc_objs.append(restore_pvc_obj)
             log.info(
                 f"Created PVC {restore_pvc_obj.name} from snapshot " f"{snap_obj.name}"
