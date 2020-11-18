@@ -19,6 +19,7 @@ class MustGather(object):
     MustGather Class
 
     """
+
     def __init__(self):
         self.type_log = None
         self.root = None
@@ -34,7 +35,7 @@ class MustGather(object):
     @log_type.setter
     def log_type(self, type_log):
         if not isinstance(type_log, str):
-            raise ValueError('log type arg must be a string')
+            raise ValueError("log type arg must be a string")
         self.type_log = type_log
 
     def collect_must_gather(self):
@@ -44,7 +45,7 @@ class MustGather(object):
         """
         temp_folder = tempfile.mkdtemp()
         collect_ocs_logs(dir_name=temp_folder, ocp=False)
-        self.root = temp_folder + '_ocs_logs'
+        self.root = temp_folder + "_ocs_logs"
 
     def search_file_path(self):
         """
@@ -84,9 +85,9 @@ class MustGather(object):
                 self.files_not_exist.append(file)
             elif Path(file_path).stat().st_size == 0:
                 self.empty_files.append(file)
-            elif re.search(r'\.yaml$', file):
-                with open(file_path, 'r') as f:
-                    if 'kind' not in f.read().lower():
+            elif re.search(r"\.yaml$", file):
+                with open(file_path, "r") as f:
+                    if "kind" not in f.read().lower():
                         self.files_content_issue.append(file)
 
     def compare_running_pods(self):
@@ -94,15 +95,15 @@ class MustGather(object):
         Compare running pods list to "/pods" subdirectories
 
         """
-        must_gather_helper = re.compile(r'must-gather-.*.-helper')
-        pod_objs = get_all_pods(namespace='openshift-storage')
+        must_gather_helper = re.compile(r"must-gather-.*.-helper")
+        pod_objs = get_all_pods(namespace="openshift-storage")
         pod_names = []
         for pod in pod_objs:
             if not must_gather_helper.match(pod.name):
                 pod_names.append(pod.name)
 
         for dir_name, subdir_list, files_list in os.walk(self.root):
-            if re.search('openshift-storage/pods$', dir_name):
+            if re.search("openshift-storage/pods$", dir_name):
                 pod_path = dir_name
 
         pod_files = []
@@ -136,16 +137,16 @@ class MustGather(object):
         Verify noobaa_diagnostics folder exist
 
         """
-        if self.type_log == 'OTHERS' and get_ocs_parsed_version() >= 4.6:
+        if self.type_log == "OTHERS" and get_ocs_parsed_version() >= 4.6:
             flag = False
-            logger.info('Verify noobaa_diagnostics folder exist')
+            logger.info("Verify noobaa_diagnostics folder exist")
             for path, subdirs, files in os.walk(self.root):
                 for file in files:
-                    if re.search(r'noobaa_diagnostics_.*.tar.gz', file):
+                    if re.search(r"noobaa_diagnostics_.*.tar.gz", file):
                         flag = True
             if not flag:
-                logger.error('noobaa_diagnostics.tar.gz does not exist')
-                self.files_not_exist.append('noobaa_diagnostics.tar.gz')
+                logger.error("noobaa_diagnostics.tar.gz does not exist")
+                self.files_not_exist.append("noobaa_diagnostics.tar.gz")
 
     def validate_must_gather(self):
         """
@@ -162,10 +163,6 @@ class MustGather(object):
         Delete temporary folder.
 
         """
-        logger.info(f'Delete must gather folder {self.root}')
-        if re.search('_ocs_logs$', self.root):
-            shutil.rmtree(
-                path=self.root,
-                ignore_errors=False,
-                onerror=None
-            )
+        logger.info(f"Delete must gather folder {self.root}")
+        if re.search("_ocs_logs$", self.root):
+            shutil.rmtree(path=self.root, ignore_errors=False, onerror=None)
