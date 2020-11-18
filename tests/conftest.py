@@ -57,6 +57,7 @@ from ocs_ci.ocs.resources.pod import (
     Pod,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
+from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import aws
@@ -2804,6 +2805,9 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
             endpoint = constants.MCG_NS_AWS_ENDPOINT
         elif platform == constants.AZURE_PLATFORM:
             endpoint = constants.MCG_NS_AZURE_ENDPOINT
+        elif platform == constants.RGW_PLATFORM:
+            rgw_conn = RGW()
+            endpoint, _, _ = rgw_conn.get_credentials()
         else:
             raise UnsupportedPlatformError(f"Unsupported Platform: {platform}")
 

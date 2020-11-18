@@ -584,6 +584,7 @@ VSPHERE_PLATFORM = "vsphere"
 BAREMETAL_PLATFORM = "baremetal"
 IBM_POWER_PLATFORM = "powervs"
 BAREMETALPSI_PLATFORM = "baremetalpsi"
+RGW_PLATFORM = "rgw"
 ON_PREM_PLATFORMS = [VSPHERE_PLATFORM, BAREMETAL_PLATFORM, BAREMETALPSI_PLATFORM]
 CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
 
@@ -733,6 +734,7 @@ RBD_PROVISIONER_SECRET = "rook-csi-rbd-provisioner"
 RBD_NODE_SECRET = "rook-csi-rbd-node"
 CEPHFS_PROVISIONER_SECRET = "rook-csi-cephfs-provisioner"
 CEPHFS_NODE_SECRET = "rook-csi-cephfs-node"
+NOOBAA_OBJECTSTOREUSER_SECRET = "rook-ceph-object-user-ocs-storagecluster-cephobjectstore-noobaa-ceph-objectstore-user"
 
 # JSON Schema
 OSD_TREE_ROOT = {

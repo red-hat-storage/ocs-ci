@@ -1,3 +1,5 @@
+import base64
+
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
@@ -30,3 +32,27 @@ class RGW(object):
         self.key_id = None
         self.secret_key = None
         self.s3_resource = None
+
+    def get_credentials(self, secret_name=constants.NOOBAA_OBJECTSTOREUSER_SECRET):
+        """
+        Get Endpoint, Access key and Secret key from OCS secret.
+
+        Args:
+            secret_name (str): Name of secret to be used for getting RGW credentials.
+
+        Returns:
+            tuple: Endpoint, Access key, Secret key
+
+        """
+        secret_ocp_obj = OCP(kind="secret", namespace=self.namespace)
+        creds_secret_obj = secret_ocp_obj.get(secret_name)
+        endpoint = base64.b64decode(
+            creds_secret_obj.get("data").get("Endpoint")
+        ).decode("utf-8")
+        access_key = base64.b64decode(
+            creds_secret_obj.get("data").get("AccessKey")
+        ).decode("utf-8")
+        secret_key = base64.b64decode(
+            creds_secret_obj.get("data").get("SecretKey")
+        ).decode("utf-8")
+        return (endpoint, access_key, secret_key)

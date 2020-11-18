@@ -22,6 +22,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
+from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 from ocs_ci.helpers.helpers import (
@@ -528,6 +529,17 @@ class MCG:
                 "identity": cld_mgr.azure_client.account_name,
                 "name": conn_name,
                 "secret": cld_mgr.azure_client.credential,
+            }
+        elif platform == constants.RGW_PLATFORM:
+            rgw_conn = RGW()
+            endpoint, access_key, secret_key = rgw_conn.get_credentials()
+            params = {
+                "auth_method": "AWS_V4",
+                "endpoint": endpoint,
+                "endpoint_type": "S3_COMPATIBLE",
+                "identity": access_key,
+                "name": conn_name,
+                "secret": secret_key,
             }
         else:
             raise UnsupportedPlatformError(f"Unsupported Platform: {platform}")
