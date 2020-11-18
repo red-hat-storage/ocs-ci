@@ -44,7 +44,7 @@ class TestHsBench(E2ETest):
         hsbenchs3.install_hsbench()
 
         # Running hsbench
-        hsbenchs3.run_benchmark(num_obj=1000, timeout=7200)
+        hsbenchs3.run_benchmark(num_obj=1000000, timeout=7200)
 
         # Validate hsbench created objects
         hsbenchs3.validate_s3_objects()
