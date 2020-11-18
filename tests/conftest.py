@@ -3077,8 +3077,10 @@ def pvc_clone_factory(request):
         ), f"Unknown provisioner in PVC {pvc_obj.name}"
         if pvc_obj.provisioner == "openshift-storage.rbd.csi.ceph.com":
             clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
+            interface = constants.CEPHBLOCKPOOL
         elif pvc_obj.provisioner == "openshift-storage.cephfs.csi.ceph.com":
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
+            interface = constants.CEPHFILESYSTEM
 
         size = size or pvc_obj.get().get("spec").get("resources").get("requests").get(
             "storage"
@@ -3100,6 +3102,7 @@ def pvc_clone_factory(request):
         instances.append(clone_pvc_obj)
         clone_pvc_obj.parent = pvc_obj
         clone_pvc_obj.volume_mode = volume_mode
+        clone_pvc_obj.interface = interface
 
         if status:
             helpers.wait_for_resource_state(clone_pvc_obj, status)
