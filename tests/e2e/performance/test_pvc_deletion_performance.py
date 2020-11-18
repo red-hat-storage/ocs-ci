@@ -70,7 +70,7 @@ class TestPVCDeletionPerformance(E2ETest):
             raise ex.PerformanceException(
                 f"PVC deletion time is {delete_time} and greater than {deletion_time} second"
             )
-        push_to_pvc_time_dashboard(self.interface, "deletion", delete_time)
+        push_to_pvc_time_dashboard(self.interface, "1-pvc-deletion", delete_time)
 
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_multiple_pvc_deletion_measurement_performance(self, teardown_factory):

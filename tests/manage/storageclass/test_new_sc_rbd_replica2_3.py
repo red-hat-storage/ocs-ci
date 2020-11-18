@@ -4,14 +4,22 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.testlib import ManageTest, tier1
-from ocs_ci.framework.pytest_customization.marks import skipif_external_mode
-from ocs_ci.ocs.cluster import get_percent_used_capacity
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_external_mode,
+    skipif_ocs_version,
+)
+from ocs_ci.ocs.cluster import (
+    get_percent_used_capacity,
+    validate_compression,
+    validate_replica_data,
+)
 
 log = logging.getLogger(__name__)
 
 
 @tier1
 @skipif_external_mode
+@skipif_ocs_version("<4.6")
 class TestCreateNewScWithNeWRbDPool(ManageTest):
     """
     Create a new  Storage Class on a new rbd pool with
@@ -63,3 +71,7 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
             f"Cluster used space with replica size {replica}, "
             f"compression mode {compression}={cluster_used_space}"
         )
+        cbp_name = sc_obj.get().get("parameters").get("pool")
+        if compression != "none":
+            validate_compression(cbp_name)
+        validate_replica_data(cbp_name, replica)

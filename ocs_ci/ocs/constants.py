@@ -17,7 +17,9 @@ LOG_FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(messag
 # Directories
 TOP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CONF_DIR = os.path.join(TOP_DIR, "conf")
-OCP_VERSION_CONF_DIR = os.path.join(CONF_DIR, "ocp_version")
+FRAMEWORK_CONF_DIR = os.path.join(TOP_DIR, "ocs_ci", "framework", "conf")
+OCP_VERSION_CONF_DIR = os.path.join(FRAMEWORK_CONF_DIR, "ocp_version")
+OCS_VERSION_CONF_DIR = os.path.join(FRAMEWORK_CONF_DIR, "ocs_version")
 TEMPLATE_DIR = os.path.join(TOP_DIR, "ocs_ci", "templates")
 TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
@@ -85,6 +87,7 @@ HEALTHY_OB = "OPTIMAL"
 HEALTHY_OBC = STATUS_BOUND
 HEALTHY_OBC_CLI_PHASE = "Phase:Bound"
 HEALTHY_OB_CLI_MODE = "Mode:OPTIMAL"
+HEALTHY_PV_BS = ["`OPTIMAL`", "`LOW_CAPACITY`"]
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
@@ -172,6 +175,7 @@ DEFAULT_NAMESPACE = "default"
 IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
 IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
 DEFAULT_NOOBAA_BACKINGSTORE = "noobaa-default-backing-store"
+MIN_PV_BACKINGSTORE_SIZE_IN_GB = 17
 RIPSAW_NAMESPACE = "my-ripsaw"
 JENKINS_BUILD = "jax-rs-build"
 JENKINS_BUILD_COMPLETE = "Complete"
@@ -1078,7 +1082,7 @@ SQUADS = {
     "Red": ["/mcg/", "/rgw/"],
     "Yellow": ["/cluster_expansion/"],
     "Purple": ["/test_must_gather", "/upgrade/"],
-    "Magenta": ["/workloads/", "/registry/", "/logging/"],
+    "Magenta": ["/workloads/", "/registry/", "/logging/", "/flowtest/", "/lifecycle/"],
     "Grey": ["/performance/"],
     "Orange": ["/scale/"],
 }
