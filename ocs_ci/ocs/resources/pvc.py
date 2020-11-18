@@ -320,7 +320,7 @@ def get_all_pvs_in_storageclass(storage_class):
 
     """
     ocp_pv_obj = OCP(kind=constants.PV)
-    pv_list = ocp_pv_obj.get(all_namespaces=True)['items']
+    pv_list = ocp_pv_obj.get(all_namespaces=True)["items"]
     out = []
     for pvc in pv_list:
         pv_obj = PVC(**pvc)
