@@ -349,9 +349,7 @@ def check_image_exists_in_registry(image_url):
     return return_value
 
 
-def image_pull_and_push(
-    project_name, template, image='', pattern='', wait=True
-):
+def image_pull_and_push(project_name, template, image="", pattern="", wait=True):
     """
     Pull and push images running oc new-app command
     Args:
@@ -361,17 +359,17 @@ def image_pull_and_push(
         pattern (str): name of the build with given pattern
         wait (bool): If true waits till the image pull and push completes.
     """
-    ocp_obj = ocp.OCP(kind='template', namespace='openshift')
+    ocp_obj = ocp.OCP(kind="template", namespace="openshift")
     try:
         ocp_obj.get(resource_name=template)
     except CommandFailed as cfe:
         if f'"{template}" not found' in str(cfe):
             logger.warn(f"Template {template} not found")
-            template = 'redis-ephemeral'
+            template = "redis-ephemeral"
         else:
             raise
 
-    if config.DEPLOYMENT.get('disconnected'):
+    if config.DEPLOYMENT.get("disconnected"):
         mirror_image(image=image)
     else:
         cmd = f"new-app --template={template} -n {project_name}"
@@ -380,20 +378,29 @@ def image_pull_and_push(
 
         # Validate it completed
         if wait:
-            if template == 'redis-ephemeral':
+            if template == "redis-ephemeral":
                 ocp_obj = ocp.OCP(kind=constants.POD, namespace=project_name)
-                deploy_pod_name = get_pod_name_by_pattern(pattern='deploy', namespace=project_name)
-                ocp_obj.wait_for_resource(condition=constants.STATUS_COMPLETED, resource_name=deploy_pod_name[0])
+                deploy_pod_name = get_pod_name_by_pattern(
+                    pattern="deploy", namespace=project_name
+                )
+                ocp_obj.wait_for_resource(
+                    condition=constants.STATUS_COMPLETED,
+                    resource_name=deploy_pod_name[0],
+                )
             else:
                 wait_time = 300
                 logger.info(f"Wait for {wait_time} seconds for build to come up")
                 time.sleep(300)
-                build_list = get_build_name_by_pattern(pattern=pattern, namespace=project_name)
+                build_list = get_build_name_by_pattern(
+                    pattern=pattern, namespace=project_name
+                )
                 if build_list is None:
                     raise Exception("Build is not created")
-                build_obj = ocp.OCP(kind='Build', namespace=project_name)
+                build_obj = ocp.OCP(kind="Build", namespace=project_name)
                 for build in build_list:
-                    build_obj.wait_for_resource(condition='Complete', resource_name=build, timeout=900)
+                    build_obj.wait_for_resource(
+                        condition="Complete", resource_name=build, timeout=900
+                    )
 
 
 def get_build_name_by_pattern(pattern="", namespace=None):
@@ -434,14 +441,16 @@ def validate_image_exists(namespace=None):
     Raises:
         Exceptions if dir/folders not found
     """
-    if not config.DEPLOYMENT.get('disconnected'):
+    if not config.DEPLOYMENT.get("disconnected"):
         pod_list = get_pod_name_by_pattern(
-            pattern="image-registry", namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+            pattern="image-registry",
+            namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
         )
         for pod_name in pod_list:
             if "cluster" not in pod_name:
                 pod_obj = pod.get_pod_obj(
-                    name=pod_name, namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+                    name=pod_name,
+                    namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
                 )
                 return pod_obj.exec_cmd_on_pod(
                     command=f"find /registry/docker/registry/v2/repositories/{namespace}"
