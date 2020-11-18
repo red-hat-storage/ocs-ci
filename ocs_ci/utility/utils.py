@@ -2661,10 +2661,10 @@ def get_system_architecture():
         str: Architecture of system
 
     """
-    from ocs_ci.ocs.node import get_typed_nodes
+    from ocs_ci.ocs.node import get_nodes
 
     log.info("Checking architecture of system")
-    node = get_typed_nodes(node_type=constants.WORKER_MACHINE)[0]
+    node = get_nodes(node_type=constants.WORKER_MACHINE)[0]
     return node.ocp.exec_oc_debug_cmd(node.data["metadata"]["name"], ["uname -m"])
 
 
