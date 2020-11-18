@@ -917,7 +917,11 @@ LOCAL_STORAGE_OPTIONAL_OPERATORS = os.path.join(
 LOCAL_VOLUME_DISCOVERY_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "local-volume-discovery.yaml"
 )
+LOCAL_VOLUME_DISCOVERY = (
+    "localvolumediscovery.local.storage.openshift.io/auto-discover-devices"
+)
 LOCAL_VOLUME_SET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "local-volume-set.yaml")
+LOCAL_VOLUME_SET = "localvolumesets.local.storage.openshift.io"
 
 # All worker default config files
 RHCOS_WORKER_CONF = os.path.join(CONF_DIR, "ocsci/aws_upi_rhcos_workers.yaml")
