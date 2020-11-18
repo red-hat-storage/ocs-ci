@@ -86,9 +86,6 @@ class TestEndpointAutoScale(MCGTest):
 
     @tier4
     @tier4a
-    @pytest.skip(
-        "Skipped because of the issue described in https://bugzilla.redhat.com/show_bug.cgi?id=1898969"
-    )
     @polarion_id("OCS-2422")
     def test_auto_scale_with_stop_and_start_node(self, mcg_job_factory, nodes, options):
         """
@@ -100,12 +97,21 @@ class TestEndpointAutoScale(MCGTest):
         self._assert_endpoint_count(desired_count=1)
         job = mcg_job_factory(custom_options=options)
         self._assert_endpoint_count(desired_count=2)
+        noobaa_db_pods = get_pods_having_label(
+            label=constants.NOOBAA_DB_LABEL,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        )
+        noobaa_db_pod = Pod(**noobaa_db_pods[0])
 
         ep_pod_objs = get_pods_having_label(
             label=constants.NOOBAA_ENDPOINT_POD_LABEL,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
         )
-        ep_pod_obj = Pod(**ep_pod_objs[0])
+        ep_pod_obj = None
+        for pod_obj in ep_pod_objs:
+            if get_pod_node(pod_obj) is not get_pod_node(noobaa_db_pod):
+                ep_pod_obj = pod_obj
+        ep_pod_obj = Pod(**ep_pod_obj)
         # Retrieve the node object on which the pod resides
         node = get_pod_node(ep_pod_obj)
 
@@ -129,8 +135,13 @@ class TestEndpointAutoScale(MCGTest):
         # Wait for 2 Noobaa endpoint pods to be started and reach running status
         logger.info("Waiting for 2 Noobaa endpoint pods to reach status Running")
 
-        self._assert_endpoint_count(desired_count=2)
+        logger.info("Deleting the previously created FIO job and starting a new one")
+        job.delete()
+        job.ocp.wait_for_delete(resource_name=job.name, timeout=60)
 
+        job = mcg_job_factory(custom_options=options)
+
+        self._assert_endpoint_count(desired_count=2)
         nodes.start_nodes([node])
 
         wait_for_nodes_status(
