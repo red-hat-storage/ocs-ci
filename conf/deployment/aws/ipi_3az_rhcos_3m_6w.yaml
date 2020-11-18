@@ -14,7 +14,7 @@ ENV_DATA:
     - 'us-east-2a'
     - 'us-east-2b'
     - 'us-east-2c'
-  worker_replicas: 3
+  worker_replicas: 6
   master_replicas: 3
   worker_instance_type: 'm5.4xlarge'
 REPORTING:
