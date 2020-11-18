@@ -388,9 +388,7 @@ class Jenkins(object):
         if node_type == constants.MASTER_MACHINE:
             nodes_drain = [
                 node.name
-                for node in get_nodes(
-                    node_type=node_type, num_of_nodes=num_of_nodes
-                )
+                for node in get_nodes(node_type=node_type, num_of_nodes=num_of_nodes)
             ]
         elif node_type == constants.WORKER_MACHINE:
             pod_objs = []
