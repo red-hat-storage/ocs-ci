@@ -52,7 +52,7 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
         file_name = "file_snapshot"
         # Run IO
         log.info("Start IO on all pods")
-        for pod_obj in self.pod_objs:
+        for pod_obj in self.pods:
             pod_obj.run_io(
                 storage_type="fs",
                 size=f"{self.pvc_size - 1}G",
@@ -62,12 +62,10 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
         log.info("IO started on all pods")
 
         # Wait for IO completion
-        for pod_obj in self.pod_objs:
+        for pod_obj in self.pods:
             pod_obj.get_fio_results()
             # Get md5sum of the file
-            pod_obj.pvc.md5sum = cal_md5sum(
-                pod_obj=pod_obj, file_name=file_name, block=True
-            )
+            pod_obj.pvc.md5sum = cal_md5sum(pod_obj=pod_obj, file_name=file_name)
         log.info("IO completed on all pods")
 
         # Create snapshots
@@ -150,6 +148,7 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
             wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
         log.info("Verified: New pods are running")
 
+        # Verify md5sum
         log.info("Verifying md5sum on new pods")
         for pod_obj in restore_pod_objs:
             log.info(f"Verifying md5sum on pod {pod_obj.name}")
