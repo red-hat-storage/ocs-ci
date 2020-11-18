@@ -342,21 +342,13 @@ class TestDiskFailures(ManageTest):
         else:
             # If ocp version is '4.6' and above the osd removal job should
             # delete the OSD prepare job, OSD PVC, OSD deployment
-            logger.info(
-                f"Verifying deletion of OSD prepare job {osd_prepare_job_name}"
-            )
+            logger.info(f"Verifying deletion of OSD prepare job {osd_prepare_job_name}")
             osd_prepare_job.ocp.wait_for_delete(
                 resource_name=osd_prepare_job_name, timeout=30
             )
-            logger.info(
-                f"Verifying deletion of OSD PVC {osd_pvc_name}"
-            )
-            osd_pvc.ocp.wait_for_delete(
-                resource_name=osd_pvc_name, timeout=30
-            )
-            logger.info(
-                f"Verifying deletion of OSD deployment {osd_deployment_name}"
-            )
+            logger.info(f"Verifying deletion of OSD PVC {osd_pvc_name}")
+            osd_pvc.ocp.wait_for_delete(resource_name=osd_pvc_name, timeout=30)
+            logger.info(f"Verifying deletion of OSD deployment {osd_deployment_name}")
             osd_deployment.ocp.wait_for_delete(
                 resource_name=osd_deployment_name, timeout=30
             )
