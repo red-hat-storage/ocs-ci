@@ -54,8 +54,6 @@ class TestPvcMultiClonePerformance(E2ETest):
 
         """
         num_of_clones = 512
-        if interface_iterate == constants.CEPHBLOCKPOOL:
-            num_of_clones = 512  # bz_1896831
 
         # Getting the total Storage capacity
         ceph_cluster = CephCluster()
@@ -255,6 +253,7 @@ class TestPvcMultiClonePerformance(E2ETest):
         start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         log.info(f"Clone yaml file is {clone_yaml}")
         res = self.run_oc_command(f"create -f {tmpfile}", self.params["nspace"])
+        time.sleep(3)
         if self.params["ERRMSG"] in res[0]:
             raise Exception(f"Can not create clone : {res}")
         # wait until clone is ready
