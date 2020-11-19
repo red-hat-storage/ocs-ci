@@ -2928,6 +2928,7 @@ def snapshot_restore_factory(request):
                 constants.CEPHBLOCKPOOL
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
+            interface = constants.CEPHBLOCKPOOL
         elif snapshot_info["spec"]["volumeSnapshotClassName"] == (
             helpers.default_volumesnapshotclass(constants.CEPHFILESYSTEM).name
         ):
@@ -2935,6 +2936,7 @@ def snapshot_restore_factory(request):
                 constants.CEPHFILESYSTEM
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_CEPHFS_PVC_RESTORE_YAML
+            interface = constants.CEPHFILESYSTEM
         restored_pvc = create_restore_pvc(
             sc_name=storageclass.name,
             snap_name=snapshot_obj.name,
@@ -2947,6 +2949,7 @@ def snapshot_restore_factory(request):
         )
         instances.append(restored_pvc)
         restored_pvc.snapshot = snapshot_obj
+        restored_pvc.interface = interface
         if status:
             helpers.wait_for_resource_state(restored_pvc, status)
         return restored_pvc
@@ -3155,3 +3158,18 @@ def pvc_clone_factory(request):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture(scope="session", autouse=True)
+def reportportal_customization(request):
+    if hasattr(request.node.config, "py_test_service"):
+        rp_service = request.node.config.py_test_service
+        launch_id = rp_service.RP.rp_client.launch_id
+        project = rp_service.RP.rp_client.project
+        endpoint = rp_service.RP.rp_client.endpoint
+        launch_url = f"{endpoint}/ui/#{project}/launches/all/{launch_id}/{launch_id}"
+        config.REPORTING["rp_launch_url"] = launch_url
+        config.REPORTING["rp_launch_id"] = launch_id
+        config.REPORTING["rp_endpoint"] = endpoint
+        config.REPORTING["rp_project"] = project
+        request.config._metadata["RP Launch URL:"] = launch_url

@@ -483,7 +483,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         """
         provisioner_resource = []
         for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
-            provisioner_pod = pod.plugin_provisioner_leader(interface=interface)
+            provisioner_pod = pod.get_plugin_provisioner_leader(interface=interface)
             node_name = pod.get_pod_node(provisioner_pod).name
             if node_name not in node_list:
                 if interface == constants.CEPHBLOCKPOOL:
