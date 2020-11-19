@@ -26,6 +26,7 @@ def cloud_uls_factory(request, cld_mgr):
             "gcp": cld_mgr.gcp_client,
             "azure": cld_mgr.azure_client,
             "ibmcos": cld_mgr.ibmcos_client,
+            "rgw": cld_mgr.rgw_client,
         }
     except AttributeError as e:
         raise Exception(
@@ -55,6 +56,7 @@ def cloud_uls_factory(request, cld_mgr):
             "gcp": set(),
             "azure": set(),
             "ibmcos": set(),
+            "rgw": set(),
         }
 
         for cloud, params in uls_dict.items():
