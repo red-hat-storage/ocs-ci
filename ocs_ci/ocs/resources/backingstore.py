@@ -21,7 +21,6 @@ from ocs_ci.helpers.helpers import create_unique_resource_name, wait_for_resourc
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.helpers.helpers import create_unique_resource_name
 
 log = logging.getLogger(__name__)
 
@@ -31,9 +30,16 @@ class BackingStore:
     A class that represents BackingStore objects
 
     """
+
     def __init__(
-        self, name, method, uls_name=None, secret_name=None,
-        mcg_obj=None, vol_num=None, vol_size=None
+        self,
+        name,
+        method,
+        uls_name=None,
+        secret_name=None,
+        mcg_obj=None,
+        vol_num=None,
+        vol_size=None,
     ):
         self.name = name
         self.method = method
