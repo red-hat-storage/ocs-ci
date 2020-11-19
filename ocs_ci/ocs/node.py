@@ -1122,4 +1122,4 @@ def taint_nodes(nodes, taint_label=constants.OCS_TAINT):
     for node in nodes:
         command = f"adm taint node {node.name} {taint_label}"
         node.exec_oc_cmd(command)
-        logging.info(f"Successfully tainted {node.name} " f"with OCS storage taint")
+        logging.info(f"Successfully tainted {node.name} with OCS storage taint")

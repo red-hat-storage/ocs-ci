@@ -9,6 +9,7 @@ from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass, get_all_pvcs
 from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
 from ocs_ci.utility.localstorage import check_local_volume
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -135,14 +136,8 @@ def uninstall_ocs():
 
     """
     ocp_obj = ocp.OCP()
-    provisioners = constants.OCS_PROVISIONERS
 
-    # step1:  List the storage classes using OCS provisioners
-    sc_list = [
-        sc for sc in get_all_storageclass() if sc.get("provisioner") in provisioners
-    ]
-
-    # step 2: list and delete all existing volume snapshots
+    log.info("deleting volume snapshots")
     vs_ocp_obj = ocp.OCP(kind=constants.VOLUMESNAPSHOT)
     vs_list = vs_ocp_obj.get(all_namespaces=True)["items"]
     for vs in vs_list:
@@ -151,7 +146,12 @@ def uninstall_ocs():
         )
         vs_obj.delete(resource_name=vs.get("metadata").get("name"))
 
-    # step 3: # Query for PVCs and OBCs that are using the storage class provisioners listed in the previous step.
+    log.info("queering for OCS PVCs")
+    provisioners = constants.OCS_PROVISIONERS
+    sc_list = [
+        sc for sc in get_all_storageclass() if sc.get("provisioner") in provisioners
+    ]
+
     pvc_to_delete = []
     for sc in sc_list:
         pvc_to_delete.extend(
@@ -160,7 +160,6 @@ def uninstall_ocs():
             if "noobaa" not in pvc.name
         )
 
-    # step 4:
     log.info("Removing monitoring stack from OpenShift Container Storage")
     remove_monitoring_stack_from_ocs()
 
@@ -175,14 +174,11 @@ def uninstall_ocs():
     except CommandFailed:
         log.info("No cluster logging found")
 
-    log.info("Deleting pvcs")
+    log.info("Deleting OCS PVCs")
     for pvc in pvc_to_delete:
-        log.info(f"Deleting pvc: {pvc.name}")
+        log.info(f"Deleting PVC: {pvc.name}")
         pvc.delete()
 
-    # TODO: delete all noobaa objects (bucketclass, obs, backingstore)
-
-    # step 5: check for local storage
     storage_cluster = ocp.OCP(
         kind=constants.STORAGECLUSTER,
         resource_name=constants.DEFAULT_CLUSTERNAME,
@@ -202,7 +198,6 @@ def uninstall_ocs():
             .get("storageClassName")
         )
 
-    # step 6: delete storagecluster
     cleanup_policy = (
         storage_cluster.get()
         .get("metadata")
@@ -213,58 +208,54 @@ def uninstall_ocs():
     log.info("Deleting storageCluster object")
     storage_cluster.delete(resource_name=constants.DEFAULT_CLUSTERNAME)
 
-    # step 7+9: check cleanup pods are compleated
     storage_node_list = get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
     if cleanup_policy == "delete":
-        # check clean up pods
+        log.info("Cleanup policy set to delete. checking cleanup pods")
         cleanup_pods = [
             pod for pod in get_all_pods() if "cluster-cleanup-job" in pod.name
         ]
         for pod in cleanup_pods:
-            if pod.get().get("status").get("phase") == "Succeeded":
-                log.info(f"Cleanup pod {pod.name} completed successfully ")
-            else:
-                log.error(f"Cleanup pod {pod.name} did not complete")
+            while pod.get().get("status").get("phase") != "Succeeded":
+                log.info(f"waiting for cleanup pod {pod.name} to complete")
+                TimeoutSampler(timeout=10, sleep=30)
+            log.info(f"Cleanup pod {pod.name} completed successfully ")
+
         # confirm var/lib/rook is deleted
+        log.info("Confirming OCS artifacts were deleted from nodes")
         for node in storage_node_list:
-            try:
-                assert not ocp_obj.exec_oc_debug_cmd(
-                    node=node, cmd_list=["ls -l var/lib/rook"]
-                ), "OCS artificats were not deleted from nodes "
-            except CommandFailed:
-                pass
+            assert not ocp_obj.exec_oc_debug_cmd(
+                node=node, cmd_list=["ls -l var/lib/rook"]
+            ), "OCS artificats were not deleted from nodes "
+    else:
+        log.info("Cleanup policy set to retain. skipping nodes cleanup")
 
-        pass
-
-    # step 8: delete namespace
     log.info("Deleting openshift-storage namespace")
-    ocp_obj.delete_project("openshift-storage")
-    ocp_obj.wait_for_delete("openshift-storage")
-    switch_to_project("default")
+    ocp_obj.delete_project(constants.OPENSHIFT_STORAGE_NAMESPACE)
+    ocp_obj.wait_for_delete(constants.OPENSHIFT_STORAGE_NAMESPACE)
+    switch_to_project(constants.DEFAULT_NAMESPACE)
 
-    # step 10: TODO remove crypto from nodes
+    # step 10: TODO remove crypto from nodes. how do I check if nodes are encrypted?
     for node in storage_node_list:
         log.info(f"removing encryption from {node}")
         ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[])
 
-    # step 11: remove LSO
     if lso_sc is not None:
-        uninstall_lso(lso_sc)  # TODO check lso func
+        log.info("Removing LSO")
+        uninstall_lso(lso_sc)
 
-    # step 12: delete noobaa sc
     log.info("deleting noobaa storage class")
     noobaa_sc = ocp.OCP(kind=constants.STORAGECLASS)
     noobaa_sc.delete(resource_name=constants.NOOBAA_SC)
 
-    # step 13: unlable storage nodes
+    log.info("Unlabeling storage nodes")
     node_objs = ocp.OCP(kind=constants.NODE).get().get("items")
     label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL[:-3] + "-")
     label_nodes(nodes=node_objs, label=constants.TOPOLOGY_ROOK_LABEL + "-")
 
-    # remove taint from nodes
+    log.info("Removing taints from storage nodes")  # TODO not working
     taint_nodes(nodes=node_objs, taint_label=constants.OCS_TAINT + "-")
 
-    # step 14: delete remaining PVs
+    log.info("Deleting remaining OCS PVs (if there are any)")
     try:
         rbd_pv = ocp.OCP(kind=constants.PV, resource_name="ocs-storagecluster-ceph-rbd")
         fs_pv = ocp.OCP(kind=constants.PV, resource_name="ocs-storagecluster-cephfs")
@@ -274,8 +265,7 @@ def uninstall_ocs():
     except Exception as e:
         log.info(f"OCS PV(s) not found. {e}")
 
-    # step 15: remove CRSD
-    log.info("Removing CRDs")
+    log.info("Removing CRDs")  # TODO get final CRDS list
     crd_list = [
         "crd backingstores.noobaa.io",
         "bucketclasses.noobaa.io",
