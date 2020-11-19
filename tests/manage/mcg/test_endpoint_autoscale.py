@@ -28,7 +28,8 @@ class TestEndpointAutoScale(MCGTest):
     MIN_ENDPOINT_COUNT = 1
     MAX_ENDPOINT_COUNT = 2
 
-    def teardown(self, request, nodes):
+    @pytest.fixture()
+    def nodes_teardown(self, request, nodes):
         """
         Make sure all nodes are up again
 
@@ -84,7 +85,7 @@ class TestEndpointAutoScale(MCGTest):
         job.ocp.wait_for_delete(resource_name=job.name, timeout=60)
         self._assert_endpoint_count(desired_count=1)
 
-    def _assert_endpoint_count(self, desired_count):
+    def _assert_endpoint_count(self, desired_count, timeout=500):
         pod = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
 
         assert pod.wait_for_resource(
@@ -92,14 +93,14 @@ class TestEndpointAutoScale(MCGTest):
             condition=constants.STATUS_RUNNING,
             selector=constants.NOOBAA_ENDPOINT_POD_LABEL,
             dont_allow_other_resources=True,
-            timeout=500,
+            timeout=timeout,
         )
 
     @tier4
     @tier4a
     @polarion_id("OCS-2422")
     def test_auto_scale_with_stop_and_start_node(
-        self, mcg_job_factory, nodes, options, teardown
+        self, mcg_job_factory, nodes, options, nodes_teardown
     ):
         """
         Test auto scale with stop and start node
@@ -196,4 +197,4 @@ class TestEndpointAutoScale(MCGTest):
 
         job.delete()
         job.ocp.wait_for_delete(resource_name=job.name, timeout=60)
-        self._assert_endpoint_count(1)
+        self._assert_endpoint_count(desired_count=1, timeout=900)
