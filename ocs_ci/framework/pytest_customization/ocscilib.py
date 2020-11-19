@@ -260,7 +260,7 @@ def pytest_configure(config):
         log.info(
             f"Dump of the consolidated config file is located here: " f"{config_file}"
         )
-        set_report_portal_tags(config)
+        set_report_portal_config(config)
         # Add OCS related versions to the html report and remove
         # extraneous metadata
         markers_arg = config.getoption("-m")
@@ -546,7 +546,14 @@ def pytest_runtest_makereport(item, call):
             log.exception("Failed to collect performance stats")
 
 
-def set_report_portal_tags(config):
+def set_report_portal_config(config):
+    """
+    Add settings for report portal like description and tags for the launch.
+
+    Args:
+        config (pytest.config): Pytest config object
+
+    """
     rp_tags = list()
     rp_tags.append(ocsci_config.ENV_DATA.get("platform"))
     rp_tags.append(ocsci_config.ENV_DATA.get("deployment_type"))
@@ -572,10 +579,21 @@ def set_report_portal_tags(config):
         rp_tags.append("production")
     if ocsci_config.ENV_DATA.get("fips"):
         rp_tags.append("fips")
+    if ocsci_config.ENV_DATA.get("encryption_at_rest"):
+        rp_tags.append("encryption_at_rest")
 
     for tag in rp_tags:
         if tag:
             config.addinivalue_line("rp_launch_tags", tag.lower())
+    description = ""
+    display_name = ocsci_config.REPORTING.get("display_name")
+    if display_name:
+        description += f"Job name: {display_name}"
+    jenkins_job_url = ocsci_config.RUN.get("jenkins_build_url")
+    if jenkins_job_url:
+        description += f" Jenkins job: {jenkins_job_url}"
+    if description:
+        config.option.rp_launch_description = description
 
 
 def set_log_level(config):
