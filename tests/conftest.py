@@ -2966,17 +2966,7 @@ def snapshot_restore_factory(request):
                 instance.ocp.wait_for_delete(instance.name)
 
         # Wait for PVs to delete
-        # If PV have ReclaimPolicy set to Retain then delete it
-        for pv_obj in pv_objs:
-            if pv_obj.data.get('spec').get(
-                'persistentVolumeReclaimPolicy'
-            ) == constants.RECLAIM_POLICY_RETAIN:
-                helpers.wait_for_resource_state(
-                    pv_obj,
-                    constants.STATUS_RELEASED
-                )
-                pv_obj.delete()
-            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+        helpers.wait_for_pv_delete(pv_objs)
 
     request.addfinalizer(finalizer)
     return factory
@@ -3175,17 +3165,7 @@ def pvc_clone_factory(request):
                 instance.ocp.wait_for_delete(instance.name)
 
         # Wait for PVs to delete
-        # If PV have ReclaimPolicy set to Retain then delete it
-        for pv_obj in pv_objs:
-            if pv_obj.data.get('spec').get(
-                'persistentVolumeReclaimPolicy'
-            ) == constants.RECLAIM_POLICY_RETAIN:
-                helpers.wait_for_resource_state(
-                    pv_obj,
-                    constants.STATUS_RELEASED
-                )
-                pv_obj.delete()
-            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+        helpers.wait_for_pv_delete(pv_objs)
 
     request.addfinalizer(finalizer)
     return factory
