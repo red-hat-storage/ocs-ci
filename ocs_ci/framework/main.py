@@ -9,7 +9,7 @@ import yaml
 from ocs_ci import framework
 from getpass import getuser
 from ocs_ci.utility import utils
-from ocs_ci.ocs.constants import CONF_DIR
+from ocs_ci.ocs.constants import OCP_VERSION_CONF_DIR, OCS_VERSION_CONF_DIR
 from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
 
 
@@ -80,13 +80,13 @@ def init_ocsci_conf(arguments=None):
             ocs_version = ocs_version_from_image
     if ocs_version:
         version_config_file = os.path.join(
-            CONF_DIR, "ocs_version", f"ocs-{ocs_version}.yaml"
+            OCS_VERSION_CONF_DIR, f"ocs-{ocs_version}.yaml"
         )
         load_config([version_config_file])
 
         default_ocp_version = framework.config.DEPLOYMENT["default_ocp_version"]
         ocp_version_config = os.path.join(
-            CONF_DIR, "ocp_version", f"ocp-{default_ocp_version}-config.yaml"
+            OCP_VERSION_CONF_DIR, f"ocp-{default_ocp_version}-config.yaml"
         )
         load_config([ocp_version_config])
     if args.flexy_env_file:

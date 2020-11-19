@@ -123,7 +123,7 @@ class TestPVCCreationPerformance(E2ETest):
                 f"PVC creation time deviation is {st_deviation_percent}%"
                 f"and is greater than the allowed {accepted_deviation_percent}%."
             )
-        push_to_pvc_time_dashboard(self.interface, "creation", st_deviation)
+        push_to_pvc_time_dashboard(self.interface, "1-pvc-creation", st_deviation)
 
     @pytest.mark.usefixtures(base_setup.__name__)
     @polarion_id("OCS-1620")

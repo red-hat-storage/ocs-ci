@@ -29,6 +29,7 @@ from ocs_ci.utility.utils import (
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants, exceptions
+from ocs_ci.ocs.exceptions import PoolNotFound
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 
 logger = logging.getLogger(__name__)
@@ -901,6 +902,91 @@ def get_osd_utilization():
         osd_filled[osd["name"]] = osd["utilization"]
 
     return osd_filled
+
+
+def get_ceph_df_detail():
+    """
+    Get ceph osd df detail
+
+    Returns:
+         dict: 'ceph df details' command output
+
+    """
+    ceph_cmd = "ceph df detail"
+    ct_pod = pod.get_ceph_tools_pod()
+    return ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+
+
+def validate_replica_data(pool_name, replica):
+    """
+    Check if data is replica 2 or 3
+
+    Args:
+        replica (int): size of the replica(2,3)
+        pool_name (str): name of the pool to check replica
+
+    Returns:
+        Bool: True if replicated data size is meet rep config and False if dont
+
+    """
+
+    ceph_df_detail_output = get_ceph_df_detail()
+    pool_list = ceph_df_detail_output.get("pools")
+    for pool in pool_list:
+        if pool.get("name") == pool_name:
+            logger.info(f"{pool_name}")
+            stored = pool["stats"]["stored"]
+            byte_used = pool["stats"]["bytes_used"]
+            compress_bytes_used = pool["stats"]["compress_bytes_used"]
+            compress_under_bytes = pool["stats"]["compress_under_bytes"]
+            byte_used = byte_used + compress_under_bytes - compress_bytes_used
+            store_ratio = byte_used / stored
+            if (replica + 0.2) > store_ratio > (replica - 0.2):
+                logger.info(f"pool {pool_name} meet rep {replica} size")
+                return True
+            else:
+                logger.info(
+                    f"pool {pool_name} meet do not meet rep {replica}"
+                    f" size Store ratio is {store_ratio}"
+                )
+
+                return False
+    raise PoolNotFound(f"Pool {pool_name} not found on cluster")
+
+
+def validate_compression(pool_name):
+    """
+    Check if data was compressed
+
+    Args:
+        pool_name (str): name of the pool to check replica
+
+    Returns:
+        bool: True if compression works. False if not
+
+    """
+    ceph_df_detail_output = get_ceph_df_detail()
+    pool_list = ceph_df_detail_output.get("pools")
+    for pool in pool_list:
+        if pool.get("name") == pool_name:
+            logger.info(f"{pool_name}")
+            byte_used = pool["stats"]["bytes_used"]
+            compress_bytes_used = pool["stats"]["compress_bytes_used"]
+            compress_under_bytes = pool["stats"]["compress_under_bytes"]
+            all_byte_used = byte_used + compress_under_bytes - compress_bytes_used
+            compression_ratio = byte_used / all_byte_used
+            logger.info(f"this is the comp_ratio {compression_ratio}")
+            if 0.6 < compression_ratio:
+                logger.info(
+                    f"Compression ratio {compression_ratio} is " f"larger than 0.6"
+                )
+                return True
+            else:
+                logger.info(
+                    f"Compression ratio {compression_ratio} is " f"smaller than 0.6"
+                )
+                return False
+    raise PoolNotFound(f"Pool {pool_name} not found on cluster")
 
 
 def validate_osd_utilization(osd_used=80):
