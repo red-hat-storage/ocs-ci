@@ -27,7 +27,7 @@ sslclientcert=/etc/pki/ca-trust/source/anchors/ops-mirror.pem
 
 [rhel-optional]
 name=RHoptional
-baseurl=http://pulp.dist.prod.ext.phx2.redhat.com/content/dist/rhel/server/7/7Server/x86_64/optional/os
+baseurl=https://mirror.openshift.com/enterprise/reposync/ci-deps/rhel-server-optional-rpms/
 enabled=1
 gpgcheck=0
 sslverify=0
@@ -36,7 +36,7 @@ sslclientcert=/etc/pki/ca-trust/source/anchors/ops-mirror.pem
 
 [rhel-fast]
 name=RHfast
-baseurl=http://pulp.dist.prod.ext.phx2.redhat.com/content/dist/rhel/server/7/7Server/x86_64/fast-datapath/os/
+baseurl=https://mirror.openshift.com/enterprise/reposync/ci-deps/rhel-fast-datapath-rpms/
 enabled=1
 gpgcheck=0
 sslverify=0
