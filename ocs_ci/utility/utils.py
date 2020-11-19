@@ -1541,7 +1541,10 @@ def ceph_health_check(namespace=None, tries=20, delay=30):
 
     """
     return retry(
-        (CephHealthException, CommandFailed), tries=tries, delay=delay, backoff=1
+        (CephHealthException, CommandFailed, subprocess.TimeoutExpired),
+        tries=tries,
+        delay=delay,
+        backoff=1,
     )(ceph_health_check_base)(namespace)
 
 
@@ -1570,7 +1573,8 @@ def ceph_health_check_base(namespace=None):
     )
     tools_pod = run_cmd(
         f"oc -n {namespace} get pod -l 'app=rook-ceph-tools' "
-        f"-o jsonpath='{{.items[0].metadata.name}}'"
+        f"-o jsonpath='{{.items[0].metadata.name}}'",
+        timeout=60,
     )
     health = run_cmd(f"oc -n {namespace} exec {tools_pod} -- ceph health")
     if health.strip() == "HEALTH_OK":
