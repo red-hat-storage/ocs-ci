@@ -99,10 +99,10 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
         sc_objs = {
             constants.CEPHBLOCKPOOL: storageclass_factory(
                 interface=constants.CEPHBLOCKPOOL
-            ),
+            ).name,
             constants.CEPHFILESYSTEM: storageclass_factory(
                 interface=constants.CEPHFILESYSTEM
-            ),
+            ).name,
         }
 
         # Create PVCs out of the snapshots
