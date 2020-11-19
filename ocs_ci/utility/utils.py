@@ -1541,7 +1541,7 @@ def ceph_health_check(namespace=None, tries=20, delay=30):
 
     """
     return retry(
-        (CephHealthException, CommandFailed, TimeoutExpiredError),
+        (CephHealthException, CommandFailed, subprocess.TimeoutExpired),
         tries=tries,
         delay=delay,
         backoff=1,
