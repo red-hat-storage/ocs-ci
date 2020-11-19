@@ -16,10 +16,7 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import (
-    create_unique_resource_name, 
-    wait_for_resource_state
-)
+from ocs_ci.helpers.helpers import create_unique_resource_name, wait_for_resource_state
 
 log = logging.getLogger(__name__)
 
@@ -180,9 +177,10 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
                             )
                         wait_for_resource_state(
                             OCP(
-                                kind="backingstore", namespace=config.ENV_DATA["cluster_namespace"]
+                                kind="backingstore",
+                                namespace=config.ENV_DATA["cluster_namespace"],
                             ),
-                            constants.STATUS_READY
+                            constants.STATUS_READY,
                         )
                         # TODO: Verify CLI BS health by using the 'status' cmd
 
