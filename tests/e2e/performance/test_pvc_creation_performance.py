@@ -169,6 +169,7 @@ class TestPVCCreationPerformance(E2ETest):
                 f"greater than 180 seconds"
             )
         logging.info(f"{number_of_pvcs} PVCs creation time took {total_time} seconds")
+        push_to_pvc_time_dashboard(self.interface, "120-pvc-creation", total_time)
 
     @pytest.mark.usefixtures(base_setup.__name__)
     @polarion_id("OCS-1270")

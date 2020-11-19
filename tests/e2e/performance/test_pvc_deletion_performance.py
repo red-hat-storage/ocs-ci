@@ -127,13 +127,19 @@ class TestPVCDeletionPerformance(E2ETest):
         log.info("Preparing to delete 120 PVC")
 
         # Delete PVC
-        for obj in pvc_objs:
-            obj.delete()
+        helpers.delete_multiple_pvcs(pvc_objs)
         for obj in pvc_objs:
             obj.ocp.wait_for_delete(obj.name)
 
         # Get PVC deletion time
-        pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
-            interface=self.interface, pv_name_list=pv_name_list
-        )
-        logging.info(f"{number_of_pvcs} PVCs deletion time took {pvc_deletion_time}")
+        start_time = helpers.get_multiple_pvc_start_or_end_time(self.interface, pvc_objs, status="start")
+        end_time = helpers.get_multiple_pvc_start_or_end_time(self.interface, pvc_objs, status="end")
+        total = end_time - start_time
+        total_time = total.total_seconds()
+        if total_time > 180:
+            raise ex.PerformanceException(
+                f"{number_of_pvcs} PVCs deletion time is {total_time} and "
+                f"greater than 180 seconds"
+            )
+        logging.info(f"{number_of_pvcs} PVCs deletion time took {total_time} seconds")
+        push_to_pvc_time_dashboard(self.interface, "120-pvc-deletion", total_time)

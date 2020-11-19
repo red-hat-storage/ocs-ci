@@ -1420,6 +1420,58 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
     return pvc_dict
 
 
+def get_multiple_pvc_start_or_end_time(interface, pvc_name, status):
+    """
+    Get the starting/ending deletion time of a PVC based on provisioner logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pvc_name (str / list): Name of the PVC(s) for creation time
+                               the list will be list of pvc objects
+        status (str): the status that we want to get - Start / End
+
+    Returns:
+        datetime object: Time of PVC(s) deletion
+
+    """
+    # Define the status that need to retrieve
+    operation = "started"
+    if status.lower() == "end":
+        operation = "succeeded"
+
+    format = "%H:%M:%S.%f"
+    # Get the correct provisioner pod based on the interface
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    # due to some delay in CSI log generation added wait
+    if isinstance(pvc_name, list):
+        time.sleep(len(pvc_name))
+    else:
+        time.sleep(60)
+    # get the logs from the csi-provisioner containers
+    logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
+    logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
+
+    logs = logs.split("\n")
+    # Extract the time for the one PVC deletion
+    if isinstance(pvc_name, str):
+        stat = [i for i in logs if re.search(f"delete.*{pvc_name}.*{operation}", i)]
+        stat = stat[0].split(" ")[1]
+    # Extract the time for the list of PVCs deletion
+    if isinstance(pvc_name, list):
+        all_stats = []
+        for pv_name in pvc_name:
+            name = pv_name.name
+            stat = [i for i in logs if re.search(f"delete.*{name}.*{operation}", i)]
+            stat = stat[0].split(" ")[1]
+            all_stats.append(stat)
+        all_stats = sorted(all_stats)
+        if status.lower() == "end":
+            stat = all_stats[-1]  # return the highest time
+        elif status.lower() == "start":
+            stat = all_stats[0]  # return the lowest time
+    return datetime.datetime.strptime(stat, format)
+
+
 def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
     """
     Measure PV deletion time of bulk PV, based on logs.
@@ -2057,6 +2109,42 @@ def create_pods_parallel(
     if False in [obj.result() for obj in future_pod_objs]:
         raise TimeoutExpiredError
     return pod_objs
+
+
+def delete_multiple_pvcs(pvc_objs):
+    """
+    Delete one or more PVC as a bulk
+
+    Args:
+        pvc_objs (list): The list of pvc
+    Returns:
+         null
+    """
+    pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
+    pvc_data["metadata"]["namespace"] = pvc_objs[0].namespace
+    # Creating tem directory to hold the files for the PVC creation
+    tmpdir = tempfile.mkdtemp()
+    logger.info("Deleting the PVC yaml files for creation in bulk")
+    for obj in pvc_objs:
+        logger.info(f"Deleting PVC with name {obj.name}")
+        pvc_data["metadata"]["name"] = obj.name
+        templating.dump_data_to_temp_yaml(pvc_data, f"{tmpdir}/{obj.name}.yaml")
+
+    logger.info("Deleting all PVCs as bulk")
+    oc = OCP(kind="pod", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cmd = f"delete -f {tmpdir}/"
+    oc.exec_oc_cmd(command=cmd, out_yaml_format=False)
+
+    # Letting the system 1 sec for each PVC to deletion.
+    # this will prevent any other command from running in the system in this
+    # period of time.
+    logger.info(
+        f"Going to sleep for {len(pvc_objs)} sec. "
+        "until starting verify that PVCs was deleted."
+    )
+    time.sleep(len(pvc_objs))
+
+    return
 
 
 def delete_objs_parallel(obj_list):
