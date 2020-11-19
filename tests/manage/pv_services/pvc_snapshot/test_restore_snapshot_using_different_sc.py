@@ -29,6 +29,7 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
         self,
         project_factory,
         secret_factory,
+        storageclass_factory,
         snapshot_restore_factory,
         create_pvcs_and_pods,
     ):
