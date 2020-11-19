@@ -1,4 +1,6 @@
 import logging
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 
 from ocs_ci.ocs.bucket_utils import (
     oc_create_aws_backingstore,
@@ -14,7 +16,10 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import (
+    create_unique_resource_name, 
+    wait_for_resource_state
+)
 
 log = logging.getLogger(__name__)
 
@@ -25,20 +30,48 @@ class BackingStore:
 
     """
 
-    def __init__(self, name, uls_name, secret_name=None):
+    def __init__(self, name, method, uls_name, secret_name=None, mcg_obj=None):
         self.name = name
+        self.method = method
         self.uls_name = uls_name
         self.secret_name = secret_name
+        self.mcg_obj = mcg_obj
 
     def delete(self):
         log.info(f"Cleaning up backingstore {self.name}")
 
-        OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
-            command=f"delete backingstore {self.name}", out_yaml_format=False
-        )
+        if self.method == "oc":
+            OCP(
+                kind="backingstore", namespace=config.ENV_DATA["cluster_namespace"]
+            ).delete(resource_name=self.name)
+        elif self.method == "cli":
+            self.mcg_obj.exec_mcg_cmd(f"backingstore delete {self.name}")
 
         log.info(f"Verifying whether backingstore {self.name} exists after deletion")
-        # Todo: implement deletion assertion
+        bs_deleted_successfully = False
+        if self.method == "oc":
+            try:
+                OCP(
+                    kind="backingstore",
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    resource_name=self.name,
+                ).get()
+            except CommandFailed as e:
+                if "NotFound" in str(e):
+                    bs_deleted_successfully = True
+                else:
+                    raise
+        elif self.method == "cli":
+            try:
+                self.mcg_obj.exec_mcg_cmd(f"backingstore status {self.name}")
+            except CommandFailed as e:
+                if "Not Found" in str(e):
+                    bs_deleted_successfully = True
+                else:
+                    raise
+        assert (
+            bs_deleted_successfully
+        ), f"Backingstore {self.name} was not deleted successfully"
 
 
 def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
@@ -130,7 +163,12 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
                         # removing characters from name (pod name length bellow 64 characters issue)
                         backingstore_name = backingstore_name[:-16]
                         created_backingstores.append(
-                            BackingStore(name=backingstore_name, uls_name=uls_name)
+                            BackingStore(
+                                name=backingstore_name,
+                                method=method.lower(),
+                                uls_name=uls_name,
+                                mcg_obj=mcg_obj,
+                            )
                         )
                         if method.lower() == "cli":
                             cmdMap[method.lower()][cloud.lower()](
@@ -140,13 +178,28 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory, mcg_obj):
                             cmdMap[method.lower()][cloud.lower()](
                                 cld_mgr, backingstore_name, uls_name, region
                             )
-                        # Todo: Raise an exception in case the BS wasn't created
+                        wait_for_resource_state(
+                            OCP(
+                                kind="backingstore", namespace=config.ENV_DATA["cluster_namespace"]
+                            ),
+                            constants.STATUS_READY
+                        )
+                        # TODO: Verify CLI BS health by using the 'status' cmd
 
         return created_backingstores
 
     def backingstore_cleanup():
         for backingstore in created_backingstores:
-            backingstore.delete()
+            try:
+                backingstore.delete()
+            except CommandFailed as e:
+                if "not found" in str(e).lower():
+                    log.warning(
+                        f"Backingstore {backingstore.name} could not be found in cleanup."
+                        "\nSkipping deletion."
+                    )
+                else:
+                    raise
 
     request.addfinalizer(backingstore_cleanup)
 
