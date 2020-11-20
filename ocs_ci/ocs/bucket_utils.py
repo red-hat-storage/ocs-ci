@@ -837,7 +837,7 @@ def s3_delete_bucket_website(s3_obj, bucketname):
     return s3_obj.s3_client.delete_bucket_website(Bucket=bucketname)
 
 
-def s3_put_bucket_versioning(s3_obj, bucketname, status="Enabled"):
+def s3_put_bucket_versioning(s3_obj, bucketname, status="Enabled", s3_client=None):
     """
     Boto3 client based Put Bucket Versioning function
 
@@ -845,27 +845,37 @@ def s3_put_bucket_versioning(s3_obj, bucketname, status="Enabled"):
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
         status (str): 'Enabled' or 'Suspended'. Default 'Enabled'
+        s3_client : Any s3 client resource
 
     Returns:
         dict : PutBucketVersioning response
     """
-    return s3_obj.s3_client.put_bucket_versioning(
-        Bucket=bucketname, VersioningConfiguration={"Status": status}
-    )
+    if s3_client:
+        return s3_client.put_bucket_versioning(
+            Bucket=bucketname, VersioningConfiguration={"Status": status}
+        )
+    else:
+        return s3_obj.s3_client.put_bucket_versioning(
+            Bucket=bucketname, VersioningConfiguration={"Status": status}
+        )
 
 
-def s3_get_bucket_versioning(s3_obj, bucketname):
+def s3_get_bucket_versioning(s3_obj, bucketname, s3_client=None):
     """
     Boto3 client based Get Bucket Versioning function
 
     Args:
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
+        s3_client: Any s3 client resource
 
     Returns:
         dict : GetBucketVersioning response
     """
-    return s3_obj.s3_client.get_bucket_versioning(Bucket=bucketname)
+    if s3_client:
+        return s3_client.get_bucket_versioning(Bucket=bucketname)
+    else:
+        return s3_obj.s3_client.get_bucket_versioning(Bucket=bucketname)
 
 
 def s3_list_object_versions(s3_obj, bucketname, prefix=""):
@@ -1036,3 +1046,161 @@ def compare_directory(awscli_pod, original_dir, result_dir, amount=2):
             result_object_path=f"{result_dir}/{file_name}",
             awscli_pod=awscli_pod,
         ), "Checksum comparision between original and result object failed"
+
+
+def s3_copy_object(s3_obj, bucketname, source, object_key):
+    """
+    Boto3 client based copy object
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        source (str): Source object key. eg: '<bucket>/<key>
+        object_key (str): Unique object Identifier for copied object
+
+    Returns:
+        dict : Copy object response
+
+    """
+    return s3_obj.s3_client.copy_object(
+        Bucket=bucketname, CopySource=source, Key=object_key
+    )
+
+
+def s3_upload_part_copy(
+    s3_obj, bucketname, copy_source, object_key, part_number, upload_id
+):
+    """
+    Boto3 client based upload_part_copy operation
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        copy_source (str):  Name of the source bucket and key name. {bucket}/{key}
+        part_number (int): Part number
+        upload_id (str): Upload Id
+        object_key (str): Unique object Identifier for copied object
+
+    Returns:
+        dict : upload_part_copy response
+
+    """
+    return s3_obj.s3_client.upload_part_copy(
+        Bucket=bucketname,
+        CopySource=copy_source,
+        Key=object_key,
+        PartNumber=part_number,
+        UploadId=upload_id,
+    )
+
+
+def s3_get_object_acl(s3_obj, bucketname, object_key):
+    """
+    Boto3 client based get_object_acl operation
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        object_key (str): Unique object Identifier for copied object
+
+    Returns:
+        dict : get object acl response
+
+    """
+    return s3_obj.s3_client.get_object_acl(Bucket=bucketname, Key=object_key)
+
+
+def s3_head_object(s3_obj, bucketname, object_key):
+    """
+    Boto3 client based head_object operation to retrieve only metadata
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        object_key (str): Unique object Identifier for copied object
+
+    Returns:
+        dict : head object response
+
+    """
+    return s3_obj.s3_client.head_object(Bucket=bucketname, Key=object_key)
+
+
+def s3_list_objects_v1(
+    s3_obj, bucketname, prefix="", delimiter="", max_keys=1000, marker=""
+):
+    """
+    Boto3 client based list object version1
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        prefix (str): Limits the response to keys that begin with the specified prefix.
+        delimiter (str): Character used to group keys.
+        max_keys (int): Maximum number of keys returned in the response. Default 1,000 keys.
+        marker (str): key to start with when listing objects in a bucket.
+
+    Returns:
+        dict : list object v1 response
+
+    """
+    return s3_obj.s3_client.list_objects(
+        Bucket=bucketname,
+        Prefix=prefix,
+        Delimiter=delimiter,
+        MaxKeys=max_keys,
+        Marker=marker,
+    )
+
+
+def s3_list_objects_v2(
+    s3_obj,
+    bucketname,
+    prefix="",
+    delimiter="",
+    max_keys=1000,
+    con_token="",
+    fetch_owner=False,
+):
+    """
+    Boto3 client based list object version2
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        prefix (str): Limits the response to keys that begin with the specified prefix.
+        delimiter (str): Character used to group keys.
+        max_keys (int): Maximum number of keys returned in the response. Default 1,000 keys.
+        con_token (str): Token used to continue the list
+        fetch_owner (bool): Unique object Identifier
+
+    Returns:
+        dict : list object v2 response
+
+    """
+    return s3_obj.s3_client.list_objects_v2(
+        Bucket=bucketname,
+        Prefix=prefix,
+        Delimiter=delimiter,
+        MaxKeys=max_keys,
+        ContinuationToken=con_token,
+        FetchOwner=fetch_owner,
+    )
+
+
+def s3_delete_objects(s3_obj, bucketname, object_keys):
+    """
+    Boto3 client based delete objects
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        object_keys (list): The objects to delete. Format: {'Key': 'object_key', 'VersionId': ''}
+
+    Returns:
+        dict : delete objects response
+
+    """
+    return s3_obj.s3_client.delete_objects(
+        Bucket=bucketname, Delete={"Objects": object_keys}
+    )

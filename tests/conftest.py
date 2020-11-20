@@ -2796,6 +2796,7 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
             config.ENV_DATA["region"],
             cld_mgr,
             cloud_uls_factory,
+            platform,
         )
 
         log.info(f"Check validity of NS resource {rand_ns_resource}")
