@@ -34,7 +34,6 @@ class HsBench(object):
         self.duration = self.hsbench_cr["duration"]
         self.num_threads = self.hsbench_cr["num_threads"]
         self.num_bucket = self.hsbench_cr["num_bucket"]
-        self.run_mode = self.hsbench_cr["run_mode"]
         self.clear_mode = self.hsbench_cr["clear_mode"]
         self.bucket_prefix = self.hsbench_cr["bucket_prefix"]
         self.end_point = self.hsbench_cr["end_point"]
@@ -116,21 +115,23 @@ class HsBench(object):
         )
         return
 
-    def run_benchmark(self, num_obj=None, timeout=None):
+    def run_benchmark(self, num_obj=None, run_mode=None, timeout=None):
         """
          Running Hotsauce S3 benchmark
          Usage detail can be found at: https://github.com/markhpc/hsbench
 
         Args:
             num_obj (int): Maximum number of objects
+            run_mode (string): mode types
             timeout (int): timeout in seconds
 
         """
         # Create hsbench S3 benchmark
         log.info("Running hsbench benchmark")
         timeout = timeout if timeout else 3600
-        self.timeout_clean = timeout
+        self.timeout_clean = timeout * 4
         self.num_obj = num_obj if num_obj else self.hsbench_cr["num_obj"]
+        self.run_mode = run_mode if run_mode else self.hsbench_cr["run_mode"]
         self.pod_obj.exec_cmd_on_pod(
             f"{self.hsbench_bin_dir} -a {self.access_key} "
             f"-s {self.secret_key} "
@@ -201,18 +202,8 @@ class HsBench(object):
         Clean up deployment config, pvc, pod and test user
 
         """
-        log.info("Removing objects in the current bucket...")
-        self.pod_obj.exec_cmd_on_pod(
-            f"{self.hsbench_bin_dir} -a {self.access_key} "
-            f"-s {self.secret_key} "
-            f"-u {self.end_point}:{self.end_point_port} "
-            f"-z {self.object_size} "
-            f"-d {self.duration} -t {self.num_threads} "
-            f"-b {self.num_bucket} "
-            f"-n {self.num_obj} -m {self.clear_mode} "
-            f"-bp {self.bucket_prefix}",
-            timeout=self.timeout_clean,
-        )
+        log.info("Removing/Clearing objects in the current bucket...")
+        self.run_benchmark(run_mode=self.clear_mode, timeout=self.timeout_clean)
         log.info("Deleting pods and deployment config")
         run_cmd(f"oc delete deploymentconfig/{self.pod_name}")
         self.pod_obj.delete()

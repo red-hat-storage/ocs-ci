@@ -20,7 +20,7 @@ spec:
           claimName: hsbench-s3
       containers:
       - name: hsbench
-        image: golang
+        image: quay.io/ocsci/golang
         resources:
           limits:
             memory: "2048Mi"
