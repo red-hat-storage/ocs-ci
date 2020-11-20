@@ -35,20 +35,25 @@ class RGW(object):
 
     def get_credentials(self, secret_name=constants.NOOBAA_OBJECTSTOREUSER_SECRET):
         """
-        Get Endpoint, Access key and Secret key from OCS secret.
+        Get Endpoint, Access key and Secret key from OCS secret. Endpoint is
+        taken from rgw exposed service. Use rgw_endpoint fixture in test to get
+        it exposed.
 
         Args:
-            secret_name (str): Name of secret to be used for getting RGW credentials.
+            secret_name (str): Name of secret to be used
+                for getting RGW credentials
 
         Returns:
             tuple: Endpoint, Access key, Secret key
 
         """
-        secret_ocp_obj = OCP(kind="secret", namespace=self.namespace)
+        secret_ocp_obj = OCP(kind=constants.SECRET, namespace=self.namespace)
+        route_ocp_obj = OCP(
+            kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         creds_secret_obj = secret_ocp_obj.get(secret_name)
-        endpoint = base64.b64decode(
-            creds_secret_obj.get("data").get("Endpoint")
-        ).decode("utf-8")
+        endpoint = route_ocp_obj.get(resource_name=constants.RGW_SERVICE)
+        endpoint = f"http://{endpoint['status']['ingress'][0]['host']}"
         access_key = base64.b64decode(
             creds_secret_obj.get("data").get("AccessKey")
         ).decode("utf-8")

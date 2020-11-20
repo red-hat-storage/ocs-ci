@@ -101,6 +101,7 @@ PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
 POD = "Pod"
 ROUTE = "Route"
+SERVICE = "Service"
 NODE = "Node"
 DEPLOYMENTCONFIG = "deploymentconfig"
 CONFIG = "Config"
@@ -909,6 +910,9 @@ RHEL_WORKERS_CONF = os.path.join(CONF_DIR, "ocsci/aws_upi_rhel_workers.yaml")
 
 # Users
 NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
+
+# Services
+RGW_SERVICE = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
 
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"

@@ -1609,7 +1609,7 @@ def ec2_instances(request, aws_obj):
 
 
 @pytest.fixture(scope="session")
-def cld_mgr(request):
+def cld_mgr(request, rgw_endpoint):
     """
     Returns a cloud manager instance that'll be used throughout the session
 
@@ -1665,6 +1665,44 @@ def rgw_deployments(request):
         return rgw_deployments
     else:
         pytest.skip("There is no RGW deployment available for this test.")
+
+
+@pytest.fixture(scope="session")
+def rgw_endpoint(request):
+    """
+    Expose RGW service and return external RGW endpoint address if available.
+
+    Returns:
+        string: external RGW endpoint
+
+    """
+    log.info("Looking for RGW service to expose")
+    oc = ocp.OCP(kind=constants.SERVICE, namespace=config.ENV_DATA["cluster_namespace"])
+    rgw_service = oc.get(selector=constants.RGW_APP_LABEL)["items"]
+    if rgw_service:
+        rgw_service = constants.RGW_SERVICE
+        log.info(f"Service {rgw_service} found and will be exposed")
+        # custom hostname is provided because default hostname from rgw service
+        # is too long and OCP rejects it
+        oc = ocp.OCP(
+            kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        routes = oc.get()["items"]
+        router_hostname = routes[0]["status"]["ingress"][0]["routerCanonicalHostname"]
+        rgw_hostname = f"rgw.{router_hostname}"
+        oc.exec_oc_cmd(f"expose service/{rgw_service} --hostname {rgw_hostname}")
+        # new route is named after service
+        rgw_endpoint = oc.get(resource_name=rgw_service)
+        endpoint_obj = OCS(**rgw_endpoint)
+
+        def _finalizer():
+            endpoint_obj.delete()
+
+        request.addfinalizer(_finalizer)
+        rgw_endpoint = f"http://{rgw_endpoint['status']['ingress'][0]['host']}"
+        return rgw_endpoint
+    else:
+        log.info("RGW service is not available")
 
 
 @pytest.fixture()
@@ -2790,10 +2828,16 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
         rand_ns_resource = create_unique_resource_name(
             constants.MCG_NS_RESOURCE, platform
         )
+        if platform == constants.RGW_PLATFORM:
+            region = None
+        else:
+            # TODO: fix this when https://github.com/red-hat-storage/ocs-ci/issues/3338
+            # is resolved
+            region = "us-east-2"
         target_bucket_name = mcg_obj.create_namespace_resource(
             rand_ns_resource,
             created_connections[platform],
-            config.ENV_DATA["region"],
+            region,
             cld_mgr,
             cloud_uls_factory,
             platform,
