@@ -4,6 +4,7 @@ Test to measure pvc scale creation & deletion time. Total pvc count would be 150
 import logging
 import csv
 import pytest
+import time
 
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pvc
@@ -132,6 +133,11 @@ class TestPVCCreationDeletionScale(E2ETest):
         job_file1.delete(namespace=self.namespace)
         job_file2.delete(namespace=self.namespace)
 
+        # Adding 5min wait time for PVC deletion logs to be updated
+        # Observed failure when we immediately check the logs for pvc delete time
+        # https://github.com/red-hat-storage/ocs-ci/issues/3371
+        time.sleep(300)
+
         # Get PVC deletion time
         pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
             interface=interface, pv_name_list=pv_name_list
@@ -247,6 +253,11 @@ class TestPVCCreationDeletionScale(E2ETest):
         # Delete kube_job
         job_file_rbd.delete(namespace=self.namespace)
         job_file_cephfs.delete(namespace=self.namespace)
+
+        # Adding 5min wait time for PVC deletion logs to be updated
+        # Observed failure when we immediately check the logs for pvc delete time
+        # https://github.com/red-hat-storage/ocs-ci/issues/3371
+        time.sleep(300)
 
         # Get PV deletion time
         fs_pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
