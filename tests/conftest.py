@@ -2957,11 +2957,12 @@ def snapshot_factory(request):
 @pytest.fixture()
 def multi_snapshot_factory(snapshot_factory):
     """
-    Snapshot factory. Calling this fixture creates sets of volume snapshot from the
-    specified PVC
+    Snapshot factory. Calling this fixture creates volume snapshots of each
+    PVC in the provided list
 
     """
-    instances = []
+
+    snapshot = []
 
     def factory(
         pvc_obj,
@@ -2975,21 +2976,22 @@ def multi_snapshot_factory(snapshot_factory):
             snapshot_name_suffix (str): Suffix to be added to snapshot
 
         Returns:
-            OCS: OCS instance of kind VolumeSnapshot
+            OCS: List of OCS instances of kind VolumeSnapshot
 
         """
-        snapshot = []
+
         for obj in pvc_obj:
             log.info(
                 f"Creating snapshot of PVC {obj.name}"
             )
-            snapshot_name = f"{obj.name}-{snapshot_name_suffix}" \
+            snapshot_name = (
+                f"{obj.name}-{snapshot_name_suffix}"
                 if snapshot_name_suffix else None
+            )
             snap_obj = snapshot_factory(
                 pvc_obj=obj, snapshot_name=snapshot_name, wait=wait
             )
             snapshot.append(snap_obj)
-            instances.append(snap_obj)
         return snapshot
 
     return factory
@@ -3101,10 +3103,11 @@ def snapshot_restore_factory(request):
 def multi_snapshot_restore_factory(snapshot_restore_factory):
     """
     Snapshot restore factory. Calling this fixture creates set of new PVC out of the
-    specified VolumeSnapshot.
+    each VolumeSnapshot provided in the list.
 
     """
-    instances = []
+
+    new_pvcs = []
 
     def factory(
         snapshot_obj,
@@ -3121,7 +3124,7 @@ def multi_snapshot_restore_factory(snapshot_restore_factory):
         Args:
             snapshot_obj (list): List OCS instance of kind VolumeSnapshot which has
                 to be restored to new PVC
-            restore_pvc_name_suffix (str): Suffix to be added to pvc name
+            restore_pvc_suffix (str): Suffix to be added to pvc name
             storageclass (str): Name of storageclass
             size (str): Size of PVC being created. eg: 5Gi. Ideally, this
                 should be same as the restore size of snapshot. Adding this
@@ -3137,24 +3140,28 @@ def multi_snapshot_restore_factory(snapshot_restore_factory):
                 before creating next PVC, False otherwise
 
         Returns:
-            PVC: Restored PVC object
+            PVC: List of restored PVC object
 
         """
-        new_pvcs = []
+        status_tmp = status if wait_each else ""
+
         for snap_obj in snapshot_obj:
             log.info(f"Creating a PVC from snapshot {snap_obj.name}")
-            restore_pvc_name = f"{snap_obj.name}-{restore_pvc_suffix}"\
+            restore_pvc_name = (
+                f"{snap_obj.name}-{restore_pvc_suffix}"
                 if restore_pvc_suffix else None
+            )
             restored_pvc = snapshot_restore_factory(
                 snapshot_obj=snap_obj, restore_pvc_name=restore_pvc_name,
                 storageclass=storageclass, size=size,
                 volume_mode=volume_mode, restore_pvc_yaml=restore_pvc_yaml,
-                access_mode=access_mode
+                access_mode=access_mode, status=status_tmp
             )
             restored_pvc.snapshot = snapshot_obj
             new_pvcs.append(restored_pvc)
-            instances.append(restored_pvc)
-            if status and wait_each:
+
+        if status and not wait_each:
+            for restored_pvc in new_pvcs:
                 helpers.wait_for_resource_state(restored_pvc, status)
 
         return new_pvcs
@@ -3379,10 +3386,10 @@ def reportportal_customization(request):
 @pytest.fixture()
 def multi_pvc_clone_factory(pvc_clone_factory):
     """
-    Calling this fixture creates a sets of clone from the specified PVC
+    Calling this fixture creates clone from each PVC in the provided list of PVCs
 
     """
-    instances = []
+    cloned_pvcs = []
 
     def factory(
         pvc_obj,
@@ -3414,19 +3421,22 @@ def multi_pvc_clone_factory(pvc_clone_factory):
             PVC: List PVC instance
 
         """
-        cloned_pvcs = []
+        status_tmp = status if wait_each else ""
+
         for obj in pvc_obj:
             # Create clone
             clone_pvc_obj = pvc_clone_factory(
                 pvc_obj=obj, clone_name=clone_name,
                 storageclass=storageclass, size=size,
-                access_mode=access_mode, volume_mode=volume_mode
+                access_mode=access_mode, volume_mode=volume_mode,
+                status=status_tmp
             )
             cloned_pvcs.append(clone_pvc_obj)
-            instances.append(clone_pvc_obj)
 
-            if status and wait_each:
-                helpers.wait_for_resource_state(clone_pvc_obj, status)
+        if status and not wait_each:
+            for cloned_pvc in cloned_pvcs:
+                helpers.wait_for_resource_state(cloned_pvc, status)
+
         return cloned_pvcs
 
     return factory
