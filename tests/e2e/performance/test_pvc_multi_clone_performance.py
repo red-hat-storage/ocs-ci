@@ -115,7 +115,6 @@ class TestPvcMultiClonePerformance(E2ETest):
         results = []
         for test_num in range(1, int(self.params["clonenum"]) + 1):
             log.info(f"Starting test number {test_num}")
-
             ct = self.create_clone(test_num, clone_yaml)
             speed = self.params["datasize"] / ct
             results.append({"Clone Num": test_num, "time": ct, "speed": speed})
@@ -160,6 +159,9 @@ class TestPvcMultiClonePerformance(E2ETest):
             "mountPath"
         ]
         log.info(f"path - {self.params['path']}")
+
+        fd, tmpfile = tempfile.mkstemp(suffix=".yaml", prefix="Clone")
+        self.params["tmpfile"] = tmpfile
 
         # reading template of clone yaml file
         with open(self.params["clone_yaml"], "r") as stream:
@@ -245,19 +247,33 @@ class TestPvcMultiClonePerformance(E2ETest):
         clone_name = f"pvc-clone-{clone_num}-"
         clone_name += self.params["pvcname"].split("-")[-1]
         clone_yaml["metadata"]["name"] = clone_name
+        tmpfile = self.params["tmpfile"]
 
-        fd, tmpfile = tempfile.mkstemp(suffix=".yaml", prefix="Clone")
         log.info(f"Going to create {tmpfile}")
         with open(tmpfile, "w") as f:
             yaml.dump(clone_yaml, f, default_flow_style=False)
         start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         log.info(f"Clone yaml file is {clone_yaml}")
         res = self.run_oc_command(f"create -f {tmpfile}", self.params["nspace"])
-        time.sleep(3)
         if self.params["ERRMSG"] in res[0]:
             raise Exception(f"Can not create clone : {res}")
         # wait until clone is ready
-        timeout = 600
+        self.wait_for_clone_creation(clone_name)
+        create_time = self.measure_clone_creation_time(clone_name, start_time)
+
+        log.info(f"Creation time of clone {clone_name} is {create_time} secs.")
+
+        return create_time
+
+    def wait_for_clone_creation(self, clone_name, timeout=600):
+        """
+        Waits for creation of clone for defined period of time
+        Raises exception and fails the test if clone was not created during that time
+        Args:
+            clone_name: name of the clone being created
+            timeout: optional argument, time period in seconds to wait for creation
+
+        """
         while timeout > 0:
             res = self.run_oc_command(
                 f"get pvc {clone_name} -o yaml", self.params["nspace"]
@@ -280,12 +296,6 @@ class TestPvcMultiClonePerformance(E2ETest):
             raise Exception(
                 f"Clone {clone_name}  for {self.interface} interface was not created for 600 seconds"
             )
-
-        create_time = self.measure_clone_creation_time(clone_name, start_time)
-
-        log.info(f"Creation time of clone {clone_name} is {create_time} secs.")
-
-        return create_time
 
     def run_command(self, cmd):
         """
