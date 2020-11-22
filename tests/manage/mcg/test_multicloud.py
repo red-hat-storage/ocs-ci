@@ -8,9 +8,9 @@ from ocs_ci.framework.testlib import MCGTest
 logger = logging.getLogger(__name__)
 
 
-class TestMultiRegion(MCGTest):
+class TestMultiCloud(MCGTest):
     """
-    Test the multi region functionality
+    Test the multi cloud functionality
     """
 
     @tier1
