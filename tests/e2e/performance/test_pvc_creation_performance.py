@@ -37,7 +37,7 @@ class TestPVCCreationPerformance(E2ETest):
 
     pvc_size = "1Gi"
 
-    def get_pv_img_count(self, pool_name, interface):
+    def get_rbd_or_fs_image_count(self, pool_name, interface):
         """
         This function return the number of rbd images or fs sub volumes
         created in the backend.
@@ -74,12 +74,25 @@ class TestPVCCreationPerformance(E2ETest):
         self, storgeclass, namespace, test_state="start", **kwargs
     ):
         """
-        Validate
-            oc get pvc |grep <storageclass-name> |wc -l --> will give the pvc number created from storageclass
-            oc get pv |grep <storageclass-name> |wc -l --> will give the pv number created from storageclass
-            ceph  ls --pool=<poolname>
+        Validate the number of PVCs -> PVs -> backend images are "as expected"
 
-        :return:
+        Args:
+            storageclass (str): storageclass of the PVCs to check
+            namespace (str): the namespace where the PVCs created
+            test_state (str): state of this check, start / end operation.
+               in case of start operation, collect the numbers of the images,
+               PVCs, PVs and return them.
+               in case of end operation, validate that the numbers of images is
+               as expected.
+            kwargs (dict): dictionary with numbers of PVCs, PVs, Images and the
+               number of PVCs need to be created.
+
+        Returns:
+            dict / bool: in case of state="start", return dict with numbers of :
+               PVCs, PVs, Images.
+               in case of state="end", return True if the numbers are as expected,
+               and false otherwise.
+
         """
 
         results = {"img": 0, "pvc": 0, "pv": 0}
@@ -87,7 +100,7 @@ class TestPVCCreationPerformance(E2ETest):
         pool_name = get_storage_pool_name(self.interface, namespace)
         log.debug(f"The pool name is {pool_name}")
 
-        results["img"] = self.get_pv_img_count(
+        results["img"] = self.get_rbd_or_fs_image_count(
             pool_name=pool_name, interface=self.interface
         )
         results["pvc"] = len(get_all_pvcs_in_storageclass(storgeclass))
