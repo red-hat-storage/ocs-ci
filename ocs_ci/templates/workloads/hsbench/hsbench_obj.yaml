@@ -9,7 +9,6 @@ num_threads: 16
 num_bucket: 1
 num_obj: 1000000
 run_mode: "cxip"
-clear_mode: "c"
 bucket_prefix: "bp01"
 end_point: "http://rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc.cluster.local"
 end_point_port: 80

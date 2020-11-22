@@ -34,7 +34,6 @@ class HsBench(object):
         self.duration = self.hsbench_cr["duration"]
         self.num_threads = self.hsbench_cr["num_threads"]
         self.num_bucket = self.hsbench_cr["num_bucket"]
-        self.clear_mode = self.hsbench_cr["clear_mode"]
         self.bucket_prefix = self.hsbench_cr["bucket_prefix"]
         self.end_point = self.hsbench_cr["end_point"]
         self.end_point_port = self.hsbench_cr["end_point_port"]
@@ -129,7 +128,7 @@ class HsBench(object):
         # Create hsbench S3 benchmark
         log.info("Running hsbench benchmark")
         timeout = timeout if timeout else 3600
-        self.timeout_clean = timeout * 4
+        self.timeout_clean = timeout * 3
         self.num_obj = num_obj if num_obj else self.hsbench_cr["num_obj"]
         self.run_mode = run_mode if run_mode else self.hsbench_cr["run_mode"]
         self.pod_obj.exec_cmd_on_pod(
@@ -193,7 +192,8 @@ class HsBench(object):
         """
         log.info(f"Deleting RGW test user: {self.uid}")
         self.toolbox.exec_cmd_on_pod(
-            f"radosgw-admin user rm --uid={self.uid} --purge-data", timeout=300
+            f"radosgw-admin user rm --uid={self.uid} --purge-data",
+            timeout=self.timeout_clean,
         )
 
     def cleanup(self):
@@ -202,8 +202,6 @@ class HsBench(object):
         Clean up deployment config, pvc, pod and test user
 
         """
-        log.info("Removing/Clearing objects in the current bucket...")
-        self.run_benchmark(run_mode=self.clear_mode, timeout=self.timeout_clean)
         log.info("Deleting pods and deployment config")
         run_cmd(f"oc delete deploymentconfig/{self.pod_name}")
         self.pod_obj.delete()
