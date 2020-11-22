@@ -15,3 +15,8 @@
     installer_kernel_url:    '/pre-release/latest-4.6/rhcos-live-kernel-x86_64'
     metal_bios_url:          '/pre-release/latest-4.6/rhcos-metal.x86_64.raw.gz'
     live_rootfs_url:         '/pre-release/latest-4.6/rhcos-live-rootfs.x86_64.img'
+'4.7':
+    installer_initramfs_url: '/wa_rhcos_images/rhcos-47.82.202011181701-0-live-initramfs.x86_64.img'
+    installer_kernel_url:    '/wa_rhcos_images/rhcos-47.82.202011181701-0-live-kernel-x86_64'
+    metal_bios_url:          '/wa_rhcos_images/rhcos-47.82.202011181701-0-metal.x86_64.raw.gz'
+    live_rootfs_url:         '/wa_rhcos_images/rhcos-47.82.202011181701-0-live-rootfs.x86_64.img'

@@ -188,11 +188,17 @@ class BAREMETALUPI(Deployment):
             with open(constants.RHCOS_IMAGES_FILE) as file_stream:
                 rhcos_images_file = yaml.safe_load(file_stream)
             ocp_version = get_ocp_version()
+            float_ocp_version = float(ocp_version)
             logger.info(rhcos_images_file)
             image_data = rhcos_images_file[ocp_version]
+            # used as workardound
+            if config.DEPLOYMENT["use_internal_bm_install_files"] and float_ocp_version == 4.7:
+                coreos_url_prefix = self.helper_node_details["loc_internal_bm_install_files"]
+            else:
+                coreos_url_prefix = constants.coreos_url_prefix
             # Download installer_initramfs
             initramfs_image_path = (
-                constants.coreos_url_prefix + image_data["installer_initramfs_url"]
+                coreos_url_prefix + image_data["installer_initramfs_url"]
             )
             if check_for_rhcos_images(initramfs_image_path):
                 cmd = (
@@ -208,7 +214,7 @@ class BAREMETALUPI(Deployment):
                 raise RhcosImageNotFound
             # Download installer_kernel
             kernel_image_path = (
-                constants.coreos_url_prefix + image_data["installer_kernel_url"]
+                coreos_url_prefix + image_data["installer_kernel_url"]
             )
             if check_for_rhcos_images(kernel_image_path):
                 cmd = (
@@ -224,7 +230,7 @@ class BAREMETALUPI(Deployment):
                 raise RhcosImageNotFound
             # Download metal_bios
             metal_image_path = (
-                constants.coreos_url_prefix + image_data["metal_bios_url"]
+                coreos_url_prefix + image_data["metal_bios_url"]
             )
             if check_for_rhcos_images(metal_image_path):
                 cmd = (
@@ -239,10 +245,10 @@ class BAREMETALUPI(Deployment):
             else:
                 raise RhcosImageNotFound
 
-            if ocp_version == "4.6":
+            if float_ocp_version >= 4.6:
                 # Download metal_bios
                 rootfs_image_path = (
-                    constants.coreos_url_prefix + image_data["live_rootfs_url"]
+                    coreos_url_prefix + image_data["live_rootfs_url"]
                 )
                 if check_for_rhcos_images(rootfs_image_path):
                     cmd = (
