@@ -224,7 +224,7 @@ class OCSUpgrade(object):
         version_change = self.get_parsed_versions()[1] > self.get_parsed_versions()[0]
         if version_change:
             version_config_file = os.path.join(
-                constants.CONF_DIR, "ocs_version", f"ocs-{upgrade_version}.yaml"
+                constants.OCS_VERSION_CONF_DIR, f"ocs-{upgrade_version}.yaml"
             )
             load_config_file(version_config_file)
         else:
