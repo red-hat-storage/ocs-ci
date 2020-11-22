@@ -74,7 +74,10 @@ def cloud_uls_factory(request, cld_mgr):
                     except AttributeError as e:
                         raise Exception(
                             f"{cloud} was initialized as None, "
-                            "please verify the needed credentials were set in auth.yaml"
+                            "please verify the needed credentials were set in auth.yaml,\n"
+                            "or refer to the getting started guide"
+                            "(https://ocs-ci.readthedocs.io/en/latest/docs/"
+                            "getting_started.html#authentication-config)"
                         ).with_traceback(e.__traceback__)
                     all_created_uls[cloud].add(uls_name)
                     current_call_created_uls[cloud.lower()].add(uls_name)
