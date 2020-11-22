@@ -316,7 +316,7 @@ def get_all_pvs_in_storageclass(storage_class):
         storage_class (str): name of the storage class
 
     Returns:
-        out: list of PV objects
+        list: list of PV objects
 
     """
     ocp_pv_obj = OCP(kind=constants.PV)
