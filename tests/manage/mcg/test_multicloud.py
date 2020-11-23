@@ -35,7 +35,7 @@ class TestMultiCloud(MCGTest):
             "GCP-OC-1",
         ],
     )
-    def test_multiregion_backingstore_creation(
+    def test_multicloud_backingstore_creation(
         self, backingstore_factory, backingstore_tup
     ):
         """
@@ -66,7 +66,7 @@ class TestMultiCloud(MCGTest):
             "GCP-OC-1",
         ],
     )
-    def test_multiregion_backingstore_deletion(
+    def test_multicloud_backingstore_deletion(
         self, backingstore_factory, backingstore_tup
     ):
         """
