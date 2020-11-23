@@ -40,7 +40,9 @@ class RipSaw(object):
             run_cmd('oc apply -f my_custom_bench')
         """
         self.args = kwargs
-        self.repo = self.args.get("repo", "https://github.com/cloud-bulldozer/ripsaw")
+        self.repo = self.args.get(
+            "repo", "https://github.com/cloud-bulldozer/benchmark-operator"
+        )
         self.branch = self.args.get("branch", "master")
         self.namespace = self.args.get("namespace", RIPSAW_NAMESPACE)
         self.pgsql_is_setup = False
@@ -78,7 +80,7 @@ class RipSaw(object):
         Args:
             crd (str): Name of file to apply
         """
-        self.dir += "/ripsaw"
+        self.dir += "/benchmark-operator"
         run("oc apply -f deploy", shell=True, check=True, cwd=self.dir)
         run(f"oc apply -f {crd}", shell=True, check=True, cwd=self.dir)
         run(f"oc apply -f {self.operator}", shell=True, check=True, cwd=self.dir)
