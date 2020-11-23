@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:10.4
+          image: quay.io/ocsci/postgres:10.4
           imagePullPolicy: "IfNotPresent"
           ports:
             - containerPort: 5432
