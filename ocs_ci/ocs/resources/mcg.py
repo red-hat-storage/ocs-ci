@@ -529,6 +529,15 @@ class MCG:
                 "name": conn_name,
                 "secret": cld_mgr.azure_client.credential,
             }
+        elif platform == constants.RGW_PLATFORM:
+            params = {
+                "auth_method": "AWS_V4",
+                "endpoint": cld_mgr.rgw_client.endpoint,
+                "endpoint_type": "S3_COMPATIBLE",
+                "identity": cld_mgr.rgw_client.access_key,
+                "name": conn_name,
+                "secret": cld_mgr.rgw_client.secret_key,
+            }
         else:
             raise UnsupportedPlatformError(f"Unsupported Platform: {platform}")
 
