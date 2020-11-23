@@ -24,6 +24,17 @@ log = logging.getLogger(__name__)
 
 
 def get_storage_pool_name(interface, namespace):
+    """
+    Return the pool name of a storageclass interface
+
+    Args:
+        interface (str): the name of the storageclass interface
+        namespace (str): the name of the namespace where the storageclass define
+
+    Returns:
+        str : the name of the pool
+
+    """
     cmd = f"oc get {interface} -n {namespace} -o jsonpath='{{.items[0].metadata.name}}'"
     pool_name = exec_cmd(cmd).stdout.decode()
     return pool_name
