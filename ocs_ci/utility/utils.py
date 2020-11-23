@@ -1561,7 +1561,6 @@ def ceph_health_check_base(namespace=None):
         boolean: True if HEALTH_OK
 
     """
-    return True
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     run_cmd(
         f"oc wait --for condition=ready pod "

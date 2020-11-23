@@ -240,14 +240,10 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                             cmdMap[method.lower()][cloud.lower()](
                                 cld_mgr, backingstore_name, uls_name, region
                             )
-                        wait_for_resource_state(
-                            OCP(
-                                kind="backingstore",
-                                namespace=config.ENV_DATA["cluster_namespace"],
-                            ),
-                            constants.STATUS_READY,
+                        mcg_obj.check_backingstore_state(
+                            backingstore_name, constants.BS_OPTIMAL
                         )
-                        # TODO: Verify CLI BS health by using the 'status' cmd
+                        # TODO: Verify OC\CLI BS health by using the appropriate methods
 
         return created_backingstores
 
