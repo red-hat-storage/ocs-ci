@@ -14,3 +14,4 @@ ENV_DATA:
 
 DEPLOYMENT:
   infra_nodes: True
+  ocs_operator_nodes_to_label: 0
