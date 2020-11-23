@@ -40,7 +40,9 @@ class RipSaw(object):
             run_cmd('oc apply -f my_custom_bench')
         """
         self.args = kwargs
-        self.repo = self.args.get("repo", "https://github.com/cloud-bulldozer/ripsaw")
+        self.repo = self.args.get(
+            "repo", "https://github.com/cloud-bulldozer/benchmark-operator"
+        )
         self.branch = self.args.get("branch", "master")
         self.namespace = self.args.get("namespace", RIPSAW_NAMESPACE)
         self.pgsql_is_setup = False
