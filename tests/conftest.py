@@ -1609,7 +1609,7 @@ def ec2_instances(request, aws_obj):
 
 
 @pytest.fixture(scope="session")
-def cld_mgr(request):
+def cld_mgr(request, rgw_endpoint):
     """
     Returns a cloud manager instance that'll be used throughout the session
 
@@ -1665,6 +1665,44 @@ def rgw_deployments(request):
         return rgw_deployments
     else:
         pytest.skip("There is no RGW deployment available for this test.")
+
+
+@pytest.fixture(scope="session")
+def rgw_endpoint(request):
+    """
+    Expose RGW service and return external RGW endpoint address if available.
+
+    Returns:
+        string: external RGW endpoint
+
+    """
+    log.info("Looking for RGW service to expose")
+    oc = ocp.OCP(kind=constants.SERVICE, namespace=config.ENV_DATA["cluster_namespace"])
+    rgw_service = oc.get(selector=constants.RGW_APP_LABEL)["items"]
+    if rgw_service:
+        rgw_service = constants.RGW_SERVICE
+        log.info(f"Service {rgw_service} found and will be exposed")
+        # custom hostname is provided because default hostname from rgw service
+        # is too long and OCP rejects it
+        oc = ocp.OCP(
+            kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        routes = oc.get()["items"]
+        router_hostname = routes[0]["status"]["ingress"][0]["routerCanonicalHostname"]
+        rgw_hostname = f"rgw.{router_hostname}"
+        oc.exec_oc_cmd(f"expose service/{rgw_service} --hostname {rgw_hostname}")
+        # new route is named after service
+        rgw_endpoint = oc.get(resource_name=rgw_service)
+        endpoint_obj = OCS(**rgw_endpoint)
+
+        def _finalizer():
+            endpoint_obj.delete()
+
+        request.addfinalizer(_finalizer)
+        rgw_endpoint = f"http://{rgw_endpoint['status']['ingress'][0]['host']}"
+        return rgw_endpoint
+    else:
+        log.info("RGW service is not available")
 
 
 @pytest.fixture()
@@ -2790,12 +2828,19 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
         rand_ns_resource = create_unique_resource_name(
             constants.MCG_NS_RESOURCE, platform
         )
+        if platform == constants.RGW_PLATFORM:
+            region = None
+        else:
+            # TODO: fix this when https://github.com/red-hat-storage/ocs-ci/issues/3338
+            # is resolved
+            region = "us-east-2"
         target_bucket_name = mcg_obj.create_namespace_resource(
             rand_ns_resource,
             created_connections[platform],
-            config.ENV_DATA["region"],
+            region,
             cld_mgr,
             cloud_uls_factory,
+            platform,
         )
 
         log.info(f"Check validity of NS resource {rand_ns_resource}")
@@ -2803,6 +2848,9 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
             endpoint = constants.MCG_NS_AWS_ENDPOINT
         elif platform == constants.AZURE_PLATFORM:
             endpoint = constants.MCG_NS_AZURE_ENDPOINT
+        elif platform == constants.RGW_PLATFORM:
+            rgw_conn = RGW()
+            endpoint, _, _ = rgw_conn.get_credentials()
         else:
             raise UnsupportedPlatformError(f"Unsupported Platform: {platform}")
 
@@ -2928,6 +2976,7 @@ def snapshot_restore_factory(request):
                 constants.CEPHBLOCKPOOL
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
+            interface = constants.CEPHBLOCKPOOL
         elif snapshot_info["spec"]["volumeSnapshotClassName"] == (
             helpers.default_volumesnapshotclass(constants.CEPHFILESYSTEM).name
         ):
@@ -2935,6 +2984,7 @@ def snapshot_restore_factory(request):
                 constants.CEPHFILESYSTEM
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_CEPHFS_PVC_RESTORE_YAML
+            interface = constants.CEPHFILESYSTEM
         restored_pvc = create_restore_pvc(
             sc_name=storageclass.name,
             snap_name=snapshot_obj.name,
@@ -2947,6 +2997,7 @@ def snapshot_restore_factory(request):
         )
         instances.append(restored_pvc)
         restored_pvc.snapshot = snapshot_obj
+        restored_pvc.interface = interface
         if status:
             helpers.wait_for_resource_state(restored_pvc, status)
         return restored_pvc
@@ -2956,10 +3007,17 @@ def snapshot_restore_factory(request):
         Delete the PVCs
 
         """
+        pv_objs = []
+
+        # Get PV form PVC instances and delete PVCs
         for instance in instances:
             if not instance.is_deleted:
+                pv_objs.append(instance.backed_pv_obj)
                 instance.delete()
                 instance.ocp.wait_for_delete(instance.name)
+
+        # Wait for PVs to delete
+        helpers.wait_for_pv_delete(pv_objs)
 
     request.addfinalizer(finalizer)
     return factory
@@ -3148,10 +3206,32 @@ def pvc_clone_factory(request):
         Delete the cloned PVCs
 
         """
+        pv_objs = []
+
+        # Get PV form PVC instances and delete PVCs
         for instance in instances:
             if not instance.is_deleted:
+                pv_objs.append(instance.backed_pv_obj)
                 instance.delete()
                 instance.ocp.wait_for_delete(instance.name)
 
+        # Wait for PVs to delete
+        helpers.wait_for_pv_delete(pv_objs)
+
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture(scope="session", autouse=True)
+def reportportal_customization(request):
+    if hasattr(request.node.config, "py_test_service"):
+        rp_service = request.node.config.py_test_service
+        launch_id = rp_service.RP.rp_client.launch_id
+        project = rp_service.RP.rp_client.project
+        endpoint = rp_service.RP.rp_client.endpoint
+        launch_url = f"{endpoint}/ui/#{project}/launches/all/{launch_id}/{launch_id}"
+        config.REPORTING["rp_launch_url"] = launch_url
+        config.REPORTING["rp_launch_id"] = launch_id
+        config.REPORTING["rp_endpoint"] = endpoint
+        config.REPORTING["rp_project"] = project
+        request.config._metadata["RP Launch URL:"] = launch_url

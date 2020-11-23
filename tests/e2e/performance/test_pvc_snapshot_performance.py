@@ -1,19 +1,44 @@
+# Builtin modules
 import logging
+import time
 
+# 3ed party modules
 import pytest
+import statistics
 
+# Local modules
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility import templating
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.ocs.ripsaw import RipSaw
+from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.resources import pod, pvc
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.helpers import helpers
 from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     skipif_ocs_version,
     E2ETest,
     performance,
 )
-from ocs_ci.ocs.resources import pod, pvc
-from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope="function")
+def ripsaw(request, storageclass_factory):
+    def teardown():
+        ripsaw.cleanup()
+        time.sleep(10)
+
+    request.addfinalizer(teardown)
+
+    ripsaw = RipSaw()
+
+    return ripsaw
 
 
 @performance
@@ -23,6 +48,8 @@ class TestPvcSnapshotPerformance(E2ETest):
     """
     Tests to verify PVC snapshot creation and deletion performance
     """
+
+    tests_numbers = 3  # number of tests to run
 
     @pytest.fixture()
     def base_setup(
@@ -57,6 +84,50 @@ class TestPvcSnapshotPerformance(E2ETest):
             interface=self.interface, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
         )
 
+    def measure_create_snapshot_time(self, pvc_name, snap_name, interface):
+        """
+        Creation volume snapshot, and measure the creation time
+
+        Args:
+            pvc_name (str): the PVC name to create a snapshot of
+            snap_name (str): the name of the snapshot to be created
+            interface (str): the interface (rbd / cephfs) to used
+
+        Returns:
+            int : the snapshot creation time in seconds
+
+        """
+
+        # Find the snapshot yaml according to the interface
+        snap_yaml = constants.CSI_RBD_SNAPSHOT_YAML
+        if interface == constants.CEPHFILESYSTEM:
+            snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
+
+        # Create the Snapshot of the PVC
+        self.snap_obj = pvc.create_pvc_snapshot(
+            pvc_name=pvc_name,
+            snap_yaml=snap_yaml,
+            snap_name=snap_name,
+            sc_name=helpers.default_volumesnapshotclass(interface).name,
+        )
+
+        # Wait until the snapshot is bound and ready to use
+        self.snap_obj.ocp.wait_for_resource(
+            condition="true",
+            resource_name=self.snap_obj.name,
+            column=constants.STATUS_READYTOUSE,
+            timeout=600,
+        )
+
+        # Getting the snapshot content name
+        self.snap_content = helpers.get_snapshot_content_obj(self.snap_obj)
+
+        # Measure the snapshot creation time
+        c_time = helpers.measure_snapshot_creation_time(
+            interface, snap_name, self.snap_content.name
+        )
+        return c_time
+
     @pytest.mark.parametrize(
         argnames=["pvc_size"],
         argvalues=[pytest.param(*["1"]), pytest.param(*["10"]), pytest.param(*["100"])],
@@ -80,8 +151,6 @@ class TestPvcSnapshotPerformance(E2ETest):
 
         """
 
-        tests_numbers = 3  # number of tests to run
-
         # Getting the total Storage capacity
         ceph_cluster = CephCluster()
         ceph_capacity = ceph_cluster.get_ceph_capacity()
@@ -101,13 +170,9 @@ class TestPvcSnapshotPerformance(E2ETest):
         # Change the file size to MB and from int to str
         file_size = f"{int(filesize * 1024)}M"
 
-        snap_yaml = constants.CSI_RBD_SNAPSHOT_YAML
-        if self.interface == constants.CEPHFILESYSTEM:
-            snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
-
         all_results = []
 
-        for test_num in range(tests_numbers):
+        for test_num in range(self.tests_numbers):
             test_results = {
                 "test_num": test_num + 1,
                 "dataset": (test_num + 1) * filesize * 1024,  # size in MiB
@@ -124,9 +189,9 @@ class TestPvcSnapshotPerformance(E2ETest):
             # Wait for fio to finish
             fio_result = self.pod_obj.get_fio_results()
             err_count = fio_result.get("jobs")[0].get("error")
-            assert err_count == 0, (
-                f"IO error on pod {self.pod_obj.name}. " f"FIO result: {fio_result}"
-            )
+            assert (
+                err_count == 0
+            ), f"IO error on pod {self.pod_obj.name}. FIO result: {fio_result}"
             log.info("IO on the PVC Finished")
 
             # Verify presence of the file
@@ -145,25 +210,11 @@ class TestPvcSnapshotPerformance(E2ETest):
                 "pvc-test", f"snapshot-test{test_num}"
             )
             log.info(f"Taking snapshot of the PVC {snap_name}")
-            snap_obj = pvc.create_pvc_snapshot(
-                self.pvc_obj.name,
-                snap_yaml,
-                snap_name,
-                helpers.default_volumesnapshotclass(self.interface).name,
-            )
-            snap_obj.ocp.wait_for_resource(
-                condition="true",
-                resource_name=snap_obj.name,
-                column=constants.STATUS_READYTOUSE,
-                timeout=60,
-            )
-            teardown_factory(snap_obj)
-            snap_con_name = snap_obj.ocp.get(
-                resource_name=snap_name, out_yaml_format=True
-            )["status"]["boundVolumeSnapshotContentName"]
-            log.info(f"Snap content is {snap_con_name}")
-            test_results["create"]["time"] = helpers.measure_snapshot_creation_time(
-                self.interface, snap_obj.name, snap_con_name
+
+            test_results["create"]["time"] = self.measure_create_snapshot_time(
+                pvc_name=self.pvc_obj.name,
+                snap_name=snap_name,
+                interface=self.interface,
             )
             test_results["create"]["speed"] = int(
                 test_results["dataset"] / test_results["create"]["time"]
@@ -195,8 +246,8 @@ class TestPvcSnapshotPerformance(E2ETest):
             log.info("Resorting the PVC from Snapshot")
             restore_pvc_obj = pvc.create_restore_pvc(
                 sc_name=sc_name,
-                snap_name=snap_obj.name,
-                namespace=snap_obj.namespace,
+                snap_name=self.snap_obj.name,
+                namespace=self.snap_obj.namespace,
                 size=pvc_size,
                 pvc_name=restore_pvc_name,
                 restore_pvc_yaml=restore_pvc_yaml,
@@ -204,8 +255,8 @@ class TestPvcSnapshotPerformance(E2ETest):
             helpers.wait_for_resource_state(
                 restore_pvc_obj,
                 constants.STATUS_BOUND,
-                timeout=3600  # setting this to 60 Min. since it can be take long time to restore,
-                # and we want it to finished.
+                timeout=3600  # setting this to 60 Min.
+                # since it can be take long time to restore, and we want it to finished.
             )
             teardown_factory(restore_pvc_obj)
             restore_pvc_obj.reload()
@@ -223,7 +274,7 @@ class TestPvcSnapshotPerformance(E2ETest):
             restore_pod_obj = helpers.create_pod(
                 interface_type=self.interface,
                 pvc_name=restore_pvc_obj.name,
-                namespace=snap_obj.namespace,
+                namespace=self.snap_obj.namespace,
                 pod_dict_path=constants.NGINX_POD_YAML,
             )
 
@@ -266,17 +317,191 @@ class TestPvcSnapshotPerformance(E2ETest):
             r_speed += tst["restore"]["speed"]
             r_runtime += tst["restore"]["time"]
             log.info(
-                f"Test {tst['test_num']} results : dataset is {tst['dataset']} MiB"
+                f"Test {tst['test_num']} results : dataset is {tst['dataset']} MiB. "
                 f"Take snapshot time is {tst['create']['time']} "
                 f"at {tst['create']['speed']} MiB/Sec "
                 f"Restore from snapshot time is {tst['restore']['time']} "
                 f"at {tst['restore']['speed']} MiB/Sec "
             )
-        log.info(f" Average snapshot creation time is {c_runtime / tests_numbers} sec.")
         log.info(
-            f" Average snapshot creation speed is {c_speed / tests_numbers} MiB/sec"
+            f" Average snapshot creation time is {c_runtime / self.tests_numbers} sec."
         )
-        log.info(f" Average snapshot restore time is {r_runtime / tests_numbers} sec.")
         log.info(
-            f" Average snapshot restore speed is {r_speed / tests_numbers} MiB/sec"
+            f" Average snapshot creation speed is {c_speed / self.tests_numbers} MiB/sec"
+        )
+        log.info(
+            f" Average snapshot restore time is {r_runtime / self.tests_numbers} sec."
+        )
+        log.info(
+            f" Average snapshot restore speed is {r_speed / self.tests_numbers} MiB/sec"
+        )
+
+    @pytest.mark.parametrize(
+        argnames=["file_size", "files", "threads", "interface"],
+        argvalues=[
+            pytest.param(
+                *[32, 125000, 8, constants.CEPHBLOCKPOOL],
+            ),
+            pytest.param(
+                *[16, 250000, 8, constants.CEPHBLOCKPOOL],
+            ),
+            pytest.param(
+                *[8, 500000, 8, constants.CEPHBLOCKPOOL],
+            ),
+            pytest.param(
+                *[32, 125000, 8, constants.CEPHFILESYSTEM],
+            ),
+            pytest.param(
+                *[16, 250000, 8, constants.CEPHFILESYSTEM],
+            ),
+            pytest.param(
+                *[8, 500000, 8, constants.CEPHFILESYSTEM],
+            ),
+        ],
+    )
+    def test_pvc_snapshot_performance_multiple_files(
+        self, ripsaw, file_size, files, threads, interface
+    ):
+        """
+        Run SmallFile Workload and the take snapshot.
+        test will run with 1M, 2M and 4M of file on the volume - total data set
+        is the same for all tests, ~30GiB, and then take snapshot and measure
+        the time it takes.
+        the test will run 3 time to check consistency.
+
+        Args:
+            ripsaw : benchmark operator fixture which will run the workload
+            file_size (int): the size of the file to be create - in KiB
+            files (int): number of files each thread will create
+            threads (int): number of threads will be used in the workload
+            interface (str): the volume interface that will be used
+                             CephBlockPool / CephFileSystem
+
+        Raises:
+            TimeoutError : in case of creation files take too long time
+                           more then 2 Hours
+
+        """
+
+        # Loading the main template yaml file for the benchmark and update some
+        # fields with new values
+        sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
+
+        if interface == constants.CEPHBLOCKPOOL:
+            storageclass = constants.DEFAULT_STORAGECLASS_RBD
+        else:
+            storageclass = constants.DEFAULT_STORAGECLASS_CEPHFS
+        log.info(f"Using {storageclass} Storageclass")
+
+        # Setting up the parameters for this test
+        sf_data["spec"]["workload"]["args"]["samples"] = 1
+        sf_data["spec"]["workload"]["args"]["operation"] = ["create"]
+        sf_data["spec"]["workload"]["args"]["file_size"] = file_size
+        sf_data["spec"]["workload"]["args"]["files"] = files
+        sf_data["spec"]["workload"]["args"]["threads"] = threads
+        sf_data["spec"]["workload"]["args"]["storageclass"] = storageclass
+
+        """
+        Calculating the size of the volume that need to be test, it should
+        be at least twice in the size then the size of the files, and at
+        least 100Gi.
+
+        Since the file_size is in Kb and the vol_size need to be in Gb, more
+        calculation is needed.
+        """
+        total_files = int(files * threads)
+        total_data = int(files * threads * file_size / constants.GB2KB)
+        data_set = int(total_data * 3)  # calculate data with replica
+        vol_size = data_set if data_set >= 100 else 100
+        sf_data["spec"]["workload"]["args"]["storagesize"] = f"{vol_size}Gi"
+
+        environment = get_environment_info()
+        if not environment["user"] == "":
+            sf_data["spec"]["test_user"] = environment["user"]
+        else:
+            # since full results object need this parameter, initialize it from CR file
+            environment["user"] = sf_data["spec"]["test_user"]
+
+        sf_data["spec"]["clustername"] = environment["clustername"]
+        log.debug(f"The smallfile yaml file is {sf_data}")
+
+        # Deploy the ripsaw operator
+        log.info("Apply Operator CRD")
+        ripsaw.apply_crd("resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml")
+
+        all_results = []
+
+        for test_num in range(self.tests_numbers):
+
+            # deploy the smallfile workload
+            log.info("Running SmallFile bench")
+            sf_obj = OCS(**sf_data)
+            sf_obj.create()
+
+            # wait for benchmark pods to get created - takes a while
+            for bench_pod in TimeoutSampler(
+                240,
+                10,
+                get_pod_name_by_pattern,
+                "smallfile-client",
+                constants.RIPSAW_NAMESPACE,
+            ):
+                try:
+                    if bench_pod[0] is not None:
+                        small_file_client_pod = bench_pod[0]
+                        break
+                except IndexError:
+                    log.info("Bench pod not ready yet")
+
+            bench_pod = OCP(kind="pod", namespace=constants.RIPSAW_NAMESPACE)
+            log.info("Waiting for SmallFile benchmark to Run")
+            assert bench_pod.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                resource_name=small_file_client_pod,
+                sleep=30,
+                timeout=600,
+            )
+            for item in bench_pod.get()["items"][1]["spec"]["volumes"]:
+                if "persistentVolumeClaim" in item:
+                    pvc_name = item["persistentVolumeClaim"]["claimName"]
+                    break
+            log.info(f"Benchmark PVC name is : {pvc_name}")
+            # Creation of 4M files on CephFS can take a lot of time
+            timeout = 7200
+            while timeout >= 0:
+                logs = bench_pod.get_logs(name=small_file_client_pod)
+                if "RUN STATUS DONE" in logs:
+                    break
+                timeout -= 30
+                if timeout == 0:
+                    raise TimeoutError("Timed out waiting for benchmark to complete")
+                time.sleep(30)
+            log.info(f"Smallfile test ({test_num + 1}) finished.")
+            snap_name = pvc_name.replace("claim", "snapshot-")
+            log.info(f"Taking snapshot of the PVC {pvc_name}")
+            log.info(f"Snapshot name : {snap_name}")
+            creation_time = self.measure_create_snapshot_time(
+                pvc_name=pvc_name, snap_name=snap_name, interface=interface
+            )
+            log.info(f"Snapshot creation time is {creation_time} seconds")
+            all_results.append(creation_time)
+
+            # Delete the smallfile workload
+            log.info("Deleting the smallfile workload")
+            if sf_obj.delete(wait=True):
+                log.info("The smallfile workload was deleted successfully")
+
+            # Delete VolumeSnapshots
+            log.info("Deleting the snapshots")
+            if self.snap_obj.delete(wait=True):
+                log.info("The snapshot deleted successfully")
+
+        log.info(f"Full test report for {interface}:")
+        log.info(
+            f"Test ran {self.tests_numbers} times, " f"All results are {all_results}"
+        )
+        log.info(f"The average creation time is : {statistics.mean(all_results)}")
+        log.info(
+            f"Number of Files on the volume : {total_files:,}, "
+            f"Total dataset : {int(data_set / 3)} GiB"
         )

@@ -4,6 +4,7 @@ from ocs_ci.framework.testlib import (
     aws_platform_required,
     MCGTest,
     tier1,
+    tier2,
     tier4,
     tier4a,
 )
@@ -59,6 +60,26 @@ class TestNamespace(MCGTest):
         """
         # Create the namespace resource and verify health
         ns_resource_name = ns_resource_factory(platform=platform)[1]
+
+        # Create the namespace bucket on top of the namespace resource
+        bucket_factory(
+            amount=1,
+            interface="mcg-namespace",
+            write_ns_resource=ns_resource_name,
+            read_ns_resources=[ns_resource_name],
+        )
+
+    @pytest.mark.polarion_id("OCS-2407")
+    @tier1
+    def test_namespace_bucket_creation_with_rgw(
+        self, ns_resource_factory, bucket_factory, rgw_deployments
+    ):
+        """
+        Test namespace bucket creation using the MCG RPC.
+
+        """
+        # Create the namespace resource and verify health
+        ns_resource_name = ns_resource_factory(platform=constants.RGW_PLATFORM)[1]
 
         # Create the namespace bucket on top of the namespace resource
         bucket_factory(
@@ -154,6 +175,64 @@ class TestNamespace(MCGTest):
 
         # Compare between uploaded files and downloaded files
         assert self.compare_dirs(awscli_pod, amount=3)
+
+    @tier2
+    @pytest.mark.parametrize(
+        argnames=["platform1", "platform2"],
+        argvalues=[
+            pytest.param(
+                *[constants.AWS_PLATFORM, constants.AZURE_PLATFORM],
+                marks=pytest.mark.polarion_id("OCS-2416"),
+            ),
+            pytest.param(
+                *[constants.AWS_PLATFORM, constants.AWS_PLATFORM],
+                marks=pytest.mark.polarion_id("OCS-2418"),
+            ),
+            pytest.param(
+                *[constants.AZURE_PLATFORM, constants.AZURE_PLATFORM],
+                marks=pytest.mark.polarion_id("OCS-2419"),
+            ),
+        ],
+    )
+    def test_resource_combinations(
+        self, ns_resource_factory, bucket_factory, platform1, platform2
+    ):
+        """
+        Test namespace bucket creation using the MCG RPC. Use 2 resources.
+
+        """
+        # Create the namespace resources and verify health
+        ns_resource_name1 = ns_resource_factory(platform=platform1)[1]
+        ns_resource_name2 = ns_resource_factory(platform=platform2)[1]
+
+        # Create the namespace bucket on top of the namespace resource
+        bucket_factory(
+            amount=1,
+            interface="mcg-namespace",
+            write_ns_resource=ns_resource_name1,
+            read_ns_resources=[ns_resource_name1, ns_resource_name2],
+        )
+
+    @pytest.mark.polarion_id("OCS-2417")
+    @tier2
+    def test_resource_combinations_with_rgw(
+        self, ns_resource_factory, rgw_deployments, bucket_factory
+    ):
+        """
+        Test namespace bucket creation using the MCG RPC. Use 2 resources.
+
+        """
+        # Create the namespace resource and verify health
+        ns_resource_name1 = ns_resource_factory(platform=constants.RGW_PLATFORM)[1]
+        ns_resource_name2 = ns_resource_factory(platform=constants.RGW_PLATFORM)[1]
+
+        # Create the namespace bucket on top of the namespace resource
+        bucket_factory(
+            amount=1,
+            interface="mcg-namespace",
+            write_ns_resource=ns_resource_name1,
+            read_ns_resources=[ns_resource_name1, ns_resource_name2],
+        )
 
     @tier4
     @tier4a

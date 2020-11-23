@@ -529,6 +529,15 @@ class MCG:
                 "name": conn_name,
                 "secret": cld_mgr.azure_client.credential,
             }
+        elif platform == constants.RGW_PLATFORM:
+            params = {
+                "auth_method": "AWS_V4",
+                "endpoint": cld_mgr.rgw_client.endpoint,
+                "endpoint_type": "S3_COMPATIBLE",
+                "identity": cld_mgr.rgw_client.access_key,
+                "name": conn_name,
+                "secret": cld_mgr.rgw_client.secret_key,
+            }
         else:
             raise UnsupportedPlatformError(f"Unsupported Platform: {platform}")
 
@@ -553,7 +562,7 @@ class MCG:
             assert False
 
     def create_namespace_resource(
-        self, ns_resource_name, conn_name, region, cld_mgr, cloud_uls_factory
+        self, ns_resource_name, conn_name, region, cld_mgr, cloud_uls_factory, platform
     ):
         """
         Creates a new namespace resource
@@ -564,13 +573,14 @@ class MCG:
             region (str): The region name to be used
             cld_mgr: A cloud manager instance
             cloud_uls_factory: The cloud uls factory
+            platform (str): The platform resource name
 
         Returns:
             str: The name of the created target_bucket_name (cloud uls)
         """
         # Create the actual target bucket on AWS
-        uls_dict = cloud_uls_factory({"aws": [(1, region)]})
-        target_bucket_name = list(uls_dict["aws"])[0]
+        uls_dict = cloud_uls_factory({platform: [(1, region)]})
+        target_bucket_name = list(uls_dict[platform])[0]
 
         # Create namespace resource
         result = self.send_rpc_query(

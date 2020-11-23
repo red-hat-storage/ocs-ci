@@ -16,7 +16,8 @@ from google.oauth2 import service_account
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import TimeoutSampler, load_auth_config
@@ -37,6 +38,7 @@ class CloudManager(ABC):
             "GCP": GoogleClient,
             "AZURE": AzureClient,
             "IBMCOS": S3Client,
+            "RGW": S3Client,
         }
         try:
             logger.info(
@@ -50,6 +52,18 @@ class CloudManager(ABC):
                 "Loading from local auth.yaml"
             )
             cred_dict = load_auth_config().get("AUTH", {})
+
+        try:
+            rgw_conn = RGW()
+            endpoint, access_key, secret_key = rgw_conn.get_credentials()
+            cred_dict["RGW"] = {
+                "SECRET_PREFIX": "RGW",
+                "ENDPOINT": endpoint,
+                "RGW_ACCESS_KEY_ID": access_key,
+                "RGW_SECRET_ACCESS_KEY": secret_key,
+            }
+        except CommandFailed:
+            pass
 
         for cloud_name in cred_dict:
             if cloud_name in cloud_map:
