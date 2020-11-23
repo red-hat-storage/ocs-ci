@@ -192,8 +192,13 @@ class BAREMETALUPI(Deployment):
             logger.info(rhcos_images_file)
             image_data = rhcos_images_file[ocp_version]
             # used as workardound
-            if config.DEPLOYMENT["use_internal_bm_install_files"] and float_ocp_version == 4.7:
-                coreos_url_prefix = self.helper_node_details["loc_internal_bm_install_files"]
+            if (
+                config.DEPLOYMENT["use_internal_bm_install_files"]
+                and float_ocp_version == 4.7
+            ):
+                coreos_url_prefix = self.helper_node_details[
+                    "loc_internal_bm_install_files"
+                ]
             else:
                 coreos_url_prefix = constants.coreos_url_prefix
             # Download installer_initramfs
@@ -213,9 +218,7 @@ class BAREMETALUPI(Deployment):
             else:
                 raise RhcosImageNotFound
             # Download installer_kernel
-            kernel_image_path = (
-                coreos_url_prefix + image_data["installer_kernel_url"]
-            )
+            kernel_image_path = coreos_url_prefix + image_data["installer_kernel_url"]
             if check_for_rhcos_images(kernel_image_path):
                 cmd = (
                     "wget -O "
@@ -229,9 +232,7 @@ class BAREMETALUPI(Deployment):
             else:
                 raise RhcosImageNotFound
             # Download metal_bios
-            metal_image_path = (
-                coreos_url_prefix + image_data["metal_bios_url"]
-            )
+            metal_image_path = coreos_url_prefix + image_data["metal_bios_url"]
             if check_for_rhcos_images(metal_image_path):
                 cmd = (
                     "wget -O "
@@ -247,9 +248,7 @@ class BAREMETALUPI(Deployment):
 
             if float_ocp_version >= 4.6:
                 # Download metal_bios
-                rootfs_image_path = (
-                    coreos_url_prefix + image_data["live_rootfs_url"]
-                )
+                rootfs_image_path = coreos_url_prefix + image_data["live_rootfs_url"]
                 if check_for_rhcos_images(rootfs_image_path):
                     cmd = (
                         "wget -O "
@@ -551,10 +550,7 @@ def clean_disk():
             )
 
             cmd = f"debug nodes/{worker.name} " f"-- chroot /host {base_cmd}"
-            out = ocp_obj.exec_oc_cmd(
-                command=cmd,
-                out_yaml_format=False,
-            )
+            out = ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False,)
             logger.info(out)
             pvs_output = json.loads(str(out))
             pvs_list = pvs_output["report"]
@@ -573,10 +569,7 @@ def clean_disk():
             )
 
             cmd = f"debug nodes/{worker.name} " f"-- chroot /host {base_cmd}"
-            out = ocp_obj.exec_oc_cmd(
-                command=cmd,
-                out_yaml_format=False,
-            )
+            out = ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False,)
             logger.info(out)
             vgs_output = json.loads(str(out))
             vgs_list = vgs_output["report"]
@@ -596,10 +589,7 @@ def clean_disk():
                 f"-- chroot /host timeout 120 vgremove {devices['vg_name']} -y -f"
             )
             logger.info("Removing vg")
-            out = ocp_obj.exec_oc_cmd(
-                command=cmd,
-                out_yaml_format=False,
-            )
+            out = ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False,)
             logger.info(out)
     for devices in lvm_to_clean:
         if devices.get("pv_name"):
