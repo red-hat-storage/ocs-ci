@@ -214,7 +214,6 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                             backingstore_name, vol_num, size, storagecluster
                         )
                 else:
-                    # TODO: use the amount parameter in uls_tup
                     _, region = uls_tup
                     # TODO: Verify that the given cloud has an initialized client
                     uls_dict = cloud_uls_factory({cloud: [uls_tup]})
