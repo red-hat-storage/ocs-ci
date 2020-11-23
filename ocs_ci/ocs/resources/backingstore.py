@@ -17,7 +17,7 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import create_unique_resource_name, wait_for_resource_state
+from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.utility.utils import TimeoutSampler
