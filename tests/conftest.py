@@ -2960,10 +2960,17 @@ def snapshot_restore_factory(request):
         Delete the PVCs
 
         """
+        pv_objs = []
+
+        # Get PV form PVC instances and delete PVCs
         for instance in instances:
             if not instance.is_deleted:
+                pv_objs.append(instance.backed_pv_obj)
                 instance.delete()
                 instance.ocp.wait_for_delete(instance.name)
+
+        # Wait for PVs to delete
+        helpers.wait_for_pv_delete(pv_objs)
 
     request.addfinalizer(finalizer)
     return factory
@@ -3152,10 +3159,17 @@ def pvc_clone_factory(request):
         Delete the cloned PVCs
 
         """
+        pv_objs = []
+
+        # Get PV form PVC instances and delete PVCs
         for instance in instances:
             if not instance.is_deleted:
+                pv_objs.append(instance.backed_pv_obj)
                 instance.delete()
                 instance.ocp.wait_for_delete(instance.name)
+
+        # Wait for PVs to delete
+        helpers.wait_for_pv_delete(pv_objs)
 
     request.addfinalizer(finalizer)
     return factory
