@@ -1,4 +1,6 @@
 import logging
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 
 from ocs_ci.ocs.bucket_utils import (
     oc_create_aws_backingstore,
@@ -15,10 +17,10 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.helpers.helpers import create_unique_resource_name
 
 log = logging.getLogger(__name__)
 
@@ -30,20 +32,56 @@ class BackingStore:
     """
 
     def __init__(
-        self, name, uls_name=None, secret_name=None, vol_num=None, vol_size=None
+        self,
+        name,
+        method,
+        uls_name=None,
+        secret_name=None,
+        mcg_obj=None,
+        vol_num=None,
+        vol_size=None,
     ):
         self.name = name
+        self.method = method
         self.uls_name = uls_name
         self.secret_name = secret_name
+        self.mcg_obj = mcg_obj
         self.vol_num = vol_num
         self.vol_size = vol_size
 
     def delete(self):
         log.info(f"Cleaning up backingstore {self.name}")
 
-        OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="backingstore").delete(
-            resource_name=self.name
-        )
+        if self.method == "oc":
+            OCP(
+                kind="backingstore", namespace=config.ENV_DATA["cluster_namespace"]
+            ).delete(resource_name=self.name)
+        elif self.method == "cli":
+            self.mcg_obj.exec_mcg_cmd(f"backingstore delete {self.name}")
+
+        log.info(f"Verifying whether backingstore {self.name} exists after deletion")
+        bs_deleted_successfully = False
+
+        try:
+            if self.method == "oc":
+                OCP(
+                    kind="backingstore",
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    resource_name=self.name,
+                ).get()
+            elif self.method == "cli":
+                self.mcg_obj.exec_mcg_cmd(f"backingstore status {self.name}")
+
+        except CommandFailed as e:
+            if "Not Found" in str(e) or "NotFound" in str(e):
+                bs_deleted_successfully = True
+            else:
+                raise
+
+        assert (
+            bs_deleted_successfully
+        ), f"Backingstore {self.name} was not deleted successfully"
+
         if "pv-backingstore" in self.name.lower():
             log.info(f"Waiting for backingstore {self.name} resources to be deleted")
             wait_for_pv_backingstore_resource_deleted(self.name)
@@ -176,7 +214,6 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                             backingstore_name, vol_num, size, storagecluster
                         )
                 else:
-                    # TODO: use the amount parameter in uls_tup
                     _, region = uls_tup
                     # TODO: Verify that the given cloud has an initialized client
                     uls_dict = cloud_uls_factory({cloud: [uls_tup]})
@@ -188,7 +225,12 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                         # removing characters from name (pod name length bellow 64 characters issue)
                         backingstore_name = backingstore_name[:-16]
                         created_backingstores.append(
-                            BackingStore(name=backingstore_name, uls_name=uls_name)
+                            BackingStore(
+                                name=backingstore_name,
+                                method=method.lower(),
+                                uls_name=uls_name,
+                                mcg_obj=mcg_obj,
+                            )
                         )
                         if method.lower() == "cli":
                             cmdMap[method.lower()][cloud.lower()](
@@ -198,13 +240,25 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                             cmdMap[method.lower()][cloud.lower()](
                                 cld_mgr, backingstore_name, uls_name, region
                             )
-                        # Todo: Raise an exception in case the BS wasn't created
+                        mcg_obj.check_backingstore_state(
+                            backingstore_name, constants.BS_OPTIMAL
+                        )
+                        # TODO: Verify OC\CLI BS health by using the appropriate methods
 
         return created_backingstores
 
     def backingstore_cleanup():
         for backingstore in created_backingstores:
-            backingstore.delete()
+            try:
+                backingstore.delete()
+            except CommandFailed as e:
+                if "not found" in str(e).lower():
+                    log.warning(
+                        f"Backingstore {backingstore.name} could not be found in cleanup."
+                        "\nSkipping deletion."
+                    )
+                else:
+                    raise
 
     request.addfinalizer(backingstore_cleanup)
 

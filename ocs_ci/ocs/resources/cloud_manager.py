@@ -47,7 +47,7 @@ class CloudManager(ABC):
             )
             cred_dict = update_config_from_s3().get("AUTH")
         except AttributeError:
-            logger.warn(
+            logger.warning(
                 "Failed to load credentials from ocs-ci-data. "
                 "Loading from local auth.yaml"
             )
@@ -68,7 +68,7 @@ class CloudManager(ABC):
         for cloud_name in cred_dict:
             if cloud_name in cloud_map:
                 if any(value is None for value in cred_dict[cloud_name].values()):
-                    logger.warn(
+                    logger.warning(
                         f"{cloud_name} credentials not found, "
                         "no client will be instantiated"
                     )
