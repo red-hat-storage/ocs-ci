@@ -61,26 +61,23 @@ class BackingStore:
 
         log.info(f"Verifying whether backingstore {self.name} exists after deletion")
         bs_deleted_successfully = False
-        if self.method == "oc":
-            try:
+
+        try:
+            if self.method == "oc":
                 OCP(
                     kind="backingstore",
                     namespace=config.ENV_DATA["cluster_namespace"],
                     resource_name=self.name,
                 ).get()
-            except CommandFailed as e:
-                if "NotFound" in str(e):
-                    bs_deleted_successfully = True
-                else:
-                    raise
-        elif self.method == "cli":
-            try:
+            elif self.method == "cli":
                 self.mcg_obj.exec_mcg_cmd(f"backingstore status {self.name}")
-            except CommandFailed as e:
-                if "Not Found" in str(e):
-                    bs_deleted_successfully = True
-                else:
-                    raise
+
+        except CommandFailed as e:
+            if "Not Found" in str(e) or "NotFound" in str(e):
+                bs_deleted_successfully = True
+            else:
+                raise
+
         assert (
             bs_deleted_successfully
         ), f"Backingstore {self.name} was not deleted successfully"
