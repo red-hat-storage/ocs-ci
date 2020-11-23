@@ -54,7 +54,7 @@ class CloudManager(ABC):
             cred_dict = load_auth_config().get("AUTH", {})
 
         try:
-            rgw_conn = rgw_conn = RGW()
+            rgw_conn = RGW()
             endpoint, access_key, secret_key = rgw_conn.get_credentials()
             cred_dict["RGW"] = {
                 "SECRET_PREFIX": "RGW",
