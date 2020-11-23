@@ -384,6 +384,9 @@ class TestPvcMultiClonePerformance(E2ETest):
 
         st = None
         et = None
+        # look for start time and end time of clone creation. The start/end line may appear in log several times
+        # in order to be on the safe side and measure the longest time difference (which is the actual clone creation
+        # time), the earliest start time and the latest end time are taken
         for sublog in logs:
             for line in sublog:
                 if (
@@ -395,17 +398,12 @@ class TestPvcMultiClonePerformance(E2ETest):
                     st = line.split(" ")[1]
                     st = datetime.datetime.strptime(st, format)
                 elif (
-                    et is None
-                    and "provision" in line
+                    "provision" in line
                     and clone_name in line
                     and "succeeded" in line
                 ):
                     et = line.split(" ")[1]
                     et = datetime.datetime.strptime(et, format)
-                if st is not None and et is not None:
-                    break
-            if st is not None and et is not None:
-                break
 
         if st is None:
             log.error(f"Can not find start time of {clone_name}")
