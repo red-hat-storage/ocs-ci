@@ -397,11 +397,7 @@ class TestPvcMultiClonePerformance(E2ETest):
                 ):
                     st = line.split(" ")[1]
                     st = datetime.datetime.strptime(st, format)
-                elif (
-                    "provision" in line
-                    and clone_name in line
-                    and "succeeded" in line
-                ):
+                elif "provision" in line and clone_name in line and "succeeded" in line:
                     et = line.split(" ")[1]
                     et = datetime.datetime.strptime(et, format)
 
