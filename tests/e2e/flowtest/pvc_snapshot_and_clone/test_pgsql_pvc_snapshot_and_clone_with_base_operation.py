@@ -3,9 +3,7 @@ import pytest
 
 from concurrent.futures import ThreadPoolExecutor
 
-from ocs_ci.framework.testlib import (
-    skipif_ocs_version, E2ETest, flowtests
-)
+from ocs_ci.framework.testlib import skipif_ocs_version, E2ETest, flowtests
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.ocs import flowtest
@@ -14,7 +12,7 @@ log = logging.getLogger(__name__)
 
 
 @flowtests
-@skipif_ocs_version('<4.6')
+@skipif_ocs_version("<4.6")
 @pytest.mark.polarion_id("OCS-2302")
 class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
     """
@@ -23,8 +21,11 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
 
     @pytest.fixture(autouse=True)
     def pgsql_setup(
-        self, pgsql_factory_fixture, multi_snapshot_factory,
-        multi_snapshot_restore_factory, multi_pvc_clone_factory
+        self,
+        pgsql_factory_fixture,
+        multi_snapshot_factory,
+        multi_snapshot_restore_factory,
+        multi_pvc_clone_factory,
     ):
         # Deploy PGSQL workload
         log.info("Deploying pgsql workloads")
@@ -53,16 +54,25 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
         pgsql_snapshot_and_clone = executor_run_bg_ops.submit(
             bg_handler.handler,
             multiple_snapshot_and_clone_of_postgres_pvc_factory,
-            pvc_size_new=25, pgsql=self.pgsql, iterations=1
+            pvc_size_new=25,
+            pgsql=self.pgsql,
+            iterations=1,
         )
         log.info("Started creation of snapshots & clones in background")
 
         flow_ops = flowtest.FlowOperations()
         log.info("Starting operation 1: Pod Restarts")
         disruption = Disruptions()
-        pod_obj_list = ['osd', 'mon', 'mgr', 'operator', 'rbdplugin', 'rbdplugin_provisioner']
+        pod_obj_list = [
+            "osd",
+            "mon",
+            "mgr",
+            "operator",
+            "rbdplugin",
+            "rbdplugin_provisioner",
+        ]
         for pod in pod_obj_list:
-            disruption.set_resource(resource=f'{pod}')
+            disruption.set_resource(resource=f"{pod}")
             disruption.delete_resource()
         log.info("Verifying exit criteria for operation 1: Pod Restarts")
         flow_ops.validate_cluster(
@@ -71,7 +81,7 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
 
         log.info("Starting operation 2: Node Reboot")
         node_names = flow_ops.node_operations_entry_criteria(
-            node_type='worker', number_of_nodes=3, operation_name="Node Reboot"
+            node_type="worker", number_of_nodes=3, operation_name="Node Reboot"
         )
         # Reboot node
         nodes.restart_nodes(node_names)
@@ -82,7 +92,7 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
 
         log.info("Starting operation 3: Node Drain")
         node_name = flow_ops.node_operations_entry_criteria(
-            node_type='worker', number_of_nodes=1, operation_name="Node Drain"
+            node_type="worker", number_of_nodes=1, operation_name="Node Drain"
         )
         # Node maintenance - to gracefully terminate all pods on the node
         drain_nodes([node_name[0].name])

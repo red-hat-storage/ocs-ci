@@ -2964,11 +2964,7 @@ def multi_snapshot_factory(snapshot_factory):
 
     snapshot = []
 
-    def factory(
-        pvc_obj,
-        wait=True,
-        snapshot_name_suffix=None
-    ):
+    def factory(pvc_obj, wait=True, snapshot_name_suffix=None):
         """
         Args:
             pvc_obj (list): List PVC object from which snapshot has to be created
@@ -2981,12 +2977,9 @@ def multi_snapshot_factory(snapshot_factory):
         """
 
         for obj in pvc_obj:
-            log.info(
-                f"Creating snapshot of PVC {obj.name}"
-            )
+            log.info(f"Creating snapshot of PVC {obj.name}")
             snapshot_name = (
-                f"{obj.name}-{snapshot_name_suffix}"
-                if snapshot_name_suffix else None
+                f"{obj.name}-{snapshot_name_suffix}" if snapshot_name_suffix else None
             )
             snap_obj = snapshot_factory(
                 pvc_obj=obj, snapshot_name=snapshot_name, wait=wait
@@ -3118,7 +3111,7 @@ def multi_snapshot_restore_factory(snapshot_restore_factory):
         restore_pvc_yaml=None,
         access_mode=constants.ACCESS_MODE_RWO,
         status=constants.STATUS_BOUND,
-        wait_each=False
+        wait_each=False,
     ):
         """
         Args:
@@ -3148,14 +3141,17 @@ def multi_snapshot_restore_factory(snapshot_restore_factory):
         for snap_obj in snapshot_obj:
             log.info(f"Creating a PVC from snapshot {snap_obj.name}")
             restore_pvc_name = (
-                f"{snap_obj.name}-{restore_pvc_suffix}"
-                if restore_pvc_suffix else None
+                f"{snap_obj.name}-{restore_pvc_suffix}" if restore_pvc_suffix else None
             )
             restored_pvc = snapshot_restore_factory(
-                snapshot_obj=snap_obj, restore_pvc_name=restore_pvc_name,
-                storageclass=storageclass, size=size,
-                volume_mode=volume_mode, restore_pvc_yaml=restore_pvc_yaml,
-                access_mode=access_mode, status=status_tmp
+                snapshot_obj=snap_obj,
+                restore_pvc_name=restore_pvc_name,
+                storageclass=storageclass,
+                size=size,
+                volume_mode=volume_mode,
+                restore_pvc_yaml=restore_pvc_yaml,
+                access_mode=access_mode,
+                status=status_tmp,
             )
             restored_pvc.snapshot = snapshot_obj
             new_pvcs.append(restored_pvc)
@@ -3399,7 +3395,7 @@ def multi_pvc_clone_factory(pvc_clone_factory):
         size=None,
         access_mode=None,
         volume_mode=None,
-        wait_each=False
+        wait_each=False,
     ):
         """
         Args:
@@ -3426,10 +3422,13 @@ def multi_pvc_clone_factory(pvc_clone_factory):
         for obj in pvc_obj:
             # Create clone
             clone_pvc_obj = pvc_clone_factory(
-                pvc_obj=obj, clone_name=clone_name,
-                storageclass=storageclass, size=size,
-                access_mode=access_mode, volume_mode=volume_mode,
-                status=status_tmp
+                pvc_obj=obj,
+                clone_name=clone_name,
+                storageclass=storageclass,
+                size=size,
+                access_mode=access_mode,
+                volume_mode=volume_mode,
+                status=status_tmp,
             )
             cloned_pvcs.append(clone_pvc_obj)
 
@@ -3442,10 +3441,12 @@ def multi_pvc_clone_factory(pvc_clone_factory):
     return factory
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def multiple_snapshot_and_clone_of_postgres_pvc_factory(
-    request, multi_snapshot_factory,
-    multi_snapshot_restore_factory, multi_pvc_clone_factory
+    request,
+    multi_snapshot_factory,
+    multi_snapshot_restore_factory,
+    multi_pvc_clone_factory,
 ):
     """
     Calling this fixture creates multiple snapshots & clone of postgres PVC
@@ -3479,39 +3480,37 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
 
         # Attach a new pgsql pod cloned pvcs
         sset_list = pgsql.attach_pgsql_pod_to_claim_pvc(
-            pvc_objs=cloned_pvcs,
-            postgres_name='postgres-clone',
-            run_benchmark=False
+            pvc_objs=cloned_pvcs, postgres_name="postgres-clone", run_benchmark=False
         )
         instances.extend(sset_list)
 
         # Resize cloned PVCs
         for pvc_obj in cloned_pvcs:
-            log.info(
-                f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G"
-            )
+            log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G")
             pvc_obj.resize_pvc(pvc_size_new, True)
 
         new_snapshots = multi_snapshot_factory(pvc_obj=cloned_pvcs)
-        log.info("Created snapshots from all the cloned PVCs"
-                 " and snapshots are in Ready state")
+        log.info(
+            "Created snapshots from all the cloned PVCs"
+            " and snapshots are in Ready state"
+        )
 
-        new_restored_pvc_objs = multi_snapshot_restore_factory(snapshot_obj=new_snapshots)
+        new_restored_pvc_objs = multi_snapshot_restore_factory(
+            snapshot_obj=new_snapshots
+        )
         log.info("Created new PVCs from all the snapshots and in Bound state")
 
         # Attach a new pgsql pod restored pvcs
         pgsql_obj_list = pgsql.attach_pgsql_pod_to_claim_pvc(
             pvc_objs=new_restored_pvc_objs,
-            postgres_name='postgres-clone-restore',
-            run_benchmark=False
+            postgres_name="postgres-clone-restore",
+            run_benchmark=False,
         )
         instances.extend(pgsql_obj_list)
 
         # Resize restored PVCs
         for pvc_obj in new_restored_pvc_objs:
-            log.info(
-                f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G"
-            )
+            log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G")
             pvc_obj.resize_pvc(pvc_size_new, True)
 
         return instances
