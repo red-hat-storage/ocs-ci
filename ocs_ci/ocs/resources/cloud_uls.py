@@ -19,7 +19,13 @@ def cloud_uls_factory(request, cld_mgr):
             an Underlying Storage factory
 
     """
-    all_created_uls = {"aws": set(), "gcp": set(), "azure": set(), "ibmcos": set()}
+    all_created_uls = {
+        "aws": set(),
+        "gcp": set(),
+        "azure": set(),
+        "ibmcos": set(),
+        "rgw": set(),
+    }
     try:
         ulsMap = {
             "aws": cld_mgr.aws_client,
@@ -33,6 +39,10 @@ def cloud_uls_factory(request, cld_mgr):
             "please verify the needed credentials "
             "were set in auth.yaml".format(str(e).split("'")[3])
         )
+    try:
+        ulsMap["rgw"] = cld_mgr.rgw_client
+    except AttributeError:
+        log.info("RGW is not available and was not initialized")
 
     def _create_uls(uls_dict):
         """
@@ -55,6 +65,7 @@ def cloud_uls_factory(request, cld_mgr):
             "gcp": set(),
             "azure": set(),
             "ibmcos": set(),
+            "rgw": set(),
         }
 
         for cloud, params in uls_dict.items():

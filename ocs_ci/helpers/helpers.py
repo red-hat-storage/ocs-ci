@@ -2691,3 +2691,21 @@ def get_snapshot_content_obj(snap_obj):
     snapcontent_obj = OCS(**data)
     snapcontent_obj.reload()
     return snapcontent_obj
+
+
+def wait_for_pv_delete(pv_objs):
+    """
+    Wait for PVs to delete. Delete PVs having ReclaimPolicy 'Retain'
+
+    Args:
+        pv_objs (list): OCS instances of kind PersistentVolume
+
+    """
+    for pv_obj in pv_objs:
+        if (
+            pv_obj.data.get("spec").get("persistentVolumeReclaimPolicy")
+            == constants.RECLAIM_POLICY_RETAIN
+        ):
+            wait_for_resource_state(pv_obj, constants.STATUS_RELEASED)
+            pv_obj.delete()
+        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
