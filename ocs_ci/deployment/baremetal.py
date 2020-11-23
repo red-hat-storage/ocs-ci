@@ -550,7 +550,10 @@ def clean_disk():
             )
 
             cmd = f"debug nodes/{worker.name} " f"-- chroot /host {base_cmd}"
-            out = ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False,)
+            out = ocp_obj.exec_oc_cmd(
+                command=cmd,
+                out_yaml_format=False,
+            )
             logger.info(out)
             pvs_output = json.loads(str(out))
             pvs_list = pvs_output["report"]
@@ -569,7 +572,10 @@ def clean_disk():
             )
 
             cmd = f"debug nodes/{worker.name} " f"-- chroot /host {base_cmd}"
-            out = ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False,)
+            out = ocp_obj.exec_oc_cmd(
+                command=cmd,
+                out_yaml_format=False,
+            )
             logger.info(out)
             vgs_output = json.loads(str(out))
             vgs_list = vgs_output["report"]
@@ -589,7 +595,10 @@ def clean_disk():
                 f"-- chroot /host timeout 120 vgremove {devices['vg_name']} -y -f"
             )
             logger.info("Removing vg")
-            out = ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False,)
+            out = ocp_obj.exec_oc_cmd(
+                command=cmd,
+                out_yaml_format=False,
+            )
             logger.info(out)
     for devices in lvm_to_clean:
         if devices.get("pv_name"):
