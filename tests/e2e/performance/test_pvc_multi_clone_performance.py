@@ -41,13 +41,13 @@ class TestPvcMultiClonePerformance(E2ETest):
     ):
         """
         1. Creating PVC
-           PVS size is calculated in the test and depends on the storage capacity, but not less then 1 GiB
+           PVC size is calculated in the test and depends on the storage capacity, but not less then 1 GiB
            it will use ~75% capacity of the Storage, Min storage capacity 1 TiB
         2. Fill the PVC with 70% of data
         3. Take a clone of the PVC and measure time and speed of creation by reading start creation and end creation
             times from relevant logs
         4. Repeat the previous step number of times (maximal num_of_clones is 512)
-        5. Rrint all measured statistics for all the clones.
+        5. Print all measured statistics for all the clones.
 
         Raises:
             StorageNotSufficientException: in case of not enough capacity on the cluster
