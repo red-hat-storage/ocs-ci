@@ -14,7 +14,7 @@ spec:
     name: "fio_distributed"
     args:
       prefill: true
-      samples: 5
+      samples: 3
       servers: 5
       pin_server: ''
       jobs:
@@ -25,8 +25,8 @@ spec:
       numjobs:
         - 1
       iodepth: 16
-      read_runtime: 500
-      write_runtime: 500
+      read_runtime: 300
+      write_runtime: 300
       read_ramp_time: 5
       write_ramp_time: 5
       filesize: 10GiB

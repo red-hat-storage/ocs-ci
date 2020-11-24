@@ -26,19 +26,6 @@ log = logging.getLogger(__name__)
 ERRMSG = "Error in command"
 
 
-def msg_logging(msg):
-    """
-    This function is logging the message to the log file, and also print it
-    for the caller script output
-
-    Args:
-        msg (str): The message to log as info and print on the console
-
-    """
-    print(msg)
-    log.info(msg)
-
-
 def run_command(cmd):
     """
     Running command on the OS and return the STDOUT & STDERR outputs
@@ -58,7 +45,7 @@ def run_command(cmd):
     else:
         return ERRMSG
 
-    msg_logging(f"Going to run {cmd}")
+    log.info(f"Going to run {cmd}")
     cp = subprocess.run(
         command,
         stdout=subprocess.PIPE,
@@ -254,6 +241,7 @@ class TestFIOBenchmark(E2ETest):
         """
         ceph_cluster = CephCluster()
         ceph_capacity = ceph_cluster.get_ceph_capacity()
+        log.info(f"Total storage capacity is {ceph_capacity} GiB")
         self.total_data_set = int(ceph_capacity * 0.4)
         self.filesize = int(
             self.fio_cr["spec"]["workload"]["args"]["filesize"].replace("GiB", "")
@@ -286,9 +274,18 @@ class TestFIOBenchmark(E2ETest):
         log.debug(f"Environment information is : {self.environment}")
 
     def setting_io_pattern(self, io_pattern):
+        """
+        Setting the test jobs according to the io pattern - random / sequential
+
+        Args:
+            io_pattern (str): the I/O pattern to run (random / sequential)
+
+        """
         if io_pattern == "sequential":
             self.fio_cr["spec"]["workload"]["args"]["jobs"] = ["write", "read"]
             self.fio_cr["spec"]["workload"]["args"]["iodepth"] = 1
+        if io_pattern == "random":
+            self.fio_cr["spec"]["workload"]["args"]["jobs"] = ["randwrite", "randread"]
 
     def deploy_and_wait_for_wl_to_start(self):
         """
@@ -450,13 +447,8 @@ class TestFIOBenchmark(E2ETest):
         time.sleep(180)
 
         # Getting all PVCs created in the test (if left).
-        NL = "\\n"
-        command = [
-            "oc",
-            "get",
-            "pvc",
-            "-n",
-        ]
+        NL = "\\n"  # NewLine character
+        command = ["oc", "get", "pvc", "-n"]
         command.append(constants.RIPSAW_NAMESPACE)
         command.append("-o")
         command.append("template")
@@ -514,6 +506,7 @@ class TestFIOBenchmark(E2ETest):
 
         """
 
+        ripsaw = RipSaw()
         self.ripsaw_deploy(ripsaw)
 
         if interface == "CephBlockPool":
@@ -552,8 +545,9 @@ class TestFIOBenchmark(E2ETest):
         full_results.add_key("test_time", {"start": self.start_time, "end": end_time})
 
         # Clean up fio benchmark
-        log.info("Deleting FIO benchmark")
-        self.fio_cr_obj.delete()
+        self.cleanup()
+
+        ripsaw.cleanup()
 
         log.debug(f"Full results is : {full_results.results}")
 
@@ -589,7 +583,6 @@ class TestFIOBenchmark(E2ETest):
         This is a basic fio perf test which run on compression enabled volume
 
         """
-        # return
         self.ripsaw_deploy(ripsaw)
 
         log.info("Creating compressed pool & SC")
@@ -619,7 +612,6 @@ class TestFIOBenchmark(E2ETest):
 
         self.fio_cr["spec"]["workload"]["args"]["storageclass"] = sc
         self.setting_io_pattern(io_pattern)
-        # for bs in ["1024KiB", "64KiB", "16KiB", "4KiB"]:
         fio_client_pod = self.deploy_and_wait_for_wl_to_start()
 
         # Getting the UUID from inside the benchmark pod
@@ -654,7 +646,6 @@ class TestFIOBenchmark(E2ETest):
         full_results.analyze_results()  # Analyze the results
         # Writing the analyzed test results to the Elastic-Search server
         full_results.es_write()
-        # full_results.codespeed_push()  # Push results to codespeed
         # Creating full link to the results on the ES server
         log.info(f"The Result can be found at ; {full_results.results_link()}")
 
@@ -663,5 +654,3 @@ class TestFIOBenchmark(E2ETest):
         sc_obj.ocp.wait_for_delete(resource_name=sc, timeout=300, sleep=5)
         run_command(f"oc delete cephblockpools -n openshift-storage {pool_name}")
         log.debug(f"Full results is : {full_results.results}")
-        # log.info('Sleep for debugging (10 Min.)')
-        # time.sleep(600)
