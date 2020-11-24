@@ -52,7 +52,8 @@ class MustGather(object):
         Search File Path
 
         """
-        files = GATHER_COMMANDS_VERSION[(self.type_log, get_ocs_parsed_version())]
+        version = get_ocs_parsed_version()
+        files = GATHER_COMMANDS_VERSION[version][self.type_log]
         for file in files:
             self.files_not_exist.append(file)
             for dir_name, subdir_list, files_list in os.walk(self.root):
