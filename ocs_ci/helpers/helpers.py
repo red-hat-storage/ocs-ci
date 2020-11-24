@@ -1375,6 +1375,33 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
     logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
     logs = logs.split("\n")
 
+    loop_counter = 0
+    while True:
+        no_data_list = list()
+        for name in pvc_name_list:
+            # check if PV data present in CSI logs
+            start = [i for i in logs if re.search(f"provision.*{name}.*started", i)]
+            if not start:
+                no_data_list.append(name)
+
+        if no_data_list:
+            # Clear and get CSI logs after 60secs
+            logging.info(f"PVC count without CSI create log data {len(no_data_list)}")
+            logs.clear()
+            time.sleep(wait_time)
+            logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
+            logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
+            logs = logs.split("\n")
+            loop_counter += 1
+            if loop_counter >= 3:
+                logging.info("Waited for more than 3mins still no data")
+                raise UnexpectedBehaviour(
+                    f"There is no pvc creation data in CSI logs for {no_data_list}"
+                )
+            continue
+        else:
+            break
+
     pvc_dict = dict()
     format = "%H:%M:%S.%f"
     for pvc_name in pvc_name_list:
@@ -1413,6 +1440,33 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
     logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
     logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
     logs = logs.split("\n")
+
+    loop_counter = 0
+    while True:
+        no_data_list = list()
+        for pv in pv_name_list:
+            # check if PV data present in CSI logs
+            start = [i for i in logs if re.search(f'delete "{pv}": started', i)]
+            if not start:
+                no_data_list.append(pv)
+
+        if no_data_list:
+            # Clear and get CSI logs after 60secs
+            logging.info(f"PV count without CSI delete log data {len(no_data_list)}")
+            logs.clear()
+            time.sleep(wait_time)
+            logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
+            logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
+            logs = logs.split("\n")
+            loop_counter += 1
+            if loop_counter >= 3:
+                logging.info("Waited for more than 3mins still no data")
+                raise UnexpectedBehaviour(
+                    f"There is no pv deletion data in CSI logs for {no_data_list}"
+                )
+            continue
+        else:
+            break
 
     pv_dict = dict()
     format = "%H:%M:%S.%f"

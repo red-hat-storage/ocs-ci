@@ -133,10 +133,10 @@ class TestPVCCreationDeletionScale(E2ETest):
         job_file1.delete(namespace=self.namespace)
         job_file2.delete(namespace=self.namespace)
 
-        # Adding 5min wait time for PVC deletion logs to be updated
+        # Adding 1min wait time for PVC deletion logs to be updated
         # Observed failure when we immediately check the logs for pvc delete time
         # https://github.com/red-hat-storage/ocs-ci/issues/3371
-        time.sleep(300)
+        time.sleep(60)
 
         # Get PVC deletion time
         pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
@@ -254,10 +254,10 @@ class TestPVCCreationDeletionScale(E2ETest):
         job_file_rbd.delete(namespace=self.namespace)
         job_file_cephfs.delete(namespace=self.namespace)
 
-        # Adding 5min wait time for PVC deletion logs to be updated
+        # Adding 1min wait time for PVC deletion logs to be updated
         # Observed failure when we immediately check the logs for pvc delete time
         # https://github.com/red-hat-storage/ocs-ci/issues/3371
-        time.sleep(300)
+        time.sleep(60)
 
         # Get PV deletion time
         fs_pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
