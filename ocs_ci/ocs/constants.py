@@ -44,6 +44,7 @@ TEMPLATE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_SERVER_DIR, "pillowfi
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_AMQ_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "amq")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(TEMPLATE_DIR, "openshift-infra/")
+TEMPLATE_BDI_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "bdi")
 TEMPLATE_CONFIGURE_PVC_MONITORING_POD = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "monitoring/"
 )
@@ -416,6 +417,18 @@ AMQ_WORKLOAD_YAML = os.path.join(TEMPLATE_AMQ_DIR, "amq_workload.yaml")
 AMQ_SIMPLE_WORKLOAD_YAML = os.path.join(TEMPLATE_AMQ_DIR, "amq_simple_workload.yaml")
 
 NGINX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "nginx.yaml")
+
+IBM_BDI_SCC_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "ibm_bdi_scc.yaml")
+
+TILLER_YAML = os.path.join(TEMPLATE_BDI_DIR, "temp_tiller.yaml")
+
+IBM_BDI_CONFIGURE_WORKLOAD_YAML = os.path.join(
+    TEMPLATE_BDI_DIR, "configure-workload.yaml"
+)
+
+IBM_BDI_DATA_LOAD_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "data-load-job.yaml")
+
+IBM_BDI_RUN_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "run-workload.yaml")
 
 AWSCLI_SERVICE_CA_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "aws-cli-service-ca-configmap.yaml"

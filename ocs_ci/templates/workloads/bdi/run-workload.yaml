@@ -1,0 +1,113 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "db2u-run-workload-job"
+  namespace: "db2u-project"                       ###  !!!!!! Namespace where db2u deployment is running  !!!!!! ### [REQUIRED]
+  labels:
+    app: db2u.workload
+spec:
+  template:
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      initContainers:
+      - name: wait-data-load
+        image: "icr.io/obs/hdm/db2u/db2u.db2client.workload:11.5.4.0-1362-x86_64"                   ### *** Update the image registry as required *** ###
+        imagePullPolicy: Always
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 500
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "50Mi"
+          limits:
+            cpu: "200m"
+            memory: "100Mi"
+        command:
+          - "/bin/sh"
+          - "-ecx"
+          - |
+            success=0
+            until [[ $status -eq 1 ]]; do
+                status=$(kubectl get job -n $POD_NAMESPACE db2u-data-load-job -o jsonpath='{.status.succeeded}')
+            done
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      containers:
+      - name: run-workload
+        image: "icr.io/obs/hdm/db2u/db2u.db2client.workload:11.5.4.0-1362-x86_64"                     ### *** Update the image registry as required *** ###
+        imagePullPolicy: Always
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 500
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "50Mi"
+          limits:
+            cpu: "200m"
+            memory: "400Mi"
+        command:
+          - "/bin/sh"
+          - "-ecx"
+          - /workload/scripts/run-workload.sh --number_of_users $NUM_OF_USERS --workload_time $WORKLOAD_TIME --interval $INTERVAL --iterations $ITERATIONS --rampup_time $RAMPUP_TIME --static_values $USER_TYPE --driver_type $DRIVER_TYPE
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          name: db2u-meta-vol
+        - mountPath: "/secrets/db2instancepwd"
+          name: db2instance-secret
+          readOnly: true
+### Default Runs for different workload type
+# For BDI, by default 3 performance runs are executed
+# 1. nohup perl run.pl warmup serial
+# 2. nohup perl run.pl -heavy_users=16 -heavy_iterations=100000000 -duration=3600 -static_values multiuser
+# 3. nohup perl run.pl -heavy_users=32 -heavy_iterations=100000000 -duration=3600 -static_values multiuser
+#
+# For DTW, by default the following run is executed
+# ./drvdtw -c 5 -r 60 -l 600 -v fo -i 10
+#
+# For TPCDS, run workload doesn't run anything
+        env:
+        - name: NUM_OF_USERS
+          value: "nil"                  ### *** Number of users (BDI/DTW); Default values will be used if left empty *** ###
+        - name: WORKLOAD_TIME
+          value: "nil"                   ### *** Workload Time (BDI/DTW); Default values will be used if left empty *** ###
+        - name: INTERVAL
+          value: "nil"                   ### *** Interval Time (DTW); Default values will be used if left empty *** ###
+        - name: ITERATIONS
+          value: "nil"                   ### *** Number of Iterations (BDI); Default values will be used if left empty *** ###
+        - name: RAMPUP_TIME
+          value: "nil"                   ### *** Rampup Time (DTW); Default values will be used if left empty *** ###
+        - name: USER_TYPE
+          value: "nil"                   ### *** Type of users (BDI). Default values will be used if left empty *** ###
+        - name: DRIVER_TYPE
+          value: "nil"                   ### *** Driver Type (BDI). Default values will be used if left empty **** ###
+      restartPolicy: Never
+      serviceAccount: db2u            ### !!!!!! Default service account that db2u uses. Change it if necessary !!!!!! ### [REQUIRED]
+      volumes:
+      - name: db2u-meta-vol
+        persistentVolumeClaim:
+          claimName: "test-bdi-db-release-name-db2u-meta-storage"               ### !!!!!!  Db2u meta storage pvc name !!!!!! ### [REQUIRED]
+      - name: db2instance-secret
+        secret:
+          secretName: "test-bdi-db-release-name-db2u-instance"                   ### !!!!!!  Db2u instance secret name !!!!!! ### [REQUIRED]
+          defaultMode: 256

@@ -22,6 +22,7 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
+from ocs_ci.ocs.cluster import CephCluster
 
 # tier marks
 
@@ -223,3 +224,9 @@ skipif_ocs_version = pytest.mark.skipif_ocs_version
 # Marker for skipping tests if the cluster is upgraded from a particular
 # OCS version
 skipif_upgraded_from = pytest.mark.skipif_upgraded_from
+
+# Marker for skipping test based on the total ceph capacity
+skipif_ceph_capacity_less_equal_1T = pytest.mark.skipif(
+    int(CephCluster().get_ceph_capacity()) <= 1000,
+    reason="Test skipped because it needs at lease 1TiB",
+)
