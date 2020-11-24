@@ -48,29 +48,29 @@ class TestPVCCreationPerformance(E2ETest):
 
     pvc_size = "1Gi"
 
-    def get_rbd_or_fs_image_count(self, pool_name, interface):
+    def get_rbd_or_fs_image_count(self, pool_name, resource):
         """
         This function return the number of rbd images or fs sub volumes
         created in the backend.
 
         Args:
             pool_name (str): the name of the pool to look into
-            interface (str): the name of the interface (block / filesystem)
+            resource (str): the name of the resource (block / filesystem)
 
         Return:
             int : then number of images / sub volumes
 
         """
         ceph = CephCluster()  # ceph cluster object to be used in the test
-        if interface == constants.CEPHBLOCKPOOL:
+        if resource == constants.CEPHBLOCKPOOL:
             ceph_cmd = f"rbd ls --pool={pool_name}"
-        elif interface == constants.CEPHFILESYSTEM:
+        elif resource == constants.CEPHFILESYSTEM:
             ceph_cmd = f"ceph fs subvolume ls {pool_name} --group_name=csi"
         results = ceph.toolbox.exec_cmd_on_pod(ceph_cmd, out_yaml_format=False)
-        if interface == constants.CEPHBLOCKPOOL:
+        if resource == constants.CEPHBLOCKPOOL:
             results = results.split("\n")
             results.pop()  # remove last empty element from the end of the list.
-        elif interface == constants.CEPHFILESYSTEM:
+        elif resource == constants.CEPHFILESYSTEM:
             data = results.split("\n")
             results = []
             for line in data:
@@ -112,7 +112,7 @@ class TestPVCCreationPerformance(E2ETest):
         log.debug(f"The pool name is {pool_name}")
 
         results["img"] = self.get_rbd_or_fs_image_count(
-            pool_name=pool_name, interface=self.interface
+            pool_name=pool_name, resource=self.interface
         )
         results["pvc"] = len(get_all_pvcs_in_storageclass(storgeclass))
         results["pv"] = len(get_all_pvs_in_storageclass(storgeclass))
