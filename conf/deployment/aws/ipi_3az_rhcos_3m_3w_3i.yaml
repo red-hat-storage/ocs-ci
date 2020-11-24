@@ -24,4 +24,4 @@ ENV_DATA:
   worker_instance_type: 'm5.4xlarge'
 REPORTING:
   polarion:
-    deployment_id: 'OCS-xxxx'
+    deployment_id: 'OCS-2430'

@@ -195,8 +195,8 @@ def create_custom_machineset(
     Args:
         role (str): Role type to be added for node eg: it will be app,worker
         instance_type (str): Type of aws instance
-        label (list of tuples): List of Labels (key, val) to be added to the node
-        taints (list of dict): List of taints to be applied
+        label (list): List of Labels (key, val) to be added to the node
+        taints (list): List of taints to be applied
         zone (str): Machineset zone for node creation.
 
     Returns:
