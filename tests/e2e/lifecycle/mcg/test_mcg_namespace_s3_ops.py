@@ -46,7 +46,7 @@ def setup_objects_to_list(mcg_obj, bucket_name, amount=100, prefix=""):
     return object_keys, object_prefixes, mid_index
 
 
-def get_list_and_verify(response, keys, verify="Contents", prefix="", delimiter=""):
+def get_list_and_verify(response, keys, verify="Contents", prefix="", delimiter="", version=''):
     """
     Gets object keys from list responses and verifies
 
@@ -56,23 +56,24 @@ def get_list_and_verify(response, keys, verify="Contents", prefix="", delimiter=
         verify (str): Type of key. "Contents", "CommonPrefixes" or "Versions"
         prefix (str): Name of the prefix
         delimiter (str): Character used to group keys.
+        version (str): ListObject version. "v1" | "v2"
 
     """
     if verify == "Contents":
-        logger.info(f"Listing objects with prefix {prefix}: {response[verify]}")
+        logger.info(f"ListObjects({version}) with prefix '{prefix}': {response[verify]}")
         page_keys = [item["Key"] for item in response[verify]]
         assert page_keys.sort() == keys.sort(), "List mismatch"
         return page_keys[-1]
 
     elif verify == "CommonPrefixes":
         logger.info(
-            f"Listing object with prefix {prefix}, delimiter {delimiter}: {response[verify]}"
+            f"ListObjects({version}) with prefix '{prefix}', delimiter '{delimiter}': {response[verify]}"
         )
         page_keys = [item["Prefix"] for item in response[verify]]
         assert page_keys.sort() == keys.sort(), "List mismatch"
 
     elif verify == "Versions":
-        logger.info(f"Listing object versions: {response[verify]}")
+        logger.info(f"Listing object_versions: {response[verify]}")
         listed_versions = [item["VersionId"] for item in response[verify]]
         assert listed_versions.sort() == keys.sort(), "List mismatch"
 
@@ -213,28 +214,28 @@ class TestMcgNamespaceS3Operations(E2ETest):
             list_v1_res = bucket_utils.s3_list_objects_v1(
                 s3_obj=mcg_obj, bucketname=ns_bucket
             )
-            get_list_and_verify(list_v1_res, obj_keys, "Contents")
+            get_list_and_verify(list_v1_res, obj_keys, "Contents", version="v1")
             first_page_res = bucket_utils.s3_list_objects_v1(
                 s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys
             )
             last_key = get_list_and_verify(
-                first_page_res, obj_keys[:mid_index], "Contents"
+                first_page_res, obj_keys[:mid_index], "Contents", version="v1"
             )
             next_page_res = bucket_utils.s3_list_objects_v1(
                 s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys, marker=last_key
             )
-            get_list_and_verify(next_page_res, obj_keys[mid_index:], "Contents")
+            get_list_and_verify(next_page_res, obj_keys[mid_index:], "Contents", version="v1")
 
             # List v1 with prefix and page entries
             list_v1_res = bucket_utils.s3_list_objects_v1(
                 s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/"
             )
-            get_list_and_verify(list_v1_res, obj_keys, "Contents", "Drive/")
+            get_list_and_verify(list_v1_res, obj_keys, "Contents", "Drive/", version="v1")
             first_page_res = bucket_utils.s3_list_objects_v1(
                 s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", max_keys=max_keys
             )
             last_key = get_list_and_verify(
-                first_page_res, obj_keys[:mid_index], "Contents", "Drive/"
+                first_page_res, obj_keys[:mid_index], "Contents", "Drive/", version="v1"
             )
             next_page_res = bucket_utils.s3_list_objects_v1(
                 s3_obj=mcg_obj,
@@ -244,7 +245,7 @@ class TestMcgNamespaceS3Operations(E2ETest):
                 marker=last_key,
             )
             get_list_and_verify(
-                next_page_res, obj_keys[mid_index:], "Contents", "Drive/"
+                next_page_res, obj_keys[mid_index:], "Contents", "Drive/", version="v1"
             )
 
             # List v1 with prefix, delimiter and page entries
@@ -252,7 +253,7 @@ class TestMcgNamespaceS3Operations(E2ETest):
                 s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", delimiter="/"
             )
             get_list_and_verify(
-                list_v1_res, obj_prefixes, "CommonPrefixes", "Drive/", "/"
+                list_v1_res, obj_prefixes, "CommonPrefixes", "Drive/", "/", version="v1"
             )
             first_page_res = bucket_utils.s3_list_objects_v1(
                 s3_obj=mcg_obj,
@@ -266,7 +267,7 @@ class TestMcgNamespaceS3Operations(E2ETest):
                 obj_prefixes[:mid_index],
                 "CommonPrefixes",
                 "Drive/",
-                "/",
+                "/", version="v1"
             )
             next_page_res = bucket_utils.s3_list_objects_v1(
                 s3_obj=mcg_obj,
@@ -277,27 +278,77 @@ class TestMcgNamespaceS3Operations(E2ETest):
                 marker=first_page_res["NextMarker"],
             )
             get_list_and_verify(
-                next_page_res, obj_prefixes[mid_index:], "CommonPrefixes", "Drive/", "/"
+                next_page_res, obj_prefixes[mid_index:], "CommonPrefixes", "Drive/", "/", version="v1"
             )
 
             # List v2
             list_v2_res = bucket_utils.s3_list_objects_v2(
                 s3_obj=mcg_obj, bucketname=ns_bucket
             )
-            get_list_and_verify(list_v2_res, obj_keys, "Contents")
+            get_list_and_verify(list_v2_res, obj_keys, "Contents", version="v2")
+            first_page_res = bucket_utils.s3_list_objects_v2(
+                s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys
+            )
+            get_list_and_verify(first_page_res, obj_keys, "Contents", version="v2")
+            next_page_res = bucket_utils.s3_list_objects_v2(
+                s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys,
+                con_token=first_page_res['NextContinuationToken']
+            )
+            get_list_and_verify(next_page_res, obj_keys[mid_index:], "Contents", version="v2")
 
             # List v2 with prefix
             list_v2_res = bucket_utils.s3_list_objects_v2(
                 s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/"
             )
-            get_list_and_verify(list_v2_res, obj_keys, "Contents", "Drive/")
+            get_list_and_verify(list_v2_res, obj_keys, "Contents", "Drive/", version="v2")
+            first_page_res = bucket_utils.s3_list_objects_v2(
+                s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", max_keys=max_keys
+            )
+            get_list_and_verify(
+                first_page_res, obj_keys[:mid_index], "Contents", "Drive/", version="v2"
+            )
+            next_page_res = bucket_utils.s3_list_objects_v2(
+                s3_obj=mcg_obj,
+                bucketname=ns_bucket,
+                prefix="Drive/",
+                max_keys=max_keys,
+                con_token=first_page_res['NextContinuationToken']
+            )
+            get_list_and_verify(
+                next_page_res, obj_keys[mid_index:], "Contents", "Drive/", version="v2"
+            )
 
             # List v2 with prefix and delimiter
             list_v2_res = bucket_utils.s3_list_objects_v2(
                 s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", delimiter="/"
             )
             get_list_and_verify(
-                list_v2_res, obj_prefixes, "CommonPrefixes", "Drive/", "/"
+                list_v2_res, obj_prefixes, "CommonPrefixes", "Drive/", "/", version="v2"
+            )
+            first_page_res = bucket_utils.s3_list_objects_v2(
+                s3_obj=mcg_obj,
+                bucketname=ns_bucket,
+                prefix="Drive/",
+                delimiter="/",
+                max_keys=max_keys,
+            )
+            get_list_and_verify(
+                first_page_res,
+                obj_prefixes[:mid_index],
+                "CommonPrefixes",
+                "Drive/",
+                "/", version="v2"
+            )
+            next_page_res = bucket_utils.s3_list_objects_v2(
+                s3_obj=mcg_obj,
+                bucketname=ns_bucket,
+                prefix="Drive/",
+                delimiter="/",
+                max_keys=max_keys,
+                con_token=first_page_res['NextContinuationToken']
+            )
+            get_list_and_verify(
+                next_page_res, obj_prefixes[mid_index:], "CommonPrefixes", "Drive/", "/", version="v2"
             )
 
     @pytest.mark.parametrize(
