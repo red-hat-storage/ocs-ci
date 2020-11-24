@@ -5,6 +5,7 @@ ENV_DATA:
   platform: 'azure'
   deployment_type: 'ipi'
   region: 'eastus'
+  azure_base_domain_resource_group_name: 'ocsqe'
   base_domain: 'azure.qe.rh-ocs.com'
   worker_replicas: 3
   master_replicas: 3

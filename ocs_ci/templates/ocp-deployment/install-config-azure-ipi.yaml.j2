@@ -40,6 +40,6 @@ fips: {{ fips }}
 {% endif %}
 platform:
   azure:
-    baseDomainResourceGroupName: ocsqe
+    baseDomainResourceGroupName: {{ azure_base_domain_resource_group_name }}
     region: {{ region }}
 pullSecret: ''
