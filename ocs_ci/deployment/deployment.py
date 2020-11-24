@@ -194,7 +194,7 @@ class Deployment(object):
             az_node_list = az_worker_nodes.get(az, [])
             az_node_list.append(node)
             az_worker_nodes[az] = az_node_list
-        logger.info(f"Found worker nodes in AZ: {az_worker_nodes}")
+        logger.debug(f"Found the worker nodes in AZ: {az_worker_nodes}")
         distributed_worker_nodes = []
         while az_worker_nodes:
             for az in list(az_worker_nodes.keys()):
