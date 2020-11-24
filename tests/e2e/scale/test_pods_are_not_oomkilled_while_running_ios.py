@@ -77,8 +77,10 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
         pod_objs = get_all_pods(
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             selector=[
-                "noobaa", "rook-ceph-osd-prepare",
-                "rook-ceph-drain-canary", "compute-0-debug"
+                "noobaa",
+                "rook-ceph-osd-prepare",
+                "rook-ceph-drain-canary",
+                "compute-0-debug",
             ],
             exclude_selector=True,
         )
