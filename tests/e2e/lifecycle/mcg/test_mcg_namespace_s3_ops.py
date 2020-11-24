@@ -215,10 +215,12 @@ class TestMcgNamespaceS3Operations(E2ETest):
             )
 
             # List v1 and page entries
+            logger.info(f"ListObjectsV1 operation on {ns_bucket}")
             list_v1_res = bucket_utils.s3_list_objects_v1(
                 s3_obj=mcg_obj, bucketname=ns_bucket
             )
             get_list_and_verify(list_v1_res, obj_keys, "Contents", version="v1")
+            logger.info("Get and verify next page entries of list using ListObjectV1")
             first_page_res = bucket_utils.s3_list_objects_v1(
                 s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys
             )
@@ -233,11 +235,15 @@ class TestMcgNamespaceS3Operations(E2ETest):
             )
 
             # List v1 with prefix and page entries
+            logger.info(f"ListObjectsV1 operation on {ns_bucket} with prefix")
             list_v1_res = bucket_utils.s3_list_objects_v1(
                 s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/"
             )
             get_list_and_verify(
                 list_v1_res, obj_keys, "Contents", "Drive/", version="v1"
+            )
+            logger.info(
+                "Get and verify next page entries of list using ListObjectV1 with prefix"
             )
             first_page_res = bucket_utils.s3_list_objects_v1(
                 s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", max_keys=max_keys
@@ -257,11 +263,17 @@ class TestMcgNamespaceS3Operations(E2ETest):
             )
 
             # List v1 with prefix, delimiter and page entries
+            logger.info(
+                f"ListObjectsV1 operation on {ns_bucket} with prefix and delimiter"
+            )
             list_v1_res = bucket_utils.s3_list_objects_v1(
                 s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", delimiter="/"
             )
             get_list_and_verify(
                 list_v1_res, obj_prefixes, "CommonPrefixes", "Drive/", "/", version="v1"
+            )
+            logger.info(
+                "Get and verify next page entries of list using ListObjectV1 with prefix and delimiter"
             )
             first_page_res = bucket_utils.s3_list_objects_v1(
                 s3_obj=mcg_obj,
@@ -296,10 +308,12 @@ class TestMcgNamespaceS3Operations(E2ETest):
             )
 
             # List v2
+            logger.info(f"ListObjectsV2 operation on {ns_bucket}")
             list_v2_res = bucket_utils.s3_list_objects_v2(
                 s3_obj=mcg_obj, bucketname=ns_bucket
             )
             get_list_and_verify(list_v2_res, obj_keys, "Contents", version="v2")
+            logger.info("Get and verify next page entries of list using ListObjectV2")
             first_page_res = bucket_utils.s3_list_objects_v2(
                 s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys
             )
@@ -315,11 +329,15 @@ class TestMcgNamespaceS3Operations(E2ETest):
             )
 
             # List v2 with prefix
+            logger.info(f"ListObjectsV2 operation on {ns_bucket} with prefix")
             list_v2_res = bucket_utils.s3_list_objects_v2(
                 s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/"
             )
             get_list_and_verify(
                 list_v2_res, obj_keys, "Contents", "Drive/", version="v2"
+            )
+            logger.info(
+                "Get and verify next page entries of list using ListObjectV2 with prefix"
             )
             first_page_res = bucket_utils.s3_list_objects_v2(
                 s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", max_keys=max_keys
@@ -339,11 +357,17 @@ class TestMcgNamespaceS3Operations(E2ETest):
             )
 
             # List v2 with prefix and delimiter
+            logger.info(
+                f"ListObjectsV2 operation on {ns_bucket} with prefix and delimiter"
+            )
             list_v2_res = bucket_utils.s3_list_objects_v2(
                 s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", delimiter="/"
             )
             get_list_and_verify(
                 list_v2_res, obj_prefixes, "CommonPrefixes", "Drive/", "/", version="v2"
+            )
+            logger.info(
+                "Get and verify next page entries of list using ListObjectV2 with prefix and delimiter"
             )
             first_page_res = bucket_utils.s3_list_objects_v2(
                 s3_obj=mcg_obj,
