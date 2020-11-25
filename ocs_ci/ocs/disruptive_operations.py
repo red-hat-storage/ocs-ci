@@ -1,7 +1,7 @@
 import logging
 import time
 
-from ocs_ci.ocs.node import get_typed_nodes, get_node_name
+from ocs_ci.ocs.node import get_nodes, get_node_name
 from ocs_ci.ocs.resources.pod import get_ocs_operator_pod, get_pod_node
 from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
 from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
@@ -43,7 +43,7 @@ def worker_node_shutdown(abrupt):
 
     # get workers node objects:
     node_to_shutdown = list()
-    for node in get_typed_nodes():
+    for node in get_nodes():
         node_name = get_node_name(node)
         log.info(f"node: {node_name}, ocs operator node: {ocs_operator_node_name}")
         if node_name == ocs_operator_node_name:

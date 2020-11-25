@@ -432,7 +432,7 @@ def add_worker_based_on_cpu_utilization(
         config.ENV_DATA["deployment_type"] == "ipi"
         and config.ENV_DATA["platform"].lower() == "aws"
     ):
-        app_nodes = node.get_typed_nodes(node_type=role_type)
+        app_nodes = node.get_nodes(node_type=role_type)
         uti_dict = node.get_node_resource_utilization_from_oc_describe(
             node_type=role_type
         )
@@ -490,7 +490,7 @@ def add_worker_based_on_pods_count_per_node(
         config.ENV_DATA["deployment_type"] == "ipi"
         and config.ENV_DATA["platform"].lower() == "aws"
     ):
-        app_nodes = node.get_typed_nodes(node_type=role_type)
+        app_nodes = node.get_nodes(node_type=role_type)
         pod_count_dict = node.get_running_pod_count_from_node(node_type=role_type)
         high_count_nodes, less_count_nodes = ([] for i in range(2))
         for node_obj in app_nodes:

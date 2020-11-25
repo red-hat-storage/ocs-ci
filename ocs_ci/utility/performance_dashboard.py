@@ -17,7 +17,7 @@ import logging
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
-from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.version import get_ocs_version
 
 log = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ def initialize_data():
 
     # worker type is relevant only for cloud instances.
     log.info("Initializing the dashboard data")
-    worker_lbl = get_typed_nodes(num_of_nodes=1)[0].data["metadata"]["labels"]
+    worker_lbl = get_nodes(num_of_nodes=1)[0].data["metadata"]["labels"]
     if "beta.kubernetes.io/instance-type" in worker_lbl:
         worker_type = worker_lbl["beta.kubernetes.io/instance-type"]
     else:

@@ -22,7 +22,7 @@ from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import utils
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-from ocs_ci.ocs.node import get_typed_nodes, get_app_pod_running_nodes, get_worker_nodes
+from ocs_ci.ocs.node import get_nodes, get_app_pod_running_nodes, get_worker_nodes
 from ocs_ci.helpers.helpers import wait_for_resource_state, create_pvc
 
 
@@ -388,9 +388,7 @@ class Jenkins(object):
         if node_type == constants.MASTER_MACHINE:
             nodes_drain = [
                 node.name
-                for node in get_typed_nodes(
-                    node_type=node_type, num_of_nodes=num_of_nodes
-                )
+                for node in get_nodes(node_type=node_type, num_of_nodes=num_of_nodes)
             ]
         elif node_type == constants.WORKER_MACHINE:
             pod_objs = []

@@ -46,7 +46,7 @@ def get_node_objs(node_names=None):
     return nodes
 
 
-def get_typed_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
+def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
     """
     Get cluster's nodes according to the node type (e.g. worker, master) and the
     number of requested nodes from that type
@@ -195,7 +195,7 @@ def get_typed_worker_nodes(os_id="rhcos"):
         list: list of worker nodes instances having specified os
 
     """
-    worker_nodes = get_typed_nodes(node_type="worker")
+    worker_nodes = get_nodes(node_type="worker")
     return [
         node
         for node in worker_nodes
@@ -385,7 +385,7 @@ def get_node_resource_utilization_from_adm_top(
     node_names = (
         [nodename]
         if nodename
-        else [node.name for node in get_typed_nodes(node_type=node_type)]
+        else [node.name for node in get_nodes(node_type=node_type)]
     )
 
     # Validate node is in Ready state
@@ -442,7 +442,7 @@ def get_node_resource_utilization_from_oc_describe(
     node_names = (
         [nodename]
         if nodename
-        else [node.name for node in get_typed_nodes(node_type=node_type)]
+        else [node.name for node in get_nodes(node_type=node_type)]
     )
     obj = ocp.OCP()
     utilization_dict = {}
@@ -488,7 +488,7 @@ def get_running_pod_count_from_node(nodename=None, node_type=constants.WORKER_MA
     node_names = (
         [nodename]
         if nodename
-        else [node.name for node in get_typed_nodes(node_type=node_type)]
+        else [node.name for node in get_nodes(node_type=node_type)]
     )
     obj = ocp.OCP()
     pod_count_dict = {}
@@ -642,7 +642,7 @@ def get_compute_node_names(no_replace=False):
 
     """
     platform = config.ENV_DATA.get("platform").lower()
-    compute_node_objs = get_typed_nodes()
+    compute_node_objs = get_nodes()
     if platform in [constants.VSPHERE_PLATFORM, constants.AWS_PLATFORM]:
         return [
             compute_obj.get()["metadata"]["labels"][constants.HOSTNAME_LABEL]
@@ -715,7 +715,7 @@ def check_nodes_specs(min_memory, min_cpu):
         bool: True if all nodes meet the required minimum specs, False otherwise
 
     """
-    nodes = get_typed_nodes()
+    nodes = get_nodes()
     log.info(
         f"Checking following nodes with worker selector (assuming that "
         f"this is ran in CI and there are no worker nodes without OCS):\n"
@@ -944,7 +944,7 @@ def get_worker_nodes_not_in_ocs():
     """
     ocs_nodes = get_ocs_nodes()
     ocs_node_names = [n.name for n in ocs_nodes]
-    worker_nodes = get_typed_nodes(constants.WORKER_MACHINE)
+    worker_nodes = get_nodes(constants.WORKER_MACHINE)
     return [n for n in worker_nodes if n.name not in ocs_node_names]
 
 

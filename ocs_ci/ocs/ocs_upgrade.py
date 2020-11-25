@@ -11,7 +11,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
 from ocs_ci.ocs.ocp import get_images, OCP
-from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -82,7 +82,7 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
         version_before_upgrade (float): version of OCS before upgrade
 
     """
-    number_of_worker_nodes = len(get_typed_nodes())
+    number_of_worker_nodes = len(get_nodes())
     osd_count = get_osd_count()
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)

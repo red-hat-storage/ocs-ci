@@ -23,7 +23,7 @@ from ocs_ci.ocs.monitoring import (
 )
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
-    get_typed_nodes,
+    get_nodes,
     drain_nodes,
     schedule_nodes,
     get_node_objs,
@@ -398,7 +398,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         """
 
         # Get the master node list
-        master_nodes = get_typed_nodes(node_type="master")
+        master_nodes = get_nodes(node_type="master")
 
         # Reboot one after one master nodes
         for node in master_nodes:

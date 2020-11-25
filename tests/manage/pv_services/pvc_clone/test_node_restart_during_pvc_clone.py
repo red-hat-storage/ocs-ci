@@ -68,7 +68,7 @@ class TestNodeRestartDuringPvcClone(ManageTest):
         """
         file_name = "fio_test"
         executor = ThreadPoolExecutor(max_workers=len(self.pvcs) + 1)
-        selected_node = node.get_typed_nodes(
+        selected_node = node.get_nodes(
             node_type=constants.WORKER_MACHINE, num_of_nodes=1
         )
 
