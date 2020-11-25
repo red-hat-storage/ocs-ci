@@ -1687,8 +1687,8 @@ def rgw_endpoint(request):
         oc = ocp.OCP(
             kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
         )
-        routes = oc.get()["items"]
-        router_hostname = routes[0]["status"]["ingress"][0]["routerCanonicalHostname"]
+        route = oc.get(resource_name="noobaa-mgmt")
+        router_hostname = route["status"]["ingress"][0]["routerCanonicalHostname"]
         rgw_hostname = f"rgw.{router_hostname}"
         oc.exec_oc_cmd(f"expose service/{rgw_service} --hostname {rgw_hostname}")
         # new route is named after service
@@ -1699,8 +1699,7 @@ def rgw_endpoint(request):
             endpoint_obj.delete()
 
         request.addfinalizer(_finalizer)
-        rgw_endpoint = f"http://{rgw_endpoint['status']['ingress'][0]['host']}"
-        return rgw_endpoint
+        return f"http://{rgw_hostname}"
     else:
         log.info("RGW service is not available")
 
@@ -2807,22 +2806,57 @@ def node_restart_teardown(request, nodes):
 
 
 @pytest.fixture()
-def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
+def mcg_connection_factory(request, mcg_obj, cld_mgr):
+    """
+    Create a new MCG connection for given platform. If there already exists
+    a connection for the platform then return this previously created
+    connection.
+
+    """
+    created_connections = {}
+
+    def _create_connection(platform=constants.AWS_PLATFORM, name=None):
+        """
+        Args:
+            platform (str): Platform used for connection
+            name (str): New connection name. If not provided then new name will
+                be generated. New name will be used only if there is not
+                existing connection for given platform
+
+        Returns:
+            str: connection name
+
+        """
+        if platform not in created_connections:
+            connection_name = name or create_unique_resource_name(
+                constants.MCG_CONNECTION, platform
+            )
+            mcg_obj.create_connection(cld_mgr, platform, connection_name)
+            created_connections[platform] = connection_name
+        return created_connections[platform]
+
+    def _connections_cleanup():
+        for platform in created_connections:
+            mcg_obj.delete_ns_connection(created_connections[platform])
+
+    request.addfinalizer(_connections_cleanup)
+
+    return _create_connection
+
+
+@pytest.fixture()
+def ns_resource_factory(
+    request, mcg_obj, cld_mgr, cloud_uls_factory, mcg_connection_factory
+):
     """
     Create a namespace resource factory. Calling this fixture creates a new namespace resource.
 
     """
     created_ns_resources = []
-    created_connections = {}
 
     def _create_ns_resources(platform=constants.AWS_PLATFORM):
-        # Create random connection_name and random namespace resource name
-        if platform not in created_connections:
-            rand_connection = create_unique_resource_name(
-                constants.MCG_CONNECTION, platform
-            )
-            mcg_obj.create_connection(cld_mgr, platform, rand_connection)
-            created_connections[platform] = rand_connection
+        # Create random connection_name
+        rand_connection = mcg_connection_factory(platform)
 
         # Create the actual namespace resource
         rand_ns_resource = create_unique_resource_name(
@@ -2836,7 +2870,7 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
             region = "us-east-2"
         target_bucket_name = mcg_obj.create_namespace_resource(
             rand_ns_resource,
-            created_connections[platform],
+            rand_connection,
             region,
             cld_mgr,
             cloud_uls_factory,
@@ -2861,14 +2895,11 @@ def ns_resource_factory(request, mcg_obj, cld_mgr, cloud_uls_factory):
         created_ns_resources.append(rand_ns_resource)
         return target_bucket_name, rand_ns_resource
 
-    def ns_resources_and_connections_cleanup():
+    def ns_resources_cleanup():
         for ns_resource in created_ns_resources:
             mcg_obj.delete_ns_resource(ns_resource)
 
-        for platform in created_connections:
-            mcg_obj.delete_ns_connection(created_connections[platform])
-
-    request.addfinalizer(ns_resources_and_connections_cleanup)
+    request.addfinalizer(ns_resources_cleanup)
 
     return _create_ns_resources
 
@@ -2972,21 +3003,23 @@ def snapshot_restore_factory(request):
         if snapshot_info["spec"]["volumeSnapshotClassName"] == (
             helpers.default_volumesnapshotclass(constants.CEPHBLOCKPOOL).name
         ):
-            storageclass = storageclass or helpers.default_storage_class(
-                constants.CEPHBLOCKPOOL
+            storageclass = (
+                storageclass
+                or helpers.default_storage_class(constants.CEPHBLOCKPOOL).name
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
             interface = constants.CEPHBLOCKPOOL
         elif snapshot_info["spec"]["volumeSnapshotClassName"] == (
             helpers.default_volumesnapshotclass(constants.CEPHFILESYSTEM).name
         ):
-            storageclass = storageclass or helpers.default_storage_class(
-                constants.CEPHFILESYSTEM
+            storageclass = (
+                storageclass
+                or helpers.default_storage_class(constants.CEPHFILESYSTEM).name
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_CEPHFS_PVC_RESTORE_YAML
             interface = constants.CEPHFILESYSTEM
         restored_pvc = create_restore_pvc(
-            sc_name=storageclass.name,
+            sc_name=storageclass,
             snap_name=snapshot_obj.name,
             namespace=snapshot_obj.namespace,
             size=size,
