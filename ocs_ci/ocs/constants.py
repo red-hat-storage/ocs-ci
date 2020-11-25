@@ -912,7 +912,8 @@ RHEL_WORKERS_CONF = os.path.join(CONF_DIR, "ocsci/aws_upi_rhel_workers.yaml")
 NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
 
 # Services
-RGW_SERVICE = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
+RGW_SERVICE_INTERNAL_MODE = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
+RGW_SERVICE_EXTERNAL_MODE = "rook-ceph-rgw-ocs-external-storagecluster-cephobjectstore"
 
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"

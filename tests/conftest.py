@@ -1680,7 +1680,10 @@ def rgw_endpoint(request):
     oc = ocp.OCP(kind=constants.SERVICE, namespace=config.ENV_DATA["cluster_namespace"])
     rgw_service = oc.get(selector=constants.RGW_APP_LABEL)["items"]
     if rgw_service:
-        rgw_service = constants.RGW_SERVICE
+        if config.DEPLOYMENT["external_mode"]:
+            rgw_service = constants.RGW_SERVICE_EXTERNAL_MODE
+        else:
+            rgw_service = constants.RGW_SERVICE_INTERNAL_MODE
         log.info(f"Service {rgw_service} found and will be exposed")
         # custom hostname is provided because default hostname from rgw service
         # is too long and OCP rejects it
