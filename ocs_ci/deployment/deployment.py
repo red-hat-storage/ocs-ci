@@ -230,7 +230,9 @@ class Deployment(object):
                     f"{constants.OPERATOR_NODE_LABEL} --overwrite"
                 )
             ]
-            if config.DEPLOYMENT["infra_nodes"]:
+            if config.DEPLOYMENT.get("infra_nodes") and not config.ENV_DATA.get(
+                "infra_replicas"
+            ):
                 logger.info(
                     f"Label nodes: {workers_to_label} with label: "
                     f"{constants.INFRA_NODE_LABEL}"
