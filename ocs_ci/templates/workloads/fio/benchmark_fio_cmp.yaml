@@ -19,12 +19,12 @@ spec:
       pin_server: ''
       jobs:
         - randwrite
-        #- randread
+        - randread
       bs:
         - 1024KiB
-        #- 64KiB
-        #- 16KiB
-        #- 4KiB
+        - 64KiB
+        - 16KiB
+        - 4KiB
       numjobs:
         - 1
       iodepth: 32
