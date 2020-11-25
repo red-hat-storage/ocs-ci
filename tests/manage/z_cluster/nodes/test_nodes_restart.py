@@ -332,6 +332,7 @@ class TestNodesRestart(ManageTest):
         for worker_node in worker_nodes:
             # Restart one worker node
             nodes.restart_nodes(nodes=[worker_node], wait=True)
+            self.sanity_helpers.health_check(tries=40)
             pod.wait_for_storage_pods()
             logger.info(f"Verify PV after reboot {worker_node}")
             pv_after_reset = get_pv_names()
