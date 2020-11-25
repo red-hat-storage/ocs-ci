@@ -1342,10 +1342,12 @@ def wait_for_storage_pods(timeout=200):
     """
     all_pod_obj = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     # Ignoring pods with "app=rook-ceph-detect-version" app label
+
     all_pod_obj = [
         pod
         for pod in all_pod_obj
-        if constants.ROOK_CEPH_DETECT_VERSION_LABEL not in pod.get_labels()
+        if pod.get_labels()
+        and constants.ROOK_CEPH_DETECT_VERSION_LABEL not in pod.get_labels()
     ]
 
     for pod_obj in all_pod_obj:
