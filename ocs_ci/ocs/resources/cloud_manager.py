@@ -70,7 +70,7 @@ class CloudManager(ABC):
                 "Local auth.yaml not found, or failed to load. "
                 "Instantiating default clients as None."
             )
-            for cloud_name in constants.cld_mgr_platforms:
+            for cloud_name in constants.CLOUD_MNGR_PLATFORMS:
                 setattr(self, f"{cloud_name.lower()}_client", None)
 
         else:

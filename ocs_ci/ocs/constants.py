@@ -1096,7 +1096,7 @@ SQUADS = {
 PRODUCTION_JOBS_PREFIX = ["jnk"]
 
 # Cloud Manager available platforms
-cld_mgr_platforms = ["AWS", "GCP", "AZURE", "IBMCOS"]
+CLOUD_MNGR_PLATFORMS = ["AWS", "GCP", "AZURE", "IBMCOS"]
 
 # min and max Noobaa endpoints
 MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
