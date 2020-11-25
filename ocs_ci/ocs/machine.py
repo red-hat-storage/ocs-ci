@@ -181,7 +181,11 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
 
 
 def create_custom_machineset(
-    role="app", instance_type="m4.xlarge", label="app-scale", zone="a"
+    role="app",
+    instance_type="m4.xlarge",
+    labels=None,
+    taints=None,
+    zone="a",
 ):
     """
     Function to create custom machineset works only for AWS
@@ -191,7 +195,8 @@ def create_custom_machineset(
     Args:
         role (str): Role type to be added for node eg: it will be app,worker
         instance_type (str): Type of aws instance
-        label (str): Label to be added to the node
+        label (list): List of Labels (key, val) to be added to the node
+        taints (list): List of taints to be applied
         zone (str): Machineset zone for node creation.
 
     Returns:
@@ -269,9 +274,6 @@ def create_custom_machineset(
                 machineset_yaml["spec"]["template"]["metadata"]["labels"][
                     "machine.openshift.io/cluster-api-machineset"
                 ] = f"{cls_id}-{role}-{aws_zone}"
-                machineset_yaml["spec"]["template"]["spec"]["metadata"]["labels"][
-                    f"node-role.kubernetes.io/{role}"
-                ] = f"{label}"
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "ami"
                 ]["id"] = ami_id
@@ -297,6 +299,24 @@ def create_custom_machineset(
                     "tags"
                 ][0]["name"] = f"kubernetes.io/cluster/{cls_id}"
 
+                # Apply the labels
+                if labels:
+                    for label in labels:
+                        machineset_yaml["spec"]["template"]["spec"]["metadata"][
+                            "labels"
+                        ][label[0]] = label[1]
+
+                # Apply the Taints
+                # ex taint list looks like:
+                # [ {'effect': 'NoSchedule',
+                #    'key': 'node.ocs.openshift.io/storage',
+                #    'value': 'true',
+                #  }, {'effect': 'Schedule', 'key': 'xyz', 'value': 'False'} ]
+                if taints:
+                    machineset_yaml["spec"]["template"]["spec"].update(
+                        {"taints": taints}
+                    )
+
                 # Create new custom machineset
                 ms_obj = OCS(**machineset_yaml)
                 ms_obj.create()
@@ -307,6 +327,69 @@ def create_custom_machineset(
                     raise ResourceNotFoundError("Machineset resource not found")
     else:
         raise UnsupportedPlatformError("Functionality not supported in UPI")
+
+
+def create_ocs_infra_nodes(num_nodes):
+    """
+    Create infra node instances
+
+    Args:
+        num_nodes (int): Number of instances to be created
+
+    Returns:
+        list: list of instance names
+
+    """
+    ms_names = []
+    zone_list = []
+    labels = [
+        ("node-role.kubernetes.io/infra", ""),
+        ("cluster.ocs.openshift.io/openshift-storage", ""),
+    ]
+    taints = [
+        {
+            "effect": "NoSchedule",
+            "key": "node.ocs.openshift.io/storage",
+            "value": "true",
+        }
+    ]
+    instance_type = config.ENV_DATA.get("infra_instance_type", "m5.4xlarge")
+
+    # If infra zones are provided then take it from conf else
+    # extract from workers
+    if config.ENV_DATA.get("infra_availability_zones"):
+        zone_list = [i[-1] for i in config.ENV_DATA["infra_availability_zones"]]
+    else:
+        machinesets_obj = OCP(
+            kind=constants.MACHINESETS,
+            namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
+        )
+        for machine in machinesets_obj.get()["items"]:
+            aws_zone = (
+                machine.get("spec")
+                .get("template")
+                .get("spec")
+                .get("providerSpec")
+                .get("value")
+                .get("placement")
+                .get("availabilityZone")
+            )
+            zone_list.append(aws_zone[-1])
+
+    ms_names.extend(
+        [
+            create_custom_machineset(
+                role="infra",
+                instance_type=instance_type,
+                labels=labels,
+                taints=taints,
+                zone=zone_list[i % len(zone_list)],
+            )
+            for i in range(num_nodes)
+        ]
+    )
+
+    return ms_names
 
 
 def delete_custom_machineset(machine_set):
