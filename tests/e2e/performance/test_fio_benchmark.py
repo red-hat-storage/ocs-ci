@@ -481,13 +481,20 @@ class TestFIOBenchmark(E2ETest):
         full_results.add_key("test_time", {"start": self.start_time, "end": end_time})
 
         log.info("verifying compression ratio")
+        expected_ratio = 50  # according to the yaml file parameter
         results = get_ceph_df_detail()
         for pool in results["pools"]:
             if "cbp-test-" in pool["name"]:
                 stor = pool["stats"]["compress_under_bytes"]
                 saved = pool["stats"]["compress_bytes_used"]
                 ratio = int(100 / (stor / saved))
-                log.info(f"The compression ratio is {ratio}%")
+                if (expected_ratio + 5) > ratio > (expected_ratio - 5):
+                    log.error(
+                        f"The compression ratio is {ratio}% "
+                        f"while the expected ratio is {expected_ratio}%"
+                    )
+                else:
+                    log.info(f"The compression ratio is {ratio}%")
                 break
 
         # Clean up fio benchmark
