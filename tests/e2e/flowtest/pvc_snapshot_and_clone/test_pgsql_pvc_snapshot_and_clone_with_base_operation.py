@@ -3,7 +3,13 @@ import pytest
 
 from concurrent.futures import ThreadPoolExecutor
 
-from ocs_ci.framework.testlib import skipif_ocs_version, E2ETest, flowtests
+from ocs_ci.framework.testlib import (
+    skipif_ocs_version,
+    skipif_ocp_version,
+    E2ETest,
+    flowtests,
+    ignore_leftovers,
+)
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.ocs import flowtest
@@ -12,7 +18,9 @@ log = logging.getLogger(__name__)
 
 
 @flowtests
+@ignore_leftovers
 @skipif_ocs_version("<4.6")
+@skipif_ocp_version("<4.6")
 @pytest.mark.polarion_id("OCS-2302")
 class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
     """
