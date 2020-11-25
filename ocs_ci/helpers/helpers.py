@@ -273,24 +273,9 @@ def create_pod(
                 container = pod_data["spec"]["template"]["spec"]["containers"][0]
             if "env" not in container:
                 container["env"] = []
-            container["env"].append(
-                {
-                    "name": "http_proxy",
-                    "value": http_proxy,
-                }
-            )
-            container["env"].append(
-                {
-                    "name": "https_proxy",
-                    "value": https_proxy,
-                }
-            )
-            container["env"].append(
-                {
-                    "name": "no_proxy",
-                    "value": no_proxy,
-                }
-            )
+            container["env"].append({"name": "http_proxy", "value": http_proxy})
+            container["env"].append({"name": "https_proxy", "value": https_proxy})
+            container["env"].append({"name": "no_proxy", "value": no_proxy})
     except KeyError as err:
         logging.warning(
             "Http(s)_proxy variable wasn't configured, " "'%s' key not found.", err
@@ -466,9 +451,7 @@ def create_ceph_file_system(pool_name=None):
     return cfs_data
 
 
-def default_storage_class(
-    interface_type,
-):
+def default_storage_class(interface_type,):
     """
     Return default storage class based on interface_type
 
@@ -2489,19 +2472,19 @@ def collect_performance_stats(dir_name):
     # ToDo: Get iops and throughput percentage of each nodes
 
     # Get the cpu and memory of each nodes from adm top
-    master_node_utilization_from_adm_top = (
-        node.get_node_resource_utilization_from_adm_top(node_type="master")
+    master_node_utilization_from_adm_top = node.get_node_resource_utilization_from_adm_top(
+        node_type="master"
     )
-    worker_node_utilization_from_adm_top = (
-        node.get_node_resource_utilization_from_adm_top(node_type="worker")
+    worker_node_utilization_from_adm_top = node.get_node_resource_utilization_from_adm_top(
+        node_type="worker"
     )
 
     # Get the cpu and memory from describe of nodes
-    master_node_utilization_from_oc_describe = (
-        node.get_node_resource_utilization_from_oc_describe(node_type="master")
+    master_node_utilization_from_oc_describe = node.get_node_resource_utilization_from_oc_describe(
+        node_type="master"
     )
-    worker_node_utilization_from_oc_describe = (
-        node.get_node_resource_utilization_from_oc_describe(node_type="worker")
+    worker_node_utilization_from_oc_describe = node.get_node_resource_utilization_from_oc_describe(
+        node_type="worker"
     )
 
     performance_stats["master_node_utilization"] = master_node_utilization_from_adm_top
@@ -2778,15 +2761,11 @@ def fetch_used_size(cbp_name, exp_val=None):
     """
 
     ct_pod = pod.get_ceph_tools_pod()
-    rados_status = ct_pod.exec_ceph_cmd(
-        ceph_cmd=f"rados df -p {cbp_name}"
-    )
-    size_bytes = rados_status['pools'][0]['size_bytes']
+    rados_status = ct_pod.exec_ceph_cmd(ceph_cmd=f"rados df -p {cbp_name}")
+    size_bytes = rados_status["pools"][0]["size_bytes"]
 
     # Convert size to GB
-    used_in_gb = float(
-        format(size_bytes / constants.GB, '.4f')
-    )
+    used_in_gb = float(format(size_bytes / constants.GB, ".4f"))
     if exp_val is True and abs(exp_val - used_in_gb) < 1.5:
         raise UnexpectedBehaviour(
             f"Actual {used_in_gb} and expected size {exp_val} not "
