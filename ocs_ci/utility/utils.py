@@ -1756,7 +1756,7 @@ def load_auth_config():
         with open(auth_file) as f:
             return yaml.safe_load(f)
     except FileNotFoundError:
-        log.warn(
+        log.warning(
             f"Unable to find the authentication configuration at {auth_file}, "
             f"please refer to the getting started guide ({constants.AUTH_CONFIG_DOCS})"
         )
