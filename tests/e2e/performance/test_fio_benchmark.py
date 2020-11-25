@@ -23,6 +23,20 @@ log = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="function")
+def ripsaw(request):
+
+    # Create benchmark Operator (formerly ripsaw)
+    ripsaw = RipSaw()
+
+    def teardown():
+        ripsaw.cleanup()
+        time.sleep(10)
+
+    request.addfinalizer(teardown)
+    return ripsaw
+
+
+@pytest.fixture(scope="function")
 def es(request):
 
     # Create internal ES only if Cloud platform is tested
@@ -366,7 +380,6 @@ class TestFIOBenchmark(E2ETest):
 
         """
 
-        ripsaw = RipSaw()
         self.ripsaw_deploy(ripsaw)
 
         if interface == "CephBlockPool":
@@ -408,8 +421,6 @@ class TestFIOBenchmark(E2ETest):
         log.info("Deleting FIO benchmark")
         self.fio_cr_obj.delete()
 
-        ripsaw.cleanup()
-
         log.debug(f"Full results is : {full_results.results}")
 
         self.copy_es_data(es, full_results)
@@ -430,13 +441,14 @@ class TestFIOBenchmark(E2ETest):
             ),
         ],
     )
-    def test_fio_compressed_workload(self, es, storageclass_factory, io_pattern):
+    def test_fio_compressed_workload(
+        self, ripsaw, es, storageclass_factory, io_pattern
+    ):
         """
         This is a basic fio perf test which run on compression enabled volume
 
         """
 
-        ripsaw = RipSaw()
         self.ripsaw_deploy(ripsaw)
 
         log.info("Creating compressed pool & SC")
@@ -500,8 +512,6 @@ class TestFIOBenchmark(E2ETest):
         # Clean up fio benchmark
         log.info("Deleting FIO benchmark")
         self.fio_cr_obj.delete()
-
-        ripsaw.cleanup()
 
         sc_obj.delete()
         sc_obj.ocp.wait_for_delete(resource_name=sc, timeout=300, sleep=5)
