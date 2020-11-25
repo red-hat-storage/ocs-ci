@@ -53,18 +53,6 @@ class CloudManager(ABC):
             )
             cred_dict = load_auth_config().get("AUTH", {})
 
-        try:
-            rgw_conn = RGW()
-            endpoint, access_key, secret_key = rgw_conn.get_credentials()
-            cred_dict["RGW"] = {
-                "SECRET_PREFIX": "RGW",
-                "ENDPOINT": endpoint,
-                "RGW_ACCESS_KEY_ID": access_key,
-                "RGW_SECRET_ACCESS_KEY": secret_key,
-            }
-        except CommandFailed:
-            pass
-
         if not cred_dict:
             logger.warning(
                 "Local auth.yaml not found, or failed to load. "
@@ -88,6 +76,18 @@ class CloudManager(ABC):
                             f"{cloud_name.lower()}_client",
                             cloud_map[cloud_name](auth_dict=cred_dict[cloud_name]),
                         )
+
+        try:
+            rgw_conn = RGW()
+            endpoint, access_key, secret_key = rgw_conn.get_credentials()
+            cred_dict["RGW"] = {
+                "SECRET_PREFIX": "RGW",
+                "ENDPOINT": endpoint,
+                "RGW_ACCESS_KEY_ID": access_key,
+                "RGW_SECRET_ACCESS_KEY": secret_key,
+            }
+        except CommandFailed:
+            pass
 
 
 class CloudClient(ABC):
