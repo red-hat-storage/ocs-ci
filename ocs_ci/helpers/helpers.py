@@ -2765,3 +2765,31 @@ def wait_for_pv_delete(pv_objs):
             wait_for_resource_state(pv_obj, constants.STATUS_RELEASED)
             pv_obj.delete()
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+
+
+@retry(UnexpectedBehaviour, tries=20, delay=10, backoff=1)
+def fetch_used_size(cbp_name, exp_val=None):
+    """
+    Fetch used size in the pool
+    Args:
+        exp_val(float): Expected size in GB
+    Returns:
+        float: Used size in GB
+    """
+
+    ct_pod = pod.get_ceph_tools_pod()
+    rados_status = ct_pod.exec_ceph_cmd(
+        ceph_cmd=f"rados df -p {cbp_name}"
+    )
+    size_bytes = rados_status['pools'][0]['size_bytes']
+
+    # Convert size to GB
+    used_in_gb = float(
+        format(size_bytes / constants.GB, '.4f')
+    )
+    if exp_val is True and abs(exp_val - used_in_gb) < 1.5:
+        raise UnexpectedBehaviour(
+            f"Actual {used_in_gb} and expected size {exp_val} not "
+            f"matching. Retrying"
+        )
+    return used_in_gb
