@@ -38,7 +38,7 @@ class TestCouchBaseNodeDrain(E2ETest):
         get_node_resource_utilization_from_adm_top(node_type="worker", print_table=True)
 
         # Node drain with specific node type
-        typed_nodes = node.get_typed_nodes(node_type=node_type, num_of_nodes=1)
+        typed_nodes = node.get_nodes(node_type=node_type, num_of_nodes=1)
         typed_node_name = typed_nodes[0].name
 
         # Node maintenance - to gracefully terminate all pods on the node

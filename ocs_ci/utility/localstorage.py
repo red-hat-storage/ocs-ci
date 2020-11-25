@@ -12,7 +12,7 @@ import yaml
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
@@ -59,7 +59,7 @@ def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
     ocp_obj = OCP(
         kind="localvolume", namespace=config.ENV_DATA["local_storage_namespace"]
     )
-    workers = get_typed_nodes(node_type="worker")
+    workers = get_nodes(node_type="worker")
     worker_names = [worker.name for worker in workers]
     config.ENV_DATA["worker_replicas"] = len(worker_names)
     output = ocp_obj.get(resource_name="local-block")

@@ -77,9 +77,7 @@ class FlowOperations:
         self.validate_cluster(node_status=True, operation_name=operation_name)
 
         logger.info(f"Getting parameters related to: {operation_name}")
-        typed_nodes = node.get_typed_nodes(
-            node_type=node_type, num_of_nodes=number_of_nodes
-        )
+        typed_nodes = node.get_nodes(node_type=node_type, num_of_nodes=number_of_nodes)
         if network_fail_time:
             return typed_nodes, network_fail_time
         else:

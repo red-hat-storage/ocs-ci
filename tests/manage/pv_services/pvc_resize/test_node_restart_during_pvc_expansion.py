@@ -65,7 +65,7 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
         """
         pvc_size_expanded = 30
         executor = ThreadPoolExecutor(max_workers=len(self.pods))
-        selected_node = node.get_typed_nodes(
+        selected_node = node.get_nodes(
             node_type=constants.WORKER_MACHINE, num_of_nodes=1
         )
 

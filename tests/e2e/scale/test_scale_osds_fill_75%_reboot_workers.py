@@ -10,7 +10,7 @@ import pytest
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.cluster import count_cluster_osd, validate_osd_utilization
 from ocs_ci.framework import config
-from ocs_ci.ocs.node import get_typed_nodes, wait_for_nodes_status
+from ocs_ci.ocs.node import get_nodes, wait_for_nodes_status
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants, platform_nodes
 from ocs_ci.ocs.resources.pod import wait_for_dc_app_pods_to_reach_running_state
@@ -108,7 +108,7 @@ class TestScaleOSDsRebootNodes(E2ETest):
             logger.info(f"The time taken to complete rebalance {time_taken}")
 
         # Rolling reboot on worker nodes
-        worker_nodes = get_typed_nodes(node_type="worker")
+        worker_nodes = get_nodes(node_type="worker")
 
         factory = platform_nodes.PlatformNodesFactory()
         nodes = factory.get_nodes_platform()
