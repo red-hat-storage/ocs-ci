@@ -76,12 +76,7 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
 
         pod_objs = get_all_pods(
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            selector=[
-                "noobaa",
-                "rook-ceph-osd-prepare",
-                "rook-ceph-drain-canary",
-                "compute-0-debug",
-            ],
+            selector=["noobaa", "rook-ceph-osd-prepare", "rook-ceph-drain-canary"],
             exclude_selector=True,
         )
 
@@ -117,6 +112,9 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
 
         for pod in pod_objs:
             pod_name = pod.get().get("metadata").get("name")
+            if "debug" in pod_name:
+                logging.info(f"Skipping {pod_name} pod from validation")
+                continue
             restart_count = (
                 pod.get().get("status").get("containerStatuses")[0].get("restartCount")
             )
