@@ -159,7 +159,7 @@ class CouchBase(PillowFight):
         self.cb_worker = OCS(**cb_work)
         self.cb_worker.create()
 
-    def create_couchbase_worker(self, replicas=1):
+    def create_couchbase_worker(self, replicas=1, sc_name=None):
         """
         Deploy a Couchbase server and pillowfight workload using operator
 
@@ -187,6 +187,8 @@ class CouchBase(PillowFight):
                 "storageClassName"
             ] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         cb_example["spec"]["servers"][0]["size"] = replicas
+        if sc_name:
+            cb_example['spec']['volumeClaimTemplates'][0]['spec']['storageClassName'] = sc_name
         self.cb_examples = OCS(**cb_example)
         self.cb_examples.create()
 
@@ -308,9 +310,11 @@ class CouchBase(PillowFight):
         self.cb_worker.delete()
         self.cb_deploy.delete()
         self.pod_obj.exec_oc_cmd(
-            command="delete rolebinding couchbase-operator-rolebinding"
+            command="delete rolebinding couchbase-operator-rolebinding -n couchbase-operator-namespace"
         )
-        self.pod_obj.exec_oc_cmd(command="delete serviceaccount couchbase-operator")
+        self.pod_obj.exec_oc_cmd(
+            command="delete serviceaccount couchbase-operator -n couchbase-operator-namespace"
+        )
         self.operator_role.delete()
         self.couchbase_obj.delete()
         switch_to_project("default")
