@@ -5,6 +5,7 @@ import tempfile
 import re
 from pathlib import Path
 
+from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.ocs.must_gather.const_must_gather import GATHER_COMMANDS_VERSION
@@ -53,7 +54,10 @@ class MustGather(object):
 
         """
         version = get_ocs_parsed_version()
-        files = GATHER_COMMANDS_VERSION[version][self.type_log]
+        if self.type_log == "OTHERS" and storagecluster_independent_check():
+            files = GATHER_COMMANDS_VERSION[version]["OTHERS_EXTERNAL"]
+        else:
+            files = GATHER_COMMANDS_VERSION[version][self.type_log]
         for file in files:
             self.files_not_exist.append(file)
             for dir_name, subdir_list, files_list in os.walk(self.root):
