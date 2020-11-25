@@ -86,7 +86,7 @@ class CloudManager(ABC):
                 "RGW_ACCESS_KEY_ID": access_key,
                 "RGW_SECRET_ACCESS_KEY": secret_key,
             }
-            setattr(self, "rgw_client", cloud_map["RGW"](auth_dict=cred_dict))
+            setattr(self, "rgw_client", cloud_map["RGW"](auth_dict=cred_dict["RGW"]))
         except CommandFailed:
             pass
 
