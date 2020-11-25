@@ -47,11 +47,35 @@ class CloudManager(ABC):
             )
             cred_dict = update_config_from_s3().get("AUTH")
         except AttributeError:
-            logger.warn(
+            logger.warning(
                 "Failed to load credentials from ocs-ci-data. "
                 "Loading from local auth.yaml"
             )
             cred_dict = load_auth_config().get("AUTH", {})
+
+        if not cred_dict:
+            logger.warning(
+                "Local auth.yaml not found, or failed to load. "
+                "Instantiating default clients as None."
+            )
+            for cloud_name in constants.CLOUD_MNGR_PLATFORMS:
+                setattr(self, f"{cloud_name.lower()}_client", None)
+
+        else:
+            for cloud_name in cred_dict:
+                if cloud_name in cloud_map:
+                    if any(value is None for value in cred_dict[cloud_name].values()):
+                        logger.warning(
+                            f"{cloud_name} credentials not found "
+                            "no client will be instantiated"
+                        )
+                        setattr(self, f"{cloud_name.lower()}_client", None)
+                    else:
+                        setattr(
+                            self,
+                            f"{cloud_name.lower()}_client",
+                            cloud_map[cloud_name](auth_dict=cred_dict[cloud_name]),
+                        )
 
         try:
             rgw_conn = RGW()
@@ -62,23 +86,9 @@ class CloudManager(ABC):
                 "RGW_ACCESS_KEY_ID": access_key,
                 "RGW_SECRET_ACCESS_KEY": secret_key,
             }
+            setattr(self, "rgw_client", cloud_map["RGW"](auth_dict=cred_dict["RGW"]))
         except CommandFailed:
             pass
-
-        for cloud_name in cred_dict:
-            if cloud_name in cloud_map:
-                if any(value is None for value in cred_dict[cloud_name].values()):
-                    logger.warn(
-                        f"{cloud_name} credentials not found "
-                        "no client will be instantiated"
-                    )
-                    setattr(self, f"{cloud_name.lower()}_client", None)
-                else:
-                    setattr(
-                        self,
-                        f"{cloud_name.lower()}_client",
-                        cloud_map[cloud_name](auth_dict=cred_dict[cloud_name]),
-                    )
 
 
 class CloudClient(ABC):
