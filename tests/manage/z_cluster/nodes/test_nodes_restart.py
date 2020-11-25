@@ -11,7 +11,7 @@ from ocs_ci.framework.testlib import (
     skipif_no_lso,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import get_node_objs, get_typed_nodes
+from ocs_ci.ocs.node import get_node_objs, get_nodes
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery, get_pv_names
@@ -327,9 +327,7 @@ class TestNodesRestart(ManageTest):
 
         """
         pv_before_reset = get_pv_names()
-        worker_nodes = get_typed_nodes(
-            node_type=constants.WORKER_MACHINE, num_of_nodes=3
-        )
+        worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=3)
         ocp_obj = OCP(kind=constants.PV)
         for worker_node in worker_nodes:
             # Restart one worker node
