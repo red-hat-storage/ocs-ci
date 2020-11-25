@@ -362,7 +362,7 @@ class TestFIOBenchmark(E2ETest):
     )
     def test_fio_workload_simple(self, ripsaw, es, interface, io_pattern):
         """
-        This is a basic fio perf test - none compressed volumes
+        This is a basic fio perf test - non-compressed volumes
 
         """
 
@@ -432,7 +432,7 @@ class TestFIOBenchmark(E2ETest):
     )
     def test_fio_compressed_workload(self, es, storageclass_factory, io_pattern):
         """
-        This is a basic fio perf test which run on compressed volume
+        This is a basic fio perf test which run on compression enabled volume
 
         """
 
