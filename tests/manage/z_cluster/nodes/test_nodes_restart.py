@@ -345,5 +345,5 @@ class TestNodesRestart(ManageTest):
                     pv_new.append(pv)
             assert (
                 not pv_new
-            ), f"Unexpected PV {pv_new} is created after reboot {worker_node}"
+            ), f"Unexpected PV {pv_new} created after reboot {worker_node}"
         logger.info("SUCCESS - No new PV was created.")
