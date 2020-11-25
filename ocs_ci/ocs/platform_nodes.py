@@ -20,7 +20,7 @@ from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.ocs.node import (
     get_node_objs,
     get_typed_worker_nodes,
-    get_typed_nodes,
+    get_nodes,
     generate_node_names_for_vsphere,
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
@@ -1405,7 +1405,7 @@ class VSPHEREUPINode(VMWareNodes):
         self.node_conf = node_conf
         self.node_type = node_type
         self.compute_count = compute_count
-        self.current_compute_count = len(get_typed_nodes())
+        self.current_compute_count = len(get_nodes())
         self.target_compute_count = self.current_compute_count + self.compute_count
 
         # update the terraform installer path in ENV_DATA

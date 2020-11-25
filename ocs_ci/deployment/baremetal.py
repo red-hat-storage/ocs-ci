@@ -15,7 +15,7 @@ from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.ocs.exceptions import CommandFailed, RhcosImageNotFound
-from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.connection import Connection
@@ -529,7 +529,7 @@ def clean_disk():
     Perform disk cleanup
     """
     lvm_to_clean = []
-    workers = get_typed_nodes(node_type="worker")
+    workers = get_nodes(node_type="worker")
     ocp_obj = ocp.OCP()
     for worker in workers:
         out = ocp_obj.exec_oc_debug_cmd(
