@@ -2962,8 +2962,6 @@ def multi_snapshot_factory(snapshot_factory):
 
     """
 
-    snapshot = []
-
     def factory(pvc_obj, wait=True, snapshot_name_suffix=None):
         """
         Args:
@@ -2975,6 +2973,7 @@ def multi_snapshot_factory(snapshot_factory):
             OCS: List of OCS instances of kind VolumeSnapshot
 
         """
+        snapshot = []
 
         for obj in pvc_obj:
             log.info(f"Creating snapshot of PVC {obj.name}")
@@ -3100,8 +3099,6 @@ def multi_snapshot_restore_factory(snapshot_restore_factory):
 
     """
 
-    new_pvcs = []
-
     def factory(
         snapshot_obj,
         restore_pvc_suffix=None,
@@ -3136,6 +3133,8 @@ def multi_snapshot_restore_factory(snapshot_restore_factory):
             PVC: List of restored PVC object
 
         """
+        new_pvcs = []
+
         status_tmp = status if wait_each else ""
 
         for snap_obj in snapshot_obj:
@@ -3385,7 +3384,6 @@ def multi_pvc_clone_factory(pvc_clone_factory):
     Calling this fixture creates clone from each PVC in the provided list of PVCs
 
     """
-    cloned_pvcs = []
 
     def factory(
         pvc_obj,
@@ -3417,6 +3415,8 @@ def multi_pvc_clone_factory(pvc_clone_factory):
             PVC: List PVC instance
 
         """
+        cloned_pvcs = []
+
         status_tmp = status if wait_each else ""
 
         for obj in pvc_obj:
@@ -3499,7 +3499,6 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
             snapshot_obj=new_snapshots
         )
         log.info("Created new PVCs from all the snapshots and in Bound state")
-
         # Attach a new pgsql pod restored pvcs
         pgsql_obj_list = pgsql.attach_pgsql_pod_to_claim_pvc(
             pvc_objs=new_restored_pvc_objs,
