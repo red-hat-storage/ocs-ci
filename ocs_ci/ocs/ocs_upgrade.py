@@ -108,18 +108,13 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     verify_pods_upgraded(
         old_images, selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL, count=2
     )
-    # This timeout is as W/A for BZ:
-    # https://bugzilla.redhat.com/show_bug.cgi?id=1895402
-    # Issue: https://github.com/red-hat-storage/ocs-ci/issues/3309
-    timeout = 720 if upgrade_version < parse_version("4.6") else 1440
     verify_pods_upgraded(
         old_images,
         selector=constants.MON_APP_LABEL,
         count=3,
-        timeout=timeout,
     )
     verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
-    osd_timeout = timeout if upgrade_version >= parse_version("4.5") else 750
+    osd_timeout = 600 if upgrade_version >= parse_version("4.5") else 750
     verify_pods_upgraded(
         old_images,
         selector=constants.OSD_APP_LABEL,
@@ -135,7 +130,6 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
             old_images,
             selector=constants.RGW_APP_LABEL,
             count=rgw_count,
-            timeout=timeout,
         )
 
     # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
@@ -149,7 +143,6 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
                 old_images,
                 selector=constants.RGW_APP_LABEL,
                 count=rgw_count,
-                timeout=timeout,
             )
 
 
