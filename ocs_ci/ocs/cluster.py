@@ -1362,6 +1362,58 @@ def check_ceph_osd_tree_after_node_replacement():
     return True
 
 
+def silence_ceph_osd_crash_warning(osd_pod_name):
+    """
+    Silence the osd crash warning of a specific osd pod
+
+    Args:
+        osd_pod_name (str): The name of the osd pod which we need to
+        silence the crash warning
+
+    Returns:
+        bool: True if it found the osd crash with name 'osd_pod_name'. False otherwise
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    new_crash_objects_list = ct_pod.exec_ceph_cmd(ceph_cmd="ceph crash ls-new")
+    for crash_obj in new_crash_objects_list:
+        if crash_obj.get("utsname_hostname") == osd_pod_name:
+            logger.info(f"Found osd crash with name {osd_pod_name}")
+            obj_crash_id = crash_obj.get("crash_id")
+            logger.info("silence the osd crash warning")
+            ct_pod.exec_ceph_cmd(ceph_cmd=f"ceph crash archive {obj_crash_id}")
+            return True
+
+    logger.info(
+        f"Didn't find osd crash with name {osd_pod_name} in ceph crash warnings"
+    )
+    return False
+
+
+def wait_for_silence_ceph_osd_crash_warning(osd_pod_name, timeout=900):
+    """
+    Wait for 'timeout' seconds to check for the ceph osd crash warning,
+    and silence it.
+
+    Args:
+        osd_pod_name (str): The name of the osd pod which we need to
+        silence the crash warning
+        timeout (int): time in seconds to wait for silence the osd crash warning
+
+    """
+    try:
+        for silence_old_osd_crash_warning in TimeoutSampler(
+            timeout=timeout,
+            sleep=30,
+            func=silence_ceph_osd_crash_warning,
+            osd_pod_name=osd_pod_name,
+        ):
+            if silence_old_osd_crash_warning:
+                return
+    except TimeoutError:
+        pass
+
+
 class CephClusterExternal(CephCluster):
     """
     Handle all external ceph cluster related functionalities

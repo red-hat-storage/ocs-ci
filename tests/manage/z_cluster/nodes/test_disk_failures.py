@@ -3,7 +3,7 @@ import pytest
 import random
 import re
 
-from ocs_ci.ocs import node, constants, ocp
+from ocs_ci.ocs import node, constants, ocp, cluster
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     tier4,
@@ -30,7 +30,6 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.ocs import get_job_obj, OCS
 from ocs_ci.utility.aws import AWSTimeoutException
 from ocs_ci.utility.utils import get_ocp_version
-
 
 logger = logging.getLogger(__name__)
 
@@ -398,6 +397,10 @@ class TestDiskFailures(ManageTest):
             f"Expected to have {osd_pods_count} OSD pods in status Running. Current OSD pods status: "
             f"{[osd_pod.ocp.get_resource(pod.get().get('metadata').get('name'), 'STATUS') for pod in get_osd_pods()]}"
         )
+
+        # We need to silence the old osd crash warning due to BZ https://bugzilla.redhat.com/show_bug.cgi?id=1896810
+        if ocp_version >= 4.6:
+            cluster.wait_for_silence_ceph_osd_crash_warning(osd_pod_name)
 
         # Validate cluster is still functional
         self.sanity_helpers.health_check(tries=80)
