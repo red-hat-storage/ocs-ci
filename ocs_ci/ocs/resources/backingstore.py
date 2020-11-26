@@ -237,7 +237,6 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                         )
                 else:
                     _, region = uls_tup
-                    # TODO: Verify that the given cloud has an initialized client
                     uls_dict = cloud_uls_factory({cloud: [uls_tup]})
                     for uls_name in uls_dict[cloud.lower()]:
                         backingstore_name = create_unique_resource_name(
