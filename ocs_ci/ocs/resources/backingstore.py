@@ -57,7 +57,25 @@ class BackingStore:
                 kind="backingstore", namespace=config.ENV_DATA["cluster_namespace"]
             ).delete(resource_name=self.name)
         elif self.method == "cli":
-            self.mcg_obj.exec_mcg_cmd(f"backingstore delete {self.name}")
+            def _cli_deletion_flow():
+                try:
+                    self.mcg_obj.exec_mcg_cmd(f"backingstore delete {self.name}")
+                    return True
+                except CommandFailed as e:
+                    if "being used by one or more buckets" in str(e).lower():
+                        log.warning(
+                            f"Deletion of {self.name} failed because it's being used by a bucket. "
+                            "Retrying..."
+                        )
+                        return False
+            sample = TimeoutSampler(
+                timeout=120,
+                sleep=20,
+                func=_cli_deletion_flow,
+            )
+            if not sample.wait_for_func_status(result=True):
+                log.error(f"Failed to {self.name}")
+                raise TimeoutExpiredError
 
         log.info(f"Verifying whether backingstore {self.name} exists after deletion")
         bs_deleted_successfully = False
