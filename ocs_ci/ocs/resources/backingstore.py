@@ -57,6 +57,7 @@ class BackingStore:
                 kind="backingstore", namespace=config.ENV_DATA["cluster_namespace"]
             ).delete(resource_name=self.name)
         elif self.method == "cli":
+
             def _cli_deletion_flow():
                 try:
                     self.mcg_obj.exec_mcg_cmd(f"backingstore delete {self.name}")
@@ -68,6 +69,7 @@ class BackingStore:
                             "Retrying..."
                         )
                         return False
+
             sample = TimeoutSampler(
                 timeout=120,
                 sleep=20,
@@ -224,7 +226,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                             method=method.lower(),
                             mcg_obj=mcg_obj,
                             vol_num=vol_num,
-                            vol_size=size
+                            vol_size=size,
                         )
                     )
                     if method.lower() == "cli":

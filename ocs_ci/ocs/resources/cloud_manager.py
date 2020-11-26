@@ -69,7 +69,9 @@ class CloudManager(ABC):
                 if cloud_name in cloud_map:
                     # If all the values of the client are filled in auth.yaml,
                     # instantiate an actual client
-                    if not any(value is None for value in cred_dict[cloud_name].values()):
+                    if not any(
+                        value is None for value in cred_dict[cloud_name].values()
+                    ):
                         setattr(
                             self,
                             f"{cloud_name.lower()}_client",
