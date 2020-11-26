@@ -1,5 +1,6 @@
 ---
 DEPLOYMENT:
+  infra_nodes: True
   allow_lower_instance_requirements: false
   ocs_operator_nodes_to_label: 0
 ENV_DATA:
