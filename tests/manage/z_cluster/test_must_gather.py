@@ -1,10 +1,10 @@
 import logging
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs.must_gather.must_gather import MustGather
 from ocs_ci.ocs.must_gather.const_must_gather import GATHER_COMMANDS_VERSION
-from ocs_ci.ocs.ocp import get_ocs_parsed_version
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class TestMustGather(ManageTest):
         ],
     )
     @pytest.mark.skipif(
-        get_ocs_parsed_version() not in GATHER_COMMANDS_VERSION,
+        float(config.ENV_DATA["ocs_version"]) not in GATHER_COMMANDS_VERSION,
         reason=(
             "Skipping must_gather test, because there is not data for this version"
         ),
