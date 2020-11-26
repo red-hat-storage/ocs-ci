@@ -202,7 +202,11 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                     backingstore_name = backingstore_name[:-16]
                     created_backingstores.append(
                         BackingStore(
-                            name=backingstore_name, vol_num=vol_num, vol_size=size
+                            name=backingstore_name,
+                            method=method.lower(),
+                            mcg_obj=mcg_obj,
+                            vol_num=vol_num,
+                            vol_size=size
                         )
                     )
                     if method.lower() == "cli":

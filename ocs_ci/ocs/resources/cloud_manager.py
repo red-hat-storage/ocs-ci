@@ -56,21 +56,20 @@ class CloudManager(ABC):
         if not cred_dict:
             logger.warning(
                 "Local auth.yaml not found, or failed to load. "
-                "Instantiating default clients as None."
+                "All cloud clients will be instantiated as None."
             )
-            for cloud_name in constants.CLOUD_MNGR_PLATFORMS:
-                setattr(self, f"{cloud_name.lower()}_client", None)
+
+        # Instantiate all needed cloud clients as None by default
+        for cloud_name in constants.CLOUD_MNGR_PLATFORMS:
+            setattr(self, f"{cloud_name.lower()}_client", None)
 
         else:
+            # Override None clients with actual ones if found
             for cloud_name in cred_dict:
                 if cloud_name in cloud_map:
-                    if any(value is None for value in cred_dict[cloud_name].values()):
-                        logger.warning(
-                            f"{cloud_name} credentials not found "
-                            "no client will be instantiated"
-                        )
-                        setattr(self, f"{cloud_name.lower()}_client", None)
-                    else:
+                    # If all the values of the client are filled in auth.yaml,
+                    # instantiate an actual client
+                    if not any(value is None for value in cred_dict[cloud_name].values()):
                         setattr(
                             self,
                             f"{cloud_name.lower()}_client",
