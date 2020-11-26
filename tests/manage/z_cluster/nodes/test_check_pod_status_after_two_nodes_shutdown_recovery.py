@@ -4,7 +4,7 @@ import time
 
 from ocs_ci.framework.testlib import ManageTest, tier4c, ignore_leftovers
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.ocs.node import wait_for_nodes_status, get_typed_nodes
+from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.resources.pod import wait_for_storage_pods, list_of_nodes_running_pods
@@ -51,7 +51,7 @@ class TestOCSWorkerNodeShutdown(ManageTest):
         list_of_nodes_running_pods(selector="csi-cephfsplugin-provisioner")
 
         # Get the node list
-        node = get_typed_nodes(node_type="worker", num_of_nodes=2)
+        node = get_nodes(node_type="worker", num_of_nodes=2)
 
         # Shutdown 2 worker nodes for 10 mins
         nodes.stop_nodes(nodes=node)

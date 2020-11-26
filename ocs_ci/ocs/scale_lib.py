@@ -432,7 +432,7 @@ def add_worker_based_on_cpu_utilization(
         config.ENV_DATA["deployment_type"] == "ipi"
         and config.ENV_DATA["platform"].lower() == "aws"
     ):
-        app_nodes = node.get_typed_nodes(node_type=role_type)
+        app_nodes = node.get_nodes(node_type=role_type)
         uti_dict = node.get_node_resource_utilization_from_oc_describe(
             node_type=role_type
         )
@@ -490,7 +490,7 @@ def add_worker_based_on_pods_count_per_node(
         config.ENV_DATA["deployment_type"] == "ipi"
         and config.ENV_DATA["platform"].lower() == "aws"
     ):
-        app_nodes = node.get_typed_nodes(node_type=role_type)
+        app_nodes = node.get_nodes(node_type=role_type)
         pod_count_dict = node.get_running_pod_count_from_node(node_type=role_type)
         high_count_nodes, less_count_nodes = ([] for i in range(2))
         for node_obj in app_nodes:
@@ -715,6 +715,7 @@ def check_and_add_enough_worker(worker_count):
             # Create machineset for app worker nodes on each aws zone
             # Each zone will have one app worker node
             ms_name = list()
+            labels = [("node-role.kubernetes.io/app", "app-scale")]
             for obj in machine.get_machineset_objs():
                 if "app" in obj.name:
                     ms_name.append(obj.name)
@@ -723,13 +724,17 @@ def check_and_add_enough_worker(worker_count):
                     for zone in ["a", "b", "c"]:
                         ms_name.append(
                             machine.create_custom_machineset(
-                                instance_type="m5.4xlarge", zone=zone
+                                instance_type="m5.4xlarge",
+                                labels=labels,
+                                zone=zone,
                             )
                         )
                 else:
                     ms_name.append(
                         machine.create_custom_machineset(
-                            instance_type="m5.4xlarge", zone="a"
+                            instance_type="m5.4xlarge",
+                            labels=labels,
+                            zone="a",
                         )
                     )
                 for ms in ms_name:

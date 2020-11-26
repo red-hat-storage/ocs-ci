@@ -35,7 +35,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods,
 )
-from ocs_ci.ocs.node import get_typed_nodes, get_compute_node_names
+from ocs_ci.ocs.node import get_nodes, get_compute_node_names
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -194,7 +194,7 @@ class Deployment(object):
             az_node_list = az_worker_nodes.get(az, [])
             az_node_list.append(node)
             az_worker_nodes[az] = az_node_list
-        logger.info(f"Found worker nodes in AZ: {az_worker_nodes}")
+        logger.debug(f"Found the worker nodes in AZ: {az_worker_nodes}")
         distributed_worker_nodes = []
         while az_worker_nodes:
             for az in list(az_worker_nodes.keys()):
@@ -230,7 +230,9 @@ class Deployment(object):
                     f"{constants.OPERATOR_NODE_LABEL} --overwrite"
                 )
             ]
-            if config.DEPLOYMENT["infra_nodes"]:
+            if config.DEPLOYMENT.get("infra_nodes") and not config.ENV_DATA.get(
+                "infra_replicas"
+            ):
                 logger.info(
                     f"Label nodes: {workers_to_label} with label: "
                     f"{constants.INFRA_NODE_LABEL}"
@@ -925,7 +927,7 @@ def setup_local_storage(storageclass):
 
     """
     # Get the worker nodes
-    workers = get_typed_nodes(node_type="worker")
+    workers = get_nodes(node_type="worker")
     worker_names = [worker.name for worker in workers]
     worker_names_str = " ".join(worker_names)
     logger.debug("Workers: %s", workers)

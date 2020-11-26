@@ -6,7 +6,7 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import default_storage_class
-from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs, get_typed_nodes
+from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs, get_nodes
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.resources.pod import get_all_pods
@@ -86,7 +86,7 @@ class TestAMQNodeReboot(E2ETest):
         pod_obj_list = get_all_pods(namespace=constants.AMQ_NAMESPACE)
 
         # Get the node list
-        node = get_typed_nodes(node_type, num_of_nodes=1)
+        node = get_nodes(node_type, num_of_nodes=1)
 
         # Reboot one master nodes
         nodes.restart_nodes(node, wait=False)
@@ -132,7 +132,7 @@ class TestAMQNodeReboot(E2ETest):
         pod_obj_list = get_all_pods(namespace=constants.AMQ_NAMESPACE)
 
         # Get the node list
-        node = get_typed_nodes(node_type="worker", num_of_nodes=1)
+        node = get_nodes(node_type="worker", num_of_nodes=1)
 
         # Reboot one master nodes
         nodes.stop_nodes(nodes=node)

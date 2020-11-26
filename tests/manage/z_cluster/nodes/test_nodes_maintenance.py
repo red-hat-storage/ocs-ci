@@ -10,7 +10,7 @@ from ocs_ci.ocs import constants, machine, ocp, defaults
 from ocs_ci.ocs.node import (
     drain_nodes,
     schedule_nodes,
-    get_typed_nodes,
+    get_nodes,
     wait_for_nodes_status,
     remove_nodes,
     get_osd_running_nodes,
@@ -119,7 +119,7 @@ class TestNodesMaintenance(ManageTest):
 
         """
         # Get 1 node of the type needed for the test iteration
-        typed_nodes = get_typed_nodes(node_type=node_type, num_of_nodes=1)
+        typed_nodes = get_nodes(node_type=node_type, num_of_nodes=1)
         assert typed_nodes, f"Failed to find a {node_type} node for the test"
         typed_node_name = typed_nodes[0].name
 
@@ -162,7 +162,7 @@ class TestNodesMaintenance(ManageTest):
 
         """
         # Get 1 node of the type needed for the test iteration
-        typed_nodes = get_typed_nodes(node_type=node_type, num_of_nodes=1)
+        typed_nodes = get_nodes(node_type=node_type, num_of_nodes=1)
         assert typed_nodes, f"Failed to find a {node_type} node for the test"
         typed_node_name = typed_nodes[0].name
 
@@ -227,7 +227,7 @@ class TestNodesMaintenance(ManageTest):
 
         """
         # Get 2 nodes
-        typed_nodes = get_typed_nodes(node_type=nodes_type, num_of_nodes=2)
+        typed_nodes = get_nodes(node_type=nodes_type, num_of_nodes=2)
         assert typed_nodes, f"Failed to find a {nodes_type} node for the test"
 
         typed_node_names = [typed_node.name for typed_node in typed_nodes]
@@ -258,7 +258,7 @@ class TestNodesMaintenance(ManageTest):
         """
         # Get 1 node from each type
         nodes = [
-            get_typed_nodes(node_type=node_type, num_of_nodes=1)[0]
+            get_nodes(node_type=node_type, num_of_nodes=1)[0]
             for node_type in ["worker", "master"]
         ]
         assert nodes, "Failed to find a nodes for the test"
