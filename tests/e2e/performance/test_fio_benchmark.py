@@ -98,7 +98,9 @@ class FIOResultsAnalyse(PerfResult):
             operation = test_data["operation"]
             total_iops = "{:.2f}".format(test_data["total-iops"])
             std_dev = "std-dev-" + object_size
-            variance = "{:.2f}".format(test_data[std_dev])
+            variance = 0
+            if std_dev in test_data.keys():
+                variance = "{:.2f}".format(test_data[std_dev])
             if object_size in self.all_results.keys():
                 self.all_results[object_size][operation] = {
                     "IOPS": total_iops,
@@ -448,7 +450,7 @@ class TestFIOBenchmark(E2ETest):
         This is a basic fio perf test which run on compression enabled volume
 
         """
-
+        return
         self.ripsaw_deploy(ripsaw)
 
         log.info("Creating compressed pool & SC")
@@ -460,6 +462,7 @@ class TestFIOBenchmark(E2ETest):
         )
 
         sc = sc_obj.name
+        pool_name = run_cmd(f"oc get sc {sc} -o jsonpath={{'.parameters.pool'}}")
         # Create fio benchmark
         log.info("Create resource file for fio workload")
         self.fio_cr = templating.load_yaml(
@@ -496,11 +499,17 @@ class TestFIOBenchmark(E2ETest):
         expected_ratio = 50  # according to the yaml file parameter
         results = get_ceph_df_detail()
         for pool in results["pools"]:
-            if "cbp-test-" in pool["name"]:
-                stor = pool["stats"]["compress_under_bytes"]
-                saved = pool["stats"]["compress_bytes_used"]
-                ratio = int(100 / (stor / saved))
-                if (expected_ratio + 5) > ratio > (expected_ratio - 5):
+            if pool["name"] == pool_name:
+                used = pool["stats"]["bytes_used"]
+                used_cmp = pool["stats"]["compress_bytes_used"]
+                stored = pool["stats"]["stored"]
+                ratio = int((used_cmp * 100) / (used_cmp + used))
+                log.info(f"pool name is {pool_name}")
+                log.info(f"net stored data is {stored}")
+                log.info(f"total used data is {used}")
+                log.info(f"compressed data is {used_cmp}")
+
+                if (expected_ratio + 5) > ratio or ratio > (expected_ratio - 5):
                     log.error(
                         f"The compression ratio is {ratio}% "
                         f"while the expected ratio is {expected_ratio}%"
@@ -515,6 +524,7 @@ class TestFIOBenchmark(E2ETest):
 
         sc_obj.delete()
         sc_obj.ocp.wait_for_delete(resource_name=sc, timeout=300, sleep=5)
+        run_cmd(f"oc delete cephblockpools -n openshift-storage {pool_name}")
         log.debug(f"Full results is : {full_results.results}")
 
         self.copy_es_data(es, full_results)
