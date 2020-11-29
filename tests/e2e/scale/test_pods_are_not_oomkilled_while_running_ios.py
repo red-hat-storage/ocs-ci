@@ -112,6 +112,9 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
 
         for pod in pod_objs:
             pod_name = pod.get().get("metadata").get("name")
+            if "debug" in pod_name:
+                logging.info(f"Skipping {pod_name} pod from validation")
+                continue
             restart_count = (
                 pod.get().get("status").get("containerStatuses")[0].get("restartCount")
             )

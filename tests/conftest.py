@@ -1680,7 +1680,10 @@ def rgw_endpoint(request):
     oc = ocp.OCP(kind=constants.SERVICE, namespace=config.ENV_DATA["cluster_namespace"])
     rgw_service = oc.get(selector=constants.RGW_APP_LABEL)["items"]
     if rgw_service:
-        rgw_service = constants.RGW_SERVICE
+        if config.DEPLOYMENT["external_mode"]:
+            rgw_service = constants.RGW_SERVICE_EXTERNAL_MODE
+        else:
+            rgw_service = constants.RGW_SERVICE_INTERNAL_MODE
         log.info(f"Service {rgw_service} found and will be exposed")
         # custom hostname is provided because default hostname from rgw service
         # is too long and OCP rejects it
@@ -3259,6 +3262,11 @@ def pvc_clone_factory(request):
 def reportportal_customization(request):
     if hasattr(request.node.config, "py_test_service"):
         rp_service = request.node.config.py_test_service
+        if not hasattr(rp_service.RP, "rp_client"):
+            request.config._metadata[
+                "RP Launch URL:"
+            ] = "Problem with RP, launch URL is not available!"
+            return
         launch_id = rp_service.RP.rp_client.launch_id
         project = rp_service.RP.rp_client.project
         endpoint = rp_service.RP.rp_client.endpoint
