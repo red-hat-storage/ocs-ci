@@ -403,5 +403,5 @@ class TestDiskFailures(ManageTest):
             cluster.wait_for_silence_ceph_osd_crash_warning(osd_pod_name)
 
         # Validate cluster is still functional
-        self.sanity_helpers.health_check(tries=80)
+        self.sanity_helpers.health_check(tries=100)
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
