@@ -401,7 +401,11 @@ class TestDiskFailures(ManageTest):
         # We need to silence the old osd crash warning due to BZ https://bugzilla.redhat.com/show_bug.cgi?id=1896810
         # This is a workaround - issue for tracking: https://github.com/red-hat-storage/ocs-ci/issues/3438
         if ocp_version >= 4.6:
-            cluster.wait_for_silence_ceph_osd_crash_warning(osd_pod_name)
+            silence_osd_crash = cluster.wait_for_silence_ceph_osd_crash_warning(
+                osd_pod_name
+            )
+            if not silence_osd_crash:
+                logger.info("Didn't find ceph osd crash warning")
 
         # Validate cluster is still functional
         self.sanity_helpers.health_check(tries=100)
