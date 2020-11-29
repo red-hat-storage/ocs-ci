@@ -1411,7 +1411,7 @@ def wait_for_silence_ceph_osd_crash_warning(osd_pod_name, timeout=900):
             if silence_old_osd_crash_warning:
                 return
     except TimeoutError:
-        pass
+        logger.info(f"Couldn't find the osd crash warning after {timeout} seconds")
 
 
 class CephClusterExternal(CephCluster):
