@@ -1368,7 +1368,7 @@ def silence_ceph_osd_crash_warning(osd_pod_name):
 
     Args:
         osd_pod_name (str): The name of the osd pod which we need to
-        silence the crash warning
+            silence the crash warning
 
     Returns:
         bool: True if it found the osd crash with name 'osd_pod_name'. False otherwise
@@ -1397,8 +1397,11 @@ def wait_for_silence_ceph_osd_crash_warning(osd_pod_name, timeout=900):
 
     Args:
         osd_pod_name (str): The name of the osd pod which we need to
-        silence the crash warning
+            silence the crash warning
         timeout (int): time in seconds to wait for silence the osd crash warning
+
+    Returns:
+        bool: True if it found the osd crash with name 'osd_pod_name'. False otherwise
 
     """
     try:
@@ -1409,9 +1412,9 @@ def wait_for_silence_ceph_osd_crash_warning(osd_pod_name, timeout=900):
             osd_pod_name=osd_pod_name,
         ):
             if silence_old_osd_crash_warning:
-                return
+                return True
     except TimeoutError:
-        logger.info(f"Couldn't find the osd crash warning after {timeout} seconds")
+        return False
 
 
 class CephClusterExternal(CephCluster):
