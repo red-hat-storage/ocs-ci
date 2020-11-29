@@ -1902,27 +1902,28 @@ def rgw_bucket_factory_session(request, rgw_obj_session):
 
 
 @pytest.fixture()
-def bucket_factory(request, mcg_obj):
+def bucket_factory(request, bucket_class_factory, mcg_obj):
     """
     Returns an MCG bucket factory
     """
-    return bucket_factory_fixture(request, mcg_obj)
+    return bucket_factory_fixture(request, bucket_class_factory, mcg_obj)
 
 
 @pytest.fixture(scope="session")
-def bucket_factory_session(request, mcg_obj_session):
+def bucket_factory_session(request, bucket_class_factory_session, mcg_obj_session):
     """
     Returns a session-scoped MCG bucket factory
     """
-    return bucket_factory_fixture(request, mcg_obj_session)
+    return bucket_factory_fixture(request, bucket_class_factory_session, mcg_obj_session)
 
 
-def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
+def bucket_factory_fixture(request, bucket_class_factory=None, mcg_obj=None, rgw_obj=None):
     """
     Create a bucket factory. Calling this fixture creates a new bucket(s).
     For a custom amount, provide the 'amount' parameter.
 
     Args:
+        bucket_class_factory: creates a new Bucket Class
         mcg_obj (MCG): An MCG object containing the MCG S3 connection
             credentials
         rgw_obj (RGW): An RGW object
@@ -1930,7 +1931,9 @@ def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
     """
     created_buckets = []
 
-    def _create_buckets(amount=1, interface="S3", verify_health=True, *args, **kwargs):
+    def _create_buckets(
+        amount=1, interface="S3", verify_health=True, bucketclass_dict=None, *args, **kwargs
+    ):
         """
         Creates and deletes all buckets that were created as part of the test
 
@@ -1949,12 +1952,19 @@ def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
                 f"Invalid interface type received: {interface}. "
                 f'available types: {", ".join(BUCKET_MAP.keys())}'
             )
+        if bucketclass_dict:
+            bucketclass_dict = bucket_class_factory(bucketclass_dict).name
         for i in range(amount):
             bucket_name = helpers.create_unique_resource_name(
                 resource_description="bucket", resource_type=interface.lower()
             )
             created_bucket = BUCKET_MAP[interface.lower()](
-                bucket_name, mcg=mcg_obj, rgw=rgw_obj, *args, **kwargs
+                bucket_name,
+                mcg=mcg_obj,
+                rgw=rgw_obj,
+                bucketclass=bucketclass_dict,
+                *args,
+                **kwargs
             )
             created_buckets.append(created_bucket)
             if verify_health:

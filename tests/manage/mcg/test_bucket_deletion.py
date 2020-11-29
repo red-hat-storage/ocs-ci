@@ -128,22 +128,71 @@ class TestBucketDeletion(MCGTest):
             ), f"Found {bucket.name} that should've been removed"
 
     @pytest.mark.parametrize(
-        argnames="interface",
+        argnames="interface, bucketclass_dict",
         argvalues=[
-            pytest.param(*["S3"], marks=[pytest.mark.polarion_id("OCS-1867"), tier3]),
-            pytest.param(*["CLI"], marks=[tier1, pytest.mark.polarion_id("OCS-1917")]),
-            pytest.param(*["OC"], marks=[tier1, pytest.mark.polarion_id("OCS-1868")]),
+            pytest.param(*["S3", None], marks=[pytest.mark.polarion_id("OCS-1867"), tier3]),
+            pytest.param(*["CLI", None], marks=[tier1, pytest.mark.polarion_id("OCS-1917")]),
+            pytest.param(*["OC", None], marks=[tier1, pytest.mark.polarion_id("OCS-1868")]),
+            pytest.param(
+                *[
+                    "OC",
+                    {
+                        "interface": "OC",
+                        "backingstore_dict":
+                            {
+                                "aws": [(1, "eu-central-1")]
+                            }
+                    }
+                ],
+                marks=[tier1]),
+            pytest.param(
+                *[
+                    "OC",
+                    {
+                        "interface": "OC",
+                        "backingstore_dict":
+                            {
+                                "azure": [(1, None)]
+                            }
+                    }
+                ],
+                marks=[tier1]),
+            pytest.param(
+                *[
+                    "OC",
+                    {
+                        "interface": "OC",
+                        "backingstore_dict":
+                            {
+                                "gcp": [(1, None)]
+                            }
+                    }
+                ],
+                marks=[tier1]),
         ],
     )
-    def test_bucket_delete_with_objects(self, mcg_obj, interface, awscli_pod):
+    def test_bucket_delete_with_objects(
+        self, mcg_obj, awscli_pod, bucket_class_factory, interface, bucketclass_dict
+    ):
         """
         Negative test with deletion of bucket has objects stored in.
+        ***IMPORTANT***
+        S3 interface is not supporting different bucketclasses DO NOT param S3
+        with bucketclass_dict
         """
         bucketname = create_unique_resource_name(
             resource_description="bucket", resource_type=interface.lower()
         )
         try:
-            bucket = BUCKET_MAP[interface.lower()](bucketname, mcg=mcg_obj)
+            if bucketclass_dict:
+                bucketclass = bucket_class_factory(bucketclass_dict)
+                bucket = BUCKET_MAP[interface.lower()](
+                    bucketname,
+                    mcg=mcg_obj,
+                    bucketclass=bucketclass.name
+                )
+            else:
+                bucket = BUCKET_MAP[interface.lower()](bucketname, mcg=mcg_obj)
 
             logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
             logger.info(f"aws region is {mcg_obj.region}")
@@ -164,6 +213,7 @@ class TestBucketDeletion(MCGTest):
                     logger.info(f"Delete non-empty OBC {bucketname} failed as expected")
         finally:
             bucket.delete()
+            bucketclass.delete()
 
     @pytest.mark.parametrize(
         argnames="interface",

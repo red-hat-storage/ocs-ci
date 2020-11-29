@@ -123,11 +123,7 @@ class TestBucketCreation(MCGTest):
         Test bucket creation using the S3 SDK, OC command or MCG CLI.
         The factory checks the bucket's health by default.
         """
-        if bucketclass_dict:
-            bucketclass = bucket_class_factory(bucketclass_dict)
-            bucket_factory(amount, interface, bucketclass=bucketclass.name)
-        else:
-            bucket_factory(amount, interface)
+        bucket_factory(amount, interface, bucketclass=bucketclass_dict)
 
     @pytest.mark.parametrize(
         argnames="amount,interface",

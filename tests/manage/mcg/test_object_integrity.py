@@ -26,12 +26,32 @@ class TestObjectIntegrity(MCGTest):
     """
 
     @pytest.mark.polarion_id("OCS-1321")
-    @tier1
-    def test_check_object_integrity(self, mcg_obj, awscli_pod, bucket_factory):
+    @pytest.mark.parametrize(
+        argnames="bucketclass_dict",
+        argvalues=[
+            pytest.param(
+                None,
+                marks=[tier1],
+            ),
+            pytest.param(
+                {"interface": "OC", "backingstore_dict": {"aws": [(1, "eu-central-1")]}},
+                marks=[tier1],
+            ),
+            pytest.param(
+                {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                marks=[tier1],
+            ),
+            pytest.param(
+                {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
+                marks=[tier1],
+            )
+        ]
+    )
+    def test_check_object_integrity(self, mcg_obj, awscli_pod, bucket_factory, bucketclass_dict):
         """
         Test object integrity using md5sum
         """
-        bucketname = bucket_factory(1)[0].name
+        bucketname = bucket_factory(1, bucketclass=bucketclass_dict).name
         original_dir = "/original"
         result_dir = "/result"
         awscli_pod.exec_cmd_on_pod(command=f"mkdir {result_dir}")
