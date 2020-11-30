@@ -363,6 +363,12 @@ def get_cli_param(config, name_of_param, default=None):
         any: value of cli parameter or default value
 
     """
+
+    # Override the default value from environmental variables
+    env_var_name = name_of_param.lstrip("-").replace("-", "_").upper()
+    if env_var_name in os.environ:
+        default = os.environ.get(env_var_name)
+
     cli_param = config.getoption(name_of_param, default=default)
     ocsci_config.RUN["cli_params"][name_of_param] = cli_param
     return cli_param
