@@ -1,7 +1,9 @@
 import logging
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp
+from ocs_ci.utility.vsphere import VSPHERE
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 
@@ -147,6 +149,16 @@ def wait_for_all_nodes_csr_and_approve(timeout=900, sleep=10, expected_node_num=
         TimeoutExpiredError: in case CSR not found
 
     """
+    start_time = time.time()
+    reboot_timeout = 120
+    vsphere_object = None
+    if config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
+        vsphere_object = VSPHERE(
+            config.ENV_DATA["vsphere_server"],
+            config.ENV_DATA["vsphere_user"],
+            config.ENV_DATA["vsphere_password"],
+        )
+
     if not expected_node_num:
         # expected number of nodes is total of master, worker nodes and
         # bootstrapper node
@@ -169,3 +181,10 @@ def wait_for_all_nodes_csr_and_approve(timeout=900, sleep=10, expected_node_num=
         pending_csrs = get_pending_csr()
         if pending_csrs:
             approve_csrs(pending_csrs)
+        # In vSphere deployment it sometime happes that VM doesn't get ip and
+        # then we need to restart it to make our CI more stable and let the VM
+        # to get IP and continue with loading ignition config. The rester of
+        # the VMs happens only once in reboot_timeout (120 seconds).
+        if vsphere_object and time.time() - start_time >= reboot_timeout:
+            start_time = time.time()
+            vsphere_object.find_vms_without_ip_and_restart()

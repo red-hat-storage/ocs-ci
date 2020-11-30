@@ -12,6 +12,7 @@ from pyVmomi import vim, vmodl
 from pyVim.task import WaitForTask, WaitForTasks
 from pyVim.connect import Disconnect, SmartStubAdapter, VimSessionOrientedStub
 from ocs_ci.ocs.exceptions import VMMaxDisksReachedException
+from ocs_ci.framework import config
 from ocs_ci.ocs.constants import (
     GB2KB,
     VM_DISK_TYPE,
@@ -1315,3 +1316,20 @@ class VSPHERE(object):
             vm, datacenter_name, cluster_name, resource_pool_name
         )
         return vm.summary.guest.ipAddress
+
+    def find_vms_without_ip_and_restart(self):
+        """
+        Find all VMs from current cluster and restart those without IP
+        """
+        all_vms = self.get_all_vms_in_pool(
+            config.ENV_DATA.get("cluster_name"),
+            config.ENV_DATA["vsphere_datacenter"],
+            config.ENV_DATA["vsphere_cluster"],
+        )
+        for vm in all_vms:
+            logger.info(f"vm name: {vm.name} , IP: {vm.summary.guest.ipAddress}")
+        vms_without_ip = [vm for vm in all_vms if not vm.summary.guest.ipAddress]
+        for vm in vms_without_ip:
+            logger.info(f"VM: {vm.name} doesn't have IP, it will be restarted!")
+        if vms_without_ip:
+            self.restart_vms(vms_without_ip, force=True)
