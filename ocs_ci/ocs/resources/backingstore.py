@@ -57,7 +57,27 @@ class BackingStore:
                 kind="backingstore", namespace=config.ENV_DATA["cluster_namespace"]
             ).delete(resource_name=self.name)
         elif self.method == "cli":
-            self.mcg_obj.exec_mcg_cmd(f"backingstore delete {self.name}")
+
+            def _cli_deletion_flow():
+                try:
+                    self.mcg_obj.exec_mcg_cmd(f"backingstore delete {self.name}")
+                    return True
+                except CommandFailed as e:
+                    if "being used by one or more buckets" in str(e).lower():
+                        log.warning(
+                            f"Deletion of {self.name} failed because it's being used by a bucket. "
+                            "Retrying..."
+                        )
+                        return False
+
+            sample = TimeoutSampler(
+                timeout=120,
+                sleep=20,
+                func=_cli_deletion_flow,
+            )
+            if not sample.wait_for_func_status(result=True):
+                log.error(f"Failed to {self.name}")
+                raise TimeoutExpiredError
 
         log.info(f"Verifying whether backingstore {self.name} exists after deletion")
         bs_deleted_successfully = False
@@ -202,7 +222,11 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                     backingstore_name = backingstore_name[:-16]
                     created_backingstores.append(
                         BackingStore(
-                            name=backingstore_name, vol_num=vol_num, vol_size=size
+                            name=backingstore_name,
+                            method=method.lower(),
+                            mcg_obj=mcg_obj,
+                            vol_num=vol_num,
+                            vol_size=size,
                         )
                     )
                     if method.lower() == "cli":
@@ -215,7 +239,6 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                         )
                 else:
                     _, region = uls_tup
-                    # TODO: Verify that the given cloud has an initialized client
                     uls_dict = cloud_uls_factory({cloud: [uls_tup]})
                     for uls_name in uls_dict[cloud.lower()]:
                         backingstore_name = create_unique_resource_name(
