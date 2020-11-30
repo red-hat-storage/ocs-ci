@@ -982,7 +982,10 @@ def setup_local_storage(storageclass):
     # Update local-storage-operator subscription data with channel
     for data in lso_data:
         if data["kind"] == "Subscription":
-            data["spec"]["channel"] = "4.6"
+            if ocp_version >= "4.6":
+                data["spec"]["channel"] = "4.6"
+            else:
+                data["spec"]["channel"] = get_lso_channel()
         if not ocp_ga_version:
             if data["kind"] == "Subscription":
                 data["spec"]["source"] = "optional-operators"
