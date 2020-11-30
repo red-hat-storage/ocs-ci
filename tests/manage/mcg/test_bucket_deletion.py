@@ -204,7 +204,8 @@ class TestBucketDeletion(MCGTest):
                     logger.info(f"Delete non-empty OBC {bucketname} failed as expected")
         finally:
             bucket.delete()
-            bucketclass.delete()
+            if bucketclass_dict:
+                bucketclass.delete()
 
     @pytest.mark.parametrize(
         argnames="interface",
