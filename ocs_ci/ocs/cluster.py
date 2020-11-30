@@ -1380,6 +1380,11 @@ def silence_ceph_osd_crash_warning(osd_pod_name):
         if crash_obj.get("utsname_hostname") == osd_pod_name:
             logger.info(f"Found osd crash with name {osd_pod_name}")
             obj_crash_id = crash_obj.get("crash_id")
+            crash_info = ct_pod.exec_ceph_cmd(
+                ceph_cmd=f"ceph crash info {obj_crash_id}"
+            )
+            logger.info(f"ceph crash info: {crash_info}")
+
             logger.info("silence the osd crash warning")
             ct_pod.exec_ceph_cmd(ceph_cmd=f"ceph crash archive {obj_crash_id}")
             return True
