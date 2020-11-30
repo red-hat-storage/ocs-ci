@@ -1,6 +1,5 @@
 import logging
-
-from botocore.exceptions import ClientError
+from ocs_ci.ocs.exceptions import CommandFailed
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
@@ -110,8 +109,8 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
         for bucket_class in created_bucket_classes:
             try:
                 bucket_class.delete()
-            except ClientError as e:
-                if e.response["Error"]["Code"] == "NoSuchBucketClass":
+            except CommandFailed as e:
+                if "NotFound" in str(e):
                     log.warning(f"{bucket_class.name} could not be found in cleanup")
                 else:
                     raise
