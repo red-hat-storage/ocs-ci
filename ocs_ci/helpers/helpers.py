@@ -1309,13 +1309,14 @@ def get_start_creation_time(interface, pvc_name):
     return datetime.datetime.strptime(start, format)
 
 
-def get_end_creation_time(interface, pvc_name):
+def get_end_creation_time(interface, pvc_name, last_end_time=False):
     """
     Get the ending creation time of a PVC based on provisioner logs
 
     Args:
         interface (str): The interface backed the PVC
         pvc_name (str): Name of the PVC for creation time measurement
+        last_end_time (bool) if creation end time appears several times, take the last (latest) one
 
     Returns:
         datetime object: End time of PVC creation
@@ -1331,24 +1332,32 @@ def get_end_creation_time(interface, pvc_name):
     logs = logs.split("\n")
     # Extract the starting time for the PVC provisioning
     end = [i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)]
-    end = end[0].split(" ")[1]
+    # End provisioning string may appear in logs several times. If last_end_time is False, first such string is taken
+    # and if last_end_time is True -- the last such string is taken
+    if not last_end_time:
+        end = end[0].split(" ")[1]
+    else:
+        end = end[len(end) - 1].split(" ")[1]
     return datetime.datetime.strptime(end, format)
 
 
-def measure_pvc_creation_time(interface, pvc_name):
+def measure_pvc_creation_time(interface, pvc_name, last_end_time=False):
     """
     Measure PVC creation time based on logs
 
     Args:
         interface (str): The interface backed the PVC
         pvc_name (str): Name of the PVC for creation time measurement
+        last_end_time (bool) if creation end time appears several times, take the last (latest) one
 
     Returns:
         float: Creation time for the PVC
 
     """
     start = get_start_creation_time(interface=interface, pvc_name=pvc_name)
-    end = get_end_creation_time(interface=interface, pvc_name=pvc_name)
+    end = get_end_creation_time(
+        interface=interface, pvc_name=pvc_name, last_end_time=last_end_time
+    )
     total = end - start
     return total.total_seconds()
 

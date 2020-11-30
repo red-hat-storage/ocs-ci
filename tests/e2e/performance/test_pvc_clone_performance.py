@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import skipif_ocs_version, performance, E2ETest
 from ocs_ci.ocs.resources import pvc, pod
 from ocs_ci.helpers import helpers
 from ocs_ci.utility.utils import convert_device_size
-
+from tests.e2e.performance import performance_lib
 
 logger = logging.getLogger(__name__)
 
@@ -93,26 +93,7 @@ class TestPVCSingleClonePerformance(E2ETest):
 
         file_size_for_io = file_size[:-1]
 
-        file_name = self.pod_obj.name
-        logger.info(f"Starting IO on the POD {self.pod_obj.name}")
-        # Going to run only write IO to fill the PVC for the before creating a clone
-        self.pod_obj.fillup_fs(size=file_size_for_io, fio_filename=file_name)
-
-        # Wait for fio to finish
-        fio_result = self.pod_obj.get_fio_results()
-        err_count = fio_result.get("jobs")[0].get("error")
-        assert err_count == 0, (
-            f"IO error on pod {self.pod_obj.name}. " f"FIO result: {fio_result}."
-        )
-        logger.info("IO on the PVC Finished")
-
-        # Verify presence of the file on pvc
-        file_path = pod.get_file_path(self.pod_obj, file_name)
-        logger.info(f"Actual file path on the pod is {file_path}.")
-        assert pod.check_file_existence(
-            self.pod_obj, file_path
-        ), f"File {file_name} does not exist"
-        logger.info(f"File {file_name} exists in {self.pod_obj.name}.")
+        performance_lib.write_fio_on_pod(self.pod_obj, file_size_for_io)
 
         max_num_of_clones = 1
         clone_creation_measures = []
@@ -146,7 +127,7 @@ class TestPVCSingleClonePerformance(E2ETest):
             )
             clones_list.append(cloned_pvc_obj)
             create_time = helpers.measure_pvc_creation_time(
-                interface_type, cloned_pvc_obj.name
+                interface_type, cloned_pvc_obj.name, last_end_time=True
             )
             creation_speed = int(file_size_mb / create_time)
             logger.info(f"Clone number {i+1} creation time is {create_time} secs.")
