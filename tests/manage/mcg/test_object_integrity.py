@@ -56,7 +56,7 @@ class TestObjectIntegrity(MCGTest):
         """
         Test object integrity using md5sum
         """
-        bucketname = bucket_factory(1, bucketclass=bucketclass_dict).name
+        bucketname = bucket_factory(1, bucketclass_dict=bucketclass_dict)[0].name
         original_dir = "/original"
         result_dir = "/result"
         awscli_pod.exec_cmd_on_pod(command=f"mkdir {result_dir}")

@@ -88,7 +88,7 @@ class TestBucketIO(MCGTest):
         # Retrieve a list of all objects on the test-objects bucket and
         # downloads them to the pod
         data_dir = "/data"
-        bucketname = bucket_factory(1, bucketclass=bucketclass_dict).name
+        bucketname = bucket_factory(1, bucketclass_dict=bucketclass_dict)[0].name
         full_object_path = f"s3://{bucketname}"
         downloaded_files = retrieve_test_objects_to_pod(awscli_pod, data_dir)
         # Write all downloaded objects to the new bucket
@@ -145,7 +145,7 @@ class TestBucketIO(MCGTest):
                 command=f"stat -c %s {download_dir}danny.webm", out_yaml_format=False
             )
         )
-        bucketname = bucket_factory(1, bucketclass=bucketclass_dict).name
+        bucketname = bucket_factory(1, bucketclass_dict=bucketclass_dict)[0].name
         for i in range(3):
             awscli_pod.exec_cmd_on_pod(
                 command=craft_s3_command(
@@ -198,7 +198,7 @@ class TestBucketIO(MCGTest):
             ),
             out_yaml_format=False,
         )
-        bucketname = bucket_factory(1, bucketclass=bucketclass_dict).name
+        bucketname = bucket_factory(1, bucketclass_dict=bucketclass_dict)[0].name
         full_object_path = f"s3://{bucketname}"
         sync_object_directory(awscli_pod, download_dir, full_object_path, mcg_obj)
         # For this test, enwik8 is used in conjunction with Snappy compression

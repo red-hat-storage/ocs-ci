@@ -46,7 +46,7 @@ class TestPvPool:
                 },
             }
         )
-        bucket = bucket_factory(1, "OC", bucketclass=bucketclass.name)[0]
+        bucket = bucket_factory(1, "OC", bucketclass_dict=bucketclass.name)[0]
 
         for i in range(1, 18):
             # add some data to the first pod
