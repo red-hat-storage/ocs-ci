@@ -130,45 +130,36 @@ class TestBucketDeletion(MCGTest):
     @pytest.mark.parametrize(
         argnames="interface, bucketclass_dict",
         argvalues=[
-            pytest.param(*["S3", None], marks=[pytest.mark.polarion_id("OCS-1867"), tier3]),
-            pytest.param(*["CLI", None], marks=[tier1, pytest.mark.polarion_id("OCS-1917")]),
-            pytest.param(*["OC", None], marks=[tier1, pytest.mark.polarion_id("OCS-1868")]),
+            pytest.param(
+                *["S3", None], marks=[tier3, pytest.mark.polarion_id("OCS-1867")]
+            ),
+            pytest.param(
+                *["CLI", None], marks=[tier1, pytest.mark.polarion_id("OCS-1917")]
+            ),
+            pytest.param(
+                *["OC", None], marks=[tier1, pytest.mark.polarion_id("OCS-1868")]
+            ),
             pytest.param(
                 *[
                     "OC",
                     {
                         "interface": "OC",
-                        "backingstore_dict":
-                            {
-                                "aws": [(1, "eu-central-1")]
-                            }
-                    }
+                        "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
                 ],
-                marks=[tier1]),
+                marks=[tier1],
+            ),
             pytest.param(
                 *[
                     "OC",
-                    {
-                        "interface": "OC",
-                        "backingstore_dict":
-                            {
-                                "azure": [(1, None)]
-                            }
-                    }
+                    {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
                 ],
-                marks=[tier1]),
+                marks=[tier1],
+            ),
             pytest.param(
-                *[
-                    "OC",
-                    {
-                        "interface": "OC",
-                        "backingstore_dict":
-                            {
-                                "gcp": [(1, None)]
-                            }
-                    }
-                ],
-                marks=[tier1]),
+                *["OC", {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}],
+                marks=[tier1],
+            ),
         ],
     )
     def test_bucket_delete_with_objects(
@@ -187,9 +178,7 @@ class TestBucketDeletion(MCGTest):
             if bucketclass_dict:
                 bucketclass = bucket_class_factory(bucketclass_dict)
                 bucket = BUCKET_MAP[interface.lower()](
-                    bucketname,
-                    mcg=mcg_obj,
-                    bucketclass=bucketclass.name
+                    bucketname, mcg=mcg_obj, bucketclass=bucketclass.name
                 )
             else:
                 bucket = BUCKET_MAP[interface.lower()](bucketname, mcg=mcg_obj)

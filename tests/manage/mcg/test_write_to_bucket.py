@@ -58,7 +58,10 @@ class TestBucketIO(MCGTest):
                 marks=[tier1, acceptance],
             ),
             pytest.param(
-                {"interface": "OC", "backingstore_dict": {"aws": [(1, "eu-central-1")]}},
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
                 marks=[tier1],
             ),
             pytest.param(
@@ -68,8 +71,8 @@ class TestBucketIO(MCGTest):
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
                 marks=[tier1],
-            )
-        ]
+            ),
+        ],
     )
     def test_write_file_to_bucket(
         self,
@@ -77,7 +80,7 @@ class TestBucketIO(MCGTest):
         awscli_pod,
         bucket_class_factory,
         bucket_factory,
-        bucketclass_dict
+        bucketclass_dict,
     ):
         """
         Test object IO using the S3 SDK
@@ -104,7 +107,10 @@ class TestBucketIO(MCGTest):
                 marks=[tier1],
             ),
             pytest.param(
-                {"interface": "OC", "backingstore_dict": {"aws": [(1, "eu-central-1")]}},
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
                 marks=[tier1],
             ),
             pytest.param(
@@ -114,10 +120,12 @@ class TestBucketIO(MCGTest):
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
                 marks=[tier1],
-            )
-        ]
+            ),
+        ],
     )
-    def test_mcg_data_deduplication(self, mcg_obj, awscli_pod, bucket_factory, bucketclass_dict):
+    def test_mcg_data_deduplication(
+        self, mcg_obj, awscli_pod, bucket_factory, bucketclass_dict
+    ):
         """
         Test data deduplication mechanics
         Args:
@@ -157,7 +165,10 @@ class TestBucketIO(MCGTest):
                 marks=[tier1],
             ),
             pytest.param(
-                {"interface": "OC", "backingstore_dict": {"aws": [(1, "eu-central-1")]}},
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
                 marks=[tier1],
             ),
             pytest.param(
@@ -167,10 +178,12 @@ class TestBucketIO(MCGTest):
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
                 marks=[tier1],
-            )
-        ]
+            ),
+        ],
     )
-    def test_mcg_data_compression(self, mcg_obj, awscli_pod, bucket_factory, bucketclass_dict):
+    def test_mcg_data_compression(
+        self, mcg_obj, awscli_pod, bucket_factory, bucketclass_dict
+    ):
         """
         Test data reduction mechanics
         Args:

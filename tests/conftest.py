@@ -1914,10 +1914,14 @@ def bucket_factory_session(request, bucket_class_factory_session, mcg_obj_sessio
     """
     Returns a session-scoped MCG bucket factory
     """
-    return bucket_factory_fixture(request, bucket_class_factory_session, mcg_obj_session)
+    return bucket_factory_fixture(
+        request, bucket_class_factory_session, mcg_obj_session
+    )
 
 
-def bucket_factory_fixture(request, bucket_class_factory=None, mcg_obj=None, rgw_obj=None):
+def bucket_factory_fixture(
+    request, bucket_class_factory=None, mcg_obj=None, rgw_obj=None
+):
     """
     Create a bucket factory. Calling this fixture creates a new bucket(s).
     For a custom amount, provide the 'amount' parameter.
@@ -1932,7 +1936,12 @@ def bucket_factory_fixture(request, bucket_class_factory=None, mcg_obj=None, rgw
     created_buckets = []
 
     def _create_buckets(
-        amount=1, interface="S3", verify_health=True, bucketclass_dict=None, *args, **kwargs
+        amount=1,
+        interface="S3",
+        verify_health=True,
+        bucketclass_dict=None,
+        *args,
+        **kwargs,
     ):
         """
         Creates and deletes all buckets that were created as part of the test
@@ -1964,7 +1973,7 @@ def bucket_factory_fixture(request, bucket_class_factory=None, mcg_obj=None, rgw
                 rgw=rgw_obj,
                 bucketclass=bucketclass_dict,
                 *args,
-                **kwargs
+                **kwargs,
             )
             created_buckets.append(created_bucket)
             if verify_health:

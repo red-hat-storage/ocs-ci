@@ -34,7 +34,10 @@ class TestObjectIntegrity(MCGTest):
                 marks=[tier1],
             ),
             pytest.param(
-                {"interface": "OC", "backingstore_dict": {"aws": [(1, "eu-central-1")]}},
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
                 marks=[tier1],
             ),
             pytest.param(
@@ -44,10 +47,12 @@ class TestObjectIntegrity(MCGTest):
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
                 marks=[tier1],
-            )
-        ]
+            ),
+        ],
     )
-    def test_check_object_integrity(self, mcg_obj, awscli_pod, bucket_factory, bucketclass_dict):
+    def test_check_object_integrity(
+        self, mcg_obj, awscli_pod, bucket_factory, bucketclass_dict
+    ):
         """
         Test object integrity using md5sum
         """
