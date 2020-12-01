@@ -84,9 +84,11 @@ def init_ocsci_conf(arguments=None):
         )
         load_config([version_config_file])
 
-        default_ocp_version = framework.config.DEPLOYMENT["default_ocp_version"]
+        ocp_version = framework.config.DEPLOYMENT["default_ocp_version"]
+        if "ocp_version" in framework.config.DEPLOYMENT:
+            ocp_version = framework.config.DEPLOYMENT["ocp_version"]
         ocp_version_config = os.path.join(
-            OCP_VERSION_CONF_DIR, f"ocp-{default_ocp_version}-config.yaml"
+            OCP_VERSION_CONF_DIR, f"ocp-{ocp_version}-config.yaml"
         )
         load_config([ocp_version_config])
     if args.flexy_env_file:
