@@ -371,7 +371,7 @@ def get_cli_param(config, name_of_param, default=None):
         default = os.environ.get(env_var_name)
 
     print("default: %s" % str(default))
-    cli_param = config.getoption(name_of_param, default=default)
+    cli_param = config.getoption(name_of_param, default=default) or default
     print("cli_param: %s" % str(cli_param))
     ocsci_config.RUN["cli_params"][name_of_param] = cli_param
     return cli_param
