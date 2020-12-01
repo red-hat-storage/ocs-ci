@@ -2079,6 +2079,58 @@ def delete_objs_parallel(obj_list):
     return True
 
 
+def get_start_resize_time(interface, pv_name):
+    """
+    Get the start resize time of a PVC based on csi-resizer logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pv_name (str): Name of the PVC for re-size time measurement
+
+    Returns:
+        datetime object: Start time of PVC re-size
+
+    """
+    format = "%H:%M:%S.%f"
+    # Get the correct provisioner pod based on the interface
+    pod_name = pod.get_plugin_provisioner_leader(interface=interface, leader_type="resizer")
+    # get the logs from the csi-provisioner containers
+    logs = pod.get_pod_logs(pod_name[0], "csi-resizer")
+    logs += pod.get_pod_logs(pod_name[1], "csi-resizer")
+
+    logs = logs.split("\n")
+    # Extract the starting time for the PV resize
+    end = [i for i in logs if re.search('Started PVC processing', i)]
+    end = end[0].split(" ")[1]
+    return datetime.datetime.strptime(end, format)
+
+
+def get_end_resize_time(interface, pv_name):
+    """
+    Get the ending re-size time of a PVC based on csi-resizer logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pv_name (str): Name of the PVC for re-size time measurement
+
+    Returns:
+        datetime object: End time of PVC re-size
+
+    """
+    format = "%H:%M:%S.%f"
+    # Get the correct provisioner pod based on the interface
+    pod_name = pod.get_plugin_provisioner_leader(interface=interface, leader_type="resizer")
+    # get the logs from the csi-provisioner containers
+    logs = pod.get_pod_logs(pod_name[0], "csi-resizer")
+    logs += pod.get_pod_logs(pod_name[1], "csi-resizer")
+
+    logs = logs.split("\n")
+    # Extract the starting time for the PV deletion
+    end = [i for i in logs if re.search(f'Update capacity of PV "{pv_name}".* succeeded', i)]
+    end = end[0].split(" ")[1]
+    return datetime.datetime.strptime(end, format)
+
+
 def memory_leak_analysis(median_dict):
     """
     Function to analyse Memory leak after execution of test case Memory leak is
