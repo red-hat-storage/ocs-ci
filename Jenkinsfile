@@ -72,7 +72,13 @@ pipeline {
       steps {
         script { LAST_STAGE=env.STAGE_NAME }
         sh """
+        echo "ENV1"
+        env
+        echo "1VNE"
         source ./venv/bin/activate
+        echo "ENV2"
+        env
+        echo "2VNE"
         run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocp.yaml --ocsci-conf=conf/ocsci/production-aws-ipi.yaml --ocsci-conf=conf/ocsci/production_device_size.yaml --cluster-name=${env.CLUSTER_USER}-ocsci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
         """
       }

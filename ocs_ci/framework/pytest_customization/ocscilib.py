@@ -366,10 +366,13 @@ def get_cli_param(config, name_of_param, default=None):
 
     # Override the default value from environmental variables
     env_var_name = name_of_param.lstrip("-").replace("-", "_").upper()
+    print("ENV: %s" % env_var_name)
     if env_var_name in os.environ:
         default = os.environ.get(env_var_name)
 
+    print("default: %s" % str(default))
     cli_param = config.getoption(name_of_param, default=default)
+    print("cli_param: %s" % str(cli_param))
     ocsci_config.RUN["cli_params"][name_of_param] = cli_param
     return cli_param
 
@@ -454,6 +457,7 @@ def process_cluster_cli_params(config):
     ocp_version = get_cli_param(config, "--ocp-version")
     if ocp_version:
         version_config_file = f"ocp-{ocp_version}-config.yaml"
+        print("Loading config '%s'" % version_config_file)
         version_config_file_path = os.path.join(
             OCP_VERSION_CONF_DIR, version_config_file
         )
