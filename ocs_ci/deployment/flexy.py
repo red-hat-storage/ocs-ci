@@ -308,19 +308,7 @@ class FlexyBase(object):
         run_cmd(chown_cmd)
         chmod_cmd = f"sudo chmod -R a+rX {self.flexy_host_dir}"
         run_cmd(chmod_cmd)
-
-        # dirs_exist_ok parameter for shutil.copytree is available in Python
-        # 3.8 and newer, so workarounding it with rsync command
-        # cluster_path_flexy_dir = os.path.join(
-        #     self.cluster_path, constants.FLEXY_HOST_DIR
-        # )
-        # shutil.copytree(
-        #     self.flexy_host_dir,
-        #     cluster_path_flexy_dir,
-        #     symlinks=True,
-        #     ignore_dangling_symlinks=True,
-        #     dirs_exist_ok=True,
-        # )
+        # mirror flexy work dir to cluster path
         rsync_cmd = f"rsync -av {self.flexy_host_dir} {self.cluster_path}/"
         run_cmd(rsync_cmd)
 
