@@ -479,7 +479,7 @@ class TestFIOBenchmark(E2ETest):
         This is a basic fio perf test which run on compression enabled volume
 
         """
-        return
+        # return
         self.ripsaw_deploy(ripsaw)
 
         log.info("Creating compressed pool & SC")
@@ -508,7 +508,7 @@ class TestFIOBenchmark(E2ETest):
 
         self.fio_cr["spec"]["workload"]["args"]["storageclass"] = sc
         self.setting_io_pattern(io_pattern)
-        for bs in "1024KiB" "64KiB" "16KiB" "4KiB":
+        for bs in ["1024KiB", "64KiB", "16KiB", "4KiB"]:
             self.fio_cr["spec"]["workload"]["args"]["bs"] = [bs]
             fio_client_pod = self.deploy_and_wait_for_wl_to_start()
 
