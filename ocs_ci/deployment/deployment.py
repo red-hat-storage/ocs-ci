@@ -381,8 +381,8 @@ class Deployment(object):
         else:
             logger.info("Deployment of OCS via OCS operator")
             self.label_and_taint_nodes()
-        logger.info("Creating namespace and operator group.")
-        run_cmd(f"oc create -f {constants.OLM_YAML}")
+            logger.info("Creating namespace and operator group.")
+            run_cmd(f"oc create -f {constants.OLM_YAML}")
         if not live_deployment:
             self.create_ocs_operator_source()
         self.subscribe_ocs()
@@ -612,8 +612,10 @@ class Deployment(object):
         """
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         logger.info("Deploying OCS with external mode RHCS")
-        logger.info("Creating namespace and operator group")
-        run_cmd(f"oc create -f {constants.OLM_YAML}")
+        ui_deployment = config.DEPLOYMENT.get("ui_deployment")
+        if not ui_deployment:
+            logger.info("Creating namespace and operator group.")
+            run_cmd(f"oc create -f {constants.OLM_YAML}")
         if not live_deployment:
             self.create_ocs_operator_source()
         self.subscribe_ocs()
