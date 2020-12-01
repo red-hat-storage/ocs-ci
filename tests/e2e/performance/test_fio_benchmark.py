@@ -466,6 +466,10 @@ class TestFIOBenchmark(E2ETest):
                 *["random"],
                 marks=pytest.mark.polarion_id("OCS-846"),
             ),
+            pytest.param(
+                *["sequential"],
+                marks=pytest.mark.polarion_id("OCS-846"),
+            ),
         ],
     )
     def test_fio_compressed_workload(
