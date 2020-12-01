@@ -504,46 +504,50 @@ class TestFIOBenchmark(E2ETest):
 
         self.fio_cr["spec"]["workload"]["args"]["storageclass"] = sc
         self.setting_io_pattern(io_pattern)
-        fio_client_pod = self.deploy_and_wait_for_wl_to_start()
+        for bs in "1024KiB" "64KiB" "16KiB" "4KiB":
+            self.fio_cr["spec"]["workload"]["args"]["bs"] = [bs]
+            fio_client_pod = self.deploy_and_wait_for_wl_to_start()
 
-        # Getting the UUID from inside the benchmark pod
-        uuid = ripsaw.get_uuid(fio_client_pod)
-        # Setting back the original elastic-search information
-        self.fio_cr["spec"]["elasticsearch"] = self.backup_es
+            # Getting the UUID from inside the benchmark pod
+            uuid = ripsaw.get_uuid(fio_client_pod)
+            # Setting back the original elastic-search information
+            self.fio_cr["spec"]["elasticsearch"] = self.backup_es
 
-        # Initialize the results doc file.
-        full_results = self.init_full_results(FIOResultsAnalyse(uuid, self.fio_cr))
+            # Initialize the results doc file.
+            full_results = self.init_full_results(FIOResultsAnalyse(uuid, self.fio_cr))
 
-        # Setting the global parameters of the test
-        full_results.add_key("io_pattern", io_pattern)
+            # Setting the global parameters of the test
+            full_results.add_key("io_pattern", io_pattern)
 
-        end_time = self.wait_for_wl_to_finish(fio_client_pod)
-        full_results.add_key("test_time", {"start": self.start_time, "end": end_time})
-
-        log.info("verifying compression ratio")
-        expected_ratio = 50  # according to the yaml file parameter
-        ratio = self.calculate_compression_ratio(pool_name)
-        if (expected_ratio + 5) > ratio or ratio > (expected_ratio - 5):
-            log.error(
-                f"The compression ratio is {ratio}% "
-                f"while the expected ratio is {expected_ratio}%"
+            end_time = self.wait_for_wl_to_finish(fio_client_pod)
+            full_results.add_key(
+                "test_time", {"start": self.start_time, "end": end_time}
             )
-        else:
-            log.info(f"The compression ratio is {ratio}%")
 
-        # Clean up fio benchmark
-        log.info("Deleting FIO benchmark")
-        self.fio_cr_obj.delete()
+            log.info("verifying compression ratio")
+            expected_ratio = 50  # according to the yaml file parameter
+            ratio = self.calculate_compression_ratio(pool_name)
+            if (expected_ratio + 5) > ratio or ratio > (expected_ratio - 5):
+                log.error(
+                    f"The compression ratio is {ratio}% "
+                    f"while the expected ratio is {expected_ratio}%"
+                )
+            else:
+                log.info(f"The compression ratio is {ratio}%")
+
+            # Clean up fio benchmark
+            log.info("Deleting FIO benchmark")
+            self.fio_cr_obj.delete()
+
+            self.copy_es_data(es, full_results)
+            full_results.analyze_results()  # Analyze the results
+            # Writing the analyzed test results to the Elastic-Search server
+            full_results.es_write()
+            full_results.codespeed_push()  # Push results to codespeed
+            # Creating full link to the results on the ES server
+            log.info(f"The Result can be found at ; {full_results.results_link()}")
 
         sc_obj.delete()
         sc_obj.ocp.wait_for_delete(resource_name=sc, timeout=300, sleep=5)
         run_cmd(f"oc delete cephblockpools -n openshift-storage {pool_name}")
         log.debug(f"Full results is : {full_results.results}")
-
-        self.copy_es_data(es, full_results)
-        full_results.analyze_results()  # Analyze the results
-        # Writing the analyzed test results to the Elastic-Search server
-        full_results.es_write()
-        full_results.codespeed_push()  # Push results to codespeed
-        # Creating full link to the results on the ES server
-        log.info(f"The Result can be found at ; {full_results.results_link()}")
