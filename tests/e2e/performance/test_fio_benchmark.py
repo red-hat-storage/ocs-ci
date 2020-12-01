@@ -355,6 +355,31 @@ class TestFIOBenchmark(E2ETest):
         # since sometimes the results of the read (just after write) are empty
         time.sleep(10)
 
+    def calculate_compression_ratio(self, pool_name):
+        """
+        Calculating the  compression of data on RBD pool
+
+        Args:
+            pool_name (str): the name of the pool to calculate the ratio on
+
+        Returns:
+            int : the compression ratio n in percentage
+
+        """
+        results = get_ceph_df_detail()
+        for pool in results["pools"]:
+            if pool["name"] == pool_name:
+                used = pool["stats"]["bytes_used"]
+                used_cmp = pool["stats"]["compress_bytes_used"]
+                stored = pool["stats"]["stored"]
+                ratio = int((used_cmp * 100) / (used_cmp + used))
+                log.info(f"pool name is {pool_name}")
+                log.info(f"net stored data is {stored}")
+                log.info(f"total used data is {used}")
+                log.info(f"compressed data is {used_cmp}")
+
+                return ratio
+
     @pytest.mark.parametrize(
         argnames=["interface", "io_pattern"],
         argvalues=[
@@ -497,26 +522,14 @@ class TestFIOBenchmark(E2ETest):
 
         log.info("verifying compression ratio")
         expected_ratio = 50  # according to the yaml file parameter
-        results = get_ceph_df_detail()
-        for pool in results["pools"]:
-            if pool["name"] == pool_name:
-                used = pool["stats"]["bytes_used"]
-                used_cmp = pool["stats"]["compress_bytes_used"]
-                stored = pool["stats"]["stored"]
-                ratio = int((used_cmp * 100) / (used_cmp + used))
-                log.info(f"pool name is {pool_name}")
-                log.info(f"net stored data is {stored}")
-                log.info(f"total used data is {used}")
-                log.info(f"compressed data is {used_cmp}")
-
-                if (expected_ratio + 5) > ratio or ratio > (expected_ratio - 5):
-                    log.error(
-                        f"The compression ratio is {ratio}% "
-                        f"while the expected ratio is {expected_ratio}%"
-                    )
-                else:
-                    log.info(f"The compression ratio is {ratio}%")
-                break
+        ratio = self.calculate_compression_ratio(pool_name)
+        if (expected_ratio + 5) > ratio or ratio > (expected_ratio - 5):
+            log.error(
+                f"The compression ratio is {ratio}% "
+                f"while the expected ratio is {expected_ratio}%"
+            )
+        else:
+            log.info(f"The compression ratio is {ratio}%")
 
         # Clean up fio benchmark
         log.info("Deleting FIO benchmark")
