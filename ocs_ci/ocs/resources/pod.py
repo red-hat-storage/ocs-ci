@@ -1547,6 +1547,12 @@ def check_pods_in_running_state(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
             and "rook-ceph-drain-canary" not in p.name
         ):
             status = ocp_pod_obj.get_resource(p.name, "STATUS")
+        if (
+            ("rook-ceph-osd-prepare" not in p.name)
+            and ("rook-ceph-drain-canary" not in p.name)
+            and ("debug" not in p.name)
+        ):
+            status = ocp_pod_obj.get_resource(p.name, "STATUS")
             if status not in "Running":
                 logging.error(
                     f"The pod {p.name} is in {status} state. Expected = Running"
