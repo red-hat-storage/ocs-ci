@@ -3,7 +3,7 @@ import logging
 from ocs_ci.ocs import node, defaults, exceptions, constants
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.resources import pod as pod_helpers
-from ocs_ci.ocs.resources.pod import check_pods_in_running_state
+from ocs_ci.ocs.resources.pod import wait_for_storage_pods
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from ocs_ci.helpers.sanity_helpers import Sanity
 
@@ -52,7 +52,7 @@ class FlowOperations:
             logger.info(
                 f"{operation_name}: Verifying StorageCluster pods are in running/completed state"
             )
-            assert check_pods_in_running_state(), "Some pods were not in expected state"
+            wait_for_storage_pods()
 
     def node_operations_entry_criteria(
         self,
@@ -77,9 +77,7 @@ class FlowOperations:
         self.validate_cluster(node_status=True, operation_name=operation_name)
 
         logger.info(f"Getting parameters related to: {operation_name}")
-        typed_nodes = node.get_typed_nodes(
-            node_type=node_type, num_of_nodes=number_of_nodes
-        )
+        typed_nodes = node.get_nodes(node_type=node_type, num_of_nodes=number_of_nodes)
         if network_fail_time:
             return typed_nodes, network_fail_time
         else:

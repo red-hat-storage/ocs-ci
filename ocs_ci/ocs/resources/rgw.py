@@ -52,7 +52,14 @@ class RGW(object):
             kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
         )
         creds_secret_obj = secret_ocp_obj.get(secret_name)
-        endpoint = route_ocp_obj.get(resource_name=constants.RGW_SERVICE)
+        if config.DEPLOYMENT["external_mode"]:
+            endpoint = route_ocp_obj.get(
+                resource_name=constants.RGW_SERVICE_EXTERNAL_MODE
+            )
+        else:
+            endpoint = route_ocp_obj.get(
+                resource_name=constants.RGW_SERVICE_INTERNAL_MODE
+            )
         endpoint = f"http://{endpoint['status']['ingress'][0]['host']}"
         access_key = base64.b64decode(
             creds_secret_obj.get("data").get("AccessKey")

@@ -8,7 +8,7 @@ from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
-    get_typed_nodes,
+    get_nodes,
     get_osd_running_nodes,
     get_node_objs,
     get_node_resource_utilization_from_adm_top,
@@ -60,7 +60,7 @@ class TestCouchBaseNodeReboot(E2ETest):
         elif pod_name_of_node == "osd":
             node_list = get_osd_running_nodes()
         elif pod_name_of_node == "master":
-            master_node = get_typed_nodes(pod_name_of_node, num_of_nodes=1)
+            master_node = get_nodes(pod_name_of_node, num_of_nodes=1)
 
         # Restart relevant node
         if pod_name_of_node == "master":

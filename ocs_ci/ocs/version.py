@@ -83,7 +83,7 @@ def get_environment_info():
         results["ocs_version"] = m.group(1)
 
     # Getting the instance type for cloud or Arch type for None cloud
-    worker_lbl = node.get_typed_nodes(num_of_nodes=1)[0].data["metadata"]["labels"]
+    worker_lbl = node.get_nodes(num_of_nodes=1)[0].data["metadata"]["labels"]
     if "beta.kubernetes.io/instance-type" in worker_lbl:
         results["worker_type"] = worker_lbl["beta.kubernetes.io/instance-type"]
     else:
