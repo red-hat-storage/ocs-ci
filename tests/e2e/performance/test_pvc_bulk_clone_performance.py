@@ -7,12 +7,11 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import performance, E2ETest
-from ocs_ci.helpers import helpers
+from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.utility import templating
-from tests.e2e.performance import performance_lib
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ class TestBulkCloneCreation(E2ETest):
         self.interface = interface_iterate
 
     @pytest.mark.usefixtures(namespace.__name__)
-    def test_bulk_clone_perforamnce(self, namespace, tmp_path, pod_factory):
+    def test_bulk_clone_performance(self, namespace, tmp_path, pod_factory):
         """
         Creates number of PVCs in a bulk using kube job
         Write 60% of PVC capacity to each one of the created PVCs
@@ -78,7 +77,7 @@ class TestBulkCloneCreation(E2ETest):
 
         total_files_size = self.run_fio_on_pvcs(pvc_dict_list, pod_factory)
 
-        clone_dict_list = self.construct_pvc_clone_yaml_bulk_for_kube_job(
+        clone_dict_list = scale_lib.construct_pvc_clone_yaml_bulk_for_kube_job(
             pvc_dict_list, clone_yaml, sc_name
         )
 
@@ -100,7 +99,7 @@ class TestBulkCloneCreation(E2ETest):
             kube_job_obj=job_clone_file,
             namespace=self.namespace,
             no_of_pvc=pvc_count,
-            timeout=600,
+            timeout=90,
         )
 
         logging.info(f"Number of clones in Bound state {len(clone_bound_list)}")
@@ -130,13 +129,13 @@ class TestBulkCloneCreation(E2ETest):
 
     def run_fio_on_pvcs(self, pvc_dict_list, pod_factory):
         total_files_size = 0
-        all_pvc_objs = pvc.get_all_pvc_objs(namespace=self.namespace)
-        logging.info(f"Found {len(all_pvc_objs)} PVCs")
+        searched_pvc_objs = pvc.get_all_pvc_objs(namespace=self.namespace)
+        logging.info(f"Found {len(searched_pvc_objs)} PVCs")
         for pvc_yaml in pvc_dict_list:
             pvc_name = pvc_yaml["metadata"]["name"]
             pvc_size = pvc_yaml["spec"]["resources"]["requests"]["storage"]
             logging.info(f"Size of pvc {pvc_name} is {pvc_size}")
-            pvc_size_int = int(pvc_size[: len(pvc_size) - 2])  # without "Gi"
+            pvc_size_int = int(pvc_size[:- 2])  # without "Gi"
             file_size_mb = int(pvc_size_int * 0.6) * constants.GB2MB
             total_files_size += file_size_mb
             file_size_mb_str = str(file_size_mb) + "M"
@@ -144,9 +143,10 @@ class TestBulkCloneCreation(E2ETest):
 
             # now find pvc_obj by name and create pod_obj to write to
             pvc_obj = None
-            for obj in all_pvc_objs:
+            for obj in searched_pvc_objs:
                 if obj.name == pvc_name:
                     pvc_obj = obj
+                    searched_pvc_objs.remove(obj)
                     break
             assert pvc_obj is not None, f"Cannot find PVC with name {pvc_name}"
 
@@ -159,38 +159,3 @@ class TestBulkCloneCreation(E2ETest):
 
         return total_files_size
 
-    def construct_pvc_clone_yaml_bulk_for_kube_job(
-        self, pvc_dict_list, clone_yaml, sc_name
-    ):
-        """
-        Function to construct pvc.yaml to create bulk of pvc's using kube_job
-
-        Args:
-            pvc_list(list): List of PVCs for each of them one clone is to be created
-            access_mode (str): PVC access_mode
-            sc_name (str): SC name for pvc creation
-
-        Returns:
-             pvc_dict_list (list): List of all PVC.yaml dicts
-
-        """
-
-        # Construct PVC.yaml for the no_of_required_pvc count
-        # append all the pvc.yaml dict to pvc_dict_list and return the list
-        pvc_clone_dict_list = list()
-        for pvc_yaml in pvc_dict_list:
-            parent_pvc_name = pvc_yaml["metadata"]["name"]
-            clone_data_yaml = templating.load_yaml(clone_yaml)
-            clone_data_yaml["metadata"]["name"] = helpers.create_unique_resource_name(
-                parent_pvc_name, "clone"
-            )
-
-            clone_data_yaml["spec"]["storageClassName"] = sc_name
-            clone_data_yaml["spec"]["dataSource"]["name"] = parent_pvc_name
-            clone_data_yaml["spec"]["resources"]["requests"]["storage"] = pvc_yaml[
-                "spec"
-            ]["resources"]["requests"]["storage"]
-
-            pvc_clone_dict_list.append(clone_data_yaml)
-
-        return pvc_clone_dict_list

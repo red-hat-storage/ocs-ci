@@ -8,9 +8,8 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import skipif_ocs_version, performance, E2ETest
 from ocs_ci.ocs.resources import pvc, pod
-from ocs_ci.helpers import helpers
+from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.utility.utils import convert_device_size
-from tests.e2e.performance import performance_lib
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +126,7 @@ class TestPVCSingleClonePerformance(E2ETest):
             )
             clones_list.append(cloned_pvc_obj)
             create_time = helpers.measure_pvc_creation_time(
-                interface_type, cloned_pvc_obj.name, last_end_time=True
+                interface_type, cloned_pvc_obj.name
             )
             creation_speed = int(file_size_mb / create_time)
             logger.info(f"Clone number {i+1} creation time is {create_time} secs.")

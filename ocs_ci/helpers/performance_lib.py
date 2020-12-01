@@ -18,14 +18,14 @@ def write_fio_on_pod(pod_obj, file_size):
     file_name = pod_obj.name
     logger.info(f"Starting IO on the POD {pod_obj.name}")
     now = datetime.now()
-    # Going to run only write IO to fill the PVC to 60% of its capacity before creating a clone
+    # Going to run only write IO to write to PVC file size data before creating a clone
     pod_obj.fillup_fs(size=file_size, fio_filename=file_name)
 
     # Wait for fio to finish
     fio_result = pod_obj.get_fio_results(timeout=3600)
     err_count = fio_result.get("jobs")[0].get("error")
     assert err_count == 0, (
-        f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}."
+        f"IO error on pod {pod_obj.name}. FIO result: {fio_result}."
     )
     logger.info("IO on the PVC Finished")
     later = datetime.now()

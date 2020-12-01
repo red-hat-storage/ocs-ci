@@ -865,10 +865,7 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(
     pvc_dict_list = list()
     for i in range(no_of_pvc):
         pvc_name = helpers.create_unique_resource_name("test", "pvc")
-        if pvc_size is not None:
-            size = pvc_size
-        else:
-            size = f"{random.randrange(5, 105, 5)}Gi"
+        size = f"{random.randrange(5, 105, 5)}Gi" if pvc_size is None else pvc_size
         pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
         pvc_data["metadata"]["name"] = pvc_name
         del pvc_data["metadata"]["namespace"]
@@ -884,6 +881,42 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(
 
     return pvc_dict_list
 
+
+def construct_pvc_clone_yaml_bulk_for_kube_job(
+        pvc_dict_list, clone_yaml, sc_name
+    ):
+        """
+        Function to construct pvc.yaml to create bulk of pvc clones using kube_job
+
+        Args:
+            pvc_dict_list(list): List of PVCs for each of them one clone is to be created
+            clone_yaml (str): Clone yaml which is the template for building clones
+            sc_name (str): SC name for pvc creation
+
+        Returns:
+             pvc_dict_list (list): List of all PVC.yaml dicts
+
+        """
+
+        # Construct PVC.yaml for the no_of_required_pvc count
+        # append all the pvc.yaml dict to pvc_dict_list and return the list
+        pvc_clone_dict_list = list()
+        clone_data_yaml = templating.load_yaml(clone_yaml)
+        for pvc_yaml in pvc_dict_list:
+            parent_pvc_name = pvc_yaml["metadata"]["name"]
+            clone_data_yaml["metadata"]["name"] = helpers.create_unique_resource_name(
+                parent_pvc_name, "clone"
+            )
+
+            clone_data_yaml["spec"]["storageClassName"] = sc_name
+            clone_data_yaml["spec"]["dataSource"]["name"] = parent_pvc_name
+            clone_data_yaml["spec"]["resources"]["requests"]["storage"] = pvc_yaml[
+                "spec"
+            ]["resources"]["requests"]["storage"]
+
+            pvc_clone_dict_list.append(clone_data_yaml)
+
+        return pvc_clone_dict_list
 
 def check_all_pvc_reached_bound_state_in_kube_job(
     kube_job_obj, namespace, no_of_pvc, timeout=30
