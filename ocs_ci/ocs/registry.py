@@ -352,15 +352,23 @@ def check_image_exists_in_registry(image_url):
 def image_pull_and_push(project_name, template, image="", pattern="", wait=True):
     """
     Pull and push images running oc new-app command
-
     Args:
         project_name (str): Name of project
         template (str): Name of the template of the image
         image (str): Name of the image with tag
         pattern (str): name of the build with given pattern
         wait (bool): If true waits till the image pull and push completes.
-
     """
+    ocp_obj = ocp.OCP(kind="template", namespace="openshift")
+    try:
+        ocp_obj.get(resource_name=template)
+    except CommandFailed as cfe:
+        if f'"{template}" not found' in str(cfe):
+            logger.warn(f"Template {template} not found")
+            template = "redis-ephemeral"
+        else:
+            raise
+
     if config.DEPLOYMENT.get("disconnected"):
         mirror_image(image=image)
     else:
@@ -370,19 +378,29 @@ def image_pull_and_push(project_name, template, image="", pattern="", wait=True)
 
         # Validate it completed
         if wait:
-            wait_time = 300
-            logger.info(f"Wait for {wait_time} seconds for build to come up")
-            time.sleep(300)
-            build_list = get_build_name_by_pattern(
-                pattern=pattern, namespace=project_name
-            )
-            if build_list is None:
-                raise Exception("Build is not created")
-            build_obj = ocp.OCP(kind="Build", namespace=project_name)
-            for build in build_list:
-                build_obj.wait_for_resource(
-                    condition="Complete", resource_name=build, timeout=900
+            if template == "redis-ephemeral":
+                ocp_obj = ocp.OCP(kind=constants.POD, namespace=project_name)
+                deploy_pod_name = get_pod_name_by_pattern(
+                    pattern="deploy", namespace=project_name
                 )
+                ocp_obj.wait_for_resource(
+                    condition=constants.STATUS_COMPLETED,
+                    resource_name=deploy_pod_name[0],
+                )
+            else:
+                wait_time = 300
+                logger.info(f"Wait for {wait_time} seconds for build to come up")
+                time.sleep(300)
+                build_list = get_build_name_by_pattern(
+                    pattern=pattern, namespace=project_name
+                )
+                if build_list is None:
+                    raise Exception("Build is not created")
+                build_obj = ocp.OCP(kind="Build", namespace=project_name)
+                for build in build_list:
+                    build_obj.wait_for_resource(
+                        condition="Complete", resource_name=build, timeout=900
+                    )
 
 
 def get_build_name_by_pattern(pattern="", namespace=None):
@@ -414,7 +432,6 @@ def get_build_name_by_pattern(pattern="", namespace=None):
 def validate_image_exists(namespace=None):
     """
     Validate image exists on registries path
-
     Args:
         namespace (str): Namespace where the images/builds are created
 
@@ -423,9 +440,7 @@ def validate_image_exists(namespace=None):
 
     Raises:
         Exceptions if dir/folders not found
-
     """
-
     if not config.DEPLOYMENT.get("disconnected"):
         pod_list = get_pod_name_by_pattern(
             pattern="image-registry",
