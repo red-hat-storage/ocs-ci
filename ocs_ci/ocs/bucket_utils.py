@@ -36,20 +36,28 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
     """
     api = "api" if api else ""
     if mcg_obj:
+        if mcg_obj.region:
+            region = f"AWS_DEFAULT_REGION={mcg_obj.region} "
+        else:
+            region = ""
         base_command = (
             f'sh -c "AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
             f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
             f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
-            f"AWS_DEFAULT_REGION={mcg_obj.region} "
+            f"{region}"
             f"aws s3{api} "
             f"--endpoint={mcg_obj.s3_internal_endpoint} "
         )
         string_wrapper = '"'
     elif signed_request_creds:
+        if signed_request_creds.get("region"):
+            region = f'AWS_DEFAULT_REGION={signed_request_creds.get("region")} '
+        else:
+            region = ""
         base_command = (
             f'sh -c "AWS_ACCESS_KEY_ID={signed_request_creds.get("access_key_id")} '
             f'AWS_SECRET_ACCESS_KEY={signed_request_creds.get("access_key")} '
-            f'AWS_DEFAULT_REGION={signed_request_creds.get("region")} '
+            f"{region}"
             f"aws s3{api} "
             f'--endpoint={signed_request_creds.get("endpoint")} '
         )
