@@ -46,8 +46,6 @@ class TestRegistryRebootNode(E2ETest):
         self.project_name = "test"
         project_factory(project_name=self.project_name)
 
-        node_restart_teardown()
-
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
