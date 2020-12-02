@@ -714,6 +714,7 @@ SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scale
 # labels
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
+APP_LABEL = "node-role.kubernetes.io/app"
 
 # Cluster name limits
 CLUSTER_NAME_MIN_CHARACTERS = 5
