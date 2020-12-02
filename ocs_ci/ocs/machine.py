@@ -307,7 +307,9 @@ def create_custom_machineset(
                         ][label[0]] = label[1]
                     # Remove app label in case of infra nodes
                     if role == "infra":
-                        machineset_yaml.pop(constants.APP_LABEL, None)
+                        machineset_yaml["spec"]["template"]["spec"]["metadata"][
+                            "labels"
+                        ].pop(constants.APP_LABEL, None)
 
                 # Apply the Taints
                 # ex taint list looks like:
