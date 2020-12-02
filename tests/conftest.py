@@ -1970,7 +1970,7 @@ def bucket_factory_fixture(
 
         bucketclass = (
             bucketclass
-            if isinstance(bucketclass, str) or isinstance(bucketclass, None)
+            if bucketclass is None or isinstance(bucketclass, str)
             else bucket_class_factory(bucketclass).name
         )
 
