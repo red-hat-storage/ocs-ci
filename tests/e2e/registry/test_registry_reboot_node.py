@@ -3,20 +3,20 @@ import pytest
 import logging
 
 from ocs_ci.ocs.constants import (
-    MASTER_MACHINE, WORKER_MACHINE,
+    MASTER_MACHINE,
+    WORKER_MACHINE,
 )
 from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
 from ocs_ci.ocs.registry import (
-    validate_registry_pod_status, image_pull_and_push,
-    validate_image_exists
+    validate_registry_pod_status,
+    image_pull_and_push,
+    validate_image_exists,
 )
-from ocs_ci.ocs.node import (
-    wait_for_nodes_status, get_typed_nodes
-)
+from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
-from tests.sanity_helpers import Sanity
+from ocs_ci.helpers.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
 
@@ -38,30 +38,22 @@ class TestRegistryRebootNode(E2ETest):
         self.sanity_helpers = Sanity()
 
     @pytest.fixture(autouse=True)
-    def setup(self, request, project_factory_class, nodes):
+    def setup(self, project_factory, node_restart_teardown):
         """
-        Setup and clean up the namespace
+        Setup and clean up
         """
 
-        self.project_name = 'test'
-        project_factory_class(project_name=self.project_name)
+        self.project_name = "test"
+        project_factory(project_name=self.project_name)
 
-        def finalizer():
-            log.info("Validate all nodes are in Ready state, if not restart nodes")
-            nodes.restart_nodes_by_stop_and_start_teardown()
-
-        request.addfinalizer(finalizer)
+        node_restart_teardown()
 
     @pytest.mark.parametrize(
-        argnames=['node_type'],
+        argnames=["node_type"],
         argvalues=[
-            pytest.param(
-                *[MASTER_MACHINE], marks=pytest.mark.polarion_id("OCS-1803")
-            ),
-            pytest.param(
-                *[WORKER_MACHINE], marks=pytest.mark.polarion_id("OCS-1795")
-            ),
-        ]
+            pytest.param(*[MASTER_MACHINE], marks=pytest.mark.polarion_id("OCS-1803")),
+            pytest.param(*[WORKER_MACHINE], marks=pytest.mark.polarion_id("OCS-1795")),
+        ],
     )
     def test_registry_reboot_node(self, node_type, nodes):
         """
@@ -69,14 +61,15 @@ class TestRegistryRebootNode(E2ETest):
         """
 
         # Get the node list
-        node = get_typed_nodes(node_type, num_of_nodes=1)
+        node = get_nodes(node_type, num_of_nodes=1)
 
         # Pull and push images to registries
         log.info("Pull and push images to registries")
         image_pull_and_push(
-            project_name=self.project_name, template='eap-cd-basic-s2i',
-            image='registry.redhat.io/jboss-eap-7-tech-preview/eap-cd-openshift-rhel8:latest',
-            pattern='eap-app'
+            project_name=self.project_name,
+            template="eap-cd-basic-s2i",
+            image="registry.redhat.io/jboss-eap-7-tech-preview/eap-cd-openshift-rhel8:latest",
+            pattern="eap-app",
         )
 
         # Validate image exists in registries path
@@ -89,15 +82,13 @@ class TestRegistryRebootNode(E2ETest):
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
             tries=60,
-            delay=15)(
-            wait_for_cluster_connectivity(tries=400)
-        )
+            delay=15,
+        )(wait_for_cluster_connectivity(tries=400))
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
             tries=60,
-            delay=15)(
-            wait_for_nodes_status(timeout=900)
-        )
+            delay=15,
+        )(wait_for_nodes_status(timeout=900))
 
         # Validate image registry pods
         validate_registry_pod_status()
@@ -109,15 +100,11 @@ class TestRegistryRebootNode(E2ETest):
         self.sanity_helpers.health_check()
 
     @pytest.mark.parametrize(
-        argnames=['node_type'],
+        argnames=["node_type"],
         argvalues=[
-            pytest.param(
-                *[MASTER_MACHINE], marks=pytest.mark.polarion_id("OCS-1802")
-            ),
-            pytest.param(
-                *[WORKER_MACHINE], marks=pytest.mark.polarion_id("OCS-1804")
-            ),
-        ]
+            pytest.param(*[MASTER_MACHINE], marks=pytest.mark.polarion_id("OCS-1802")),
+            pytest.param(*[WORKER_MACHINE], marks=pytest.mark.polarion_id("OCS-1804")),
+        ],
     )
     def test_registry_rolling_reboot_node(self, node_type, nodes):
         """
@@ -125,14 +112,15 @@ class TestRegistryRebootNode(E2ETest):
         """
 
         # Get the node list
-        node_list = get_typed_nodes(node_type)
+        node_list = get_nodes(node_type)
 
         # Pull and push images to registries
         log.info("Pull and push images to registries")
         image_pull_and_push(
-            project_name=self.project_name, template='eap-cd-basic-s2i',
-            image='registry.redhat.io/jboss-eap-7-tech-preview/eap-cd-openshift-rhel8:latest',
-            pattern='eap-app'
+            project_name=self.project_name,
+            template="eap-cd-basic-s2i",
+            image="registry.redhat.io/jboss-eap-7-tech-preview/eap-cd-openshift-rhel8:latest",
+            pattern="eap-app",
         )
 
         # Validate image exists in registries path
@@ -151,17 +139,25 @@ class TestRegistryRebootNode(E2ETest):
 
             # Validate all nodes and services are in READY state and up
             retry(
-                (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
+                (
+                    CommandFailed,
+                    TimeoutError,
+                    AssertionError,
+                    ResourceWrongStatusException,
+                ),
                 tries=60,
-                delay=15)(
-                wait_for_cluster_connectivity(tries=400)
-            )
+                delay=15,
+            )(wait_for_cluster_connectivity(tries=400))
             retry(
-                (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
+                (
+                    CommandFailed,
+                    TimeoutError,
+                    AssertionError,
+                    ResourceWrongStatusException,
+                ),
                 tries=60,
-                delay=15)(
-                wait_for_nodes_status(timeout=900)
-            )
+                delay=15,
+            )(wait_for_nodes_status(timeout=900))
 
             # Validate image registry pods
             validate_registry_pod_status()
