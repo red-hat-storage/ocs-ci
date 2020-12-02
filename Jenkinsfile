@@ -122,7 +122,7 @@ pipeline {
           emailext (
             subject: "Job '${env.JOB_NAME}' build #${env.BUILD_ID} failed during stage '${LAST_STAGE}'",
             body: "Build failed : ${env.BUILD_URL}",
-            from: "${env.EMAIL}",
+            from: "ocs-ci@redhat.com",
             to: "${env.EMAIL}"
           )
         }
