@@ -10,6 +10,7 @@ from itertools import chain
 from math import floor
 from shutil import copyfile
 from functools import partial
+import typing
 
 from botocore.exceptions import ClientError
 import pytest
@@ -1939,7 +1940,7 @@ def bucket_factory_fixture(
         amount=1,
         interface="S3",
         verify_health=True,
-        bucketclass_dict=None,
+        bucketclass: typing.Union[None, str, dict] = None,
         *args,
         **kwargs,
     ):
@@ -1950,6 +1951,11 @@ def bucket_factory_fixture(
             amount (int): The amount of buckets to create
             interface (str): The interface to use for creation of buckets.
                 S3 | OC | CLI | NAMESPACE
+            verify_Health (bool): Whether to verify the created bucket's health
+                post-creation
+            bucketclass (None|str|dict): An existing bucketclass name to use,
+                or a dictionary describing a new bucketclass to be created.
+                When None, the default bucketclass is used.
 
         Returns:
             list: A list of s3.Bucket objects, containing all the created
@@ -1961,8 +1967,13 @@ def bucket_factory_fixture(
                 f"Invalid interface type received: {interface}. "
                 f'available types: {", ".join(BUCKET_MAP.keys())}'
             )
-        if bucketclass_dict:
-            bucketclass_dict = bucket_class_factory(bucketclass_dict).name
+
+        bucketclass = (
+            bucketclass
+            if isinstance(bucketclass, str) or isinstance(bucketclass, None)
+            else bucket_class_factory(bucketclass).name
+        )
+
         for i in range(amount):
             bucket_name = helpers.create_unique_resource_name(
                 resource_description="bucket", resource_type=interface.lower()
@@ -1971,7 +1982,7 @@ def bucket_factory_fixture(
                 bucket_name,
                 mcg=mcg_obj,
                 rgw=rgw_obj,
-                bucketclass=bucketclass_dict,
+                bucketclass=bucketclass,
                 *args,
                 **kwargs,
             )

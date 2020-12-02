@@ -117,9 +117,7 @@ class TestBucketDeletion(MCGTest):
         """
         if bucketclass_dict:
             bucketclass = bucket_class_factory(bucketclass_dict)
-            buckets = bucket_factory(
-                amount, interface, bucketclass_dict=bucketclass.name
-            )
+            buckets = bucket_factory(amount, interface, bucketclass=bucketclass.name)
         else:
             buckets = bucket_factory(amount, interface)
         for bucket in buckets:

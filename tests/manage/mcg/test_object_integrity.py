@@ -1,4 +1,5 @@
 import logging
+import time
 
 import pytest
 
@@ -56,7 +57,7 @@ class TestObjectIntegrity(MCGTest):
         """
         Test object integrity using md5sum
         """
-        bucketname = bucket_factory(1, bucketclass_dict=bucketclass_dict)[0].name
+        bucketname = bucket_factory(1, bucketclass=bucketclass_dict)[0].name
         original_dir = "/original"
         result_dir = "/result"
         awscli_pod.exec_cmd_on_pod(command=f"mkdir {result_dir}")
@@ -66,7 +67,6 @@ class TestObjectIntegrity(MCGTest):
         downloaded_files = retrieve_test_objects_to_pod(awscli_pod, original_dir)
         # Write all downloaded objects to the new bucket
         sync_object_directory(awscli_pod, original_dir, full_object_path, mcg_obj)
-
         # Retrieve all objects from MCG bucket to result dir in Pod
         logger.info("Downloading all objects from MCG bucket to awscli pod")
         sync_object_directory(awscli_pod, full_object_path, result_dir, mcg_obj)
