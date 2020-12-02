@@ -365,7 +365,7 @@ def get_cli_param(config, name_of_param, default=None):
     """
 
     # Override the default value from environmental variables
-    env_var_name = name_of_param.lstrip("-").replace("-", "_").upper()
+    env_var_name = "OCS_CI_" + name_of_param.lstrip("-").replace("-", "_").upper()
     print("ENV: %s" % env_var_name)
     if env_var_name in os.environ:
         default = os.environ.get(env_var_name)
