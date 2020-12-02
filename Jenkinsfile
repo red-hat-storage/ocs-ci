@@ -27,6 +27,7 @@ pipeline {
     AWS_SECRET_ACCESS_KEY = credentials("openshift-dev-aws-secret-access-key-${env.CLUSTER_USER}")
     PULL_SECRET = credentials('openshift-pull-secret')
     BUGZILLA_CFG = credentials('ocs-bugzilla-cfg')
+    OCS_CI_OCP_VERSION = "${env.OCP_VERSION}"
   }
   stages {
     stage("Setup") {
