@@ -51,6 +51,7 @@ log = logging.getLogger(__name__)
 handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter(LOG_FORMAT))
 log.addHandler(handler)
+notset = object()
 
 
 def pytest_addoption(parser):
@@ -61,96 +62,105 @@ def pytest_addoption(parser):
         "--ocsci-conf",
         dest="ocsci_conf",
         action="append",
+        default=notset,
         help="Path to config file of OCS CI",
     )
     parser.addoption(
         "--cluster-path",
         dest="cluster_path",
+        default=notset,
         help="Path to cluster directory",
     )
     parser.addoption(
         "--cluster-name",
         dest="cluster_name",
+        default=notset,
         help="Name of cluster",
     )
     parser.addoption(
         "--teardown",
         dest="teardown",
         action="store_true",
-        default=False,
+        default=notset,
         help="If provided the test cluster will be destroyed after tests complete",
     )
     parser.addoption(
         "--deploy",
         dest="deploy",
         action="store_true",
-        default=False,
+        default=notset,
         help="If provided a test cluster will be deployed on AWS to use for testing",
     )
     parser.addoption(
         "--live-deploy",
         dest="live_deploy",
         action="store_true",
-        default=False,
+        default=notset,
         help="Deploy OCS from live registry like a customer",
     )
     parser.addoption(
         "--email",
         dest="email",
+        default=notset,
         help="Email ID to send results",
     )
     parser.addoption(
         "--squad-analysis",
         dest="squad_analysis",
         action="store_true",
-        default=False,
+        default=notset,
         help="Include Squad Analysis to email report.",
     )
     parser.addoption(
         "--collect-logs",
         dest="collect-logs",
         action="store_true",
-        default=False,
+        default=notset,
         help="Collect OCS logs when test case failed",
     )
     parser.addoption(
         "--collect-logs-on-success-run",
         dest="collect_logs_on_success_run",
         action="store_true",
-        default=False,
+        default=notset,
         help="Collect must gather logs at the end of the execution (also when no failure in the tests)",
     )
     parser.addoption(
         "--io-in-bg",
         dest="io_in_bg",
         action="store_true",
-        default=False,
+        default=notset,
         help="Run IO in the background",
     )
     parser.addoption(
         "--io-load",
         dest="io_load",
+        default=notset,
         help="IOs throughput target percentage. Value should be between 0 to 100",
     )
     parser.addoption(
         "--log-cluster-utilization",
         dest="log_cluster_utilization",
         action="store_true",
+        default=notset,
         help="Enable logging of cluster utilization metrics every 10 seconds",
     )
     parser.addoption(
         "--ocs-version",
         dest="ocs_version",
+        default=notset,
         help="ocs version for which ocs-ci to be run",
     )
     parser.addoption(
         "--upgrade-ocs-version",
         dest="upgrade_ocs_version",
+        default=notset,
         help="ocs version to upgrade (e.g. 4.3)",
     )
     parser.addoption(
         "--upgrade-ocp-version",
         dest="upgrade_ocp_version",
+        default=notset,
         help="""
         OCP version to upgrade to. This version will be used to
         load file from conf/ocp_version/ocp-VERSION-config.yaml.
@@ -162,6 +172,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--upgrade-ocp-image",
         dest="upgrade_ocp_image",
+        default=notset,
         help="""
         OCP image to upgrade to. This image string will be split on ':' to
         determine the image source and the specified tag to use.
@@ -171,6 +182,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--ocp-version",
         dest="ocp_version",
+        default=notset,
         help="""
         OCP version to be used for deployment. This version will be used for
         load file from conf/ocp_version/ocp-VERSION-config.yaml. You can use
@@ -183,6 +195,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--ocp-installer-version",
         dest="ocp_installer_version",
+        default=notset,
         help="""
         Specific OCP installer version to be used for deployment. This option
         will generally be used for non-GA or nightly builds. (e.g. 4.5.5).
@@ -192,6 +205,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--ocs-registry-image",
         dest="ocs_registry_image",
+        default=notset,
         help=(
             "ocs registry image to be used for deployment "
             "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.2)"
@@ -200,6 +214,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--upgrade-ocs-registry-image",
         dest="upgrade_ocs_registry_image",
+        default=notset,
         help=(
             "ocs registry image to be used for upgrade "
             "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.3)"
@@ -209,6 +224,7 @@ def pytest_addoption(parser):
         "--osd-size",
         dest="osd_size",
         type=int,
+        default=notset,
         help="OSD size in GB - for 2TB pass 2048, for 0.5TB pass 512 and so on.",
     )
     parser.addoption(
@@ -217,6 +233,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--csv-change",
         dest="csv_change",
+        default=notset,
         help=(
             "Pattern or string to change in the CSV. Should contain the value to replace "
             "from and the value to replace to, separated by '::'"
@@ -226,7 +243,7 @@ def pytest_addoption(parser):
         "--dev-mode",
         dest="dev_mode",
         action="store_true",
-        default=False,
+        default=notset,
         help=(
             "Runs in development mode. It skips few checks like collecting "
             "versions, collecting logs, etc"
@@ -364,14 +381,17 @@ def get_cli_param(config, name_of_param, default=None):
 
     """
 
-    # Override the default value from environmental variables
+    # Override the default value from OCS_CI_* environmental variables
     env_var_name = "OCS_CI_" + name_of_param.lstrip("-").replace("-", "_").upper()
     print("ENV: %s" % env_var_name)
     if env_var_name in os.environ:
         default = os.environ.get(env_var_name)
 
     print("default: %s" % str(default))
-    cli_param = config.getoption(name_of_param, default=default) or default
+    cli_param = config.getoption(name_of_param, default=default)
+    # Set the default value if the cli option was not set
+    if cli_param is notset:
+        cli_param = default
     print("cli_param: %s" % str(cli_param))
     ocsci_config.RUN["cli_params"][name_of_param] = cli_param
     return cli_param
