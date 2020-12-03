@@ -13,7 +13,7 @@ from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.deployment.vmware import update_machine_conf
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
-from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
+from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils, powernodes
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.ocs import constants, ocp, exceptions, cluster
@@ -65,6 +65,7 @@ class PlatformNodesFactory:
             "azure": AZURENodes,
             "gcp": NodesBase,
             "vsphere_lso": VMWareLSONodes,
+            "powervs": IBMPowerNodes,
         }
 
     def get_nodes_platform(self):
@@ -1710,6 +1711,113 @@ class BaremetalNodes(NodesBase):
             default_config_dict = yaml.safe_load(f)
 
         return default_config_dict
+
+
+class IBMPowerNodes(NodesBase):
+    """
+    IBM Power Nodes class
+    """
+
+    def __init__(self):
+        super(IBMPowerNodes, self).__init__()
+        self.powernodes = powernodes.POWERNodes()
+
+    def stop_nodes(self, nodes, force=True):
+        """
+        Stop PowerNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force nodes stop, False otherwise
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.stop_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            raise NotImplementedError(
+                "This is not libvirt environment. Stop nodes not implemented"
+            )
+
+    def start_nodes(self, nodes, force=True):
+        """
+        Start PowerNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): Wait for node status
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.start_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            raise NotImplementedError(
+                "This is not libvirt environment. Start nodes not implemented"
+            )
+
+    def restart_nodes(self, nodes, timeout=540, wait=True, force=True):
+        """
+        Restart PowerNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+            wait (bool): True if need to wait till the restarted node reaches timeout
+            force (bool): True for force BM stop, False otherwise
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.restart_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            raise NotImplementedError(
+                "This is not libvirt environment. Restart nodes not implemented"
+            )
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        """
+        Restart PowerNodes with stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force node stop, False otherwise
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.restart_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            raise NotImplementedError(
+                "This is not libvirt environment. Restart nodes by stop and start not implemented"
+            )
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Make sure all PowerNodes are up by the end of the test
+        """
+        if not self.powernodes.iskvm():
+            raise NotImplementedError(
+                "This is not libvirt environment. Restart nodes by stop and start teardown not implemented"
+            )
+
+        self.cluster_nodes = get_node_objs()
+        stopped_powernodes = [
+            powernode
+            for powernode in self.cluster_nodes
+            if self.powernodes.verify_machine_is_down(powernode) is True
+        ]
+
+        if stopped_powernodes:
+            logger.info(
+                f"The following PowerNodes are powered off: {stopped_powernodes}"
+            )
+            self.powernodes.start_powernodes_machines(stopped_powernodes)
 
 
 class AZURENodes(NodesBase):
