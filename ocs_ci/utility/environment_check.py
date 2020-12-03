@@ -103,7 +103,7 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
             log.debug("ignoring item with app label %s: %s", app_label, item)
             continue
         if item.get("kind") == constants.POD:
-            name = item.get("metadata").get("name")
+            name = item.get("metadata", {}).get("name", "")
             if name.endswith("-debug"):
                 log.debug(f"ignoring item: {name}")
                 continue
