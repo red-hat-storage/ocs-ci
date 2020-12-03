@@ -52,6 +52,8 @@ handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter(LOG_FORMAT))
 log.addHandler(handler)
 notset = object()
+notset_list = list()
+notset_false = list()
 
 
 def pytest_addoption(parser):
@@ -62,7 +64,7 @@ def pytest_addoption(parser):
         "--ocsci-conf",
         dest="ocsci_conf",
         action="append",
-        default=notset,
+        default=notset_list,
         help="Path to config file of OCS CI",
     )
     parser.addoption(
@@ -81,21 +83,21 @@ def pytest_addoption(parser):
         "--teardown",
         dest="teardown",
         action="store_true",
-        default=notset,
+        default=notset_false,
         help="If provided the test cluster will be destroyed after tests complete",
     )
     parser.addoption(
         "--deploy",
         dest="deploy",
         action="store_true",
-        default=notset,
+        default=notset_false,
         help="If provided a test cluster will be deployed on AWS to use for testing",
     )
     parser.addoption(
         "--live-deploy",
         dest="live_deploy",
         action="store_true",
-        default=notset,
+        default=notset_false,
         help="Deploy OCS from live registry like a customer",
     )
     parser.addoption(
@@ -108,28 +110,28 @@ def pytest_addoption(parser):
         "--squad-analysis",
         dest="squad_analysis",
         action="store_true",
-        default=notset,
+        default=notset_false,
         help="Include Squad Analysis to email report.",
     )
     parser.addoption(
         "--collect-logs",
         dest="collect-logs",
         action="store_true",
-        default=notset,
+        default=notset_false,
         help="Collect OCS logs when test case failed",
     )
     parser.addoption(
         "--collect-logs-on-success-run",
         dest="collect_logs_on_success_run",
         action="store_true",
-        default=notset,
+        default=notset_false,
         help="Collect must gather logs at the end of the execution (also when no failure in the tests)",
     )
     parser.addoption(
         "--io-in-bg",
         dest="io_in_bg",
         action="store_true",
-        default=notset,
+        default=notset_false,
         help="Run IO in the background",
     )
     parser.addoption(
@@ -142,7 +144,7 @@ def pytest_addoption(parser):
         "--log-cluster-utilization",
         dest="log_cluster_utilization",
         action="store_true",
-        default=notset,
+        default=notset_false,
         help="Enable logging of cluster utilization metrics every 10 seconds",
     )
     parser.addoption(
@@ -243,7 +245,7 @@ def pytest_addoption(parser):
         "--dev-mode",
         dest="dev_mode",
         action="store_true",
-        default=notset,
+        default=notset_false,
         help=(
             "Runs in development mode. It skips few checks like collecting "
             "versions, collecting logs, etc"
@@ -366,7 +368,7 @@ def gather_version_info_for_report(config):
             )
 
 
-def get_cli_param(config, name_of_param, default=None):
+def get_cli_param(config, name_of_param):
     """
     This is helper function which store cli parameter in RUN section in
     cli_params
@@ -374,25 +376,43 @@ def get_cli_param(config, name_of_param, default=None):
     Args:
         config (pytest.config): Pytest config object
         name_of_param (str): cli parameter name
-        default (any): default value of parameter (default: None)
 
     Returns:
         any: value of cli parameter or default value
 
     """
 
-    # Override the default value from OCS_CI_* environmental variables
-    env_var_name = "OCS_CI_" + name_of_param.lstrip("-").replace("-", "_").upper()
-    print("ENV: %s" % env_var_name)
-    if env_var_name in os.environ:
-        default = os.environ.get(env_var_name)
+    cli_param = config.getoption(name_of_param, default=notset)
 
-    print("default: %s" % str(default))
-    cli_param = config.getoption(name_of_param, default=default)
-    # Set the default value if the cli option was not set
+    print("CLI: %s" % str(cli_param))
+
+    # The variable name should be in upper case with OCS_CI prefix
+    env_var_name = "OCS_CI_" + name_of_param.lstrip("-").replace("-", "_").upper()
+
+    print("VAR: %s" % env_var_name)
+
+    # Try to get env variable
+    env_var = os.environ.get(env_var_name, None)
+
+    print("ENV: %s" % str(env_var_name))
+
+    # Resolve unset parameters
+    # Translate notset to None or env_var (if it exists)
     if cli_param is notset:
-        cli_param = default
-    print("cli_param: %s" % str(cli_param))
+        cli_param = env_var
+
+    # Translate notset_list to an empty list or split the env variable
+    if cli_param is notset_list:
+        if env_var:
+            cli_param = env_var.split(';')
+        else:
+            cli_param = []
+
+    # Translate notset_false to False or bool of the env variable
+    if cli_param is notset_false:
+        cli_param = bool(env_var)
+
+    print("CLI: %s" % str(cli_param))
     ocsci_config.RUN["cli_params"][name_of_param] = cli_param
     return cli_param
 
@@ -424,12 +444,12 @@ def process_cluster_cli_params(config):
     )
     cluster_name = get_cli_param(config, "cluster_name")
     ocsci_config.RUN["cli_params"]["teardown"] = get_cli_param(
-        config, "teardown", default=False
+        config, "teardown"
     )
     ocsci_config.RUN["cli_params"]["deploy"] = get_cli_param(
-        config, "deploy", default=False
+        config, "deploy"
     )
-    live_deployment = get_cli_param(config, "live_deploy", default=False)
+    live_deployment = get_cli_param(config, "live_deploy")
     ocsci_config.DEPLOYMENT["live_deployment"] = live_deployment or (
         ocsci_config.DEPLOYMENT.get("live_deployment", False)
     )
