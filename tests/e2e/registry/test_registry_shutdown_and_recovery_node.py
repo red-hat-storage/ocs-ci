@@ -3,16 +3,16 @@ import logging
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.registry import (
-    validate_registry_pod_status, image_pull_and_push,
-    validate_image_exists
+    validate_registry_pod_status,
+    image_pull_and_push,
+    validate_image_exists,
 )
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
-from ocs_ci.ocs.node import (
-    wait_for_nodes_status, get_typed_nodes
-)
+from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
-from tests.sanity_helpers import Sanity
+from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.ocs.resources.pod import wait_for_storage_pods
 
 log = logging.getLogger(__name__)
 
@@ -34,19 +34,13 @@ class TestRegistryShutdownAndRecoveryNode(E2ETest):
         self.sanity_helpers = Sanity()
 
     @pytest.fixture(autouse=True)
-    def setup(self, request, project_factory_class, nodes):
+    def setup(self, project_factory, node_restart_teardown):
         """
         Setup and clean up the namespace
         """
 
-        self.project_name = 'test'
-        project_factory_class(project_name=self.project_name)
-
-        def finalizer():
-            log.info("Validate all nodes are in Ready state, if not restart nodes")
-            nodes.restart_nodes_by_stop_and_start_teardown()
-
-        request.addfinalizer(finalizer)
+        self.project_name = "test"
+        project_factory(project_name=self.project_name)
 
     @pytest.mark.polarion_id("OCS-1800")
     def test_registry_shutdown_and_recovery_node(self, nodes):
@@ -59,13 +53,14 @@ class TestRegistryShutdownAndRecoveryNode(E2ETest):
         # Pull and push images to registries
         log.info("Pull and push images to registries")
         image_pull_and_push(
-            project_name=self.project_name, template='eap-cd-basic-s2i',
-            image='registry.redhat.io/jboss-eap-7-tech-preview/eap-cd-openshift-rhel8:latest',
-            pattern='eap-app'
+            project_name=self.project_name,
+            template="eap-cd-basic-s2i",
+            image="registry.redhat.io/jboss-eap-7-tech-preview/eap-cd-openshift-rhel8:latest",
+            pattern="eap-app",
         )
 
         # Get the node list
-        node_list = get_typed_nodes(node_type='worker')
+        node_list = get_nodes(node_type="worker")
 
         for node in node_list:
 
@@ -73,27 +68,33 @@ class TestRegistryShutdownAndRecoveryNode(E2ETest):
             nodes.stop_nodes(nodes=[node])
 
             # Validate node reached NotReady state
-            wait_for_nodes_status(node_names=[node.name], status=constants.NODE_NOT_READY)
-
-            # Validate image exists in registries path
-            validate_image_exists(namespace=self.project_name)
+            wait_for_nodes_status(
+                node_names=[node.name], status=constants.NODE_NOT_READY
+            )
 
             # Start node
             nodes.start_nodes(nodes=[node])
 
             # Validate all nodes are in READY state and up
             retry(
-                (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-                tries=30,
-                delay=15)(
-                wait_for_nodes_status(timeout=900)
-            )
+                (
+                    CommandFailed,
+                    TimeoutError,
+                    AssertionError,
+                    ResourceWrongStatusException,
+                ),
+                tries=60,
+                delay=15,
+            )(wait_for_nodes_status)(timeout=900)
 
-            # Validate image exists in registries path
-            validate_image_exists(namespace=self.project_name)
+        # Validate all storage pods are running
+        wait_for_storage_pods()
+
+        # Validate cluster health ok and all pods are running
+        self.sanity_helpers.health_check()
 
         # Validate image registry pods
         validate_registry_pod_status()
 
-        # Validate cluster health ok and all pods are running
-        self.sanity_helpers.health_check()
+        # Validate image exists in registries path
+        validate_image_exists(namespace=self.project_name)
