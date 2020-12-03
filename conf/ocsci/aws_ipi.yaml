@@ -1,7 +1,11 @@
 ---
+# This configuration file is for development purpose only and allow you to
+# install OCS on nodes with lower then required resources. This can lead to
+# some issues and should be used only for development purpose only.
+DEPLOYMENT:
+  allow_lower_instance_requirements: true
 ENV_DATA:
   platform: 'aws'
   deployment_type: 'ipi'
   region: 'us-east-2'
-  skip_ocp_deployment: false
-  skip_ocs_deployment: false
+  worker_instance_type: 'm4.xlarge'

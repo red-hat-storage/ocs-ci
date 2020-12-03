@@ -60,7 +60,9 @@ DEPLOYMENT:
   ssh_key: "~/.ssh/openshift-dev.pub"
   ssh_key_private: "~/.ssh/openshift-dev.pem"
   force_deploy_multiple_clusters: False
-  allow_lower_instance_requirements: true
+  # If you deploy for development purpose on cluster with lower then minimum
+  # requirements, the value of option below needs to be set to true.
+  allow_lower_instance_requirements: false
   # For manual subscription plan (for manual approve of upgrade set bellow)
   # subscription_plan_approval: "Manual"
   # For UI deployment you have to set following parameter ui_deployment to True
@@ -106,7 +108,7 @@ ENV_DATA:
   region: 'us-east-2'
   base_domain: 'qe.rh-ocs.com'
   master_instance_type: 'm4.xlarge'
-  worker_instance_type: 'm4.xlarge'
+  worker_instance_type: 'm5.4xlarge'
   master_replicas: 3
   worker_replicas: 3
   skip_ocp_deployment: false
