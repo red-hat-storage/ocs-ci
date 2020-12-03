@@ -81,12 +81,12 @@ class TestRegistryRebootNode(E2ETest):
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
             tries=60,
             delay=15,
-        )(wait_for_cluster_connectivity(tries=400))
+        )(wait_for_cluster_connectivity)(tries=400)
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
             tries=60,
             delay=15,
-        )(wait_for_nodes_status(timeout=900))
+        )(wait_for_nodes_status)(timeout=900)
 
         # Validate image registry pods
         validate_registry_pod_status()
@@ -145,7 +145,7 @@ class TestRegistryRebootNode(E2ETest):
                 ),
                 tries=60,
                 delay=15,
-            )(wait_for_cluster_connectivity(tries=400))
+            )(wait_for_cluster_connectivity)(tries=400)
             retry(
                 (
                     CommandFailed,
@@ -155,7 +155,7 @@ class TestRegistryRebootNode(E2ETest):
                 ),
                 tries=60,
                 delay=15,
-            )(wait_for_nodes_status(timeout=900))
+            )(wait_for_nodes_status)(timeout=900)
 
             # Validate image registry pods
             validate_registry_pod_status()
