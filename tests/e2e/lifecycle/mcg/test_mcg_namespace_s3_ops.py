@@ -205,201 +205,199 @@ class TestMcgNamespaceS3Operations(E2ETest):
                 key == del_res["Deleted"][i]["Key"]
             ), "Object key not found/not-deleted"
 
-        if not platform == constants.AZURE_PLATFORM:
-            logger.info("Setting up objects to verify list operations")
-            obj_keys, obj_prefixes, mid_index = setup_objects_to_list(
-                amount=100,
-                prefix="Drive/Folder",
-                bucket_name=ns_bucket,
-                mcg_obj=mcg_obj,
-            )
+        logger.info("Setting up objects to verify list operations")
+        obj_keys, obj_prefixes, mid_index = setup_objects_to_list(
+            amount=100,
+            prefix="Drive/Folder",
+            bucket_name=ns_bucket,
+            mcg_obj=mcg_obj,
+        )
 
-            # List v1 and page entries
-            logger.info(f"ListObjectsV1 operation on {ns_bucket}")
-            list_v1_res = bucket_utils.s3_list_objects_v1(
-                s3_obj=mcg_obj, bucketname=ns_bucket
-            )
-            get_list_and_verify(list_v1_res, obj_keys, "Contents", version="v1")
-            logger.info("Get and verify next page entries of list using ListObjectV1")
-            first_page_res = bucket_utils.s3_list_objects_v1(
-                s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys
-            )
-            last_key = get_list_and_verify(
-                first_page_res, obj_keys[:mid_index], "Contents", version="v1"
-            )
-            next_page_res = bucket_utils.s3_list_objects_v1(
-                s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys, marker=last_key
-            )
-            get_list_and_verify(
-                next_page_res, obj_keys[mid_index:], "Contents", version="v1"
-            )
+        # List v1 and page entries
+        logger.info(f"ListObjectsV1 operation on {ns_bucket}")
+        list_v1_res = bucket_utils.s3_list_objects_v1(
+            s3_obj=mcg_obj, bucketname=ns_bucket
+        )
+        get_list_and_verify(list_v1_res, obj_keys, "Contents", version="v1")
+        logger.info("Get and verify next page entries of list using ListObjectV1")
+        first_page_res = bucket_utils.s3_list_objects_v1(
+            s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys
+        )
+        last_key = get_list_and_verify(
+            first_page_res, obj_keys[:mid_index], "Contents", version="v1"
+        )
+        next_page_res = bucket_utils.s3_list_objects_v1(
+            s3_obj=mcg_obj,
+            bucketname=ns_bucket,
+            max_keys=max_keys,
+            marker=first_page_res["NextMarker"]
+            if platform == constants.AZURE_PLATFORM
+            else last_key,
+        )
+        get_list_and_verify(
+            next_page_res, obj_keys[mid_index:], "Contents", version="v1"
+        )
 
-            # List v1 with prefix and page entries
-            logger.info(f"ListObjectsV1 operation on {ns_bucket} with prefix")
-            list_v1_res = bucket_utils.s3_list_objects_v1(
-                s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/"
-            )
-            get_list_and_verify(
-                list_v1_res, obj_keys, "Contents", "Drive/", version="v1"
-            )
-            logger.info(
-                "Get and verify next page entries of list using ListObjectV1 with prefix"
-            )
-            first_page_res = bucket_utils.s3_list_objects_v1(
-                s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", max_keys=max_keys
-            )
-            last_key = get_list_and_verify(
-                first_page_res, obj_keys[:mid_index], "Contents", "Drive/", version="v1"
-            )
-            next_page_res = bucket_utils.s3_list_objects_v1(
-                s3_obj=mcg_obj,
-                bucketname=ns_bucket,
-                prefix="Drive/",
-                max_keys=max_keys,
-                marker=last_key,
-            )
-            get_list_and_verify(
-                next_page_res, obj_keys[mid_index:], "Contents", "Drive/", version="v1"
-            )
+        # List v1 with prefix and page entries
+        logger.info(f"ListObjectsV1 operation on {ns_bucket} with prefix")
+        list_v1_res = bucket_utils.s3_list_objects_v1(
+            s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/"
+        )
+        get_list_and_verify(list_v1_res, obj_keys, "Contents", "Drive/", version="v1")
+        logger.info(
+            "Get and verify next page entries of list using ListObjectV1 with prefix"
+        )
+        first_page_res = bucket_utils.s3_list_objects_v1(
+            s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", max_keys=max_keys
+        )
+        last_key = get_list_and_verify(
+            first_page_res, obj_keys[:mid_index], "Contents", "Drive/", version="v1"
+        )
+        next_page_res = bucket_utils.s3_list_objects_v1(
+            s3_obj=mcg_obj,
+            bucketname=ns_bucket,
+            prefix="Drive/",
+            max_keys=max_keys,
+            marker=first_page_res["NextMarker"]
+            if platform == constants.AZURE_PLATFORM
+            else last_key,
+        )
+        get_list_and_verify(
+            next_page_res, obj_keys[mid_index:], "Contents", "Drive/", version="v1"
+        )
 
-            # List v1 with prefix, delimiter and page entries
-            logger.info(
-                f"ListObjectsV1 operation on {ns_bucket} with prefix and delimiter"
-            )
-            list_v1_res = bucket_utils.s3_list_objects_v1(
-                s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", delimiter="/"
-            )
-            get_list_and_verify(
-                list_v1_res, obj_prefixes, "CommonPrefixes", "Drive/", "/", version="v1"
-            )
-            logger.info(
-                "Get and verify next page entries of list using ListObjectV1 with prefix and delimiter"
-            )
-            first_page_res = bucket_utils.s3_list_objects_v1(
-                s3_obj=mcg_obj,
-                bucketname=ns_bucket,
-                prefix="Drive/",
-                delimiter="/",
-                max_keys=max_keys,
-            )
-            get_list_and_verify(
-                first_page_res,
-                obj_prefixes[:mid_index],
-                "CommonPrefixes",
-                "Drive/",
-                "/",
-                version="v1",
-            )
-            next_page_res = bucket_utils.s3_list_objects_v1(
-                s3_obj=mcg_obj,
-                bucketname=ns_bucket,
-                prefix="Drive/",
-                delimiter="/",
-                max_keys=max_keys,
-                marker=first_page_res["NextMarker"],
-            )
-            get_list_and_verify(
-                next_page_res,
-                obj_prefixes[mid_index:],
-                "CommonPrefixes",
-                "Drive/",
-                "/",
-                version="v1",
-            )
+        # List v1 with prefix, delimiter and page entries
+        logger.info(f"ListObjectsV1 operation on {ns_bucket} with prefix and delimiter")
+        list_v1_res = bucket_utils.s3_list_objects_v1(
+            s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", delimiter="/"
+        )
+        get_list_and_verify(
+            list_v1_res, obj_prefixes, "CommonPrefixes", "Drive/", "/", version="v1"
+        )
+        logger.info(
+            "Get and verify next page entries of list using ListObjectV1 with prefix and delimiter"
+        )
+        first_page_res = bucket_utils.s3_list_objects_v1(
+            s3_obj=mcg_obj,
+            bucketname=ns_bucket,
+            prefix="Drive/",
+            delimiter="/",
+            max_keys=max_keys,
+        )
+        get_list_and_verify(
+            first_page_res,
+            obj_prefixes[:mid_index],
+            "CommonPrefixes",
+            "Drive/",
+            "/",
+            version="v1",
+        )
+        next_page_res = bucket_utils.s3_list_objects_v1(
+            s3_obj=mcg_obj,
+            bucketname=ns_bucket,
+            prefix="Drive/",
+            delimiter="/",
+            max_keys=max_keys,
+            marker=first_page_res["NextMarker"],
+        )
+        get_list_and_verify(
+            next_page_res,
+            obj_prefixes[mid_index:],
+            "CommonPrefixes",
+            "Drive/",
+            "/",
+            version="v1",
+        )
 
-            # List v2
-            logger.info(f"ListObjectsV2 operation on {ns_bucket}")
-            list_v2_res = bucket_utils.s3_list_objects_v2(
-                s3_obj=mcg_obj, bucketname=ns_bucket
-            )
-            get_list_and_verify(list_v2_res, obj_keys, "Contents", version="v2")
-            logger.info("Get and verify next page entries of list using ListObjectV2")
-            first_page_res = bucket_utils.s3_list_objects_v2(
-                s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys
-            )
-            get_list_and_verify(first_page_res, obj_keys, "Contents", version="v2")
-            next_page_res = bucket_utils.s3_list_objects_v2(
-                s3_obj=mcg_obj,
-                bucketname=ns_bucket,
-                max_keys=max_keys,
-                con_token=first_page_res["NextContinuationToken"],
-            )
-            get_list_and_verify(
-                next_page_res, obj_keys[mid_index:], "Contents", version="v2"
-            )
+        # List v2
+        logger.info(f"ListObjectsV2 operation on {ns_bucket}")
+        list_v2_res = bucket_utils.s3_list_objects_v2(
+            s3_obj=mcg_obj, bucketname=ns_bucket
+        )
+        get_list_and_verify(list_v2_res, obj_keys, "Contents", version="v2")
+        logger.info("Get and verify next page entries of list using ListObjectV2")
+        first_page_res = bucket_utils.s3_list_objects_v2(
+            s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys
+        )
+        get_list_and_verify(first_page_res, obj_keys, "Contents", version="v2")
+        next_page_res = bucket_utils.s3_list_objects_v2(
+            s3_obj=mcg_obj,
+            bucketname=ns_bucket,
+            max_keys=max_keys,
+            con_token=first_page_res["NextContinuationToken"],
+        )
+        get_list_and_verify(
+            next_page_res, obj_keys[mid_index:], "Contents", version="v2"
+        )
 
-            # List v2 with prefix
-            logger.info(f"ListObjectsV2 operation on {ns_bucket} with prefix")
-            list_v2_res = bucket_utils.s3_list_objects_v2(
-                s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/"
-            )
-            get_list_and_verify(
-                list_v2_res, obj_keys, "Contents", "Drive/", version="v2"
-            )
-            logger.info(
-                "Get and verify next page entries of list using ListObjectV2 with prefix"
-            )
-            first_page_res = bucket_utils.s3_list_objects_v2(
-                s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", max_keys=max_keys
-            )
-            get_list_and_verify(
-                first_page_res, obj_keys[:mid_index], "Contents", "Drive/", version="v2"
-            )
-            next_page_res = bucket_utils.s3_list_objects_v2(
-                s3_obj=mcg_obj,
-                bucketname=ns_bucket,
-                prefix="Drive/",
-                max_keys=max_keys,
-                con_token=first_page_res["NextContinuationToken"],
-            )
-            get_list_and_verify(
-                next_page_res, obj_keys[mid_index:], "Contents", "Drive/", version="v2"
-            )
+        # List v2 with prefix
+        logger.info(f"ListObjectsV2 operation on {ns_bucket} with prefix")
+        list_v2_res = bucket_utils.s3_list_objects_v2(
+            s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/"
+        )
+        get_list_and_verify(list_v2_res, obj_keys, "Contents", "Drive/", version="v2")
+        logger.info(
+            "Get and verify next page entries of list using ListObjectV2 with prefix"
+        )
+        first_page_res = bucket_utils.s3_list_objects_v2(
+            s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", max_keys=max_keys
+        )
+        get_list_and_verify(
+            first_page_res, obj_keys[:mid_index], "Contents", "Drive/", version="v2"
+        )
+        next_page_res = bucket_utils.s3_list_objects_v2(
+            s3_obj=mcg_obj,
+            bucketname=ns_bucket,
+            prefix="Drive/",
+            max_keys=max_keys,
+            con_token=first_page_res["NextContinuationToken"],
+        )
+        get_list_and_verify(
+            next_page_res, obj_keys[mid_index:], "Contents", "Drive/", version="v2"
+        )
 
-            # List v2 with prefix and delimiter
-            logger.info(
-                f"ListObjectsV2 operation on {ns_bucket} with prefix and delimiter"
-            )
-            list_v2_res = bucket_utils.s3_list_objects_v2(
-                s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", delimiter="/"
-            )
-            get_list_and_verify(
-                list_v2_res, obj_prefixes, "CommonPrefixes", "Drive/", "/", version="v2"
-            )
-            logger.info(
-                "Get and verify next page entries of list using ListObjectV2 with prefix and delimiter"
-            )
-            first_page_res = bucket_utils.s3_list_objects_v2(
-                s3_obj=mcg_obj,
-                bucketname=ns_bucket,
-                prefix="Drive/",
-                delimiter="/",
-                max_keys=max_keys,
-            )
-            get_list_and_verify(
-                first_page_res,
-                obj_prefixes[:mid_index],
-                "CommonPrefixes",
-                "Drive/",
-                "/",
-                version="v2",
-            )
-            next_page_res = bucket_utils.s3_list_objects_v2(
-                s3_obj=mcg_obj,
-                bucketname=ns_bucket,
-                prefix="Drive/",
-                delimiter="/",
-                max_keys=max_keys,
-                con_token=first_page_res["NextContinuationToken"],
-            )
-            get_list_and_verify(
-                next_page_res,
-                obj_prefixes[mid_index:],
-                "CommonPrefixes",
-                "Drive/",
-                "/",
-                version="v2",
-            )
+        # List v2 with prefix and delimiter
+        logger.info(f"ListObjectsV2 operation on {ns_bucket} with prefix and delimiter")
+        list_v2_res = bucket_utils.s3_list_objects_v2(
+            s3_obj=mcg_obj, bucketname=ns_bucket, prefix="Drive/", delimiter="/"
+        )
+        get_list_and_verify(
+            list_v2_res, obj_prefixes, "CommonPrefixes", "Drive/", "/", version="v2"
+        )
+        logger.info(
+            "Get and verify next page entries of ListObjectV2 with prefix and delimiter"
+        )
+        first_page_res = bucket_utils.s3_list_objects_v2(
+            s3_obj=mcg_obj,
+            bucketname=ns_bucket,
+            prefix="Drive/",
+            delimiter="/",
+            max_keys=max_keys,
+        )
+        get_list_and_verify(
+            first_page_res,
+            obj_prefixes[:mid_index],
+            "CommonPrefixes",
+            "Drive/",
+            "/",
+            version="v2",
+        )
+        next_page_res = bucket_utils.s3_list_objects_v2(
+            s3_obj=mcg_obj,
+            bucketname=ns_bucket,
+            prefix="Drive/",
+            delimiter="/",
+            max_keys=max_keys,
+            con_token=first_page_res["NextContinuationToken"],
+        )
+        get_list_and_verify(
+            next_page_res,
+            obj_prefixes[mid_index:],
+            "CommonPrefixes",
+            "Drive/",
+            "/",
+            version="v2",
+        )
 
     @pytest.mark.parametrize(
         argnames=["platform"],
