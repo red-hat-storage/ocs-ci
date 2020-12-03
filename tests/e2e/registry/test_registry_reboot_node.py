@@ -13,6 +13,7 @@ from ocs_ci.ocs.registry import (
     validate_image_exists,
 )
 from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
+from ocs_ci.ocs.resources.pod import wait_for_storage_pods
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
@@ -88,14 +89,17 @@ class TestRegistryRebootNode(E2ETest):
             delay=15,
         )(wait_for_nodes_status)(timeout=900)
 
+        # Validate storage pods are running
+        wait_for_storage_pods()
+
+        # Validate cluster health ok and all pods are running
+        self.sanity_helpers.health_check()
+
         # Validate image registry pods
         validate_registry_pod_status()
 
         # Validate image exists in registries path
         validate_image_exists(namespace=self.project_name)
-
-        # Validate cluster health ok and all pods are running
-        self.sanity_helpers.health_check()
 
     @pytest.mark.parametrize(
         argnames=["node_type"],
@@ -157,11 +161,14 @@ class TestRegistryRebootNode(E2ETest):
                 delay=15,
             )(wait_for_nodes_status)(timeout=900)
 
-            # Validate image registry pods
-            validate_registry_pod_status()
-
-            # Validate image exists in registries path
-            validate_image_exists(namespace=self.project_name)
+        # Validate storage pods are running
+        wait_for_storage_pods()
 
         # Validate cluster health ok and all pods are running
         self.sanity_helpers.health_check()
+
+        # Validate image registry pods
+        validate_registry_pod_status()
+
+        # Validate image exists in registries path
+        validate_image_exists(namespace=self.project_name)
