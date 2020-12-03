@@ -61,13 +61,13 @@ run it belongs here.
 Deployment related parameters. Only deployment related params not used
 anywhere else.
 
-* `installer_version` - OCS installer version
-* `force_download_installer` - Download the OCS installer even if one already exists in the bin_dir
+* `installer_version` - OCP installer version
+* `force_download_installer` - Download the OCP installer even if one already exists in the bin_dir
 * `force_download_client` - Download the OCP client even if one already exists in the bin_dir
 * `default_latest_tag` - OCS latest tag to be used by default if one is not provided
 * `external_mode` - If OCS cluster is setup in external mode (Default: false)
 * `ocs_csv_channel` - Channel used to install OCS CSV
-* `default_ocs_registry_image` - Default OCS registry image
+* `default_ocs_registry_image` - Default OCS registry image (e.g. "quay.io/rhceph-dev/ocs-olm-operator:latest-4.6")
 * `ocs_operator_nodes_to_label` - Number of OCS operator nodes to label
 * `ocs_operator_nodes_to_taint` - Number of OCS operator nodes to taint
 * `ssh_key` - Filepath to the public SSH key used to authenticate with OCP nodes
@@ -103,8 +103,8 @@ Reporting related config. (Do not store secret data in the repository!).
 * `polarion` - Subsection for polarion reporting configuration
     * `project_id` - Polarion project ID
 * `us_ds` - 'DS' or 'US', specify downstream or upstream OCS deployment
-* `ocp_must_gather_image` - Image used for OCP must-gather
-* `ocs_must_gather_image` - Image used for OCS must-gather
+* `ocp_must_gather_image` - Image used for OCP must-gather (e.g. "quay.io/openshift/origin-must-gather")
+* `ocs_must_gather_image` - Image used for OCS must-gather (e.g. "quay.io/ocs-dev/origin-must-gather")
 * `default_ocs_must_gather_latest_tag` - Latest tag to use by default for OCS must-gather
 * `ocs_must_gather_latest_tag` - Latest tag to use for OCS must-gather
 * `gather_on_deploy_failure` - Run must-gather on deployment failure or not (Default: true)
