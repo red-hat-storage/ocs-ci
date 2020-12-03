@@ -11,4 +11,4 @@ ENV_DATA:
   deployment_type: 'upi'
   monitoring_enabled: false
   number_of_storage_nodes: 3
-  number_of_storage_disks: 1
+

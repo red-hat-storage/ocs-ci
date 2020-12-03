@@ -1128,7 +1128,7 @@ def setup_local_storage(storageclass):
     if platform == constants.AWS_PLATFORM:
         storage_class_device_count = 2
     if platform == constants.IBM_POWER_PLATFORM:
-        numberofstoragedisks = config.ENV_DATA["number_of_storage_disks"]
+        numberofstoragedisks = config.ENV_DATA.get("number_of_storage_disks", 1)
         storage_class_device_count = numberofstoragedisks
     verify_pvs_created(len(worker_names) * storage_class_device_count)
 
