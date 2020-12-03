@@ -102,6 +102,11 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
         if app_label in exclude_labels:
             log.debug("ignoring item with app label %s: %s", app_label, item)
             continue
+        if item.get("kind") == constants.POD:
+            name = item.get("metadata").get("name")
+            if name.endswith("-debug"):
+                log.debug(f"ignoring item: {name}")
+                continue
         if item.get("kind") == constants.NAMESPACE:
             name = item.get("metadata").get("generateName")
             if name == "openshift-must-gather-":
