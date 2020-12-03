@@ -451,7 +451,9 @@ def create_ceph_file_system(pool_name=None):
     return cfs_data
 
 
-def default_storage_class(interface_type,):
+def default_storage_class(
+    interface_type,
+):
     """
     Return default storage class based on interface_type
 
@@ -2472,19 +2474,19 @@ def collect_performance_stats(dir_name):
     # ToDo: Get iops and throughput percentage of each nodes
 
     # Get the cpu and memory of each nodes from adm top
-    master_node_utilization_from_adm_top = node.get_node_resource_utilization_from_adm_top(
-        node_type="master"
+    master_node_utilization_from_adm_top = (
+        node.get_node_resource_utilization_from_adm_top(node_type="master")
     )
-    worker_node_utilization_from_adm_top = node.get_node_resource_utilization_from_adm_top(
-        node_type="worker"
+    worker_node_utilization_from_adm_top = (
+        node.get_node_resource_utilization_from_adm_top(node_type="worker")
     )
 
     # Get the cpu and memory from describe of nodes
-    master_node_utilization_from_oc_describe = node.get_node_resource_utilization_from_oc_describe(
-        node_type="master"
+    master_node_utilization_from_oc_describe = (
+        node.get_node_resource_utilization_from_oc_describe(node_type="master")
     )
-    worker_node_utilization_from_oc_describe = node.get_node_resource_utilization_from_oc_describe(
-        node_type="worker"
+    worker_node_utilization_from_oc_describe = (
+        node.get_node_resource_utilization_from_oc_describe(node_type="worker")
     )
 
     performance_stats["master_node_utilization"] = master_node_utilization_from_adm_top
