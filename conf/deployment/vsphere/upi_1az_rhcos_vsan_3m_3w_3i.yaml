@@ -16,4 +16,5 @@ ENV_DATA:
   fio_storageutilization_min_mbps: 10.0
 REPORTING:
   polarion:
-    deployment_id: 'xxx'
+    deployment_id: 'OCS-2444'
+
