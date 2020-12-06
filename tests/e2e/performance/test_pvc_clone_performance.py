@@ -122,16 +122,18 @@ class TestPVCSingleClonePerformance(E2ETest):
 
             cloned_pvc_obj.reload()
             logger.info(
-                f"Clone with name {cloned_pvc_obj.name} for pvc {parent_pvc} was created."
+                f"Clone with name {cloned_pvc_obj.name} for {pvc_size} pvc {parent_pvc} was created."
             )
             clones_list.append(cloned_pvc_obj)
             create_time = helpers.measure_pvc_creation_time(
                 interface_type, cloned_pvc_obj.name
             )
             creation_speed = int(file_size_mb / create_time)
-            logger.info(f"Clone number {i+1} creation time is {create_time} secs.")
             logger.info(
-                f"Clone number {i+1} creation speed is {creation_speed} MB/sec."
+                f"Clone number {i+1} creation time is {create_time} secs for {pvc_size} pvc."
+            )
+            logger.info(
+                f"Clone number {i+1} creation speed is {creation_speed} MB/sec for {pvc_size} pvc."
             )
             creation_measures = {
                 "clone_num": i + 1,
@@ -161,11 +163,13 @@ class TestPVCSingleClonePerformance(E2ETest):
             delete_time = helpers.measure_pvc_deletion_time(
                 interface_type, cloned_pvc_obj.backed_pv
             )
-            logger.info(f"Clone number {i + 1} deletion time is {delete_time} secs.")
+            logger.info(
+                f"Clone number {i + 1} deletion time is {delete_time} secs for {pvc_size} pvc."
+            )
 
             deletion_speed = int(file_size_mb / delete_time)
             logger.info(
-                f"Clone number {i+1} deletion speed is {deletion_speed} MB/sec."
+                f"Clone number {i+1} deletion speed is {deletion_speed} MB/sec for {pvc_size} pvc."
             )
             deletion_measures = {
                 "clone_num": i + 1,
@@ -181,10 +185,10 @@ class TestPVCSingleClonePerformance(E2ETest):
 
         for c in clone_creation_measures:
             logger.info(
-                f"Clone number {c['clone_num']} creation time is {c['time']} secs."
+                f"Clone number {c['clone_num']} creation time is {c['time']} secs for {pvc_size} pvc ."
             )
             logger.info(
-                f"Clone number {c['clone_num']} creation speed is {c['speed']} MB/sec."
+                f"Clone number {c['clone_num']} creation speed is {c['speed']} MB/sec for {pvc_size} pvc."
             )
 
         logger.info(
@@ -192,10 +196,10 @@ class TestPVCSingleClonePerformance(E2ETest):
         )
         for d in clone_deletion_measures:
             logger.info(
-                f"Clone number {d['clone_num']} deletion time is {d['time']} secs."
+                f"Clone number {d['clone_num']} deletion time is {d['time']} secs for {pvc_size} pvc."
             )
             logger.info(
-                f"Clone number {d['clone_num']} deletion speed is {d['speed']} MB/sec."
+                f"Clone number {d['clone_num']} deletion speed is {d['speed']} MB/sec for {pvc_size} pvc."
             )
 
         logger.info("test_clones_creation_performance finished successfully.")

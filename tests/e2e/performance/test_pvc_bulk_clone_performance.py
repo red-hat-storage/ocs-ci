@@ -99,7 +99,7 @@ class TestBulkCloneCreation(E2ETest):
             kube_job_obj=job_clone_file,
             namespace=self.namespace,
             no_of_pvc=pvc_count,
-            timeout=90,
+            timeout=200,
         )
 
         logging.info(f"Number of clones in Bound state {len(clone_bound_list)}")
@@ -124,7 +124,8 @@ class TestBulkCloneCreation(E2ETest):
         total_time = (end_time - start_time).total_seconds()
         speed = round(total_files_size / total_time, 2)
         logging.info(
-            f"Total creation time = {total_time} secs, data size = {total_files_size} MB, speed = {speed} MB/sec"
+            f"Total creation time = {total_time} secs, data size = {total_files_size} MB, speed = {speed} MB/sec "
+            f"for {self.interface} clone in bulk of {pvc_count} clones."
         )
 
     def run_fio_on_pvcs(self, pvc_dict_list, pod_factory):
@@ -135,7 +136,7 @@ class TestBulkCloneCreation(E2ETest):
             pvc_name = pvc_yaml["metadata"]["name"]
             pvc_size = pvc_yaml["spec"]["resources"]["requests"]["storage"]
             logging.info(f"Size of pvc {pvc_name} is {pvc_size}")
-            pvc_size_int = int(pvc_size[:- 2])  # without "Gi"
+            pvc_size_int = int(pvc_size[:-2])  # without "Gi"
             file_size_mb = int(pvc_size_int * 0.6) * constants.GB2MB
             total_files_size += file_size_mb
             file_size_mb_str = str(file_size_mb) + "M"
@@ -158,4 +159,3 @@ class TestBulkCloneCreation(E2ETest):
             performance_lib.write_fio_on_pod(pod_obj, file_size_mb_str)
 
         return total_files_size
-
