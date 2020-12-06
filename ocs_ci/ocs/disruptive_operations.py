@@ -62,3 +62,7 @@ def worker_node_shutdown(abrupt):
         log.info("Abrupt Shutdown")
         if node_to_shutdown:
             nodes.start_nodes(nodes=node_to_shutdown)
+
+
+def osd_node_reboot():
+    pass

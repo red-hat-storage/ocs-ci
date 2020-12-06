@@ -43,6 +43,16 @@ def test_worker_node_permanent_shutdown(teardown):
     run_ocs_upgrade(operation=worker_node_shutdown, abrupt=False)
 
 
+@pytest.mark.polarion_id("OCS-1558")
+def test_osd_reboot(teardown):
+    """
+    OCS Upgrade with node reboot:  with 1 OSD going down and back up while upgrade is running
+
+    """
+
+    pass
+
+
 @ocs_upgrade
 @polarion_id(get_polarion_id(upgrade=True))
 def test_upgrade():
