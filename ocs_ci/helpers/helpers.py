@@ -46,7 +46,8 @@ logger = logging.getLogger(__name__)
 def create_unique_resource_name(resource_description, resource_type):
     """
     Creates a unique object name by using the object_description,
-    object_type and a random uuid(in hex) as suffix
+    object_type and a random uuid(in hex) as suffix trimmed to support
+    kubernetes limitation of 63 characters
 
     Args:
         resource_description (str): The user provided object description
@@ -56,7 +57,8 @@ def create_unique_resource_name(resource_description, resource_type):
     Returns:
         str: A unique name
     """
-    return f"{resource_type}-{resource_description[:23]}-{uuid4().hex}"
+    name = f"{resource_type}-{resource_description[:23]}-{uuid4().hex}"
+    return name if len(name) < 64 else name[:63]
 
 
 def create_resource(do_reload=True, **kwargs):
