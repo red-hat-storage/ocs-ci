@@ -155,7 +155,6 @@ GATHER_COMMANDS_OTHERS = [
     "registry-cephfs-rwx-pvc.yaml",
     "replicasets.yaml",
     "replicationcontrollers.yaml",
-    "rook-ceph-mon-a.yaml",
     "routes.yaml",
     "secrets.yaml",
     "services.yaml",
