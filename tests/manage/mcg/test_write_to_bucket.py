@@ -73,6 +73,12 @@ class TestBucketIO(MCGTest):
                 marks=[tier1],
             ),
         ],
+        ids=[
+            "DEFAULT-BACKINGSTORE",
+            "AWS-OC-1",
+            "AZURE-OC-1",
+            "GCP-OC-1",
+        ],
     )
     def test_write_file_to_bucket(
         self,
@@ -121,6 +127,12 @@ class TestBucketIO(MCGTest):
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
                 marks=[tier1],
             ),
+        ],
+        ids=[
+            "DEFAULT-BACKINGSTORE",
+            "AWS-OC-1",
+            "AZURE-OC-1",
+            "GCP-OC-1",
         ],
     )
     def test_mcg_data_deduplication(
@@ -179,6 +191,12 @@ class TestBucketIO(MCGTest):
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
                 marks=[tier1],
             ),
+        ],
+        ids=[
+            "DEFAULT-BACKINGSTORE",
+            "AWS-OC-1",
+            "AZURE-OC-1",
+            "GCP-OC-1",
         ],
     )
     def test_mcg_data_compression(

@@ -115,6 +115,19 @@ class TestBucketCreation(MCGTest):
                 marks=[tier1, pytest.mark.polarion_id("OCS-2331")],
             ),
         ],
+        ids=[
+            "3-S3-DEFAULT-BACKINGSTORE",
+            "100-S3-DEFAULT-BACKINGSTORE",
+            "1000-S3-DEFAULT-BACKINGSTORE",
+            "3-CLI-DEFAULT-BACKINGSTORE",
+            "100-CLI-DEFAULT-BACKINGSTORE",
+            "1000-CLI-DEFAULT-BACKINGSTORE",
+            "3-OC-DEFAULT-BACKINGSTORE",
+            "100-OC-DEFAULT-BACKINGSTORE",
+            "1000-OC-DEFAULT-BACKINGSTORE",
+            "1-OC-PVPOOL",
+            "1-CLI-PVPOOL",
+        ],
     )
     def test_bucket_creation(
         self, bucket_class_factory, bucket_factory, amount, interface, bucketclass_dict

@@ -49,6 +49,12 @@ class TestObjectIntegrity(MCGTest):
                 marks=[tier1],
             ),
         ],
+        ids=[
+            "DEFAULT-BACKINGSTORE",
+            "AWS-OC-1",
+            "AZURE-OC-1",
+            "GCP-OC-1",
+        ],
     )
     def test_check_object_integrity(
         self, mcg_obj, awscli_pod, bucket_factory, bucketclass_dict

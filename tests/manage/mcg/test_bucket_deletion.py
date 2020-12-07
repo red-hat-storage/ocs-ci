@@ -101,6 +101,17 @@ class TestBucketDeletion(MCGTest):
                 marks=[tier1, pytest.mark.polarion_id("OCS-2354")],
             ),
         ],
+        ids=[
+            "3-S3-DEFAULT-BACKINGSTORE",
+            "3-CLI-DEFAULT-BACKINGSTORE",
+            "3-OC-DEFAULT-BACKINGSTORE",
+            "100-S3-DEFAULT-BACKINGSTORE",
+            "100-OC-DEFAULT-BACKINGSTORE",
+            "1000-S3-DEFAULT-BACKINGSTORE",
+            "1000-OC-DEFAULT-BACKINGSTORE",
+            "1-OC-PVPOOL",
+            "1-CLI-PVPOOL",
+        ],
     )
     def test_bucket_delete(
         self,
