@@ -89,7 +89,10 @@ def push_results(json_data):
         log.info(f"POST request output is {request.text}")
     except Exception:
         # Catching any exception just to prevent the test from failed
-        log.error("Failed to push data to codespeed, make sure the server is up")
+        log.warning(
+            "Failed to push data to codespeed, make sure the server is"
+            "up, and that you are in RH network"
+        )
 
 
 def push_perf_dashboard(interface, read_iops, write_iops, bw_read, bw_write):
