@@ -5,6 +5,8 @@ import logging
 import pytest
 import time
 
+import subprocess
+
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
@@ -20,6 +22,61 @@ from ocs_ci.ocs.cluster import CephCluster, get_ceph_df_detail
 from ocs_ci.ocs.version import get_environment_info
 
 log = logging.getLogger(__name__)
+
+ERRMSG = "Error in command"
+
+
+def msg_logging(msg):
+    """
+    This function is logging the message to the log file, and also print it
+    for the caller script output
+
+    Args:
+        msg (str): The message to log as info and print on the console
+
+    """
+    print(msg)
+    log.info(msg)
+
+
+def run_command(cmd):
+    """
+    Running command on the OS and return the STDOUT & STDERR outputs
+    in case of argument is not string or list, return error message
+
+    Args:
+        cmd (str/list): the command to execute
+
+    Returns:
+        list : all STDOUT / STDERR output as list of lines
+
+    """
+    if isinstance(cmd, str):
+        command = cmd.split()
+    elif isinstance(cmd, list):
+        command = cmd
+    else:
+        return ERRMSG
+
+    msg_logging(f"Going to run {cmd}")
+    cp = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.PIPE,
+        timeout=600,
+    )
+    output = cp.stdout.decode()
+    err = cp.stderr.decode()
+    # exit code is not zero
+    if cp.returncode:
+        log.error(f"Command finished with non zero ({cp.returncode}) {err}")
+        print(f"Command finished with non zero ({cp.returncode}) {err}")
+        output += f"{ERRMSG} {err}"
+
+    output = output.split("\n")  # convert output to list
+    output.pop()  # remove last empty element from the list
+    return output
 
 
 @pytest.fixture(scope="function")
@@ -97,18 +154,25 @@ class FIOResultsAnalyse(PerfResult):
             object_size = test_data["object_size"]
             operation = test_data["operation"]
             total_iops = "{:.2f}".format(test_data["total-iops"])
+            total_iops = float(total_iops)
             std_dev = "std-dev-" + object_size
             variance = 0
+            bs = int(object_size.replace("KiB", ""))
             if std_dev in test_data.keys():
                 variance = "{:.2f}".format(test_data[std_dev])
             if object_size in self.all_results.keys():
                 self.all_results[object_size][operation] = {
                     "IOPS": total_iops,
-                    "std_dev": variance,
+                    "std_dev": float(variance),
+                    "Throughput": int(int(total_iops) * bs / 1024),
                 }
             else:
                 self.all_results[object_size] = {
-                    operation: {"IOPS": total_iops, "std_dev": variance}
+                    operation: {
+                        "IOPS": total_iops,
+                        "std_dev": float(variance),
+                        "Throughput": int(int(total_iops) * bs / 1024),
+                    }
                 }
 
             log.info(
@@ -380,6 +444,49 @@ class TestFIOBenchmark(E2ETest):
 
                 return ratio
 
+    def cleanup(self):
+        log.info("Deleting FIO benchmark")
+        self.fio_cr_obj.delete()
+        time.sleep(180)
+
+        # Getting all PVCs created in the test (if left).
+        NL = "\\n"
+        command = [
+            "oc",
+            "get",
+            "pvc",
+            "-n",
+        ]
+        command.append(constants.RIPSAW_NAMESPACE)
+        command.append("-o")
+        command.append("template")
+        command.append("--template")
+        command.append("'{{range .items}}{{.metadata.name}}{{\"" + NL + "\"}}{{end}}'")
+        pvcs_list = run_command(command)
+        log.info(f"list of all PVCs :{pvcs_list}")
+        for pvc in pvcs_list:
+            pvc = pvc.replace("'", "")
+            run_command(f"oc -n {constants.RIPSAW_NAMESPACE} delete pvc {pvc}")
+
+        # Getting all PVs created in the test (if left).
+        command[2] = "pv"
+        command[8] = (
+            "'{{range .items}}{{.metadata.name}} {{.spec.claimRef.namespace}}{{\""
+            + NL
+            + "\"}}{{end}}'"
+        )
+        command.remove("-n")
+        command.remove(constants.RIPSAW_NAMESPACE)
+        pvs_list = run_command(command)
+        log.info(f"list of all PVs :{pvs_list}")
+
+        for line in pvs_list:
+            pv, ns = line.split(" ")
+            pv = pv.replace("'", "")
+            if ns == constants.RIPSAW_NAMESPACE:
+                log.info(f"Going to delete {pv}")
+                run_command(f"oc delete pv {pv}")
+
     @pytest.mark.parametrize(
         argnames=["interface", "io_pattern"],
         argvalues=[
@@ -460,20 +567,23 @@ class TestFIOBenchmark(E2ETest):
 
     @skipif_ocs_version("<4.6")
     @pytest.mark.parametrize(
-        argnames=["io_pattern"],
+        argnames=["io_pattern", "bs"],
         argvalues=[
+            # ["1024KiB", "64KiB", "16KiB", "4KiB"]
+            pytest.param(*["random", "1024KiB"]),
+            pytest.param(*["random", "64KiB"]),
+            pytest.param(*["random", "16KiB"]),
+            pytest.param(*["random", "4KiB"]),
             pytest.param(
-                *["random"],
-                marks=pytest.mark.polarion_id("OCS-846"),
+                *["sequential", "1024KiB"],
             ),
-            pytest.param(
-                *["sequential"],
-                marks=pytest.mark.polarion_id("OCS-846"),
-            ),
+            pytest.param(*["sequential", "64KiB"]),
+            pytest.param(*["sequential", "16KiB"]),
+            pytest.param(*["sequential", "4KiB"]),
         ],
     )
     def test_fio_compressed_workload(
-        self, ripsaw, es, storageclass_factory, io_pattern
+        self, ripsaw, es, storageclass_factory, io_pattern, bs
     ):
         """
         This is a basic fio perf test which run on compression enabled volume
@@ -497,6 +607,7 @@ class TestFIOBenchmark(E2ETest):
         self.fio_cr = templating.load_yaml(
             "ocs_ci/templates/workloads/fio/benchmark_fio_cmp.yaml"
         )
+        self.fio_cr["spec"]["workload"]["args"]["bs"] = [bs]
 
         # Saving the Original elastic-search IP and PORT - if defined in yaml
         self.es_info_backup(es)
@@ -508,50 +619,49 @@ class TestFIOBenchmark(E2ETest):
 
         self.fio_cr["spec"]["workload"]["args"]["storageclass"] = sc
         self.setting_io_pattern(io_pattern)
-        for bs in ["1024KiB", "64KiB", "16KiB", "4KiB"]:
-            self.fio_cr["spec"]["workload"]["args"]["bs"] = [bs]
-            fio_client_pod = self.deploy_and_wait_for_wl_to_start()
+        # for bs in ["1024KiB", "64KiB", "16KiB", "4KiB"]:
+        fio_client_pod = self.deploy_and_wait_for_wl_to_start()
 
-            # Getting the UUID from inside the benchmark pod
-            uuid = ripsaw.get_uuid(fio_client_pod)
-            # Setting back the original elastic-search information
-            self.fio_cr["spec"]["elasticsearch"] = self.backup_es
+        # Getting the UUID from inside the benchmark pod
+        uuid = ripsaw.get_uuid(fio_client_pod)
+        # Setting back the original elastic-search information
+        self.fio_cr["spec"]["elasticsearch"] = self.backup_es
 
-            # Initialize the results doc file.
-            full_results = self.init_full_results(FIOResultsAnalyse(uuid, self.fio_cr))
+        # Initialize the results doc file.
+        full_results = self.init_full_results(FIOResultsAnalyse(uuid, self.fio_cr))
 
-            # Setting the global parameters of the test
-            full_results.add_key("io_pattern", io_pattern)
+        # Setting the global parameters of the test
+        full_results.add_key("io_pattern", io_pattern)
 
-            end_time = self.wait_for_wl_to_finish(fio_client_pod)
-            full_results.add_key(
-                "test_time", {"start": self.start_time, "end": end_time}
+        end_time = self.wait_for_wl_to_finish(fio_client_pod)
+        full_results.add_key("test_time", {"start": self.start_time, "end": end_time})
+
+        log.info("verifying compression ratio")
+        expected_ratio = 50  # according to the yaml file parameter
+        ratio = self.calculate_compression_ratio(pool_name)
+        full_results.add_key("cmp_ratio", {"expected": 50, "actual": ratio})
+        if (expected_ratio + 5) < ratio or ratio < (expected_ratio - 5):
+            log.error(
+                f"The compression ratio is {ratio}% "
+                f"while the expected ratio is {expected_ratio}%"
             )
+        else:
+            log.info(f"The compression ratio is {ratio}%")
 
-            log.info("verifying compression ratio")
-            expected_ratio = 50  # according to the yaml file parameter
-            ratio = self.calculate_compression_ratio(pool_name)
-            if (expected_ratio + 5) > ratio or ratio > (expected_ratio - 5):
-                log.error(
-                    f"The compression ratio is {ratio}% "
-                    f"while the expected ratio is {expected_ratio}%"
-                )
-            else:
-                log.info(f"The compression ratio is {ratio}%")
+        # Clean up fio benchmark
 
-            # Clean up fio benchmark
-            log.info("Deleting FIO benchmark")
-            self.fio_cr_obj.delete()
+        self.copy_es_data(es, full_results)
+        full_results.analyze_results()  # Analyze the results
+        # Writing the analyzed test results to the Elastic-Search server
+        full_results.es_write()
+        # full_results.codespeed_push()  # Push results to codespeed
+        # Creating full link to the results on the ES server
+        log.info(f"The Result can be found at ; {full_results.results_link()}")
 
-            self.copy_es_data(es, full_results)
-            full_results.analyze_results()  # Analyze the results
-            # Writing the analyzed test results to the Elastic-Search server
-            full_results.es_write()
-            full_results.codespeed_push()  # Push results to codespeed
-            # Creating full link to the results on the ES server
-            log.info(f"The Result can be found at ; {full_results.results_link()}")
-
+        self.cleanup()
         sc_obj.delete()
         sc_obj.ocp.wait_for_delete(resource_name=sc, timeout=300, sleep=5)
-        run_cmd(f"oc delete cephblockpools -n openshift-storage {pool_name}")
+        run_command(f"oc delete cephblockpools -n openshift-storage {pool_name}")
         log.debug(f"Full results is : {full_results.results}")
+        # log.info('Sleep for debugging (10 Min.)')
+        # time.sleep(600)
