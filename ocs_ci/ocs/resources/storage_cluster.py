@@ -282,8 +282,10 @@ def ocs_install_verification(
             "in the output."
         )
 
-        if config.DEPLOYMENT.get("local_storage"):
-            deviceset_pvcs = [osd.get_node() for osd in get_osd_pods()]
+        if config.DEPLOYMENT.get("local_storage") or config.ENV_DATA.get(
+            "enable_flexible_scaling"
+        ):
+            deviceset_pvcs = get_compute_node_names()
         else:
             deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
 
@@ -346,7 +348,7 @@ def ocs_install_verification(
         log.info("Verified: CSI snapshotter is not present.")
 
     # Verify pool crush rule is with "type": "zone"
-    if utils.get_az_count() == 3:
+    if not config.ENV_DATA["enable_flexible_scaling"] and utils.get_az_count() == 3:
         log.info("Verifying pool crush rule is with type: zone")
         crush_dump = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd crush dump", format="")
         pool_names = [
@@ -362,6 +364,23 @@ def ocs_install_verification(
                 item for item in crush_rule["steps"] if item.get("type") == "zone"
             ], f"{crush_rule['rule_name']} is not with type as zone"
         log.info("Verified - pool crush rule is with type: zone")
+    else:
+        if config.ENV_DATA["enable_flexible_scaling"]:
+            log.info("Verifying pool crush rule is with type: host")
+            crush_dump = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd crush dump", format="")
+            pool_names = [
+                constants.METADATA_POOL,
+                constants.DEFAULT_BLOCKPOOL,
+                constants.DATA_POOL,
+            ]
+            crush_rules = [
+                rule for rule in crush_dump["rules"] if rule["rule_name"] in pool_names
+            ]
+            for crush_rule in crush_rules:
+                assert [
+                    item for item in crush_rule["steps"] if item.get("type") == "host"
+                ], f"{crush_rule['rule_name']} is not with type host"
+            log.info("Verified - pool crush rule is with type: host")
     log.info("Validate cluster on PVC")
     validate_cluster_on_pvc()
 

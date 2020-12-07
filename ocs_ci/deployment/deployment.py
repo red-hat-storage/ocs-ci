@@ -373,6 +373,12 @@ class Deployment(object):
         ui_deployment = config.DEPLOYMENT.get("ui_deployment")
         live_deployment = config.DEPLOYMENT.get("live_deployment")
 
+        ocs_version = float(config.ENV_DATA["ocs_version"])
+        ocp_version = float(get_ocp_version())
+
+        if config.DEPLOYMENT.get("local_storage"):
+            setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
+
         if ui_deployment:
             if not live_deployment:
                 self.create_ocs_operator_source()
@@ -438,10 +444,21 @@ class Deployment(object):
             run_cmd(f"oc create -f {self.CUSTOM_STORAGE_CLASS_PATH}")
 
         # creating StorageCluster
-        if self.platform == constants.IBM_POWER_PLATFORM:
-            cluster_data = templating.load_yaml(constants.IBM_STORAGE_CLUSTER_YAML)
+        if config.ENV_DATA.get("enable_flexible_scaling"):
+            if ocs_version < 4.7:
+                error_message = "Flexible scaling can be enabled only on OCS >= 4.7!"
+                logger.error(error_message)
+                raise UnsupportedFeatureError(error_message)
+            else:
+                logger.info("Enabling flexible scaling!")
+                cluster_data = templating.load_yaml(
+                    constants.FLEXIBLE_STORAGE_CLUSTER_YAML
+                )
         else:
-            cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
+            if self.platform == constants.IBM_POWER_PLATFORM:
+                cluster_data = templating.load_yaml(constants.IBM_STORAGE_CLUSTER_YAML)
+            else:
+                cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
 
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
 
@@ -508,9 +525,6 @@ class Deployment(object):
                 deviceset_data["dataPVCTemplate"]["spec"][
                     "storageClassName"
                 ] = self.DEFAULT_STORAGECLASS
-
-            ocs_version = float(config.ENV_DATA["ocs_version"])
-            ocp_version = float(get_ocp_version())
 
             # StorageCluster tweaks for LSO
             if config.DEPLOYMENT.get("local_storage"):

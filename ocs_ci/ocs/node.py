@@ -665,7 +665,15 @@ def get_compute_node_names(no_replace=False):
     """
     platform = config.ENV_DATA.get("platform").lower()
     compute_node_objs = get_nodes()
-    if platform in [constants.VSPHERE_PLATFORM, constants.AWS_PLATFORM]:
+
+    if config.ENV_DATA.get("enable_flexible_scaling"):
+        return [
+            compute_obj.get()["metadata"]["labels"][constants.HOSTNAME_LABEL].replace(
+                ".", "-"
+            )
+            for compute_obj in compute_node_objs
+        ]
+    elif platform in [constants.VSPHERE_PLATFORM, constants.AWS_PLATFORM]:
         return [
             compute_obj.get()["metadata"]["labels"][constants.HOSTNAME_LABEL]
             for compute_obj in compute_node_objs
