@@ -234,10 +234,10 @@ def uninstall_ocs():
     ocp_obj.wait_for_delete(constants.OPENSHIFT_STORAGE_NAMESPACE)
     switch_to_project(constants.DEFAULT_NAMESPACE)
 
-    # step 10: TODO remove crypto from nodes. how do I check if nodes are encrypted?
-    for node in storage_node_list:
+    # step 10: TODO remove crypto from nodes.
+    """for node in storage_node_list:
         log.info(f"removing encryption from {node}")
-        ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[])
+        ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[])"""
 
     if lso_sc is not None:
         log.info("Removing LSO")
@@ -265,9 +265,9 @@ def uninstall_ocs():
     except Exception as e:
         log.info(f"OCS PV(s) not found. {e}")
 
-    log.info("Removing CRDs")  # TODO get final CRDS list
+    log.info("Removing CRDs")
     crd_list = [
-        "crd backingstores.noobaa.io",
+        "backingstores.noobaa.io",
         "bucketclasses.noobaa.io",
         "cephblockpools.ceph.rook.io",
         "cephclusters.ceph.rook.io",
