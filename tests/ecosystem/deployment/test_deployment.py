@@ -5,7 +5,8 @@ from ocs_ci.framework.testlib import deployment, polarion_id
 from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
 from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import is_cluster_running
-from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
+
+# from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 
 log = logging.getLogger(__name__)
 
@@ -22,16 +23,16 @@ def test_deployment(pvc_factory, pod_factory):
             ocs_registry_image = config.DEPLOYMENT.get("ocs_registry_image")
             ocs_install_verification(ocs_registry_image=ocs_registry_image)
 
-            # Check basic cluster functionality by creating resources
-            # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
-            # run IO and delete the resources
-            if config.DEPLOYMENT["external_mode"]:
-                sanity_helpers = SanityExternalCluster()
-            else:
-                sanity_helpers = Sanity()
-            sanity_helpers.health_check()
-            sanity_helpers.create_resources(pvc_factory, pod_factory)
-            sanity_helpers.delete_resources()
+            # # Check basic cluster functionality by creating resources
+            # # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
+            # # run IO and delete the resources
+            # if config.DEPLOYMENT["external_mode"]:
+            #     sanity_helpers = SanityExternalCluster()
+            # else:
+            #     sanity_helpers = Sanity()
+            # sanity_helpers.health_check()
+            # sanity_helpers.create_resources(pvc_factory, pod_factory)
+            # sanity_helpers.delete_resources()
 
     if teardown:
         log.info("Cluster will be destroyed during teardown part of this test.")
