@@ -84,7 +84,7 @@ def cloud_uls_factory(request, cld_mgr):
                         ulsMap[cloud.lower()].create_uls(uls_name, region)
                     except AttributeError as e:
                         raise Exception(
-                            f"""{cloud}_client was initialized as None, 
+                            f"""{cloud}_client was initialized as None,
                             please verify the needed credentials were set in auth.yaml,\n
                             or refer to the OCS-CI documentation
                             ( https://ocs-ci.readthedocs.io/en/latest/usecases/
