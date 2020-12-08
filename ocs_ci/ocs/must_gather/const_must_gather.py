@@ -622,6 +622,18 @@ GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE = [
     "ocs-storagecluster-rbdplugin-snapclass.yaml",
 ]
 
+# TODO: Remove monitoring_registry_pvc_list once issue #3465 is fixed
+# https://github.com/red-hat-storage/ocs-ci/issues/3465
+monitoring_registry_pvc_list = [
+    "my-alertmanager-claim-alertmanager-main-0.yaml",
+    "my-alertmanager-claim-alertmanager-main-1.yaml",
+    "my-alertmanager-claim-alertmanager-main-2.yaml",
+    "my-prometheus-claim-prometheus-k8s-0.yaml",
+    "my-prometheus-claim-prometheus-k8s-1.yaml",
+    "registry-cephfs-rwx-pvc.yaml",
+]
+GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE.extend(monitoring_registry_pvc_list)
+
 GATHER_COMMANDS_OTHERS_EXTERNAL_4_5 = list(
     set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_4_5)
     - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
