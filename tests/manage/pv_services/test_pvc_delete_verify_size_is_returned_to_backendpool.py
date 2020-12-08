@@ -49,33 +49,6 @@ def verify_pv_not_exists(pvc_obj, cbp_name, rbd_image_id):
     logger.info("Expected: PV should not be found " "after deleting corresponding PVC")
 
 
-@retry(UnexpectedBehaviour, tries=20, delay=10, backoff=1)
-def fetch_used_size(cbp_name, exp_val=None):
-    """
-    Fetch used size in the pool
-
-    Args:
-        exp_val(float): Expected size in GB
-
-    Returns:
-        float: Used size in GB
-    """
-
-    ct_pod = pod.get_ceph_tools_pod()
-    rados_status = ct_pod.exec_ceph_cmd(ceph_cmd=f"rados df -p {cbp_name}")
-    size_bytes = rados_status["pools"][0]["size_bytes"]
-
-    # Convert size to GB
-    used_in_gb = float(format(size_bytes / constants.GB, ".4f"))
-    if exp_val:
-        if not abs(exp_val - used_in_gb) < 1.5:
-            raise UnexpectedBehaviour(
-                f"Actual {used_in_gb} and expected size {exp_val} not "
-                f"matching. Retrying"
-            )
-    return used_in_gb
-
-
 @pytest.mark.polarion_id("OCS-372")
 class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
     """
@@ -105,13 +78,13 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         )
         pvc_obj.reload()
 
-        used_before_io = fetch_used_size(cbp_name)
+        used_before_io = helpers.fetch_used_size(cbp_name)
         logger.info(f"Used before IO {used_before_io}")
 
         # Write 6Gb
         pod.run_io_and_verify_mount_point(pod_obj, bs="10M", count="600")
         exp_size = used_before_io + (6 * replica_size)
-        used_after_io = fetch_used_size(cbp_name, exp_size)
+        used_after_io = helpers.fetch_used_size(cbp_name, exp_size)
         logger.info(f"Used space after IO {used_after_io}")
 
         rbd_image_id = pvc_obj.image_uuid
@@ -121,5 +94,5 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
 
         verify_pv_not_exists(pvc_obj, cbp_name, rbd_image_id)
-        used_after_deleting_pvc = fetch_used_size(cbp_name, used_before_io)
+        used_after_deleting_pvc = helpers.fetch_used_size(cbp_name, used_before_io)
         logger.info(f"Used after deleting PVC {used_after_deleting_pvc}")
