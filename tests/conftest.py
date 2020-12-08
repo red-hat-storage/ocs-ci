@@ -80,6 +80,7 @@ from ocs_ci.utility.utils import (
     skipif_ocs_version,
     TimeoutSampler,
     skipif_upgraded_from,
+    update_container_with_mirrored_image,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -1781,6 +1782,8 @@ def awscli_pod_fixture(request, scope_name):
         constants.AWSCLI_RELAY_POD_NAME, scope_name
     )
     awscli_pod_dict["metadata"]["name"] = awscli_pod_name
+
+    update_container_with_mirrored_image(awscli_pod_dict)
 
     awscli_pod_obj = Pod(**awscli_pod_dict)
     assert awscli_pod_obj.create(
