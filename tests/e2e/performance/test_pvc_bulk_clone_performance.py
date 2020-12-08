@@ -11,7 +11,6 @@ from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
-from ocs_ci.utility import templating
 
 log = logging.getLogger(__name__)
 
@@ -116,7 +115,7 @@ class TestBulkCloneCreation(E2ETest):
 
         assert len(clone_bound_list) == len(
             clone_objs
-        ), f"There are object clones not found, cannot measure time"
+        ), "Not all clones reached BOUND state, cannot measure time"
         start_time = helpers.get_provision_time(
             self.interface, clone_objs, status="start"
         )

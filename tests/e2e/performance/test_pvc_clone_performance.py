@@ -7,7 +7,7 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import skipif_ocs_version, performance, E2ETest
-from ocs_ci.ocs.resources import pvc, pod
+from ocs_ci.ocs.resources import pvc
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.utility.utils import convert_device_size
 
