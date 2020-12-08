@@ -44,6 +44,7 @@ TEMPLATE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_SERVER_DIR, "pillowfi
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_AMQ_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "amq")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(TEMPLATE_DIR, "openshift-infra/")
+TEMPLATE_HSBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "hsbench")
 TEMPLATE_CONFIGURE_PVC_MONITORING_POD = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "monitoring/"
 )
@@ -417,6 +418,8 @@ AMQ_SIMPLE_WORKLOAD_YAML = os.path.join(TEMPLATE_AMQ_DIR, "amq_simple_workload.y
 
 NGINX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "nginx.yaml")
 
+HSBENCH_OBJ_YAML = os.path.join(TEMPLATE_HSBENCH_DIR, "hsbench_obj.yaml")
+
 AWSCLI_SERVICE_CA_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "aws-cli-service-ca-configmap.yaml"
 )
@@ -430,6 +433,8 @@ SERVICE_ACCOUNT_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "service_account.ya
 FEDORA_DC_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedora_dc.yaml")
 
 RHEL_7_7_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "rhel-7_7.yaml")
+
+GOLANG_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "golang.yaml")
 
 # Openshift-logging elasticsearch operator deployment yamls
 EO_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-project.yaml")
@@ -714,6 +719,7 @@ SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scale
 # labels
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
+APP_LABEL = "node-role.kubernetes.io/app"
 
 # Cluster name limits
 CLUSTER_NAME_MIN_CHARACTERS = 5
@@ -955,10 +961,13 @@ JENKINS_NFS_CURRENT_CLUSTER_DIR = "/home/jenkins/current-cluster-dir"
 FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
 FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
-FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/aosqe/flexy:poc"
+FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/flexy/ocp4:v1.3"
 FLEXY_ENV_FILE_UPDATED_NAME = "ocs-flexy-env-file-updated.env"
-FLEXY_ENV_FILE_UPDATED = os.path.join(FLEXY_HOST_DIR_PATH, FLEXY_ENV_FILE_UPDATED_NAME)
+FLEXY_ENV_FILE_UPDATED_PATH = os.path.join(
+    FLEXY_HOST_DIR_PATH, FLEXY_ENV_FILE_UPDATED_NAME
+)
 REGISTRY_SVC = "registry.svc.ci.openshift.org/ocp/release"
+FLEXY_USER_LOCAL_UID = 101000
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"

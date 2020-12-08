@@ -22,7 +22,6 @@ from ocs_ci.utility.utils import (
     expose_ocp_version,
     wait_for_machineconfigpool_status,
 )
-from ocs_ci.ocs import exceptions
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +34,11 @@ class FlexyBase(object):
     def __init__(self):
         self.cluster_name = config.ENV_DATA["cluster_name"]
         self.cluster_path = config.ENV_DATA["cluster_path"]
+
         # Host dir path which will be mounted inside flexy container
         # This will be root for all flexy housekeeping
         self.flexy_host_dir = os.path.expanduser(constants.FLEXY_HOST_DIR_PATH)
-        if not os.path.exists(self.flexy_host_dir):
-            os.mkdir(self.flexy_host_dir)
-            os.chmod(self.flexy_host_dir, mode=0o777)
+        self.flexy_prepare_work_dir()
 
         # Path inside container where flexy_host_dir will be mounted
         self.flexy_mnt_container_dir = config.ENV_DATA.get(
@@ -149,7 +147,7 @@ class FlexyBase(object):
         Build flexy command line for 'deploy' operation
 
         """
-        cmd = shlex.split("sudo podman run --rm=true")
+        cmd = shlex.split("podman run --rm=true")
         flexy_container_args = self.build_container_args()
         return cmd + flexy_container_args
 
@@ -158,18 +156,8 @@ class FlexyBase(object):
         Build flexy command line for 'destroy' operation
 
         """
-        # if ocs-ci/data were cleaned up (e.g. on Jenkins), copy
-        # Flexy env file from cluster dir to the data directory
-        if not os.path.exists(constants.FLEXY_ENV_FILE_UPDATED):
-            cluster_dir_flexy_env_file_updated = os.path.join(
-                constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
-                constants.FLEXY_HOST_DIR,
-                constants.FLEXY_ENV_FILE_UPDATED_NAME,
-            )
-            shutil.copyfile(
-                cluster_dir_flexy_env_file_updated, constants.FLEXY_ENV_FILE_UPDATED
-            )
-        cmd = shlex.split("sudo podman run --rm=true")
+
+        cmd = shlex.split("podman run --rm=true")
         flexy_container_args = self.build_container_args("destroy")
         return cmd + flexy_container_args + ["destroy"]
 
@@ -187,7 +175,7 @@ class FlexyBase(object):
 
         """
         args = list()
-        args.append(f"--env-file={constants.FLEXY_ENV_FILE_UPDATED}")
+        args.append(f"--env-file={constants.FLEXY_ENV_FILE_UPDATED_PATH}")
         args.append(f"-w={self.flexy_mnt_container_dir}")
         # For destroy on NFS mount, relabel=shared will not work
         # with podman hence we will keep 'relabel=shared' only for
@@ -195,18 +183,9 @@ class FlexyBase(object):
         # Also during destroy we assume that copying of flexy
         # would be done during deployment and we can rely on
         if purpose == "destroy":
-            if self.is_jenkins_mount():
-                flexy_dir = os.path.join(
-                    constants.JENKINS_NFS_CURRENT_CLUSTER_DIR, constants.FLEXY_HOST_DIR
-                )
-                if not os.path.exists(flexy_dir):
-                    raise exceptions.FlexyDataNotFound("Failed to find flexy data")
-            else:
-                flexy_dir = self.flexy_host_dir
             args.append(
-                f"--mount=type=bind,source={flexy_dir},"
-                f"destination={self.flexy_mnt_container_dir}"
-                f'{[",relabel=shared", ""][self.is_jenkins_mount()]}'
+                f"--mount=type=bind,source={self.flexy_host_dir},"
+                f"destination={self.flexy_mnt_container_dir},relabel=shared"
             )
         else:
             args.append(
@@ -276,7 +255,7 @@ class FlexyBase(object):
                 config_parser.set("root", key, f"{config.FLEXY[key]}")
 
         # write the updated config_parser content to updated env file
-        with open(constants.FLEXY_ENV_FILE_UPDATED, "w") as fp:
+        with open(constants.FLEXY_ENV_FILE_UPDATED_PATH, "w") as fp:
             src = io.StringIO()
             dst = io.StringIO()
             config_parser.write(src)
@@ -291,45 +270,57 @@ class FlexyBase(object):
             # removed
             fp.write("".join(dst.readlines()[1:-1]))
 
-    def flexy_post_processing(self):
+    def flexy_prepare_work_dir(self):
         """
-        Perform copying of flexy-dir to nfs mount
-        and do this only if its jenkins run
-
+        Prepare Flexy working directory (flexy-dir):
+            - copy flexy-dir from cluster_path to data dir (if available)
+            - set proper ownership
         """
-        abs_cluster_path = os.path.abspath(self.cluster_path)
-        flexy_cluster_path = os.path.join(
-            self.flexy_host_dir, "flexy/workdir/install-dir"
-        )
-        if os.path.exists(abs_cluster_path):
-            os.rmdir(abs_cluster_path)
-        # Check whether its a jenkins run
-        if self.is_jenkins_mount():
-            flexy_nfs_path = os.path.join(
-                constants.JENKINS_NFS_CURRENT_CLUSTER_DIR, constants.FLEXY_HOST_DIR
+        logger.info(f"Prepare flexy working directory {self.flexy_host_dir}.")
+        if not os.path.exists(self.flexy_host_dir):
+            # if ocs-ci/data were cleaned up (e.g. on Jenkins) and flexy-dir
+            # exists in cluster dir, copy it to the data directory, othervise
+            # just create empty flexy-dir
+            cluster_path_flexy_dir = os.path.join(
+                self.cluster_path, constants.FLEXY_HOST_DIR
             )
-            if not os.path.exists(flexy_nfs_path):
+            if os.path.exists(cluster_path_flexy_dir):
                 shutil.copytree(
+                    cluster_path_flexy_dir,
                     self.flexy_host_dir,
-                    flexy_nfs_path,
                     symlinks=True,
                     ignore_dangling_symlinks=True,
                 )
-                chmod = f"chmod -R 777 {flexy_nfs_path}"
-                run_cmd(chmod)
-                logger.info(f"Symlinking {abs_cluster_path} to {flexy_nfs_path}")
-                os.symlink(
-                    os.path.join(flexy_nfs_path, constants.FLEXY_RELATIVE_CLUSTER_DIR),
-                    abs_cluster_path,
-                )
-        else:
-            # recursively change permissions
-            # for all the subdirs
-            chmod = f"sudo chmod -R 777 {constants.FLEXY_HOST_DIR_PATH}"
-            run_cmd(chmod)
-            logger.info(f"Symlinking {flexy_cluster_path, abs_cluster_path}")
-            os.symlink(flexy_cluster_path, abs_cluster_path)
+            else:
+                os.mkdir(self.flexy_host_dir)
+        # change the ownership to the uid of user in flexy container
+        chown_cmd = (
+            f"sudo chown -R {constants.FLEXY_USER_LOCAL_UID} {self.flexy_host_dir}"
+        )
+        run_cmd(chown_cmd)
 
+    def flexy_backup_work_dir(self):
+        """
+        Perform copying of flexy-dir to cluster_path.
+        """
+        # change ownership of flexy-dir back to current user
+        chown_cmd = f"sudo chown -R {os.getuid()}:{os.getgid()} {self.flexy_host_dir}"
+        run_cmd(chown_cmd)
+        chmod_cmd = f"sudo chmod -R a+rX {self.flexy_host_dir}"
+        run_cmd(chmod_cmd)
+        # mirror flexy work dir to cluster path
+        rsync_cmd = f"rsync -av {self.flexy_host_dir} {self.cluster_path}/"
+        run_cmd(rsync_cmd)
+
+        # create symlink to auth directory
+        cluster_path_auth = os.path.join(self.cluster_path, "auth")
+        if not os.path.exists(cluster_path_auth):
+            os.symlink("flexy-dir/flexy/workdir/install-dir/auth", cluster_path_auth)
+
+    def flexy_post_processing(self):
+        """
+        Update global pull-secret and configure ntp (if required).
+        """
         # Apply pull secrets on ocp cluster
         kubeconfig = os.path.join(
             self.cluster_path, config.RUN.get("kubeconfig_location")
@@ -353,19 +344,6 @@ class FlexyBase(object):
         time.sleep(60)
         wait_for_machineconfigpool_status("all")
 
-    def is_jenkins_mount(self):
-        """
-        Find if this is jenkins run based on current-cluster-dir and
-        NFS mount
-
-        Returns:
-            bool: True if this is jenkins run else False
-
-        """
-        return os.path.exists(
-            constants.JENKINS_NFS_CURRENT_CLUSTER_DIR
-        ) and os.path.ismount(constants.JENKINS_NFS_CURRENT_CLUSTER_DIR)
-
     def deploy(self, log_level=""):
         """
         build and invoke flexy deployer here
@@ -379,17 +357,17 @@ class FlexyBase(object):
         if log_level:
             pass
         cmd = self.build_install_cmd()
-        flexy_err = None
         # Ensure that flexy workdir will be copied to cluster dir even when
         # Flexy itself fails.
         try:
             self.run_container(cmd)
         except Exception as err:
             logger.error(err)
-            flexy_err = err
+            raise
+        finally:
+            self.flexy_backup_work_dir()
+
         self.flexy_post_processing()
-        if flexy_err:
-            raise flexy_err
 
     def destroy(self):
         """
@@ -397,7 +375,13 @@ class FlexyBase(object):
 
         """
         cmd = self.build_destroy_cmd()
-        self.run_container(cmd)
+        try:
+            self.run_container(cmd)
+        except Exception as err:
+            logger.error(err)
+            raise
+        finally:
+            self.flexy_backup_work_dir()
 
 
 class FlexyBaremetalPSI(FlexyBase):

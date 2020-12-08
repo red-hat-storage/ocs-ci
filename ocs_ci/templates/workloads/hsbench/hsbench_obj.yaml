@@ -1,0 +1,15 @@
+uid: "johndoe"
+display_name: '"John Doe"'
+email: "john@example.com"
+access_key: "UPUS6I40TCFN34S6SJMJ"
+secret_key: "2DYtFzwKuimaxCGiJVAFmqH4tVAnPRASffckPC1n"
+object_size: "4K"
+duration: -1
+num_threads: 16
+num_bucket: 1
+num_obj: 1000000
+run_mode: "cxip"
+bucket_prefix: "bp01"
+end_point: "http://rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc.cluster.local"
+end_point_port: 80
+hsbench_bin_dir: "/go/bin/hsbench"

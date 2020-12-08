@@ -1,0 +1,5 @@
+# This configuration file is for development purpose only and allow you to
+# install OCS on nodes with lower then required resources.
+---
+DEPLOYMENT:
+  allow_lower_instance_requirements: true
