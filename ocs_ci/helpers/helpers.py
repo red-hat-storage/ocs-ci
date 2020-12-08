@@ -1301,8 +1301,7 @@ def get_end_creation_time(interface, pvc_name):
     Args:
         interface (str): The interface backed the PVC
         pvc_name (str): Name of the PVC for creation time measurement
-        last_end_time (bool) if creation end time appears several times, take the last (latest) one
-
+        
     Returns:
         datetime object: End time of PVC creation
 
