@@ -365,7 +365,7 @@ def ocs_install_verification(
             ], f"{crush_rule['rule_name']} is not with type as zone"
         log.info("Verified - pool crush rule is with type: zone")
     else:
-        if config.ENV_DATA["enable_flexible_scaling"]:
+        if config.ENV_DATA.get("enable_flexible_scaling"):
             log.info("Verifying pool crush rule is with type: host")
             crush_dump = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd crush dump", format="")
             pool_names = [
