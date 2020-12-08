@@ -3,20 +3,11 @@ import logging
 from ocs_ci.framework.testlib import MCGTest, scale, skipif_ocs_version
 from ocs_ci.ocs import constants, defaults, ocp, scale_pgsql
 from ocs_ci.utility import utils
+from ocs_ci.helpers import disruption_helpers
 
 log = logging.getLogger(__name__)
 
-option1 = {
-    "create": [("name", "job1"), ("runtime", "900")],
-    "job1": [
-        ("iodepth", "4"),
-        ("rw", "randrw"),
-        ("bs", "32k"),
-        ("size", "64m"),
-        ("numjobs", "4"),
-    ],
-}
-option2 = {
+options = {
     "create": [
         ("name", "job1"),
         ("name", "job2"),
@@ -50,14 +41,12 @@ option2 = {
 @scale
 @skipif_ocs_version("<4.5")
 @pytest.mark.parametrize(
-    argnames=[
-        "test_options",
-        "endpoint1",
-        "endpoint2",
-    ],
+    argnames="resource_to_delete",
     argvalues=[
-        pytest.param(*[option1, 1, 1], marks=pytest.mark.polarion_id("OCS-2420")),
-        pytest.param(*[option2, 1, 2], marks=pytest.mark.polarion_id("OCS-2402")),
+        pytest.param(*["mgr"], marks=pytest.mark.polarion_id("OCS-2402")),
+        pytest.param(*["mon"], marks=pytest.mark.polarion_id("OCS-2420")),
+        pytest.param(*["osd"], marks=pytest.mark.polarion_id("OCS-2446")),
+        pytest.param(*["mds"], marks=pytest.mark.polarion_id("OCS-2447")),
     ],
 )
 class TestScaleEndpointAutoScale(MCGTest):
@@ -81,25 +70,38 @@ class TestScaleEndpointAutoScale(MCGTest):
             timeout=500,
         )
 
-    def test_scale_endpoint(self, mcg_job_factory, test_options, endpoint1, endpoint2):
+    def test_scale_endpoint_and_respin_ceph_pods(
+        self, mcg_job_factory, resource_to_delete
+    ):
+        """
+        Generate S3 workload to trigger autoscale to increase from 1 to 2 endpoint
+        then respin ceph pods
+        """
         # Add workers node to cluster
         scale_pgsql.add_worker_node()
 
         # Check autoscale endpoint count before start s3 load
-        self._assert_endpoint_count(endpoint1)
+        self._assert_endpoint_count(desired_count=1)
 
         # Create s3 workload using mcg_job_factory
-        job = mcg_job_factory(custom_options=test_options)
+        job = mcg_job_factory(custom_options=options)
 
         # Validate autoscale endpoint count
-        self._assert_endpoint_count(endpoint2)
+        self._assert_endpoint_count(desired_count=2)
+
+        # Respin ceph pods
+        disruption = disruption_helpers.Disruptions()
+        disruption.set_resource(resource=resource_to_delete)
+        no_of_resource = disruption.resource_count
+        for i in range(0, no_of_resource):
+            disruption.delete_resource(resource_id=i)
 
         # Delete mcg_job_factory
         job.delete()
         job.ocp.wait_for_delete(resource_name=job.name, timeout=60)
 
         # Validate autoscale endpoint count
-        self._assert_endpoint_count(endpoint1)
+        self._assert_endpoint_count(desired_count=1)
 
         # Delete workers node in the cluster
         scale_pgsql.delete_worker_node()
