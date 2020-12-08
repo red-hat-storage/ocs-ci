@@ -24,9 +24,7 @@ def write_fio_on_pod(pod_obj, file_size):
     # Wait for fio to finish
     fio_result = pod_obj.get_fio_results(timeout=3600)
     err_count = fio_result.get("jobs")[0].get("error")
-    assert err_count == 0, (
-        f"IO error on pod {pod_obj.name}. FIO result: {fio_result}."
-    )
+    assert err_count == 0, f"IO error on pod {pod_obj.name}. FIO result: {fio_result}."
     logger.info("IO on the PVC Finished")
     later = datetime.now()
     diff = int((later - now).total_seconds() / 60)

@@ -1335,9 +1335,7 @@ def measure_pvc_creation_time(interface, pvc_name):
 
     """
     start = get_start_creation_time(interface=interface, pvc_name=pvc_name)
-    end = get_end_creation_time(
-        interface=interface, pvc_name=pvc_name
-    )
+    end = get_end_creation_time(interface=interface, pvc_name=pvc_name)
     total = end - start
     return total.total_seconds()
 
