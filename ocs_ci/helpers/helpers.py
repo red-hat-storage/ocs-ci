@@ -1316,7 +1316,8 @@ def get_end_creation_time(interface, pvc_name):
     logs = logs.split("\n")
     # Extract the starting time for the PVC provisioning
     end = [i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)]
-    end = end[0].split(" ")[1]
+    # End provisioning string may appear in logs several times, take here the latest one
+    end = end[-1].split(" ")[1]
     return datetime.datetime.strptime(end, format)
 
 
