@@ -25,7 +25,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableResourceException,
 )
-from ocs_ci.ocs.utils import setup_ceph_toolbox
+from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd, check_timeout_reached, TimeoutSampler
@@ -1625,3 +1625,32 @@ def list_of_nodes_running_pods(selector, namespace=defaults.ROOK_CLUSTER_NAMESPA
     pods_running_nodes = [get_pod_node(pod) for pod in pod_obj_list]
     logger.info(f"{selector} running on nodes {pods_running_nodes}")
     return list(set(pods_running_nodes))
+
+
+def get_osd_removal_pod_name(osd_id, timeout=60):
+    """
+    Get the osd removal pod name
+
+    Args:
+        osd_id (int): The osd's id to get the osd removal pod name
+        timeout (int): The time to wait for getting the osd removal pod name
+
+    Returns:
+        str: The osd removal pod name
+
+    """
+    try:
+        for osd_removal_pod_names in TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=get_pod_name_by_pattern,
+            pattern=f"ocs-osd-removal-{osd_id}",
+        ):
+            if osd_removal_pod_names:
+                osd_removal_pod_name = osd_removal_pod_names[0]
+                logging.info(f"Found pod {osd_removal_pod_name}")
+                return osd_removal_pod_name
+
+    except TimeoutExpiredError:
+        logger.warning(f"Failed to get pod ocs-osd-removal-{osd_id}")
+        return None
