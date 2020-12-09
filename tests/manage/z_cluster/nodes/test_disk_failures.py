@@ -3,7 +3,7 @@ import pytest
 import random
 import re
 
-from ocs_ci.ocs import node, constants, ocp
+from ocs_ci.ocs import node, constants, ocp, cluster
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     tier4,
@@ -25,11 +25,11 @@ from ocs_ci.ocs.resources.pod import (
     get_osd_prepare_pods,
     get_pod_obj,
     get_pod_logs,
+    get_osd_removal_pod_name,
 )
 from ocs_ci.ocs.resources.ocs import get_job_obj, OCS
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.aws import AWSTimeoutException
-
+from ocs_ci.utility.utils import get_ocp_version
 
 logger = logging.getLogger(__name__)
 
@@ -289,16 +289,21 @@ class TestDiskFailures(ManageTest):
             osd_pod.ocp.wait_for_delete(resource_name=osd_pod_name)
 
         # Run ocs-osd-removal job
+        ocp_version = float(get_ocp_version())
+        if ocp_version >= 4.6:
+            cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_id} -o yaml"
+        else:
+            cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_id} -o yaml"
+
         logger.info(f"Executing OSD removal job on OSD-{osd_id}")
-        osd_removal_job_yaml = ocp.OCP(
-            namespace=config.ENV_DATA["cluster_namespace"]
-        ).exec_oc_cmd(f"process ocs-osd-removal" f" -p FAILED_OSD_ID={osd_id} -o yaml")
+        ocp_obj = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
+        osd_removal_job_yaml = ocp_obj.exec_oc_cmd(cmd)
         osd_removal_job = OCS(**osd_removal_job_yaml)
         osd_removal_job.create(do_reload=False)
 
         # Get ocs-osd-removal pod name
         logger.info("Getting the ocs-osd-removal pod name")
-        osd_removal_pod_name = get_pod_name_by_pattern(f"ocs-osd-removal-{osd_id}")[0]
+        osd_removal_pod_name = get_osd_removal_pod_name(osd_id)
         osd_removal_pod_obj = get_pod_obj(
             osd_removal_pod_name, namespace="openshift-storage"
         )
@@ -312,25 +317,40 @@ class TestDiskFailures(ManageTest):
         pattern = f"purged osd.{osd_id}"
         assert re.search(pattern, logs)
 
-        # Delete the OSD prepare job
-        logger.info(f"Deleting OSD prepare job {osd_prepare_job_name}")
-        osd_prepare_job.delete()
-        osd_prepare_job.ocp.wait_for_delete(
-            resource_name=osd_prepare_job_name, timeout=120
-        )
-
-        # Delete the OSD PVC
         osd_pvc_name = osd_pvc.name
-        logger.info(f"Deleting OSD PVC {osd_pvc_name}")
-        osd_pvc.delete()
-        osd_pvc.ocp.wait_for_delete(resource_name=osd_pvc_name)
 
-        # Delete the OSD deployment
-        logger.info(f"Deleting OSD deployment {osd_deployment_name}")
-        osd_deployment.delete()
-        osd_deployment.ocp.wait_for_delete(
-            resource_name=osd_deployment_name, timeout=120
-        )
+        if ocp_version < 4.6:
+            # Delete the OSD prepare job
+            logger.info(f"Deleting OSD prepare job {osd_prepare_job_name}")
+            osd_prepare_job.delete()
+            osd_prepare_job.ocp.wait_for_delete(
+                resource_name=osd_prepare_job_name, timeout=120
+            )
+
+            # Delete the OSD PVC
+            logger.info(f"Deleting OSD PVC {osd_pvc_name}")
+            osd_pvc.delete()
+            osd_pvc.ocp.wait_for_delete(resource_name=osd_pvc_name)
+
+            # Delete the OSD deployment
+            logger.info(f"Deleting OSD deployment {osd_deployment_name}")
+            osd_deployment.delete()
+            osd_deployment.ocp.wait_for_delete(
+                resource_name=osd_deployment_name, timeout=120
+            )
+        else:
+            # If ocp version is '4.6' and above the osd removal job should
+            # delete the OSD prepare job, OSD PVC, OSD deployment
+            logger.info(f"Verifying deletion of OSD prepare job {osd_prepare_job_name}")
+            osd_prepare_job.ocp.wait_for_delete(
+                resource_name=osd_prepare_job_name, timeout=30
+            )
+            logger.info(f"Verifying deletion of OSD PVC {osd_pvc_name}")
+            osd_pvc.ocp.wait_for_delete(resource_name=osd_pvc_name, timeout=30)
+            logger.info(f"Verifying deletion of OSD deployment {osd_deployment_name}")
+            osd_deployment.ocp.wait_for_delete(
+                resource_name=osd_deployment_name, timeout=30
+            )
 
         # Delete PV
         logger.info(f"Verifying deletion of PV {osd_pv_name}")
@@ -340,10 +360,11 @@ class TestDiskFailures(ManageTest):
             osd_pv.delete()
             osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
 
-        # Delete the rook ceph operator pod to trigger reconciliation
-        rook_operator_pod = get_operator_pods()[0]
-        logger.info(f"deleting Rook Ceph operator pod {rook_operator_pod.name}")
-        rook_operator_pod.delete()
+        if ocp_version < 4.6:
+            # Delete the rook ceph operator pod to trigger reconciliation
+            rook_operator_pod = get_operator_pods()[0]
+            logger.info(f"deleting Rook Ceph operator pod {rook_operator_pod.name}")
+            rook_operator_pod.delete()
 
         # Delete the OSD removal job
         logger.info(f"Deleting OSD removal job ocs-osd-removal-{osd_id}")
@@ -377,6 +398,15 @@ class TestDiskFailures(ManageTest):
             f"{[osd_pod.ocp.get_resource(pod.get().get('metadata').get('name'), 'STATUS') for pod in get_osd_pods()]}"
         )
 
+        # We need to silence the old osd crash warning due to BZ https://bugzilla.redhat.com/show_bug.cgi?id=1896810
+        # This is a workaround - issue for tracking: https://github.com/red-hat-storage/ocs-ci/issues/3438
+        if ocp_version >= 4.6:
+            silence_osd_crash = cluster.wait_for_silence_ceph_osd_crash_warning(
+                osd_pod_name
+            )
+            if not silence_osd_crash:
+                logger.info("Didn't find ceph osd crash warning")
+
         # Validate cluster is still functional
-        self.sanity_helpers.health_check(tries=80)
+        self.sanity_helpers.health_check(tries=100)
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
