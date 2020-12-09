@@ -84,11 +84,15 @@ def cloud_uls_factory(request, cld_mgr):
                         ulsMap[cloud.lower()].create_uls(uls_name, region)
                     except AttributeError as e:
                         raise Exception(
-                            f"{cloud} was initialized as None, "
-                            "please verify the needed credentials were set in auth.yaml,\n"
-                            "or refer to the getting started guide"
-                            "(https://ocs-ci.readthedocs.io/en/latest/docs/"
-                            "getting_started.html#authentication-config)"
+                            f"{cloud}_client was initialized as None.\n"
+                            "Please verify the needed credentials were set in auth.yaml, "
+                            "or refer to the OCS-CI documentation -\n"
+                            "( https://ocs-ci.readthedocs.io/en/latest/usecases/"
+                            "running_tests_on_cluster_not_deployed_by_ocsci.html"
+                            "#access-to-cloud-object-storage-mcg-only )\n"
+                            "The current test cannot proceed unless a valid "
+                            f"{cloud.upper()} account is provided via auth.yaml.\n"
+                            "The account is needed for performing tasks over the cloud service."
                         ).with_traceback(e.__traceback__)
                     all_created_uls[cloud].add(uls_name)
                     current_call_created_uls[cloud.lower()].add(uls_name)
