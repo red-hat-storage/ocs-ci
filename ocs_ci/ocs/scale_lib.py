@@ -847,7 +847,9 @@ def increase_pods_per_worker_node_count(pods_per_node=500, pods_per_core=10):
     )
 
 
-def construct_pvc_creation_yaml_bulk_for_kube_job(no_of_pvc, access_mode, sc_name):
+def construct_pvc_creation_yaml_bulk_for_kube_job(
+    no_of_pvc, access_mode, sc_name, pvc_size=None
+):
     """
     Function to construct pvc.yaml to create bulk of pvc's using kube_job
 
@@ -855,6 +857,8 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(no_of_pvc, access_mode, sc_nam
         no_of_pvc(int): Bulk PVC count
         access_mode (str): PVC access_mode
         sc_name (str): SC name for pvc creation
+        pvc_size (str): size of all pvcs to be created with Gi suffix (e.g. 10Gi).
+                If None, random size pvc will be created
 
     Returns:
          pvc_dict_list (list): List of all PVC.yaml dicts
@@ -866,7 +870,7 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(no_of_pvc, access_mode, sc_nam
     pvc_dict_list = list()
     for i in range(no_of_pvc):
         pvc_name = helpers.create_unique_resource_name("test", "pvc")
-        size = f"{random.randrange(5, 105, 5)}Gi"
+        size = f"{random.randrange(5, 105, 5)}Gi" if pvc_size is None else pvc_size
         pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
         pvc_data["metadata"]["name"] = pvc_name
         del pvc_data["metadata"]["namespace"]
@@ -883,7 +887,44 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(no_of_pvc, access_mode, sc_nam
     return pvc_dict_list
 
 
-def check_all_pvc_reached_bound_state_in_kube_job(kube_job_obj, namespace, no_of_pvc):
+def construct_pvc_clone_yaml_bulk_for_kube_job(pvc_dict_list, clone_yaml, sc_name):
+    """
+    Function to construct pvc.yaml to create bulk of pvc clones using kube_job
+
+    Args:
+        pvc_dict_list(list): List of PVCs for each of them one clone is to be created
+        clone_yaml (str): Clone yaml which is the template for building clones
+        sc_name (str): SC name for pvc creation
+
+    Returns:
+         pvc_dict_list (list): List of all PVC.yaml dicts
+
+    """
+
+    # Construct PVC.yaml for the no_of_required_pvc count
+    # append all the pvc.yaml dict to pvc_dict_list and return the list
+    pvc_clone_dict_list = list()
+    for pvc_yaml in pvc_dict_list:
+        parent_pvc_name = pvc_yaml["metadata"]["name"]
+        clone_data_yaml = templating.load_yaml(clone_yaml)
+        clone_data_yaml["metadata"]["name"] = helpers.create_unique_resource_name(
+            parent_pvc_name, "clone"
+        )
+
+        clone_data_yaml["spec"]["storageClassName"] = sc_name
+        clone_data_yaml["spec"]["dataSource"]["name"] = parent_pvc_name
+        clone_data_yaml["spec"]["resources"]["requests"]["storage"] = pvc_yaml["spec"][
+            "resources"
+        ]["requests"]["storage"]
+
+        pvc_clone_dict_list.append(clone_data_yaml)
+
+    return pvc_clone_dict_list
+
+
+def check_all_pvc_reached_bound_state_in_kube_job(
+    kube_job_obj, namespace, no_of_pvc, timeout=30
+):
     """
     Function to check either bulk created PVCs reached Bound state using kube_job
 
@@ -891,6 +932,7 @@ def check_all_pvc_reached_bound_state_in_kube_job(kube_job_obj, namespace, no_of
         kube_job_obj (obj): Kube Job Object
         namespace (str): Namespace of PVC's created
         no_of_pvc (int): Bulk PVC count
+        timeout: a timeout for all the pvc in kube job to reach bound status
 
     Returns:
         pvc_bound_list (list): List of all PVCs which is in Bound state.
@@ -917,15 +959,15 @@ def check_all_pvc_reached_bound_state_in_kube_job(kube_job_obj, namespace, no_of
                 )
 
         # Check the length of pvc_not_bound_list to decide either all PVCs reached Bound state
-        # If not then wait for 30secs and re-iterate while loop
+        # If not then wait for timeout secs and re-iterate while loop
         if len(pvc_not_bound_list):
-            time.sleep(30)
+            time.sleep(timeout)
             while_iteration_count += 1
-            # Breaking while loop after 10 Iteration i.e. after 30*10 secs of wait_time
+            # Breaking while loop after 10 Iteration i.e. after timeout*10 secs of wait_time
             # And if PVCs still not in bound state then there will be assert.
             if while_iteration_count >= 10:
                 assert logging.error(
-                    f" Listed PVCs took more than 300secs to bound {pvc_not_bound_list}"
+                    f" Listed PVCs took more than {timeout*10} secs to bound {pvc_not_bound_list}"
                 )
                 break
             pvc_not_bound_list.clear()
