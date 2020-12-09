@@ -364,7 +364,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             pod_node_obj = pod.get_pod_node(pod_obj)
 
             # Make one of the node down where the prometheus pod is hosted
-            nodes.restart_nodes([pod_node_obj])
+            nodes.restart_nodes([pod_node_obj], timeout=900)
 
             # Validate all nodes are in READY state
             retry((CommandFailed, ResourceWrongStatusException), tries=20, delay=15)(
