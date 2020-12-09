@@ -19,6 +19,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating, utils
 from ocs_ci.utility.utils import run_cmd, exec_cmd, TimeoutSampler
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
+from ocs_ci.helpers.helpers import storagecluster_independent_check
 
 log = logging.getLogger(__name__)
 URL = "https://get.helm.sh/helm-v2.16.1-linux-amd64.tar.gz"
@@ -199,6 +200,8 @@ class AMQ(object):
         return : kafka_persistent
 
         """
+        if storagecluster_independent_check():
+            sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         try:
             kafka_persistent = templating.load_yaml(
                 os.path.join(self.dir, self.amq_kafka_pers_yaml)
@@ -881,6 +884,8 @@ class AMQ(object):
             replicas (int): Number of kafka and zookeeper pods to be created
 
         """
+        if storagecluster_independent_check():
+            sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         self.setup_amq_cluster_operator(namespace)
         self.setup_amq_kafka_persistent(sc_name, size, replicas)
         self.setup_amq_kafka_connect()
