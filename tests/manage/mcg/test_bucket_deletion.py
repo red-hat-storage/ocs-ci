@@ -178,9 +178,7 @@ class TestBucketDeletion(MCGTest):
     ):
         """
         Negative test with deletion of bucket has objects stored in.
-        ***IMPORTANT***
-        S3 interface is not supporting different bucketclasses DO NOT param S3
-        with bucketclass_dict
+
         """
         bucketname = create_unique_resource_name(
             resource_description="bucket", resource_type=interface.lower()

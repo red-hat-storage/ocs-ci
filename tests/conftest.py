@@ -1927,6 +1927,11 @@ def bucket_factory_fixture(
     Create a bucket factory. Calling this fixture creates a new bucket(s).
     For a custom amount, provide the 'amount' parameter.
 
+    ***Please note***
+    Creation of buckets by utilizing the S3 interface *does not* support bucketclasses.
+    Only OC/CLI buckets can support different bucketclasses.
+    By default, all S3 buckets utilize the default bucketclass.
+
     Args:
         bucket_class_factory: creates a new Bucket Class
         mcg_obj (MCG): An MCG object containing the MCG S3 connection
