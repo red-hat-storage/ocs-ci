@@ -2650,6 +2650,19 @@ def get_pv_size(storageclass=None):
     return return_list
 
 
+def get_pv_names():
+    """
+    Get Pv names
+
+    Returns:
+        list: list of pv names
+
+    """
+    ocp_obj = ocp.OCP(kind=constants.PV)
+    pv_objs = ocp_obj.get()["items"]
+    return [pv_obj["metadata"]["name"] for pv_obj in pv_objs]
+
+
 def get_cluster_proxies():
     """
     Get http and https proxy configuration:
