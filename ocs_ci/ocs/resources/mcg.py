@@ -669,7 +669,7 @@ class MCG:
         bc_data["metadata"]["name"] = name
         bc_data["metadata"]["namespace"] = self.namespace
         tiers = bc_data["spec"]["placementPolicy"]["tiers"][0]
-        tiers["backingStores"] = backingstores
+        tiers["backingStores"] = [backingstore.name for backingstore in backingstores]
         tiers["placement"] = placement
         return create_resource(**bc_data)
 
@@ -685,7 +685,8 @@ class MCG:
             OCS: The bucket class resource
 
         """
-        bc = f" --backingstores={','.join(backingstores)} --placement={placement}"
+        backingstore_name_list = [backingstore.name for backingstore in backingstores]
+        bc = f" --backingstores={','.join(backingstore_name_list)} --placement={placement}"
         self.exec_mcg_cmd(f"bucketclass create {name}{bc}")
 
     def check_if_mirroring_is_done(self, bucket_name, timeout=140):

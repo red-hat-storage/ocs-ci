@@ -88,7 +88,7 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
             backingstores = ["noobaa-default-backing-store"]
 
         if "placement_policy" in bucket_class_dict:
-            placement_policy = bucket_class_dict["placement"]
+            placement_policy = bucket_class_dict["placement_policy"]
         else:
             placement_policy = "Spread"
         bucket_class_name = create_unique_resource_name(
