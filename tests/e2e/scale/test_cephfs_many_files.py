@@ -88,7 +88,6 @@ class MillionFilesOnCephfs(object):
             interface_type=constants.CEPHFILESYSTEM,
             namespace=config.ENV_DATA["cluster_namespace"],
             pvc_name=pvc_name,
-            node_name="compute-0",
             pod_name=self.pod_name,
         )
         helpers.wait_for_resource_state(
