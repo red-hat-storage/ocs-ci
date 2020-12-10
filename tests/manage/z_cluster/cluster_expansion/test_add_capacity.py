@@ -19,6 +19,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 
 
 def add_capacity_test():
@@ -40,6 +41,10 @@ def add_capacity_test():
     #     resource_count=result * 3
     # )
     # Commented this lines as a workaround due to bug 1842500
+
+    # Verify OSDs are encrypted
+    if config.ENV_DATA.get("encryption_at_rest"):
+        osd_encryption_verification()
 
     ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=80)
     ceph_cluster_obj = CephCluster()
