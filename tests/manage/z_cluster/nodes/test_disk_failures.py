@@ -30,6 +30,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.ocs import get_job_obj, OCS
 from ocs_ci.utility.aws import AWSTimeoutException
 from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,10 @@ class TestDiskFailures(ManageTest):
                     node_obj = get_pod_node(pod)
                     nodes.restart_nodes([node_obj])
                     node.wait_for_nodes_status([node_obj.name])
+
+            # Verify OSD encrypted
+            if config.ENV_DATA.get("encryption_at_rest"):
+                osd_encryption_verification()
 
         request.addfinalizer(finalizer)
 
