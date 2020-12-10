@@ -275,6 +275,12 @@ ceph_metrics = (
 )
 
 
+# List of RGW metrics.
+ceph_rgw_metrics = tuple(
+    metric for metric in ceph_metrics if metric.startswith("ceph_rgw")
+)
+
+
 # List of all ceph metrics.
 ceph_metrics_all = tuple(ceph_metrics + ceph_rbd_metrics)
 
