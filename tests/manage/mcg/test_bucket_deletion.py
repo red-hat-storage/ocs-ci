@@ -204,7 +204,7 @@ class TestBucketDeletion(MCGTest):
         finally:
             bucket.delete()
             if bucketclass_dict:
-                bucketclass.delete()
+                bucket.bucketclass.delete()
 
     @pytest.mark.parametrize(
         argnames="interface",

@@ -6,11 +6,9 @@ import tempfile
 import threading
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
-from itertools import chain
 from math import floor
 from shutil import copyfile
 from functools import partial
-import typing
 
 from botocore.exceptions import ClientError
 import pytest
