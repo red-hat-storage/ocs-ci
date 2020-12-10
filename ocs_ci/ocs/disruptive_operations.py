@@ -1,7 +1,11 @@
 import logging
 import time
 
-from ocs_ci.ocs.node import get_nodes, get_node_name
+from ocs_ci.ocs.node import (
+    get_nodes,
+    get_node_name,
+    get_osd_running_nodes,
+)
 from ocs_ci.ocs.resources.pod import get_ocs_operator_pod, get_pod_node
 from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
 from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
@@ -65,4 +69,12 @@ def worker_node_shutdown(abrupt):
 
 
 def osd_node_reboot():
-    pass
+    nodes = PlatformNodesFactory().get_nodes_platform()
+    osd_nodes_names = get_osd_running_nodes()
+    osd_node_to_reboot = list()
+    for node in get_nodes():
+        node_name = get_node_name(node)
+        if node_name == osd_nodes_names[0]:
+            osd_node_to_reboot.append(node)
+    log.info(f"Rebooting OSD node: {get_node_name(osd_node_to_reboot[0])}")
+    nodes.restart_nodes(osd_node_to_reboot)
