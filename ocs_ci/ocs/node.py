@@ -2,6 +2,7 @@ import copy
 import logging
 import re
 from prettytable import PrettyTable
+from collections import defaultdict
 
 from subprocess import TimeoutExpired
 
@@ -561,6 +562,20 @@ def get_osd_running_nodes():
 
     """
     return [pod.get_pod_node(osd_node).name for osd_node in pod.get_osd_pods()]
+
+
+def get_osds_per_node():
+    """
+    Gets the osd running pod names per node name
+
+    Returns:
+        dict: {"Node name":["osd running pod name running on the node",..,]}
+
+    """
+    dic_node_osd = defaultdict(list)
+    for osd_pod in pod.get_osd_pods():
+        dic_node_osd[pod.get_pod_node(osd_pod).name].append(osd_pod.name)
+    return dic_node_osd
 
 
 def get_app_pod_running_nodes(pod_obj):
