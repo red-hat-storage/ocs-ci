@@ -153,6 +153,10 @@ class UnsupportedPlatformError(Exception):
     pass
 
 
+class UnsupportedPlatformVersionError(Exception):
+    pass
+
+
 class UnsupportedFeatureError(Exception):
     pass
 
