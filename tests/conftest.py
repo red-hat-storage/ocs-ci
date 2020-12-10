@@ -2145,53 +2145,13 @@ def bucket_class_factory_session(
 
 
 @pytest.fixture()
-def multiregion_resources(request, cld_mgr, mcg_obj):
-    return multiregion_resources_fixture(request, cld_mgr, mcg_obj)
+def multiregion_mirror_setup(bucket_factory):
+    return multiregion_mirror_setup_fixture(bucket_factory)
 
 
 @pytest.fixture(scope="session")
-def multiregion_resources_session(request, cld_mgr, mcg_obj_session):
-    return multiregion_resources_fixture(request, cld_mgr, mcg_obj_session)
-
-
-def multiregion_resources_fixture(request, cld_mgr, mcg_obj):
-    bs_objs, bs_secrets, bucketclasses, aws_buckets = ([] for _ in range(4))
-
-    # Cleans up all resources that were created for the test
-    def resource_cleanup():
-        for resource in chain(bs_secrets, bucketclasses):
-            resource.delete()
-
-        for aws_bucket in aws_buckets:
-            cld_mgr.toggle_aws_bucket_readwrite(aws_bucket.name, block=False)
-
-    request.addfinalizer(resource_cleanup)
-
-    return aws_buckets, bs_secrets, bs_objs, bucketclasses
-
-
-@pytest.fixture()
-def multiregion_mirror_setup(
-    mcg_obj, multiregion_resources, backingstore_factory, bucket_factory
-):
-    return multiregion_mirror_setup_fixture(
-        mcg_obj, multiregion_resources, backingstore_factory, bucket_factory
-    )
-
-
-@pytest.fixture(scope="session")
-def multiregion_mirror_setup_session(
-    mcg_obj_session,
-    multiregion_resources_session,
-    backingstore_factory_session,
-    bucket_factory_session,
-):
-    return multiregion_mirror_setup_fixture(
-        mcg_obj_session,
-        multiregion_resources_session,
-        backingstore_factory_session,
-        bucket_factory_session,
-    )
+def multiregion_mirror_setup_session(bucket_factory_session):
+    return multiregion_mirror_setup_fixture(bucket_factory_session)
 
 
 def multiregion_mirror_setup_fixture(bucket_factory):
