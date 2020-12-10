@@ -14,7 +14,7 @@ from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.utility import localstorage, utils
-from ocs_ci.ocs.node import get_osd_running_nodes
+from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.ocs.exceptions import UnsupportedFeatureError
 from ocs_ci.utility.utils import run_cmd
 
@@ -387,33 +387,43 @@ def osd_encryption_verification():
     Raises:
         UnsupportedFeatureError: OCS version is smaller than 4.6
         EnvironmentError: The OSD is not encrypted
+
     """
     ocs_version = float(config.ENV_DATA["ocs_version"])
     if ocs_version < 4.6:
         error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"
         raise UnsupportedFeatureError(error_message)
-
-    osd_node_names = get_osd_running_nodes()
     osd_size = get_osd_size()
+
+    # Get "lsblk" command output on nodes where osd running
+    osd_node_names = get_osds_per_node()
     lsblk_output_list = []
     for worker_node in osd_node_names:
         lsblk_cmd = "oc debug node/" + worker_node + " -- chroot /host lsblk"
         out = run_cmd(lsblk_cmd)
         log.info(f"the output from lsblk command is {out}")
-        lsblk_output_list.append(out)
+        lsblk_output_list.append((out, len([worker_node])))
 
+    # Verify "lsblk" command results are as expected
     for node_output_lsblk in lsblk_output_list:
-        node_lsb = node_output_lsblk.split()
+        node_lsb = node_output_lsblk[0].split()
         # Search 'crypt' in node_lsb list
-        if "crypt" not in node_lsb:
+        all_occurrences_crypt = [
+            index for index, element in enumerate(node_lsb) if element == "crypt"
+        ]
+        # Verify all OSDs encrypted on node
+        if len(all_occurrences_crypt) != node_output_lsblk[1]:
             raise EnvironmentError("OSD is not encrypted")
-        index_crypt = node_lsb.index("crypt")
-        encrypted_component_size = int(
-            (re.findall(r"\d+", node_lsb[index_crypt - 2]))[0]
-        )
+
         # Verify that OSD is encrypted, and not another component like sda
-        if encrypted_component_size != osd_size:
-            raise EnvironmentError("The OSD is not encrypted, another mount encrypted.")
+        for index_crypt in all_occurrences_crypt:
+            encrypted_component_size = int(
+                (re.findall(r"\d+", node_lsb[index_crypt - 2]))[0]
+            )
+            if encrypted_component_size != osd_size:
+                raise EnvironmentError(
+                    "The OSD is not encrypted, another mount encrypted."
+                )
 
 
 def add_capacity(osd_size_capacity_requested):
