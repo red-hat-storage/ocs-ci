@@ -319,8 +319,9 @@ class TestNodesRestart(ManageTest):
         # Checking cluster and Ceph health
         self.sanity_helpers.health_check()
 
-    @bugzilla("1873938")
     @skipif_no_lso
+    @bugzilla("1873938")
+    @pytest.mark.polarion_id("OCS-2448")
     def test_pv_after_reboot_node(self, nodes):
         """
         Verify unexpected PV is not created after node reboot on LSO cluster
