@@ -79,7 +79,7 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
             interface = "OC"
         if "backingstore_dict" in bucket_class_dict:
             backingstores = [
-                backingstore.name
+                backingstore
                 for backingstore in backingstore_factory(
                     interface, bucket_class_dict["backingstore_dict"]
                 )

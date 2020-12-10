@@ -1945,7 +1945,7 @@ def bucket_factory_fixture(
         amount=1,
         interface="S3",
         verify_health=True,
-        bucketclass: typing.Union[None, str, dict] = None,
+        bucketclass=None,
         *args,
         **kwargs,
     ):
@@ -1958,8 +1958,8 @@ def bucket_factory_fixture(
                 S3 | OC | CLI | NAMESPACE
             verify_Health (bool): Whether to verify the created bucket's health
                 post-creation
-            bucketclass (None|str|dict): An existing bucketclass name to use,
-                or a dictionary describing a new bucketclass to be created.
+            bucketclass (dict): A dictionary describing a new
+                bucketclass to be created.
                 When None, the default bucketclass is used.
 
         Returns:
@@ -1974,9 +1974,7 @@ def bucket_factory_fixture(
             )
 
         bucketclass = (
-            bucketclass
-            if bucketclass is None or isinstance(bucketclass, str)
-            else bucket_class_factory(bucketclass).name
+            bucketclass if bucketclass is None else bucket_class_factory(bucketclass)
         )
 
         for i in range(amount):
@@ -2196,41 +2194,24 @@ def multiregion_mirror_setup_session(
     )
 
 
-def multiregion_mirror_setup_fixture(
-    mcg_obj, multiregion_resources, backingstore_factory, bucket_factory
-):
+def multiregion_mirror_setup_fixture(bucket_factory):
     # Setup
     # Todo:
     #  add region and amount parametrization - note that `us-east-1`
     #  will cause an error as it is the default region. If usage of `us-east-1`
     #  needs to be tested, keep the 'region' field out.
-    (
-        aws_buckets,
-        backingstore_secrets,
-        backingstore_objects,
-        bucketclasses,
-    ) = multiregion_resources
 
-    # Define backing stores
-    created_backingstores = backingstore_factory(
-        "OC", {"aws": [(1, "us-west-1"), (1, "us-east-2")]}
-    )
+    bucketclass = {
+        "interface": "CLI",
+        "backingstore_dict": {"aws": [(1, "us-west-1"), (1, "us-east-2")]},
+        "placement_policy": "Mirror",
+    }
 
-    # Create a new mirror bucketclass that'll use all the backing stores we
-    # created
-    bucketclass = mcg_obj.oc_create_bucketclass(
-        helpers.create_unique_resource_name(
-            resource_description="testbc", resource_type="bucketclass"
-        ),
-        [backingstore.name for backingstore in created_backingstores],
-        "Mirror",
-    )
-    bucketclasses.append(bucketclass)
     # Create a NooBucket that'll use the bucket class in order to test
     # the mirroring policy
-    bucket = bucket_factory(1, "OC", bucketclass=bucketclass.name)[0]
+    bucket = bucket_factory(1, "OC", bucketclass=bucketclass)[0]
 
-    return bucket, created_backingstores
+    return bucket, bucket.bucketclass.backingstores
 
 
 @pytest.fixture(scope="session")

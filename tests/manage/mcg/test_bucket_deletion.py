@@ -126,11 +126,7 @@ class TestBucketDeletion(MCGTest):
         """
         Test deletion of bucket using the S3 SDK, MCG CLI and OC
         """
-        if bucketclass_dict:
-            bucketclass = bucket_class_factory(bucketclass_dict)
-            buckets = bucket_factory(amount, interface, bucketclass=bucketclass.name)
-        else:
-            buckets = bucket_factory(amount, interface)
+        buckets = bucket_factory(amount, interface, bucketclass=bucketclass_dict)
         for bucket in buckets:
             logger.info(f"Deleting bucket: {bucket.name}")
             bucket.delete()
@@ -184,13 +180,9 @@ class TestBucketDeletion(MCGTest):
             resource_description="bucket", resource_type=interface.lower()
         )
         try:
-            if bucketclass_dict:
-                bucketclass = bucket_class_factory(bucketclass_dict)
-                bucket = BUCKET_MAP[interface.lower()](
-                    bucketname, mcg=mcg_obj, bucketclass=bucketclass.name
-                )
-            else:
-                bucket = BUCKET_MAP[interface.lower()](bucketname, mcg=mcg_obj)
+            bucket = BUCKET_MAP[interface.lower()](
+                bucketname, mcg=mcg_obj, bucketclass=bucketclass_dict
+            )
 
             logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
             logger.info(f"aws region is {mcg_obj.region}")

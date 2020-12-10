@@ -123,7 +123,7 @@ class ObjectBucket(ABC):
 
     mcg, name = (None,) * 2
 
-    def __init__(self, name, mcg=None, rgw=None, *args, **kwargs):
+    def __init__(self, name, mcg=None, rgw=None, bucketclass=None, *args, **kwargs):
         """
         Constructor of an MCG bucket
 
@@ -131,6 +131,7 @@ class ObjectBucket(ABC):
         self.name = name
         self.mcg = mcg
         self.rgw = rgw
+        self.bucketclass = bucketclass
         self.namespace = config.ENV_DATA["cluster_namespace"]
         logger.info(f"Creating bucket: {self.name}")
 
@@ -278,11 +279,7 @@ class MCGCLIBucket(ObjectBucket):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        bc = (
-            f" --bucketclass={kwargs['bucketclass']}"
-            if kwargs.get("bucketclass")
-            else ""
-        )
+        bc = f" --bucketclass={self.bucketclass.name}" if self.bucketclass else ""
         self.mcg.exec_mcg_cmd(f"obc create --exact {self.name}{bc}")
 
     def internal_delete(self):
@@ -414,10 +411,10 @@ class MCGOCBucket(OCBucket):
         obc_data["spec"]["bucketName"] = self.name
         obc_data["spec"]["storageClassName"] = self.namespace + ".noobaa.io"
         obc_data["metadata"]["namespace"] = self.namespace
-        if kwargs.get("bucketclass"):
+        if self.bucketclass:
             obc_data.setdefault("spec", {}).setdefault(
                 "additionalConfig", {}
-            ).setdefault("bucketclass", kwargs["bucketclass"])
+            ).setdefault("bucketclass", self.bucketclass.name)
         create_resource(**obc_data)
 
 
