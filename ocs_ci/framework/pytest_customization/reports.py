@@ -1,3 +1,4 @@
+import os
 import pytest
 import logging
 from py.xml import html
@@ -32,7 +33,8 @@ def pytest_html_results_table_row(report, cells):
                 and hasattr(tag.attr, "href")
             ):
                 tag.attr.href = tag.attr.href.replace(
-                    ocsci_config.RUN.get("log_dir"), ocsci_config.RUN.get("logs_url")
+                    os.path.expanduser(ocsci_config.RUN.get("log_dir")),
+                    ocsci_config.RUN.get("logs_url"),
                 )
 
 
