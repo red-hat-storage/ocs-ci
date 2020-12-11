@@ -949,13 +949,17 @@ def parse_html_for_email(soup):
         soup (obj): BeautifulSoup object
 
     """
-    decompose_html_attributes(soup, ["extra", "col-links"])
+    attributes_to_decompose = ["extra"]
+    if not config.RUN.get("logs_url"):
+        attributes_to_decompose.append("col-links")
+    decompose_html_attributes(soup, attributes_to_decompose)
     soup.find(id="not-found-message").decompose()
 
-    for tr in soup.find_all("tr"):
-        for th in tr.find_all("th"):
-            if "Links" in th.text:
-                th.decompose()
+    if not config.RUN.get("logs_url"):
+        for tr in soup.find_all("tr"):
+            for th in tr.find_all("th"):
+                if "Links" in th.text:
+                    th.decompose()
 
     for p in soup.find_all("p"):
         if "(Un)check the boxes to filter the results." in p.text:
