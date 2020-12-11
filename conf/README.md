@@ -41,7 +41,7 @@ run it belongs here.
 * `username` - Kubeadmin username
 * `password_location` - Filepath (under the cluster path) where the kubeadmin password is located
 * `log_dir` - Directory where logs are placed
-* `logs_url` - URL where will be available logs for remote access, used for Jenkins runs and configured by Jenkins
+* `logs_url` - URL where the logs will be available for remote access, used for Jenkins runs and configured by Jenkins
 * `run_id` - Timestamp ID that is used for log directory naming
 * `kubeconfig_location` - Filepath (under the cluster path) where the kubeconfig is located
 * `cli_params` - Dict that holds onto all CLI parameters
