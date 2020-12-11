@@ -444,23 +444,21 @@ class Deployment(object):
             run_cmd(f"oc create -f {self.CUSTOM_STORAGE_CLASS_PATH}")
 
         # creating StorageCluster
+        if self.platform == constants.IBM_POWER_PLATFORM:
+            cluster_data = templating.load_yaml(constants.IBM_STORAGE_CLUSTER_YAML)
+        else:
+            cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
+
+        cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
+
+        # Flexible scaling is available from version 4.7
         if config.ENV_DATA.get("enable_flexible_scaling"):
             if ocs_version < 4.7:
                 error_message = "Flexible scaling can be enabled only on OCS >= 4.7!"
                 logger.error(error_message)
                 raise UnsupportedFeatureError(error_message)
             else:
-                logger.info("Enabling flexible scaling!")
-                cluster_data = templating.load_yaml(
-                    constants.FLEXIBLE_STORAGE_CLUSTER_YAML
-                )
-        else:
-            if self.platform == constants.IBM_POWER_PLATFORM:
-                cluster_data = templating.load_yaml(constants.IBM_STORAGE_CLUSTER_YAML)
-            else:
-                cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
-
-        cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
+                cluster_data["spec"]["flexibleScaling"] = True
 
         if self.platform == constants.IBM_POWER_PLATFORM:
             numberofstoragenodes = config.ENV_DATA["number_of_storage_nodes"]
@@ -526,6 +524,10 @@ class Deployment(object):
                     "storageClassName"
                 ] = self.DEFAULT_STORAGECLASS
 
+            if config.ENV_DATA.get("enable_flexible_scaling"):
+                deviceset_data["count"] = 1
+                deviceset_data["replica"] = 3
+
             # StorageCluster tweaks for LSO
             if config.DEPLOYMENT.get("local_storage"):
                 cluster_data["spec"]["manageNodes"] = False
@@ -545,7 +547,6 @@ class Deployment(object):
                     cluster_data["metadata"]["annotations"] = {
                         "cluster.ocs.openshift.io/local-devices": "true"
                     }
-
             # Allow lower instance requests and limits for OCS deployment
             # The resources we need to change can be found here:
             # https://github.com/openshift/ocs-operator/blob/release-4.5/pkg/deploy-manager/storagecluster.go#L88-L116

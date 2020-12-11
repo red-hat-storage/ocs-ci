@@ -465,10 +465,6 @@ IBM_STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "ibm-storage-cluster.yaml"
 )
 
-FLEXIBLE_STORAGE_CLUSTER_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "flexible-scaling-storage-cluster.yaml"
-)
-
 EXTERNAL_STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "external-storage-cluster.yaml"
 )

@@ -348,7 +348,7 @@ def ocs_install_verification(
         log.info("Verified: CSI snapshotter is not present.")
 
     # Verify pool crush rule is with "type": "zone"
-    if not config.ENV_DATA("enable_flexible_scaling") and utils.get_az_count() == 3:
+    if not config.ENV_DATA.get("enable_flexible_scaling") and utils.get_az_count() == 3:
         log.info("Verifying pool crush rule is with type: zone")
         crush_dump = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd crush dump", format="")
         pool_names = [
