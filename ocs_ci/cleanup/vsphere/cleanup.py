@@ -104,7 +104,19 @@ class IPAM(object):
         """
         # Form the FQDN for the nodes
         all_nodes = []
-        nodes = config.ENV_DATA["vm_names"]
+        nodes = config.ENV_DATA.get("vm_names", [])
+        # sometime cluster deployment fails without creating VM's
+        # ( eg: space issue ) but VM's has reserved the IP address in
+        # IPAM server. In that we have to delete the IP's in IPAM server
+        # even though resource pool is not created in Datacenter
+        if not nodes:
+            node_type = ["compute", "control-plane", "lb"]
+            for each_type in node_type:
+                if each_type == "lb":
+                    nodes.append(f"{each_type}-0")
+                    continue
+                for i in range(0, 3):
+                    nodes.append(f"{each_type}-{i}")
         for node in nodes:
             node_fqdn = f"{node}.{cluster_name}.{config.ENV_DATA['base_domain']}"
             all_nodes.append(node_fqdn)
