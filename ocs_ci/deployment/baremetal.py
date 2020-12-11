@@ -286,12 +286,13 @@ class BAREMETALUPI(Deployment):
             )
             logger.info("Uploading PXE files")
             ocp_version = get_ocp_version()
+            float_ocp_version = float(ocp_version)
             for machine in self.mgmt_details:
                 if self.mgmt_details[machine].get("cluster_name") or self.mgmt_details[
                     machine
                 ].get("extra_node"):
                     pxe_file_path = self.create_pxe_files(
-                        ocp_version=ocp_version,
+                        ocp_version=float_ocp_version,
                         role=self.mgmt_details[machine].get("role"),
                     )
                     upload_file(
@@ -493,7 +494,7 @@ class BAREMETALUPI(Deployment):
             Create pxe file for giver role
 
             Args:
-                ocp_version (str): OCP version
+                ocp_version (float): OCP version
                 role (str): Role of node eg:- bootstrap,master,worker
 
             Returns:
@@ -503,7 +504,7 @@ class BAREMETALUPI(Deployment):
             extra_data = ""
             bm_install_files_loc = self.helper_node_details["bm_install_files"]
             extra_data_pxe = "rhcos-live-rootfs.x86_64.img coreos.inst.insecure"
-            if ocp_version == "4.6":
+            if ocp_version >= 4.6:
                 extra_data = (
                     f"coreos.live.rootfs_url={bm_install_files_loc}{extra_data_pxe}"
                 )
