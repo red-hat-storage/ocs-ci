@@ -266,8 +266,9 @@ def pytest_configure(config):
         markers_arg = config.getoption("-m")
 
         # add logs url
-        if ocsci_config.RUN.get("logs_url"):
-            config._metadata["Logs URL"] = ocsci_config.RUN.get("logs_url")
+        logs_url = ocsci_config.RUN.get("logs_url")
+        if logs_url:
+            config._metadata["Logs URL"] = logs_url
 
         if ocsci_config.RUN["cli_params"].get("teardown") or (
             "deployment" in markers_arg and ocsci_config.RUN["cli_params"].get("deploy")
