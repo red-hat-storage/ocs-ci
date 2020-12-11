@@ -451,6 +451,39 @@ def osd_encryption_verification():
                 )
 
 
+def add_one_osd():
+    """
+    Add storage capacity to the cluster
+
+    Args:
+        osd_size_capacity_requested(int): Requested osd size capacity
+
+    Returns:
+        new storage device set count (int) : Returns True if all OSDs are in Running state
+
+    Note:
+    With flexible scaling enabled, we can increment by 1
+    Initially count is set to 3. We will increment it by 1
+    """
+
+    old_storage_devices_sets_count = get_deviceset_count()
+    # Needs to return an error
+    if not config.ENV_DATA.get("enable_flexible_scaling"):
+        return old_storage_devices_sets_count
+
+    new_storage_devices_sets_count = int(old_storage_devices_sets_count + 1)
+    sc = get_storage_cluster()
+    # adding the storage capacity to the cluster
+    params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
+                "value": {new_storage_devices_sets_count}}}]"""
+    sc.patch(
+        resource_name=sc.get()["items"][0]["metadata"]["name"],
+        params=params.strip("\n"),
+        format_type="json",
+    )
+    return new_storage_devices_sets_count
+
+
 def add_capacity(osd_size_capacity_requested):
     """
     Add storage capacity to the cluster

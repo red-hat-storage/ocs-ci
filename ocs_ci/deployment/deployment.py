@@ -525,8 +525,8 @@ class Deployment(object):
                 ] = self.DEFAULT_STORAGECLASS
 
             if config.ENV_DATA.get("enable_flexible_scaling"):
-                deviceset_data["count"] = 1
-                deviceset_data["replica"] = 3
+                deviceset_data["count"] = 3
+                deviceset_data["replica"] = 1
 
             # StorageCluster tweaks for LSO
             if config.DEPLOYMENT.get("local_storage"):
