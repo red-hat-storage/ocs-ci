@@ -1153,12 +1153,12 @@ def email_reports(session):
 
     """
     # calculate percentage pass
-    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
-    passed = len(reporter.stats.get("passed", []))
-    failed = len(reporter.stats.get("failed", []))
-    error = len(reporter.stats.get("error", []))
-    total = passed + failed + error
-    percentage_passed = (passed / total) * 100
+    # reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    # passed = len(reporter.stats.get("passed", []))
+    # failed = len(reporter.stats.get("failed", []))
+    # error = len(reporter.stats.get("error", []))
+    # total = passed + failed + error
+    # percentage_passed = (passed / total) * 100
 
     build_id = get_ocs_build_number()
     build_str = f"BUILD ID: {build_id} " if build_id else ""
@@ -1171,7 +1171,7 @@ def email_reports(session):
         f"ocs-ci results for {get_testrun_name()} "
         f"({build_str}"
         f"RUN ID: {config.RUN['run_id']}) "
-        f"Passed: {percentage_passed:.0f}%"
+        # f"Passed: {percentage_passed:.0f}%"
     )
     msg["From"] = sender
     msg["To"] = ", ".join(recipients)
