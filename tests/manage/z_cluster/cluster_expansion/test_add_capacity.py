@@ -42,7 +42,7 @@ def add_capacity_test():
     # )
     # Commented this lines as a workaround due to bug 1842500
 
-    # Verify OSDs are encrypted
+    # Verify OSDs are encrypted.
     if config.ENV_DATA.get("encryption_at_rest"):
         osd_encryption_verification()
 
