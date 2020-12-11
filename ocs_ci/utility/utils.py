@@ -1024,7 +1024,7 @@ def add_squad_analysis_to_email(session, soup):
                         skipped_message = "--unknown--"
                     skipped["UNASSIGNED"].append((result.nodeid, skipped_message))
 
-    # no failed or skipped tests - exist the function
+    # no failed or skipped tests - exit the function
     if not failed and not skipped:
         return
 
@@ -1044,6 +1044,7 @@ def add_squad_analysis_to_email(session, soup):
         font-family: monospace;
         background-color: #eee;
         padding: 5px;
+        margin-top: 10px;
     }
     .squad-analysis h2 {
         margin: 0px;
@@ -1124,11 +1125,41 @@ def add_squad_analysis_to_email(session, soup):
                 skips_ul_tag.append(skips_li_tag)
 
 
+def move_summary_to_top(soup):
+    """
+    Move summary to the top of the eamil report
+
+    """
+    summary = []
+    summary.append(soup.find("h2", text="Summary"))
+    for tag in summary[0].next_siblings:
+        if tag.name == "h2":
+            break
+        else:
+            summary.append(tag)
+    for tag in summary:
+        tag.extract()
+    main_header = soup.find("h1")
+    # because we are inserting the tags just after the header one by one, we
+    # have to insert them in reverse order
+    summary.reverse()
+    for tag in summary:
+        main_header.insert_after(tag)
+
+
 def email_reports(session):
     """
     Email results of test run
 
     """
+    # calculate percentage pass
+    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    passed = len(reporter.stats.get("passed", []))
+    failed = len(reporter.stats.get("failed", []))
+    error = len(reporter.stats.get("error", []))
+    total = passed + failed + error
+    percentage_passed = (passed / total) * 100
+
     build_id = get_ocs_build_number()
     build_str = f"BUILD ID: {build_id} " if build_id else ""
     mailids = config.RUN["cli_params"]["email"]
@@ -1139,7 +1170,8 @@ def email_reports(session):
     msg["Subject"] = (
         f"ocs-ci results for {get_testrun_name()} "
         f"({build_str}"
-        f"RUN ID: {config.RUN['run_id']})"
+        f"RUN ID: {config.RUN['run_id']}) "
+        f"Passed: {percentage_passed:.0f}%"
     )
     msg["From"] = sender
     msg["To"] = ", ".join(recipients)
@@ -1152,6 +1184,7 @@ def email_reports(session):
     parse_html_for_email(soup)
     if config.RUN["cli_params"].get("squad_analysis"):
         add_squad_analysis_to_email(session, soup)
+    move_summary_to_top(soup)
     part1 = MIMEText(soup, "html")
     msg.attach(part1)
     try:
