@@ -1,4 +1,6 @@
 import logging
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.backingstore import BackingStore
 from ocs_ci.ocs.exceptions import CommandFailed
 
 from ocs_ci.framework import config
@@ -85,7 +87,9 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
                 )
             ]
         else:
-            backingstores = ["noobaa-default-backing-store"]
+            backingstores = [
+                BackingStore(constants.DEFAULT_NOOBAA_BACKINGSTORE, method="oc")
+            ]
 
         if "placement_policy" in bucket_class_dict:
             placement_policy = bucket_class_dict["placement_policy"]

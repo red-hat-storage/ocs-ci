@@ -84,7 +84,9 @@ class TestBucketDeletion(MCGTest):
                     "OC",
                     {
                         "interface": "OC",
-                        "backingstores": {"pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]},
+                        "backingstore_dict": {
+                            "pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]
+                        },
                     },
                 ],
                 marks=[tier1, pytest.mark.polarion_id("OCS-2354")],
@@ -95,7 +97,9 @@ class TestBucketDeletion(MCGTest):
                     "CLI",
                     {
                         "interface": "CLI",
-                        "backingstores": {"pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]},
+                        "backingstore_dict": {
+                            "pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]
+                        },
                     },
                 ],
                 marks=[tier1, pytest.mark.polarion_id("OCS-2354")],
@@ -117,7 +121,6 @@ class TestBucketDeletion(MCGTest):
         self,
         verify_rgw_restart_count,
         mcg_obj,
-        bucket_class_factory,
         bucket_factory,
         amount,
         interface,
@@ -168,6 +171,7 @@ class TestBucketDeletion(MCGTest):
                 marks=[tier1],
             ),
         ],
+        ids=["S3", "CLI", "OC", "OC-AWS", "OC-AZURE", "OC-GCP"],
     )
     def test_bucket_delete_with_objects(
         self, mcg_obj, awscli_pod, bucket_class_factory, interface, bucketclass_dict
@@ -181,7 +185,9 @@ class TestBucketDeletion(MCGTest):
         )
         try:
             bucket = BUCKET_MAP[interface.lower()](
-                bucketname, mcg=mcg_obj, bucketclass=bucketclass_dict
+                bucketname,
+                mcg=mcg_obj,
+                bucketclass=bucket_class_factory(bucketclass_dict),
             )
 
             logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
