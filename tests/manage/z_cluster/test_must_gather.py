@@ -62,7 +62,7 @@ class TestMustGather(ManageTest):
     @tier4a
     @bugzilla("1770199")
     @pytest.mark.polarion_id("OCS-2328")
-    def test_must_gather_worker_node_down(self, nodes):
+    def test_must_gather_worker_node_down(self, mustgather, nodes):
         """
         Collect must-gather OCS logs when a worker node is down
 
@@ -71,12 +71,13 @@ class TestMustGather(ManageTest):
         worker_nodes = get_worker_nodes()
         worker_node = worker_nodes[randint(0, len(worker_nodes) - 1)]
 
-        logger.info(f"Stop {worker_node.name} worker node")
+        logger.info(f"Stop {worker_node} worker node")
         nodes.stop_nodes(get_node_objs([worker_node]))
 
-        # Collect must gather and check content
+        logger.info("Collect must gather and check content")
+        mustgather.collect_must_gather()
         mustgather.log_type = "CEPH"
         mustgather.validate_must_gather()
 
-        # Start worker node
+        logger.info(f"Start {worker_node} worker node")
         nodes.start_nodes(get_node_objs([worker_node]))
