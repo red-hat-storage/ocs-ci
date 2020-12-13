@@ -3,13 +3,16 @@ import pytest
 from random import randint
 
 from ocs_ci.framework import config
+<<<<<<< HEAD
 from ocs_ci.framework.testlib import (
     ManageTest, tier1, tier4a, tier4, bugzilla, skipif_external_mode
 )
+=======
+>>>>>>> add `tier4` mark to `test_must_gather_worker_node_down`
 from ocs_ci.ocs.must_gather.must_gather import MustGather
 from ocs_ci.ocs.must_gather.const_must_gather import GATHER_COMMANDS_VERSION
 from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
-
+from ocs_ci.framework.testlib import ManageTest, tier1, tier4a, bugzilla, tier4
 
 logger = logging.getLogger(__name__)
 
