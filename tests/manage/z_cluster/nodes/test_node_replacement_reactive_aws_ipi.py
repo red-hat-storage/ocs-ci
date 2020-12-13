@@ -11,8 +11,10 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import machine, constants, ocp
 from ocs_ci.ocs.resources import pod
+from ocs_ci.framework import config
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import label_worker_node, remove_label_from_worker_node
+from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.ocs.node import (
     get_osd_running_nodes,
     get_app_pod_running_nodes,
@@ -42,6 +44,9 @@ class TestNodeReplacement(ManageTest):
             worker_nodes = get_worker_nodes()
             # Removing created label on all worker nodes
             remove_label_from_worker_node(worker_nodes, label_key="dc")
+            # Verify OSD encrypted
+            if config.ENV_DATA.get("encryption_at_rest"):
+                osd_encryption_verification()
 
         request.addfinalizer(finalizer)
 

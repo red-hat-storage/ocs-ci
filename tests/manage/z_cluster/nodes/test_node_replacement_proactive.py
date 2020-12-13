@@ -15,6 +15,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 
 from ocs_ci.helpers.sanity_helpers import Sanity
 
@@ -180,6 +181,11 @@ class TestNodeReplacement(ManageTest):
         # Verify everything running fine
         log.info("Verifying All resources are Running and matches expected result")
         self.sanity_helpers.health_check(tries=90)
+
+        # Verify OSD encrypted
+        if config.ENV_DATA.get("encryption_at_rest"):
+            osd_encryption_verification()
+
         ceph_cluster_obj = CephCluster()
         assert ceph_cluster_obj.wait_for_rebalance(
             timeout=1800
