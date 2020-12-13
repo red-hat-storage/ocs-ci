@@ -24,6 +24,7 @@ class MustGather(object):
     def __init__(self):
         self.type_log = None
         self.root = None
+        self.delete_directories = list()
         self.files_path = dict()
         self.empty_files = list()
         self.files_not_exist = list()
@@ -45,8 +46,10 @@ class MustGather(object):
 
         """
         temp_folder = tempfile.mkdtemp()
+        self.delete_directories.append(temp_folder)
         collect_ocs_logs(dir_name=temp_folder, ocp=False)
         self.root = temp_folder + "_ocs_logs"
+        self.delete_directories.append(self.root)
 
     def search_file_path(self):
         """
@@ -168,6 +171,6 @@ class MustGather(object):
         Delete temporary folder.
 
         """
-        logger.info(f"Delete must gather folder {self.root}")
-        if re.search("_ocs_logs$", self.root):
-            shutil.rmtree(path=self.root, ignore_errors=False, onerror=None)
+        logger.info(f"Delete must gather dicrectoried {self.delete_directories}")
+        for directory in self.delete_directories:
+            shutil.rmtree(path=directory, ignore_errors=False, onerror=None)
