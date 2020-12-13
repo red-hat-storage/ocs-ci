@@ -152,6 +152,10 @@ class TestNodeReplacementWithIO(ManageTest):
         log.info("Verifying All resources are Running and matches expected result")
         self.sanity_helpers.health_check(tries=120)
 
+        # Verify OSD is encrypted
+        if config.ENV_DATA.get("encryption_at_rest"):
+            osd_encryption_verification()
+
 
 @tier4
 @tier4a
