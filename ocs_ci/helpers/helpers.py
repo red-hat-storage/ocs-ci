@@ -58,7 +58,7 @@ def create_unique_resource_name(resource_description, resource_type):
         str: A unique name
     """
     name = f"{resource_type}-{resource_description[:23]}-{uuid4().hex}"
-    return name if len(name) < 45 else name[:45]
+    return name if len(name) > 30 else name[:30]
 
 
 def create_resource(do_reload=True, **kwargs):
