@@ -15,6 +15,7 @@ from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.framework import config
 from ocs_ci.helpers.pvc_ops import test_create_delete_pvcs
+from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 
 logger = logging.getLogger(__name__)
 
@@ -343,10 +344,15 @@ class TestAddCapacity(ManageTest):
         for pod_io in cluster_io_pods:
             pod_helpers.get_fio_rw_iops(pod_io)
 
+        # Verify OSDs are encrypted
+        if config.ENV_DATA.get("encryption_at_rest"):
+            osd_encryption_verification()
+
         cluster_obj = cluster_helpers.CephCluster()
         assert (
             cluster_obj.get_ceph_health() != "HEALTH_ERR"
         ), "Ceph cluster health checking failed"
+
         logger.info("ALL Exit criteria verification successfully")
         logger.info(
             "********************** TEST PASSED *********************************"

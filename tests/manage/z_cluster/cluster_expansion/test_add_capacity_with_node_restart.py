@@ -9,6 +9,7 @@ from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.node import get_ocs_nodes
+from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 
 
 @pytest.mark.parametrize(
@@ -79,6 +80,10 @@ class TestAddCapacityNodeRestart(ManageTest):
             selector="app=rook-ceph-osd",
             resource_count=result * 3,
         )
+
+        # Verify OSDs are encrypted
+        if config.ENV_DATA.get("encryption_at_rest"):
+            osd_encryption_verification()
 
         logging.info("Finished verifying add capacity osd storage with node restart")
         logging.info("Waiting for ceph health check to finished...")
