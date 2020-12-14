@@ -1,3 +1,4 @@
+import os
 import pytest
 import logging
 from py.xml import html
@@ -23,6 +24,18 @@ def pytest_html_results_table_row(report, cells):
         cells.insert(2, html.td(report.description))
     except AttributeError:
         cells.insert(2, html.td("--- no description ---"))
+    # if logs_url is defined, replace local path Log File links to the logs_url
+    if ocsci_config.RUN.get("logs_url"):
+        for tag in cells[4][0]:
+            if (
+                hasattr(tag, "xmlname")
+                and tag.xmlname == "a"
+                and hasattr(tag.attr, "href")
+            ):
+                tag.attr.href = tag.attr.href.replace(
+                    os.path.expanduser(ocsci_config.RUN.get("log_dir")),
+                    ocsci_config.RUN.get("logs_url"),
+                )
 
 
 @pytest.mark.hookwrapper
