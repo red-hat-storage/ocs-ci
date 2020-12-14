@@ -169,6 +169,7 @@ higher priority).
 * `rhel_num_cpus` - Number of CPUs for each RHEL node
 * `rhel_memory` - The amount of memory RHEL nodes will have
 * `mixed_cluster` - Whether or not a cluster has a mix of RHEL and RHCOS nodes (Default: false)
+* `enable_flexible_scaling` - Allows storage cluster to be expanded in increments of 1
 
 #### UPGRADE
 
