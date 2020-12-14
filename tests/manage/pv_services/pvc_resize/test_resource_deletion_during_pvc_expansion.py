@@ -73,7 +73,7 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
         """
         pvc_size_expanded = 30
         executor = ThreadPoolExecutor(max_workers=len(self.pvcs))
-        disruption_ops = disruption_helpers.Disruptions()
+        disruption_ops = disruption_helpers.Disruptions().get_disruptor()
 
         # Run IO to fill some data
         log.info("Running IO on all pods to fill some data before PVC expansion.")

@@ -22,7 +22,7 @@ from ocs_ci.helpers import helpers, disruption_helpers
 
 
 logger = logging.getLogger(__name__)
-DISRUPTION_OPS = disruption_helpers.Disruptions()
+DISRUPTION_OPS = disruption_helpers.Disruptions().get_disruptor()
 
 
 @tier4

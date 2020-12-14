@@ -195,7 +195,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
 
         executor = ThreadPoolExecutor(max_workers=len(io_pods))
 
-        disruption = disruption_helpers.Disruptions()
+        disruption = disruption_helpers.Disruptions().get_disruptor()
         disruption.set_resource(resource=resource_to_delete)
 
         # Get number of pods of type 'resource_to_delete'

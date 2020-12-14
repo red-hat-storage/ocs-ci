@@ -96,7 +96,7 @@ class TestAMQPodRespin(E2ETest):
                 )
         else:
             log.info(f"Respin Ceph pod {pod_name}")
-            disruption = Disruptions()
+            disruption = Disruptions().get_disruptor()
             disruption.set_resource(resource=f"{pod_name}")
             disruption.delete_resource()
 

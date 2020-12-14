@@ -122,7 +122,7 @@ class TestScaleEndpointAutoScale(MCGTest):
         self._assert_endpoint_count(desired_count=self.MAX_ENDPOINT_COUNT)
 
         # Respin ceph pods
-        disruption = disruption_helpers.Disruptions()
+        disruption = disruption_helpers.Disruptions().get_disruptor()
         disruption.set_resource(resource=resource_to_delete)
         number_of_resource = disruption.resource_count
         for i in range(0, number_of_resource):

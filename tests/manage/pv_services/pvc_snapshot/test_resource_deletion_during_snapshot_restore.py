@@ -60,7 +60,9 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
             "mgr",
         ]
         executor = ThreadPoolExecutor(max_workers=len(self.pvcs) + len(pods_to_delete))
-        disruption_ops = [disruption_helpers.Disruptions() for _ in pods_to_delete]
+        disruption_ops = [
+            disruption_helpers.Disruptions().get_disruptor() for _ in pods_to_delete
+        ]
         file_name = "file_snap"
 
         # Run IO

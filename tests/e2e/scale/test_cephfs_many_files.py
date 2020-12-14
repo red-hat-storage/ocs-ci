@@ -157,7 +157,7 @@ class TestMillionCephfsFiles(E2ETest):
 
         """
         logging.info(f"Testing respin of {resource_to_delete}")
-        disruption = disruption_helpers.Disruptions()
+        disruption = disruption_helpers.Disruptions().get_disruptor()
         disruption.set_resource(resource=resource_to_delete)
         disruption.delete_resource()
         ocp_obj = million_file_cephfs.ocp_obj

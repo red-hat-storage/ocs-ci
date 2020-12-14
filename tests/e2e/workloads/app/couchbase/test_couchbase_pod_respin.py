@@ -41,7 +41,7 @@ class TestCouchBasePodRespin(E2ETest):
         if pod_name == "couchbase":
             self.cb.respin_couchbase_app_pod()
         else:
-            disruption = Disruptions()
+            disruption = Disruptions().get_disruptor()
             disruption.set_resource(resource=f"{pod_name}")
             disruption.delete_resource()
 

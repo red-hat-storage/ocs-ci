@@ -107,7 +107,7 @@ class BasePvcCreateRespinCephPods(E2ETest):
             resource_to_delete (str): Ceph resource type to be deleted.
             eg: mgr/mon/osd/mds/cephfsplugin/rbdplugin/cephfsplugin_provisioner/rbdplugin_provisioner
         """
-        disruption = disruption_helpers.Disruptions()
+        disruption = disruption_helpers.Disruptions().get_disruptor()
         disruption.set_resource(resource=resource_to_delete)
         no_of_resource = disruption.resource_count
         for i in range(0, no_of_resource):

@@ -315,7 +315,7 @@ class TestMonitoringBackedByOCS(E2ETest):
 
         # Re-spin the ceph pods(i.e mgr, mon, osd, mds) one by one
         resource_to_delete = ["mgr", "mon", "osd"]
-        disruption = Disruptions()
+        disruption = Disruptions().get_disruptor()
         for res_to_del in resource_to_delete:
             disruption.set_resource(resource=res_to_del)
             disruption.delete_resource()

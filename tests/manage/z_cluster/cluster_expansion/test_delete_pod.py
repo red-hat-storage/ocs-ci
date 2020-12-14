@@ -74,7 +74,7 @@ class TestAddCapacityWithResourceDelete:
             max_iterations (int): Maximum times of iterations to delete the given resource
 
         """
-        d = Disruptions()
+        d = Disruptions().get_disruptor()
 
         for i in range(max_iterations):
             logging.info(
@@ -160,7 +160,7 @@ class TestAddCapacityWithResourceDelete:
         osd_pods_before = pod_helpers.get_osd_pods()
         number_of_osd_pods_before = len(osd_pods_before)
 
-        d = Disruptions()
+        d = Disruptions().get_disruptor()
         d.set_resource(resource_name)
 
         self.new_pods_in_status_running = False

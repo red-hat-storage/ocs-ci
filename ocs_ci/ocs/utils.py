@@ -1138,52 +1138,68 @@ def get_cluster_object(external_rhcs_info):
     return Ceph(node_list=node_list)
 
 
-def kill_osd_external(ceph_cluster, osd_id, sig_type="SIGTERM"):
+def get_systemd_unit_external(ceph_cluster, daemon_type, daemon_id):
     """
-    Kill an osd with given signal
+    Get the systemd_unit for a Ceph daemon
 
     Args:
         ceph_cluster (external_cluster.Ceph): Cluster object
-        osd_id (int): id of osd
-        sig_type (str): type of signal to be sent
+        daemon_type (str): type of Ceph daemon
+        daemon_id (int): daemon id
 
-    Raises:
-        CommandFailed exception
+    Returns:
+        str: systemd_unit
 
     """
-    log.info(f"OSDID={osd_id}")
-    kill_cmd = f"systemctl kill -s {sig_type} ceph-osd@{osd_id}"
-    osd_obj = ceph_cluster.get_nodes(role=f"osd.{osd_id}")
-    for osd in osd_obj:
-        log.info(f"OSD node = {osd.vmname}")
-        try:
-            osd.exec_command(cmd=kill_cmd)
-        except CommandFailed:
-            log.error("Failed to kill osd")
-            raise
+    obj = ceph_cluster.get_nodes(role="client")
+    out, _ = obj[0].exec_command(cmd="cephadm shell ceph version || ceph version")
+    ceph_version = out.read().decode().rstrip()
+    log.info(ceph_version)
+    if "nautilus" in ceph_version:
+        systemd_unit = f"ceph-{daemon_type}@{daemon_id}"
+    else:
+        out, _ = obj[0].exec_command(cmd="cephadm shell ceph fsid || ceph fsid")
+        ceph_fsid = out.read().decode().rstrip()
+        systemd_unit = f"ceph-{ceph_fsid}@{daemon_type}.{daemon_id}"
+
+    log.info(f"systemd_unit: {systemd_unit}")
+    return systemd_unit
 
 
-def revive_osd_external(ceph_cluster, osd_id):
+def manage_systemd_unit_external(
+    ceph_cluster, daemon_type, daemon_id, command, options=""
+):
     """
-    Start an already stopped osd
+    Start, stop or restart the Ceph daemon with systemctl utility
 
     Args:
-        ceph_cluster (external_cluster.Ceph): cluster object
-        osd_id (int): id of osd
+        ceph_cluster (external_cluster.Ceph): Cluster object
+        daemon_type (str): type of Ceph daemon
+        daemon_id (int): daemon id of the Ceph daemon
+        command (str): operation to be performed
+        options (str): additional options
 
     Raises:
         CommandFailed exception in case of failure
 
     """
-    log.info(f"Reviving osd ={osd_id}")
-    revive_cmd = f"systemctl start ceph-osd@{osd_id}"
-    osd_obj = ceph_cluster.get_nodes(role=f"osd.{osd_id}")
-    for osd in osd_obj:
+    systemd_unit = get_systemd_unit_external(ceph_cluster, daemon_type, daemon_id)
+    cmd = f"systemctl {options} {command} {systemd_unit}"
+    if daemon_type == "osd":
+        role = f"osd.{daemon_id}"
+    elif daemon_type == "mds" and len(daemon_id.split(".")) == 3:
+        role = daemon_id.split(".")[1]
+    else:
+        role = daemon_id.split(".")[0]
+    daemon_obj = ceph_cluster.get_nodes(role=role)
+    for obj in daemon_obj:
+        log.info(f"{command} {daemon_type}.{daemon_id} on node {obj.vmname}")
         try:
-            osd.exec_command(cmd=revive_cmd)
+            obj.exec_command(cmd=cmd)
         except CommandFailed:
-            log.error("Failed to revive osd")
+            log.error(f"Failed to {command} {systemd_unit}")
             raise
+    log.info(f"{command} command succeeded")
 
 
 def reboot_node(ceph_node, timeout=300):

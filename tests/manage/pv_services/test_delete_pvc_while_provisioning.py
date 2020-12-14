@@ -23,7 +23,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 
 log = logging.getLogger(__name__)
-DISRUPTION_OPS = disruption_helpers.Disruptions()
+DISRUPTION_OPS = disruption_helpers.Disruptions().get_disruptor()
 
 
 @pytest.mark.parametrize(

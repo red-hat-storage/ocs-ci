@@ -460,7 +460,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
         disruptor = []
         for resource in provisioner_resource:
-            disruption = disruption_helpers.Disruptions()
+            disruption = disruption_helpers.Disruptions().get_disruptor()
             disruption.set_resource(resource=resource)
             disruptor.append(disruption)
 

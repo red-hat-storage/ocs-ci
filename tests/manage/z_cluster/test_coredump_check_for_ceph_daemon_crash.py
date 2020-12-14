@@ -117,7 +117,7 @@ class TestKillCephDaemon(ManageTest):
                 raise Exception(f"The ceph-{daemon_type} process-id was not found.")
 
             log.info(f"Kill ceph-{daemon_type} process-id {pid}")
-            disruptions_obj = Disruptions()
+            disruptions_obj = Disruptions().get_disruptor()
             disruptions_obj.daemon_pid = pid
             disruptions_obj.kill_daemon(
                 node_name=node_name, check_new_pid=False, kill_signal="11"

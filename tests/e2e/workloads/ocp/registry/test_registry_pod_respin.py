@@ -66,7 +66,7 @@ class TestRegistryPodRespin(E2ETest):
 
         # Respin relevant pod
         log.info(f"Respin Ceph pod {pod_name}")
-        disruption = disruption_helpers.Disruptions()
+        disruption = disruption_helpers.Disruptions().get_disruptor()
         disruption.set_resource(resource=f"{pod_name}")
         disruption.delete_resource()
 

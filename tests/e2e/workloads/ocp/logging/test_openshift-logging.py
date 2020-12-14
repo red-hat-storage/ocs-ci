@@ -195,7 +195,7 @@ class Testopenshiftloggingonocs(E2ETest):
         project1 = dc_pvc_obj.project.namespace
 
         # Delete the OSD pod
-        disruption = disruption_helpers.Disruptions()
+        disruption = disruption_helpers.Disruptions().get_disruptor()
         disruption.set_resource(resource="osd")
         disruption.delete_resource()
 

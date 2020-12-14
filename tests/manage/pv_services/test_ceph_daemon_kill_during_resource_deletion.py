@@ -184,7 +184,7 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
             "rbdplugin_provisioner": partial(get_rbdfsplugin_provisioner_pods),
             "operator": partial(get_operator_pods),
         }
-        disruption = disruption_helpers.Disruptions()
+        disruption = disruption_helpers.Disruptions().get_disruptor()
         disruption.set_resource(resource=resource_name)
         executor = ThreadPoolExecutor(max_workers=1)
 

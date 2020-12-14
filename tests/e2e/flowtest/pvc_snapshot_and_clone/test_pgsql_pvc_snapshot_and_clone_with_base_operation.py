@@ -44,7 +44,7 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
 
         flow_ops = flowtest.FlowOperations()
         log.info("Starting operation 1: Pod Restarts")
-        disruption = Disruptions()
+        disruption = Disruptions().get_disruptor()
         pod_obj_list = [
             "osd",
             "mon",
