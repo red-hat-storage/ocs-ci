@@ -928,9 +928,9 @@ class AMQ(object):
                 self.crb_tiller.delete()
                 run_cmd(f"oc delete project {tiller_namespace}")
                 self.ns_obj.wait_for_delete(resource_name=tiller_namespace)
-            self.kafka_persistent.delete()
             self.kafka_connect.delete()
             self.kafka_bridge.delete()
+            self.kafka_persistent.delete()
             run_cmd(
                 f"oc delete -f {self.amq_dir}", shell=True, check=True, cwd=self.dir
             )
