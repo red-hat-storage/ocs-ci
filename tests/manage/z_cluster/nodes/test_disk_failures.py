@@ -368,8 +368,10 @@ class TestDiskFailures(ManageTest):
             osd_pv.delete()
             osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
 
-        osd_size = get_osd_size()
-        nodes.create_and_attach_volume(node=osd_node, size=osd_size)
+        if config.ENV_DATA.get("local_storage"):
+            osd_size = get_osd_size()
+            logger.info(f"Create a new disk with size {osd_size}")
+            nodes.create_and_attach_volume(node=osd_node, size=osd_size)
 
         if ocp_version < 4.6:
             # Delete the rook ceph operator pod to trigger reconciliation
