@@ -86,4 +86,4 @@ class TestRegistryPodRespin(E2ETest):
         validate_registry_pod_status()
 
         # Validate cluster health ok and all pods are running
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=40)
