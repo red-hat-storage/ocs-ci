@@ -1829,6 +1829,11 @@ class AZURENodes(NodesBase):
 
 
 class VMWareLSONodes(VMWareNodes):
+    """
+    VMWare LSO nodes class
+
+    """
+
     def __init__(self):
         super().__init__()
 
