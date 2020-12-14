@@ -3,6 +3,7 @@ kind: ClusterRole
 metadata:
   creationTimestamp: null
   name: couchbase-operator-admission
+  namespace: default
 rules:
 - apiGroups:
   - couchbase.com
