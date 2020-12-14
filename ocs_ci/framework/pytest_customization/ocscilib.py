@@ -264,6 +264,12 @@ def pytest_configure(config):
         # Add OCS related versions to the html report and remove
         # extraneous metadata
         markers_arg = config.getoption("-m")
+
+        # add logs url
+        logs_url = ocsci_config.RUN.get("logs_url")
+        if logs_url:
+            config._metadata["Logs URL"] = logs_url
+
         if ocsci_config.RUN["cli_params"].get("teardown") or (
             "deployment" in markers_arg and ocsci_config.RUN["cli_params"].get("deploy")
         ):
