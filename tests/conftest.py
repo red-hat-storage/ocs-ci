@@ -2367,7 +2367,7 @@ def pgsql_factory_fixture(request):
         transactions=None,
         scaling_factor=None,
         timeout=None,
-        sc_name=None
+        sc_name=None,
     ):
         """
         Factory to start pgsql workload

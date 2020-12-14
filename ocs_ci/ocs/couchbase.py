@@ -188,7 +188,9 @@ class CouchBase(PillowFight):
             ] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         cb_example["spec"]["servers"][0]["size"] = replicas
         if sc_name:
-            cb_example['spec']['volumeClaimTemplates'][0]['spec']['storageClassName'] = sc_name
+            cb_example["spec"]["volumeClaimTemplates"][0]["spec"][
+                "storageClassName"
+            ] = sc_name
         self.cb_examples = OCS(**cb_example)
         self.cb_examples.create()
 
