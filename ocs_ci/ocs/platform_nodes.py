@@ -17,7 +17,6 @@ from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.ocs import constants, ocp, exceptions
-
 from ocs_ci.ocs.node import (
     get_node_objs,
     get_typed_worker_nodes,
