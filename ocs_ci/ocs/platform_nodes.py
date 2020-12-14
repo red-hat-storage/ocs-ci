@@ -17,6 +17,7 @@ from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.ocs import constants, ocp, exceptions
+
 from ocs_ci.ocs.node import (
     get_node_objs,
     get_typed_worker_nodes,
@@ -65,10 +66,13 @@ class PlatformNodesFactory:
             "baremetal": BaremetalNodes,
             "azure": AZURENodes,
             "gcp": NodesBase,
+            "vsphere_lso": VMWareLSONodes,
         }
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA["platform"]
+        if config.ENV_DATA.get("local_storage"):
+            platform += "_lso"
         return self.cls_map[platform]()
 
 
@@ -1823,3 +1827,23 @@ class AZURENodes(NodesBase):
         raise NotImplementedError(
             "attach nodes to cluster functionality is not implemented"
         )
+
+
+class VMWareLSONodes(VMWareNodes):
+    def __init__(self):
+        super().__init__()
+
+    def get_data_volumes(self, pvs=None):
+        """
+        Get the data vSphere volumes
+
+        Args:
+            pvs (list): PV OCS objects
+
+        Returns:
+            list: vSphere volumes
+
+        """
+        if not pvs:
+            pvs = get_deviceset_pvs()
+        return [pv.get().get("spec").get("local").get("path") for pv in pvs]
