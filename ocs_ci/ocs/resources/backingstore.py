@@ -243,8 +243,6 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                             resource_description="backingstore",
                             resource_type=cloud.lower(),
                         )
-                        # removing characters from name (pod name length bellow 64 characters issue)
-                        backingstore_name = backingstore_name[:-16]
                         created_backingstores.append(
                             BackingStore(
                                 name=backingstore_name,
