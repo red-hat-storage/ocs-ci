@@ -127,6 +127,25 @@ class CloudClient(ABC):
     def verify_uls_exists(self, uls_name):
         pass
 
+    def verify_uls_state(self, uls_name, is_available):
+        check_type = "Delete"
+        if is_available:
+            check_type = "Create"
+        sample = TimeoutSampler(
+            timeout=180, sleep=15, func=self.verify_uls_exists, uls_name=uls_name
+        )
+        if sample.wait_for_func_status(result=is_available):
+            logger.info(f"Underlying Storage {uls_name} {is_available}d successfully.")
+        else:
+            logger.error(
+                f"{check_type}ion of Underlying Storage {uls_name} timed out. "
+                f"Unable to {check_type.lower()} {uls_name}"
+            )
+        if not is_available:
+            logger.warning(
+                f"{uls_name} still found after 3 minutes, and might require manual removal."
+            )
+
     @abstractmethod
     def internal_create_uls(self, name, region):
         pass
@@ -189,6 +208,7 @@ class S3Client(CloudClient):
             self.client.create_bucket(
                 Bucket=name, CreateBucketConfiguration={"LocationConstraint": region}
             )
+        self.verify_uls_state(name, True)
 
     def internal_delete_uls(self, name):
         """
@@ -241,18 +261,7 @@ class S3Client(CloudClient):
             assert False
 
         # Todo: rename client to resource (or find an alternative)
-        sample = TimeoutSampler(
-            timeout=180, sleep=15, func=self.verify_uls_exists, uls_name=name
-        )
-        if not sample.wait_for_func_status(result=False):
-            logger.error(
-                f"Deletion of Underlying Storage {name} timed out. Unable to delete {name}"
-            )
-            logger.warning(
-                f"AWS S3 bucket {name} still found after 3 minutes, and might require manual removal."
-            )
-        else:
-            logger.info(f"Underlying Storage {name} deleted successfully.")
+        self.verify_uls_state(name, False)
 
     def get_all_uls_names(self):
         """
@@ -372,6 +381,7 @@ class GoogleClient(CloudClient):
             self.client.create_bucket(name)
         else:
             self.client.create_bucket(name, location=region)
+        self.verify_uls_state(name, True)
 
     def internal_delete_uls(self, name):
         """
@@ -393,6 +403,7 @@ class GoogleClient(CloudClient):
                     f"Deletion of Underlying Storage {name} failed. Retrying..."
                 )
                 sleep(3)
+        self.verify_uls_state(name, False)
 
     def get_all_uls_names(self):
         """
@@ -468,6 +479,8 @@ class AzureClient(CloudClient):
         """
         self.blob_service_client.get_container_client(name).create_container()
 
+        self.verify_uls_state(name, True)
+
     def internal_delete_uls(self, name):
         """
         Deletes the Underlying Storage using the Azure API
@@ -477,6 +490,7 @@ class AzureClient(CloudClient):
 
         """
         self.blob_service_client.get_container_client(name).delete_container()
+        self.verify_uls_state(name, False)
 
     def get_all_uls_names(self):
         """
