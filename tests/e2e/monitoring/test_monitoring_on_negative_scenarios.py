@@ -58,6 +58,13 @@ def wait_to_update_mgrpod_info_prometheus_pod():
     log.info("Ceph health status metrics is updated")
 
 
+@retry(AssertionError, tries=30, delay=5, backoff=2)
+def check_ceph_metrics_available_within_time():
+    assert (
+        check_ceph_metrics_available()
+    ), "failed to get results for some metrics after Downscaling and Upscaling deployment mgr"
+
+
 @retry(
     (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
     tries=60,
@@ -611,6 +618,4 @@ class TestMonitoringBackedByOCS(E2ETest):
         )
 
         # Check ceph metrics available
-        assert (
-            check_ceph_metrics_available()
-        ), "failed to get results for some metrics after Downscaling and Upscaling deployment mgr"
+        check_ceph_metrics_available_within_time()

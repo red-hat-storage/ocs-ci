@@ -933,4 +933,4 @@ class AMQ(object):
 
         # Reset namespace to default
         switch_to_default_rook_cluster_project()
-        self.ns_obj.wait_for_delete(resource_name=kafka_namespace)
+        self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
