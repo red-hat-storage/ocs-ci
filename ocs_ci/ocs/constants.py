@@ -745,6 +745,7 @@ RBD_NODE_SECRET = "rook-csi-rbd-node"
 CEPHFS_PROVISIONER_SECRET = "rook-csi-cephfs-provisioner"
 CEPHFS_NODE_SECRET = "rook-csi-cephfs-node"
 NOOBAA_OBJECTSTOREUSER_SECRET = "rook-ceph-object-user-ocs-storagecluster-cephobjectstore-noobaa-ceph-objectstore-user"
+EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = "rook-ceph-object-user-ocs-external-storagecluster-cephobjectstore-noobaa-ceph-objectstore-user"
 OCS_SECRET = "ocs-secret"
 
 # JSON Schema
