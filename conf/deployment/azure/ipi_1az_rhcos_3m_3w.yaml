@@ -7,10 +7,10 @@ ENV_DATA:
   deployment_type: 'ipi'
   region: 'eastus'
   azure_base_domain_resource_group_name: 'ocsqe'
-  base_domain: 'azure.qe.rh-ocs.com'
+  base_domain: 'azure2.qe.rh-ocs.com'
   worker_replicas: 3
   master_replicas: 3
-  master_instance_type: 'Standard_D8s_v3'
+  master_instance_type: 'Standard_D16s_v3'
   worker_instance_type: 'Standard_D16s_v3'
 REPORTING:
   polarion:
