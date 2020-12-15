@@ -29,6 +29,7 @@ and functionality using AWS and other supported platforms.
    debugging.md
    unit_tests.md
    workarounds.md
+   release_guidelines.md
    usecases/index.rst
 
 
