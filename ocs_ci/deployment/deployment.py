@@ -1241,9 +1241,15 @@ def verify_pvs_created(expected_pvs):
 
     # check number of PVs created
     num_pvs = len(pv_json["items"])
-    assert (
-        num_pvs == expected_pvs
-    ), f"{num_pvs} PVs created but we are expecting {expected_pvs}"
+    ocp_version = float(get_ocp_version())
+    if ocp_version >= 4.6:
+        assert (
+            num_pvs >= expected_pvs
+        ), f"{num_pvs} PVs created but we are expecting {expected_pvs}"
+    else:
+        assert (
+            num_pvs == expected_pvs
+        ), f"{num_pvs} PVs created but we are expecting {expected_pvs}"
 
     # checks the state of PV
     for pv in pv_json["items"]:
