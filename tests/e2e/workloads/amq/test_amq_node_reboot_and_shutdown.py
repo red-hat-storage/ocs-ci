@@ -109,7 +109,7 @@ class TestAMQNodeReboot(E2ETest):
         )(wait_for_nodes_status(timeout=1800))
 
         # Check the node are Ready state and check cluster is health ok
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=40)
 
         # Check all amq pods are up and running
         assert POD.wait_for_resource(

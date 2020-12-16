@@ -321,6 +321,9 @@ class TestMonitoringBackedByOCS(E2ETest):
                 pod_obj.pvc.name
             ), f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
 
+        # Validate osd is up and ceph health is ok
+        self.sanity_helpers.health_check(tries=40)
+
     @pytest.mark.polarion_id("OCS-605")
     def test_monitoring_when_osd_down(self, pods):
         """
