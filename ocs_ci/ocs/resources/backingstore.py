@@ -49,7 +49,6 @@ class BackingStore:
         self.mcg_obj = mcg_obj
         self.vol_num = vol_num
         self.vol_size = vol_size
-        self.pv_name = None
 
     def delete(self):
         log.info(f"Cleaning up backingstore {self.name}")
@@ -58,7 +57,7 @@ class BackingStore:
             backingstore_pvc = OCP(
                 kind=constants.PVC, selector=f"pool={self.name}"
             ).get()["items"][0]
-            self.pv_name = backingstore_pvc["spec"]["volumeName"]
+            pv_name = backingstore_pvc["spec"]["volumeName"]
 
         if self.method == "oc":
             OCP(
@@ -113,51 +112,51 @@ class BackingStore:
 
         if "pv-backingstore" in self.name.lower():
             log.info(f"Waiting for backingstore {self.name} resources to be deleted")
-            self.wait_for_pv_backingstore_resource_deleted()
+            self._wait_for_pv_backingstore_resource_deleted()
 
-    def wait_for_pv_backingstore_resource_deleted(self, namespace=None):
-        """
-        wait for pv backing store resources to be deleted at the end of test teardown
+        def _wait_for_pv_backingstore_resource_deleted(namespace=None):
+            """
+            wait for pv backing store resources to be deleted at the end of test teardown
 
-        Args:
-            backingstore_name (str): backingstore name
-            namespace (str): backing store's namespace
+            Args:
+                backingstore_name (str): backingstore name
+                namespace (str): backing store's namespace
 
-        """
-        namespace = namespace or config.ENV_DATA["cluster_namespace"]
-        sample = TimeoutSampler(
-            timeout=120,
-            sleep=15,
-            func=self.check_resources_deleted,
-            namespace=namespace,
-        )
-        if not sample.wait_for_func_status(result=True):
-            log.error(f"{self.name} was not deleted properly, leftovers were found")
-            raise TimeoutExpiredError
+            """
+            namespace = namespace or config.ENV_DATA["cluster_namespace"]
+            sample = TimeoutSampler(
+                timeout=120,
+                sleep=15,
+                func=_check_resources_deleted,
+                namespace=namespace,
+            )
+            if not sample.wait_for_func_status(result=True):
+                log.error(f"{self.name} was not deleted properly, leftovers were found")
+                raise TimeoutExpiredError
 
-    def check_resources_deleted(self, namespace=None):
-        """
-        check if resources of the pv pool backingstore deleted properly
+        def _check_resources_deleted(namespace=None):
+            """
+            check if resources of the pv pool backingstore deleted properly
 
-        Args:
-            namespace (str): backing store's namespace
+            Args:
+                namespace (str): backing store's namespace
 
-        Returns:
-            bool: True if pvc(s) were deleted
+            Returns:
+                bool: True if pvc(s) were deleted
 
-        """
-        try:
-            OCP(kind=constants.PV, resource_name=self.pv_name).get()
-            log.warning(f"Found PV leftovers belonging to {self.name}")
-            return False
-        except CommandFailed as e:
-            if "not found" in str(e):
-                pass
-            else:
-                raise
-        pvcs = get_all_pvcs(namespace=namespace, selector=f"pool={self.name}")
-        pods = get_pods_having_label(namespace=namespace, label=f"pool={self.name}")
-        return len(pvcs["items"]) == 0 and len(pods) == 0
+            """
+            try:
+                OCP(kind=constants.PV, resource_name=pv_name).get()
+                log.warning(f"Found PV leftovers belonging to {self.name}")
+                return False
+            except CommandFailed as e:
+                if "not found" in str(e):
+                    pass
+                else:
+                    raise
+            pvcs = get_all_pvcs(namespace=namespace, selector=f"pool={self.name}")
+            pods = get_pods_having_label(namespace=namespace, label=f"pool={self.name}")
+            return len(pvcs["items"]) == 0 and len(pods) == 0
 
 
 def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
