@@ -6,7 +6,7 @@ from time import sleep
 
 import boto3
 import google.api_core.exceptions as GoogleExceptions
-from azure.core.exceptions import ResourceExistsError
+from azure.core.exceptions import ResourceNotFoundError
 from azure.storage.blob import BlobServiceClient
 from botocore.exceptions import ClientError
 from google.auth.exceptions import DefaultCredentialsError
@@ -15,13 +15,13 @@ from google.cloud.storage.bucket import Bucket as GCPBucket
 from google.oauth2 import service_account
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import create_resource
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError, ResourceInUnexpectedState
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import TimeoutSampler, load_auth_config
-from ocs_ci.helpers.helpers import create_resource
 
 logger = logging.getLogger(name=__file__)
 
@@ -521,7 +521,7 @@ class AzureClient(CloudClient):
                 uls_name
             ).get_container_properties()
             return True
-        except ResourceExistsError:
+        except ResourceNotFoundError:
             return False
 
     def create_azure_secret(self):
