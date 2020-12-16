@@ -1,6 +1,7 @@
 import copy
 import logging
 import textwrap
+import yaml
 
 import pytest
 
@@ -8,6 +9,7 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import Pod
 from ocs_ci.helpers import helpers
 
@@ -527,6 +529,68 @@ def mcg_workload_job(
 
     """
     return mcg_job_factory_session(job_name="mcg-workload", project=fio_project_mcg)
+
+
+@pytest.fixture(scope="session")
+def rgw_workload_job(
+    request, mcg_job_factory_session, rgw_bucket_factory_session, cld_mgr
+):
+    """
+    Creates kubernetes job that should utilize RGW during upgrade.
+
+    Returns:
+        object: Job object
+
+    """
+    rgw_bucket_factory_session(1, "rgw-oc")
+    testdir = "/tmp/testdir"
+    template = textwrap.dedent(
+        f"""
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: rgw-utilization
+        spec:
+          backoffLimit: 0
+          template:
+            metadata:
+              name: rgw-utiliztion
+            spec:
+              containers:
+                - name: awscli
+                  image: quay.io/ocsci/aws-cli:2.0.13
+                  command: ["/bin/bash","-c"]
+                  args:
+                    - >-
+                        export BUCKET=$(
+                        AWS_ACCESS_KEY_ID={cld_mgr.rgw_client.access_key}
+                        AWS_SECRET_ACCESS_KEY={cld_mgr.rgw_client.secret_key}
+                        aws s3 --endpoint={cld_mgr.rgw_client.endpoint} ls|awk '{{print $NF}}'
+                        );
+                        mkdir {testdir};
+                        while true;
+                        do
+                        dd if=/dev/urandom of={testdir}/file bs=1M count=10 status=none;
+                        AWS_ACCESS_KEY_ID={cld_mgr.rgw_client.access_key}
+                        AWS_SECRET_ACCESS_KEY={cld_mgr.rgw_client.secret_key}
+                        aws s3 --endpoint={cld_mgr.rgw_client.endpoint} sync {testdir} s3://$BUCKET;
+                        done
+              restartPolicy: Never
+        """
+    )
+    data = yaml.safe_load(template)
+    job = OCS(**data)
+    job.create()
+
+    def _finalizer():
+        """
+        Delete the job
+        """
+        job.delete()
+        job.ocp.wait_for_delete(job.name)
+
+    request.addfinalizer(_finalizer)
+    return job
 
 
 @pytest.fixture(scope="session")
