@@ -21,7 +21,7 @@ from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import TimeoutSampler, load_auth_config
-from ocs_ci.helpers.helpers import create_resource
+from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
 
 logger = logging.getLogger(name=__file__)
 
@@ -321,7 +321,9 @@ class S3Client(CloudClient):
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
         secret_name_prefix = secret_prefix.lower()
         secret_name_prefix = secret_name_prefix.replace("_", "-")
-        bs_secret_data["metadata"]["name"] = f"cldmgr-{secret_name_prefix}-secret"
+        bs_secret_data["metadata"]["name"] = create_unique_resource_name(
+            f"cldmgr-{secret_name_prefix}", "secret"
+        )
         bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         bs_secret_data["data"][
             f"{secret_prefix}_ACCESS_KEY_ID"
@@ -424,7 +426,9 @@ class GoogleClient(CloudClient):
 
         """
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
-        bs_secret_data["metadata"]["name"] = "cldmgr-gcp-secret"
+        bs_secret_data["metadata"]["name"] = create_unique_resource_name(
+            "cldmgr-gcp", "secret"
+        )
         bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         bs_secret_data["data"][
             "GoogleServiceAccountPrivateKeyJson"
@@ -513,7 +517,9 @@ class AzureClient(CloudClient):
 
         """
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
-        bs_secret_data["metadata"]["name"] = "cldmgr-azure-secret"
+        bs_secret_data["metadata"]["name"] = create_unique_resource_name(
+            "cldmgr-azure", "secret"
+        )
         bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         bs_secret_data["data"]["AccountKey"] = base64.urlsafe_b64encode(
             self.credential.encode("UTF-8")
