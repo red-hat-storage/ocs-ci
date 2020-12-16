@@ -39,7 +39,6 @@ def worker_node_shutdown(abrupt):
         AssertionError: in case the ceph-tools pod was not recovered
 
     """
-
     nodes = PlatformNodesFactory().get_nodes_platform()
     log.info(f"Abrupt {abrupt}")
     # get ocs-operator node:
@@ -69,6 +68,13 @@ def worker_node_shutdown(abrupt):
 
 
 def osd_node_reboot():
+    """
+    Rebooting worker node that running OSD
+
+    Raises:
+        AssertionError: in case the ceph-tools pod was not recovered
+
+    """
     nodes = PlatformNodesFactory().get_nodes_platform()
     osd_nodes_names = get_osd_running_nodes()
     osd_node_to_reboot = list()
@@ -78,3 +84,9 @@ def osd_node_reboot():
             osd_node_to_reboot.append(node)
     log.info(f"Rebooting OSD node: {get_node_name(osd_node_to_reboot[0])}")
     nodes.restart_nodes(osd_node_to_reboot)
+
+    log.info("Sleeping 5 minutes")
+    time.sleep(320)
+    assert (
+        wait_for_ct_pod_recovery()
+    ), "Ceph tools pod failed to come up on another node"
