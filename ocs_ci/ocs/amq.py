@@ -20,6 +20,7 @@ from ocs_ci.utility import templating, utils
 from ocs_ci.utility.utils import run_cmd, exec_cmd, TimeoutSampler
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.helpers.helpers import storagecluster_independent_check
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 
 log = logging.getLogger(__name__)
 URL = "https://get.helm.sh/helm-v2.16.1-linux-amd64.tar.gz"
@@ -928,14 +929,23 @@ class AMQ(object):
                 self.crb_tiller.delete()
                 run_cmd(f"oc delete project {tiller_namespace}")
                 self.ns_obj.wait_for_delete(resource_name=tiller_namespace)
+
+            self.kafka_persistent.delete()
             self.kafka_connect.delete()
             self.kafka_bridge.delete()
-            self.kafka_persistent.delete()
             run_cmd(
                 f"oc delete -f {self.amq_dir}", shell=True, check=True, cwd=self.dir
             )
+
+            ocs_pvc_obj = get_all_pvc_objs(namespace=kafka_namespace)
+
         run_cmd(f"oc delete project {kafka_namespace}")
 
+        self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
+        for pvc in ocs_pvc_obj:
+            logging.info(pvc.name)
+            from ocs_ci.helpers import helpers
+
+            helpers.validate_pv_delete(pvc.backed_pv)
         # Reset namespace to default
         switch_to_default_rook_cluster_project()
-        self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
