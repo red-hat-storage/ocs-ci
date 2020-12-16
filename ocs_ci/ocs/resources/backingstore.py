@@ -17,7 +17,7 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import create_unique_resource_name, get_all_pvs
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.utility.utils import TimeoutSampler
@@ -141,9 +141,10 @@ def check_resources_deleted(backingstore_name, namespace=None):
         bool: True if pvc(s) were deleted
 
     """
+    pvs = get_all_pvs(namespace=namespace, selector=f"pool={backingstore_name}")
     pvcs = get_all_pvcs(namespace=namespace, selector=f"pool={backingstore_name}")
     pods = get_pods_having_label(namespace=namespace, label=f"pool={backingstore_name}")
-    return True if len(pvcs["items"]) == 0 and len(pods) == 0 else False
+    return len(pvcs["items"]) == 0 and len(pvs["items"]) == 0 and len(pods) == 0
 
 
 def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
