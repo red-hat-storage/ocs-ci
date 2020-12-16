@@ -36,6 +36,7 @@ class BackingStore:
         self,
         name,
         method,
+        type,
         uls_name=None,
         secret_name=None,
         mcg_obj=None,
@@ -44,6 +45,7 @@ class BackingStore:
     ):
         self.name = name
         self.method = method
+        self.type = type
         self.uls_name = uls_name
         self.secret_name = secret_name
         self.mcg_obj = mcg_obj
@@ -53,7 +55,7 @@ class BackingStore:
     def delete(self):
         log.info(f"Cleaning up backingstore {self.name}")
         # If the backingstore utilizes a PV, save its PV name for deletion verification
-        if "pv-backingstore" in self.name.lower():
+        if self.type == "pv":
             backingstore_pvc = OCP(
                 kind=constants.PVC, selector=f"pool={self.name}"
             ).get()["items"][0]
@@ -110,10 +112,6 @@ class BackingStore:
             bs_deleted_successfully
         ), f"Backingstore {self.name} was not deleted successfully"
 
-        if "pv-backingstore" in self.name.lower():
-            log.info(f"Waiting for backingstore {self.name} resources to be deleted")
-            self._wait_for_pv_backingstore_resource_deleted()
-
         def _wait_for_pv_backingstore_resource_deleted(namespace=None):
             """
             wait for pv backing store resources to be deleted at the end of test teardown
@@ -157,6 +155,10 @@ class BackingStore:
             pvcs = get_all_pvcs(namespace=namespace, selector=f"pool={self.name}")
             pods = get_pods_having_label(namespace=namespace, label=f"pool={self.name}")
             return len(pvcs["items"]) == 0 and len(pods) == 0
+
+        if self.type == "pv":
+            log.info(f"Waiting for backingstore {self.name} resources to be deleted")
+            _wait_for_pv_backingstore_resource_deleted()
 
 
 def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
@@ -237,6 +239,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                         BackingStore(
                             name=backingstore_name,
                             method=method.lower(),
+                            type="pv",
                             mcg_obj=mcg_obj,
                             vol_num=vol_num,
                             vol_size=size,
@@ -264,6 +267,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                             BackingStore(
                                 name=backingstore_name,
                                 method=method.lower(),
+                                type="cloud",
                                 uls_name=uls_name,
                                 mcg_obj=mcg_obj,
                             )
