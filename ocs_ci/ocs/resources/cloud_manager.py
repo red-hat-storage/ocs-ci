@@ -16,7 +16,7 @@ from google.oauth2 import service_account
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError, ResourceInUnexpectedState
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import update_config_from_s3
@@ -135,16 +135,19 @@ class CloudClient(ABC):
             timeout=180, sleep=15, func=self.verify_uls_exists, uls_name=uls_name
         )
         if sample.wait_for_func_status(result=is_available):
-            logger.info(f"Underlying Storage {uls_name} {is_available}d successfully.")
+            logger.info(
+                f"Underlying Storage {uls_name} {check_type.lower()}d successfully."
+            )
         else:
-            logger.error(
-                f"{check_type}ion of Underlying Storage {uls_name} timed out. "
-                f"Unable to {check_type.lower()} {uls_name}"
-            )
-        if not is_available:
-            logger.warning(
-                f"{uls_name} still found after 3 minutes, and might require manual removal."
-            )
+            if is_available:
+                raise ResourceInUnexpectedState(
+                    f"{check_type}ion of Underlying Storage {uls_name} timed out. "
+                    f"Unable to {check_type.lower()} {uls_name}"
+                )
+            else:
+                logger.warning(
+                    f"{uls_name} still found after 3 minutes, and might require manual removal."
+                )
 
     @abstractmethod
     def internal_create_uls(self, name, region):
