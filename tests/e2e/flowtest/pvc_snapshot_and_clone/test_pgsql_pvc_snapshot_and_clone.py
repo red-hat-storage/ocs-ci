@@ -21,15 +21,6 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
     Tests Story/Flow based test scenario for pgsql snapshot and clone
     """
 
-    # @pytest.fixture(autouse=True)
-    # def pgsql_setup(
-    #     self,
-    #     pgsql_factory_fixture,
-    #     multi_snapshot_factory,
-    #     multi_snapshot_restore_factory,
-    #     multi_pvc_clone_factory,
-    # ):
-
     def test_pvc_snapshot_and_clone(
         self, pgsql_factory_fixture, multiple_snapshot_and_clone_of_postgres_pvc_factory
     ):
