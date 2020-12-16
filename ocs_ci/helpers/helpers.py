@@ -930,21 +930,15 @@ def run_io_with_rados_bench(**kw):
     return ret
 
 
-def get_all_pvs(namespace=defaults.ROOK_CLUSTER_NAMESPACE, selector=None):
+def get_all_pvs():
     """
-    Gets all persistent volumes in a given namespace
-
-    Args:
-        namespace (str): Name of namespace  ('all-namespaces' to get all namespaces)
-        selector (str): The label selector to look for
+    Gets all pv in openshift-storage namespace
 
     Returns:
-         dict: Dict of all persistent volumes in the given namespace
+         dict: Dict of all pv in openshift-storage namespace
     """
-    all_ns = True if namespace == "all-namespaces" else False
-    ocp_pv_obj = ocp.OCP(kind=constants.PV, namespace=namespace)
-
-    return ocp_pv_obj.get(selector=selector, all_namespaces=all_ns)
+    ocp_pv_obj = ocp.OCP(kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    return ocp_pv_obj.get()
 
 
 # TODO: revert counts of tries and delay,BZ 1726266
