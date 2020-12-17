@@ -647,7 +647,7 @@ class TestFIOBenchmark(E2ETest):
         ratio = self.calculate_compression_ratio(pool_name)
         full_results.add_key("cmp_ratio", {"expected": cmp_ratio, "actual": ratio})
         # TODO: change the info message to Warning/Error after
-        #  prefill at ripsaw will be fixed
+        #  prefill at ripsaw will be fixed Ripsaw PR - #505
         if (cmp_ratio + 5) < ratio or ratio < (cmp_ratio - 5):
             log.info(
                 f"The compression ratio is {ratio}% "
