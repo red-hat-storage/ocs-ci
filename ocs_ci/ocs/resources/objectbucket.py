@@ -1,6 +1,7 @@
 import base64
 import logging
 from abc import ABC, abstractmethod
+import json
 
 import boto3
 from ocs_ci.helpers.helpers import (
@@ -194,7 +195,7 @@ class ObjectBucket(ABC):
             logger.error(f"{self.name} was not deleted within {timeout} seconds.")
             assert False, f"{self.name} was not deleted within {timeout} seconds."
 
-    def verify_health(self, timeout=60, interval=5):
+    def verify_health(self, timeout=1, interval=1):
         """
         Health verification function that tries to verify
         the a bucket's health by using its appropriate internal_verify_health
@@ -222,9 +223,16 @@ class ObjectBucket(ABC):
             logger.error(
                 f"{self.name} did not reach a healthy state within {timeout} seconds."
             )
+            obc_obj = OCP(kind="obc", namespace=self.namespace, resource_name=self.name)
+            obc_yaml = obc_obj.get()
+            obc_description = obc_obj.describe(resource_name=self.name)
             assert (
                 False
-            ), f"{self.name} did not reach a healthy state within {timeout} seconds."
+            ), (
+                f"{self.name} did not reach a healthy state within {timeout} seconds.\n"
+                f"OBC YAML:\n{json.dumps(obc_yaml, indent=2)}\n\n"
+                f"OBC description:\n{obc_description}"               
+            )
 
     """
     The following methods are abstract, internal methods.
@@ -412,7 +420,7 @@ class MCGOCBucket(OCBucket):
             self.name = create_unique_resource_name("oc", "obc")
         obc_data["metadata"]["name"] = self.name
         obc_data["spec"]["bucketName"] = self.name
-        obc_data["spec"]["storageClassName"] = self.namespace + ".noobaa.io"
+        obc_data["spec"]["storageClassName"] = "nope.noobaa.io"
         obc_data["metadata"]["namespace"] = self.namespace
         if kwargs.get("bucketclass"):
             obc_data.setdefault("spec", {}).setdefault(
