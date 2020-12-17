@@ -34,6 +34,7 @@ class TestMCGResourcesDisruptions(MCGTest):
     Test MCG resources disruptions
 
     """
+
     nb_db_label = (
         constants.NOOBAA_DB_LABEL_46_AND_UNDER
         if float(config.ENV_DATA["ocs_version"]) < 4.7
