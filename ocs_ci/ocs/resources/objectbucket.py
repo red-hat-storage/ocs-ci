@@ -195,7 +195,7 @@ class ObjectBucket(ABC):
             logger.error(f"{self.name} was not deleted within {timeout} seconds.")
             assert False, f"{self.name} was not deleted within {timeout} seconds."
 
-    def verify_health(self, timeout=1, interval=1):
+    def verify_health(self, timeout=60, interval=15):
         """
         Health verification function that tries to verify
         the a bucket's health by using its appropriate internal_verify_health
@@ -420,7 +420,7 @@ class MCGOCBucket(OCBucket):
             self.name = create_unique_resource_name("oc", "obc")
         obc_data["metadata"]["name"] = self.name
         obc_data["spec"]["bucketName"] = self.name
-        obc_data["spec"]["storageClassName"] = "nope.noobaa.io"
+        obc_data["spec"]["storageClassName"] = f"{self.namespace}.noobaa.io"
         obc_data["metadata"]["namespace"] = self.namespace
         if kwargs.get("bucketclass"):
             obc_data.setdefault("spec", {}).setdefault(
