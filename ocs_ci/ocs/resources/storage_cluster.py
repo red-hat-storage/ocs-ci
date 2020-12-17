@@ -7,6 +7,7 @@ import re
 from jsonschema import validate
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.exceptions import ResourceNotFoundError
 from ocs_ci.ocs.ocp import get_images, OCP
@@ -469,6 +470,7 @@ def add_capacity(osd_size_capacity_requested):
         device_sets_required + old_storage_devices_sets_count
     )
     lvpresent = localstorage.check_local_volume()
+    lvspresent = localstorage.check_local_volume_set()
     if lvpresent:
         ocp_obj = OCP(
             kind="localvolume", namespace=config.ENV_DATA["local_storage_namespace"]
@@ -495,6 +497,10 @@ def add_capacity(osd_size_capacity_requested):
         localstorage.check_pvs_created(
             int(len(final_device_list) / new_storage_devices_sets_count)
         )
+
+    if lvspresent:
+        check_pvs_present_for_ocs_expansion()
+
     sc = get_storage_cluster()
     # adding the storage capacity to the cluster
     params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",

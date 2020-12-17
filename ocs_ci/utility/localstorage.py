@@ -127,6 +127,29 @@ def check_local_volume():
         return "No resources found" not in status
 
 
+def check_local_volume_set():
+    """
+    Function to check if Local-volume-set is present or not
+
+    Returns:
+        bool: True if LVS present, False if LVS not present
+
+    """
+
+    if csv.get_csvs_start_with_prefix(
+        csv_prefix=defaults.LOCAL_STORAGE_OPERATOR_NAME,
+        namespace=config.ENV_DATA["local_storage_namespace"],
+    ):
+        ocp_obj = OCP()
+        command = f"get localvolumeset localblock -n {config.ENV_DATA['local_storage_namespace']} "
+        try:
+            status = ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
+        except CommandFailed as ex:
+            logger.debug(f"Local volume Set does not exists! Exception: {ex}")
+            return False
+        return "No resources found" not in status
+
+
 @retry(AssertionError, 12, 10, 1)
 def check_pvs_created(num_pvs_required):
     """

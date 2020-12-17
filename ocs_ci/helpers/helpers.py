@@ -28,6 +28,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableBuildException,
     UnexpectedBehaviour,
+    PVNotSufficientException,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
@@ -2961,3 +2962,42 @@ def get_mon_pdb():
     disruptions_allowed = pdb_obj.get().get("status").get("disruptionsAllowed")
     min_available_mon = pdb_obj.get().get("spec").get("minAvailable")
     return disruptions_allowed, min_available_mon
+
+
+def check_pvs_present_for_ocs_expansion(sc="localblock"):
+    """
+    Check for pvs present for OCS cluster expansion
+
+    Args:
+        sc (str): Name of SC
+
+
+    Returns:
+        bool: True if PVS present, assert if PVS not present
+
+    """
+    for rack_no in range(0, 3):
+        pv_check_list = list()
+        nodes_obj = OCP(
+            kind=constants.NODE,
+            selector=f"{constants.TOPOLOGY_ROOK_LABEL}=rack{rack_no}",
+        )
+        nodes_data = nodes_obj.get()["items"]
+        node_name = [nodes["metadata"]["name"] for nodes in nodes_data]
+        logger.info(node_name)
+        for nodes in node_name:
+            pvs_obj = OCP(
+                kind=constants.PV, selector=f"{constants.HOSTNAME_LABEL}={nodes}"
+            )
+            pvs_data = pvs_obj.get()["items"]
+            for pv in pvs_data:
+                if pv["spec"]["storageClassName"] == sc:
+                    if pv["status"]["phase"] == constants.STATUS_AVAILABLE:
+                        pv_check_list.append(pv["metadata"]["name"])
+        if pv_check_list:
+            pass
+        else:
+            raise PVNotSufficientException(
+                f"No Extra PV found in {constants.TOPOLOGY_ROOK_LABEL}=rack{rack_no} "
+            )
+    return True
