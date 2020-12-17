@@ -21,7 +21,7 @@ from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.external_ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
 from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterDetailsException
-from ocs_ci.ocs.ocp import OCP, get_ocs_version
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.openstack import CephVMNode
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.ocs.resources.ocs import OCS
@@ -854,9 +854,14 @@ def collect_noobaa_db_dump(log_dir_path):
         Pod,
     )
 
+    nb_db_label = (
+        constants.NOOBAA_DB_LABEL_46_AND_UNDER
+        if float(ocsci_config.ENV_DATA["ocs_version"]) < 4.7
+        else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
+    )
     nb_db_pod = Pod(
         **get_pods_having_label(
-            label=get_mcg_db_label(), namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            label=nb_db_label, namespace=defaults.ROOK_CLUSTER_NAMESPACE
         )[0]
     )
     ocs_log_dir_path = os.path.join(log_dir_path, "noobaa_db_dump")
@@ -1113,9 +1118,3 @@ def reboot_node(ceph_node, timeout=300):
     except SSHException:
         log.exception(f"Failed to connect to node {ceph_node.hostname}")
         raise
-
-
-def get_mcg_db_label():
-    if float(".".join(get_ocs_version().split(".")[:2])) < 4.7:
-        return constants.NOOBAA_DB_LABEL_46_AND_UNDER
-    return constants.NOOBAA_DB_LABEL_47_AND_ABOVE
