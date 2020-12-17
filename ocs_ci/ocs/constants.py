@@ -11,8 +11,6 @@ and with consideration of the entire project.
 
 import os
 
-from ocs_ci.framework import config
-
 # Logging
 LOG_FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
 
