@@ -11,6 +11,8 @@ and with consideration of the entire project.
 
 import os
 
+from ocs_ci.framework import config
+
 # Logging
 LOG_FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
 
@@ -243,7 +245,11 @@ LOCAL_STORAGE_OPERATOR_LABEL = "name=local-storage-operator"
 NOOBAA_APP_LABEL = "app=noobaa"
 NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
 NOOBAA_OPERATOR_POD_LABEL = "noobaa-operator=deployment"
-NOOBAA_DB_LABEL = "noobaa-db=noobaa"
+NOOBAA_DB_LABEL = (
+    "noobaa-db=noobaa"
+    if float(config.ENV_DATA["ocs_version"]) < 4.7
+    else "noobaa-db=postgres"
+)
 NOOBAA_ENDPOINT_POD_LABEL = "noobaa-s3=noobaa"
 ROOK_CEPH_DETECT_VERSION_LABEL = "app=rook-ceph-detect-version"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
