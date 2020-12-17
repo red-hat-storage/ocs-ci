@@ -1127,3 +1127,64 @@ def taint_nodes(nodes, taint_label=constants.OCS_TAINT):
             logging.info(f"Successfully tainted {node} with OCS storage taint")
         except Exception as e:
             logging.info(f"{node} was not tainted - {e}")
+
+
+def check_taint_on_nodes(taint=None):
+    """
+    Function to check for particular taint on nodes
+
+    Args:
+        taint (str): The taint to check on nodes
+
+    """
+    taint = taint if taint else "node.ocs.openshift.io/storage=true:NoSchedule"
+    ocs_nodes = get_ocs_nodes()
+    flag = -1
+    for node_obj in ocs_nodes:
+        if node_obj.get().get("spec").get("taints"):
+            if node_obj.get().get("spec").get("taints")[0].get("key") in taint:
+                log.info(f"Node {node_obj.name} has taint {taint}")
+                flag = 1
+        else:
+            flag = 0
+    return bool(flag)
+
+
+def taint_nodes(nodes_to_taint=None):
+    """
+    Function to taint nodes
+
+    Args:
+        nodes_to_taint (list): Nodes to taint
+
+    """
+    if not check_taint_on_nodes():
+        ocp = OCP()
+        ocs_nodes = get_ocs_nodes()
+        nodes_to_taint = nodes_to_taint if nodes_to_taint else ocs_nodes
+        log.info(f"Taint nodes with taint: " f"{constants.OPERATOR_NODE_TAINT}")
+        for node in nodes_to_taint:
+            taint_cmd = f"adm taint nodes {node.name} {constants.OPERATOR_NODE_TAINT}"
+            ocp.exec_oc_cmd(command=taint_cmd)
+    else:
+        log.info(f"Nodes already have taint {constants.OPERATOR_NODE_TAINT} ")
+
+
+def untaint_nodes(taint=None, nodes_to_taint=None):
+    """
+    Function to remove taints from nodes
+
+    Args:
+        taint (str): taint to use
+        nodes_to_taint (list): list of nodes to untaint
+
+    """
+    if check_taint_on_nodes():
+        ocp = OCP()
+        ocs_nodes = get_ocs_nodes()
+        taint = taint if taint else constants.OPERATOR_NODE_TAINT
+        nodes_to_taint = nodes_to_taint if nodes_to_taint else ocs_nodes
+        for node in nodes_to_taint:
+            taint_cmd = f"adm taint nodes {node.name} {taint}-"
+            ocp.exec_oc_cmd(command=taint_cmd)
+            log.info(f"Untainted {node.name}")
