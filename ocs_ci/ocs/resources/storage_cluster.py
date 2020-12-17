@@ -16,6 +16,7 @@ from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.utility import localstorage, utils
 from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.ocs.exceptions import UnsupportedFeatureError
+from ocs_ci.ocs.utils import get_mcg_db_label
 from ocs_ci.utility.utils import run_cmd
 
 log = logging.getLogger(__name__)
@@ -156,13 +157,8 @@ def ocs_install_verification(
         min_eps = 1
         max_eps = 1
 
-    nb_db_label = (
-        constants.NOOBAA_DB_LABEL_46_AND_UNDER
-        if float(config.ENV_DATA["ocs_version"]) < 4.7
-        else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
-    )
     resources_dict = {
-        nb_db_label: 1,
+        get_mcg_db_label(): 1,
         constants.OCS_OPERATOR_LABEL: 1,
         constants.OPERATOR_LABEL: 1,
         constants.NOOBAA_OPERATOR_POD_LABEL: 1,
