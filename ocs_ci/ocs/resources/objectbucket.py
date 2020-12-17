@@ -226,12 +226,10 @@ class ObjectBucket(ABC):
             obc_obj = OCP(kind="obc", namespace=self.namespace, resource_name=self.name)
             obc_yaml = obc_obj.get()
             obc_description = obc_obj.describe(resource_name=self.name)
-            assert (
-                False
-            ), (
+            assert False, (
                 f"{self.name} did not reach a healthy state within {timeout} seconds.\n"
                 f"OBC YAML:\n{json.dumps(obc_yaml, indent=2)}\n\n"
-                f"OBC description:\n{obc_description}"               
+                f"OBC description:\n{obc_description}"
             )
 
     """
