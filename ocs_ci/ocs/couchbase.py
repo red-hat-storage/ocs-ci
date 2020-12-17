@@ -14,7 +14,10 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.pillowfight import PillowFight
 from ocs_ci.ocs.ocp import switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources.pod import get_pod_obj
-from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.helpers.helpers import (
+    wait_for_resource_state,
+    storagecluster_independent_check,
+)
 
 log = logging.getLogger(__name__)
 
@@ -179,6 +182,10 @@ class CouchBase(PillowFight):
         """
         logging.info("Creating pods..")
         cb_example = templating.load_yaml(constants.COUCHBASE_WORKER_EXAMPLE)
+        if storagecluster_independent_check():
+            cb_example["spec"]["volumeClaimTemplates"][0]["spec"][
+                "storageClassName"
+            ] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         cb_example["spec"]["servers"][0]["size"] = replicas
         self.cb_examples = OCS(**cb_example)
         self.cb_examples.create()
