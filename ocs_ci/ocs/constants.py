@@ -245,11 +245,8 @@ LOCAL_STORAGE_OPERATOR_LABEL = "name=local-storage-operator"
 NOOBAA_APP_LABEL = "app=noobaa"
 NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
 NOOBAA_OPERATOR_POD_LABEL = "noobaa-operator=deployment"
-NOOBAA_DB_LABEL = (
-    "noobaa-db=noobaa"
-    if float(config.ENV_DATA["ocs_version"]) < 4.7
-    else "noobaa-db=postgres"
-)
+NOOBAA_DB_LABEL_46_AND_UNDER = "noobaa-db=noobaa"
+NOOBAA_DB_LABEL_47_AND_ABOVE = "noobaa-db=postgres"
 NOOBAA_ENDPOINT_POD_LABEL = "noobaa-s3=noobaa"
 ROOK_CEPH_DETECT_VERSION_LABEL = "app=rook-ceph-detect-version"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
