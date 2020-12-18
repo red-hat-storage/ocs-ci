@@ -796,6 +796,9 @@ class TimeoutSampler(object):
         """ Timeout in seconds. """
         self.sleep = sleep
         """ Sleep interval seconds. """
+        # check that given timeout and sleep values makes sense
+        if self.timeout < self.sleep:
+            raise ValueError("timeout should be larger than sleep time")
 
         self.func = func
         """ A function to sample. """
@@ -819,17 +822,39 @@ class TimeoutSampler(object):
             self.start_time = time.time()
         while True:
             self.last_sample_time = time.time()
+            if self.timeout <= (self.last_sample_time - self.start_time):
+                raise self.timeout_exc_cls(*self.timeout_exc_args)
             try:
                 yield self.func(*self.func_args, **self.func_kwargs)
             except Exception as ex:
                 msg = f"Exception raised during iteration: {ex}"
-                logging.error(msg)
-            if self.timeout < (time.time() - self.start_time):
+                log.exception(msg)
+            if self.timeout <= (time.time() - self.start_time):
                 raise self.timeout_exc_cls(*self.timeout_exc_args)
-            log.info(
-                f"Going to sleep for {self.sleep} seconds" " before next iteration"
-            )
+            log.info("Going to sleep for %d seconds before next iteration", self.sleep)
             time.sleep(self.sleep)
+
+    def wait_for_func_value(self, value):
+        """
+        Implements common usecase of TimeoutSampler: waiting until func (given
+        function) returns a given value.
+
+        Args:
+            value: Expected return value of func we are waiting for.
+        """
+        try:
+            for i_value in self:
+                if i_value == value:
+                    break
+        except self.timeout_exc_cls:
+            log.error(
+                "function %s failed to return expected value %s "
+                "after multiple retries during %d second timeout",
+                self.func.__name__,
+                value,
+                self.timeout,
+            )
+            raise
 
     def wait_for_func_status(self, result):
         """
@@ -837,7 +862,7 @@ class TimeoutSampler(object):
         (using __iter__ function)
 
         Args:
-            result (bool): Expected result from func.
+            result: Expected result from func.
 
         Examples::
 
@@ -850,15 +875,30 @@ class TimeoutSampler(object):
 
         """
         try:
-            for res in self:
-                if result == res:
-                    return True
+            self.wait_for_func_value(result)
+            return True
         except self.timeout_exc_cls:
-            log.error(
-                f"({self.func.__name__}) return incorrect status "
-                f"after {self.timeout} second timeout"
-            )
             return False
+
+
+class TimeoutIterator(TimeoutSampler):
+    """
+    Wrapper of TimeoutSampler which separates parameters of the class itself
+    and func arguments in __init__ method. Such way of passing function with
+    parameters is used in python standard library.
+
+    This allows more explicit usage, which improves readability, eg.::
+
+        t1 = TimeoutIterator(timeout=60, sleep=5, func=foo, func_args=[bar])
+        t2 = TimeoutIterator(3600, sleep=10, func=foo, func_args=[bar])
+    """
+
+    def __init__(self, timeout, sleep, func, func_args=None, func_kwargs=None):
+        if func_args is None:
+            func_args = []
+        if func_kwargs is None:
+            func_kwargs = {}
+        super().__init__(timeout, sleep, func, *func_args, **func_kwargs)
 
 
 def get_random_str(size=13):
