@@ -47,13 +47,7 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
-<<<<<<< HEAD
 from ocs_ci.utility import templating, ibmcloud
-from ocs_ci.utility.deployment import get_ocp_ga_version
-from ocs_ci.utility.localstorage import get_lso_channel
-=======
-from ocs_ci.utility import templating
->>>>>>> 9df9fd8e (moving lso code to deployment helpers)
 from ocs_ci.utility.openshift_console import OpenshiftConsole
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -388,22 +382,17 @@ class Deployment(object):
         else:
             logger.info("Deployment of OCS via OCS operator")
             self.label_and_taint_nodes()
-<<<<<<< HEAD
-            logger.info("Creating namespace and operator group.")
-            run_cmd(f"oc apply -f {constants.OLM_YAML}")
-        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
-            ibmcloud.add_deployment_dependencies()
-            if not live_deployment:
-                create_ocs_secret(self.namespace)
-                create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
-=======
 
         if config.DEPLOYMENT.get("local_storage"):
             setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
 
         logger.info("Creating namespace and operator group.")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
->>>>>>> 9df9fd8e (moving lso code to deployment helpers)
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+            ibmcloud.add_deployment_dependencies()
+            if not live_deployment:
+                create_ocs_secret(self.namespace)
+                create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         if not live_deployment:
             self.create_ocs_operator_source()
         self.subscribe_ocs()
