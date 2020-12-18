@@ -2822,3 +2822,24 @@ def get_full_test_logs_path(cname):
     )
 
     return full_log_path
+
+
+def get_mon_pdb():
+    """
+    Check for Mon PDB
+
+    Returns:
+        disruptions_allowed (int): Count of mon allowed disruption
+        min_available_mon (int): Count of minimum mon available
+
+    """
+
+    pdb_obj = OCP(
+        kind=constants.POD_DISRUPTION_BUDGET,
+        resource_name=constants.MON_PDB,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    )
+
+    disruptions_allowed = pdb_obj.get().get("status").get("disruptionsAllowed")
+    min_available_mon = pdb_obj.get().get("spec").get("minAvailable")
+    return disruptions_allowed, min_available_mon
