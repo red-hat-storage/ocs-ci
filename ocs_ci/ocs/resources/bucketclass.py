@@ -16,10 +16,11 @@ class BucketClass:
 
     """
 
-    def __init__(self, name, backingstores, placement_policy):
+    def __init__(self, name, backingstores, placement_policy, namespace_policy):
         self.name = name
         self.backingstores = backingstores
         self.placement_policy = placement_policy
+        self.namespace_policy = namespace_policy
 
     # TODO: verify health of bucketclass
 
@@ -64,6 +65,7 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
                                             requirements.
                 - placement_policy (str): The Placement policy for this bucket class.
                     Spread | Mirror
+                - namespace_policy_dict (dict):  A dictionary that describes the namespace policy.
                 if no key is provided default values will apply.
 
         Returns:
@@ -79,6 +81,23 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
                 )
         else:
             interface = "OC"
+
+        namespace_policy = None
+        backingstores = None
+        placement_policy = None
+
+        if "namespace_policy_dict" in bucket_class_dict:
+            namespace_policy = bucket_class_dict["namespace_policy_dict"]
+            if "namespacestore_dict" in namespace_policy:
+                # TODO: need to call here namespace factory according to the args
+                # and change the namespace_policy population according to:
+                # if amount > 1, put all created namespace stores as read_resources
+                # and the first to be the write resource
+                # notice - write_resource must be one of the read_resources
+                nss = None
+                namespace_policy["read_resources"] = [nss]
+                namespace_policy["write_resources"] = nss
+
         if "backingstore_dict" in bucket_class_dict:
             backingstores = [
                 backingstore
@@ -95,6 +114,7 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
             placement_policy = bucket_class_dict["placement_policy"]
         else:
             placement_policy = "Spread"
+
         bucket_class_name = create_unique_resource_name(
             resource_description="bucketclass", resource_type=interface.lower()
         )
@@ -102,9 +122,10 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
             name=bucket_class_name,
             backingstores=backingstores,
             placement=placement_policy,
+            namespace_policy=namespace_policy,
         )
         bucket_class_object = BucketClass(
-            bucket_class_name, backingstores, placement_policy
+            bucket_class_name, backingstores, placement_policy, namespace_policy
         )
         created_bucket_classes.append(bucket_class_object)
         return bucket_class_object

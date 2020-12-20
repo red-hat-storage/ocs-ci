@@ -38,6 +38,11 @@ from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
 )
+
+from ocs_ci.ocs.resources.namespacestore import (
+    namespace_store_factory as namespacestore_factory_implementation,
+)
+
 from ocs_ci.ocs.resources.bucketclass import (
     bucket_class_factory as bucketclass_factory_implementation,
 )
@@ -2882,6 +2887,40 @@ def ns_resource_factory(
     request.addfinalizer(ns_resources_cleanup)
 
     return _create_ns_resources
+
+
+@pytest.fixture()
+def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
+    """
+    Create a Namespace Store factory.
+    Calling this fixture creates a new Namespace Store(s).
+
+    Returns:
+        func: Factory method - each call to this function creates
+            a namespacestore
+
+    """
+    return namespacestore_factory_implementation(
+        request, cld_mgr, mcg_obj, cloud_uls_factory
+    )
+
+
+@pytest.fixture(scope="session")
+def namespace_store_factory_session(
+    request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
+):
+    """
+    Create a Namespace Store factory.
+    Calling this fixture creates a new Namespace Store(s).
+
+    Returns:
+        func: Factory method - each call to this function creates
+            a namespacestore
+
+    """
+    return namespacestore_factory_implementation(
+        request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
+    )
 
 
 @pytest.fixture()
