@@ -1,4 +1,5 @@
 import logging
+from ocs_ci.framework import config
 
 import pytest
 
@@ -34,9 +35,14 @@ class TestMCGResourcesDisruptions(MCGTest):
 
     """
 
+    nb_db_label = (
+        constants.NOOBAA_DB_LABEL_46_AND_UNDER
+        if float(config.ENV_DATA["ocs_version"]) < 4.7
+        else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
+    )
     labels_map = {
         "noobaa_core": constants.NOOBAA_CORE_POD_LABEL,
-        "noobaa_db": constants.NOOBAA_DB_LABEL,
+        "noobaa_db": nb_db_label,
         "noobaa_endpoint": constants.NOOBAA_ENDPOINT_POD_LABEL,
         "noobaa_operator": constants.NOOBAA_OPERATOR_POD_LABEL,
     }

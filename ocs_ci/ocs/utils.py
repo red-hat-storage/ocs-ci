@@ -854,9 +854,14 @@ def collect_noobaa_db_dump(log_dir_path):
         Pod,
     )
 
+    nb_db_label = (
+        constants.NOOBAA_DB_LABEL_46_AND_UNDER
+        if float(ocsci_config.ENV_DATA["ocs_version"]) < 4.7
+        else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
+    )
     nb_db_pod = Pod(
         **get_pods_having_label(
-            label=constants.NOOBAA_DB_LABEL, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            label=nb_db_label, namespace=defaults.ROOK_CLUSTER_NAMESPACE
         )[0]
     )
     ocs_log_dir_path = os.path.join(log_dir_path, "noobaa_db_dump")
