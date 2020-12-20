@@ -4,6 +4,7 @@ Functions here are tune to use as minimum as possible of memory.
 functions can be used from pytest scrips or from regular python scripts.
 
 """
+
 import logging
 import subprocess
 
@@ -25,6 +26,7 @@ def run_command(cmd, timeout=600, out_format="string", **kwargs):
         list/str : all STDOUT / STDERR output as list of lines, or one string separated by '\n'
 
     """
+
     if isinstance(cmd, str):
         command = cmd.split()
     elif isinstance(cmd, list):
