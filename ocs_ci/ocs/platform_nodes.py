@@ -70,7 +70,7 @@ class PlatformNodesFactory:
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA["platform"]
-        if config.ENV_DATA.get("local_storage"):
+        if config.DEPLOYMENT.get("local_storage"):
             platform += "_lso"
         return self.cls_map[platform]()
 
@@ -1851,3 +1851,19 @@ class VMWareLSONodes(VMWareNodes):
         if not pvs:
             pvs = get_deviceset_pvs()
         return [pv.get().get("spec").get("local").get("path") for pv in pvs]
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        """
+        Detach disk from a VM and delete from datastore if specified
+
+        Args:
+            volume (str): Volume path
+            node (OCS): The OCS object representing the node
+            delete_from_backend (bool): True for deleting the disk (vmdk)
+                from backend datastore, False otherwise
+
+        """
+        vm = self.get_vms([node])[0]
+        self.vsphere.remove_disk(
+            vm=vm, identifier=volume, key="disk_name", datastore=delete_from_backend
+        )

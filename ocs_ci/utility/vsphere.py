@@ -636,15 +636,15 @@ class VSPHERE(object):
         Args:
             vm (vim.VirtualMachine): VM instance
             identifier (str): The value of either 'unit_number'
-                (Disk unit number to remove) or 'volume_path'
+                (Disk unit number to remove), 'volume_path'
                 (The volume path in the datastore (i.e,
-                '[vsanDatastore] d4210a5e-40ce-efb8-c87e-040973d176e1/control-plane-1.vmdk')
-            key (str): Either 'unit_number' 'volume_path'
+                '[vsanDatastore] d4210a5e-40ce-efb8-c87e-040973d176e1/control-plane-1.vmdk'),
+                or 'disk_name'(The disk name (i.e, 'scsi-36000c290a2cffeb9fcf4a5f748e21909')
+            key (str): Either 'unit_number', 'volume_path', or 'disk_name'
             datastore (bool): Delete the disk (vmdk) from backend datastore
                 if True
 
         """
-        virtual_disk_device = None
         virtual_disk_spec = vim.vm.device.VirtualDeviceSpec()
         if datastore:
             virtual_disk_spec.fileOperation = (
@@ -652,28 +652,7 @@ class VSPHERE(object):
             )
         virtual_disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.remove
 
-        if key == "unit_number":
-            disk_prefix = "Hard disk "
-            for dev in vm.config.hardware.device:
-                # choose the device based on unit number instead of
-                # deviceInfo.label. labels can change if a disk is removed
-                if (
-                    isinstance(dev, vim.vm.device.VirtualDisk)
-                    and dev.unitNumber == identifier
-                    and disk_prefix in dev.deviceInfo.label
-                ):
-                    virtual_disk_device = dev
-
-        elif key == "volume_path":
-            vm_volumes = [
-                device
-                for device in vm.config.hardware.device
-                if isinstance(device, vim.vm.device.VirtualDisk)
-            ]
-            for vol in vm_volumes:
-                if vol.backing.fileName == identifier:
-                    virtual_disk_device = vol
-                    break
+        virtual_disk_device = self.get_device_by_key(vm, identifier, key)
 
         if not virtual_disk_device:
             logger.warning(
@@ -1333,3 +1312,56 @@ class VSPHERE(object):
             logger.info(f"VM: {vm.name} doesn't have IP, it will be restarted!")
         if vms_without_ip:
             self.restart_vms(vms_without_ip, force=True)
+
+    def get_device_by_key(self, vm, identifier, key="unit_number"):
+        """
+        Get the device by key, and a specific identifier
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+            identifier (str): The value of either 'unit_number'
+                (Disk unit number to remove), 'volume_path'
+                (The volume path in the datastore (i.e,
+                '[vsanDatastore] d4210a5e-40ce-efb8-c87e-040973d176e1/control-plane-1.vmdk'),
+                or 'disk_name'(The disk name (i.e, 'scsi-36000c290a2cffeb9fcf4a5f748e21909')
+            key (str): Either 'unit_number', 'volume_path', or 'disk_name'
+
+        Returns:
+            pyVmomi.VmomiSupport.vim.vm.device.VirtualDisk: The virtual disk device object that
+                matches the key and the identifier
+
+        """
+        virtual_disk_device = None
+        vm_volumes = [
+            device
+            for device in vm.config.hardware.device
+            if isinstance(device, vim.vm.device.VirtualDisk)
+        ]
+
+        if key == "unit_number":
+            disk_prefix = "Hard disk "
+            for dev in vm.config.hardware.device:
+                # choose the device based on unit number instead of
+                # deviceInfo.label. labels can change if a disk is removed
+                if (
+                    isinstance(dev, vim.vm.device.VirtualDisk)
+                    and dev.unitNumber == identifier
+                    and disk_prefix in dev.deviceInfo.label
+                ):
+                    virtual_disk_device = dev
+
+        elif key == "volume_path":
+            for vol in vm_volumes:
+                if vol.backing.fileName == identifier:
+                    virtual_disk_device = vol
+                    break
+
+        elif key == "disk_name":
+            for vol in vm_volumes:
+                uuid_suffix = "".join(vol.backing.uuid.split("-")[1:])
+                identifier_suffix = identifier[-len(uuid_suffix) :]
+                if uuid_suffix == identifier_suffix:
+                    virtual_disk_device = vol
+                    break
+
+        return virtual_disk_device
