@@ -17,15 +17,13 @@ def run_command(cmd, timeout=600, out_format="string", **kwargs):
     Args:
         cmd (str/list): the command to execute
         timeout (int): the command timeout in seconds, default is 10 Min.
-        out_format (str): in which format to return the output -
-            string - one long string separated with '\n' between lines
-            list - list of lines
-        kwargs (dict): dictionary of argument as subprocess get, with some
-            specific arguments:
+        out_format (str): in which format to return the output:
+         string - one long string separated with '\n' between lines
+         list - list of lines
+        kwargs (dict): dictionary of argument as subprocess get
 
     Returns:
-        list/str : all STDOUT / STDERR output as list of lines,
-            or one string separated by '\n'
+        list/str : all STDOUT / STDERR output as list of lines, or one string separated by '\n'
 
     """
     if isinstance(cmd, str):
