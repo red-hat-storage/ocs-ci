@@ -141,7 +141,7 @@ class CloudClient(ABC):
         else:
             if is_available:
                 raise ResourceInUnexpectedState(
-                    f"{check_type}ion of Underlying Storage {uls_name} timed out. "
+                    f"{check_type[:-1]}ion of Underlying Storage {uls_name} timed out. "
                     f"Unable to {check_type.lower()} {uls_name}"
                 )
             else:
