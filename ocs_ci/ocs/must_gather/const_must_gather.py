@@ -168,13 +168,48 @@ GATHER_COMMANDS_CEPH_4_5 = [
 
 GATHER_COMMANDS_JSON_4_5 = []
 
-GATHER_COMMANDS_OTHERS_4_5 = []
+GATHER_COMMANDS_OTHERS_4_5 = [
+    "describe_nodes",
+    "describe_pods_-n_openshift-storage",
+    "get_clusterversion_-oyaml",
+    "get_csv_-n_openshift-storage",
+    "get_events_-n_openshift-storage",
+    "get_infrastructures.config_-oyaml",
+    "get_installplan_-n_openshift-storage",
+    "get_nodes_--show-labels",
+    "get_pods_-owide_-n_openshift-storage",
+    "get_pv",
+    "get_pvc_--all-namespaces",
+    "get_sc",
+    "get_subscription_-n_openshift-storage",
+]
 
 GATHER_COMMANDS_CEPH_4_6 = []
 
 GATHER_COMMANDS_JSON_4_6 = []
 
 GATHER_COMMANDS_OTHERS_4_6 = [
+    "volumesnapshotclass",
+    "storagecluster",
+    "get_clusterrole",
+    "desc_clusterrole",
+    "desc_nodes",
+    "get_infrastructures.config",
+    "get_clusterrolebinding",
+    "desc_pv",
+    "get_clusterversion",
+    "get_sc",
+    "desc_clusterrolebinding",
+    "get_nodes_-o_wide_--show-labels",
+    "desc_clusterversion",
+    "get_pv",
+    "desc_sc",
+    "desc_infrastructures.config",
+    "csv",
+    "rolebinding",
+    "all",
+    "role",
+    "storagecluster.yaml",
     "admin.yaml",
     "aggregate-olm-edit.yaml",
     "aggregate-olm-view.yaml",
