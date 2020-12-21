@@ -16,7 +16,7 @@ from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
-from ocs_ci.ocs import constants, ocp, exceptions
+from ocs_ci.ocs import constants, ocp, exceptions, cluster
 from ocs_ci.ocs.node import (
     get_node_objs,
     get_typed_worker_nodes,
@@ -70,7 +70,7 @@ class PlatformNodesFactory:
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA["platform"]
-        if config.DEPLOYMENT.get("local_storage"):
+        if cluster.is_lso_cluster():
             platform += "_lso"
         return self.cls_map[platform]()
 

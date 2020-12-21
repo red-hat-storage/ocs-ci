@@ -1422,6 +1422,17 @@ def wait_for_silence_ceph_osd_crash_warning(osd_pod_name, timeout=900):
         return False
 
 
+def is_lso_cluster():
+    """
+    Check if the cluster is an lso cluster
+
+    Returns:
+        bool: True, if the cluster is an lso cluster. False, otherwise
+
+    """
+    return config.DEPLOYMENT.get("local_storage", False)
+
+
 class CephClusterExternal(CephCluster):
     """
     Handle all external ceph cluster related functionalities
