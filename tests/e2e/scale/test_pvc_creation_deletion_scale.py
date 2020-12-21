@@ -107,7 +107,9 @@ class TestPVCCreationDeletionScale(E2ETest):
 
         # Get PVC creation time
         pvc_create_time = helpers.measure_pvc_creation_time_bulk(
-            interface=interface, pvc_name_list=pvc_bound_list
+            interface=interface,
+            pvc_name_list=pvc_bound_list,
+            wait_time=300,
         )
 
         # TODO: Update below code with google API, to record value in spreadsheet
