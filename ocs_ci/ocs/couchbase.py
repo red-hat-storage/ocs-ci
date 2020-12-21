@@ -83,10 +83,12 @@ class CouchBase(PillowFight):
         switch_to_project("default")
         self.up_adm_chk = OCP(namespace="default")
         self.up_check = OCP(namespace=constants.COUCHBASE_OPERATOR)
+        self.adm_objects = []
         for adm_yaml in self.admission_parts:
             adm_data = templating.load_yaml(adm_yaml)
             adm_obj = OCS(**adm_data)
             adm_obj.create()
+            self.adm_objects.append(adm_obj)
 
         # Wait for admission pod to be created
         for adm_pod in TimeoutSampler(
@@ -321,11 +323,12 @@ class CouchBase(PillowFight):
         self.couchbase_obj.delete()
         switch_to_project("default")
         self.ns_obj.delete_project(constants.COUCHBASE_OPERATOR)
-        self.ns_obj.wait_for_delete(resource_name=constants.COUCHBASE_OPERATOR)
-        for adm_yaml in self.admission_parts:
-            adm_data = templating.load_yaml(adm_yaml)
-            adm_obj = OCS(**adm_data)
+        self.ns_obj.wait_for_delete(
+            resource_name=constants.COUCHBASE_OPERATOR, timeout=90
+        )
+        for adm_obj in self.adm_objects:
             adm_obj.delete()
+
         # Before the code below was added, the teardown task would sometimes
         # fail with the leftover objects because it would still see one of the
         # couchbase pods.
