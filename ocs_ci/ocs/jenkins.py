@@ -23,8 +23,11 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import utils
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.ocs.node import get_nodes, get_app_pod_running_nodes, get_worker_nodes
-from ocs_ci.helpers.helpers import wait_for_resource_state, create_pvc
-
+from ocs_ci.helpers.helpers import (
+    wait_for_resource_state,
+    create_pvc,
+    storagecluster_independent_check,
+)
 
 log = logging.getLogger(__name__)
 
@@ -219,12 +222,17 @@ class Jenkins(object):
             List: pvc_objs
         """
         pvc_objs = []
+        sc_name = (
+            constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+            if storagecluster_independent_check()
+            else constants.DEFAULT_STORAGECLASS_RBD
+        )
         for project in self.projects:
             log.info(f"create jenkins pvc on project {project}")
             pvc_obj = create_pvc(
                 pvc_name="dependencies",
                 size="10Gi",
-                sc_name=constants.DEFAULT_STORAGECLASS_RBD,
+                sc_name=sc_name,
                 namespace=project,
             )
             pvc_objs.append(pvc_obj)
@@ -298,10 +306,15 @@ class Jenkins(object):
         tmp_dict["labels"]["template"] = "jenkins-persistent-ocs-template"
         tmp_dict["metadata"]["name"] = "jenkins-persistent-ocs"
         # Find Kind: 'PersistentVolumeClaim' position in the objects list, differs in OCP 4.5 and OCP 4.6.
+        sc_name = (
+            constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+            if storagecluster_independent_check()
+            else constants.DEFAULT_STORAGECLASS_RBD
+        )
         for i in range(len(tmp_dict["objects"])):
             if tmp_dict["objects"][i]["kind"] == constants.PVC:
                 tmp_dict["objects"][i]["metadata"]["annotations"] = {
-                    "volume.beta.kubernetes.io/storage-class": "ocs-storagecluster-ceph-rbd"
+                    "volume.beta.kubernetes.io/storage-class": sc_name
                 }
 
         tmp_dict["parameters"][4]["value"] = "10Gi"

@@ -168,13 +168,48 @@ GATHER_COMMANDS_CEPH_4_5 = [
 
 GATHER_COMMANDS_JSON_4_5 = []
 
-GATHER_COMMANDS_OTHERS_4_5 = []
+GATHER_COMMANDS_OTHERS_4_5 = [
+    "describe_nodes",
+    "describe_pods_-n_openshift-storage",
+    "get_clusterversion_-oyaml",
+    "get_csv_-n_openshift-storage",
+    "get_events_-n_openshift-storage",
+    "get_infrastructures.config_-oyaml",
+    "get_installplan_-n_openshift-storage",
+    "get_nodes_--show-labels",
+    "get_pods_-owide_-n_openshift-storage",
+    "get_pv",
+    "get_pvc_--all-namespaces",
+    "get_sc",
+    "get_subscription_-n_openshift-storage",
+]
 
 GATHER_COMMANDS_CEPH_4_6 = []
 
 GATHER_COMMANDS_JSON_4_6 = []
 
 GATHER_COMMANDS_OTHERS_4_6 = [
+    "volumesnapshotclass",
+    "storagecluster",
+    "get_clusterrole",
+    "desc_clusterrole",
+    "desc_nodes",
+    "get_infrastructures.config",
+    "get_clusterrolebinding",
+    "desc_pv",
+    "get_clusterversion",
+    "get_sc",
+    "desc_clusterrolebinding",
+    "get_nodes_-o_wide_--show-labels",
+    "desc_clusterversion",
+    "get_pv",
+    "desc_sc",
+    "desc_infrastructures.config",
+    "csv",
+    "rolebinding",
+    "all",
+    "role",
+    "storagecluster.yaml",
     "admin.yaml",
     "aggregate-olm-edit.yaml",
     "aggregate-olm-view.yaml",
@@ -604,16 +639,60 @@ GATHER_COMMANDS_OTHERS_4_6 = [
     "whereabouts-cni.yaml",
 ]
 
+GATHER_COMMANDS_OTHERS_EXTERNAL = GATHER_COMMANDS_OTHERS + [
+    "ocs-external-storagecluster-ceph-rbd.yaml",
+    "ocs-external-storagecluster-ceph-rgw.yaml",
+    "ocs-external-storagecluster-cephfs.yaml",
+]
+
+GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE = [
+    "ocs-storagecluster-cephblockpool.yaml",
+    "ocs-storagecluster-cephcluster.yaml",
+    "ocs-storagecluster-cephfilesystem.yaml",
+    "pools_rbd_ocs-storagecluster-cephblockpool",
+    "ocs-storagecluster-ceph-rbd.yaml",
+    "ocs-storagecluster-ceph-rgw.yaml",
+    "ocs-storagecluster-cephfs.yaml",
+    "ocs-storagecluster-cephfsplugin-snapclass.yaml",
+    "ocs-storagecluster-rbdplugin-snapclass.yaml",
+]
+
+# TODO: Remove monitoring_registry_pvc_list once issue #3465 is fixed
+# https://github.com/red-hat-storage/ocs-ci/issues/3465
+monitoring_registry_pvc_list = [
+    "my-alertmanager-claim-alertmanager-main-0.yaml",
+    "my-alertmanager-claim-alertmanager-main-1.yaml",
+    "my-alertmanager-claim-alertmanager-main-2.yaml",
+    "my-prometheus-claim-prometheus-k8s-0.yaml",
+    "my-prometheus-claim-prometheus-k8s-1.yaml",
+    "registry-cephfs-rwx-pvc.yaml",
+]
+GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE.extend(monitoring_registry_pvc_list)
+
+GATHER_COMMANDS_OTHERS_EXTERNAL_4_5 = list(
+    set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_4_5)
+    - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
+)
+
+GATHER_COMMANDS_OTHERS_EXTERNAL_4_6 = list(
+    set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_4_6)
+    - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
+) + [
+    "ocs-external-storagecluster-cephfsplugin-snapclass.yaml",
+    "ocs-external-storagecluster-rbdplugin-snapclass.yaml",
+]
 
 GATHER_COMMANDS_VERSION = {
     4.5: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_5,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_5,
         "OTHERS": GATHER_COMMANDS_OTHERS + GATHER_COMMANDS_OTHERS_4_5,
+        "OTHERS_EXTERNAL": GATHER_COMMANDS_OTHERS_EXTERNAL_4_5,
     },
     4.6: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_6,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_6,
         "OTHERS": GATHER_COMMANDS_OTHERS + GATHER_COMMANDS_OTHERS_4_6,
+        "OTHERS_EXTERNAL": GATHER_COMMANDS_OTHERS_EXTERNAL_4_6,
     },
 }

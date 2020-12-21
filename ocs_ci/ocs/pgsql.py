@@ -25,7 +25,11 @@ from ocs_ci.ocs.resources.pod import (
     get_file_path,
 )
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
-from ocs_ci.helpers.helpers import wait_for_resource_state, create_unique_resource_name
+from ocs_ci.helpers.helpers import (
+    wait_for_resource_state,
+    create_unique_resource_name,
+    storagecluster_independent_check,
+)
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
@@ -73,6 +77,10 @@ class Postgresql(RipSaw):
             pgsql_cmap = templating.load_yaml(constants.PGSQL_CONFIGMAP_YAML)
             pgsql_sset = templating.load_yaml(constants.PGSQL_STATEFULSET_YAML)
             pgsql_sset["spec"]["replicas"] = replicas
+            if storagecluster_independent_check():
+                pgsql_sset["spec"]["volumeClaimTemplates"][0]["spec"][
+                    "storageClassName"
+                ] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
             self.pgsql_service = OCS(**pgsql_service)
             self.pgsql_service.create()
             self.pgsql_cmap = OCS(**pgsql_cmap)

@@ -4,9 +4,6 @@ Deploying en Elasticsearch server for collecting logs from ripsaw benchmarks
 """
 import os
 import logging
-import tempfile
-import urllib
-import urllib.error
 import base64
 import signal
 import subprocess
@@ -34,8 +31,7 @@ class ElasticSearch(object):
         """
         log.info("Initializing the Elastic-Search environment object")
         self.namespace = "elastic-system"
-        self.eck_path = "https://download.elastic.co/downloads/eck/1.1.2"
-        self.eck_file = "all-in-one.yaml"
+        self.eck_file = "ocs_ci/templates/app-pods/eck.1.3.1-all-in-one.yaml"
         self.pvc = "ocs_ci/templates/app-pods/es-pvc.yaml"
         self.crd = "ocs_ci/templates/app-pods/esq.yaml"
         self.lspid = None
@@ -53,8 +49,6 @@ class ElasticSearch(object):
             namespace=self.namespace,
         )
 
-        # Fetch the all-in-one.yaml from the official repository
-        self._get_eck_file()
         # Deploy the ECK all-in-one.yaml file
         self._deploy_eck()
         # Deploy the Elastic-Search server
@@ -78,27 +72,6 @@ class ElasticSearch(object):
         # Connect to the server
         self.con = self._es_connect()
 
-    def _get_eck_file(self):
-        """
-        Getting the ECK file from the official Elasticsearch web site and store
-        it as a temporary file.
-
-        Current version is 1.1.2, this need to be update with new versions,
-        after testing it, and also it may need to update the CRD file (esq.yaml)
-        with the new version as well.
-
-        """
-
-        self.dir = tempfile.mkdtemp(prefix="elastic-system_")
-        src_file = f"{self.eck_path}/{self.eck_file}"
-        trg_file = f"{self.dir}/{self.eck_file}"
-        log.info(f"Retrieving the ECK CR file from {src_file} into {trg_file}")
-        try:
-            urllib.request.urlretrieve(src_file, trg_file)
-        except urllib.error.HTTPError as e:
-            log.error(f"Can not connect to {src_file} : {e}")
-            raise e
-
     def _deploy_eck(self):
         """
         Deploying the ECK environment for the Elasticsearch, and make sure it
@@ -107,7 +80,7 @@ class ElasticSearch(object):
         """
 
         log.info("Deploying the ECK environment for the ES cluster")
-        self.ocp.apply(f"{self.dir}/{self.eck_file}")
+        self.ocp.apply(self.eck_file)
 
         for es_pod in TimeoutSampler(
             300, 10, get_pod_name_by_pattern, "elastic-operator", self.namespace
@@ -200,8 +173,8 @@ class ElasticSearch(object):
         os.kill(self.lspid, signal.SIGKILL)
         log.info("Deleting all resources")
         subprocess.run(f"oc delete -f {self.crd}", shell=True)
-        subprocess.run(f"oc delete -f {self.eck_file}", shell=True, cwd=self.dir)
-        self.ns_obj.wait_for_delete(resource_name=self.namespace)
+        self.ns_obj.delete_project(project_name=self.namespace)
+        self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=180)
 
     def local_server(self):
         """

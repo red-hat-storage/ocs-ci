@@ -15,7 +15,7 @@ from google.cloud.storage.bucket import Bucket as GCPBucket
 from google.oauth2 import service_account
 
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import create_resource
+from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError, ResourceInUnexpectedState
 from ocs_ci.ocs.resources.rgw import RGW
@@ -333,7 +333,9 @@ class S3Client(CloudClient):
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
         secret_name_prefix = secret_prefix.lower()
         secret_name_prefix = secret_name_prefix.replace("_", "-")
-        bs_secret_data["metadata"]["name"] = f"cldmgr-{secret_name_prefix}-secret"
+        bs_secret_data["metadata"]["name"] = create_unique_resource_name(
+            f"cldmgr-{secret_name_prefix}", "secret"
+        )
         bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         bs_secret_data["data"][
             f"{secret_prefix}_ACCESS_KEY_ID"
@@ -438,7 +440,9 @@ class GoogleClient(CloudClient):
 
         """
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
-        bs_secret_data["metadata"]["name"] = "cldmgr-gcp-secret"
+        bs_secret_data["metadata"]["name"] = create_unique_resource_name(
+            "cldmgr-gcp", "secret"
+        )
         bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         bs_secret_data["data"][
             "GoogleServiceAccountPrivateKeyJson"
@@ -530,7 +534,9 @@ class AzureClient(CloudClient):
 
         """
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
-        bs_secret_data["metadata"]["name"] = "cldmgr-azure-secret"
+        bs_secret_data["metadata"]["name"] = create_unique_resource_name(
+            "cldmgr-azure", "secret"
+        )
         bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         bs_secret_data["data"]["AccountKey"] = base64.urlsafe_b64encode(
             self.credential.encode("UTF-8")

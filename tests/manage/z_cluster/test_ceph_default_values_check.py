@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, skipif_external_mode
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.cluster import get_pg_balancer_status
 
@@ -9,6 +9,7 @@ log = logging.getLogger(__name__)
 
 
 @tier1
+@skipif_external_mode
 @pytest.mark.polarion_id("OCS-2231")
 class TestCephDefaultValuesCheck(ManageTest):
     def test_ceph_default_values_check(self):

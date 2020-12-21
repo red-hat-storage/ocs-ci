@@ -156,10 +156,15 @@ def ocs_install_verification(
         min_eps = 1
         max_eps = 1
 
+    nb_db_label = (
+        constants.NOOBAA_DB_LABEL_46_AND_UNDER
+        if float(config.ENV_DATA["ocs_version"]) < 4.7
+        else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
+    )
     resources_dict = {
+        nb_db_label: 1,
         constants.OCS_OPERATOR_LABEL: 1,
         constants.OPERATOR_LABEL: 1,
-        constants.NOOBAA_DB_LABEL: 1,
         constants.NOOBAA_OPERATOR_POD_LABEL: 1,
         constants.NOOBAA_CORE_POD_LABEL: 1,
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
