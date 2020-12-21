@@ -527,7 +527,7 @@ class TestFIOBenchmark(E2ETest):
 
         # Create fio benchmark
         log.info("Create resource file for fio workload")
-        self.fio_cr = templating.load_yaml(constants.fio_cr_YAML)
+        self.fio_cr = templating.load_yaml(constants.FIO_CR_YAML)
 
         # Saving the Original elastic-search IP and PORT - if defined in yaml
         self.es_info_backup(es)
