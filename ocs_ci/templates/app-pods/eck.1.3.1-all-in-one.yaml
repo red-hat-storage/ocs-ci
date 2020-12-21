@@ -3073,7 +3073,7 @@ spec:
           secretName: "elastic-webhook-server-cert"
 ---
 # Source: eck-operator/templates/webhook.yaml
-apiVersion: admissionregistration.k8s.io/v1
+apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration
 metadata:
   name: elastic-webhook.k8s.elastic.co
