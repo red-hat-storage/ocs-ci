@@ -52,7 +52,7 @@ class TestPvcResizeOfClonedAndRestoredPVC(E2ETest):
         2. Take a snapshot of the pgsql PVC.
         3. Create a new PVC out of that snapshot or restore snapshot
         4. Attach a new pgsql pod to it.
-        5. Resize a new PVC
+        5. Resize the new PVC
         6. Clone pgsql PVC and attach a new pgsql pod to it
         7. Resize cloned PVC
 
