@@ -17,7 +17,11 @@ from google.oauth2 import service_account
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError, ResourceInUnexpectedState
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    TimeoutExpiredError,
+    ResourceInUnexpectedState,
+)
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import update_config_from_s3
