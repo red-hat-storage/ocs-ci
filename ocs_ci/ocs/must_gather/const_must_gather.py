@@ -189,6 +189,8 @@ GATHER_COMMANDS_CEPH_4_6 = []
 GATHER_COMMANDS_JSON_4_6 = []
 
 GATHER_COMMANDS_OTHERS_4_6 = [
+    "volumesnapshotclass",
+    "storagecluster",
     "get_clusterrole",
     "desc_clusterrole",
     "desc_nodes",
