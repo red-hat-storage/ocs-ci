@@ -518,7 +518,6 @@ class TestFIOBenchmark(E2ETest):
 
         """
 
-        ripsaw = RipSaw()
         self.ripsaw_deploy(ripsaw)
 
         if interface == "CephBlockPool":
