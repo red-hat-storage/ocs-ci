@@ -51,25 +51,31 @@ class TestBucketIO(MCGTest):
 
     @pytest.mark.polarion_id("OCS-1300")
     @pytest.mark.parametrize(
-        argnames="bucketclass_dict",
+        argnames="interface,bucketclass_dict",
         argvalues=[
             pytest.param(
-                None,
+                *["S3", None],
                 marks=[tier1, acceptance],
             ),
             pytest.param(
-                {
-                    "interface": "OC",
-                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-                },
+                *[
+                    "OC",
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                ],
                 marks=[tier1],
             ),
             pytest.param(
-                {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                *[
+                    "OC",
+                    {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                ],
                 marks=[tier1],
             ),
             pytest.param(
-                {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
+                *["OC", {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}],
                 marks=[tier1],
             ),
         ],
@@ -86,6 +92,7 @@ class TestBucketIO(MCGTest):
         awscli_pod,
         bucket_class_factory,
         bucket_factory,
+        interface,
         bucketclass_dict,
     ):
         """
@@ -94,7 +101,9 @@ class TestBucketIO(MCGTest):
         # Retrieve a list of all objects on the test-objects bucket and
         # downloads them to the pod
         data_dir = "/data"
-        bucketname = bucket_factory(1, bucketclass=bucketclass_dict)[0].name
+        bucketname = bucket_factory(
+            1, interface=interface, bucketclass=bucketclass_dict
+        )[0].name
         full_object_path = f"s3://{bucketname}"
         downloaded_files = retrieve_test_objects_to_pod(awscli_pod, data_dir)
         # Write all downloaded objects to the new bucket

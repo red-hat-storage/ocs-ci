@@ -183,34 +183,34 @@ class TestBucketDeletion(MCGTest):
         bucketname = create_unique_resource_name(
             resource_description="bucket", resource_type=interface.lower()
         )
-        try:
-            bucket = BUCKET_MAP[interface.lower()](
-                bucketname,
-                mcg=mcg_obj,
-                bucketclass=bucket_class_factory(bucketclass_dict),
-            )
+        bucket = BUCKET_MAP[interface.lower()](
+            bucketname,
+            mcg=mcg_obj,
+            bucketclass=bucket_class_factory(bucketclass_dict)
+            if bucketclass_dict
+            else None,
+        )
 
-            logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
-            logger.info(f"aws region is {mcg_obj.region}")
-            data_dir = "/data"
-            full_object_path = f"s3://{bucketname}"
-            retrieve_test_objects_to_pod(awscli_pod, data_dir)
-            sync_object_directory(awscli_pod, data_dir, full_object_path, mcg_obj)
+        logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
+        logger.info(f"aws region is {mcg_obj.region}")
+        data_dir = "/data"
+        full_object_path = f"s3://{bucketname}"
+        retrieve_test_objects_to_pod(awscli_pod, data_dir)
+        sync_object_directory(awscli_pod, data_dir, full_object_path, mcg_obj)
 
-            logger.info(f"Deleting bucket: {bucketname}")
-            if interface == "S3":
-                try:
-                    s3_del = mcg_obj.s3_resource.Bucket(bucketname).delete()
-                    assert not s3_del, "Unexpected s3 delete non-empty OBC succeed"
-                except botocore.exceptions.ClientError as err:
-                    assert "BucketNotEmpty" in str(
-                        err
-                    ), "Couldn't verify delete non-empty OBC with s3"
-                    logger.info(f"Delete non-empty OBC {bucketname} failed as expected")
-        finally:
-            bucket.delete()
-            if bucketclass_dict:
-                bucket.bucketclass.delete()
+        logger.info(f"Deleting bucket: {bucketname}")
+        if interface == "S3":
+            try:
+                s3_del = mcg_obj.s3_resource.Bucket(bucketname).delete()
+                assert not s3_del, "Unexpected s3 delete non-empty OBC succeed"
+            except botocore.exceptions.ClientError as err:
+                assert "BucketNotEmpty" in str(
+                    err
+                ), "Couldn't verify delete non-empty OBC with s3"
+                logger.info(f"Delete non-empty OBC {bucketname} failed as expected")
+        bucket.delete()
+        if bucketclass_dict:
+            bucket.bucketclass.delete()
 
     @pytest.mark.parametrize(
         argnames="interface",
