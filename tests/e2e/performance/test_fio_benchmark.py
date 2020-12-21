@@ -558,8 +558,6 @@ class TestFIOBenchmark(E2ETest):
         # Clean up fio benchmark
         self.cleanup()
 
-        ripsaw.cleanup()
-
         log.debug(f"Full results is : {full_results.results}")
 
         self.copy_es_data(es, full_results)
