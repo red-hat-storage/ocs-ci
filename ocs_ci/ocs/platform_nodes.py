@@ -16,7 +16,7 @@ from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
-from ocs_ci.ocs import constants, ocp, exceptions
+from ocs_ci.ocs import constants, ocp, exceptions, cluster
 from ocs_ci.ocs.node import (
     get_node_objs,
     get_typed_worker_nodes,
@@ -65,10 +65,13 @@ class PlatformNodesFactory:
             "baremetal": BaremetalNodes,
             "azure": AZURENodes,
             "gcp": NodesBase,
+            "vsphere_lso": VMWareLSONodes,
         }
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA["platform"]
+        if cluster.is_lso_cluster():
+            platform += "_lso"
         return self.cls_map[platform]()
 
 
@@ -1822,4 +1825,45 @@ class AZURENodes(NodesBase):
     def attach_nodes_to_cluster(self, node_list):
         raise NotImplementedError(
             "attach nodes to cluster functionality is not implemented"
+        )
+
+
+class VMWareLSONodes(VMWareNodes):
+    """
+    VMWare LSO nodes class
+
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def get_data_volumes(self, pvs=None):
+        """
+        Get the data vSphere volumes
+
+        Args:
+            pvs (list): PV OCS objects
+
+        Returns:
+            list: vSphere volumes
+
+        """
+        if not pvs:
+            pvs = get_deviceset_pvs()
+        return [pv.get().get("spec").get("local").get("path") for pv in pvs]
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        """
+        Detach disk from a VM and delete from datastore if specified
+
+        Args:
+            volume (str): Volume path
+            node (OCS): The OCS object representing the node
+            delete_from_backend (bool): True for deleting the disk (vmdk)
+                from backend datastore, False otherwise
+
+        """
+        vm = self.get_vms([node])[0]
+        self.vsphere.remove_disk(
+            vm=vm, identifier=volume, key="disk_name", datastore=delete_from_backend
         )
