@@ -909,9 +909,7 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
     return new_node_name
 
 
-def delete_and_create_osd_node_vsphere_lso(
-    osd_node_name, use_existing_node=False
-):
+def delete_and_create_osd_node_vsphere_lso(osd_node_name, use_existing_node=False):
     """
     Unschedule, drain and delete osd node, and creating a new osd node.
     At the end of the function there should be the same number of osd nodes as
@@ -933,7 +931,7 @@ def delete_and_create_osd_node_vsphere_lso(
     remove_nodes([osd_node])
     log.info(f"name of deleted node = {osd_node_name}")
 
-    if config.ENV_DATA.get('rhel_workers'):
+    if config.ENV_DATA.get("rhel_workers"):
         node_type = constants.RHEL_OS
     else:
         node_type = constants.RHCOS
@@ -1260,7 +1258,7 @@ def get_node_pods(node):
 
 
 def scale_down_deployments(node_obj):
-    ocp = OCP(kind='node', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp = OCP(kind="node", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     pods_to_scale_down = get_node_pods_to_scale_down(node_obj)
     for p in pods_to_scale_down:
         deployment_name = pod.get_deployment_name(p.name)
@@ -1282,10 +1280,7 @@ def get_node_pods(node_name, pods_to_search=None):
 
     """
     pods_to_search = pods_to_search or pod.get_all_pods()
-    return [
-        p for p in pods_to_search
-        if pod.get_pod_node(p).name == node_name
-    ]
+    return [p for p in pods_to_search if pod.get_pod_node(p).name == node_name]
 
 
 def get_node_pods_to_scale_down(node_name):
@@ -1304,7 +1299,7 @@ def get_node_pods_to_scale_down(node_name):
         *pod.get_mon_pods(),
         *pod.get_osd_pods(),
         *pod.get_rgw_pods(),
-        *pod.get_mgr_pods()
+        *pod.get_mgr_pods(),
     ]
 
     return get_node_pods(node_name, pods_to_scale_down)
@@ -1319,7 +1314,7 @@ def scale_down_deployments(node_name):
         node_name (str): The node name
 
     """
-    ocp = OCP(kind='node', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp = OCP(kind="node", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     pods_to_scale_down = get_node_pods_to_scale_down(node_name)
     for p in pods_to_scale_down:
         deployment_name = pod.get_deployment_name(p.name)
@@ -1345,8 +1340,7 @@ def get_node_disk_path(node_name):
     """
     ocp_obj = ocp.OCP()
     disk_path = ocp_obj.exec_oc_debug_cmd(
-        node=node_name,
-        cmd_list=["readlink /mnt/local-storage/localblock/sdb"]
+        node=node_name, cmd_list=["readlink /mnt/local-storage/localblock/sdb"]
     )
     return disk_path.strip()
 
@@ -1367,23 +1361,23 @@ def add_new_device_in_local_volume(new_device_path, old_device_path):
     ocp_pvc_obj = OCP(
         kind=constants.LOCAL_VOLUME,
         namespace=defaults.LOCAL_STORAGE_NAMESPACE,
-        resource_name='local-block'
+        resource_name="local-block",
     )
 
     # Still in progress
-    patch_param_new_device = f'{{spec: {{storageClassDevices:{{ devicePaths: {{ {new_device_path}}}}}}}'
-    patch_param_old_device = f'{{spec: {{storageClassDevices:{{ devicePaths: {{ {old_device_path}}}}}}}'
-
-    ocp_pvc_obj.patch(
-        resource_name='local-block',
-        params=patch_param_new_device,
-        format_type='merge'
+    patch_param_new_device = (
+        f"{{spec: {{storageClassDevices:{{ devicePaths: {{ {new_device_path}}}}}}}"
+    )
+    patch_param_old_device = (
+        f"{{spec: {{storageClassDevices:{{ devicePaths: {{ {old_device_path}}}}}}}"
     )
 
     ocp_pvc_obj.patch(
-        resource_name='local-block',
-        params=patch_param_old_device,
-        format_type='delete'
+        resource_name="local-block", params=patch_param_new_device, format_type="merge"
+    )
+
+    ocp_pvc_obj.patch(
+        resource_name="local-block", params=patch_param_old_device, format_type="delete"
     )
 
 
@@ -1398,8 +1392,8 @@ def get_deployment_node_name(deployment):
         str: The node name of the deployment
 
     """
-    spec = deployment.get().get('spec').get('template').get('spec')
-    return spec.get('nodeSelector').get('kubernetes.io/hostname')
+    spec = deployment.get().get("spec").get("template").get("spec")
+    return spec.get("nodeSelector").get("kubernetes.io/hostname")
 
 
 def find_node_deployments(node_name, deployments_to_search):
@@ -1417,8 +1411,7 @@ def find_node_deployments(node_name, deployments_to_search):
 
     """
     return [
-        d for d in deployments_to_search
-        if get_deployment_node_name(d) == node_name
+        d for d in deployments_to_search if get_deployment_node_name(d) == node_name
     ]
 
 
