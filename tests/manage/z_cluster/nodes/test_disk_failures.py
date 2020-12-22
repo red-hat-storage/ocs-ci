@@ -30,7 +30,10 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.ocs import get_job_obj, OCS
 from ocs_ci.utility.aws import AWSTimeoutException
 from ocs_ci.utility.utils import get_ocp_version
-from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
+from ocs_ci.ocs.resources.storage_cluster import (
+    osd_encryption_verification,
+    get_osd_size,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -364,6 +367,12 @@ class TestDiskFailures(ManageTest):
         except TimeoutError:
             osd_pv.delete()
             osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
+
+        # If we use LSO, we need to create and attach a new disk manually
+        if cluster.is_lso_cluster():
+            osd_size = get_osd_size()
+            logger.info(f"Create a new disk with size {osd_size}")
+            nodes.create_and_attach_volume(node=osd_node, size=osd_size)
 
         if ocp_version < 4.6:
             # Delete the rook ceph operator pod to trigger reconciliation
