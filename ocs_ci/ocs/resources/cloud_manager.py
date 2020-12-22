@@ -115,6 +115,7 @@ class CloudClient(ABC):
         """
         logger.info(f"Creating Underlying Storage {name} in {region}")
         self.internal_create_uls(name, region)
+        self.verify_uls_state(name, True)
 
     def delete_uls(self, name):
         """
@@ -124,6 +125,7 @@ class CloudClient(ABC):
         """
         logger.info(f"Deleting ULS: {name}")
         self.internal_delete_uls(name)
+        self.verify_uls_state(name, False)
 
     def get_all_uls_names(self):
         pass
@@ -148,10 +150,9 @@ class CloudClient(ABC):
                     f"{check_type[:-1]}ion of Underlying Storage {uls_name} timed out. "
                     f"Unable to {check_type.lower()} {uls_name}"
                 )
-            else:
-                logger.warning(
-                    f"{uls_name} still found after 3 minutes, and might require manual removal."
-                )
+            logger.warning(
+                f"{uls_name} still found after 3 minutes, and might require manual removal."
+            )
 
     @abstractmethod
     def internal_create_uls(self, name, region):
@@ -215,7 +216,6 @@ class S3Client(CloudClient):
             self.client.create_bucket(
                 Bucket=name, CreateBucketConfiguration={"LocationConstraint": region}
             )
-        self.verify_uls_state(name, True)
 
     def internal_delete_uls(self, name):
         """
@@ -268,7 +268,6 @@ class S3Client(CloudClient):
             assert False
 
         # Todo: rename client to resource (or find an alternative)
-        self.verify_uls_state(name, False)
 
     def get_all_uls_names(self):
         """
@@ -390,7 +389,6 @@ class GoogleClient(CloudClient):
             self.client.create_bucket(name)
         else:
             self.client.create_bucket(name, location=region)
-        self.verify_uls_state(name, True)
 
     def internal_delete_uls(self, name):
         """
@@ -412,7 +410,6 @@ class GoogleClient(CloudClient):
                     f"Deletion of Underlying Storage {name} failed. Retrying..."
                 )
                 sleep(3)
-        self.verify_uls_state(name, False)
 
     def get_all_uls_names(self):
         """
@@ -490,8 +487,6 @@ class AzureClient(CloudClient):
         """
         self.blob_service_client.get_container_client(name).create_container()
 
-        self.verify_uls_state(name, True)
-
     def internal_delete_uls(self, name):
         """
         Deletes the Underlying Storage using the Azure API
@@ -501,7 +496,6 @@ class AzureClient(CloudClient):
 
         """
         self.blob_service_client.get_container_client(name).delete_container()
-        self.verify_uls_state(name, False)
 
     def get_all_uls_names(self):
         """
