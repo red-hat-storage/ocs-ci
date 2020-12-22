@@ -1,0 +1,10 @@
+---
+# This configuration file is used for add device type in the deployment
+# Valid only for OCS >= 4.7
+# https://issues.redhat.com/browse/KNIP-1500
+ENV_DATA:
+  device_type: hdd
+# This can be empty also.
+# For AWS this should be hdd when using gp2
+# it can have only these values enum: ssd, SSD, hdd, HDD, NVME, nvme, NVMe
+
