@@ -89,11 +89,11 @@ class TestRegistryRebootNode(E2ETest):
             delay=15,
         )(wait_for_nodes_status)(timeout=900)
 
-        # Validate storage pods are running
-        wait_for_storage_pods()
-
         # Validate cluster health ok and all pods are running
         self.sanity_helpers.health_check(tries=40)
+
+        # Validate storage pods are running
+        wait_for_storage_pods()
 
         # Validate image registry pods
         validate_registry_pod_status()
@@ -161,11 +161,11 @@ class TestRegistryRebootNode(E2ETest):
                 delay=15,
             )(wait_for_nodes_status)(timeout=900)
 
-        # Validate storage pods are running
-        wait_for_storage_pods()
-
         # Validate cluster health ok and all pods are running
         self.sanity_helpers.health_check(tries=40)
+
+        # Validate storage pods are running
+        wait_for_storage_pods()
 
         # Validate image registry pods
         validate_registry_pod_status()
