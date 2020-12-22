@@ -1,18 +1,18 @@
 import pytest
 import logging
 
+from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
+from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
+from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
+from ocs_ci.ocs.resources.pod import wait_for_storage_pods
 from ocs_ci.ocs.registry import (
     validate_registry_pod_status,
     image_pull_and_push,
     validate_image_exists,
 )
-from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
-from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
-from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.ocs.resources.pod import wait_for_storage_pods
 
 log = logging.getLogger(__name__)
 
