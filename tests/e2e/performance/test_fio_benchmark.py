@@ -19,7 +19,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import E2ETest, performance, skipif_ocs_version
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.elasticsearch import ElasticSearch
-from ocs_ci.ocs.cluster import CephCluster, get_ceph_df_detail
+from ocs_ci.ocs.cluster import CephCluster, calculate_compression_ratio
 from ocs_ci.ocs.version import get_environment_info
 
 log = logging.getLogger(__name__)
@@ -428,31 +428,6 @@ class TestFIOBenchmark(E2ETest):
         # since sometimes the results of the read (just after write) are empty
         time.sleep(10)
 
-    def calculate_compression_ratio(self, pool_name):
-        """
-        Calculating the  compression of data on RBD pool
-
-        Args:
-            pool_name (str): the name of the pool to calculate the ratio on
-
-        Returns:
-            int : the compression ratio n in percentage
-
-        """
-        results = get_ceph_df_detail()
-        for pool in results["pools"]:
-            if pool["name"] == pool_name:
-                used = pool["stats"]["bytes_used"]
-                used_cmp = pool["stats"]["compress_bytes_used"]
-                stored = pool["stats"]["stored"]
-                ratio = int((used_cmp * 100) / (used_cmp + used))
-                log.info(f"pool name is {pool_name}")
-                log.info(f"net stored data is {stored}")
-                log.info(f"total used data is {used}")
-                log.info(f"compressed data is {used_cmp}")
-
-                return ratio
-
     def cleanup(self):
         log.info("Deleting FIO benchmark")
         self.fio_cr_obj.delete()
@@ -641,7 +616,7 @@ class TestFIOBenchmark(E2ETest):
         full_results.add_key("test_time", {"start": self.start_time, "end": end_time})
 
         log.info("verifying compression ratio")
-        ratio = self.calculate_compression_ratio(pool_name)
+        ratio = calculate_compression_ratio(pool_name)
         full_results.add_key("cmp_ratio", {"expected": cmp_ratio, "actual": ratio})
         # TODO: change the info message to Warning/Error after
         #  prefill at ripsaw will be fixed Ripsaw PR - #505
