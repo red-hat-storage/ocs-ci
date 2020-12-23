@@ -6,7 +6,6 @@ import tempfile
 import threading
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
-from itertools import chain
 from math import floor
 from shutil import copyfile
 from functools import partial
@@ -1905,27 +1904,37 @@ def rgw_bucket_factory_session(request, rgw_obj_session):
 
 
 @pytest.fixture()
-def bucket_factory(request, mcg_obj):
+def bucket_factory(request, bucket_class_factory, mcg_obj):
     """
     Returns an MCG bucket factory
     """
-    return bucket_factory_fixture(request, mcg_obj)
+    return bucket_factory_fixture(request, bucket_class_factory, mcg_obj)
 
 
 @pytest.fixture(scope="session")
-def bucket_factory_session(request, mcg_obj_session):
+def bucket_factory_session(request, bucket_class_factory_session, mcg_obj_session):
     """
     Returns a session-scoped MCG bucket factory
     """
-    return bucket_factory_fixture(request, mcg_obj_session)
+    return bucket_factory_fixture(
+        request, bucket_class_factory_session, mcg_obj_session
+    )
 
 
-def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
+def bucket_factory_fixture(
+    request, bucket_class_factory=None, mcg_obj=None, rgw_obj=None
+):
     """
     Create a bucket factory. Calling this fixture creates a new bucket(s).
     For a custom amount, provide the 'amount' parameter.
 
+    ***Please note***
+    Creation of buckets by utilizing the S3 interface *does not* support bucketclasses.
+    Only OC/CLI buckets can support different bucketclasses.
+    By default, all S3 buckets utilize the default bucketclass.
+
     Args:
+        bucket_class_factory: creates a new Bucket Class
         mcg_obj (MCG): An MCG object containing the MCG S3 connection
             credentials
         rgw_obj (RGW): An RGW object
@@ -1933,7 +1942,14 @@ def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
     """
     created_buckets = []
 
-    def _create_buckets(amount=1, interface="S3", verify_health=True, *args, **kwargs):
+    def _create_buckets(
+        amount=1,
+        interface="S3",
+        verify_health=True,
+        bucketclass=None,
+        *args,
+        **kwargs,
+    ):
         """
         Creates and deletes all buckets that were created as part of the test
 
@@ -1941,6 +1957,11 @@ def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
             amount (int): The amount of buckets to create
             interface (str): The interface to use for creation of buckets.
                 S3 | OC | CLI | NAMESPACE
+            verify_Health (bool): Whether to verify the created bucket's health
+                post-creation
+            bucketclass (dict): A dictionary describing a new
+                bucketclass to be created.
+                When None, the default bucketclass is used.
 
         Returns:
             list: A list of s3.Bucket objects, containing all the created
@@ -1952,12 +1973,22 @@ def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
                 f"Invalid interface type received: {interface}. "
                 f'available types: {", ".join(BUCKET_MAP.keys())}'
             )
+
+        bucketclass = (
+            bucketclass if bucketclass is None else bucket_class_factory(bucketclass)
+        )
+
         for i in range(amount):
             bucket_name = helpers.create_unique_resource_name(
                 resource_description="bucket", resource_type=interface.lower()
             )
             created_bucket = BUCKET_MAP[interface.lower()](
-                bucket_name, mcg=mcg_obj, rgw=rgw_obj, *args, **kwargs
+                bucket_name,
+                mcg=mcg_obj,
+                rgw=rgw_obj,
+                bucketclass=bucketclass,
+                *args,
+                **kwargs,
             )
             created_buckets.append(created_bucket)
             if verify_health:
@@ -2115,90 +2146,33 @@ def bucket_class_factory_session(
 
 
 @pytest.fixture()
-def multiregion_resources(request, cld_mgr, mcg_obj):
-    return multiregion_resources_fixture(request, cld_mgr, mcg_obj)
+def multiregion_mirror_setup(bucket_factory):
+    return multiregion_mirror_setup_fixture(bucket_factory)
 
 
 @pytest.fixture(scope="session")
-def multiregion_resources_session(request, cld_mgr, mcg_obj_session):
-    return multiregion_resources_fixture(request, cld_mgr, mcg_obj_session)
+def multiregion_mirror_setup_session(bucket_factory_session):
+    return multiregion_mirror_setup_fixture(bucket_factory_session)
 
 
-def multiregion_resources_fixture(request, cld_mgr, mcg_obj):
-    bs_objs, bs_secrets, bucketclasses, aws_buckets = ([] for _ in range(4))
-
-    # Cleans up all resources that were created for the test
-    def resource_cleanup():
-        for resource in chain(bs_secrets, bucketclasses):
-            resource.delete()
-
-        for aws_bucket in aws_buckets:
-            cld_mgr.toggle_aws_bucket_readwrite(aws_bucket.name, block=False)
-
-    request.addfinalizer(resource_cleanup)
-
-    return aws_buckets, bs_secrets, bs_objs, bucketclasses
-
-
-@pytest.fixture()
-def multiregion_mirror_setup(
-    mcg_obj, multiregion_resources, backingstore_factory, bucket_factory
-):
-    return multiregion_mirror_setup_fixture(
-        mcg_obj, multiregion_resources, backingstore_factory, bucket_factory
-    )
-
-
-@pytest.fixture(scope="session")
-def multiregion_mirror_setup_session(
-    mcg_obj_session,
-    multiregion_resources_session,
-    backingstore_factory_session,
-    bucket_factory_session,
-):
-    return multiregion_mirror_setup_fixture(
-        mcg_obj_session,
-        multiregion_resources_session,
-        backingstore_factory_session,
-        bucket_factory_session,
-    )
-
-
-def multiregion_mirror_setup_fixture(
-    mcg_obj, multiregion_resources, backingstore_factory, bucket_factory
-):
+def multiregion_mirror_setup_fixture(bucket_factory):
     # Setup
     # Todo:
     #  add region and amount parametrization - note that `us-east-1`
     #  will cause an error as it is the default region. If usage of `us-east-1`
     #  needs to be tested, keep the 'region' field out.
-    (
-        aws_buckets,
-        backingstore_secrets,
-        backingstore_objects,
-        bucketclasses,
-    ) = multiregion_resources
 
-    # Define backing stores
-    created_backingstores = backingstore_factory(
-        "OC", {"aws": [(1, "us-west-1"), (1, "us-east-2")]}
-    )
+    bucketclass = {
+        "interface": "CLI",
+        "backingstore_dict": {"aws": [(1, "us-west-1"), (1, "us-east-2")]},
+        "placement_policy": "Mirror",
+    }
 
-    # Create a new mirror bucketclass that'll use all the backing stores we
-    # created
-    bucketclass = mcg_obj.oc_create_bucketclass(
-        helpers.create_unique_resource_name(
-            resource_description="testbc", resource_type="bucketclass"
-        ),
-        [backingstore.name for backingstore in created_backingstores],
-        "Mirror",
-    )
-    bucketclasses.append(bucketclass)
     # Create a NooBucket that'll use the bucket class in order to test
     # the mirroring policy
-    bucket = bucket_factory(1, "OC", bucketclass=bucketclass.name)[0]
+    bucket = bucket_factory(1, "OC", bucketclass=bucketclass)[0]
 
-    return bucket, created_backingstores
+    return bucket, bucket.bucketclass.backingstores
 
 
 @pytest.fixture(scope="session")
