@@ -26,12 +26,43 @@ class TestObjectIntegrity(MCGTest):
     """
 
     @pytest.mark.polarion_id("OCS-1321")
-    @tier1
-    def test_check_object_integrity(self, mcg_obj, awscli_pod, bucket_factory):
+    @pytest.mark.parametrize(
+        argnames="bucketclass_dict",
+        argvalues=[
+            pytest.param(
+                None,
+                marks=[tier1],
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
+                marks=[tier1],
+            ),
+            pytest.param(
+                {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                marks=[tier1],
+            ),
+            pytest.param(
+                {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
+                marks=[tier1],
+            ),
+        ],
+        ids=[
+            "DEFAULT-BACKINGSTORE",
+            "AWS-OC-1",
+            "AZURE-OC-1",
+            "GCP-OC-1",
+        ],
+    )
+    def test_check_object_integrity(
+        self, mcg_obj, awscli_pod, bucket_factory, bucketclass_dict
+    ):
         """
         Test object integrity using md5sum
         """
-        bucketname = bucket_factory(1)[0].name
+        bucketname = bucket_factory(1, bucketclass=bucketclass_dict)[0].name
         original_dir = "/original"
         result_dir = "/result"
         awscli_pod.exec_cmd_on_pod(command=f"mkdir {result_dir}")
@@ -41,7 +72,6 @@ class TestObjectIntegrity(MCGTest):
         downloaded_files = retrieve_test_objects_to_pod(awscli_pod, original_dir)
         # Write all downloaded objects to the new bucket
         sync_object_directory(awscli_pod, original_dir, full_object_path, mcg_obj)
-
         # Retrieve all objects from MCG bucket to result dir in Pod
         logger.info("Downloading all objects from MCG bucket to awscli pod")
         sync_object_directory(awscli_pod, full_object_path, result_dir, mcg_obj)
