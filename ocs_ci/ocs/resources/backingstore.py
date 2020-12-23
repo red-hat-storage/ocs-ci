@@ -17,7 +17,10 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import (
+    create_unique_resource_name,
+    storagecluster_independent_check,
+)
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.utility.utils import TimeoutSampler
@@ -215,6 +218,13 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                     )
                 if cloud == "pv":
                     vol_num, size, storagecluster = uls_tup
+                    if (
+                        storagecluster == constants.DEFAULT_STORAGECLASS_RBD
+                        and storagecluster_independent_check()
+                    ):
+                        storagecluster = (
+                            constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+                        )
                     backingstore_name = create_unique_resource_name(
                         resource_description="backingstore", resource_type=cloud.lower()
                     )
