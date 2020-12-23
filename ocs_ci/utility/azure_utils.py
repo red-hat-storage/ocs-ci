@@ -327,3 +327,16 @@ class AZURE:
             self.cluster_resource_group, vm_name
         )
         result.wait()
+
+    def stop_vm_instance(self, vm_name):
+        """
+        Stop an Azure vm instance
+
+        Args:
+            vm_name: Name of azure vm instance
+
+        """
+        result = self.compute_client.virtual_machines.power_off(
+            self.cluster_resource_group, vm_name
+        )
+        result.wait()
