@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.framework.testlib import ManageTest, tier4a, bugzilla
 from ocs_ci.ocs.resources.pod import get_pod_node, get_mon_pods, get_ceph_tools_pod
@@ -27,7 +28,7 @@ class TestKillCephMonDaemon(ManageTest):
 
         def finalizer():
             tool_pod = get_ceph_tools_pod()
-            tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
+            tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all", format=None)
 
         request.addfinalizer(finalizer)
 
@@ -56,13 +57,16 @@ class TestKillCephMonDaemon(ManageTest):
         cmd = cmd_gen + cmd_kill
         run_cmd(cmd=cmd)
 
+        # Waiting to updated crash list
+        time.sleep(600)
+
         log.info("Verify that we have a crash event for ceph-mon crash")
         tool_pod = get_ceph_tools_pod()
-        crash_ls = tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash ls-new")
+        crash_ls = tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash ls-new", format=None)
         if "mon." not in crash_ls:
             raise Exception("ceph mon process does not killed")
 
         log.info("Check coredump log ")
-        coredump_ls = tool_pod.exec_ceph_cmd(ceph_cmd="coredumpctl list")
+        coredump_ls = tool_pod.exec_ceph_cmd(ceph_cmd="coredumpctl list", format=None)
         if "mon." not in coredump_ls:
             raise Exception("coredump not getting generated for ceph mon daemon crash")
