@@ -1,0 +1,2 @@
+class BucketUnexpectedStateWarning(UserWarning):
+    pass

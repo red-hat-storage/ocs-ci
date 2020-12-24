@@ -26,9 +26,10 @@ from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import TimeoutSampler, load_auth_config
+import warnings
+from ocs_ci.ocs.warnings import BucketUnexpectedStateWarning
 
 logger = logging.getLogger(name=__file__)
-
 
 class CloudManager(ABC):
     """
@@ -153,6 +154,8 @@ class CloudClient(ABC):
             logger.warning(
                 f"{uls_name} still found after 3 minutes, and might require manual removal."
             )
+            warnings.warn(BucketUnexpectedStateWarning(f"{uls_name} still found after 3 minutes,"
+                                                       f"and might require manual removal."))
 
     @abstractmethod
     def internal_create_uls(self, name, region):
