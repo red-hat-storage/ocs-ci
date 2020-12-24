@@ -8,7 +8,7 @@ import boto3
 import google.api_core.exceptions as GoogleExceptions
 from azure.core.exceptions import ResourceExistsError
 from azure.storage.blob import BlobServiceClient
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, EndpointConnectionError
 from google.auth.exceptions import DefaultCredentialsError
 from google.cloud.storage import Client as GCPStorageClient
 from google.cloud.storage.bucket import Bucket as GCPBucket
@@ -46,10 +46,11 @@ class CloudManager(ABC):
                 "This flow is only relevant when running under OCS-QE environments."
             )
             cred_dict = update_config_from_s3().get("AUTH")
-        except AttributeError:
+        except (AttributeError, EndpointConnectionError):
             logger.warning(
-                "Failed to load credentials from ocs-ci-data. "
-                "Loading from local auth.yaml"
+                "Failed to load credentials from ocs-ci-data.\n"
+                "Your local AWS credentials might be misconfigured.\n"
+                "Trying to load credentials from local auth.yaml instead"
             )
             cred_dict = load_auth_config().get("AUTH", {})
 
