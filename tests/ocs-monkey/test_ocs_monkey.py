@@ -52,6 +52,7 @@ def test_ocs_monkey():
 
         if ret_workload is not None:
             log.info("Workload runner completed.")
+            log.debug(popen_workload.stdout.read())
             # Terminate chaos_runner if workload_runner is completed
             log.info("Terminating chaos runner")
             popen_chaos.terminate()
@@ -73,6 +74,7 @@ def test_ocs_monkey():
 
         if ret_chaos is not None:
             log.info("Chaos runner completed.")
+            log.debug(popen_chaos.stdout.read())
             # Terminate workload_runner if chaos_runner is completed
             log.info("Terminating workload runner")
             popen_workload.terminate()
@@ -84,9 +86,9 @@ def test_ocs_monkey():
             break
 
         # Terminate the process if it is not completed within the specified
-        # time. Give grace period of 600 seconds considering the time
+        # time. Give grace period of 900 seconds considering the time
         # taken for setup
-        if time.time() - start_time > run_time + 600:
+        if time.time() - start_time > run_time + 900:
             log.error(
                 f"ocs-monkey did not complete with in the specified run time"
                 f" {run_time} seconds. Killing the process now."
@@ -96,7 +98,7 @@ def test_ocs_monkey():
             raise TimeoutError(
                 f"ocs-monkey did not complete with in the specified run time "
                 f"{run_time} seconds. Killed the process after providing "
-                f"grace period of 600 seconds."
+                f"grace period of 900 seconds."
             )
 
     assert ceph_health_check(tries=40, delay=30), "Ceph cluster health is not OK"
