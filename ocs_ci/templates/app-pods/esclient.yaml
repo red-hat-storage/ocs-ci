@@ -1,0 +1,14 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: es-dumper
+  namespace: elastic-system
+spec:
+  containers:
+   - name: esdumpper
+     image: quay.io/avili/esdump:v0.1
+     imagePullPolicy: Always
+     command: ['/bin/bash']
+     stdin: true
+     tty: true
