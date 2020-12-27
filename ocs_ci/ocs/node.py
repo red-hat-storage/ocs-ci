@@ -1326,59 +1326,62 @@ def scale_down_deployments(node_name):
     )
 
 
-def get_node_disk_path(node_name):
+def get_node_index_in_local_block(node_name):
     """
-    Get the node disk path
+    Get the node index in the node values as it appears in the local block resource
 
     Args:
-        node_name (str): The node name to get the disk path
+        node_name (str): The node name to search for his index
 
     Returns:
-        str: The node disk path(For example:
-            '/dev/disk/by-id/wwn-0x6000c2918c85473c88331532c93e4597')
+        int: The node index in the nodeSelector values
 
     """
-    ocp_obj = ocp.OCP()
-    disk_path = ocp_obj.exec_oc_debug_cmd(
-        node=node_name, cmd_list=["readlink /mnt/local-storage/localblock/sdb"]
+    ocp_lvs_obj = OCP(
+        kind=constants.LOCAL_VOLUME_SET,
+        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
+        resource_name=constants.LOCAL_BLOCK_RESOURCE,
     )
-    return disk_path.strip()
+    node_selector = ocp_lvs_obj.get().get("spec").get("nodeSelector")
+    node_values = (
+        node_selector.get("nodeSelectorTerms")[0]
+        .get("matchExpressions")[0]
+        .get("values")
+    )
+    return node_values.index(node_name)
 
 
-def add_new_device_in_local_volume(new_device_path, old_device_path):
+def replace_old_node_with_new_node(new_node_name, old_node_name):
     """
-    Add a new device to the local volume as described in the documents
+    Replace the old node with the new node as described in the documents
     of node replacement with LSO
 
     Args:
-        new_device_path (str): the new device path to add to local volume
-        old_device_path (str): The old device path to remove from local volume
+        new_node_name (str): the new node name to add to the local volume
+        old_node_name (str): The old node name to remove from the local volume
 
     Returns:
         bool: True in case if changes are applied. False otherwise
 
     """
-    ocp_pvc_obj = OCP(
-        kind=constants.LOCAL_VOLUME,
+    old_node_index = get_node_index_in_local_block(old_node_name)
+    path_to_old_node = f"/spec/nodeSelector/nodeSelectorTerms/0/matchExpressions/0/values/{old_node_index}"
+    params = f"""[{{"op": "replace", "path": "{path_to_old_node}", "value": "{new_node_name}"}}]"""
+
+    ocp_lvs_obj = OCP(
+        kind=constants.LOCAL_VOLUME_SET,
         namespace=defaults.LOCAL_STORAGE_NAMESPACE,
-        resource_name="local-block",
+        resource_name=constants.LOCAL_BLOCK_RESOURCE,
     )
 
-    # Still in progress
-    patch_param_new_device = (
-        f"{{spec: {{storageClassDevices:{{ devicePaths: {{ {new_device_path}}}}}}}"
-    )
-    patch_param_old_device = (
-        f"{{spec: {{storageClassDevices:{{ devicePaths: {{ {old_device_path}}}}}}}"
+    ocp_lvd_obj = OCP(
+        kind=constants.LOCAL_VOLUME_DISCOVERY,
+        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
+        resource_name=constants.AUTO_DISCOVER_DEVICES_RESOURCE,
     )
 
-    ocp_pvc_obj.patch(
-        resource_name="local-block", params=patch_param_new_device, format_type="merge"
-    )
-
-    ocp_pvc_obj.patch(
-        resource_name="local-block", params=patch_param_old_device, format_type="delete"
-    )
+    ocp_lvs_obj.patch(params=params, format_type="json")
+    ocp_lvd_obj.patch(params=params, format_type="json")
 
 
 def get_deployment_node_name(deployment):
