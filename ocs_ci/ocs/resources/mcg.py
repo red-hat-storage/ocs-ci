@@ -11,7 +11,11 @@ from botocore.client import ClientError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
-from ocs_ci.ocs.constants import NODE_READY, DEFAULT_NOOBAA_BACKINGSTORE, DEFAULT_NOOBAA_BUCKETCLASS
+from ocs_ci.ocs.constants import (
+    NODE_READY,
+    DEFAULT_NOOBAA_BACKINGSTORE,
+    DEFAULT_NOOBAA_BUCKETCLASS,
+)
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     CredReqSecretNotFound,
@@ -85,34 +89,34 @@ class MCG:
 
         self.s3_endpoint = (
             get_noobaa.get("items")[0]
-                .get("status")
-                .get("services")
-                .get("serviceS3")
-                .get("externalDNS")[0]
+            .get("status")
+            .get("services")
+            .get("serviceS3")
+            .get("externalDNS")[0]
         )
         self.s3_internal_endpoint = (
             get_noobaa.get("items")[0]
-                .get("status")
-                .get("services")
-                .get("serviceS3")
-                .get("internalDNS")[0]
+            .get("status")
+            .get("services")
+            .get("serviceS3")
+            .get("internalDNS")[0]
         )
         self.mgmt_endpoint = (
-                                 get_noobaa.get("items")[0]
-                                     .get("status")
-                                     .get("services")
-                                     .get("serviceMgmt")
-                                     .get("externalDNS")[0]
-                             ) + "/rpc"
+            get_noobaa.get("items")[0]
+            .get("status")
+            .get("services")
+            .get("serviceMgmt")
+            .get("externalDNS")[0]
+        ) + "/rpc"
         self.region = config.ENV_DATA["region"]
 
         creds_secret_name = (
             get_noobaa.get("items")[0]
-                .get("status")
-                .get("accounts")
-                .get("admin")
-                .get("secretRef")
-                .get("name")
+            .get("status")
+            .get("accounts")
+            .get("admin")
+            .get("secretRef")
+            .get("name")
         )
         secret_ocp_obj = OCP(kind="secret", namespace=self.namespace)
         creds_secret_obj = secret_ocp_obj.get(creds_secret_name)
@@ -180,7 +184,7 @@ class MCG:
             rgw_count = (
                 2
                 if float(config.ENV_DATA["ocs_version"]) >= 4.5
-                   and not (check_if_cluster_was_upgraded())
+                and not (check_if_cluster_was_upgraded())
                 else 1
             )
 
@@ -710,9 +714,9 @@ class MCG:
                 self.send_rpc_query(
                     "object_api", "list_objects", params={"bucket": bucket_name}
                 )
-                    .json()
-                    .get("reply")
-                    .get("objects")
+                .json()
+                .get("reply")
+                .get("objects")
             )
 
             for written_object in obj_list:
@@ -726,9 +730,9 @@ class MCG:
                             "obj_id": written_object.get("obj_id"),
                         },
                     )
-                        .json()
-                        .get("reply")
-                        .get("chunks")
+                    .json()
+                    .get("reply")
+                    .get("chunks")
                 )
 
                 for object_chunk in object_chunks:
@@ -898,7 +902,11 @@ class MCG:
         get_default_bc = OCP(kind="bucketclass", namespace=self.namespace).get(
             resource_name=DEFAULT_NOOBAA_BUCKETCLASS
         )
-        if get_noobaa["status"]["phase"] == get_default_bs["status"]["phase"] == \
-                get_default_bc["status"]["phase"] == NODE_READY:
+        if (
+            get_noobaa["status"]["phase"]
+            == get_default_bs["status"]["phase"]
+            == get_default_bc["status"]["phase"]
+            == NODE_READY
+        ):
             return True
         return False
