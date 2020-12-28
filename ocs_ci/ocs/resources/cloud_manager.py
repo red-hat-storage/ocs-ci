@@ -410,6 +410,7 @@ class GoogleClient(CloudClient):
                 logger.warning(
                     "Failed to delete some of the bucket blobs. Retrying..."
                 )
+                sleep(10)
 
     def get_all_uls_names(self):
         """
