@@ -406,11 +406,10 @@ class GoogleClient(CloudClient):
                 bucket.delete_blobs(bucket.list_blobs())
                 bucket.delete()
                 break
-            except ClientError:  # TODO: Find relevant exception
-                logger.info(
-                    f"Deletion of Underlying Storage {name} failed. Retrying..."
+            except GoogleExceptions.NotFound:
+                logger.warning(
+                    "Failed to delete some of the bucket blobs. Retrying..."
                 )
-                sleep(3)
 
     def get_all_uls_names(self):
         """
