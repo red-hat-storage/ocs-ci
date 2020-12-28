@@ -52,3 +52,6 @@ IPMI_IPMB_ADDRESS = 0x20
 
 # Background load FIO pod name
 BG_LOAD_NAMESPACE = "bg-fio-load"
+
+# pool related data
+MAX_BYTES_IN_POOL_AFTER_DATA_DELETE = 250000
