@@ -235,3 +235,11 @@ class MemoryNotSufficientException(Exception):
 
 class CPUNotSufficientException(Exception):
     pass
+
+
+class PoolNotCompressedAsExpected(Exception):
+    pass
+
+
+class PoolNotReplicatedAsNeeded(Exception):
+    pass
