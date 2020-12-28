@@ -407,9 +407,7 @@ class GoogleClient(CloudClient):
                 bucket.delete()
                 break
             except GoogleExceptions.NotFound:
-                logger.warning(
-                    "Failed to delete some of the bucket blobs. Retrying..."
-                )
+                logger.warning("Failed to delete some of the bucket blobs. Retrying...")
                 sleep(10)
 
     def get_all_uls_names(self):
