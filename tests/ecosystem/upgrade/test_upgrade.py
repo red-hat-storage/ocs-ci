@@ -3,7 +3,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import ocs_upgrade, polarion_id
-from ocs_ci.ocs.disruptive_operations import worker_node_shutdown
+from ocs_ci.ocs.disruptive_operations import worker_node_shutdown, osd_node_reboot
 from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
 from ocs_ci.utility.reporting import get_polarion_id
 
@@ -41,6 +41,17 @@ def test_worker_node_permanent_shutdown(teardown):
     """
     log.info("Starting disruptive function: test_worker_node_permanent_shutdown")
     run_ocs_upgrade(operation=worker_node_shutdown, abrupt=False)
+
+
+@pytest.mark.polarion_id("OCS-1558")
+def test_osd_reboot(teardown):
+    """
+    OCS Upgrade with node reboot: with 1 OSD going down and back up while upgrade is running
+
+    """
+
+    log.info("Starting disruptive function: test_osd_reboot")
+    run_ocs_upgrade(operation=osd_node_reboot)
 
 
 @ocs_upgrade
