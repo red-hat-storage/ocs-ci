@@ -3237,18 +3237,25 @@ def nb_ensure_endpoint_count(request):
             should_wait = True
 
     if should_wait:
-        # loggin the ready endpoint count for 5 min in 30sec internvals
-        for i in range(10):
-            ready_count = get_ready_noobaa_endpoint_count(namespace)
-            log.info(
-                f"Elapsed time {i * 30} sec: Waiting for noobaa endpoints to stabilize. "
-                f"Current ready count: {ready_count}"
+        # Wait for the NooBaa endpoint pods to stabilize
+        try:
+            for ready_nb_ep_count in TimeoutSampler(
+                30, 10, get_ready_noobaa_endpoint_count, namespace
+            ):
+                if min_ep_count <= ready_nb_ep_count <= max_ep_count:
+                    log.info(
+                        f"NooBaa endpoints stabilized. Ready endpoints: {ready_nb_ep_count}"
+                    )
+                    break
+                log.info(
+                    f"Waiting for the NooBaa endpoints to stabilize. "
+                    f"Current ready count: {ready_nb_ep_count}"
+                )
+        except TimeoutExpiredError:
+            raise (
+                "NooBaa endpoints did not stabilize in time.\n"
+                f"Min count: {min_ep_count}, max count: {max_ep_count}, ready count: {ready_nb_ep_count}"
             )
-            time.sleep(30)
-
-    # Assert that we have the desired number of endpoints
-    ready_count = get_ready_noobaa_endpoint_count(namespace)
-    assert min_ep_count <= ready_count <= max_ep_count
 
 
 @pytest.fixture()
