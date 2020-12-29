@@ -38,19 +38,11 @@ class TestMustGather(ManageTest):
         argvalues=[
             pytest.param(
                 *["CEPH"],
-<<<<<<< HEAD
-                marks=[pytest.mark.polarion_id("OCS-1583"), skipif_external_mode]
-            ),
-            pytest.param(
-                *["JSON"],
-                marks=[pytest.mark.polarion_id("OCS-1583"), skipif_external_mode]
-=======
                 marks=[pytest.mark.polarion_id("OCS-1583"), skipif_external_mode],
             ),
             pytest.param(
                 *["JSON"],
                 marks=[pytest.mark.polarion_id("OCS-1583"), skipif_external_mode],
->>>>>>> fix conflict issue
             ),
             pytest.param(*["OTHERS"], marks=pytest.mark.polarion_id("OCS-1583")),
         ],
