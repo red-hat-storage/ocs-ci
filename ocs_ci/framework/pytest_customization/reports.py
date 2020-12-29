@@ -43,6 +43,7 @@ def pytest_runtest_makereport(item, call):
     Add extra column( Log File) and link the log file location
     """
     from pytest_reportportal import RPLogHandler
+
     pytest_html = item.config.pluginmanager.getplugin("html")
     outcome = yield
     report = outcome.get_result()
