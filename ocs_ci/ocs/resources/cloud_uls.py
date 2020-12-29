@@ -84,7 +84,7 @@ def cloud_uls_factory(request, cld_mgr):
                     )
                     try:
                         ulsMap[cloud.lower()].create_uls(uls_name, region)
-                    except AttributeError as e:
+                    except AttributeError:
                         log.warning(
                             f"{cloud}_client was initialized as None.\n"
                             "Please verify the needed credentials were set in auth.yaml, "
