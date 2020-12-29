@@ -49,12 +49,13 @@ class TestKillCephMonDaemon(ManageTest):
         log.info("find ceph-mon process-id")
         cmd_ps = "ps -ef"
         cmd = cmd_gen + cmd_ps
+        pid = ""
         out = run_cmd(cmd=cmd)
         for line in out.split("\n"):
             if ("setuser-match-path" in line) and ("167" in line):
                 pid = line.split()[1]
-            else:
-                raise Exception("The ceph-mon process-id was not found.")
+        if not pid.isnumeric():
+            raise Exception("The ceph-mon process-id was not found.")
 
         log.info(f"Kill ceph-mon process-id {pid}")
         cmd_kill = f"kill -11 {pid}"

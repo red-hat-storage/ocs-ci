@@ -2921,14 +2921,14 @@ def get_mon_pdb():
 
 
 def verify_cli_cmd_output(
-    cmd=None, expected_output_lst=[], cephtool_cmd=False, debug_node=None
+    cmd=None, expected_output_lst=(), cephtool_cmd=False, debug_node=None
 ):
     """
     Verify cli command output
 
     Args:
         cmd(str): cli command
-        expected_output_lst(list): A list of strings that need to be included in the command output.
+        expected_output_lst(set): A set of strings that need to be included in the command output.
         cephtool_cmd(bool): command on ceph-tool pod
         debug_node(str): name of node
 
