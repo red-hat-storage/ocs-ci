@@ -895,7 +895,9 @@ class MCG:
 
         """
         # Get noobaa status
-        get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get()
+        get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get(
+            resource_name="noobaa"
+        )
         get_default_bs = OCP(kind="backingstore", namespace=self.namespace).get(
             resource_name=DEFAULT_NOOBAA_BACKINGSTORE
         )
