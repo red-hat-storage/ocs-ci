@@ -171,6 +171,6 @@ class MustGather(object):
         Delete temporary folder.
 
         """
-        logger.info(f"Delete must gather dicrectoried {self.delete_directories}")
+        logger.info(f"Delete must gather dicrectories {self.delete_directories}")
         for directory in self.delete_directories:
             shutil.rmtree(path=directory, ignore_errors=False, onerror=None)
