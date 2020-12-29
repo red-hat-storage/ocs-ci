@@ -301,10 +301,17 @@ def add_new_node_and_label_it(machineset_name, num_nodes=1, mark_for_ocs_label=T
     if mark_for_ocs_label:
         node_obj = ocp.OCP(kind="node")
         for new_spun_node in new_spun_nodes:
-            node_obj.add_label(
-                resource_name=new_spun_node, label=constants.OPERATOR_NODE_LABEL
-            )
-            logging.info(f"Successfully labeled {new_spun_node} with OCS storage label")
+            if is_ocs_labeled(new_spun_node):
+                logging.info(
+                    f"node {new_spun_node} is already labeled with the OCS storage label"
+                )
+            else:
+                node_obj.add_label(
+                    resource_name=new_spun_node, label=constants.OPERATOR_NODE_LABEL
+                )
+                logging.info(
+                    f"Successfully labeled {new_spun_node} with OCS storage label"
+                )
 
     return new_spun_nodes
 
@@ -1073,3 +1080,18 @@ def generate_node_names_for_vsphere(count, prefix="compute-"):
         f"{prefix}{current_compute_suffix + node_count}"
         for node_count in range(1, count + 1)
     ]
+
+
+def is_ocs_labeled(node_name):
+    """
+    Check if the node is labeled with the OCS storage label
+
+    Args:
+        node_name (str): The node name
+
+    Returns:
+        bool: True if the node is labeled with the OCS storage label. False otherwise
+
+    """
+    ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+    return node_name in ocs_node_names
