@@ -1,5 +1,7 @@
 import logging
 
+import pytest
+
 from ocs_ci.helpers.helpers import create_unique_resource_name
 
 log = logging.getLogger(__name__)
@@ -83,7 +85,7 @@ def cloud_uls_factory(request, cld_mgr):
                     try:
                         ulsMap[cloud.lower()].create_uls(uls_name, region)
                     except AttributeError as e:
-                        raise Exception(
+                        log.warning(
                             f"{cloud}_client was initialized as None.\n"
                             "Please verify the needed credentials were set in auth.yaml, "
                             "or refer to the OCS-CI documentation -\n"
@@ -93,7 +95,9 @@ def cloud_uls_factory(request, cld_mgr):
                             "The current test cannot proceed unless a valid "
                             f"{cloud.upper()} account is provided via auth.yaml.\n"
                             "The account is needed for performing tasks over the cloud service."
-                        ).with_traceback(e.__traceback__)
+                            "The test will be skipped."
+                        )
+                        pytest.skip("Missing credentials. See logs for more info.")
                     all_created_uls[cloud].add(uls_name)
                     current_call_created_uls[cloud.lower()].add(uls_name)
 
