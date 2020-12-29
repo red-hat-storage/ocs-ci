@@ -1,0 +1,7 @@
+---
+ENV_DATA:
+  platform: 'openshiftdedicated'
+  deployment_type: 'managed'
+
+DEPLOYMENT:
+  ocs_csv_channel: "alpha"
