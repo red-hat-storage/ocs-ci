@@ -3252,7 +3252,7 @@ def nb_ensure_endpoint_count(request):
                     f"Current ready count: {ready_nb_ep_count}"
                 )
         except TimeoutExpiredError:
-            raise (
+            raise TimeoutExpiredError(
                 "NooBaa endpoints did not stabilize in time.\n"
                 f"Min count: {min_ep_count}, max count: {max_ep_count}, ready count: {ready_nb_ep_count}"
             )
