@@ -1961,9 +1961,8 @@ def bucket_factory_fixture(request, mcg_obj=None, rgw_obj=None):
             )
             created_buckets.append(created_bucket)
             if verify_health:
-                assert (
-                    created_bucket.verify_health()
-                ), f"{bucket_name} did not reach a healthy state in time."
+                created_bucket.verify_health()
+
         return created_buckets
 
     def bucket_cleanup():
