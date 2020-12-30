@@ -82,21 +82,21 @@ def ripsaw(request):
 
 
 @pytest.fixture(scope="function")
-def es(request):
+def elasticsearch(request):
 
     # Create internal ES only if Cloud platform is tested
     if node.get_provider().lower() in constants.CLOUD_PLATFORMS:
-        es = ElasticSearch()
+        elasticsearch = ElasticSearch()
     else:
-        es = None
+        elasticsearch = None
 
     def teardown():
-        if es is not None:
-            es.cleanup()
+        if elasticsearch is not None:
+            elasticsearch.cleanup()
             time.sleep(10)
 
     request.addfinalizer(teardown)
-    return es
+    return elasticsearch
 
 
 class FIOResultsAnalyse(PerfResult):
@@ -143,13 +143,13 @@ class FIOResultsAnalyse(PerfResult):
             operation = test_data["operation"]
             if operation == "rw":
                 operation = "pre-fill"
-            total_iops = "{:.2f}".format(test_data["total-iops"])
+            total_iops = f"{test_data['total-iops']:.2f}"
             total_iops = float(total_iops)
             std_dev = "std-dev-" + object_size
             variance = 0
             bs = int(object_size.replace("KiB", ""))
             if std_dev in test_data.keys():
-                variance = "{:.2f}".format(test_data[std_dev])
+                variance = f"{test_data[std_dev]:.2f}"
             if object_size in self.all_results.keys():
                 self.all_results[object_size][operation] = {
                     "IOPS": total_iops,
@@ -214,7 +214,7 @@ class TestFIOBenchmark(E2ETest):
         log.info("Deploying benchmark operator (ripsaw)")
         ripsaw.apply_crd("resources/crds/" "ripsaw_v1alpha1_ripsaw_crd.yaml")
 
-    def es_info_backup(self, es):
+    def es_info_backup(self, elasticsearch):
         """
         Saving the Original elastic-search IP and PORT - if defined in yaml
 
@@ -238,10 +238,10 @@ class TestFIOBenchmark(E2ETest):
             self.fio_cr["spec"]["elasticsearch"] = {}
 
         # Use the internal define elastic-search server in the test - if exist
-        if es:
+        if elasticsearch:
             self.fio_cr["spec"]["elasticsearch"] = {
-                "server": es.get_ip(),
-                "port": es.get_port(),
+                "server": elasticsearch.get_ip(),
+                "port": elasticsearch.get_port(),
             }
 
     def setting_storage_usage(self):
@@ -412,18 +412,18 @@ class TestFIOBenchmark(E2ETest):
         )
         return full_results
 
-    def copy_es_data(self, es, full_results):
+    def copy_es_data(self, elasticsearch, full_results):
         """
         Copy data from Internal ES (if exists) to the main ES
 
         Args:
-            es (obj): elasticsearch object (if exits)
+            elasticsearch (obj): elasticsearch object (if exits)
             full_results (obj): the full results object
 
         """
-        if es:
+        if elasticsearch:
             log.info("Copy all data from Internal ES to Main ES")
-            es._copy(full_results.es)
+            elasticsearch._copy(full_results.es)
         # Adding this sleep between the copy and the analyzing of the results
         # since sometimes the results of the read (just after write) are empty
         time.sleep(10)
@@ -487,7 +487,7 @@ class TestFIOBenchmark(E2ETest):
             ),
         ],
     )
-    def test_fio_workload_simple(self, ripsaw, es, interface, io_pattern):
+    def test_fio_workload_simple(self, ripsaw, elasticsearch, interface, io_pattern):
         """
         This is a basic fio perf test - non-compressed volumes
 
@@ -505,7 +505,7 @@ class TestFIOBenchmark(E2ETest):
         self.fio_cr = templating.load_yaml(constants.FIO_CR_YAML)
 
         # Saving the Original elastic-search IP and PORT - if defined in yaml
-        self.es_info_backup(es)
+        self.es_info_backup(elasticsearch)
 
         # Setting the data set to 40% of the total storage capacity
         self.setting_storage_usage()
@@ -535,7 +535,7 @@ class TestFIOBenchmark(E2ETest):
 
         log.debug(f"Full results is : {full_results.results}")
 
-        self.copy_es_data(es, full_results)
+        self.copy_es_data(elasticsearch, full_results)
         full_results.analyze_results()  # Analyze the results
         # Writing the analyzed test results to the Elastic-Search server
         full_results.es_write()
@@ -556,7 +556,7 @@ class TestFIOBenchmark(E2ETest):
         ],
     )
     def test_fio_compressed_workload(
-        self, ripsaw, es, storageclass_factory, io_pattern, bs, cmp_ratio
+        self, ripsaw, elasticsearch, storageclass_factory, io_pattern, bs, cmp_ratio
     ):
         """
         This is a basic fio perf test which run on compression enabled volume
@@ -590,7 +590,7 @@ class TestFIOBenchmark(E2ETest):
         self.fio_cr["spec"]["workload"]["args"]["cmp_ratio"] = cmp_ratio
 
         # Saving the Original elastic-search IP and PORT - if defined in yaml
-        self.es_info_backup(es)
+        self.es_info_backup(elasticsearch)
 
         # Setting the data set to 40% of the total storage capacity
         self.setting_storage_usage()
@@ -630,7 +630,7 @@ class TestFIOBenchmark(E2ETest):
 
         # Clean up fio benchmark
 
-        self.copy_es_data(es, full_results)
+        self.copy_es_data(elasticsearch, full_results)
         full_results.analyze_results()  # Analyze the results
         # Writing the analyzed test results to the Elastic-Search server
         full_results.es_write()
