@@ -56,7 +56,7 @@ class PackageManifest(OCP):
             kind="packagemanifest",
             **kwargs,
         )
-
+    @retry(ResourceNotFoundError, tries=100, delay=5, backoff=1)
     def get(self, **kwargs):
         """
         Overloaded get method from OCP class.
