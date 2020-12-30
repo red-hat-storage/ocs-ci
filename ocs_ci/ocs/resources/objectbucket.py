@@ -213,6 +213,7 @@ class ObjectBucket(ABC):
             ):
                 if health_check:
                     logger.info(f"{self.name} is healthy")
+                    break
                 else:
                     logger.info(f"{self.name} is unhealthy. Rechecking.")
         except TimeoutExpiredError:
