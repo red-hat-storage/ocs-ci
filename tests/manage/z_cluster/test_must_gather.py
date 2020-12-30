@@ -24,8 +24,9 @@ def mustgather(request):
     mustgather = MustGather()
     mustgather.collect_must_gather()
 
-    def teardown():
+    def teardown(nodes):
         mustgather.cleanup()
+        nodes.restart_nodes_by_stop_and_start_teardown()
 
     request.addfinalizer(teardown)
     return mustgather
