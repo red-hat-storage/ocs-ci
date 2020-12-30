@@ -976,13 +976,13 @@ def get_byte_used_by_pool(pool_name):
 
 def calculate_compression_ratio(pool_name):
     """
-    Calculating the  compression of data on RBD pool
+    Calculating the compression of data on RBD pool
 
     Args:
         pool_name (str): the name of the pool to calculate the ratio on
 
     Returns:
-        int : the compression ratio n in percentage
+        int: the compression ratio in percentage
 
     """
     results = get_ceph_df_detail()
@@ -999,7 +999,7 @@ def calculate_compression_ratio(pool_name):
             return ratio
 
     logger.warning(f"the pool {pool_name} does not exits !")
-    return 0
+    return None
 
 
 def validate_compression(pool_name):
