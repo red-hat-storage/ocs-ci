@@ -7,6 +7,7 @@ import time
 
 import subprocess
 
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
@@ -227,8 +228,8 @@ class TestFIOBenchmark(E2ETest):
         if dev_mode:
             if "elasticsearch" in self.fio_cr["spec"]:
                 self.fio_cr["spec"]["elasticsearch"] = {
-                    "server": "10.0.144.152",
-                    "port": 9200,
+                    "server": defaults.ELASTICSEARCH_DEV_IP,
+                    "port": defaults.ELASTICSEARCE_PORT,
                 }
 
         if "elasticsearch" in self.fio_cr["spec"]:
