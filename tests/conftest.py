@@ -3240,7 +3240,7 @@ def nb_ensure_endpoint_count(request):
         # Wait for the NooBaa endpoint pods to stabilize
         try:
             for ready_nb_ep_count in TimeoutSampler(
-                30, 10, get_ready_noobaa_endpoint_count, namespace
+                300, 30, get_ready_noobaa_endpoint_count, namespace
             ):
                 if min_ep_count <= ready_nb_ep_count <= max_ep_count:
                     log.info(
