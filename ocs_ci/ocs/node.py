@@ -945,6 +945,17 @@ def get_worker_nodes():
     label = "node-role.kubernetes.io/worker"
     ocp_node_obj = ocp.OCP(kind=constants.NODE)
     nodes = ocp_node_obj.get(selector=label).get("items")
+    # Eliminate infra nodes from worker nodes in case of openshift dedicated
+    if config.ENV_DATA["platform"].lower() == "openshiftdedicated":
+        infra_nodes = ocp_node_obj.get(selector=constants.INFRA_NODE_LABEL).get("items")
+        infra_node_ids = [
+            infra_node.get("metadata").get("name") for infra_node in infra_nodes
+        ]
+        nodes = [
+            node
+            for node in nodes
+            if node.get("metadata").get("name") not in infra_node_ids
+        ]
     worker_nodes_list = [node.get("metadata").get("name") for node in nodes]
     return worker_nodes_list
 

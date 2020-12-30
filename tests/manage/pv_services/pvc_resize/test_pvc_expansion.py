@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     skipif_upgraded_from,
 )
 from ocs_ci.helpers import helpers
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
@@ -178,7 +179,12 @@ class TestPvcExpand(ManageTest):
         Verify PVC expand feature
 
         """
-        pvc_size_new = 25
+        # Expand PVC with a small amount to fall behind default quota (100 Gi) for
+        # openshift dedicated
+        if config.ENV_DATA["platform"].lower() == "openshiftdedicated":
+            pvc_size_new = 15
+        else:
+            pvc_size_new = 25
 
         # Modify size of PVCs and verify the change
         log.info(f"Expanding PVCs to {pvc_size_new}G")
