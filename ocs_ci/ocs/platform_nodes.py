@@ -1709,16 +1709,7 @@ class AZURENodes(NodesBase):
         """
         if not nodes:
             raise ValueError("No nodes found to stop")
-
-        node_names = [n.name for n in nodes]
-        for node_name in node_names:
-            self.azure.stop_vm_instance(node_name)
-        if wait:
-            # When the node is not reachable then the node reaches status NotReady.
-            logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
-            wait_for_nodes_status(
-                node_names=node_names, status=constants.NODE_NOT_READY, timeout=timeout
-            )
+        self.azure.stop_vm_instance([n.name for n in nodes], timeout=timeout, wait=wait)
 
     def start_nodes(self, nodes, timeout=540, wait=True):
         """
@@ -1732,15 +1723,9 @@ class AZURENodes(NodesBase):
         """
         if not nodes:
             raise ValueError("No nodes found to start")
-        node_names = [n.name for n in nodes]
-        for node_name in node_names:
-            self.azure.start_vm_instance(node_name)
-        if wait:
-            # When the node is reachable then the node reaches status Ready.
-            logger.info(f"Waiting for nodes: {node_names} to reach ready state")
-            wait_for_nodes_status(
-                node_names=node_names, status=constants.NODE_READY, timeout=timeout
-            )
+        self.azure.start_vm_instance(
+            [n.name for n in nodes], timeout=timeout, wait=wait
+        )
 
     def restart_nodes(self, nodes, timeout=540, wait=True):
         """

@@ -13,7 +13,9 @@ from azure.mgmt.resource import ResourceManagementClient
 
 
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(name=__file__)
@@ -315,28 +317,48 @@ class AZURE:
             self.cluster_resource_group, volume_name
         ).disk_state
 
-    def start_vm_instance(self, vm_name):
+    def start_vm_instance(self, node_names, timeout=540, wait=True):
         """
         Start an Azure vm instance
 
         Args:
-            vm_name: Name of azure vm instance
+            node_names(list): List of azure vm instance to start
+            wait (bool): True for waiting the instances to start, False otherwise
+            timeout (int): time in seconds to wait for node to reach 'ready' state.
 
         """
-        result = self.compute_client.virtual_machines.start(
-            self.cluster_resource_group, vm_name
-        )
-        result.wait()
 
-    def stop_vm_instance(self, vm_name):
+        for node_name in node_names:
+            result = self.compute_client.virtual_machines.start(
+                self.cluster_resource_group, node_name
+            )
+            result.wait()
+
+        if wait:
+            # When the node is reachable then the node reaches status Ready.
+            logger.info(f"Waiting for nodes: {node_names} to reach ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY, timeout=timeout
+            )
+
+    def stop_vm_instance(self, node_names, timeout=540, wait=True):
         """
         Stop an Azure vm instance
 
         Args:
-            vm_name: Name of azure vm instance
+            node_names(list): List of azure vm instance to start
+            wait (bool): True for waiting the instances to stop, False otherwise
+            timeout (int): time in seconds to wait for node to reach 'not ready' state.
 
         """
-        result = self.compute_client.virtual_machines.power_off(
-            self.cluster_resource_group, vm_name
-        )
-        result.wait()
+        for node_name in node_names:
+            result = self.compute_client.virtual_machines.power_off(
+                self.cluster_resource_group, node_name
+            )
+            result.wait()
+        if wait:
+            # When the node is not reachable then the node reaches status NotReady.
+            logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_NOT_READY, timeout=timeout
+            )
