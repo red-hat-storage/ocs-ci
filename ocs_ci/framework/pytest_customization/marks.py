@@ -181,6 +181,11 @@ skipif_bm = pytest.mark.skipif(
     reason="Test will not run on Bare Metal",
 )
 
+skipif_openshift_dedicated = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == "openshiftdedicated",
+    reason="Test will not run on Openshift dedicated cluster",
+)
+
 skipif_external_mode = pytest.mark.skipif(
     config.DEPLOYMENT.get("external_mode") is True,
     reason="Test will not run on External Mode cluster",
