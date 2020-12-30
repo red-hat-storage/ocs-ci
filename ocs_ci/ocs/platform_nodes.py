@@ -1780,6 +1780,23 @@ class AZURENodes(NodesBase):
                 node_names=node_names, status=constants.NODE_READY, timeout=timeout
             )
 
+    def restart_nodes_by_stop_and_start(self, nodes, timeout=540, wait=True):
+        """
+        Restart Azure vm instances by stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes / Azure Vm instance
+            wait (bool): True if need to wait till the restarted node reaches
+                READY state. False otherwise
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+
+        """
+        if not nodes:
+            raise ValueError("No nodes found for restarting")
+        self.stop_nodes(nodes, timeout=timeout, wait=wait)
+        self.start_nodes(nodes, timeout=timeout, wait=wait)
+
     def get_data_volumes(self):
         """
         Get the data Azure disk objects
