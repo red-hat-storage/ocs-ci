@@ -954,6 +954,26 @@ def validate_replica_data(pool_name, replica):
     raise PoolNotFound(f"Pool {pool_name} not found on cluster")
 
 
+def get_byte_used_by_pool(pool_name):
+    """
+    Check byte_used value for specific pool
+
+    Args:
+        pool_name (str): name of the pool to check replica
+
+    Returns:
+        integer: The amount of byte stored from pool.
+
+    """
+    ceph_df_detail_output = get_ceph_df_detail()
+    pool_list = ceph_df_detail_output.get("pools")
+    for pool in pool_list:
+        if pool.get("name") == pool_name:
+            byte_used = pool["stats"]["bytes_used"]
+            return byte_used
+    raise PoolNotFound(f"Pool {pool_name} not found on cluster")
+
+
 def validate_compression(pool_name):
     """
     Check if data was compressed
