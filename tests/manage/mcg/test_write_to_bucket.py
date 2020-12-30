@@ -22,6 +22,7 @@ from ocs_ci.ocs.bucket_utils import (
     retrieve_anon_s3_resource,
     craft_s3_command,
 )
+from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 
@@ -44,22 +45,67 @@ def pod_io(pods):
             p.submit(pod.run_io, "fs", "1G")
 
 
+@skipif_openshift_dedicated
 class TestBucketIO(MCGTest):
     """
     Test IO of a bucket
     """
 
     @pytest.mark.polarion_id("OCS-1300")
-    @tier1
-    @acceptance
-    def test_write_file_to_bucket(self, mcg_obj, awscli_pod, bucket_factory):
+    @pytest.mark.parametrize(
+        argnames="interface,bucketclass_dict",
+        argvalues=[
+            pytest.param(
+                *["S3", None],
+                marks=[tier1, acceptance],
+            ),
+            pytest.param(
+                *[
+                    "OC",
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                ],
+                marks=[tier1],
+            ),
+            pytest.param(
+                *[
+                    "OC",
+                    {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                ],
+                marks=[tier1],
+            ),
+            pytest.param(
+                *["OC", {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}],
+                marks=[tier1],
+            ),
+        ],
+        ids=[
+            "DEFAULT-BACKINGSTORE",
+            "AWS-OC-1",
+            "AZURE-OC-1",
+            "GCP-OC-1",
+        ],
+    )
+    def test_write_file_to_bucket(
+        self,
+        mcg_obj,
+        awscli_pod,
+        bucket_class_factory,
+        bucket_factory,
+        interface,
+        bucketclass_dict,
+    ):
         """
         Test object IO using the S3 SDK
         """
         # Retrieve a list of all objects on the test-objects bucket and
         # downloads them to the pod
         data_dir = "/data"
-        bucketname = bucket_factory(1)[0].name
+        bucketname = bucket_factory(
+            1, interface=interface, bucketclass=bucketclass_dict
+        )[0].name
         full_object_path = f"s3://{bucketname}"
         downloaded_files = retrieve_test_objects_to_pod(awscli_pod, data_dir)
         # Write all downloaded objects to the new bucket
@@ -70,9 +116,39 @@ class TestBucketIO(MCGTest):
         )
 
     @pytest.mark.polarion_id("OCS-1949")
-    @tier1
-    @acceptance
-    def test_mcg_data_deduplication(self, mcg_obj, awscli_pod, bucket_factory):
+    @pytest.mark.parametrize(
+        argnames="bucketclass_dict",
+        argvalues=[
+            pytest.param(
+                None,
+                marks=[tier1],
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
+                marks=[tier1],
+            ),
+            pytest.param(
+                {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                marks=[tier1],
+            ),
+            pytest.param(
+                {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
+                marks=[tier1],
+            ),
+        ],
+        ids=[
+            "DEFAULT-BACKINGSTORE",
+            "AWS-OC-1",
+            "AZURE-OC-1",
+            "GCP-OC-1",
+        ],
+    )
+    def test_mcg_data_deduplication(
+        self, mcg_obj, awscli_pod, bucket_factory, bucketclass_dict
+    ):
         """
         Test data deduplication mechanics
         Args:
@@ -92,8 +168,7 @@ class TestBucketIO(MCGTest):
                 command=f"stat -c %s {download_dir}danny.webm", out_yaml_format=False
             )
         )
-        bucket = bucket_factory(amount=1)[0]
-        bucketname = bucket.name
+        bucketname = bucket_factory(1, bucketclass=bucketclass_dict)[0].name
         for i in range(3):
             awscli_pod.exec_cmd_on_pod(
                 command=craft_s3_command(
@@ -105,9 +180,39 @@ class TestBucketIO(MCGTest):
         mcg_obj.check_data_reduction(bucketname, 2 * file_size)
 
     @pytest.mark.polarion_id("OCS-1949")
-    @tier1
-    @acceptance
-    def test_mcg_data_compression(self, mcg_obj, awscli_pod, bucket_factory):
+    @pytest.mark.parametrize(
+        argnames="bucketclass_dict",
+        argvalues=[
+            pytest.param(
+                None,
+                marks=[tier1],
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
+                marks=[tier1],
+            ),
+            pytest.param(
+                {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                marks=[tier1],
+            ),
+            pytest.param(
+                {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
+                marks=[tier1],
+            ),
+        ],
+        ids=[
+            "DEFAULT-BACKINGSTORE",
+            "AWS-OC-1",
+            "AZURE-OC-1",
+            "GCP-OC-1",
+        ],
+    )
+    def test_mcg_data_compression(
+        self, mcg_obj, awscli_pod, bucket_factory, bucketclass_dict
+    ):
         """
         Test data reduction mechanics
         Args:
@@ -122,8 +227,7 @@ class TestBucketIO(MCGTest):
             ),
             out_yaml_format=False,
         )
-        bucket = bucket_factory(amount=1)[0]
-        bucketname = bucket.name
+        bucketname = bucket_factory(1, bucketclass=bucketclass_dict)[0].name
         full_object_path = f"s3://{bucketname}"
         sync_object_directory(awscli_pod, download_dir, full_object_path, mcg_obj)
         # For this test, enwik8 is used in conjunction with Snappy compression

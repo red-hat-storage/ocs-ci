@@ -1,4 +1,5 @@
 import logging
+
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 
@@ -17,7 +18,10 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import (
+    create_unique_resource_name,
+    storagecluster_independent_check,
+)
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.utility.utils import TimeoutSampler
@@ -35,6 +39,7 @@ class BackingStore:
         self,
         name,
         method,
+        type,
         uls_name=None,
         secret_name=None,
         mcg_obj=None,
@@ -43,6 +48,7 @@ class BackingStore:
     ):
         self.name = name
         self.method = method
+        self.type = type
         self.uls_name = uls_name
         self.secret_name = secret_name
         self.mcg_obj = mcg_obj
@@ -51,6 +57,12 @@ class BackingStore:
 
     def delete(self):
         log.info(f"Cleaning up backingstore {self.name}")
+        # If the backingstore utilizes a PV, save its PV name for deletion verification
+        if self.type == "pv":
+            backingstore_pvc = OCP(
+                kind=constants.PVC, selector=f"pool={self.name}"
+            ).get()["items"][0]
+            pv_name = backingstore_pvc["spec"]["volumeName"]
 
         if self.method == "oc":
             OCP(
@@ -79,6 +91,7 @@ class BackingStore:
                 log.error(f"Failed to {self.name}")
                 raise TimeoutExpiredError
 
+        # Verify deletion was successful
         log.info(f"Verifying whether backingstore {self.name} exists after deletion")
         bs_deleted_successfully = False
 
@@ -102,48 +115,53 @@ class BackingStore:
             bs_deleted_successfully
         ), f"Backingstore {self.name} was not deleted successfully"
 
-        if "pv-backingstore" in self.name.lower():
+        def _wait_for_pv_backingstore_resource_deleted(namespace=None):
+            """
+            wait for pv backing store resources to be deleted at the end of test teardown
+
+            Args:
+                backingstore_name (str): backingstore name
+                namespace (str): backing store's namespace
+
+            """
+            namespace = namespace or config.ENV_DATA["cluster_namespace"]
+            sample = TimeoutSampler(
+                timeout=120,
+                sleep=15,
+                func=_check_resources_deleted,
+                namespace=namespace,
+            )
+            if not sample.wait_for_func_status(result=True):
+                log.error(f"{self.name} was not deleted properly, leftovers were found")
+                raise TimeoutExpiredError
+
+        def _check_resources_deleted(namespace=None):
+            """
+            check if resources of the pv pool backingstore deleted properly
+
+            Args:
+                namespace (str): backing store's namespace
+
+            Returns:
+                bool: True if pvc(s) were deleted
+
+            """
+            try:
+                OCP(kind=constants.PV, resource_name=pv_name).get()
+                log.warning(f"Found PV leftovers belonging to {self.name}")
+                return False
+            except CommandFailed as e:
+                if "not found" in str(e):
+                    pass
+                else:
+                    raise
+            pvcs = get_all_pvcs(namespace=namespace, selector=f"pool={self.name}")
+            pods = get_pods_having_label(namespace=namespace, label=f"pool={self.name}")
+            return len(pvcs["items"]) == 0 and len(pods) == 0
+
+        if self.type == "pv":
             log.info(f"Waiting for backingstore {self.name} resources to be deleted")
-            wait_for_pv_backingstore_resource_deleted(self.name)
-
-
-def wait_for_pv_backingstore_resource_deleted(backingstore_name, namespace=None):
-    """
-    wait for pv backing store resources to be deleted at the end of test teardown
-
-    Args:
-        backingstore_name (str): backingstore name
-        namespace (str): backing store's namespace
-
-    """
-    namespace = namespace or config.ENV_DATA["cluster_namespace"]
-    sample = TimeoutSampler(
-        timeout=120,
-        sleep=15,
-        func=check_resources_deleted,
-        backingstore_name=backingstore_name,
-        namespace=namespace,
-    )
-    if not sample.wait_for_func_status(result=True):
-        log.error(f"Unable to delete resources of {backingstore_name}")
-        raise TimeoutExpiredError
-
-
-def check_resources_deleted(backingstore_name, namespace=None):
-    """
-    check if resources of the pv pool backingstore deleted properly
-
-    Args:
-        backingstore_name (str): backingstore name
-        namespace (str): backing store's namespace
-
-    Returns:
-        bool: True if pvc(s) were deleted
-
-    """
-    pvcs = get_all_pvcs(namespace=namespace, selector=f"pool={backingstore_name}")
-    pods = get_pods_having_label(namespace=namespace, label=f"pool={backingstore_name}")
-    return True if len(pvcs["items"]) == 0 and len(pods) == 0 else False
+            _wait_for_pv_backingstore_resource_deleted()
 
 
 def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
@@ -215,6 +233,13 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                     )
                 if cloud == "pv":
                     vol_num, size, storagecluster = uls_tup
+                    if (
+                        storagecluster == constants.DEFAULT_STORAGECLASS_RBD
+                        and storagecluster_independent_check()
+                    ):
+                        storagecluster = (
+                            constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+                        )
                     backingstore_name = create_unique_resource_name(
                         resource_description="backingstore", resource_type=cloud.lower()
                     )
@@ -222,6 +247,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                         BackingStore(
                             name=backingstore_name,
                             method=method.lower(),
+                            type="pv",
                             mcg_obj=mcg_obj,
                             vol_num=vol_num,
                             vol_size=size,
@@ -247,6 +273,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                             BackingStore(
                                 name=backingstore_name,
                                 method=method.lower(),
+                                type="cloud",
                                 uls_name=uls_name,
                                 mcg_obj=mcg_obj,
                             )

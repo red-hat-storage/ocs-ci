@@ -302,7 +302,7 @@ class OCSUpgrade(object):
         ocs_source = (
             current_ocs_source
             if self.upgrade_in_current_source
-            else (constants.OPERATOR_CATALOG_SOURCE_NAME)
+            else constants.OPERATOR_CATALOG_SOURCE_NAME
         )
         patch_subscription_cmd = (
             f"patch subscription {constants.OCS_SUBSCRIPTION} "

@@ -32,21 +32,19 @@ class TestPvPool:
         """
         Test to check the full capacity functionality of a pv based backing store.
         """
-        bucketclass = bucket_class_factory(
-            {
-                "interface": "OC",
-                "backingstore_dict": {
-                    "pv": [
-                        (
-                            1,
-                            MIN_PV_BACKINGSTORE_SIZE_IN_GB,
-                            "ocs-storagecluster-ceph-rbd",
-                        )
-                    ]
-                },
-            }
-        )
-        bucket = bucket_factory(1, "OC", bucketclass=bucketclass.name)[0]
+        bucketclass_dict = {
+            "interface": "OC",
+            "backingstore_dict": {
+                "pv": [
+                    (
+                        1,
+                        MIN_PV_BACKINGSTORE_SIZE_IN_GB,
+                        "ocs-storagecluster-ceph-rbd",
+                    )
+                ]
+            },
+        }
+        bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
 
         for i in range(1, 18):
             # add some data to the first pod
@@ -59,7 +57,7 @@ class TestPvPool:
                 )
             except CommandFailed:
                 assert check_pv_backingstore_status(
-                    bucketclass.backingstores[0],
+                    bucket.bucketclass.backingstores[0],
                     config.ENV_DATA["cluster_namespace"],
                     "`NO_CAPACITY`",
                 ), "Failed to fill the bucket"
@@ -82,7 +80,7 @@ class TestPvPool:
             )
         except CommandFailed:
             assert not check_pv_backingstore_status(
-                bucketclass.backingstores[0],
+                bucket.bucketclass.backingstores[0],
                 config.ENV_DATA["cluster_namespace"],
                 "`NO_CAPACITY`",
             ), "Failed to re-upload the removed file file"

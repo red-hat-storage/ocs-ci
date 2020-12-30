@@ -6,22 +6,26 @@ from time import sleep
 
 import boto3
 import google.api_core.exceptions as GoogleExceptions
-from azure.core.exceptions import ResourceExistsError
+from azure.core.exceptions import ResourceNotFoundError
 from azure.storage.blob import BlobServiceClient
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, EndpointConnectionError
 from google.auth.exceptions import DefaultCredentialsError
 from google.cloud.storage import Client as GCPStorageClient
 from google.cloud.storage.bucket import Bucket as GCPBucket
 from google.oauth2 import service_account
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    TimeoutExpiredError,
+    ResourceInUnexpectedState,
+)
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import TimeoutSampler, load_auth_config
-from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
 
 logger = logging.getLogger(name=__file__)
 
@@ -46,10 +50,11 @@ class CloudManager(ABC):
                 "This flow is only relevant when running under OCS-QE environments."
             )
             cred_dict = update_config_from_s3().get("AUTH")
-        except AttributeError:
+        except (AttributeError, EndpointConnectionError):
             logger.warning(
-                "Failed to load credentials from ocs-ci-data. "
-                "Loading from local auth.yaml"
+                "Failed to load credentials from ocs-ci-data.\n"
+                "Your local AWS credentials might be misconfigured.\n"
+                "Trying to load credentials from local auth.yaml instead"
             )
             cred_dict = load_auth_config().get("AUTH", {})
 
@@ -111,6 +116,7 @@ class CloudClient(ABC):
         """
         logger.info(f"Creating Underlying Storage {name} in {region}")
         self.internal_create_uls(name, region)
+        self.verify_uls_state(name, True)
 
     def delete_uls(self, name):
         """
@@ -120,12 +126,34 @@ class CloudClient(ABC):
         """
         logger.info(f"Deleting ULS: {name}")
         self.internal_delete_uls(name)
+        self.verify_uls_state(name, False)
 
     def get_all_uls_names(self):
         pass
 
     def verify_uls_exists(self, uls_name):
         pass
+
+    def verify_uls_state(self, uls_name, is_available):
+        check_type = "Delete"
+        if is_available:
+            check_type = "Create"
+        sample = TimeoutSampler(
+            timeout=180, sleep=15, func=self.verify_uls_exists, uls_name=uls_name
+        )
+        if sample.wait_for_func_status(result=is_available):
+            logger.info(
+                f"Underlying Storage {uls_name} {check_type.lower()}d successfully."
+            )
+        else:
+            if is_available:
+                raise ResourceInUnexpectedState(
+                    f"{check_type[:-1]}ion of Underlying Storage {uls_name} timed out. "
+                    f"Unable to {check_type.lower()} {uls_name}"
+                )
+            logger.warning(
+                f"{uls_name} still found after 3 minutes, and might require manual removal."
+            )
 
     @abstractmethod
     def internal_create_uls(self, name, region):
@@ -241,18 +269,6 @@ class S3Client(CloudClient):
             assert False
 
         # Todo: rename client to resource (or find an alternative)
-        sample = TimeoutSampler(
-            timeout=180, sleep=15, func=self.verify_uls_exists, uls_name=name
-        )
-        if not sample.wait_for_func_status(result=False):
-            logger.error(
-                f"Deletion of Underlying Storage {name} timed out. Unable to delete {name}"
-            )
-            logger.warning(
-                f"AWS S3 bucket {name} still found after 3 minutes, and might require manual removal."
-            )
-        else:
-            logger.info(f"Underlying Storage {name} deleted successfully.")
 
     def get_all_uls_names(self):
         """
@@ -390,11 +406,9 @@ class GoogleClient(CloudClient):
                 bucket.delete_blobs(bucket.list_blobs())
                 bucket.delete()
                 break
-            except ClientError:  # TODO: Find relevant exception
-                logger.info(
-                    f"Deletion of Underlying Storage {name} failed. Retrying..."
-                )
-                sleep(3)
+            except GoogleExceptions.NotFound:
+                logger.warning("Failed to delete some of the bucket blobs. Retrying...")
+                sleep(10)
 
     def get_all_uls_names(self):
         """
@@ -508,7 +522,7 @@ class AzureClient(CloudClient):
                 uls_name
             ).get_container_properties()
             return True
-        except ResourceExistsError:
+        except ResourceNotFoundError:
             return False
 
     def create_azure_secret(self):

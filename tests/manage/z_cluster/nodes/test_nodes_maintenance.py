@@ -29,9 +29,13 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required,
     skipif_bm,
 )
-from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 from ocs_ci.ocs.resources import pod
-from ocs_ci.helpers.helpers import label_worker_node, remove_label_from_worker_node
+from ocs_ci.helpers.helpers import (
+    label_worker_node,
+    remove_label_from_worker_node,
+    storagecluster_independent_check,
+)
 from ocs_ci.helpers import helpers
 
 
@@ -82,7 +86,10 @@ class TestNodesMaintenance(ManageTest):
         Initialize Sanity instance
 
         """
-        self.sanity_helpers = Sanity()
+        if storagecluster_independent_check():
+            self.sanity_helpers = SanityExternalCluster()
+        else:
+            self.sanity_helpers = Sanity()
 
     @pytest.fixture(autouse=True)
     def health_checker(self):

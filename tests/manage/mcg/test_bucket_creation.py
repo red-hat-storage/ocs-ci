@@ -14,10 +14,12 @@ from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.framework.testlib import MCGTest
+from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 
 
+@skipif_openshift_dedicated
 class TestBucketCreation(MCGTest):
     """
     Test creation of a bucket
@@ -115,6 +117,19 @@ class TestBucketCreation(MCGTest):
                 marks=[tier1, pytest.mark.polarion_id("OCS-2331")],
             ),
         ],
+        ids=[
+            "3-S3-DEFAULT-BACKINGSTORE",
+            "100-S3-DEFAULT-BACKINGSTORE",
+            "1000-S3-DEFAULT-BACKINGSTORE",
+            "3-CLI-DEFAULT-BACKINGSTORE",
+            "100-CLI-DEFAULT-BACKINGSTORE",
+            "1000-CLI-DEFAULT-BACKINGSTORE",
+            "3-OC-DEFAULT-BACKINGSTORE",
+            "100-OC-DEFAULT-BACKINGSTORE",
+            "1000-OC-DEFAULT-BACKINGSTORE",
+            "1-OC-PVPOOL",
+            "1-CLI-PVPOOL",
+        ],
     )
     def test_bucket_creation(
         self, bucket_class_factory, bucket_factory, amount, interface, bucketclass_dict
@@ -123,11 +138,7 @@ class TestBucketCreation(MCGTest):
         Test bucket creation using the S3 SDK, OC command or MCG CLI.
         The factory checks the bucket's health by default.
         """
-        if bucketclass_dict:
-            bucketclass = bucket_class_factory(bucketclass_dict)
-            bucket_factory(amount, interface, bucketclass=bucketclass.name)
-        else:
-            bucket_factory(amount, interface)
+        bucket_factory(amount, interface, bucketclass=bucketclass_dict)
 
     @pytest.mark.parametrize(
         argnames="amount,interface",

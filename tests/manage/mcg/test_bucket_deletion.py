@@ -21,11 +21,13 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.framework.testlib import MCGTest
+from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 ERRATIC_TIMEOUTS_SKIP_REASON = "Skipped because of erratic timeouts"
 
 
+@skipif_openshift_dedicated
 class TestBucketDeletion(MCGTest):
     """
     Test bucket Creation Deletion of buckets
@@ -84,7 +86,9 @@ class TestBucketDeletion(MCGTest):
                     "OC",
                     {
                         "interface": "OC",
-                        "backingstores": {"pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]},
+                        "backingstore_dict": {
+                            "pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]
+                        },
                     },
                 ],
                 marks=[tier1, pytest.mark.polarion_id("OCS-2354")],
@@ -95,18 +99,30 @@ class TestBucketDeletion(MCGTest):
                     "CLI",
                     {
                         "interface": "CLI",
-                        "backingstores": {"pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]},
+                        "backingstore_dict": {
+                            "pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]
+                        },
                     },
                 ],
                 marks=[tier1, pytest.mark.polarion_id("OCS-2354")],
             ),
+        ],
+        ids=[
+            "3-S3-DEFAULT-BACKINGSTORE",
+            "3-CLI-DEFAULT-BACKINGSTORE",
+            "3-OC-DEFAULT-BACKINGSTORE",
+            "100-S3-DEFAULT-BACKINGSTORE",
+            "100-OC-DEFAULT-BACKINGSTORE",
+            "1000-S3-DEFAULT-BACKINGSTORE",
+            "1000-OC-DEFAULT-BACKINGSTORE",
+            "1-OC-PVPOOL",
+            "1-CLI-PVPOOL",
         ],
     )
     def test_bucket_delete(
         self,
         verify_rgw_restart_count,
         mcg_obj,
-        bucket_class_factory,
         bucket_factory,
         amount,
         interface,
@@ -115,11 +131,7 @@ class TestBucketDeletion(MCGTest):
         """
         Test deletion of bucket using the S3 SDK, MCG CLI and OC
         """
-        if bucketclass_dict:
-            bucketclass = bucket_class_factory(bucketclass_dict)
-            buckets = bucket_factory(amount, interface, bucketclass=bucketclass.name)
-        else:
-            buckets = bucket_factory(amount, interface)
+        buckets = bucket_factory(amount, interface, bucketclass=bucketclass_dict)
         for bucket in buckets:
             logger.info(f"Deleting bucket: {bucket.name}")
             bucket.delete()
@@ -128,42 +140,79 @@ class TestBucketDeletion(MCGTest):
             ), f"Found {bucket.name} that should've been removed"
 
     @pytest.mark.parametrize(
-        argnames="interface",
+        argnames="interface, bucketclass_dict",
         argvalues=[
-            pytest.param(*["S3"], marks=[pytest.mark.polarion_id("OCS-1867"), tier3]),
-            pytest.param(*["CLI"], marks=[tier1, pytest.mark.polarion_id("OCS-1917")]),
-            pytest.param(*["OC"], marks=[tier1, pytest.mark.polarion_id("OCS-1868")]),
+            pytest.param(
+                *["S3", None], marks=[tier3, pytest.mark.polarion_id("OCS-1867")]
+            ),
+            pytest.param(
+                *["CLI", None], marks=[tier1, pytest.mark.polarion_id("OCS-1917")]
+            ),
+            pytest.param(
+                *["OC", None], marks=[tier1, pytest.mark.polarion_id("OCS-1868")]
+            ),
+            pytest.param(
+                *[
+                    "OC",
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                ],
+                marks=[tier1],
+            ),
+            pytest.param(
+                *[
+                    "OC",
+                    {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                ],
+                marks=[tier1],
+            ),
+            pytest.param(
+                *["OC", {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}],
+                marks=[tier1],
+            ),
         ],
+        ids=["S3", "CLI", "OC", "OC-AWS", "OC-AZURE", "OC-GCP"],
     )
-    def test_bucket_delete_with_objects(self, mcg_obj, interface, awscli_pod):
+    def test_bucket_delete_with_objects(
+        self, mcg_obj, awscli_pod, bucket_class_factory, interface, bucketclass_dict
+    ):
         """
         Negative test with deletion of bucket has objects stored in.
+
         """
         bucketname = create_unique_resource_name(
             resource_description="bucket", resource_type=interface.lower()
         )
-        try:
-            bucket = BUCKET_MAP[interface.lower()](bucketname, mcg=mcg_obj)
+        bucket = BUCKET_MAP[interface.lower()](
+            bucketname,
+            mcg=mcg_obj,
+            bucketclass=bucket_class_factory(bucketclass_dict)
+            if bucketclass_dict
+            else None,
+        )
 
-            logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
-            logger.info(f"aws region is {mcg_obj.region}")
-            data_dir = "/data"
-            full_object_path = f"s3://{bucketname}"
-            retrieve_test_objects_to_pod(awscli_pod, data_dir)
-            sync_object_directory(awscli_pod, data_dir, full_object_path, mcg_obj)
+        logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
+        logger.info(f"aws region is {mcg_obj.region}")
+        data_dir = "/data"
+        full_object_path = f"s3://{bucketname}"
+        retrieve_test_objects_to_pod(awscli_pod, data_dir)
+        sync_object_directory(awscli_pod, data_dir, full_object_path, mcg_obj)
 
-            logger.info(f"Deleting bucket: {bucketname}")
-            if interface == "S3":
-                try:
-                    s3_del = mcg_obj.s3_resource.Bucket(bucketname).delete()
-                    assert not s3_del, "Unexpected s3 delete non-empty OBC succeed"
-                except botocore.exceptions.ClientError as err:
-                    assert "BucketNotEmpty" in str(
-                        err
-                    ), "Couldn't verify delete non-empty OBC with s3"
-                    logger.info(f"Delete non-empty OBC {bucketname} failed as expected")
-        finally:
-            bucket.delete()
+        logger.info(f"Deleting bucket: {bucketname}")
+        if interface == "S3":
+            try:
+                s3_del = mcg_obj.s3_resource.Bucket(bucketname).delete()
+                assert not s3_del, "Unexpected s3 delete non-empty OBC succeed"
+            except botocore.exceptions.ClientError as err:
+                assert "BucketNotEmpty" in str(
+                    err
+                ), "Couldn't verify delete non-empty OBC with s3"
+                logger.info(f"Delete non-empty OBC {bucketname} failed as expected")
+        bucket.delete()
+        if bucketclass_dict:
+            bucket.bucketclass.delete()
 
     @pytest.mark.parametrize(
         argnames="interface",

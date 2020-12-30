@@ -16,7 +16,7 @@ from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
-from ocs_ci.ocs import constants, ocp, exceptions
+from ocs_ci.ocs import constants, ocp, exceptions, cluster
 from ocs_ci.ocs.node import (
     get_node_objs,
     get_typed_worker_nodes,
@@ -65,10 +65,13 @@ class PlatformNodesFactory:
             "baremetal": BaremetalNodes,
             "azure": AZURENodes,
             "gcp": NodesBase,
+            "vsphere_lso": VMWareLSONodes,
         }
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA["platform"]
+        if cluster.is_lso_cluster():
+            platform += "_lso"
         return self.cls_map[platform]()
 
 
@@ -1694,11 +1697,50 @@ class AZURENodes(NodesBase):
         super(AZURENodes, self).__init__()
         self.azure = azure_utils.AZURE()
 
-    def stop_nodes(self, nodes):
-        raise NotImplementedError("Stop nodes functionality is not implemented")
+    def stop_nodes(self, nodes, timeout=540, wait=True):
+        """
+        Stop Azure vm instances
 
-    def start_nodes(self, nodes):
-        raise NotImplementedError("Start nodes functionality is not implemented")
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to stop, False otherwise
+            timeout (int): time in seconds to wait for node to reach 'not ready' state.
+
+        """
+        if not nodes:
+            raise ValueError("No nodes found to stop")
+
+        node_names = [n.name for n in nodes]
+        for node_name in node_names:
+            self.azure.stop_vm_instance(node_name)
+        if wait:
+            # When the node is not reachable then the node reaches status NotReady.
+            logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_NOT_READY, timeout=timeout
+            )
+
+    def start_nodes(self, nodes, timeout=540, wait=True):
+        """
+        Start Azure vm instances
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to start, False otherwise
+            timeout (int): time in seconds to wait for node to reach 'ready' state.
+
+        """
+        if not nodes:
+            raise ValueError("No nodes found to start")
+        node_names = [n.name for n in nodes]
+        for node_name in node_names:
+            self.azure.start_vm_instance(node_name)
+        if wait:
+            # When the node is reachable then the node reaches status Ready.
+            logger.info(f"Waiting for nodes: {node_names} to reach ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY, timeout=timeout
+            )
 
     def restart_nodes(self, nodes, timeout=540, wait=True):
         """
@@ -1822,4 +1864,45 @@ class AZURENodes(NodesBase):
     def attach_nodes_to_cluster(self, node_list):
         raise NotImplementedError(
             "attach nodes to cluster functionality is not implemented"
+        )
+
+
+class VMWareLSONodes(VMWareNodes):
+    """
+    VMWare LSO nodes class
+
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def get_data_volumes(self, pvs=None):
+        """
+        Get the data vSphere volumes
+
+        Args:
+            pvs (list): PV OCS objects
+
+        Returns:
+            list: vSphere volumes
+
+        """
+        if not pvs:
+            pvs = get_deviceset_pvs()
+        return [pv.get().get("spec").get("local").get("path") for pv in pvs]
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        """
+        Detach disk from a VM and delete from datastore if specified
+
+        Args:
+            volume (str): Volume path
+            node (OCS): The OCS object representing the node
+            delete_from_backend (bool): True for deleting the disk (vmdk)
+                from backend datastore, False otherwise
+
+        """
+        vm = self.get_vms([node])[0]
+        self.vsphere.remove_disk(
+            vm=vm, identifier=volume, key="disk_name", datastore=delete_from_backend
         )
