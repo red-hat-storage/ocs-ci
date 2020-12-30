@@ -12,9 +12,9 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.constants import (
-    NODE_READY,
     DEFAULT_NOOBAA_BACKINGSTORE,
     DEFAULT_NOOBAA_BUCKETCLASS,
+    STATUS_READY,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -888,7 +888,7 @@ class MCG:
     @property
     def status(self):
         """
-        Verify noobaa's, default backing store's and default bucket class's status
+        Verify the status of NooBaa, and its default backing store and bucket class
 
         Returns:
             bool: return False if any of the above components of noobaa is not in READY state
@@ -904,11 +904,9 @@ class MCG:
         get_default_bc = OCP(kind="bucketclass", namespace=self.namespace).get(
             resource_name=DEFAULT_NOOBAA_BUCKETCLASS
         )
-        if (
+        return (
             get_noobaa["status"]["phase"]
             == get_default_bs["status"]["phase"]
             == get_default_bc["status"]["phase"]
-            == NODE_READY
-        ):
-            return True
-        return False
+            == STATUS_READY
+        )

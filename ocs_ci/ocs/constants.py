@@ -69,6 +69,7 @@ CLEANUP_YAML = "cleanup.yaml.j2"
 
 
 # Statuses
+STATUS_READY = "Ready"
 STATUS_PENDING = "Pending"
 STATUS_CONTAINER_CREATING = "ContainerCreating"
 STATUS_AVAILABLE = "Available"
