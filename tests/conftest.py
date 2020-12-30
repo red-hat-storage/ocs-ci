@@ -2004,7 +2004,7 @@ def bucket_factory_fixture(
                 bucket.delete()
             except ClientError as e:
                 if e.response["Error"]["Code"] == "NoSuchBucket":
-                    log.warn(f"{bucket.name} could not be found in cleanup")
+                    log.warning(f"{bucket.name} could not be found in cleanup")
                 else:
                     raise
 
