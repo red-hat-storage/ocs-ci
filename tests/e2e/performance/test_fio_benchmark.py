@@ -5,8 +5,6 @@ import logging
 import pytest
 import time
 
-import subprocess
-
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.ocp import OCP
@@ -22,50 +20,10 @@ from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.cluster import CephCluster, calculate_compression_ratio
 from ocs_ci.ocs.version import get_environment_info
+from ocs_ci.helpers.performance_lib import run_command
 
 log = logging.getLogger(__name__)
 dev_mode = config.RUN["cli_params"].get("dev_mode")
-ERRMSG = "Error in command"
-
-
-def run_command(cmd):
-    """
-    Running command on the OS and return the STDOUT & STDERR outputs
-    in case of argument is not string or list, return error message
-
-    Args:
-        cmd (str/list): the command to execute
-
-    Returns:
-        list : all STDOUT / STDERR output as list of lines
-
-    """
-    if isinstance(cmd, str):
-        command = cmd.split()
-    elif isinstance(cmd, list):
-        command = cmd
-    else:
-        return ERRMSG
-
-    log.info(f"Going to run {cmd}")
-    cp = subprocess.run(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        stdin=subprocess.PIPE,
-        timeout=600,
-    )
-    output = cp.stdout.decode()
-    err = cp.stderr.decode()
-    # exit code is not zero
-    if cp.returncode:
-        log.error(f"Command finished with non zero ({cp.returncode}) {err}")
-        print(f"Command finished with non zero ({cp.returncode}) {err}")
-        output += f"{ERRMSG} {err}"
-
-    output = output.split("\n")  # convert output to list
-    output.pop()  # remove last empty element from the list
-    return output
 
 
 @pytest.fixture(scope="function")
@@ -442,7 +400,7 @@ class TestFIOBenchmark(E2ETest):
         command.append("template")
         command.append("--template")
         command.append("'{{range .items}}{{.metadata.name}}{{\"" + NL + "\"}}{{end}}'")
-        pvcs_list = run_command(command)
+        pvcs_list = run_command(command, out_format="list")
         log.info(f"list of all PVCs :{pvcs_list}")
         for pvc in pvcs_list:
             pvc = pvc.replace("'", "")
@@ -457,7 +415,7 @@ class TestFIOBenchmark(E2ETest):
         )
         command.remove("-n")
         command.remove(constants.RIPSAW_NAMESPACE)
-        pvs_list = run_command(command)
+        pvs_list = run_command(command, out_format="list")
         log.info(f"list of all PVs :{pvs_list}")
 
         for line in pvs_list:
