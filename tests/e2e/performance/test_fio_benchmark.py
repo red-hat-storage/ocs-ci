@@ -521,9 +521,9 @@ class TestFIOBenchmark(E2ETest):
         This is a basic fio perf test which run on compression enabled volume
 
         Args:
-                io_pattern (str): the I/O pattern to do - random / sequential
-                bs (str): block size to use in the test
-                cmp_ratio (int): the expected compression ratio
+            io_pattern (str): the I/O pattern to do - random / sequential
+            bs (str): block size to use in the test
+            cmp_ratio (int): the expected compression ratio
 
         """
 
