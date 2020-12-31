@@ -974,6 +974,34 @@ def get_byte_used_by_pool(pool_name):
     raise PoolNotFound(f"Pool {pool_name} not found on cluster")
 
 
+def calculate_compression_ratio(pool_name):
+    """
+    Calculating the compression of data on RBD pool
+
+    Args:
+        pool_name (str): the name of the pool to calculate the ratio on
+
+    Returns:
+        int: the compression ratio in percentage
+
+    """
+    results = get_ceph_df_detail()
+    for pool in results["pools"]:
+        if pool["name"] == pool_name:
+            used = pool["stats"]["bytes_used"]
+            used_cmp = pool["stats"]["compress_bytes_used"]
+            stored = pool["stats"]["stored"]
+            ratio = int((used_cmp * 100) / (used_cmp + used))
+            logger.info(f"pool name is {pool_name}")
+            logger.info(f"net stored data is {stored}")
+            logger.info(f"total used data is {used}")
+            logger.info(f"compressed data is {used_cmp}")
+            return ratio
+
+    logger.warning(f"the pool {pool_name} does not exits !")
+    return None
+
+
 def validate_compression(pool_name):
     """
     Check if data was compressed
