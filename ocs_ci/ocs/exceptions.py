@@ -251,3 +251,7 @@ class PoolNotCompressedAsExpected(Exception):
 
 class PoolNotReplicatedAsNeeded(Exception):
     pass
+
+
+class UnhealthyBucket(Exception):
+    pass
