@@ -253,5 +253,9 @@ class PoolNotReplicatedAsNeeded(Exception):
     pass
 
 
+class ImageIsNotDeletedOrNotFound(Exception):
+    pass
+
+
 class UnhealthyBucket(Exception):
     pass
