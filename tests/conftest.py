@@ -2119,22 +2119,8 @@ def backingstore_factory_session(
 
 
 @pytest.fixture()
-def bucket_class_factory(request, mcg_obj, backingstore_factory):
-    """
-    Create a Bucket Class factory.
-    Calling this fixture creates a new Bucket Class.
-
-    Returns:
-        func: Factory method - each call to this function creates
-            a bucketclass
-
-    """
-    return bucketclass_factory_implementation(request, mcg_obj, backingstore_factory)
-
-
-@pytest.fixture(scope="session")
-def bucket_class_factory_session(
-    request, mcg_obj_session, backingstore_factory_session
+def bucket_class_factory(
+    request, mcg_obj, backingstore_factory, namespace_store_factory
 ):
     """
     Create a Bucket Class factory.
@@ -2146,7 +2132,31 @@ def bucket_class_factory_session(
 
     """
     return bucketclass_factory_implementation(
-        request, mcg_obj_session, backingstore_factory_session
+        request, mcg_obj, backingstore_factory, namespace_store_factory
+    )
+
+
+@pytest.fixture(scope="session")
+def bucket_class_factory_session(
+    request,
+    mcg_obj_session,
+    backingstore_factory_session,
+    namespace_store_factory_session,
+):
+    """
+    Create a Bucket Class factory.
+    Calling this fixture creates a new Bucket Class.
+
+    Returns:
+        func: Factory method - each call to this function creates
+            a bucketclass
+
+    """
+    return bucketclass_factory_implementation(
+        request,
+        mcg_obj_session,
+        backingstore_factory_session,
+        namespace_store_factory_session,
     )
 
 

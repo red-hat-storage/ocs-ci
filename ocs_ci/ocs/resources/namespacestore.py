@@ -93,56 +93,49 @@ def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     """
     created_nss = []
 
-    def _create_nss(platform=constants.AWS_PLATFORM):
+    cmdMap = {"oc": mcg_obj.create_namespace_store, "cli": ""}  # TODO
 
-        # Create the actual namespace resource
-        rand_nss_name = create_unique_resource_name(constants.MCG_NSS, platform)
-        if platform == constants.RGW_PLATFORM:
-            region = None
-        else:
-            # TODO: fix this when https://github.com/red-hat-storage/ocs-ci/issues/3338
-            # is resolved
-            region = "us-east-2"
+    endpointMap = {
+        constants.AWS_PLATFORM: constants.MCG_NS_AWS_ENDPOINT,
+        constants.AZURE_PLATFORM: constants.MCG_NS_AZURE_ENDPOINT,
+        constants.MCG_NS_AZURE_ENDPOINT: RGW().get_credentials()[0],
+    }
 
-        target_bucket_name = mcg_obj.create_namespace_store(
-            rand_nss_name,
-            region,
-            cld_mgr,
-            cloud_uls_factory,
-            platform,
-        )
+    def _create_nss(method, nss_dict):
+        current_call_created_nss = []
+        for platform, nss_lst in nss_dict.items():
+            for nss_tup in nss_lst:
+                # Create the actual namespace resource
+                nss_name = create_unique_resource_name(constants.MCG_NSS, platform)
 
-        log.info(f"Check validity of NS store {rand_nss_name}")
-        if platform == constants.AWS_PLATFORM:
-            endpoint = constants.MCG_NS_AWS_ENDPOINT
-        elif platform == constants.AZURE_PLATFORM:
-            endpoint = constants.MCG_NS_AZURE_ENDPOINT
-        elif platform == constants.RGW_PLATFORM:
-            rgw_conn = RGW()
-            endpoint, _, _ = rgw_conn.get_credentials()
-        else:
-            raise UnsupportedPlatformError(f"Unsupported Platform: {platform}")
+                target_bucket_name = cmdMap[method](
+                    nss_name, nss_tup[1], cld_mgr, cloud_uls_factory, platform
+                )
 
-        sample = TimeoutSampler(
-            timeout=60,
-            sleep=5,
-            func=mcg_obj.check_ns_resource_validity,
-            ns_resource_name=rand_nss_name,
-            target_bucket_name=target_bucket_name,
-            endpoint=endpoint,
-        )
-        if not sample.wait_for_func_status(result=True):
-            log.error(f"Failed to check validty for ${rand_nss_name}")
-            raise TimeoutExpiredError
+                # TODO: Check platform exists in endpointMap
 
-        created_nss.append(
-            NamespaceStore(
-                name=rand_nss_name,
-                method="oc",
-                mcg_obj=mcg_obj,
-            )
-        )
-        return target_bucket_name, rand_nss_name
+                sample = TimeoutSampler(
+                    timeout=60,
+                    sleep=5,
+                    func=mcg_obj.check_ns_resource_validity,
+                    ns_resource_name=nss_name,
+                    target_bucket_name=target_bucket_name,
+                    endpoint=endpointMap[platform],
+                )
+                if not sample.wait_for_func_status(result=True):
+                    log.error(f"{nss_name} failed its verification check")
+                    raise TimeoutExpiredError
+
+                nss_obj = NamespaceStore(
+                    name=nss_name,
+                    method="oc",
+                    mcg_obj=mcg_obj,
+                )
+
+                created_nss.append(nss_obj)
+                current_call_created_nss.append(nss_obj)
+
+        return current_call_created_nss
 
     def nss_cleanup():
         for nss in created_nss:

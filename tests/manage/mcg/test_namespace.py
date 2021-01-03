@@ -33,12 +33,27 @@ class TestNamespace(MCGTest):
 
     @skipif_ocs_version("<4.7")
     @tier1
-    def test_namespace_store_creation_crd(self, namespace_store_factory):
+    @pytest.mark.parametrize(
+        argnames="nss_tup",
+        argvalues=[
+            pytest.param(("oc", {"aws": [(1, "eu-central-1")]})),
+            pytest.param(("oc", {"azure": [(1, None)]})),
+            pytest.param(("oc", {"rgw": [(1, None)]})),
+        ],
+        # A test ID list for describing the parametrized tests
+        # <CLOUD_PROVIDER>-<METHOD>-<AMOUNT-OF-BACKINGSTORES>
+        ids=[
+            "AWS-OC-1",
+            "AZURE-OC-1",
+            "RGW-OC-1",
+        ],
+    )
+    def test_namespace_store_creation_crd(self, namespace_store_factory, nss_tup):
         """
         Test namespace store creation using the MCG CRDs.
         """
         # Create the namespace store and verify health
-        namespace_store_factory()
+        namespace_store_factory(*nss_tup)
 
     @skipif_ocs_version("<4.7")
     @tier1

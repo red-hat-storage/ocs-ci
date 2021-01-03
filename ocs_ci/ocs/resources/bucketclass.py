@@ -35,7 +35,9 @@ class BucketClass:
         # Todo: implement deletion assertion
 
 
-def bucket_class_factory(request, mcg_obj, backingstore_factory):
+def bucket_class_factory(
+    request, mcg_obj, backingstore_factory, namespace_store_factory
+):
     """
     Create a bucket class factory. Calling this fixture creates a new custom bucket class.
     For a custom backingstore(s), provide the 'backingstore_dict' parameter.
@@ -82,23 +84,18 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
         else:
             interface = "OC"
 
-        namespace_policy = None
+        namespace_policy = {}
         backingstores = None
         placement_policy = None
 
         if "namespace_policy_dict" in bucket_class_dict:
-            namespace_policy = bucket_class_dict["namespace_policy_dict"]
-            if "namespacestore_dict" in namespace_policy:
-                # TODO: need to call here namespace factory according to the args
-                # and change the namespace_policy population according to:
-                # if amount > 1, put all created namespace stores as read_resources
-                # and the first to be the write resource
-                # notice - write_resource must be one of the read_resources
-                nss = None
-                namespace_policy["read_resources"] = [nss]
-                namespace_policy["write_resources"] = nss
+            if "namespacestore_dict" in bucket_class_dict["namespace_policy_dict"]:
+                nss_dict = bucket_class_dict["namespace_policy_dict"]["namespacestore_dict"]
+                nss_lst = namespace_store_factory(interface, nss_dict)
+                namespace_policy["read_resources"] = [nss.name for nss in nss_lst]
+                namespace_policy["write_resources"] = nss_lst[0].name
 
-        if "backingstore_dict" in bucket_class_dict:
+        elif "backingstore_dict" in bucket_class_dict:
             backingstores = [
                 backingstore
                 for backingstore in backingstore_factory(

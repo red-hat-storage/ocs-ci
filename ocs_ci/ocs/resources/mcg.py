@@ -733,7 +733,7 @@ class MCG:
             ]
             tiers["placement"] = placement
 
-        if namespace_policy is not None:
+        if namespace_policy:
             bc_data["spec"]["namespacePolicy"] = {}
             ns_policy = bc_data["spec"]["namespacePolicy"]
             ns_policy_type = namespace_policy.get("type")
