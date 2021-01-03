@@ -2887,6 +2887,46 @@ def wait_for_pv_delete(pv_objs):
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
 
+def get_pv_objs_in_sc(sc_name):
+    pv_objs = get_all_pvs()["items"]
+    return [pv for pv in pv_objs if pv.get("spec").get("storageClassName") == sc_name]
+
+
+def get_pv_status(pv_obj):
+    return pv_obj.get("status").get("phase")
+
+
+def get_pv_name(pv_obj):
+    return pv_obj["metadata"]["name"]
+
+
+def verify_new_pv_available_in_sc(old_pv_objs, sc_name):
+    new_pv_objs = get_pv_objs_in_sc(sc_name)
+    num_of_new_pv = len(new_pv_objs)
+    expected_num_of_new_pv = len(old_pv_objs) + 1
+    error_message = f"expected to find {expected_num_of_new_pv} PVs in sc {sc_name}, but find {num_of_new_pv} PVs"
+    assert num_of_new_pv == expected_num_of_new_pv, error_message
+
+    old_pv_names = [get_pv_name(pv) for pv in old_pv_objs]
+    new_pv_obj = [pv for pv in new_pv_objs if get_pv_name(pv) not in old_pv_names][0]
+    new_pv_status = get_pv_status(new_pv_obj)
+    assert new_pv_status in [
+        constants.STATUS_AVAILABLE,
+        constants.STATUS_BOUND,
+    ], f"New pv is in status {new_pv_status}"
+
+
+def delete_released_pvs_in_sc(sc_name):
+    pv_objs = get_pv_objs_in_sc(sc_name)
+    released_pvs = [
+        pv for pv in pv_objs if get_pv_status(pv) == constants.STATUS_RELEASED
+    ]
+    for pv in released_pvs:
+        pv_name = get_pv_name(pv)
+        ocp.OCP().exec_oc_cmd(f"oc delete {pv_name}", timeout=60)
+        logger.info(f"Successfully deleted pv {pv_name}")
+
+
 @retry(UnexpectedBehaviour, tries=20, delay=10, backoff=1)
 def fetch_used_size(cbp_name, exp_val=None):
     """

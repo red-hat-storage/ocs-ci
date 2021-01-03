@@ -10,14 +10,13 @@ from ocs_ci.ocs.machine import get_machine_objs
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, switch_to_project
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions
-from ocs_ci.ocs.resources import pvc
 
 log = logging.getLogger(__name__)
 
@@ -926,7 +925,15 @@ def delete_and_create_osd_node_vsphere_lso(osd_node_name, use_existing_node=Fals
         str: The new node name
 
     """
+    from ocs_ci.helpers import helpers
+
+    sc_name = constants.LOCAL_BLOCK_RESOURCE
+    old_pv_objs = helpers.get_pv_objs_in_sc(sc_name)
+
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
+    osd_pod = get_node_pods(osd_node, pods_to_search=pod.get_osd_pods())[0]
+    osd_id = osd_pod.get().get("metadata").get("labels").get("ceph-osd-id")
+
     scale_down_deployments(osd_node)
     remove_nodes([osd_node])
     log.info(f"name of deleted node = {osd_node_name}")
@@ -951,9 +958,13 @@ def delete_and_create_osd_node_vsphere_lso(osd_node_name, use_existing_node=Fals
         label_nodes([node_not_in_ocs])
         new_node_name = node_not_in_ocs.name
 
-    osd_deployment = get_node_osd_deployments(osd_node_name)[0]
-    ocs_deviceset = pvc.get_osd_deployment_deviceset(osd_deployment)
-    pvc.delete_pvc_and_associated_pv(ocs_deviceset.name)
+    helpers.verify_new_pv_available_in_sc(old_pv_objs, sc_name)
+    switch_to_project(defaults.ROOK_CLUSTER_NAMESPACE)
+
+    pod.run_osd_removal_job(osd_id)
+    pod.verify_osd_removal_job_completed_successfully(osd_id)
+    helpers.delete_released_pvs_in_sc(sc_name)
+
     return new_node_name
 
 
@@ -1397,38 +1408,3 @@ def get_deployment_node_name(deployment):
     """
     spec = deployment.get().get("spec").get("template").get("spec")
     return spec.get("nodeSelector").get("kubernetes.io/hostname")
-
-
-def find_node_deployments(node_name, deployments_to_search):
-    """
-    Find all the deployments that related to the node
-    from the deployment list 'deployments_to_search'
-
-    Args:
-        node_name (str): The node name
-        deployments_to_search (list): The list of the deployments to search.
-
-    Returns:
-          list: The list of the deployments that related to the node
-              from the list 'deployments_to_search'.
-
-    """
-    return [
-        d for d in deployments_to_search if get_deployment_node_name(d) == node_name
-    ]
-
-
-def get_node_osd_deployments(node_name):
-    """
-    Get the node's osd deployments
-
-    Args:
-        node_name (str): The node name
-
-    Returns:
-        list: The osd deployments associated to the node
-
-    """
-    osd_deployments = pod.get_osd_deployments()
-    node_osd_deployments = find_node_deployments(node_name, osd_deployments)
-    return node_osd_deployments

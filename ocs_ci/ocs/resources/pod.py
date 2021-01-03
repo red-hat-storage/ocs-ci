@@ -28,7 +28,12 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_cmd, check_timeout_reached, TimeoutSampler
+from ocs_ci.utility.utils import (
+    run_cmd,
+    check_timeout_reached,
+    TimeoutSampler,
+    get_ocp_version,
+)
 from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
 
@@ -1693,6 +1698,42 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
             logger.error(
                 f"The pod {resource_name} does not have toleration {toleration_key}"
             )
+
+
+def run_osd_removal_job(osd_id):
+    ocp_version = float(get_ocp_version())
+    if ocp_version >= 4.6:
+        cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_id} -o yaml"
+    else:
+        cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_id} -o yaml"
+
+    logger.info(f"Executing OSD removal job on OSD-{osd_id}")
+    ocp_obj = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
+    osd_removal_job_yaml = ocp_obj.exec_oc_cmd(cmd)
+    osd_removal_job = OCS(**osd_removal_job_yaml)
+    osd_removal_job.create(do_reload=False)
+
+    return osd_removal_job
+
+
+def verify_osd_removal_job_completed_successfully(osd_id):
+    # Get ocs-osd-removal pod name
+    logger.info("Getting the ocs-osd-removal pod name")
+    osd_removal_pod_name = get_osd_removal_pod_name(osd_id)
+    osd_removal_pod_obj = get_pod_obj(
+        osd_removal_pod_name, namespace="openshift-storage"
+    )
+    osd_removal_pod_obj.ocp.wait_for_resource(
+        condition=constants.STATUS_COMPLETED, resource_name=osd_removal_pod_name
+    )
+
+    # Verify OSD removal from the ocs-osd-removal pod logs
+    logger.info(f"Verifying removal of OSD from {osd_removal_pod_name} pod logs")
+    logs = get_pod_logs(osd_removal_pod_name)
+    pattern = f"purged osd.{osd_id}"
+    assert re.search(pattern, logs)
+
+    return True
 
 
 def get_mon_deployments(osd_label=constants.OSD_APP_LABEL, namespace=None):
