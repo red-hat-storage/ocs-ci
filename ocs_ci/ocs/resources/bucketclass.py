@@ -90,7 +90,9 @@ def bucket_class_factory(
 
         if "namespace_policy_dict" in bucket_class_dict:
             if "namespacestore_dict" in bucket_class_dict["namespace_policy_dict"]:
-                nss_dict = bucket_class_dict["namespace_policy_dict"]["namespacestore_dict"]
+                nss_dict = bucket_class_dict["namespace_policy_dict"][
+                    "namespacestore_dict"
+                ]
                 nss_lst = namespace_store_factory(interface, nss_dict)
                 namespace_policy["read_resources"] = [nss.name for nss in nss_lst]
                 namespace_policy["write_resources"] = nss_lst[0].name
