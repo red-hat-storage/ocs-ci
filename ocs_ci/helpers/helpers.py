@@ -705,6 +705,37 @@ def verify_block_pool_exists(pool_name):
         return False
 
 
+def get_pool_cr(pool_name):
+    """
+    Get the pool CR even if the kind is unknown.
+
+    Args:
+         pool_name (str): The name of the pool to get the CR for.
+
+    Returns:
+        dict: If the resource is found, None otherwise.
+
+    """
+    logger.info(f"Checking if pool {pool_name} is kind of {constants.CEPHBLOCKPOOL}")
+    ocp_kind_cephblockpool = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOL, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    pool_cr = ocp_kind_cephblockpool.get(resource_name=pool_name, dont_raise=True)
+    if pool_cr is not None:
+        return pool_cr
+    else:
+        logger.info(
+            f"Pool {pool_name} is not kind={constants.CEPHBLOCKPOOL}"
+            f", checkging if it is kind={constants.CEPHFILESYSTEM}"
+        )
+        ocp_kind_cephfilesystem = ocp.OCP(
+            kind="CephFilesystem",
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        pool_cr = ocp_kind_cephfilesystem.get(resource_name=pool_name, dont_raise=True)
+        return pool_cr
+
+
 def get_admin_key():
     """
     Fetches admin key secret from Ceph
@@ -1651,6 +1682,8 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
         bool: True if volume is present and False if volume is not present
 
     """
+    cmd = ""
+    valid_error = []
     ct_pod = pod.get_ceph_tools_pod()
     if interface == constants.CEPHBLOCKPOOL:
         valid_error = [f"error opening image csi-vol-{image_uuid}"]
@@ -1728,6 +1761,91 @@ def verify_volume_deleted_in_backend(
         ct_pod.exec_ceph_cmd("ceph progress json", format=None)
         ct_pod.exec_ceph_cmd("ceph rbd task list")
         return False
+
+
+def delete_volume_in_backend(img_uuid, pool_name=None):
+    """
+    Delete an Image/Subvolume in the backend
+
+    Args:
+         img_uuid (str): Part of VolID which represents corresponding
+            image/subvolume in backend, eg:
+            ``oc get pv/<volumeName> -o jsonpath='{.spec.csi.volumeHandle}'``
+            Output is the CSI generated VolID and looks like:
+            ``0001-000c-rook-cluster-0000000000000001-f301898c-a192-11e9-852a-1eeeb6975c91``
+            where image_uuid is ``f301898c-a192-11e9-852a-1eeeb6975c91``
+         pool_name (str): The of the pool
+
+    Returns:
+         bool: True if image deleted successfully
+            False if:
+                Pool not found
+                image not found
+                image not deleted
+
+    """
+    cmd = ""
+    valid_error = []
+    pool_cr = get_pool_cr(pool_name)
+    if pool_cr is not None:
+        if pool_cr["kind"] == "CephFilesystem":
+            interface = "CephFileSystem"
+        else:
+            interface = pool_cr["kind"]
+        logger.info(f"pool {pool_cr} kind is {interface}")
+    else:
+        logger.info(
+            f"Pool {pool_name} has no kind of "
+            f"{constants.CEPHBLOCKPOOL} "
+            f"or {constants.CEPHFILESYSTEM}"
+        )
+        return False
+
+    # Checking if image is present before trying to delete
+    image_present_results = is_volume_present_in_backend(
+        interface=interface, image_uuid=img_uuid, pool_name=pool_name
+    )
+
+    # Incase image is present delete
+    if image_present_results:
+        if interface == constants.CEPHBLOCKPOOL:
+            logger.info(
+                f"Trying to delete image csi-vol-{img_uuid} from pool {pool_name}"
+            )
+            valid_error = ["No such file or directory"]
+            cmd = f"rbd rm -p {pool_name} csi-vol-{img_uuid}"
+
+        if interface == constants.CEPHFILESYSTEM:
+            logger.info(
+                f"Trying to delete image csi-vol-{img_uuid} from pool {pool_name}"
+            )
+            valid_error = [
+                f"Subvolume 'csi-vol-{img_uuid}' not found",
+                f"subvolume 'csi-vol-{img_uuid}' does not exist",
+            ]
+            cmd = f"ceph fs subvolume rm {get_cephfs_name()} csi-vol-{img_uuid} csi"
+
+        ct_pod = pod.get_ceph_tools_pod()
+        try:
+            ct_pod.exec_ceph_cmd(ceph_cmd=cmd, format=None)
+        except CommandFailed as ecf:
+            if any([error in str(ecf) for error in valid_error]):
+                logger.info(
+                    f"Error occurred while verifying volume is present in backend: "
+                    f"{str(ecf)} ImageUUID: {img_uuid}. Interface type: {interface}"
+                )
+                return False
+
+        verify_img_delete_result = is_volume_present_in_backend(
+            interface=interface, image_uuid=img_uuid, pool_name=pool_name
+        )
+        if not verify_img_delete_result:
+            logger.info(f"Image csi-vol-{img_uuid} deleted successfully")
+            return True
+        else:
+            logger.info(f"Image csi-vol-{img_uuid} not deleted successfully")
+            return False
+    return False
 
 
 def create_serviceaccount(namespace):
