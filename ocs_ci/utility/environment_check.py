@@ -112,6 +112,11 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
             if name == "openshift-must-gather-":
                 log.debug(f"ignoring item: {constants.NAMESPACE} with name {name}")
                 continue
+        if item.get("kind") == constants.NAMESPACE:
+            name = item.get("metadata").get("name")
+            if name.startswith(defaults.SRE_BUILD_TEST_NAMESPACE):
+                log.debug(f"ignoring item: {constants.NAMESPACE} with name {name}")
+                continue
         items_filtered.append(item)
 
     ignored = len(items) - len(items_filtered)
