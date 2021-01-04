@@ -16,9 +16,12 @@ class BucketClass:
 
     """
 
-    def __init__(self, name, backingstores, placement_policy, namespace_policy):
+    def __init__(
+        self, name, backingstores, namespacestores, placement_policy, namespace_policy
+    ):
         self.name = name
         self.backingstores = backingstores
+        self.namespacestores = namespacestores
         self.placement_policy = placement_policy
         self.namespace_policy = namespace_policy
 
@@ -86,6 +89,7 @@ def bucket_class_factory(
 
         namespace_policy = {}
         backingstores = None
+        namespacestores = None
         placement_policy = None
 
         if "namespace_policy_dict" in bucket_class_dict:
@@ -93,9 +97,14 @@ def bucket_class_factory(
                 nss_dict = bucket_class_dict["namespace_policy_dict"][
                     "namespacestore_dict"
                 ]
-                nss_lst = namespace_store_factory(interface, nss_dict)
-                namespace_policy["read_resources"] = [nss.name for nss in nss_lst]
-                namespace_policy["write_resources"] = nss_lst[0].name
+                namespacestores = namespace_store_factory(interface, nss_dict)
+                namespace_policy["type"] = bucket_class_dict["namespace_policy_dict"][
+                    "type"
+                ]
+                namespace_policy["read_resources"] = [
+                    nss.name for nss in namespacestores
+                ]
+                namespace_policy["write_resource"] = namespacestores[0].name
 
         elif "backingstore_dict" in bucket_class_dict:
             backingstores = [
@@ -124,7 +133,11 @@ def bucket_class_factory(
             namespace_policy=namespace_policy,
         )
         bucket_class_object = BucketClass(
-            bucket_class_name, backingstores, placement_policy, namespace_policy
+            bucket_class_name,
+            backingstores,
+            namespacestores,
+            placement_policy,
+            namespace_policy,
         )
         created_bucket_classes.append(bucket_class_object)
         return bucket_class_object

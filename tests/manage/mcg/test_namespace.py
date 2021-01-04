@@ -58,144 +58,95 @@ class TestNamespace(MCGTest):
     @skipif_ocs_version("<4.7")
     @tier1
     @pytest.mark.parametrize(
-        argnames=["platform", "interface", "namespace_policy_type"],
+        argnames=["bucketclass_dict"],
         argvalues=[
             pytest.param(
-                constants.AWS_PLATFORM,
-                "OC",
-                constants.NAMESPACE_POLICY_TYPE_SINGLE,
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, None)]},
+                    },
+                }
             ),
             pytest.param(
-                constants.AZURE_PLATFORM,
-                "OC",
-                constants.NAMESPACE_POLICY_TYPE_SINGLE,
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"azure": [(1, None)]},
+                    },
+                }
             ),
             pytest.param(
-                constants.AWS_PLATFORM,
-                "OC",
-                constants.NAMESPACE_POLICY_TYPE_MULTI,
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"rgw": [(1, None)]},
+                    },
+                }
             ),
             pytest.param(
-                constants.AZURE_PLATFORM,
-                "OC",
-                constants.NAMESPACE_POLICY_TYPE_MULTI,
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Multi",
+                        "namespacestore_dict": {
+                            "aws": [(1, "eu-central-1")],
+                            "azure": [(1, None)],
+                        },
+                    },
+                }
             ),
         ],
+        ids=["AWS-OC-Single", "Azure-OC-Single", "RGW-OC-Single", "AWS+Azure-OC-Multi"],
     )
-    def test_namespace_bucket_creation_crd(
-        self,
-        bucket_factory,
-        platform,
-        interface,
-        namespace_policy_type,
-    ):
+    def test_namespace_bucket_creation_crd(self, bucket_factory, bucketclass_dict):
         """
         Test namespace bucket creation using the MCG CRDs.
         """
 
         # Create the namespace bucket on top of the namespace resource
-        bucketclass_dict = {
-            "interface": interface,
-            "namespace_policy_dict": {
-                "type": namespace_policy_type,
-                "namespacestore_dict": {platform: [(1, None)]},
-            },
-        }
         bucket_factory(
             amount=1,
-            interface="OC",
+            interface=bucketclass_dict["interface"],
             bucketclass=bucketclass_dict,
         )
 
     @skipif_ocs_version("<4.7")
     @tier1
     @pytest.mark.parametrize(
-        argnames=["interface", "namespace_policy_type"],
+        argnames=["bucketclass_dict"],
         argvalues=[
             pytest.param(
-                "OC",
-                constants.NAMESPACE_POLICY_TYPE_SINGLE,
-            ),
-            pytest.param(
-                "OC",
-                constants.NAMESPACE_POLICY_TYPE_MULTI,
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                }
             ),
         ],
     )
-    def test_namespace_bucket_creation_with_rgw_crd(
-        self,
-        bucket_factory,
-        interface,
-        namespace_policy_type,
-    ):
-        """
-        Test namespace bucket creation using the MCG CRDs.
-
-        """
-
-        # Create the namespace bucket on top of the namespace store
-        bucketclass_dict = {
-            "interface": interface,
-            "namespace_policy_dict": {
-                "type": namespace_policy_type,
-                "namespacestore_dict": {constants.RGW_PLATFORM: [(1, None)]},
-            },
-        }
-        bucket_factory(
-            amount=1,
-            interface="OC",
-            bucketclass=bucketclass_dict,
-        )
-
-    @skipif_ocs_version("<4.7")
-    @tier1
-    @pytest.mark.parametrize(
-        argnames=["interface", "namespace_policy_type"],
-        argvalues=[
-            pytest.param(
-                "OC",
-                constants.NAMESPACE_POLICY_TYPE_SINGLE,
-            ),
-            pytest.param(
-                "OC",
-                constants.NAMESPACE_POLICY_TYPE_MULTI,
-            ),
-        ],
-    )
-    def test_write_to_aws_read_from_ns_crd(
+    def test_write_to_aws_read_from_nsb_crd(
         self,
         mcg_obj,
         cld_mgr,
         awscli_pod,
-        namespace_store_factory,
         bucket_factory,
-        interface,
-        namespace_policy_type,
+        bucketclass_dict,
     ):
         """
-        Test Write to AWS and read from ns bucket using MCG RPC.
+        Test writing to AWS and reading from an ns bucket
         """
-        # Create the namespace store and verify health
-        result = namespace_store_factory()
-        target_bucket_name = result[0]
-        nss_name = result[1]
 
-        # Create the namespace bucket on top of the namespace resource
-        bucketclass_dict = {
-            "interface": interface,
-            "namespace_policy_dict": {"type": namespace_policy_type},
-        }
-        if namespace_policy_type == constants.NAMESPACE_POLICY_TYPE_SINGLE:
-            bucketclass_dict["namespace_policy_dict"]["resource"] = nss_name
-        elif namespace_policy_type == constants.NAMESPACE_POLICY_TYPE_MULTI:
-            bucketclass_dict["namespace_policy_dict"]["read_resources"] = [nss_name]
-            bucketclass_dict["namespace_policy_dict"]["write_resource"] = nss_name
-
-        rand_ns_bucket = bucket_factory(
+        ns_bucket = bucket_factory(
             amount=1,
-            interface="OC",
+            interface=bucketclass_dict["interface"],
             bucketclass=bucketclass_dict,
-        )[0].name
+        )[0]
 
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
@@ -203,16 +154,18 @@ class TestNamespace(MCGTest):
             "endpoint": constants.MCG_NS_AWS_ENDPOINT,
             "region": self.DEFAULT_REGION,
         }
+        aws_target_bucket = ns_bucket.bucketclass.namespacestores[0].uls_name
+
         # Upload files directly to AWS
         self.write_files_to_pod_and_upload(
             mcg_obj,
             awscli_pod,
-            bucket_to_write=target_bucket_name,
+            bucket_to_write=aws_target_bucket,
             amount=3,
             s3_creds=s3_creds,
         )
         # Read files from ns bucket
-        self.download_files(mcg_obj, awscli_pod, bucket_to_read=rand_ns_bucket)
+        self.download_files(mcg_obj, awscli_pod, bucket_to_read=ns_bucket.name)
 
         # Compare between uploaded files and downloaded files
         assert self.compare_dirs(awscli_pod, amount=3)
@@ -220,15 +173,16 @@ class TestNamespace(MCGTest):
     @skipif_ocs_version("<4.7")
     @tier1
     @pytest.mark.parametrize(
-        argnames=["interface", "namespace_policy_type"],
+        argnames=["bucketclass_dict"],
         argvalues=[
             pytest.param(
-                "OC",
-                constants.NAMESPACE_POLICY_TYPE_SINGLE,
-            ),
-            pytest.param(
-                "OC",
-                constants.NAMESPACE_POLICY_TYPE_MULTI,
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                }
             ),
         ],
     )
@@ -237,36 +191,18 @@ class TestNamespace(MCGTest):
         mcg_obj,
         cld_mgr,
         awscli_pod,
-        namespace_store_factory,
         bucket_factory,
-        interface,
-        namespace_policy_type,
+        bucketclass_dict,
     ):
         """
         Test Write to ns bucket using MCG RPC and read directly from AWS.
         """
 
-        # Create the namespace resource and verify health
-        result = namespace_store_factory()
-        target_bucket_name = result[0]
-        nss_name = result[1]
-
-        # Create the namespace bucket on top of the namespace resource
-        bucketclass_dict = {
-            "interface": interface,
-            "namespace_policy_dict": {"type": namespace_policy_type},
-        }
-        if namespace_policy_type == constants.NAMESPACE_POLICY_TYPE_SINGLE:
-            bucketclass_dict["namespace_policy_dict"]["resource"] = nss_name
-        elif namespace_policy_type == constants.NAMESPACE_POLICY_TYPE_MULTI:
-            bucketclass_dict["namespace_policy_dict"]["read_resources"] = [nss_name]
-            bucketclass_dict["namespace_policy_dict"]["write_resource"] = nss_name
-
-        rand_ns_bucket = bucket_factory(
+        ns_bucket = bucket_factory(
             amount=1,
-            interface="OC",
+            interface=bucketclass_dict["interface"],
             bucketclass=bucketclass_dict,
-        )[0].name
+        )[0]
 
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
@@ -274,13 +210,15 @@ class TestNamespace(MCGTest):
             "endpoint": constants.MCG_NS_AWS_ENDPOINT,
             "region": self.DEFAULT_REGION,
         }
+        aws_target_bucket = ns_bucket.bucketclass.namespacestores[0].uls_name
+
         # Upload files to NS bucket
         self.write_files_to_pod_and_upload(
-            mcg_obj, awscli_pod, bucket_to_write=rand_ns_bucket, amount=3
+            mcg_obj, awscli_pod, bucket_to_write=ns_bucket, amount=3
         )
         # Read files directly from AWS
         self.download_files(
-            mcg_obj, awscli_pod, bucket_to_read=target_bucket_name, s3_creds=s3_creds
+            mcg_obj, awscli_pod, bucket_to_read=aws_target_bucket, s3_creds=s3_creds
         )
 
         # Compare between uploaded files and downloaded files

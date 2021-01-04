@@ -2,7 +2,6 @@ import logging
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.ocs.exceptions import UnsupportedPlatformError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -98,7 +97,7 @@ def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     endpointMap = {
         constants.AWS_PLATFORM: constants.MCG_NS_AWS_ENDPOINT,
         constants.AZURE_PLATFORM: constants.MCG_NS_AZURE_ENDPOINT,
-        constants.MCG_NS_AZURE_ENDPOINT: RGW().get_credentials()[0],
+        constants.RGW_PLATFORM: RGW().get_credentials()[0],
     }
 
     def _create_nss(method, nss_dict):
@@ -108,7 +107,7 @@ def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                 # Create the actual namespace resource
                 nss_name = create_unique_resource_name(constants.MCG_NSS, platform)
 
-                target_bucket_name = cmdMap[method](
+                target_bucket_name = cmdMap[method.lower()](
                     nss_name, nss_tup[1], cld_mgr, cloud_uls_factory, platform
                 )
 
@@ -130,6 +129,7 @@ def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                     name=nss_name,
                     method="oc",
                     mcg_obj=mcg_obj,
+                    uls_name=target_bucket_name,
                 )
 
                 created_nss.append(nss_obj)

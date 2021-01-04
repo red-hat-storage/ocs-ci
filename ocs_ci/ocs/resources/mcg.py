@@ -733,25 +733,29 @@ class MCG:
             ]
             tiers["placement"] = placement
 
+        # In cases of Single and Cache namespace policies, we use the
+        # write_resource key to populate the relevant YAML field.
+        # The right field name is still used.
         if namespace_policy:
             bc_data["spec"]["namespacePolicy"] = {}
-            ns_policy = bc_data["spec"]["namespacePolicy"]
-            ns_policy_type = namespace_policy.get("type")
-            ns_policy["type"] = ns_policy_type
+            ns_policy_type = namespace_policy["type"]
+            bc_data["spec"]["namespacePolicy"]["type"] = ns_policy_type
 
             if ns_policy_type == constants.NAMESPACE_POLICY_TYPE_SINGLE:
-                ns_policy["single"] = {"resource": namespace_policy.get("resource")}
+                bc_data["spec"]["namespacePolicy"]["single"] = {
+                    "resource": namespace_policy["write_resource"]
+                }
 
             elif ns_policy_type == constants.NAMESPACE_POLICY_TYPE_MULTI:
-                ns_policy["multi"] = {
-                    "writeResource": namespace_policy.get("write_resource"),
-                    "readResources": namespace_policy.get("read_resources"),
+                bc_data["spec"]["namespacePolicy"]["multi"] = {
+                    "writeResource": namespace_policy["write_resource"],
+                    "readResources": namespace_policy["read_resources"],
                 }
 
             elif ns_policy_type == constants.NAMESPACE_POLICY_TYPE_CACHE:
-                ns_policy["cache"] = {
-                    "hubResource": namespace_policy.get("hub_resource"),
-                    "ttl": namespace_policy.get("ttl"),
+                bc_data["spec"]["namespacePolicy"]["cache"] = {
+                    "hubResource": namespace_policy["write_resource"],
+                    "ttl": namespace_policy["ttl"],
                 }
 
         return create_resource(**bc_data)
