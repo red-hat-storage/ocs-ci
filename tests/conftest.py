@@ -365,6 +365,7 @@ def storageclass_factory_fixture(
         replica=3,
         compression=None,
         new_rbd_pool=False,
+        pool_name=None,
     ):
         """
         Args:
@@ -379,6 +380,8 @@ def storageclass_factory_fixture(
             replica (int): Replica size for a pool
             compression (str): Compression type option for a pool
             new_rbd_pool (bool): True if user wants to create new rbd pool for SC
+            pool_name (str): Existing pool name to create the storageclass other
+                then the default rbd pool.
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -397,7 +400,10 @@ def storageclass_factory_fixture(
                     )
                     interface_name = pool_obj.name
                 else:
-                    interface_name = helpers.default_ceph_block_pool()
+                    if pool_name is None:
+                        interface_name = helpers.default_ceph_block_pool()
+                    else:
+                        interface_name = pool_name
             elif interface == constants.CEPHFILESYSTEM:
                 interface_name = helpers.get_cephfs_data_pool_name()
 
