@@ -4,10 +4,11 @@ import pytest
 import random
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier4a
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
     tier4,
+    tier4a,
+    acceptance,
     ManageTest,
     ignore_leftovers,
     aws_platform_required,
@@ -159,6 +160,7 @@ class TestNodeReplacementWithIO(ManageTest):
 
 @tier4
 @tier4a
+@acceptance
 @ignore_leftovers
 class TestNodeReplacement(ManageTest):
     """
