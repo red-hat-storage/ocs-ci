@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     tier3,
     tier4,
     tier4a,
+    acceptance,
 )
 from ocs_ci.ocs.bucket_utils import sync_object_directory, verify_s3_object_integrity
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
@@ -40,6 +41,7 @@ class TestNamespace(MCGTest):
         ns_resource_factory()
 
     @tier1
+    @acceptance
     @pytest.mark.parametrize(
         argnames=["platform"],
         argvalues=[
