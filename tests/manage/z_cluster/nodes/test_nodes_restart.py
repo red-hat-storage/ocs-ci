@@ -59,7 +59,9 @@ class TestNodesRestart(ManageTest):
             ),
         ],
     )
-    def test_nodes_restart(self, nodes, pvc_factory, pod_factory, force):
+    def test_nodes_restart(
+        self, nodes, pvc_factory, pod_factory, force, bucket_factory, rgw_bucket_factory
+    ):
         """
         Test nodes restart (from the platform layer, i.e, EC2 instances, VMWare VMs)
 
@@ -67,11 +69,15 @@ class TestNodesRestart(ManageTest):
         ocp_nodes = get_node_objs()
         nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, force=force)
         self.sanity_helpers.health_check()
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
 
     @bugzilla("1754287")
     @pytest.mark.polarion_id("OCS-2015")
-    def test_rolling_nodes_restart(self, nodes, pvc_factory, pod_factory):
+    def test_rolling_nodes_restart(
+        self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+    ):
         """
         Test restart nodes one after the other and check health status in between
 
@@ -80,7 +86,9 @@ class TestNodesRestart(ManageTest):
         for node in ocp_nodes:
             nodes.restart_nodes(nodes=[node], wait=False)
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
 
     @pytest.mark.parametrize(
         argnames=["interface", "operation"],
@@ -102,7 +110,14 @@ class TestNodesRestart(ManageTest):
         ],
     )
     def test_pv_provisioning_under_degraded_state_stop_provisioner_pod_node(
-        self, nodes, pvc_factory, pod_factory, interface, operation
+        self,
+        nodes,
+        pvc_factory,
+        pod_factory,
+        interface,
+        operation,
+        bucket_factory,
+        rgw_bucket_factory,
     ):
         """
         Test PV provisioning under degraded state -
@@ -147,7 +162,9 @@ class TestNodesRestart(ManageTest):
         """
         if operation == "delete_resources":
             # Create resources that their deletion will be tested later
-            self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+            self.sanity_helpers.create_resources(
+                pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+            )
 
         provisioner_pods = None
         # Get the provisioner pod according to the interface
@@ -211,7 +228,9 @@ class TestNodesRestart(ManageTest):
         logger.info(f"{interface} provisioner pod has reached status Running")
         if operation == "create_resources":
             # Cluster validation (resources creation and IO running)
-            self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+            self.sanity_helpers.create_resources(
+                pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+            )
         elif operation == "delete_resources":
             # Cluster validation (resources creation and IO running)
             self.sanity_helpers.delete_resources()
@@ -234,7 +253,13 @@ class TestNodesRestart(ManageTest):
         ],
     )
     def test_pv_provisioning_under_degraded_state_stop_rook_operator_pod_node(
-        self, nodes, pvc_factory, pod_factory, operation
+        self,
+        nodes,
+        pvc_factory,
+        pod_factory,
+        operation,
+        bucket_factory,
+        rgw_bucket_factory,
     ):
         """
         Test PV provisioning under degraded state -
@@ -258,7 +283,9 @@ class TestNodesRestart(ManageTest):
         """
         if operation == "delete_resources":
             # Create resources that their deletion will be tested later
-            self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+            self.sanity_helpers.create_resources(
+                pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+            )
 
         rook_operator_pods = pod.get_operator_pods()
         rook_operator_pod = rook_operator_pods[0]
@@ -308,7 +335,9 @@ class TestNodesRestart(ManageTest):
         if operation == "create_resources":
             # Cluster validation (resources creation and IO running)
 
-            self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+            self.sanity_helpers.create_resources(
+                pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+            )
         elif operation == "delete_resources":
             # Cluster validation (resources creation and IO running)
             self.sanity_helpers.delete_resources()

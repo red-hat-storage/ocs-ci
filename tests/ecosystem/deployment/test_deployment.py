@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 @deployment
 @polarion_id(get_polarion_id())
-def test_deployment(pvc_factory, pod_factory):
+def test_deployment(pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory):
     deploy = config.RUN["cli_params"].get("deploy")
     teardown = config.RUN["cli_params"].get("teardown")
     if not teardown or deploy:
@@ -30,7 +30,9 @@ def test_deployment(pvc_factory, pod_factory):
             else:
                 sanity_helpers = Sanity()
             sanity_helpers.health_check()
-            sanity_helpers.create_resources(pvc_factory, pod_factory)
+            sanity_helpers.create_resources(
+                pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+            )
             sanity_helpers.delete_resources()
 
     if teardown:
