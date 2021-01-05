@@ -3,7 +3,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.machine import get_labeled_nodes
-from ocs_ci.ocs.node import label_nodes, taint_nodes
+from ocs_ci.ocs.node import label_nodes, taint_nodes, get_all_nodes, get_node_objs
 from ocs_ci.ocs.ocp import switch_to_project
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass, get_all_pvcs
@@ -208,7 +208,6 @@ def uninstall_ocs():
     log.info("Deleting storageCluster object")
     storage_cluster.delete(resource_name=constants.DEFAULT_CLUSTERNAME)
 
-    storage_node_list = get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
     if cleanup_policy == "delete":
         log.info("Cleanup policy set to delete. checking cleanup pods")
         cleanup_pods = [
@@ -219,13 +218,7 @@ def uninstall_ocs():
                 log.info(f"waiting for cleanup pod {pod.name} to complete")
                 TimeoutSampler(timeout=10, sleep=30)
             log.info(f"Cleanup pod {pod.name} completed successfully ")
-
-        # confirm var/lib/rook is deleted
-        log.info("Confirming OCS artifacts were deleted from nodes")
-        for node in storage_node_list:
-            assert not ocp_obj.exec_oc_debug_cmd(
-                node=node, cmd_list=["ls -l var/lib/rook"]
-            ), "OCS artificats were not deleted from nodes "
+        # no need to confirm var/vib/rook was deleted from nodes if all cleanup pods are completed.
     else:
         log.info("Cleanup policy set to retain. skipping nodes cleanup")
 
@@ -241,19 +234,24 @@ def uninstall_ocs():
 
     if lso_sc is not None:
         log.info("Removing LSO")
-        uninstall_lso(lso_sc)
+        try:
+            uninstall_lso(lso_sc)
+        except Exception as e:
+            log.info(f"LSO removal failed.{e}")
 
     log.info("deleting noobaa storage class")
     noobaa_sc = ocp.OCP(kind=constants.STORAGECLASS)
     noobaa_sc.delete(resource_name=constants.NOOBAA_SC)
 
+    nodes = get_all_nodes()
+    node_objs = get_node_objs(nodes)
+
     log.info("Unlabeling storage nodes")
-    node_objs = ocp.OCP(kind=constants.NODE).get().get("items")
     label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL[:-3] + "-")
     label_nodes(nodes=node_objs, label=constants.TOPOLOGY_ROOK_LABEL + "-")
 
-    log.info("Removing taints from storage nodes")  # TODO not working
-    taint_nodes(nodes=node_objs, taint_label=constants.OCS_TAINT + "-")
+    log.info("Removing taints from storage nodes")
+    taint_nodes(nodes=nodes, taint_label=constants.OCS_TAINT + "-")
 
     log.info("Deleting remaining OCS PVs (if there are any)")
     try:

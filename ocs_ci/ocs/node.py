@@ -1119,7 +1119,11 @@ def taint_nodes(nodes, taint_label=constants.OCS_TAINT):
             Default value is the OCS taint
 
     """
+    ocp_obj = ocp.OCP()
     for node in nodes:
-        command = f"adm taint node {node.name} {taint_label}"
-        node.exec_oc_cmd(command)
-        logging.info(f"Successfully tainted {node.name} with OCS storage taint")
+        command = f"adm taint node {node} {taint_label}"
+        try:
+            ocp_obj.exec_oc_cmd(command)
+            logging.info(f"Successfully tainted {node} with OCS storage taint")
+        except Exception as e:
+            logging.info(f"{node} was not tainted - {e}")
