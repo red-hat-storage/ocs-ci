@@ -275,7 +275,6 @@ def uninstall_ocs():
         "cephobjectstoreusers.ceph.rook.io",
         "noobaas.noobaa.io",
         "ocsinitializations.ocs.openshift.io",
-        "storageclusterinitializations.ocs.openshift.io",
         "storageclusters.ocs.openshift.io",
         "cephclients.ceph.rook.io",
         "cephobjectrealms.ceph.rook.io",
