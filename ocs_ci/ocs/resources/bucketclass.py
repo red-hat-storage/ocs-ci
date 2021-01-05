@@ -63,15 +63,21 @@ def bucket_class_factory(
 
         Args:
             bucket_class_dict (dict): Dictionary containing the description of the bucket class.
-                possible keys and values are:
+                Possible keys and values are:
                 - interface (str): The interface to use for creation of buckets.
                     OC | CLI
-                - backingstore_dict (dict): A dictionary compatible with the backing store factory
-                                            requirements.
+
                 - placement_policy (str): The Placement policy for this bucket class.
                     Spread | Mirror
-                - namespace_policy_dict (dict):  A dictionary that describes the namespace policy.
-                if no key is provided default values will apply.
+
+                - backingstore_dict (dict): A dictionary compatible with the backing store factory
+                                            requirements. (Described in backingstore.py, under _create_backingstore)
+
+                - namespace_policy_dict (dict):  A dictionary compatible with the namespace store factory.
+                Needs to contain the following keys and values:
+                    - type (str): Single | Multi | Cache
+                    - namespacestore_dict (dict): Identical format to backingstore_dict, contains
+                      data that's forwarded to cloud_uls_factory.
 
         Returns:
             BucketClass: A Bucket Class object.
