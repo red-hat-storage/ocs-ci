@@ -280,9 +280,10 @@ def image_push(image_url, namespace):
         registry_path (str): Uploaded image path
 
     """
-    image_path = f"image-registry.openshift-image-registry.svc:5000/{namespace}/image"
+    image = image_url.split("/")[-1]
+    image_path = f"image-registry.openshift-image-registry.svc:5000/{namespace}/{image}"
     tag_cmd = f"podman tag {image_url} {image_path}"
-    push_cmd = f"podman push image-registry.openshift-image-registry.svc:5000/{namespace}/image"
+    push_cmd = f"podman push {image_path}"
     cmd_list = get_oc_podman_login_cmd()
     cmd_list.append(tag_cmd)
     cmd_list.append(push_cmd)
