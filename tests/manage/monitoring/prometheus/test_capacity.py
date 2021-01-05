@@ -135,6 +135,112 @@ def test_cephfs_capacity_workload_alerts(workload_storageutilization_95p_cephfs)
         )
 
 
+@tier2
+@gather_metrics_on_fail(
+    "ceph_cluster_total_used_bytes", "cluster:memory_usage_bytes:sum"
+)
+def test_rbd_osd_workload_alerts(workload_storageutilization_95p_rbd):
+    """
+    Test that there are appropriate alerts related to OSD utilization when
+    ceph cluster is utilized via RBD interface.
+
+    """
+    api = prometheus.PrometheusAPI()
+    measure_end_time = workload_storageutilization_95p_rbd.get("stop")
+
+    # Check utilization on 95%
+    alerts = workload_storageutilization_95p_rbd.get("prometheus_alerts")
+
+    nearfull_message = (
+        "Back-end storage device is nearing full."
+    )
+    criticallfull_mesage = (
+        "Back-end storage device is critically full."
+    )
+
+    for target_label, target_msg, target_states, target_severity in [
+        (
+            constants.ALERT_OSDNEARFULL,
+            nearfull_message,
+            ["pending", "firing"],
+            "warning",
+        ),
+        (
+            constants.ALERT_OSDCRITICALLYFULL,
+            criticallfull_mesage,
+            ["pending", "firing"],
+            "error",
+        ),
+    ]:
+        prometheus.check_alert_list(
+            label=target_label,
+            msg=target_msg,
+            alerts=alerts,
+            states=target_states,
+            severity=target_severity,
+            ignore_more_occurences=True,
+        )
+        # the time to wait is increased because it takes more time for Ceph
+        # cluster to delete all data
+        pg_wait = 300
+        api.check_alert_cleared(
+            label=target_label, measure_end_time=measure_end_time, time_min=pg_wait
+        )
+
+
+@tier2
+@gather_metrics_on_fail(
+    "ceph_cluster_total_used_bytes", "cluster:memory_usage_bytes:sum"
+)
+def test_cephfs_osd_workload_alerts(workload_storageutilization_95p_cephfs):
+    """
+    Test that there are appropriate alerts related to OSD utilization when
+    ceph cluster is utilized.
+
+    """
+    api = prometheus.PrometheusAPI()
+    measure_end_time = workload_storageutilization_95p_cephfs.get("stop")
+
+    # Check utilization on 95%
+    alerts = workload_storageutilization_95p_cephfs.get("prometheus_alerts")
+
+    nearfull_message = (
+        "Back-end storage device is nearing full."
+    )
+    criticallfull_mesage = (
+        "Back-end storage device is critically full."
+    )
+
+    for target_label, target_msg, target_states, target_severity in [
+        (
+            constants.ALERT_OSDNEARFULL,
+            nearfull_message,
+            ["pending", "firing"],
+            "warning",
+        ),
+        (
+            constants.ALERT_OSDCRITICALLYFULL,
+            criticallfull_mesage,
+            ["pending", "firing"],
+            "error",
+        ),
+    ]:
+        prometheus.check_alert_list(
+            label=target_label,
+            msg=target_msg,
+            alerts=alerts,
+            states=target_states,
+            severity=target_severity,
+            ignore_more_occurences=True,
+        )
+        # the time to wait is increased because it takes more time for Ceph
+        # cluster to delete all data
+        pg_wait = 300
+        api.check_alert_cleared(
+            label=target_label, measure_end_time=measure_end_time, time_min=pg_wait
+        )
+
+
 def teardown_module():
     ocs_obj = OCP()
     ocs_obj.login_as_sa()
