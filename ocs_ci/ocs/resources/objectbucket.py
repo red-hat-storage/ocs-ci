@@ -1,6 +1,7 @@
 import base64
 import logging
 from abc import ABC, abstractmethod
+import json
 
 import boto3
 from ocs_ci.helpers.helpers import (
@@ -11,7 +12,7 @@ from ocs_ci.helpers.helpers import (
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError, UnhealthyBucket
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.utils import oc_get_all_obc_names
@@ -205,9 +206,6 @@ class ObjectBucket(ABC):
             timeout (int): Timeout for the check, in seconds
             interval (int): Interval to wait between checks, in seconds
 
-        Returns:
-            (bool): True if the bucket is healthy, False otherwise
-
         """
         logger.info(f"Waiting for {self.name} to be healthy")
         try:
@@ -216,16 +214,21 @@ class ObjectBucket(ABC):
             ):
                 if health_check:
                     logger.info(f"{self.name} is healthy")
-                    return True
+                    break
                 else:
                     logger.info(f"{self.name} is unhealthy. Rechecking.")
         except TimeoutExpiredError:
             logger.error(
                 f"{self.name} did not reach a healthy state within {timeout} seconds."
             )
-            assert (
-                False
-            ), f"{self.name} did not reach a healthy state within {timeout} seconds."
+            obc_obj = OCP(kind="obc", namespace=self.namespace, resource_name=self.name)
+            obc_yaml = obc_obj.get()
+            obc_description = obc_obj.describe(resource_name=self.name)
+            raise UnhealthyBucket(
+                f"{self.name} did not reach a healthy state within {timeout} seconds.\n"
+                f"OBC YAML:\n{json.dumps(obc_yaml, indent=2)}\n\n"
+                f"OBC description:\n{obc_description}"
+            )
 
     """
     The following methods are abstract, internal methods.
@@ -409,7 +412,7 @@ class MCGOCBucket(OCBucket):
             self.name = create_unique_resource_name("oc", "obc")
         obc_data["metadata"]["name"] = self.name
         obc_data["spec"]["bucketName"] = self.name
-        obc_data["spec"]["storageClassName"] = self.namespace + ".noobaa.io"
+        obc_data["spec"]["storageClassName"] = f"{self.namespace}.noobaa.io"
         obc_data["metadata"]["namespace"] = self.namespace
         if self.bucketclass:
             obc_data.setdefault("spec", {}).setdefault(

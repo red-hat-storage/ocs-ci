@@ -22,6 +22,7 @@ from ocs_ci.ocs.bucket_utils import (
     retrieve_anon_s3_resource,
     craft_s3_command,
 )
+from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ def pod_io(pods):
             p.submit(pod.run_io, "fs", "1G")
 
 
+@skipif_openshift_dedicated
 class TestBucketIO(MCGTest):
     """
     Test IO of a bucket

@@ -69,6 +69,7 @@ CLEANUP_YAML = "cleanup.yaml.j2"
 
 
 # Statuses
+STATUS_READY = "Ready"
 STATUS_PENDING = "Pending"
 STATUS_CONTAINER_CREATING = "ContainerCreating"
 STATUS_AVAILABLE = "Available"
@@ -177,6 +178,8 @@ DEFAULT_NAMESPACE = "default"
 IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
 IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
 DEFAULT_NOOBAA_BACKINGSTORE = "noobaa-default-backing-store"
+DEFAULT_NOOBAA_BUCKETCLASS = "noobaa-default-bucket-class"
+NOOBAA_RESOURCE_NAME = "noobaa"
 MIN_PV_BACKINGSTORE_SIZE_IN_GB = 17
 RIPSAW_NAMESPACE = "my-ripsaw"
 JENKINS_BUILD = "jax-rs-build"
@@ -747,7 +750,10 @@ RBD_PROVISIONER_SECRET = "rook-csi-rbd-provisioner"
 RBD_NODE_SECRET = "rook-csi-rbd-node"
 CEPHFS_PROVISIONER_SECRET = "rook-csi-cephfs-provisioner"
 CEPHFS_NODE_SECRET = "rook-csi-cephfs-node"
-NOOBAA_OBJECTSTOREUSER_SECRET = "rook-ceph-object-user-ocs-storagecluster-cephobjectstore-noobaa-ceph-objectstore-user"
+# OSU = ObjectStoreUser, shortened for compliance with flake8+black because of line length issues
+NB_OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore-noobaa-ceph-objectstore-user"
+NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("")
+EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("external-")
 OCS_SECRET = "ocs-secret"
 
 # JSON Schema

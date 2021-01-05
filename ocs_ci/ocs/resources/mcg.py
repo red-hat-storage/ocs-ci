@@ -11,6 +11,12 @@ from botocore.client import ClientError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
+from ocs_ci.ocs.constants import (
+    DEFAULT_NOOBAA_BACKINGSTORE,
+    DEFAULT_NOOBAA_BUCKETCLASS,
+    STATUS_READY,
+    NOOBAA_RESOURCE_NAME,
+)
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     CredReqSecretNotFound,
@@ -970,21 +976,25 @@ class MCG:
     @property
     def status(self):
         """
-        Verify noobaa status output is clean without any errors
+        Verify the status of NooBaa, and its default backing store and bucket class
 
         Returns:
-            bool: return False if any of the non optional components of noobaa is not available
+            bool: return False if any of the above components of noobaa is not in READY state
 
         """
         # Get noobaa status
-        status = self.exec_mcg_cmd("status").stderr
-        for line in status.split("\n"):
-            if (
-                any(i in line for i in ["Not Found", "Waiting for phase ready ..."])
-                and "Optional" not in line
-            ):
-                logger.error(f"Error in noobaa status output- {line}")
-                # Workaround for https://github.com/red-hat-storage/ocs-ci/issues/3570
-                return True
-        logger.info("Verified: noobaa status does not contain any error.")
-        return True
+        get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get(
+            resource_name=NOOBAA_RESOURCE_NAME
+        )
+        get_default_bs = OCP(kind="backingstore", namespace=self.namespace).get(
+            resource_name=DEFAULT_NOOBAA_BACKINGSTORE
+        )
+        get_default_bc = OCP(kind="bucketclass", namespace=self.namespace).get(
+            resource_name=DEFAULT_NOOBAA_BUCKETCLASS
+        )
+        return (
+            get_noobaa["status"]["phase"]
+            == get_default_bs["status"]["phase"]
+            == get_default_bc["status"]["phase"]
+            == STATUS_READY
+        )

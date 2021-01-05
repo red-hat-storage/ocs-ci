@@ -143,10 +143,12 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
         log.info("Created new PVCs from all the snapshots")
 
         # Confirm that the restored PVCs are Bound
+        # Increased wait time to 600 seconds as a workaround for BZ 1899968
+        # TODO: Revert wait time to 200 seconds once BZ 1899968 is fixed
         log.info("Verify the restored PVCs are Bound")
         for pvc_obj in restore_pvc_objs:
             wait_for_resource_state(
-                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=200
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=600
             )
             pvc_obj.reload()
         log.info("Verified: Restored PVCs are Bound.")

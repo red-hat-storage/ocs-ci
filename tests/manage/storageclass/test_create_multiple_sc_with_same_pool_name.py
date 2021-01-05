@@ -30,6 +30,7 @@ def resources(request):
         Delete the resources created during the test
         """
         failed_to_delete = []
+        pvs = [pvc.backed_pv_obj for pvc in pvcs]
         for resource_type in pods, pvcs, storageclasses:
             for resource in resource_type:
                 resource.delete()
@@ -37,6 +38,8 @@ def resources(request):
                     resource.ocp.wait_for_delete(resource.name)
                 except TimeoutError:
                     failed_to_delete.append(resource)
+            if resource.kind == constants.PVC:
+                helpers.wait_for_pv_delete(pvs)
 
         if failed_to_delete:
             raise ResourceLeftoversException(

@@ -370,6 +370,7 @@ def storageclass_factory_fixture(
         replica=3,
         compression=None,
         new_rbd_pool=False,
+        pool_name=None,
     ):
         """
         Args:
@@ -384,6 +385,8 @@ def storageclass_factory_fixture(
             replica (int): Replica size for a pool
             compression (str): Compression type option for a pool
             new_rbd_pool (bool): True if user wants to create new rbd pool for SC
+            pool_name (str): Existing pool name to create the storageclass other
+                then the default rbd pool.
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -402,7 +405,10 @@ def storageclass_factory_fixture(
                     )
                     interface_name = pool_obj.name
                 else:
-                    interface_name = helpers.default_ceph_block_pool()
+                    if pool_name is None:
+                        interface_name = helpers.default_ceph_block_pool()
+                    else:
+                        interface_name = pool_name
             elif interface == constants.CEPHFILESYSTEM:
                 interface_name = helpers.get_cephfs_data_pool_name()
 
@@ -1997,9 +2003,8 @@ def bucket_factory_fixture(
             )
             created_buckets.append(created_bucket)
             if verify_health:
-                assert (
-                    created_bucket.verify_health()
-                ), f"{bucket_name} did not reach a healthy state in time."
+                created_bucket.verify_health()
+
         return created_buckets
 
     def bucket_cleanup():
@@ -2009,7 +2014,7 @@ def bucket_factory_fixture(
                 bucket.delete()
             except ClientError as e:
                 if e.response["Error"]["Code"] == "NoSuchBucket":
-                    log.warn(f"{bucket.name} could not be found in cleanup")
+                    log.warning(f"{bucket.name} could not be found in cleanup")
                 else:
                     raise
 
@@ -3286,18 +3291,25 @@ def nb_ensure_endpoint_count(request):
             should_wait = True
 
     if should_wait:
-        # loggin the ready endpoint count for 5 min in 30sec internvals
-        for i in range(10):
-            ready_count = get_ready_noobaa_endpoint_count(namespace)
-            log.info(
-                f"Elapsed time {i * 30} sec: Waiting for noobaa endpoints to stabilize. "
-                f"Current ready count: {ready_count}"
+        # Wait for the NooBaa endpoint pods to stabilize
+        try:
+            for ready_nb_ep_count in TimeoutSampler(
+                300, 30, get_ready_noobaa_endpoint_count, namespace
+            ):
+                if min_ep_count <= ready_nb_ep_count <= max_ep_count:
+                    log.info(
+                        f"NooBaa endpoints stabilized. Ready endpoints: {ready_nb_ep_count}"
+                    )
+                    break
+                log.info(
+                    f"Waiting for the NooBaa endpoints to stabilize. "
+                    f"Current ready count: {ready_nb_ep_count}"
+                )
+        except TimeoutExpiredError:
+            raise TimeoutExpiredError(
+                "NooBaa endpoints did not stabilize in time.\n"
+                f"Min count: {min_ep_count}, max count: {max_ep_count}, ready count: {ready_nb_ep_count}"
             )
-            time.sleep(30)
-
-    # Assert that we have the desired number of endpoints
-    ready_count = get_ready_noobaa_endpoint_count(namespace)
-    assert min_ep_count <= ready_count <= max_ep_count
 
 
 @pytest.fixture()

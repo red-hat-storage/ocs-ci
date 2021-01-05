@@ -3,7 +3,6 @@ import pytest
 import logging
 from py.xml import html
 from ocs_ci.utility.utils import email_reports
-from pytest_reportportal import RPLogHandler
 from ocs_ci.framework import config as ocsci_config
 
 
@@ -43,6 +42,8 @@ def pytest_runtest_makereport(item, call):
     """
     Add extra column( Log File) and link the log file location
     """
+    from pytest_reportportal import RPLogHandler
+
     pytest_html = item.config.pluginmanager.getplugin("html")
     outcome = yield
     report = outcome.get_result()

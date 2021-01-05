@@ -229,9 +229,29 @@ class PoolNotFound(Exception):
     pass
 
 
+class PoolDataNotErased(Exception):
+    pass
+
+
+class PvcNotDeleted(Exception):
+    pass
+
+
 class MemoryNotSufficientException(Exception):
     pass
 
 
 class CPUNotSufficientException(Exception):
+    pass
+
+
+class PoolNotCompressedAsExpected(Exception):
+    pass
+
+
+class PoolNotReplicatedAsNeeded(Exception):
+    pass
+
+
+class UnhealthyBucket(Exception):
     pass

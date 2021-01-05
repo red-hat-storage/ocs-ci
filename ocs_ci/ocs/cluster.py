@@ -954,6 +954,54 @@ def validate_replica_data(pool_name, replica):
     raise PoolNotFound(f"Pool {pool_name} not found on cluster")
 
 
+def get_byte_used_by_pool(pool_name):
+    """
+    Check byte_used value for specific pool
+
+    Args:
+        pool_name (str): name of the pool to check replica
+
+    Returns:
+        integer: The amount of byte stored from pool.
+
+    """
+    ceph_df_detail_output = get_ceph_df_detail()
+    pool_list = ceph_df_detail_output.get("pools")
+    for pool in pool_list:
+        if pool.get("name") == pool_name:
+            byte_used = pool["stats"]["bytes_used"]
+            return byte_used
+    raise PoolNotFound(f"Pool {pool_name} not found on cluster")
+
+
+def calculate_compression_ratio(pool_name):
+    """
+    Calculating the compression of data on RBD pool
+
+    Args:
+        pool_name (str): the name of the pool to calculate the ratio on
+
+    Returns:
+        int: the compression ratio in percentage
+
+    """
+    results = get_ceph_df_detail()
+    for pool in results["pools"]:
+        if pool["name"] == pool_name:
+            used = pool["stats"]["bytes_used"]
+            used_cmp = pool["stats"]["compress_bytes_used"]
+            stored = pool["stats"]["stored"]
+            ratio = int((used_cmp * 100) / (used_cmp + used))
+            logger.info(f"pool name is {pool_name}")
+            logger.info(f"net stored data is {stored}")
+            logger.info(f"total used data is {used}")
+            logger.info(f"compressed data is {used_cmp}")
+            return ratio
+
+    logger.warning(f"the pool {pool_name} does not exits !")
+    return None
+
+
 def validate_compression(pool_name):
     """
     Check if data was compressed
