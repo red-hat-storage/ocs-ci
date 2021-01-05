@@ -139,7 +139,13 @@ class UserInterfaceSelenium(object):
         time.sleep(3)
 
     def wait_page_loaded(self, timeout, title):
-        """"""
+        """
+        Explicit waits are confined to a particular web element.
+
+        timeout (int): the second parameter specifies the timeout
+        title (str): page title
+
+        """
         WebDriverWait(self.driver, timeout).until(ec.title_is(title))
 
     def cleanup(self):
