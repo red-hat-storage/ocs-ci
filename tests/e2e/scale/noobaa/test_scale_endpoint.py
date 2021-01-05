@@ -92,8 +92,8 @@ class TestScaleEndpointAutoScale(MCGTest):
         # Respin ceph pods
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=resource_to_delete)
-        no_of_resource = disruption.resource_count
-        for i in range(0, no_of_resource):
+        number_of_resource = disruption.resource_count
+        for i in range(0, number_of_resource):
             disruption.delete_resource(resource_id=i)
 
         # Delete mcg_job_factory
