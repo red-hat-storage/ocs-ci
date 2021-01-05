@@ -1,10 +1,11 @@
 import time
 import logging
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as ec
 
 from ocs_ci.utility.utils import run_cmd, get_kubeadmin_password
-from ocs_ci.ocs.ui_selenium.const_xpath import xpath_pvc_page
+from ocs_ci.ocs.ui_selenium.const_xpath import xpath_pvc_page, page_title
 
 logger = logging.getLogger(__name__)
 
@@ -28,16 +29,14 @@ class UserInterfaceSelenium(object):
             "jsonpath='{.status.consoleURL}'"
         )
         password = get_kubeadmin_password()
-        password = password.rstrip()
         self.driver = webdriver.Chrome()
         self.driver.get(console_url)
-        time.sleep(30)
+        self.wait_page_loaded(timeout=30, title=page_title["OCP Login Page"])
         self.driver.find_element_by_id("inputUsername").send_keys("kubeadmin")
         self.driver.find_element_by_id("inputPassword").send_keys(password)
-        self.click_xpath("/html/body/div/div/main/div/form/div[4]/button")
-        time.sleep(30)
+        self.wait_page_loaded(timeout=30, title=page_title["OCP Page"])
         self.driver.get(console_url + "/dashboards")
-        time.sleep(20)
+        self.wait_page_loaded(timeout=30, title=page_title["OCP Page"])
 
     def create_pvc_ui(self, sc_type, pvc_name, access_mode, pvc_size):
         """
@@ -99,11 +98,12 @@ class UserInterfaceSelenium(object):
         self.click_xpath(xpath_pvc_page["PVC Select Project openshift-storage"])
 
         logger.info(f"Go to PVC {pvc_name} Page")
-        for i in range(2):
+        for i in range(4):
             try:
                 self.driver.find_element_by_partial_link_text(pvc_name).click()
-            except NoSuchElementException:
+            except Exception:
                 pass
+        time.sleep(10)
 
         logger.info("Click on Actions")
         self.click_xpath(xpath_pvc_page["PVC Actions"])
@@ -113,6 +113,9 @@ class UserInterfaceSelenium(object):
 
         logger.info("Confirm PVC Deletion")
         self.click_xpath("//*[@id='confirm-action']")
+
+        logger.info("Click on Storage Tab")
+        self.click_xpath(xpath_pvc_page["Storage Tab"])
 
     def click_xpath(self, xpath):
         """
@@ -134,6 +137,10 @@ class UserInterfaceSelenium(object):
         """
         self.driver.find_element_by_xpath(xpath).send_keys(keys)
         time.sleep(3)
+
+    def wait_page_loaded(self, timeout, title):
+        """"""
+        WebDriverWait(self.driver, timeout).until(ec.title_is(title))
 
     def cleanup(self):
         """

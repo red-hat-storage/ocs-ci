@@ -6,7 +6,7 @@ xpath_pvc_page = {
     "PVC Create Button": "//*[@id='yaml-create']",
     "PVC Storage Class Selector": "//*[@id='storageclass-dropdown']",
     "ocs-storagecluster-ceph-rbd": "//*[@id='ocs-storagecluster-ceph-rbd-link']/span",
-    "ocs-storagecluster-ceph-fs": "//*[@id='ocs-storagecluster-cephfs-link']/span",
+    "ocs-storagecluster-cephfs": "//*[@id='ocs-storagecluster-cephfs-link']/span",
     "PVC Name": "//*[@id='pvc-name']",
     "ReadWriteOnce": "//*[@id='content-scrollable']/div/form/div[1]/div[3]/label[1]/input",
     "ReadWriteMany": "//*[@id='content-scrollable']/div/form/div[1]/div[3]/label[2]/input",
@@ -16,4 +16,9 @@ xpath_pvc_page = {
     "PVC Create": "//*[@id='save-changes']",
     "PVC Actions": "//*[@id='content-scrollable']/div[1]/h1/div[2]/div/button",
     "PVC Delete": "//*[@id='content-scrollable']/div[1]/h1/div[2]/div/ul/li[7]/button",
+}
+
+page_title = {
+    "OCP Login Page": "Login - Red Hat OpenShift Container Platform",
+    "OCP Page": "Overview · Red Hat OpenShift Container Platform",
 }

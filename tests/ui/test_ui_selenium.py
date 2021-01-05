@@ -9,7 +9,7 @@ from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, delete_pvcs
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def usr_int(request):
 
     usr_int = UserInterfaceSelenium()
@@ -35,6 +35,9 @@ class TestPvcUserInterface(object):
     @pytest.mark.parametrize(
         argnames=["sc_type", "pvc_name", "access_mode", "pvc_size"],
         argvalues=[
+            pytest.param(
+                *["ocs-storagecluster-cephfs", "test-pvc-fs", "ReadWriteMany", "2"]
+            ),
             pytest.param(
                 *["ocs-storagecluster-ceph-rbd", "test-pvc-rbd", "ReadWriteOnce", "1"]
             ),
