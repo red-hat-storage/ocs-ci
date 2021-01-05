@@ -95,10 +95,10 @@ class Sanity:
         for pvc_obj in self.pvc_objs:
             pvc_obj.ocp.wait_for_delete(pvc_obj.name)
         for obc_obj in self.obc_objs:
-            obc_obj.delete()
+            obc_obj[0].delete()
             assert not self.ceph_cluster._mcg_obj.s3_verify_bucket_exists(
-                obc_obj.name
-            ), f"Found {obc_obj.name} that should've been removed"
+                obc_obj[0].name
+            ), f"Found {obc_obj[0].name} that should've been removed"
 
     @ignore_leftovers
     def create_pvc_delete(self, multi_pvc_factory, project=None):
