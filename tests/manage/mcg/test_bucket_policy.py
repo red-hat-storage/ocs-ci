@@ -945,7 +945,7 @@ class TestS3BucketPolicy(MCGTest):
     @tier2
     def test_public_website(self, mcg_obj, bucket_factory):
         """
-        Tests public read bucket website
+        Tests public bucket website access
         """
         # Creating a S3 bucket to host website
         s3_bucket = bucket_factory(amount=1, interface="S3")
