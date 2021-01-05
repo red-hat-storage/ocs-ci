@@ -41,7 +41,7 @@ def test_mcg_cpu_usage(workload_idle):
     validation = check_query_range_result_limits(
         result=cpu_result,
         good_min=0.0,
-        good_max=0.1,
+        good_max=0.25,
     )
     msg = "No NooBaa pod should utilize over 0.1 cpu units while idle."
     assert validation, msg
