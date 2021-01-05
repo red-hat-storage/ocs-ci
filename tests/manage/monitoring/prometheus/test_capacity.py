@@ -151,12 +151,8 @@ def test_rbd_osd_workload_alerts(workload_storageutilization_95p_rbd):
     # Check utilization on 95%
     alerts = workload_storageutilization_95p_rbd.get("prometheus_alerts")
 
-    nearfull_message = (
-        "Back-end storage device is nearing full."
-    )
-    criticallfull_mesage = (
-        "Back-end storage device is critically full."
-    )
+    nearfull_message = "Back-end storage device is nearing full."
+    criticallfull_mesage = "Back-end storage device is critically full."
 
     for target_label, target_msg, target_states, target_severity in [
         (
@@ -204,12 +200,8 @@ def test_cephfs_osd_workload_alerts(workload_storageutilization_95p_cephfs):
     # Check utilization on 95%
     alerts = workload_storageutilization_95p_cephfs.get("prometheus_alerts")
 
-    nearfull_message = (
-        "Back-end storage device is nearing full."
-    )
-    criticallfull_mesage = (
-        "Back-end storage device is critically full."
-    )
+    nearfull_message = "Back-end storage device is nearing full."
+    criticallfull_mesage = "Back-end storage device is critically full."
 
     for target_label, target_msg, target_states, target_severity in [
         (
