@@ -283,5 +283,9 @@ def uninstall_ocs():
         "cephobjectzones.ceph.rook.io",
         "cephrbdmirrors.ceph.rook.io",
     ]
+
     for crd in crd_list:
-        ocp_obj.exec_oc_cmd(f"delete crd {crd} --timeout=300m")
+        try:
+            ocp_obj.exec_oc_cmd(f"delete crd {crd} --timeout=300m")
+        except Exception:
+            log.info(f"crd {crd} was not found")
