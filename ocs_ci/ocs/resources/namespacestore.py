@@ -78,7 +78,7 @@ class NamespaceStore:
                 resource_name=self.name,
             ).get()
         elif self.method == "cli":
-            if self.name not in self.mcg_obj.exec_mcg_cmd(f"namespacestore list"):
+            if self.name not in self.mcg_obj.exec_mcg_cmd("namespacestore list"):
                 ns_deleted_successfully = True
 
         assert (
