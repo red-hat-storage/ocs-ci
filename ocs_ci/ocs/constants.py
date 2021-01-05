@@ -179,6 +179,7 @@ IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
 IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
 DEFAULT_NOOBAA_BACKINGSTORE = "noobaa-default-backing-store"
 DEFAULT_NOOBAA_BUCKETCLASS = "noobaa-default-bucket-class"
+NOOBAA_RESOURCE_NAME = "noobaa"
 MIN_PV_BACKINGSTORE_SIZE_IN_GB = 17
 RIPSAW_NAMESPACE = "my-ripsaw"
 JENKINS_BUILD = "jax-rs-build"

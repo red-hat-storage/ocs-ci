@@ -15,6 +15,7 @@ from ocs_ci.ocs.constants import (
     DEFAULT_NOOBAA_BACKINGSTORE,
     DEFAULT_NOOBAA_BUCKETCLASS,
     STATUS_READY,
+    NOOBAA_RESOURCE_NAME,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -896,7 +897,7 @@ class MCG:
         """
         # Get noobaa status
         get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get(
-            resource_name="noobaa"
+            resource_name=NOOBAA_RESOURCE_NAME
         )
         get_default_bs = OCP(kind="backingstore", namespace=self.namespace).get(
             resource_name=DEFAULT_NOOBAA_BACKINGSTORE
