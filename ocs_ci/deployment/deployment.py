@@ -613,7 +613,7 @@ class Deployment(object):
             mode="w+", prefix="cluster_storage", delete=False
         )
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
-        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=900)
+        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=1200)
         if config.DEPLOYMENT["infra_nodes"]:
             _ocp = ocp.OCP(kind="node")
             _ocp.exec_oc_cmd(
