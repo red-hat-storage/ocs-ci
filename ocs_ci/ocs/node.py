@@ -17,6 +17,12 @@ from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions
+from ocs_ci.helpers.helpers import (
+    get_pv_objs_in_sc,
+    verify_new_pv_available_in_sc,
+    delete_released_pvs_in_sc,
+)
+
 
 log = logging.getLogger(__name__)
 
@@ -925,16 +931,20 @@ def delete_and_create_osd_node_vsphere_lso(osd_node_name, use_existing_node=Fals
         str: The new node name
 
     """
-    from ocs_ci.helpers import helpers
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+    from ocs_ci.ocs.resources.storage_cluster import get_osd_size
 
     sc_name = constants.LOCAL_BLOCK_RESOURCE
-    old_pv_objs = helpers.get_pv_objs_in_sc(sc_name)
+    old_pv_objs = get_pv_objs_in_sc(sc_name)
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
-    osd_pod = get_node_pods(osd_node, pods_to_search=pod.get_osd_pods())[0]
+    osd_pod = get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())[0]
     osd_id = osd_pod.get().get("metadata").get("labels").get("ceph-osd-id")
+    log.info(f"osd id to remove = {osd_id}")
 
-    scale_down_deployments(osd_node)
+    log.info("Scale down node deployments...")
+    scale_down_deployments(osd_node_name)
+    log.info("Scale down deployments finished successfully")
     remove_nodes([osd_node])
     log.info(f"name of deleted node = {osd_node_name}")
 
@@ -958,12 +968,47 @@ def delete_and_create_osd_node_vsphere_lso(osd_node_name, use_existing_node=Fals
         label_nodes([node_not_in_ocs])
         new_node_name = node_not_in_ocs.name
 
-    helpers.verify_new_pv_available_in_sc(old_pv_objs, sc_name)
+    # If we use LSO, we need to create and attach a new disk manually
+    new_node = get_node_objs(node_names=[new_node_name])[0]
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
+    osd_size = get_osd_size()
+    log.info(
+        f"Create a new disk with size {osd_size}, and attach to node {new_node_name}"
+    )
+    node_util.create_and_attach_volume(node=new_node, size=osd_size)
+
+    log.info(
+        "Replace the old node with the new worker node in localVolumeDiscovery and localVolumeSet"
+    )
+    replace_old_node_with_new_node(
+        old_node_name=osd_node_name, new_node_name=new_node_name
+    )
+
+    log.info("Verify new pv is available...")
+    is_new_pv_available = verify_new_pv_available_in_sc(old_pv_objs, sc_name)
+    assert is_new_pv_available, "New pv is not available"
+    log.info("Finished verifying that the new pv is available")
+
     switch_to_project(defaults.ROOK_CLUSTER_NAMESPACE)
 
-    pod.run_osd_removal_job(osd_id)
-    pod.verify_osd_removal_job_completed_successfully(osd_id)
-    helpers.delete_released_pvs_in_sc(sc_name)
+    osd_removal_job = pod.run_osd_removal_job(osd_id)
+    assert osd_removal_job, "ocs-osd-removal failed to create"
+    is_completed = (pod.verify_osd_removal_job_completed_successfully(osd_id),)
+    assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
+    log.info("ocs-osd-removal-job completed successfully")
+
+    delete_released_pvs_in_sc(sc_name)
+
+    # Delete the crashcollector pod deployment
+    ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
+        f"delete deployment --selector=app=rook-ceph-crashcollector,node_name='{osd_node_name}'",
+        timeout=60,
+    )
+
+    is_deleted = pod.delete_osd_removal_job(osd_id)
+    assert is_deleted, "Failed to delete ocs-osd-removal-job"
+    log.info("ocs-osd-removal-job deleted successfully")
 
     return new_node_name
 
@@ -1309,7 +1354,6 @@ def get_node_pods_to_scale_down(node_name):
     pods_to_scale_down = [
         *pod.get_mon_pods(),
         *pod.get_osd_pods(),
-        *pod.get_rgw_pods(),
         *pod.get_mgr_pods(),
     ]
 
@@ -1329,11 +1373,13 @@ def scale_down_deployments(node_name):
     pods_to_scale_down = get_node_pods_to_scale_down(node_name)
     for p in pods_to_scale_down:
         deployment_name = pod.get_deployment_name(p.name)
+        log.info(f"Scale down deploymet {deployment_name}")
         ocp.exec_oc_cmd(f"scale deployment {deployment_name} --replicas=0")
 
+    log.info("Scale down rook-ceph-crashcollector")
     ocp.exec_oc_cmd(
-        f"scale deployment --selector=app=rook-ceph-crashcollector, "
-        f"node_name={node_name}  --replicas=0"
+        f"scale deployment --selector=app=rook-ceph-crashcollector,"
+        f"node_name='{node_name}' --replicas=0"
     )
 
 
@@ -1362,7 +1408,7 @@ def get_node_index_in_local_block(node_name):
     return node_values.index(node_name)
 
 
-def replace_old_node_with_new_node(new_node_name, old_node_name):
+def replace_old_node_with_new_node(old_node_name, new_node_name):
     """
     Replace the old node with the new node as described in the documents
     of node replacement with LSO
@@ -1393,18 +1439,3 @@ def replace_old_node_with_new_node(new_node_name, old_node_name):
 
     ocp_lvs_obj.patch(params=params, format_type="json")
     ocp_lvd_obj.patch(params=params, format_type="json")
-
-
-def get_deployment_node_name(deployment):
-    """
-    Get the deployment's node name
-
-    Args:
-         deployment (ocs_ci.ocs.resources.ocs.OCS): The deployment object
-
-    Returns:
-        str: The node name of the deployment
-
-    """
-    spec = deployment.get().get("spec").get("template").get("spec")
-    return spec.get("nodeSelector").get("kubernetes.io/hostname")

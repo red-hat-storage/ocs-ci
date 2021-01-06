@@ -15,7 +15,7 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required,
 )
 from ocs_ci.ocs import constants, node
-from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
@@ -70,19 +70,13 @@ def delete_and_create_osd_node(osd_node_name):
             log.error(msg_invalid)
             pytest.fail(msg_invalid)
     elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-        worker_nodes_not_in_ocs = node.get_worker_nodes_not_in_ocs()
-        if not worker_nodes_not_in_ocs:
-            pytest.skip(
-                "Skipping the test because we don't have an "
-                "extra worker node that not in ocs"
+        if is_lso_cluster():
+            new_node_name = node.delete_and_create_osd_node_vsphere_lso(
+                osd_node_name, use_existing_node=False
             )
         else:
-            log.info(
-                "Perform delete and create ocs node in Vmware using one "
-                "of the existing extra worker nodes that not in ocs"
-            )
             new_node_name = node.delete_and_create_osd_node_vsphere_upi(
-                osd_node_name, use_existing_node=True
+                osd_node_name, use_existing_node=False
             )
 
     assert node.node_replacement_verification_steps_ceph_side(
@@ -195,7 +189,7 @@ class TestNodeReplacement(ManageTest):
 
         # Verify everything running fine
         log.info("Verifying All resources are Running and matches expected result")
-        self.sanity_helpers.health_check(tries=90)
+        self.sanity_helpers.health_check(tries=100)
 
         # Verify OSD encrypted
         if config.ENV_DATA.get("encryption_at_rest"):
