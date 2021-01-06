@@ -19,7 +19,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating, utils
 from ocs_ci.utility.utils import run_cmd, exec_cmd, TimeoutSampler
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-from ocs_ci.helpers.helpers import storagecluster_independent_check
+from ocs_ci.helpers.helpers import storagecluster_independent_check, validate_pv_delete
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 
 log = logging.getLogger(__name__)
@@ -944,8 +944,6 @@ class AMQ(object):
         self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
         for pvc in ocs_pvc_obj:
             logging.info(pvc.name)
-            from ocs_ci.helpers import helpers
-
-            helpers.validate_pv_delete(pvc.backed_pv)
+            validate_pv_delete(pvc.backed_pv)
         # Reset namespace to default
         switch_to_default_rook_cluster_project()
