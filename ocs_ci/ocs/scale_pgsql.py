@@ -6,7 +6,6 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, machine, node
-from ocs_ci.ocs.exceptions import UnsupportedPlatformError
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.utility import templating
 
@@ -76,7 +75,7 @@ class ScalePodPGSQL(Postgresql):
         delete_worker_node()
 
 
-def add_worker_node(instance_type=None):
+def add_worker_node(instance_type=None, replicas=None):
     global ms_name
     ms_name = list()
     worker_list = node.get_worker_nodes()
@@ -106,14 +105,12 @@ def add_worker_node(instance_type=None):
     ):
         log.info("Adding worker nodes on the current cluster")
         labels = [("node-role.kubernetes.io/app", "app-scale")]
+
         # Create machineset for app worker nodes on each zone
         for obj in machine.get_machineset_objs():
             if "app" in obj.name:
                 ms_name.append(obj.name)
-        if instance_type is not None:
-            instance_type = instance_type
-        else:
-            instance_type = "m5.4xlarge"
+        instance_type = instance_type if instance_type else "m5.4xlarge"
         if not ms_name:
             if len(machine.get_machineset_objs()) == 3:
                 for zone in ["a", "b", "c"]:
@@ -132,6 +129,9 @@ def add_worker_node(instance_type=None):
                         zone="a",
                     )
                 )
+            replicas = replicas if replicas else 1
+            for name in ms_name:
+                machine.add_node(machine_set=name, count=replicas)
             for ms in ms_name:
                 machine.wait_for_new_node_to_be_ready(ms)
 
@@ -148,21 +148,10 @@ def add_worker_node(instance_type=None):
                 node_list=worker_list, label_key="scale-label", label_value="app-scale"
             )
         return True
-    elif (
-        config.ENV_DATA["deployment_type"] == "upi"
-        and config.ENV_DATA["platform"].lower() == "vsphere"
-    ):
-        log.info("Running scale test on existing worker nodes.")
-    elif (
-        config.ENV_DATA["deployment_type"] == "upi"
-        and config.ENV_DATA["platform"].lower() == "baremetal"
-    ):
-        log.info("Running scale test on existing worker nodes.")
-    elif (
-        config.ENV_DATA["deployment_type"] == "upi"
-        and config.ENV_DATA["platform"].lower() == "azure"
-    ):
-        raise UnsupportedPlatformError("Unsupported Platform")
+    elif config.ENV_DATA["deployment_type"] == "upi" and [
+        config.ENV_DATA["platform"].lower() == "vsphere" or "baremetal" or "azure"
+    ]:
+        log.info("Running scale on existing worker nodes")
 
 
 def delete_worker_node():

@@ -1,5 +1,6 @@
 import logging
 import pytest
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import scale_pgsql
 from ocs_ci.utility import utils
@@ -36,13 +37,16 @@ class TestPgsqlPodScale(E2ETest):
           * Label new worker node
           * Create pgsql to run on 200 pods on new added worker node
         """
-        replicas = 200  # Number of postgres and pgbench pods to be deployed
-        timeout = (
-            replicas * 100
-        )  # Time in seconds to wait for pgbench pods to be created
-
         # Add workers node to cluster
-        scale_pgsql.add_worker_node()
+        add_node = scale_pgsql.add_worker_node()
+
+        # Number of postgres and pgbench pods to be deployed
+        if config.RUN.get("use_ocs_worker_for_scale") or not add_node:
+            replicas = 50
+        else:
+            replicas = 100
+        # Time in seconds to wait for pgbench pods to be created/completed
+        timeout = replicas * 100
 
         # Check ceph health status
         utils.ceph_health_check()
