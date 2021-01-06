@@ -943,7 +943,7 @@ class TestS3BucketPolicy(MCGTest):
     @pytest.mark.polarion_id("OCS-2451")
     @pytest.mark.bugzilla("1893163")
     @skipif_ocs_version("<4.6")
-    @tier2
+    @tier1
     def test_public_website(self, mcg_obj, bucket_factory):
         """
         Tests public bucket website access
@@ -952,21 +952,18 @@ class TestS3BucketPolicy(MCGTest):
         s3_bucket = bucket_factory(amount=1, interface="S3")
 
         # Creating random S3 users
+        users = []
         account1 = "noobaa-user1" + str(uuid.uuid4().hex)
         account2 = "noobaa-user2" + str(uuid.uuid4().hex)
-        noobaa_user1 = NoobaaAccount(
-            mcg_obj,
-            name=account1,
-            email=f"{account1}@mail.com",
-            buckets=[s3_bucket[0].name],
-        )
-        noobaa_user2 = NoobaaAccount(
-            mcg_obj,
-            name=account2,
-            email=f"{account2}@mail.com",
-            buckets=[s3_bucket[0].name],
-        )
-        users = [noobaa_user1, noobaa_user2]
+        for account in account1, account2:
+            users.append(
+                NoobaaAccount(
+                    mcg=mcg_obj,
+                    name=account,
+                    email=f"{account}@mail.com",
+                    buckets=[s3_bucket[0].name],
+                )
+            )
 
         logger.info(f"Adding bucket website config to: {s3_bucket[0].name}")
         assert s3_put_bucket_website(
