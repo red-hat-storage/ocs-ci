@@ -66,6 +66,7 @@ ROOK_EXAMPLES_DIR = os.path.join(
 ROOK_CSI_RBD_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "rbd")
 ROOK_CSI_CEPHFS_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "cephfs")
 CLEANUP_YAML = "cleanup.yaml.j2"
+MANIFESTS_DIR = "manifests"
 
 
 # Statuses
@@ -487,6 +488,11 @@ OPERATOR_SOURCE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "operator-source.ya
 HTPASSWD_IDP_YAML = os.path.join(TEMPLATE_AUTHENTICATION_DIR, "htpasswd_provider.yaml")
 
 IBM_COS_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "ibm-cloud-secret.yaml")
+OCS_OPERATOR_CSV_YAML = "ocs-operator.clusterserviceversion.yaml"
+
+TEMPLATE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "imageContentSourcePolicy-template.yaml"
+)
 
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
@@ -579,6 +585,7 @@ OPERATOR_CS_QUAY_API_QUERY = (
     "tag/?onlyActiveTags=true&limit={tag_limit}"
 )
 OPTIONAL_OPERATORS_SELECTOR = "catalog=optional-operators"
+OCS_OPERATOR_BUNDLE_IMAGE = "quay.io/rhceph-dev/ocs-operator-bundle"
 
 # OCP related constants
 OPENSHIFT_UPGRADE_INFO_API = (
@@ -983,17 +990,30 @@ FLEXY_DEFAULT_PRIVATE_CONF_REPO = (
     "https://gitlab.cee.redhat.com/ocs/flexy-ocs-private.git"
 )
 FLEXY_JENKINS_USER = "jenkins"
-JENKINS_NFS_CURRENT_CLUSTER_DIR = "/home/jenkins/current-cluster-dir"
 FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
 FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
-FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/flexy/ocp4:v1.3"
+FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/flexy/ocp4:latest"
 FLEXY_ENV_FILE_UPDATED_NAME = "ocs-flexy-env-file-updated.env"
 FLEXY_ENV_FILE_UPDATED_PATH = os.path.join(
     FLEXY_HOST_DIR_PATH, FLEXY_ENV_FILE_UPDATED_NAME
 )
-REGISTRY_SVC = "registry.svc.ci.openshift.org/ocp/release"
+REGISTRY_SVC = "registry.ci.openshift.org/ocp/release"
 FLEXY_USER_LOCAL_UID = 101000
+
+# domains required to be accessible through proxy on disconnected cluster
+DISCON_CL_PROXY_ALLOWED_DOMAINS = (
+    ".debian.org",
+    ".fedoraproject.org",
+    "ocsci-test-files.s3.amazonaws.com",
+    ".elb.amazonaws.com",
+    "s3.openshift-storage.svc",
+    ".s3.us-west-1.amazonaws.com",
+    ".s3.us-east-2.amazonaws.com",
+    "s3.amazonaws.com",
+    "mirrorlist.centos.org",
+    "mirror.centos.org",
+)
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"

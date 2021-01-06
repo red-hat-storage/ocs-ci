@@ -67,6 +67,7 @@ from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
 )
+from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
@@ -3643,3 +3644,13 @@ def setup_ui(request):
     request.addfinalizer(finalizer)
 
     return driver
+
+
+@pytest.fixture(scope="session", autouse=True)
+def load_cluster_info_file(request):
+    """
+    This fixture tries to load cluster_info.json file if exists (on cluster
+    installed via Flexy) and apply the information to the config object (for
+    example related to disconnected cluster)
+    """
+    load_cluster_info()

@@ -14,6 +14,7 @@ import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
+from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
@@ -48,6 +49,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
 from ocs_ci.utility import templating, ibmcloud
+from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.openshift_console import OpenshiftConsole
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -305,15 +307,19 @@ class Deployment(object):
         # Wait for catalog source is ready
         catalog_source.wait_for_state("READY")
 
-    def create_ocs_operator_source(self):
+    def create_ocs_operator_source(self, image=None):
         """
         This prepare catalog or operator source for OCS deployment.
+
+        Args:
+            image (str): Image of ocs registry.
+
         """
         if config.DEPLOYMENT.get("stage"):
             # deployment from stage
             self.create_stage_operator_source()
         else:
-            create_catalog_source()
+            create_catalog_source(image)
 
     def subscribe_ocs(self):
         """
@@ -366,9 +372,13 @@ class Deployment(object):
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
 
-    def deploy_ocs_via_operator(self):
+    def deploy_ocs_via_operator(self, image=None):
         """
         Method for deploy OCS via OCS operator
+
+        Args:
+            image (str): Image of ocs registry.
+
         """
         ui_deployment = config.DEPLOYMENT.get("ui_deployment")
         live_deployment = config.DEPLOYMENT.get("live_deployment")
@@ -394,7 +404,7 @@ class Deployment(object):
                 create_ocs_secret(self.namespace)
                 create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         if not live_deployment:
-            self.create_ocs_operator_source()
+            self.create_ocs_operator_source(image)
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
@@ -734,6 +744,7 @@ class Deployment(object):
         Handle OCS deployment, since OCS deployment steps are common to any
         platform, implementing OCS deployment here in base class.
         """
+        image = None
         ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
         try:
             ceph_cluster.get().get("items")[0]
@@ -742,10 +753,15 @@ class Deployment(object):
         except (IndexError, CommandFailed):
             logger.info("Running OCS basic installation")
 
+        # disconnected installation?
+        load_cluster_info()
+        if config.DEPLOYMENT.get("disconnected"):
+            image = prepare_disconnected_ocs_deployment()
+
         if config.DEPLOYMENT["external_mode"]:
             logger.info("Deploying OCS on external mode RHCS")
             return self.deploy_with_external_mode()
-        self.deploy_ocs_via_operator()
+        self.deploy_ocs_via_operator(image)
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
         cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
         # Check for Ceph pods

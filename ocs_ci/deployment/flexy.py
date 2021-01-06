@@ -16,12 +16,15 @@ import shutil
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
-    get_ocp_version,
     clone_repo,
-    run_cmd,
+    exec_cmd,
     expose_ocp_version,
+    get_ocp_version,
+    login_to_mirror_registry,
     wait_for_machineconfigpool_status,
 )
+from ocs_ci.utility.connection import Connection
+from ocs_ci.utility.flexy import load_cluster_info
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +214,7 @@ class FlexyBase(object):
             f"git-crypt unlock "
             f"{os.path.expanduser(constants.FLEXY_GIT_CRYPT_KEYFILE)}"
         )
-        run_cmd(cmd, cwd=self.flexy_host_private_conf_dir_path)
+        exec_cmd(cmd, cwd=self.flexy_host_private_conf_dir_path)
         logger.info("Unlocked the git repo")
 
     def merge_flexy_env(self):
@@ -297,7 +300,7 @@ class FlexyBase(object):
         chown_cmd = (
             f"sudo chown -R {constants.FLEXY_USER_LOCAL_UID} {self.flexy_host_dir}"
         )
-        run_cmd(chown_cmd)
+        exec_cmd(chown_cmd)
 
     def flexy_backup_work_dir(self):
         """
@@ -305,17 +308,18 @@ class FlexyBase(object):
         """
         # change ownership of flexy-dir back to current user
         chown_cmd = f"sudo chown -R {os.getuid()}:{os.getgid()} {self.flexy_host_dir}"
-        run_cmd(chown_cmd)
+        exec_cmd(chown_cmd)
         chmod_cmd = f"sudo chmod -R a+rX {self.flexy_host_dir}"
-        run_cmd(chmod_cmd)
+        exec_cmd(chmod_cmd)
         # mirror flexy work dir to cluster path
         rsync_cmd = f"rsync -av {self.flexy_host_dir} {self.cluster_path}/"
-        run_cmd(rsync_cmd)
+        exec_cmd(rsync_cmd)
 
-        # create symlink to auth directory
-        cluster_path_auth = os.path.join(self.cluster_path, "auth")
-        if not os.path.exists(cluster_path_auth):
-            os.symlink("flexy-dir/flexy/workdir/install-dir/auth", cluster_path_auth)
+        # mirror install-dir to cluster path (auth directory, metadata.json
+        # file and other files)
+        install_dir = os.path.join(self.flexy_host_dir, "flexy/workdir/install-dir/")
+        rsync_cmd = f"rsync -av {install_dir} {self.cluster_path}/"
+        exec_cmd(rsync_cmd)
 
     def flexy_post_processing(self):
         """
@@ -325,13 +329,43 @@ class FlexyBase(object):
         kubeconfig = os.path.join(
             self.cluster_path, config.RUN.get("kubeconfig_location")
         )
+        # load cluster info
+        load_cluster_info()
+
+        # if on disconnected cluster, perform required tasks
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        if config.DEPLOYMENT.get("disconnected"):
+            login_to_mirror_registry(pull_secret_path)
+
+            # configure proxy on INT_SVC_INSTANCE - allow access to required sites
+            private_key = os.path.expanduser(config.DEPLOYMENT["ssh_key_private"])
+            ssh_int_svc = Connection(
+                config.DEPLOYMENT.get("int_svc_instance"), "ec2-user", private_key
+            )
+            # as we are inserting the two lines before first line one by one,
+            # we have to launch the sed commands in reverse order
+            cmd = (
+                "sudo sed -i '1i http_access allow ocs_whitelist' "
+                "/srv/squid/etc/squid.conf"
+            )
+            logger.info(ssh_int_svc.exec_cmd(cmd=cmd))
+            cmd = (
+                """sudo sed -i '1i acl ocs_whitelist dstdomain """
+                f"""{" ".join(constants.DISCON_CL_PROXY_ALLOWED_DOMAINS)}' """
+                """/srv/squid/etc/squid.conf"""
+            )
+            logger.info(ssh_int_svc.exec_cmd(cmd=cmd))
+            cmd = "sudo systemctl restart squid-proxy.service"
+            logger.info(ssh_int_svc.exec_cmd(cmd=cmd))
+
+        # update pull-secret
         secret_cmd = (
             f"oc set data secret/pull-secret "
             f"--kubeconfig {kubeconfig} "
             f"-n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
-            f"--from-file=.dockerconfigjson={constants.DATA_DIR}/pull-secret"
+            f"--from-file=.dockerconfigjson={pull_secret_path}"
         )
-        run_cmd(secret_cmd)
+        exec_cmd(secret_cmd)
 
         if not config.ENV_DATA.get("skip_ntp_configuration", False):
             ntp_cmd = (
@@ -339,7 +373,7 @@ class FlexyBase(object):
                 f"create -f {constants.NTP_CHRONY_CONF}"
             )
             logger.info("Creating NTP chrony")
-            run_cmd(ntp_cmd)
+            exec_cmd(ntp_cmd)
         # sleep here to start update machineconfigpool status
         time.sleep(60)
         wait_for_machineconfigpool_status("all")
