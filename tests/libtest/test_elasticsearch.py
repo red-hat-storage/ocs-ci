@@ -9,7 +9,7 @@ import pytest
 
 from ocs_ci.ocs import defaults
 from tests.fixtures import es
-from ocs_ci.helpers.helpers import get_full_logs_path
+from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.helpers.performance_lib import run_command
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
@@ -117,8 +117,8 @@ class TestElasticsearch:
             es (fixture) : fixture that deploy / teardown the elasticsearch
 
         """
-        full_log_path = get_full_logs_path(cname=self)
-        log.info(f"Log file name is {full_log_path}")
+        full_log_path = get_full_test_logs_path(cname=self)
+        log.info(f"Logs file path name is : {full_log_path}")
         log.info("The ElasticSearch deployment test started.")
         if es.get_health():
             log.info("The Status of the elasticsearch is OK")
