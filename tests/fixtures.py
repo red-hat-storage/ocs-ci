@@ -3,7 +3,6 @@ import pytest
 from ocs_ci.ocs.resources.pod import delete_deploymentconfig_pods
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.elasticsearch import ElasticSearch
 
 
 @pytest.fixture()
@@ -340,21 +339,3 @@ def create_serviceaccount(request):
         namespace=class_instance.project_obj.namespace,
     )
     assert class_instance.sa_obj, "Failed to create serviceaccount"
-
-
-@pytest.fixture()
-def es(request):
-    """
-    Create In-cluster elastic-search deployment for benchmark-operator tests.
-
-    using the name es - as shortcut for elastcsearch for simplicity
-    """
-
-    def teardown():
-        es.cleanup()
-
-    request.addfinalizer(teardown)
-
-    es = ElasticSearch()
-
-    return es

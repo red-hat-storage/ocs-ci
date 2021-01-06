@@ -5,10 +5,7 @@ Testing the Elasticsearch server deployment
 import logging
 import time
 
-import pytest
-
 from ocs_ci.ocs import defaults
-from tests.fixtures import es
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.helpers.performance_lib import run_command
 from ocs_ci.ocs.ocp import OCP
@@ -23,9 +20,6 @@ from ocs_ci.ocs.elasticsearch import elasticsearch_load
 log = logging.getLogger(__name__)
 
 
-@pytest.mark.usefixtures(
-    es.__name__,
-)
 class TestElasticsearch:
     def smallfile_run(self, es):
         """
@@ -148,7 +142,6 @@ class TestElasticsearch:
             f"ls {full_log_path}/FullResults.tgz"
         ), "Results file did not retrieve from pod"
 
-        # time.sleep(10)
         main_es = {
             "host": defaults.ELASTICSEARCH_DEV_IP,
             "port": defaults.ELASTICSEARCE_PORT,

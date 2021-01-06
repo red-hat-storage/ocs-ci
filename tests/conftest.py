@@ -89,6 +89,7 @@ from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.amq import AMQ
+from ocs_ci.ocs.elasticsearch import ElasticSearch
 
 log = logging.getLogger(__name__)
 
@@ -3523,3 +3524,21 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture()
+def es(request):
+    """
+    Create In-cluster elastic-search deployment for benchmark-operator tests.
+
+    using the name es - as shortcut for elastic-search for simplicity
+    """
+
+    def teardown():
+        es.cleanup()
+
+    request.addfinalizer(teardown)
+
+    es = ElasticSearch()
+
+    return es
