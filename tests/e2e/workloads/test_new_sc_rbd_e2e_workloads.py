@@ -33,6 +33,9 @@ class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
         replica,
         compression,
     ):
+        """
+        Testing workloads on new storage class with new cephblockpool
+        """
         interface_type = constants.CEPHBLOCKPOOL
         sc_obj = storageclass_factory(
             interface=interface_type,
