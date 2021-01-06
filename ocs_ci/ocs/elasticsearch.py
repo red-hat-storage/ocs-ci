@@ -1,5 +1,5 @@
 """
-Deploying en Elasticsearch server for collecting logs from ripsaw benchmarks.
+Deploying an Elasticsearch server for collecting logs from ripsaw benchmarks.
 Interface for the Performance ElasticSearch server
 
 """
@@ -51,7 +51,7 @@ def elasticsearch_load(connection, target_path):
             log.error(f"Can not connect to the main ES server on {connection}")
             return False
         for ind in all_files:
-            if ".data." in ind:  # load only data files and noy mapping info
+            if ".data." in ind:  # load only data files and not mapping info
                 file_name = f"{target_path}/results/{ind}"
                 ind_name = ind.split(".")[0]
                 log.info(f"Loading the {ind} data into the ES server")
@@ -240,11 +240,11 @@ class ElasticSearch(object):
         """
         log.info("Teardown the Elasticsearch environment")
         log.info("Deleting all resources")
-        log.info("deleting the dumper client pod")
+        log.info("Deleting the dumper client pod")
         self.ocp.delete(yaml_file=self.dumper_file)
-        log.info("deleting the es resource")
+        log.info("Deleting the es resource")
         self.ocp.delete(yaml_file=self.crd)
-        log.info("deleting the es project")
+        log.info("Deleting the es project")
         self.ns_obj.delete_project(project_name=self.namespace)
         self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=180)
 
