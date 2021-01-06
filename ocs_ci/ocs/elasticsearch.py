@@ -116,7 +116,7 @@ class ElasticSearch(object):
                 time.sleep(30)
                 timeout -= 30
 
-        self._deploy_dump_client()
+        self._deploy_data_dumper_client()
 
         # Connect to the server
         self.con = self._es_connect()
@@ -142,7 +142,7 @@ class ElasticSearch(object):
             except IndexError:
                 log.info("ECK operator pod not ready yet")
 
-    def _deploy_dump_client(self):
+    def _deploy_data_dumper_client(self):
         """
         Deploying elastic search client pod with utility which dump all the data
         from the server to .tgz file
@@ -307,7 +307,7 @@ class ElasticSearch(object):
                 log.debug(f"Going to write : {doc}")
                 es.index(index=ind, doc_type="_doc", body=doc["_source"])
 
-    def dump(self, target_path):
+    def dumping_all_data(self, target_path):
         """
         Dump All data from the internal ES server to .tgz file.
 

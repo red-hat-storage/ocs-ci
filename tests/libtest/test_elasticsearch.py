@@ -142,7 +142,7 @@ class TestElasticsearch:
 
         log.info(f"Test UUDI is : {self.smallfile_run(es)}")
 
-        assert es.dump(full_log_path), "Can not Retrieve the test data"
+        assert es.dumping_all_data(full_log_path), "Can not Retrieve the test data"
 
         assert run_command(
             f"ls {full_log_path}/FullResults.tgz"
