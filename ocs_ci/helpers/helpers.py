@@ -2800,7 +2800,7 @@ def get_full_test_logs_path(cname):
     this function use the inspect module to find the name of the caller function, so it need
     to be call once from the main test function.
     the output is in the form of :
-      ocsci_log_path/<full test file path>/<test filename>/<test class name>/<test function name>
+        ocsci_log_path/<full test file path>/<test filename>/<test class name>/<test function name>
 
     Args:
         cname (obj): the Class object which was run and called this function
