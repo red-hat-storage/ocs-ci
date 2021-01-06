@@ -335,7 +335,7 @@ class ElasticSearch(object):
             log.info("Extracting the FullResults.tgz file")
             kwargs = {"cwd": target_path}
             results = run_command(f"tar zxvf {target_path}/FullResults.tgz", **kwargs)
-            log.warning(f"The untar results is {results}")
+            log.debug(f"The untar results is {results}")
             if "Error in command" in results:
                 log.warning("Can not untar the dumped file")
                 return False
