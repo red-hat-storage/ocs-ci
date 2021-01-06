@@ -73,9 +73,9 @@ class Sanity:
                 get_fio_rw_iops(pod)
 
         if config.ENV_DATA["platform"] in constants.ON_PREM_PLATFORMS:
-            self.obc_objs.append(rgw_bucket_factory(1, "rgw-oc"))
+            self.obc_objs.append(rgw_bucket_factory(1, "rgw-oc")[0])
 
-        self.obc_objs.append(bucket_factory(amount=1, interface="OC"))
+        self.obc_objs.append(bucket_factory(amount=1, interface="OC")[0])
 
         self.ceph_cluster.wait_for_noobaa_health_ok()
 
@@ -95,10 +95,8 @@ class Sanity:
         for pvc_obj in self.pvc_objs:
             pvc_obj.ocp.wait_for_delete(pvc_obj.name)
         for obc_obj in self.obc_objs:
-            obc_obj[0].delete()
-            assert not self.ceph_cluster._mcg_obj.s3_verify_bucket_exists(
-                obc_obj[0].name
-            ), f"Found {obc_obj[0].name} that should've been removed"
+            obc_obj.delete()
+            assert obc_obj.verify_deletion(), f"OBC {obc_obj.name} still exists"
 
     @ignore_leftovers
     def create_pvc_delete(self, multi_pvc_factory, project=None):
