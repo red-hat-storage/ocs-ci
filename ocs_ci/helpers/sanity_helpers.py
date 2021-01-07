@@ -48,7 +48,7 @@ class Sanity:
         self, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory, run_io=True
     ):
         """
-        Sanity validation - Create resources (FS and RBD) and run IO
+        Sanity validation: Create resources - pods, OBCs (RGW and MCG), PVCs (FS and RBD) and run IO
 
         Args:
             pvc_factory (function): A call to pvc_factory function
