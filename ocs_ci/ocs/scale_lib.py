@@ -10,6 +10,7 @@ from ocs_ci.utility import templating, utils
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs import constants, cluster, machine, node
+from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     UnexpectedBehaviour,
@@ -978,3 +979,22 @@ def check_all_pvc_reached_bound_state_in_kube_job(
             logging.info("All PVCs in Bound state")
             break
     return pvc_bound_list
+
+
+def get_max_pvc_count():
+    """
+    Return the maximum number of pvcs to test for.
+    This value is 500 times the number of worker nodes.
+    """
+    worker_nodes = get_nodes(node_type="worker")
+    count = 0
+    for wnode in worker_nodes:
+        wdata = wnode.data
+        labellist = wdata["metadata"]["labels"].keys()
+        if "node-role.kubernetes.io/worker" not in labellist:
+            continue
+        if "cluster.ocs.openshift.io/openshift-storage" not in labellist:
+            continue
+        count += 1
+    pvc_count = count * 500
+    return pvc_count
