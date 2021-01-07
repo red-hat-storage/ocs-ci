@@ -83,10 +83,12 @@ class CouchBase(PillowFight):
         switch_to_project("default")
         self.up_adm_chk = OCP(namespace="default")
         self.up_check = OCP(namespace=constants.COUCHBASE_OPERATOR)
+        self.adm_objects = []
         for adm_yaml in self.admission_parts:
             adm_data = templating.load_yaml(adm_yaml)
             adm_obj = OCS(**adm_data)
             adm_obj.create()
+            self.adm_objects.append(adm_obj)
 
         # Wait for admission pod to be created
         for adm_pod in TimeoutSampler(
@@ -159,7 +161,7 @@ class CouchBase(PillowFight):
         self.cb_worker = OCS(**cb_work)
         self.cb_worker.create()
 
-    def create_couchbase_worker(self, replicas=1):
+    def create_couchbase_worker(self, replicas=1, sc_name=None):
         """
         Deploy a Couchbase server and pillowfight workload using operator
 
@@ -187,6 +189,10 @@ class CouchBase(PillowFight):
                 "storageClassName"
             ] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         cb_example["spec"]["servers"][0]["size"] = replicas
+        if sc_name:
+            cb_example["spec"]["volumeClaimTemplates"][0]["spec"][
+                "storageClassName"
+            ] = sc_name
         self.cb_examples = OCS(**cb_example)
         self.cb_examples.create()
 
@@ -308,18 +314,21 @@ class CouchBase(PillowFight):
         self.cb_worker.delete()
         self.cb_deploy.delete()
         self.pod_obj.exec_oc_cmd(
-            command="delete rolebinding couchbase-operator-rolebinding"
+            command="delete rolebinding couchbase-operator-rolebinding -n couchbase-operator-namespace"
         )
-        self.pod_obj.exec_oc_cmd(command="delete serviceaccount couchbase-operator")
+        self.pod_obj.exec_oc_cmd(
+            command="delete serviceaccount couchbase-operator -n couchbase-operator-namespace"
+        )
         self.operator_role.delete()
         self.couchbase_obj.delete()
         switch_to_project("default")
         self.ns_obj.delete_project(constants.COUCHBASE_OPERATOR)
-        self.ns_obj.wait_for_delete(resource_name=constants.COUCHBASE_OPERATOR)
-        for adm_yaml in self.admission_parts:
-            adm_data = templating.load_yaml(adm_yaml)
-            adm_obj = OCS(**adm_data)
+        self.ns_obj.wait_for_delete(
+            resource_name=constants.COUCHBASE_OPERATOR, timeout=90
+        )
+        for adm_obj in self.adm_objects:
             adm_obj.delete()
+
         # Before the code below was added, the teardown task would sometimes
         # fail with the leftover objects because it would still see one of the
         # couchbase pods.
