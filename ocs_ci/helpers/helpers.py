@@ -12,6 +12,7 @@ import statistics
 import tempfile
 import threading
 import time
+import inspect
 from concurrent.futures import ThreadPoolExecutor
 from subprocess import PIPE, TimeoutExpired, run
 from uuid import uuid4
@@ -2790,3 +2791,34 @@ def fetch_used_size(cbp_name, exp_val=None):
             f"matching. Retrying"
         )
     return used_in_gb
+
+
+def get_full_test_logs_path(cname):
+    """
+    Getting the full path of the logs file for particular test
+
+    this function use the inspect module to find the name of the caller function, so it need
+    to be call once from the main test function.
+    the output is in the form of
+    ocsci_log_path/<full test file path>/<test filename>/<test class name>/<test function name>
+
+    Args:
+        cname (obj): the Class object which was run and called this function
+
+    Return:
+        str : full path of the test logs relative to the ocs-ci base logs path
+
+    """
+
+    # the module path relative to ocs-ci base path
+    log_file_name = (inspect.stack()[1][1]).replace(f"{os.getcwd()}/", "")
+
+    # The name of the class
+    mname = type(cname).__name__
+
+    # the full log path (relative to ocs-ci base path)
+    full_log_path = (
+        f"{ocsci_log_path()}/{log_file_name}/{mname}/{inspect.stack()[1][3]}"
+    )
+
+    return full_log_path

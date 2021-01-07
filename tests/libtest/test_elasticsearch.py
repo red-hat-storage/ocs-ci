@@ -5,61 +5,102 @@ Testing the Elasticsearch server deployment
 import logging
 import time
 
-import pytest
-
-from ocs_ci.ocs.elasticsearch import ElasticSearch
-from elasticsearch import Elasticsearch, exceptions as esexp
-from subprocess import run
+from ocs_ci.ocs import defaults
+from ocs_ci.helpers.helpers import get_full_test_logs_path
+from ocs_ci.helpers.performance_lib import run_command
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility import templating
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.ocs.ripsaw import RipSaw
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.elasticsearch import elasticsearch_load
 
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="function")
-def es(request):
-    def teardown():
-        es.cleanup()
+class TestElasticsearch:
+    def smallfile_run(self, es):
+        """
+        Run the smallfiles workload so the elasticsearch server will have some data
+        in it for copy
 
-    request.addfinalizer(teardown)
+        Args:
+            es (Elasticsearch): elastic search object
 
-    es = ElasticSearch()
+        Returns:
+            str: the UUID of the test
 
-    return es
+        """
 
+        ripsaw = RipSaw()
 
-class Test_Elasticsearch:
-    def curl_run(self, es, auth=True):
+        # Loading the main template yaml file for the benchmark and update some
+        # fields with new values
+        sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
 
-        if auth:
-            con_string = f"elastic:{es.get_password()}@"
-            msg = "with authentication"
-        else:
-            con_string = ""
-            msg = "without authentication"
+        # Setting up the parameters for this test
+        sf_data["spec"]["elasticsearch"]["server"] = es.get_ip()
+        sf_data["spec"]["elasticsearch"]["port"] = es.get_port()
 
-        log.info(f"\nTesting the Local server Connecting {msg}")
+        sf_data["spec"]["workload"]["args"]["samples"] = 1
+        sf_data["spec"]["workload"]["args"]["operation"] = ["create"]
+        sf_data["spec"]["workload"]["args"]["file_size"] = 4
+        sf_data["spec"]["workload"]["args"]["files"] = 500000
+        sf_data["spec"]["workload"]["args"]["threads"] = 4
+        sf_data["spec"]["workload"]["args"][
+            "storageclass"
+        ] = constants.DEFAULT_STORAGECLASS_RBD
+        sf_data["spec"]["workload"]["args"]["storagesize"] = "100Gi"
 
-        try:
-            if auth:
-                test_es = Elasticsearch(
-                    [{"host": "localhost", "port": es.get_port()}],
-                    http_auth=("elastic", es.get_password()),
-                )
-            else:
-                test_es = Elasticsearch([{"host": "localhost", "port": es.get_port()}])
-        except esexp.ConnectionError:
-            log.error(
-                "can not connect to ES server {}:{} {}".format(
-                    es.get_ip, es.get_port, msg
-                )
-            )
-            raise
+        # Deploy the ripsaw operator
+        log.info("Apply Operator CRD")
+        ripsaw.apply_crd("resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml")
 
-        log.info(f"testing ES object is {test_es}")
-        server_string = f'localhost:{es.get_port()}"'
-        curl_cmd = 'curl "http://'
+        # deploy the smallfile workload
+        log.info("Running SmallFile bench")
+        sf_obj = OCS(**sf_data)
+        sf_obj.create()
 
-        log.info(f"Going to run : {curl_cmd}{con_string}{server_string}")
-        log.info(run(f"{curl_cmd}{con_string}{server_string}", shell=True))
+        # wait for benchmark pods to get created - takes a while
+        for bench_pod in TimeoutSampler(
+            240,
+            10,
+            get_pod_name_by_pattern,
+            "smallfile-client",
+            constants.RIPSAW_NAMESPACE,
+        ):
+            try:
+                if bench_pod[0] is not None:
+                    small_file_client_pod = bench_pod[0]
+                    break
+            except IndexError:
+                log.info("Bench pod not ready yet")
+
+        bench_pod = OCP(kind="pod", namespace=constants.RIPSAW_NAMESPACE)
+        log.info("Waiting for SmallFile benchmark to Run")
+        bench_pod.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_name=small_file_client_pod,
+            sleep=30,
+            timeout=600,
+        )
+        for item in bench_pod.get()["items"][1]["spec"]["volumes"]:
+            if "persistentVolumeClaim" in item:
+                break
+        uuid = ripsaw.get_uuid(small_file_client_pod)
+        timeout = 600
+        while timeout >= 0:
+            logs = bench_pod.get_logs(name=small_file_client_pod)
+            if "RUN STATUS DONE" in logs:
+                break
+            timeout -= 30
+            if timeout == 0:
+                raise TimeoutError("Timed out waiting for benchmark to complete")
+            time.sleep(30)
+        ripsaw.cleanup()
+        return uuid
 
     def test_elasticsearch(self, es):
         """
@@ -70,7 +111,8 @@ class Test_Elasticsearch:
             es (fixture) : fixture that deploy / teardown the elasticsearch
 
         """
-
+        full_log_path = get_full_test_logs_path(cname=self)
+        log.info(f"Logs file path name is : {full_log_path}")
         log.info("The ElasticSearch deployment test started.")
         if es.get_health():
             log.info("The Status of the elasticsearch is OK")
@@ -88,11 +130,22 @@ class Test_Elasticsearch:
             log.info(f"The Elasticsearch IP is {es.get_ip()}")
             log.info(f"The Elasticsearch port is {es.get_port()}")
             log.info(f"The Password to connect is {es.get_password()}")
-            log.info(f"The local server PID is {es.lspid}")
-
-            self.curl_run(es, auth=True)
-
-            self.curl_run(es, auth=False)
 
         else:
             assert False, "The Elasticsearch module is not ready !"
+
+        log.info(f"Test UUDI is : {self.smallfile_run(es)}")
+
+        assert es.dumping_all_data(full_log_path), "Can not Retrieve the test data"
+
+        assert run_command(
+            f"ls {full_log_path}/FullResults.tgz"
+        ), "Results file did not retrieve from pod"
+
+        main_es = {
+            "host": defaults.ELASTICSEARCH_DEV_IP,
+            "port": defaults.ELASTICSEARCE_PORT,
+        }
+        assert elasticsearch_load(
+            main_es, full_log_path
+        ), "Can not load data into Main ES server"
