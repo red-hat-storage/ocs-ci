@@ -45,9 +45,6 @@ class PerfResult:
         """
         Create Elastic-Search server connection
 
-        Raise:
-             ConnectionError : in case of can not connect to the server
-             ValueError: in case of ES server ping failed.
 
         """
 
@@ -56,17 +53,15 @@ class PerfResult:
         try:
             self.es = Elasticsearch([{"host": self.server, "port": self.port}])
         except ESExp.ConnectionError:
-            log.error(
+            log.warning(
                 "can not connect to ES server {}:{}".format(self.server, self.port)
             )
-            raise
 
         # Testing the connection to the elastic-search
         if not self.es.ping():
-            log.error(
+            log.warning(
                 "can not connect to ES server {}:{}".format(self.server, self.port)
             )
-            raise ValueError("Connection failed")
 
     def es_read(self):
         """
@@ -94,7 +89,11 @@ class PerfResult:
 
         """
 
-        log.info("Writing all data to ES server")
+        if self.es is None:
+            log.warning("No elasticsearch server to write data to")
+            return False
+
+        log.info(f"Writing all data to ES server {self.es}")
         self.add_key("all_results", self.all_results)
         log.info(
             f"Params : index={self.new_index}, "
@@ -105,8 +104,9 @@ class PerfResult:
                 index=self.new_index, doc_type="_doc", body=self.results, id=self.uuid
             )
         except ESExp.RequestError as e:
-            log.error(f"Failed writhing data with {e}")
-            raise
+            log.warning(f"Failed writhing data with {e}")
+            return False
+        return True
 
     def add_key(self, key, value):
         """

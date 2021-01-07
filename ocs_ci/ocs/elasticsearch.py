@@ -42,14 +42,22 @@ def elasticsearch_load(connection, target_path):
         log.error("There is No data to load into ES server")
         return False
     else:
+        if connection is None:
+            log.warning("There is no elasticsearch server to load data into")
+            return False
+        """
         log.info(f"Loading data from {target_path} to ES server at {connection}")
+        log.info(f"Creating new ES connection to {connection}")
         try:
-            log.info(f"Creating new ES connection to {connection}")
-            main_es = Elasticsearch([connection])
-            log.debug(f"Connection info : {main_es}")
-        except esexp.ConnectionError:
+            main_es = Elasticsearch([connection], verify_certs=True)
+        except esexp.ConnectionError as ex:
+            log.error(f"Can not connect to the main ES server on {connection} - ({ex})")
+            return False
+        if not main_es.ping():
             log.error(f"Can not connect to the main ES server on {connection}")
             return False
+        """
+        log.info(f"The ES connection is {connection}")
         for ind in all_files:
             if ".data." in ind:  # load only data files and not mapping info
                 file_name = f"{target_path}/results/{ind}"
@@ -61,7 +69,7 @@ def elasticsearch_load(connection, target_path):
                         if line:
                             full_data = json.loads(line)
                             log.debug(f"Loading {full_data} into the ES")
-                            main_es.index(
+                            connection.index(
                                 index=ind_name, doc_type="_doc", body=full_data
                             )
                         else:
@@ -253,17 +261,14 @@ class ElasticSearch(object):
         Create a connection to the local ES
 
         Returns:
-            Elasticsearch: elasticsearch connection object
-
-        Raise:
-            ConnectionError: if can not connect to the server
+            Elasticsearch: elasticsearch connection object, None if can not connect to ES
 
         """
         try:
             es = Elasticsearch([{"host": self.get_ip(), "port": self.get_port()}])
         except esexp.ConnectionError:
-            log.error("Can not connect to ES server in the LocalServer")
-            raise
+            log.warning("Can not connect to ES server in the LocalServer")
+            es = None
         return es
 
     def get_indices(self):
