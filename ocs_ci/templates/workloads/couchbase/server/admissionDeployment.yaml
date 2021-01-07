@@ -3,6 +3,8 @@ kind: Deployment
 metadata:
   creationTimestamp: null
   name: couchbase-operator-admission
+  namespace: default
+
 spec:
   replicas: 1
   selector:

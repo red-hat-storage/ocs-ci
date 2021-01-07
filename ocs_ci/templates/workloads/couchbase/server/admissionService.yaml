@@ -3,6 +3,8 @@ kind: Service
 metadata:
   creationTimestamp: null
   name: couchbase-operator-admission
+  namespace: default
+
 spec:
   ports:
   - port: 443
