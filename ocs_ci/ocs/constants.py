@@ -120,7 +120,7 @@ MACHINECONFIGPOOL = "MachineConfigPool"
 VOLUMESNAPSHOTCLASS = "VolumeSnapshotClass"
 HPA = "horizontalpodautoscaler"
 VOLUMESNAPSHOTCONTENT = "VolumeSnapshotContent"
-POD_DISRUPTION_BUDGET = "pdb"
+POD_DISRUPTION_BUDGET = "PodDisruptionBudget"
 
 
 # Provisioners

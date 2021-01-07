@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.testlib import ocs_upgrade, polarion_id
+from ocs_ci.framework.testlib import ocs_upgrade, polarion_id, post_ocs_upgrade
 from ocs_ci.ocs.disruptive_operations import worker_node_shutdown, osd_node_reboot
 from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
 from ocs_ci.utility.reporting import get_polarion_id
@@ -67,11 +67,11 @@ def test_upgrade():
     run_ocs_upgrade()
 
 
-@ocs_upgrade
+@post_ocs_upgrade
 @pytest.mark.polarion_id("OCS-2449")
 def test_check_mon_pdb_post_upgrade():
     """
-    Function to check disruptions_allowed and minimum
+    Testcase to check disruptions_allowed and minimum
     available mon count
 
     """
@@ -85,5 +85,6 @@ def test_check_mon_pdb_post_upgrade():
     log.info(f"Number of Mons Disruptions_allowed {disruptions_allowed}")
     log.info(f"Minimum_available mon count {min_available_mon}")
 
+    # The PDB values are considered from OCS 4.5 onwards.
     assert disruptions_allowed == 1, "Mon Disruptions_allowed count not matching"
     assert min_available_mon == 2, "Minimum available mon count is not matching"
