@@ -220,6 +220,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
             list: A list of backingstore names.
 
         """
+        current_call_created_backingstores = []
         if method.lower() not in cmdMap:
             raise RuntimeError(
                 f"Invalid method type received: {method}. "
@@ -245,16 +246,16 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                     backingstore_name = create_unique_resource_name(
                         resource_description="backingstore", resource_type=cloud.lower()
                     )
-                    created_backingstores.append(
-                        BackingStore(
-                            name=backingstore_name,
-                            method=method.lower(),
-                            type="pv",
-                            mcg_obj=mcg_obj,
-                            vol_num=vol_num,
-                            vol_size=size,
-                        )
+                    backingstore_obj = BackingStore(
+                        name=backingstore_name,
+                        method=method.lower(),
+                        type="pv",
+                        mcg_obj=mcg_obj,
+                        vol_num=vol_num,
+                        vol_size=size,
                     )
+                    current_call_created_backingstores.append(backingstore_obj)
+                    created_backingstores.append(backingstore_obj)
                     if method.lower() == "cli":
                         cmdMap[method.lower()][cloud.lower()](
                             mcg_obj, backingstore_name, vol_num, size, storagecluster
@@ -271,15 +272,16 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                             resource_description="backingstore",
                             resource_type=cloud.lower(),
                         )
-                        created_backingstores.append(
-                            BackingStore(
-                                name=backingstore_name,
-                                method=method.lower(),
-                                type="cloud",
-                                uls_name=uls_name,
-                                mcg_obj=mcg_obj,
-                            )
+                        backingstore_obj = BackingStore(
+                            name=backingstore_name,
+                            method=method.lower(),
+                            type="pv",
+                            mcg_obj=mcg_obj,
+                            vol_num=vol_num,
+                            vol_size=size,
                         )
+                        current_call_created_backingstores.append(backingstore_obj)
+                        created_backingstores.append(backingstore_obj)
                         if method.lower() == "cli":
                             cmdMap[method.lower()][cloud.lower()](
                                 mcg_obj, cld_mgr, backingstore_name, uls_name, region
@@ -293,7 +295,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                         )
                         # TODO: Verify OC\CLI BS health by using the appropriate methods
 
-        return created_backingstores
+        return current_call_created_backingstores
 
     def backingstore_cleanup():
         for backingstore in created_backingstores:
