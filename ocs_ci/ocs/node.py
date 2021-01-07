@@ -17,7 +17,7 @@ from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions
-from ocs_ci.helpers.helpers import (
+from ocs_ci.ocs.pv import (
     get_pv_objs_in_sc,
     verify_new_pv_available_in_sc,
     delete_released_pvs_in_sc,
