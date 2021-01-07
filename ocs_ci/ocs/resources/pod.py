@@ -1666,7 +1666,7 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
         return None
 
 
-def check_toleration_on_pods(toleration_key=None):
+def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
     """
     Function to check toleration on pods
 
@@ -1674,21 +1674,20 @@ def check_toleration_on_pods(toleration_key=None):
         toleration_key (str): The toleration key to check
 
     """
-    toleration_key = toleration_key if toleration_key else constants.TOLERATION_KEY
+
     pod_objs = get_all_pods(
         namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-        selector=constants.TOOL_APP_LABEL,
+        selector=[constants.TOOL_APP_LABEL],
         exclude_selector=True,
     )
-    flag = 1
+    flag = False
     for pod_obj in pod_objs:
         resource_name = pod_obj.name
         tolerations = pod_obj.get().get("spec").get("tolerations")
         for key in tolerations:
             if key["key"] == toleration_key:
-                flag = 0
-        logger.info(flag)
-        if not flag:
+                flag = True
+        if flag:
             logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
         else:
             logger.error(

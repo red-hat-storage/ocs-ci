@@ -1137,17 +1137,17 @@ def check_taint_on_nodes(taint=None):
         taint (str): The taint to check on nodes
 
     """
-    taint = taint if taint else "node.ocs.openshift.io/storage=true:NoSchedule"
+    taint = taint if taint else constants.OPERATOR_NODE_TAINT
     ocs_nodes = get_ocs_nodes()
     flag = -1
     for node_obj in ocs_nodes:
         if node_obj.get().get("spec").get("taints"):
-            if node_obj.get().get("spec").get("taints")[0].get("key") in taint:
+            if taint in node_obj.get().get("spec").get("taints")[0].get("key"):
                 log.info(f"Node {node_obj.name} has taint {taint}")
                 flag = 1
         else:
             flag = 0
-    return bool(flag)
+        return bool(flag)
 
 
 def taint_nodes(nodes_to_taint=None):
@@ -1170,7 +1170,7 @@ def taint_nodes(nodes_to_taint=None):
         log.info(f"Nodes already have taint {constants.OPERATOR_NODE_TAINT} ")
 
 
-def untaint_nodes(taint=None, nodes_to_taint=None):
+def untaint_nodes(taint=constants.OPERATOR_NODE_TAINT, nodes_to_taint=None):
     """
     Function to remove taints from nodes
 
@@ -1182,7 +1182,6 @@ def untaint_nodes(taint=None, nodes_to_taint=None):
     if check_taint_on_nodes():
         ocp = OCP()
         ocs_nodes = get_ocs_nodes()
-        taint = taint if taint else constants.OPERATOR_NODE_TAINT
         nodes_to_taint = nodes_to_taint if nodes_to_taint else ocs_nodes
         for node in nodes_to_taint:
             taint_cmd = f"adm taint nodes {node.name} {taint}-"
