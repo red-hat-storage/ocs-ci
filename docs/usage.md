@@ -10,11 +10,23 @@ Run `report-version --cluster-path /my-cluster/path --log-level INFO` to
 get information on various image version deployed by ocs-ci
 
 # usage for cleanup
+
+#### AWS
   This should be used only when your cluster-dir is accidentally deleted
   `ci-cleanup [-h] --cluster CLUSTER`
   CLUSTER points to cluster tag eg: mycluster-ocs-ci-jlgzn , without additional
    -master or -worker. This can be found by logging into AWS, Selecting the VM
    and clicking on Tags.
+
+#### vSphere
+  This should be used only when your cluster-dir is accidentally deleted
+  ```bash
+  vsphere-cleanup [-h] --cluster_name CLUSTER_NAME --vsphere_conf VSPHERE_CONF
+  ```
+  e.g:
+
+  `vsphere-cleanup --cluster_name mycluster-oct12
+                   --vsphere_conf ~/vSphere-DC-CP_VC1.yaml`
 
 # usage to shutdown AWS nodes when nodes are not in use
   Following cli can be used when you want to shutdown the cluster
@@ -102,7 +114,7 @@ to the pytest.
   bugzilla_password = yourPassword
   ```
 * `--collect-logs` - to collect OCS logs for failed test cases.
-* `--collect-logs-on-success-run` - Collect must gather logs at the end of the 
+* `--collect-logs-on-success-run` - Collect must gather logs at the end of the
    execution (also when no failure in the tests)
 * `--io-in-bg` - If passed, IO will be running in the test background.
 * `--io-load` - IOs throughput target percentage. The value should be
