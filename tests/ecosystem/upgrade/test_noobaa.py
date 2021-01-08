@@ -108,10 +108,10 @@ def test_noobaa_postupgrade(
     awscli_pod_session.exec_cmd_on_pod(command=f'sh -c "rm -rf {LOCAL_TEMP_PATH}/*"')
 
     mcg_obj_session.check_backingstore_state(
-        "backing-store-" + backingstore1["name"], BS_OPTIMAL, timeout=360
+        "backing-store-" + backingstore1.name, BS_OPTIMAL, timeout=360
     )
     mcg_obj_session.check_backingstore_state(
-        "backing-store-" + backingstore2["name"], BS_OPTIMAL, timeout=360
+        "backing-store-" + backingstore2.name, BS_OPTIMAL, timeout=360
     )
 
     assert bucket.status == constants.STATUS_BOUND
