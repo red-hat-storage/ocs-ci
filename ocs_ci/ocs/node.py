@@ -100,6 +100,7 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=
             reached the desired state
 
     """
+    timeout = 1800
     try:
         if not node_names:
             for sample in TimeoutSampler(60, 3, get_node_objs):

@@ -123,6 +123,7 @@ class OCP(object):
             str: If out_yaml_format is False.
 
         """
+        timeout = 1800
         oc_cmd = "oc "
         env_kubeconfig = os.getenv("KUBECONFIG")
         if not env_kubeconfig or not os.path.exists(env_kubeconfig):
@@ -170,6 +171,7 @@ class OCP(object):
             CommandFailed: When failure in command execution
         """
         # Appending one empty value in list for string manipulation
+        timeout = 1800
         create_cmd_list = copy.deepcopy(cmd_list)
         create_cmd_list.append(" ")
         err_msg = "CMD FAILED"
@@ -504,6 +506,7 @@ class OCP(object):
                 False otherwise
 
         """
+        timeout = 1800
         if condition == error_condition:
             # when this fails, this method is used in a wrong way
             raise ValueError(
@@ -674,6 +677,7 @@ class OCP(object):
             bool: True in case resource deletion is successful
 
         """
+        timeout = 1800
         start_time = time.time()
         while True:
             try:
@@ -850,6 +854,7 @@ class OCP(object):
                 specified.
 
         """
+        timeout = 1800
         self.check_function_supported(self._has_phase)
         self.check_name_is_specified()
         sampler = TimeoutSampler(timeout, sleep, func=self.check_phase, phase=phase)
@@ -915,6 +920,7 @@ class OCP(object):
             str: container logs
 
         """
+        timeout = 1800
         log.info("fetching logs from %s/%s", self.kind, name)
         oc_cmd = f"logs {self.kind}/{name}"
         if container_name is not None:
@@ -1068,7 +1074,7 @@ def rsync(src, dst, node, dst_node=True, extra_params=""):
         with tempfile.NamedTemporaryFile() as rsync_pod_yaml:
             dump_data_to_temp_yaml(pod_data, rsync_pod_yaml.name)
             pod.create(yaml_file=rsync_pod_yaml.name)
-        pod.wait_for_resource(condition=constants.STATUS_RUNNING, timeout=120)
+        pod.wait_for_resource(condition=constants.STATUS_RUNNING, timeout=1800)
         rsync_cmd = f"rsync {extra_params} {src} {dst}"
         out = pod.exec_oc_cmd(rsync_cmd)
         log.info(f"Rsync out: {out}")

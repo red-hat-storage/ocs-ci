@@ -1564,7 +1564,7 @@ def get_az_count():
         return 1
 
 
-def ceph_health_check(namespace=None, tries=20, delay=30):
+def ceph_health_check(namespace=None, tries=20, delay=60):
     """
     Args:
         namespace (str): Namespace of OCS

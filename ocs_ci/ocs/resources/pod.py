@@ -33,7 +33,7 @@ from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
-FIO_TIMEOUT = 600
+FIO_TIMEOUT = 1800
 
 TEXT_CONTENT = (
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
@@ -157,6 +157,7 @@ class Pod(OCS):
         Returns:
             Munch Obj: This object represents a returned yaml file
         """
+        timeout = 1800
         rsh_cmd = f"rsh {self.name} "
         rsh_cmd += command
         return self.ocp.exec_oc_cmd(
@@ -799,7 +800,7 @@ def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=False):
     # Check I/O started
     try:
         for sample in TimeoutSampler(
-            timeout=20,
+            timeout=1800,
             sleep=1,
             func=check_file_existence,
             pod_obj=pod_obj,
@@ -1143,7 +1144,7 @@ def validate_pods_are_respinned_and_running_state(pod_objs_list):
 
     """
     for pod in pod_objs_list:
-        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING, timeout=180)
+        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING, timeout=1800)
 
     for pod in pod_objs_list:
         pod_obj = pod.get()
@@ -1350,6 +1351,7 @@ def wait_for_storage_pods(timeout=200):
             state
 
     """
+    timeout = 1800
     all_pod_obj = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     # Ignoring pods with "app=rook-ceph-detect-version" app label
 
@@ -1401,6 +1403,7 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
 
     """
 
+    timeout = 1800
     namespace = config.ENV_DATA["cluster_namespace"]
     pod = OCP(
         kind=constants.POD,
@@ -1472,6 +1475,7 @@ def wait_for_dc_app_pods_to_reach_running_state(
         exclude_state (str): A resource state to ignore
 
     """
+    timeout = 1800
     for pod_obj in dc_pod_obj:
         name = pod_obj.get_labels().get("name")
         dpod_list = get_all_pods(selector_label=f"name={name}", wait=True)
@@ -1504,7 +1508,7 @@ def delete_deploymentconfig_pods(pod_obj):
 def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
     status_options = ["Init:1/4", "Init:2/4", "Init:3/4", "PodInitializing", "Running"]
     try:
-        for osd_pods in TimeoutSampler(timeout=180, sleep=3, func=get_osd_pods):
+        for osd_pods in TimeoutSampler(timeout=1800, sleep=3, func=get_osd_pods):
             # Check if the new osd pods has started to come up
             new_osd_pods = osd_pods[number_of_osd_pods_before:]
             new_osd_pods_come_up = [
@@ -1602,6 +1606,7 @@ def wait_for_pods_to_be_running(timeout=200, namespace=defaults.ROOK_CLUSTER_NAM
          bool: True, if all pods in Running state. False, otherwise
 
     """
+    timeout = 1800
     try:
         for pods_running in TimeoutSampler(
             timeout=timeout,
