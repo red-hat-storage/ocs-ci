@@ -2729,13 +2729,12 @@ def log_alerts(request):
 
     """
     alerts_before = []
-    alerts_after = []
     prometheus = None
 
     try:
         prometheus = PrometheusAPI()
     except Exception as e:
-        log.warning("There was a problem with connecting to Promeheus: {e.message}")
+        log.warning(f"There was a problem with connecting to Promeheus: {e.message}")
 
     def _collect_alerts():
         try:
@@ -2753,7 +2752,7 @@ def log_alerts(request):
                 return False
         except Exception as e:
             log.warning(
-                "There was a problem with collecting alerts for analysis: {e.message}"
+                f"There was a problem with collecting alerts for analysis: {e.message}"
             )
             return False
 
