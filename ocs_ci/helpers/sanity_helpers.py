@@ -72,7 +72,7 @@ class Sanity:
             for pod in self.pod_objs:
                 get_fio_rw_iops(pod)
 
-        if config.ENV_DATA["platform"] in constants.ON_PREM_PLATFORMS:
+        if rgw_bucket_factory:
             self.obc_objs.extend(rgw_bucket_factory(1, "rgw-oc"))
 
         self.obc_objs.extend(bucket_factory(amount=1, interface="OC"))
