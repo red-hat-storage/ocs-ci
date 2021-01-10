@@ -29,6 +29,11 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import create_directory_path, mirror_image, run_cmd
+from ocs_ci.ocs.resources.pod import (
+    get_pods_having_label,
+    download_file_from_pod,
+    Pod,
+)
 
 
 log = logging.getLogger(__name__)
@@ -848,12 +853,6 @@ def collect_noobaa_db_dump(log_dir_path):
         log_dir_path (str): directory for dumped Noobaa DB
 
     """
-    from ocs_ci.ocs.resources.pod import (
-        get_pods_having_label,
-        download_file_from_pod,
-        Pod,
-    )
-
     nb_db_label = (
         constants.NOOBAA_DB_LABEL_46_AND_UNDER
         if float(ocsci_config.ENV_DATA["ocs_version"]) < 4.7
@@ -867,7 +866,12 @@ def collect_noobaa_db_dump(log_dir_path):
     ocs_log_dir_path = os.path.join(log_dir_path, "noobaa_db_dump")
     create_directory_path(ocs_log_dir_path)
     ocs_log_dir_path = os.path.join(ocs_log_dir_path, "nbcore.gz")
-    nb_db_pod.exec_cmd_on_pod("mongodump --archive=nbcore.gz --gzip --db=nbcore")
+    if float(ocsci_config.ENV_DATA["ocs_version"]) < 4.7:
+        cmd = "mongodump --archive=nbcore.gz --gzip --db=nbcore"
+    else:
+        cmd = "pg_dump nbcore | gzip > nbcore.gz"
+
+    nb_db_pod.exec_cmd_on_pod(cmd)
     download_file_from_pod(
         pod_name=nb_db_pod.name,
         remotepath="/opt/app-root/src/nbcore.gz",
