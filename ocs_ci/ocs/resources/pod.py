@@ -1814,3 +1814,17 @@ def get_deployment_name(pod_name):
 
     """
     return "-".join(pod_name.split("-")[:-2])
+
+
+def get_osd_pod_id(osd_pod):
+    """
+    Get the osd pod id
+
+    Args:
+        osd_pod (ocs_ci.ocs.resources.pod.Pod): The osd pod object
+
+    Returns:
+        str: The osd pod id
+
+    """
+    return osd_pod.get().get("metadata").get("labels").get("ceph-osd-id")

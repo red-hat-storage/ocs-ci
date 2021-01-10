@@ -47,6 +47,9 @@ def delete_and_create_osd_node(osd_node_name):
 
     """
     new_node_name = None
+    osd_pod = node.get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())[0]
+    old_osd_id = pod.get_osd_pod_id(osd_pod)
+
     # error message for invalid deployment configuration
     msg_invalid = (
         "ocs-ci config 'deployment_type' value "
@@ -74,6 +77,7 @@ def delete_and_create_osd_node(osd_node_name):
             new_node_name = node.delete_and_create_osd_node_vsphere_lso(
                 osd_node_name, use_existing_node=False
             )
+
         else:
             new_node_name = node.delete_and_create_osd_node_vsphere_upi(
                 osd_node_name, use_existing_node=False
@@ -83,7 +87,7 @@ def delete_and_create_osd_node(osd_node_name):
         osd_node_name, new_node_name
     )
     assert node.node_replacement_verification_steps_user_side(
-        osd_node_name, new_node_name
+        osd_node_name, new_node_name, old_osd_id
     )
 
 

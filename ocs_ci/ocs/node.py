@@ -939,7 +939,7 @@ def delete_and_create_osd_node_vsphere_lso(osd_node_name, use_existing_node=Fals
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
     osd_pod = get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())[0]
-    osd_id = osd_pod.get().get("metadata").get("labels").get("ceph-osd-id")
+    osd_id = pod.get_osd_pod_id(osd_pod)
     log.info(f"osd id to remove = {osd_id}")
 
     log.info("Scale down node deployments...")
@@ -981,9 +981,10 @@ def delete_and_create_osd_node_vsphere_lso(osd_node_name, use_existing_node=Fals
     log.info(
         "Replace the old node with the new worker node in localVolumeDiscovery and localVolumeSet"
     )
-    replace_old_node_with_new_node(
+    res = add_new_node_to_lvd_and_lvs(
         old_node_name=osd_node_name, new_node_name=new_node_name
     )
+    assert res, "Failed to add the new node to LVD and LVS"
 
     log.info("Verify new pv is available...")
     is_new_pv_available = verify_new_pv_available_in_sc(old_pv_objs, sc_name)
@@ -1086,7 +1087,9 @@ def get_worker_nodes_not_in_ocs():
     return [n for n in worker_nodes if n.name not in ocs_node_names]
 
 
-def node_replacement_verification_steps_user_side(old_node_name, new_node_name):
+def node_replacement_verification_steps_user_side(
+    old_node_name, new_node_name, old_osd_id
+):
     """
     Check the verification steps that the user should perform after the process
     of node replacement as described in the docs
@@ -1094,6 +1097,7 @@ def node_replacement_verification_steps_user_side(old_node_name, new_node_name):
     Args:
         old_node_name (str): The name of the old node that has been deleted
         new_node_name (str): The name of the new node that has been created
+        old_osd_id (str): The old osd id
 
     Returns:
         bool: True if all the verification steps passed. False otherwise
@@ -1119,6 +1123,19 @@ def node_replacement_verification_steps_user_side(old_node_name, new_node_name):
     # after the process of node replacement
     if not pod.wait_for_pods_to_be_running():
         log.warning("Not all the pods in running state")
+        return False
+
+    new_osd_pod = get_node_pods(new_node_name, pods_to_search=pod.get_osd_pods())[0]
+    if not new_osd_pod:
+        log.warning("Didn't find any osd pods running on the new node")
+        return False
+
+    new_osd_id = pod.get_osd_pod_id(new_osd_pod)
+    if old_osd_id != new_osd_id:
+        log.warning(
+            f"The osd pod, that associated to the new node, has the id {new_osd_id} "
+            f"instead of the expected osd id {old_osd_id}"
+        )
         return False
 
     log.info("Verification steps from the user side finish successfully")
@@ -1408,14 +1425,14 @@ def get_node_index_in_local_block(node_name):
     return node_values.index(node_name)
 
 
-def replace_old_node_with_new_node(old_node_name, new_node_name):
+def add_new_node_to_lvd_and_lvs(old_node_name, new_node_name):
     """
-    Replace the old node with the new node as described in the documents
-    of node replacement with LSO
+    Replace the old node with the new node in localVolumeDiscovery and localVolumeSet,
+    as described in the documents of node replacement with LSO
 
     Args:
-        new_node_name (str): the new node name to add to the local volume
         old_node_name (str): The old node name to remove from the local volume
+        new_node_name (str): the new node name to add to the local volume
 
     Returns:
         bool: True in case if changes are applied. False otherwise
@@ -1437,5 +1454,7 @@ def replace_old_node_with_new_node(old_node_name, new_node_name):
         resource_name=constants.AUTO_DISCOVER_DEVICES_RESOURCE,
     )
 
-    ocp_lvs_obj.patch(params=params, format_type="json")
-    ocp_lvd_obj.patch(params=params, format_type="json")
+    lvs_result = ocp_lvs_obj.patch(params=params, format_type="json")
+    lvd_result = ocp_lvd_obj.patch(params=params, format_type="json")
+
+    return lvs_result and lvd_result
