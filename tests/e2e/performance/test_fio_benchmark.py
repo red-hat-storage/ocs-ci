@@ -188,9 +188,14 @@ class TestFIOBenchmark(E2ETest):
                 self.fio_cr["spec"]["elasticsearch"] = {
                     "server": defaults.ELASTICSEARCH_DEV_IP,
                     "port": defaults.ELASTICSEARCE_PORT,
+                    "url": f"http://{defaults.ELASTICSEARCH_DEV_IP}:{defaults.ELASTICSEARCE_PORT}",
                 }
 
         if "elasticsearch" in self.fio_cr["spec"]:
+            self.fio_cr["spec"]["elasticsearch"]["url"] = (
+                f"http://{self.fio_cr['spec']['elasticsearch']['server']}:"
+                f"{self.fio_cr['spec']['elasticsearch']['port']}"
+            )
             self.backup_es = self.fio_cr["spec"]["elasticsearch"]
         else:
             log.warning("Elastic Search information does not exists in YAML file")
@@ -201,6 +206,7 @@ class TestFIOBenchmark(E2ETest):
             self.fio_cr["spec"]["elasticsearch"] = {
                 "server": elasticsearch.get_ip(),
                 "port": elasticsearch.get_port(),
+                "url": f"http://{elasticsearch.get_ip()}:{elasticsearch.get_port()}",
             }
 
     def setting_storage_usage(self):
