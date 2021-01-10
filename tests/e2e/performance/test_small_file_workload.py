@@ -383,6 +383,9 @@ class TestSmallFileWorkload(E2ETest):
 
         # Saving the Original elastic-search IP and PORT - if defined in yaml
         if "elasticsearch" in sf_data["spec"]:
+            sf_data["spec"]["elasticsearch"][
+                "url"
+            ] = f"http://{sf_data['spec']['elasticsearch']['server']}:{sf_data['spec']['elasticsearch']['port']}"
             backup_es = sf_data["spec"]["elasticsearch"]
         else:
             log.warning("Elastic Search information does not exists in YAML file")
@@ -391,6 +394,7 @@ class TestSmallFileWorkload(E2ETest):
         # Use the internal define elastic-search server in the test - if exist
         if es:
             sf_data["spec"]["elasticsearch"] = {
+                "url": f"http://{es.get_ip()}:{es.get_port()}",
                 "server": es.get_ip(),
                 "port": es.get_port(),
             }
