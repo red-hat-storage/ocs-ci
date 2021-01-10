@@ -1107,3 +1107,23 @@ def is_node_labeled(node_name, label=constants.OPERATOR_NODE_LABEL):
     """
     node_names_with_label = machine.get_labeled_nodes(label=label)
     return node_name in node_names_with_label
+
+
+def taint_nodes(nodes, taint_label=constants.OCS_TAINT):
+    """
+    Taint nodes
+
+    Args:
+        nodes (list): list of node names need to taint
+        taint_label (str): New taint label to be assigned for these nodes.
+            Default value is the OCS taint
+
+    """
+    ocp_obj = ocp.OCP()
+    for node in nodes:
+        command = f"adm taint node {node} {taint_label}"
+        try:
+            ocp_obj.exec_oc_cmd(command)
+            logging.info(f"Successfully tainted {node} with OCS storage taint")
+        except Exception as e:
+            logging.info(f"{node} was not tainted - {e}")
