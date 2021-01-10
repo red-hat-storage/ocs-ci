@@ -6,4 +6,4 @@ metadata:
   namespace: openshift-storage
 spec:
   storageClassName: openshift-storage.noobaa.io
-  objectBucketName: noobaa-obc
+  bucketName: noobaa-obc
