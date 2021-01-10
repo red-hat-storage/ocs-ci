@@ -96,6 +96,7 @@ CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
 CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
 CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
+NOOBAA_SC = "openshift-storage.noobaa.io"
 DEPLOYMENT = "Deployment"
 JOB = "Job"
 STORAGECLASS = "StorageClass"
@@ -144,6 +145,7 @@ IGNORE_SC_GP2 = "gp2"
 IGNORE_SC_FLEX = "rook-ceph-block"
 TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
+OPENSHIFT_STORAGE_NAMESPACE = "openshift-storage"
 OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
 OPENSHIFT_LOGGING_NAMESPACE = "openshift-logging"
 OPENSHIFT_OPERATORS_REDHAT_NAMESPACE = "openshift-operators-redhat"
@@ -918,7 +920,11 @@ LOCAL_STORAGE_OPTIONAL_OPERATORS = os.path.join(
 LOCAL_VOLUME_DISCOVERY_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "local-volume-discovery.yaml"
 )
+LOCAL_VOLUME_DISCOVERY = (
+    "localvolumediscovery.local.storage.openshift.io/auto-discover-devices"
+)
 LOCAL_VOLUME_SET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "local-volume-set.yaml")
+LOCAL_VOLUME_SET = "localvolumesets.local.storage.openshift.io"
 
 # All worker default config files
 RHCOS_WORKER_CONF = os.path.join(CONF_DIR, "ocsci/aws_upi_rhcos_workers.yaml")
@@ -1125,3 +1131,6 @@ CLOUD_MNGR_PLATFORMS = ["AWS", "GCP", "AZURE", "IBMCOS"]
 MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
 MCG_TESTS_MIN_NB_ENDPOINT_COUNT = 2
 MAX_NB_ENDPOINT_COUNT = 2
+
+OCS_TAINT = "node.ocs.openshift.io/storage"
+VOLUMESNAPSHOT = "volumesnapshot"
