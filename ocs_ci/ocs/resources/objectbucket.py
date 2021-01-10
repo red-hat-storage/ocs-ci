@@ -412,6 +412,8 @@ class MCGOCBucket(OCBucket):
             self.name = create_unique_resource_name("oc", "obc")
         obc_data["metadata"]["name"] = self.name
         obc_data["spec"]["bucketName"] = self.name
+        if float(config.ENV_DATA["ocs_version"]) >= 4.7:
+            obc_data["spec"]["objectBucketName"] = self.name
         obc_data["spec"]["storageClassName"] = f"{self.namespace}.noobaa.io"
         obc_data["metadata"]["namespace"] = self.namespace
         if self.bucketclass:
@@ -433,6 +435,8 @@ class RGWOCBucket(OCBucket):
             self.name = create_unique_resource_name("oc", "obc")
         obc_data["metadata"]["name"] = self.name
         obc_data["spec"]["bucketName"] = self.name
+        if float(config.ENV_DATA["ocs_version"]) >= 4.7:
+            obc_data["spec"]["objectBucketName"] = self.name
         if storagecluster_independent_check():
             obc_data["spec"][
                 "storageClassName"
