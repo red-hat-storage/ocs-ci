@@ -95,7 +95,7 @@ class Sanity:
         for pvc_obj in self.pvc_objs:
             pvc_obj.ocp.wait_for_delete(pvc_obj.name)
         for obc_obj in self.obc_objs:
-            assert obc_obj.delete(), f"OBC {obc_obj.name} still exists"
+            obc_obj.delete(), f"OBC {obc_obj.name} still exists"
 
     @ignore_leftovers
     def create_pvc_delete(self, multi_pvc_factory, project=None):
