@@ -275,10 +275,9 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                         backingstore_obj = BackingStore(
                             name=backingstore_name,
                             method=method.lower(),
-                            type="pv",
+                            type="cloud",
+                            uls_name=uls_name,
                             mcg_obj=mcg_obj,
-                            vol_num=vol_num,
-                            vol_size=size,
                         )
                         current_call_created_backingstores.append(backingstore_obj)
                         created_backingstores.append(backingstore_obj)
