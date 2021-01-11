@@ -285,7 +285,7 @@ def ocs_install_verification(
         if config.DEPLOYMENT.get("local_storage") or config.ENV_DATA.get(
             "enable_flexible_scaling"
         ):
-            deviceset_pvcs = get_compute_node_names()
+            deviceset_pvcs = [osd.get_node() for osd in get_osd_pods()]
         else:
             deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
 
