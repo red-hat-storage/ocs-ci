@@ -6,11 +6,14 @@ metadata:
 spec:
   repositoryDigestMirrors:
   - mirrors:
-    - quay.io/openshift-qe-optional-operators
-    source: registry.redhat.io/openshift4
+    - brew.registry.redhat.io
+    source: registry.redhat.io
   - mirrors:
-    - quay.io/openshift-qe-optional-operators
-    source: registry-proxy.engineering.redhat.com/rh-osbs
+    - brew.registry.redhat.io
+    source: registry.stage.redhat.io
+  - mirrors:
+    - brew.registry.redhat.io
+    source: registry-proxy.engineering.redhat.com
 
 
 ---
