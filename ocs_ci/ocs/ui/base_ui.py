@@ -1,3 +1,6 @@
+import logging
+import time
+
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
@@ -6,6 +9,9 @@ from selenium.webdriver.common.by import By
 
 from ocs_ci.utility.utils import run_cmd, get_kubeadmin_password
 from ocs_ci.ocs.ui.views import login
+
+
+logger = logging.getLogger(__name__)
 
 
 class BaseUI:
@@ -59,18 +65,39 @@ def login_ui(browser):
         driver(Selenium WebDriver)
 
     """
+    logger.info("Get URL of OCP console")
     console_url = run_cmd(
         "oc get consoles.config.openshift.io cluster -o"
         "jsonpath='{.status.consoleURL}'"
     )
+    logger.info("Get password of OCP console")
     password = get_kubeadmin_password()
     password = password.rstrip()
     if browser == "chrome":
+        logger.info("chrome browser")
         driver = webdriver.Chrome()
     if browser == "firefox":
+        logger.info("firefox browser")
         driver = webdriver.Firefox()
-    driver.get(console_url)
     wait = WebDriverWait(driver, 30)
+    driver.get(console_url)
+    try:
+        logger.info("1")
+        time.sleep(10)
+        driver.find_element_by_xpath('//*[@id="details-button"]').click()
+        logger.info("2")
+        time.sleep(10)
+        driver.find_element_by_xpath('//*[@id="proceed-link"]').click()
+        logger.info("3")
+        time.sleep(10)
+        driver.find_element_by_xpath('//*[@id="details-button"]').click()
+        logger.info("4")
+        time.sleep(10)
+        driver.find_element_by_xpath('//*[@id="proceed-link"]').click()
+        logger.info("5")
+        time.sleep(10)
+    except Exception:
+        pass
     element = wait.until(ec.element_to_be_clickable((By.ID, "inputUsername")))
     element.send_keys("kubeadmin")
     element = wait.until(ec.element_to_be_clickable((By.ID, "inputPassword")))
