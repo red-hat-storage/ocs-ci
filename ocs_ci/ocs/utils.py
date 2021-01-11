@@ -870,7 +870,7 @@ def collect_noobaa_db_dump(log_dir_path):
     if float(ocsci_config.ENV_DATA["ocs_version"]) < 4.7:
         cmd = "mongodump --archive=nbcore.gz --gzip --db=nbcore"
     else:
-        cmd = "pg_dump nbcore | gzip > nbcore.gz"
+        cmd = 'bash -c "pg_dump nbcore | gzip > nbcore.gz"'
 
     nb_db_pod.exec_cmd_on_pod(cmd)
     download_file_from_pod(
