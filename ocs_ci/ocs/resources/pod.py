@@ -1740,7 +1740,7 @@ def verify_osd_removal_job_completed_successfully(osd_id):
     logger.info("Getting the ocs-osd-removal pod name")
     osd_removal_pod_name = get_osd_removal_pod_name(osd_id)
     osd_removal_pod_obj = get_pod_obj(
-        osd_removal_pod_name, namespace="openshift-storage"
+        osd_removal_pod_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
     is_completed = osd_removal_pod_obj.ocp.wait_for_resource(
         condition=constants.STATUS_COMPLETED, resource_name=osd_removal_pod_name
@@ -1781,25 +1781,6 @@ def delete_osd_removal_job(osd_id):
         return False
 
     return True
-
-
-def get_mon_deployments(osd_label=constants.OSD_APP_LABEL, namespace=None):
-    """
-    Fetches info about osd deployments in the cluster
-
-    Args:
-        osd_label (str): label associated with osd deployments
-            (default: defaults.OSD_APP_LABEL)
-        namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
-
-    Returns:
-        list: OSD deployment OCS instances
-    """
-    namespace = namespace or config.ENV_DATA["cluster_namespace"]
-    mons = get_deployments_having_label(osd_label, namespace)
-    mon_deployments = [OCS(**mon) for mon in mons]
-    return mon_deployments
 
 
 def get_deployment_name(pod_name):
