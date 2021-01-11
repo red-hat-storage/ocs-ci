@@ -945,28 +945,12 @@ def delete_and_create_osd_node_vsphere_lso(osd_node_name, use_existing_node=Fals
     log.info("Scale down node deployments...")
     scale_down_deployments(osd_node_name)
     log.info("Scale down deployments finished successfully")
-    remove_nodes([osd_node])
-    log.info(f"name of deleted node = {osd_node_name}")
 
-    if config.ENV_DATA.get("rhel_workers"):
-        node_type = constants.RHEL_OS
-    else:
-        node_type = constants.RHCOS
-
-    if not use_existing_node:
-        log.info("Preparing to create a new node...")
-        new_node_names = add_new_node_and_label_upi(node_type, 1)
-        new_node_name = new_node_names[0]
-    else:
-        node_not_in_ocs = get_worker_nodes_not_in_ocs()[0]
-        log.info(
-            f"Preparing to replace the node {osd_node_name} "
-            f"with an existing node {node_not_in_ocs.name}"
-        )
-        if node_type == constants.RHEL_OS:
-            set_selinux_permissions(workers=[node_not_in_ocs])
-        label_nodes([node_not_in_ocs])
-        new_node_name = node_not_in_ocs.name
+    new_node_name = delete_and_create_osd_node_vsphere_upi(
+        osd_node_name, use_existing_node
+    )
+    assert new_node_name, "Failed to create a new node"
+    log.info(f"New node created successfully. Node name: {new_node_name}")
 
     # If we use LSO, we need to create and attach a new disk manually
     new_node = get_node_objs(node_names=[new_node_name])[0]
@@ -982,7 +966,8 @@ def delete_and_create_osd_node_vsphere_lso(osd_node_name, use_existing_node=Fals
         "Replace the old node with the new worker node in localVolumeDiscovery and localVolumeSet"
     )
     res = add_new_node_to_lvd_and_lvs(
-        old_node_name=osd_node_name, new_node_name=new_node_name
+        old_node_name=get_node_hostname_label(osd_node),
+        new_node_name=get_node_hostname_label(new_node),
     )
     assert res, "Failed to add the new node to LVD and LVS"
 
@@ -1458,3 +1443,17 @@ def add_new_node_to_lvd_and_lvs(old_node_name, new_node_name):
     lvd_result = ocp_lvd_obj.patch(params=params, format_type="json")
 
     return lvs_result and lvd_result
+
+
+def get_node_hostname_label(node_obj):
+    """
+    Get the hostname label of a node
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        str: The node's hostname label
+
+    """
+    return node_obj.get("matadata").get("labels").get(constants.HOSTNAME_LABEL)
