@@ -90,6 +90,7 @@ from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.elasticsearch import ElasticSearch
+from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 
 log = logging.getLogger(__name__)
 
@@ -3543,3 +3544,15 @@ def es(request):
     es = ElasticSearch()
 
     return es
+
+
+@pytest.fixture(params=["chrome"], scope="function")
+def setup_ui(request):
+    driver = login_ui(request.param)
+
+    def finalizer():
+        close_browser(driver)
+
+    request.addfinalizer(finalizer)
+
+    return driver
