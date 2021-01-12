@@ -230,6 +230,7 @@ class MCG:
                         "password": self.noobaa_password,
                     },
                 )
+                logger.error(f"RPC_RESPONSE_JSON: {str(rpc_response.json())}")
                 return rpc_response.json().get("reply").get("token")
 
             except json.JSONDecodeError:
