@@ -90,7 +90,15 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         ],
     )
     def test_automated_recovery_from_failed_nodes_IPI_reactive(
-        self, nodes, pvc_factory, pod_factory, failure, dc_pod_factory, interface
+        self,
+        nodes,
+        pvc_factory,
+        pod_factory,
+        failure,
+        dc_pod_factory,
+        interface,
+        bucket_factory,
+        rgw_bucket_factory,
     ):
         """
         Knip-678 Automated recovery from failed nodes
@@ -168,7 +176,9 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
         # run IO and delete the resources
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
         self.sanity_helpers.delete_resources()
 
         # Perform cluster and Ceph health checks

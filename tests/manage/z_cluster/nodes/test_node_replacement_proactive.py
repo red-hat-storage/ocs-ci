@@ -112,7 +112,12 @@ class TestNodeReplacementWithIO(ManageTest):
         self.sanity_helpers = Sanity()
 
     def test_nodereplacement_proactive_with_io_running(
-        self, pvc_factory, pod_factory, dc_pod_factory
+        self,
+        pvc_factory,
+        pod_factory,
+        dc_pod_factory,
+        bucket_factory,
+        rgw_bucket_factory,
     ):
         """
         Knip-894 Node Replacement proactive when IO running in the background
@@ -145,7 +150,9 @@ class TestNodeReplacementWithIO(ManageTest):
 
         # Creating Resources
         log.info("Creating Resources using sanity helpers")
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
         # Deleting Resources
         self.sanity_helpers.delete_resources()
 

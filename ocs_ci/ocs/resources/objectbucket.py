@@ -161,7 +161,7 @@ class ObjectBucket(ABC):
             else:
                 raise e
         if verify:
-            return self.verify_deletion()
+            self.verify_deletion()
         else:
             return True
 
@@ -188,8 +188,8 @@ class ObjectBucket(ABC):
                 timeout, interval, self.internal_verify_deletion
             ):
                 if del_check:
-                    logger.info(f"{self.name} was deleted successfuly")
-                    return True
+                    logger.info(f"{self.name} was deleted successfully")
+                    break
                 else:
                     logger.info(f"{self.name} still exists. Retrying...")
         except TimeoutExpiredError:
