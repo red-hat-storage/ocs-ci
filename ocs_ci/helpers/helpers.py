@@ -2964,19 +2964,21 @@ def get_mon_pdb():
     return disruptions_allowed, min_available_mon
 
 
-def check_pvs_present_for_ocs_expansion(sc="localblock"):
+def check_pvs_present_for_ocs_expansion(sc=constants.LOCALSTORAGE_SC):
     """
     Check for pvs present for OCS cluster expansion
 
     Args:
         sc (str): Name of SC
 
-
-    Returns:
-        bool: True if PVS present, assert if PVS not present
+    Raises:
+        Assertion if PVS not present
 
     """
+    # TODO: need to handle it for N+1
+
     for rack_no in range(0, 3):
+
         pv_check_list = list()
         nodes_obj = OCP(
             kind=constants.NODE,
@@ -3000,4 +3002,3 @@ def check_pvs_present_for_ocs_expansion(sc="localblock"):
             raise PVNotSufficientException(
                 f"No Extra PV found in {constants.TOPOLOGY_ROOK_LABEL}=rack{rack_no} "
             )
-    return True
