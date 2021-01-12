@@ -230,6 +230,8 @@ class MCG:
                         "password": self.noobaa_password,
                     },
                 )
+                # Should be removed ASAP
+                # For more info: https://github.com/red-hat-storage/ocs-ci/issues/3673
                 logger.info(f"RPC_RESPONSE_JSON: {str(rpc_response.json())}")
                 return rpc_response.json().get("reply").get("token")
 
