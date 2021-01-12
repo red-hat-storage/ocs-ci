@@ -13,9 +13,7 @@ from ocs_ci.utility import rgwutils
         ("4.6", False, None, 2),
         ("4.6", True, "4.5", 2),
         ("4.7", False, None, 1),
-        ("4.7", True, "4.6", 2),
-        ("4.8", False, None, 1),
-        ("4.8", True, "4.7", 1),
+        ("4.7", True, "4.6", 1),
     ],
 )
 def test_get_rgw_count(ocs_version, is_upgrade, version_before_upgrade, expected):
