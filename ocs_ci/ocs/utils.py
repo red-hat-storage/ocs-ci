@@ -867,7 +867,12 @@ def collect_noobaa_db_dump(log_dir_path):
     ocs_log_dir_path = os.path.join(log_dir_path, "noobaa_db_dump")
     create_directory_path(ocs_log_dir_path)
     ocs_log_dir_path = os.path.join(ocs_log_dir_path, "nbcore.gz")
-    nb_db_pod.exec_cmd_on_pod("mongodump --archive=nbcore.gz --gzip --db=nbcore")
+    if float(ocsci_config.ENV_DATA["ocs_version"]) < 4.7:
+        cmd = "mongodump --archive=nbcore.gz --gzip --db=nbcore"
+    else:
+        cmd = 'bash -c "pg_dump nbcore | gzip > nbcore.gz"'
+
+    nb_db_pod.exec_cmd_on_pod(cmd)
     download_file_from_pod(
         pod_name=nb_db_pod.name,
         remotepath="/opt/app-root/src/nbcore.gz",
