@@ -53,7 +53,12 @@ class OBC(object):
             kind="ObjectBucketClaim",
             resource_name=self.obc_name,
         ).get()
-        self.ob_name = obc_resource.get("spec").get("ObjectBucketName")
+        obn_str = (
+            "ObjectBucketName"
+            if float(config.ENV_DATA["ocs_version"]) < 4.7
+            else "objectBucketName"
+        )
+        self.ob_name = obc_resource.get("spec").get(obn_str)
         self.bucket_name = obc_resource.get("spec").get("bucketName")
         ob_obj = OCP(
             namespace=self.namespace, kind="ObjectBucket", resource_name=self.ob_name
