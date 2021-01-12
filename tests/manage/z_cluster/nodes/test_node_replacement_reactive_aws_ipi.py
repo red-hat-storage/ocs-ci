@@ -77,7 +77,15 @@ class TestNodeReplacement(ManageTest):
         ],
     )
     def test_node_replacement_reactive_aws_ipi(
-        self, nodes, pvc_factory, pod_factory, dc_pod_factory, failure, interface
+        self,
+        nodes,
+        pvc_factory,
+        pod_factory,
+        dc_pod_factory,
+        failure,
+        interface,
+        bucket_factory,
+        rgw_bucket_factory,
     ):
         """
         Knip-894 Node replacement - AWS-IPI-Reactive
@@ -172,7 +180,9 @@ class TestNodeReplacement(ManageTest):
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
         # run IO and delete the resources
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
         self.sanity_helpers.delete_resources()
 
         # Perform cluster and Ceph health checks

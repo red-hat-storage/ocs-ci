@@ -53,6 +53,7 @@ from ocs_ci.ocs.resources.pod import (
     get_rgw_pods,
     delete_deploymentconfig_pods,
     get_pods_having_label,
+    get_deployments_having_label,
     Pod,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
@@ -1655,7 +1656,13 @@ def rgw_obj_fixture(request):
     Returns:
         RGW: An RGW resource
     """
-    return RGW()
+    rgw_deployments = get_deployments_having_label(
+        label=constants.RGW_APP_LABEL, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    if rgw_deployments:
+        return RGW()
+    else:
+        return None
 
 
 @pytest.fixture()
@@ -1664,10 +1671,9 @@ def rgw_deployments(request):
     Return RGW deployments or skip the test.
 
     """
-    oc = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+    rgw_deployments = get_deployments_having_label(
+        label=constants.RGW_APP_LABEL, namespace=config.ENV_DATA["cluster_namespace"]
     )
-    rgw_deployments = oc.get(selector=constants.RGW_APP_LABEL)["items"]
     if rgw_deployments:
         return rgw_deployments
     else:
@@ -1902,12 +1908,18 @@ def verify_rgw_restart_count_fixture(request):
 
 @pytest.fixture()
 def rgw_bucket_factory(request, rgw_obj):
-    return bucket_factory_fixture(request, rgw_obj=rgw_obj)
+    if rgw_obj:
+        return bucket_factory_fixture(request, rgw_obj=rgw_obj)
+    else:
+        return None
 
 
 @pytest.fixture(scope="session")
 def rgw_bucket_factory_session(request, rgw_obj_session):
-    return bucket_factory_fixture(request, rgw_obj=rgw_obj_session)
+    if rgw_obj_session:
+        return bucket_factory_fixture(request, rgw_obj=rgw_obj_session)
+    else:
+        return None
 
 
 @pytest.fixture()

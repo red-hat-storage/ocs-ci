@@ -129,7 +129,9 @@ class TestDiskFailures(ManageTest):
     @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1085")
     @bugzilla("1825675")
-    def test_detach_attach_worker_volume(self, nodes, pvc_factory, pod_factory):
+    def test_detach_attach_worker_volume(
+        self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+    ):
         """
         Detach and attach worker volume
 
@@ -158,7 +160,9 @@ class TestDiskFailures(ManageTest):
             wait_for_ct_pod_recovery()
         ), "Ceph tools pod failed to come up on another node"
 
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
 
         # Restart the instance so the volume will get re-mounted
         nodes.restart_nodes([worker])
@@ -171,7 +175,9 @@ class TestDiskFailures(ManageTest):
 
     @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1086")
-    def test_detach_attach_2_data_volumes(self, nodes, pvc_factory, pod_factory):
+    def test_detach_attach_2_data_volumes(
+        self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+    ):
         """
         Detach and attach disk from 2 worker nodes
 
@@ -200,12 +206,16 @@ class TestDiskFailures(ManageTest):
 
         # Validate cluster is still functional
         self.sanity_helpers.health_check()
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
 
     @bugzilla("1830702")
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2172")
-    def test_recovery_from_volume_deletion(self, nodes, pvc_factory, pod_factory):
+    def test_recovery_from_volume_deletion(
+        self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+    ):
         """
         Test cluster recovery from disk deletion from the platform side.
         Based on documented procedure detailed in
@@ -423,4 +433,6 @@ class TestDiskFailures(ManageTest):
 
         # Validate cluster is still functional
         self.sanity_helpers.health_check(tries=100)
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
