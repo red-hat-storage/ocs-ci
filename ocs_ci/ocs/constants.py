@@ -1093,6 +1093,10 @@ MCG_NS_RESOURCE = "ns_resource"
 MCG_NS_BUCKET = "ns-bucket"
 MCG_CONNECTION = "connection"
 
+# MCG version-dependent constants
+OBJECTBUCKETNAME_46ANDBELOW = "ObjectBucketName"
+OBJECTBUCKETNAME_47ANDABOVE = "objectBucketName"
+
 # Cloud provider default endpoints
 # Upon use, utilize .format() to replace the curly braces where necessary
 AZURE_BLOB_ENDPOINT_TEMPLATE = "https://{}.blob.core.windows.net"

@@ -54,9 +54,9 @@ class OBC(object):
             resource_name=self.obc_name,
         ).get()
         obn_str = (
-            "ObjectBucketName"
+            constants.OBJECTBUCKETNAME_46ANDBELOW
             if float(config.ENV_DATA["ocs_version"]) < 4.7
-            else "objectBucketName"
+            else constants.OBJECTBUCKETNAME_47ANDABOVE
         )
         self.ob_name = obc_resource.get("spec").get(obn_str)
         self.bucket_name = obc_resource.get("spec").get("bucketName")
