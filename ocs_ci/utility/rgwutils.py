@@ -11,6 +11,7 @@ def get_rgw_count(ocs_version, is_upgrade, version_before_upgrade):
        OCS 4.5 unless upgraded from a prior version
        OCS 4.6
        OCS 4.7 only if upgraded from a prior version
+
     Otherwise, RGW Count is 1
 
     Args:
