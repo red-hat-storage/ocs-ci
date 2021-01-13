@@ -694,7 +694,7 @@ class MCG:
         backingstore_name_list = [backingstore.name for backingstore in backingstores]
         bc = f" --backingstores={','.join(backingstore_name_list)} --placement={placement}"
         placement_parameter = (
-            "placement-bucketclass "
+            f"{constants.PLACEMENT_BUCKETCLASS} "
             if float(config.ENV_DATA["ocs_version"]) < 4.7
             else ""
         )

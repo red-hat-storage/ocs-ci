@@ -1078,6 +1078,9 @@ BM_STATUS_ABSENT = "ABSENT"
 BM_STATUS_PRESENT = "PRESENT"
 BM_STATUS_RESPONSE_UPDATED = "UPDATED"
 
+# MCG constants
+PLACEMENT_BUCKETCLASS = "placement-bucketclass"
+
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
 MCG_NS_AZURE_ENDPOINT = "https://blob.core.windows.net"
