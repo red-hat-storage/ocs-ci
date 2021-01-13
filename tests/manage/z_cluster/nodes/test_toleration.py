@@ -1,18 +1,13 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import (
-    tier4a,
-    E2ETest,
-)
+from ocs_ci.framework.testlib import tier4a, E2ETest
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     check_toleration_on_pods,
-    delete_pods,
-    validate_pods_are_respinned_and_running_state,
     wait_for_pods_to_be_running,
 )
-from ocs_ci.ocs.node import taint_nodes, untaint_nodes
+from ocs_ci.ocs.node import taint_ocs_nodes, untaint_ocs_nodes
 
 
 logger = logging.getLogger(__name__)
@@ -33,7 +28,7 @@ class TestTaintAndTolerations(E2ETest):
         """
 
         def finalizer():
-            untaint_nodes()
+            assert untaint_ocs_nodes(), "Failed to untaint"
 
         request.addfinalizer(finalizer)
 
@@ -47,15 +42,13 @@ class TestTaintAndTolerations(E2ETest):
 
         """
         # taint nodes if not already tainted
-        taint_nodes()
+        taint_ocs_nodes()
 
         # Check tolerations on pods under openshift-storage
         check_toleration_on_pods()
 
         # Respin all pods and check it if is still running
         pod_list = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-        assert delete_pods(pod_list), "Failed to delete pods"
-        assert wait_for_pods_to_be_running()
-        assert validate_pods_are_respinned_and_running_state(
-            pod_list
-        ), "Pod not respinned"
+        for pod in pod_list:
+            pod.delete(wait=False)
+        assert wait_for_pods_to_be_running(timeout=300)
