@@ -1919,6 +1919,8 @@ def verify_rgw_restart_count_fixture(request):
 
 @pytest.fixture()
 def rgw_bucket_factory(request, rgw_obj):
+    if config.RUN["cli_params"].get("teardown"):
+        return
     if rgw_obj:
         return bucket_factory_fixture(request, rgw_obj=rgw_obj)
     else:
@@ -1938,6 +1940,8 @@ def bucket_factory(request, bucket_class_factory, mcg_obj):
     """
     Returns an MCG bucket factory
     """
+    if config.RUN["cli_params"].get("teardown"):
+        return
     return bucket_factory_fixture(request, bucket_class_factory, mcg_obj)
 
 
