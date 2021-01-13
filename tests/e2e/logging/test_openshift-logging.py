@@ -29,13 +29,6 @@ def setup_fixture(install_logging):
     logger.info("Testcases execution post deployment of openshift-logging")
 
 
-@pytest.mark.skipif(
-    get_ocp_version() == "4.7",
-    reason=(
-        "Skipping logging tests on OCP 4.7 cause of issue: "
-        "https://github.com/red-hat-storage/ocs-ci/issues/2823"
-    ),
-)
 @pytest.mark.usefixtures(setup_fixture.__name__)
 @ignore_leftovers
 class Testopenshiftloggingonocs(E2ETest):
