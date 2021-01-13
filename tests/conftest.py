@@ -986,6 +986,17 @@ def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
     record_testsuite_property("polarion-custom-isautomated", "True")
 
 
+@pytest.fixture(scope="session", autouse=True)
+def additional_testsuite_properties(record_testsuite_property, pytestconfig):
+    """
+    Configures additional custom testsuite properties for junit xml
+    """
+    # add logs url
+    logs_url = config.RUN.get("logs_url")
+    if logs_url:
+        record_testsuite_property("logs-url", logs_url)
+
+
 @pytest.fixture(scope="session")
 def tier_marks_name():
     """
