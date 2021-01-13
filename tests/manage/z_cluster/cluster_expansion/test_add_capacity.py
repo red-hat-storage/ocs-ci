@@ -21,6 +21,7 @@ from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
+from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 
 def add_capacity_test():
@@ -59,6 +60,7 @@ def add_capacity_test():
 @acceptance
 @polarion_id("OCS-1191")
 @pytest.mark.last
+@skipif_openshift_dedicated
 @skipif_aws_i3
 @skipif_bm
 @skipif_external_mode
