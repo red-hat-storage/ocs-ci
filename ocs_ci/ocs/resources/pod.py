@@ -67,6 +67,8 @@ class Pod(OCS):
             Copy of ocs/defaults.py::<some pod> dictionary
         """
         self.pod_data = kwargs
+        # configure http[s]_proxy env variable, if applicable
+        helpers.update_container_with_proxy_env(self.pod_data)
         super(Pod, self).__init__(**kwargs)
 
         with tempfile.NamedTemporaryFile(

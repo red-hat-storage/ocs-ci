@@ -115,6 +115,36 @@ def wait_for_resource_state(resource, state, timeout=60):
     logger.info(f"{resource.kind} {resource.name} reached state {state}")
 
 
+def update_container_with_proxy_env(job_pod_dict):
+    """
+    If applicable, update Job or Pod configuration dict with http_proxy,
+    https_proxy and no_proxy env variables (required for disconnected clusters
+    and clusters behind proxy).
+
+    Args:
+        job_pod_dict (dict): dictionary with Job or Pod configuration (updated
+            in-place)
+
+    """
+    # configure http[s]_proxy env variable, if required
+    try:
+        http_proxy, https_proxy, no_proxy = get_cluster_proxies()
+        if http_proxy:
+            if "containers" in job_pod_dict["spec"]:
+                container = job_pod_dict["spec"]["containers"][0]
+            else:
+                container = job_pod_dict["spec"]["template"]["spec"]["containers"][0]
+            if "env" not in container:
+                container["env"] = []
+            container["env"].append({"name": "http_proxy", "value": http_proxy})
+            container["env"].append({"name": "https_proxy", "value": https_proxy})
+            container["env"].append({"name": "no_proxy", "value": no_proxy})
+    except KeyError as err:
+        logging.warning(
+            "Http(s)_proxy variable wasn't configured, " "'%s' key not found.", err
+        )
+
+
 def create_pod(
     interface_type=None,
     pvc_name=None,
@@ -267,22 +297,7 @@ def create_pod(
     update_container_with_mirrored_image(pod_data)
 
     # configure http[s]_proxy env variable, if required
-    try:
-        http_proxy, https_proxy, no_proxy = get_cluster_proxies()
-        if http_proxy:
-            if "containers" in pod_data["spec"]:
-                container = pod_data["spec"]["containers"][0]
-            else:
-                container = pod_data["spec"]["template"]["spec"]["containers"][0]
-            if "env" not in container:
-                container["env"] = []
-            container["env"].append({"name": "http_proxy", "value": http_proxy})
-            container["env"].append({"name": "https_proxy", "value": https_proxy})
-            container["env"].append({"name": "no_proxy", "value": no_proxy})
-    except KeyError as err:
-        logging.warning(
-            "Http(s)_proxy variable wasn't configured, " "'%s' key not found.", err
-        )
+    update_container_with_proxy_env(pod_data)
 
     if dc_deployment:
         ocs_obj = create_resource(**pod_data)
