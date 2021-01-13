@@ -5,7 +5,7 @@ from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.resources import pod as Pod
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import get_all_pods
-from ocs_ci.framework.testlib import E2ETest, scale
+from ocs_ci.framework.testlib import E2ETest, scale, scale_regression
 from ocs_ci.helpers.helpers import (
     default_storage_class,
     validate_pod_oomkilled,
@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 
 
 @scale
+@scale_regression
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[

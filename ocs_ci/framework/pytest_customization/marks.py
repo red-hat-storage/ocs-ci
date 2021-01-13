@@ -67,6 +67,7 @@ workloads = pytest.mark.workloads
 flowtests = pytest.mark.flowtests
 performance = pytest.mark.performance
 scale = pytest.mark.scale
+scale_regression = pytest.mark.scale_regression
 deployment = pytest.mark.deployment
 polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla

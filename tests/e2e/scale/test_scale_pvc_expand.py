@@ -4,6 +4,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     E2ETest,
     scale,
+    scale_regression,
     ignore_leftovers,
     skipif_ocs_version,
 )
@@ -30,6 +31,7 @@ def resize_pvc(request):
 
 
 @scale
+@scale_regression
 @skipif_ocs_version("<4.5")
 @ignore_leftovers
 @pytest.mark.parametrize(

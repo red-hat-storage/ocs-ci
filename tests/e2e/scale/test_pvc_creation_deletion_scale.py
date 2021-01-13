@@ -10,13 +10,14 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.utility.utils import ocsci_log_path
-from ocs_ci.framework.testlib import scale, E2ETest, polarion_id
+from ocs_ci.framework.testlib import scale, E2ETest, polarion_id, scale_regression
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 
 log = logging.getLogger(__name__)
 
 
 @scale
+@scale_regression
 class TestPVCCreationDeletionScale(E2ETest):
     """
     Base class for PVC scale creation and deletion

@@ -5,7 +5,7 @@ from ocs_ci.helpers import disruption_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.utility import utils
 from ocs_ci.ocs.scale_lib import FioPodScale
-from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
+from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers, scale_regression
 from ocs_ci.framework.pytest_customization.marks import skipif_external_mode
 
 log = logging.getLogger(__name__)
@@ -46,6 +46,7 @@ def fioscale(request):
         pytest.param(*["mds"], marks=[pytest.mark.polarion_id("OCS-613")]),
     ],
 )
+@scale_regression
 class TestScaleRespinCephPods(E2ETest):
     """
     Scale the OCS cluster to reach 1500 PVC+POD
