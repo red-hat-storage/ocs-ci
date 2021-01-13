@@ -17,6 +17,7 @@ OPENSHIFT_REST_CLIENT_API_VERSION = "v1"
 
 INSTALLER_VERSION = "4.1.4"
 CLIENT_VERSION = INSTALLER_VERSION
+SRE_BUILD_TEST_NAMESPACE = "openshift-build-test"
 ROOK_CLUSTER_NAMESPACE = "openshift-storage"
 OCS_MONITORING_NAMESPACE = "openshift-monitoring"
 KUBECONFIG_LOCATION = "auth/kubeconfig"  # relative from cluster_dir
