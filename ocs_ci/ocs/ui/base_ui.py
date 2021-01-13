@@ -1,6 +1,11 @@
 import logging
 import time
+import wget
+import tempfile
+import os
+import shutil
 
+from zipfile import ZipFile
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
@@ -9,6 +14,7 @@ from selenium.webdriver.common.by import By
 
 from ocs_ci.utility.utils import run_cmd, get_kubeadmin_password
 from ocs_ci.ocs.ui.views import login
+from ocs_ci import framework
 
 
 logger = logging.getLogger(__name__)
@@ -54,6 +60,28 @@ class BaseUI:
         return self.driver.title
 
 
+def install_chromedriver():
+    """
+    Install chromedriver
+
+    """
+    bin_dir = framework.config.RUN.get("bin_dir")
+    files_bin = os.listdir(bin_dir)
+    if "chromedriver" in files_bin:
+        return True
+    tmp_dir_path = tempfile.mkdtemp()
+    url = "https://chromedriver.storage.googleapis.com/87.0.4280.20/chromedriver_linux64.zip"
+    logger.info(f"download chromedriver {url}")
+    wget.download(url, tmp_dir_path)
+    files = os.listdir(tmp_dir_path)
+    chromedriver_file = os.path.join(tmp_dir_path, files[0])
+    zip = ZipFile(chromedriver_file)
+    logger.info(f"Unzip {chromedriver_file}")
+    zip.extractall(path=tmp_dir_path)
+    os.chmod(os.path.join(tmp_dir_path, "chromedriver"), 777)
+    shutil.move(os.path.join(tmp_dir_path, "chromedriver"), bin_dir)
+
+
 def login_ui(browser):
     """
     Login to OpenShift Console
@@ -65,6 +93,7 @@ def login_ui(browser):
         driver(Selenium WebDriver)
 
     """
+    install_chromedriver()
     logger.info("Get URL of OCP console")
     console_url = run_cmd(
         "oc get consoles.config.openshift.io cluster -o"
