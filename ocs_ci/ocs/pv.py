@@ -1,4 +1,6 @@
 import logging
+from subprocess import TimeoutExpired
+
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -109,12 +111,25 @@ def delete_released_pvs_in_sc(sc_name):
     Args:
         sc_name (str): The storage class name
 
+    Returns:
+        bool: True, if the released PVs deleted successfully. False, otherwise
+
     """
+    result = True
+
     pv_objs = get_pv_objs_in_sc(sc_name)
     released_pvs = [
         pv for pv in pv_objs if get_pv_status(pv) == constants.STATUS_RELEASED
     ]
+
     for pv in released_pvs:
         pv_name = get_pv_name(pv)
-        ocp.OCP().exec_oc_cmd(f"delete pv {pv_name}", timeout=60)
-        logger.info(f"Successfully deleted pv {pv_name}")
+        timeout = 60
+        try:
+            ocp.OCP().exec_oc_cmd(f"delete pv {pv_name}", timeout=timeout)
+            logger.info(f"Successfully deleted pv {pv_name}")
+        except TimeoutExpired:
+            logger.info(f"Failed to delete pv {pv_name} after {timeout} seconds")
+            result = False
+
+    return result
