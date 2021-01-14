@@ -576,6 +576,7 @@ OPERATOR_CS_QUAY_API_QUERY = (
     "https://quay.io/api/v1/repository/rhceph-dev/{image}/"
     "tag/?onlyActiveTags=true&limit={tag_limit}"
 )
+OPTIONAL_OPERATORS_SELECTOR = "catalog=optional-operators"
 
 # OCP related constants
 OPENSHIFT_UPGRADE_INFO_API = (
