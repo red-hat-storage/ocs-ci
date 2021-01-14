@@ -25,6 +25,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox
+from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import (
     get_latest_ds_olm_tag,
     get_next_version_available_for_upgrade,
@@ -123,27 +124,14 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     )
     verify_pods_upgraded(old_images, selector=constants.MDS_APP_LABEL, count=2)
     if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
-        # RGW count is 1 if the cluster was upgraded from <= 4.4
-        # Related bug - https://bugzilla.redhat.com/show_bug.cgi?id=1857802
-        rgw_count = 2 if float(version_before_upgrade) >= 4.5 else 1
+        rgw_count = get_rgw_count(
+            float(upgrade_version), True, float(version_before_upgrade)
+        )
         verify_pods_upgraded(
             old_images,
             selector=constants.RGW_APP_LABEL,
             count=rgw_count,
         )
-
-    # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
-    if config.ENV_DATA.get("platform") == constants.AZURE_PLATFORM:
-        if float(config.ENV_DATA["ocs_version"]) == 4.4 or (
-            float(config.ENV_DATA["ocs_version"]) == 4.5
-            and float(version_before_upgrade) < 4.5
-        ):
-            rgw_count = 1
-            verify_pods_upgraded(
-                old_images,
-                selector=constants.RGW_APP_LABEL,
-                count=rgw_count,
-            )
 
 
 class OCSUpgrade(object):
