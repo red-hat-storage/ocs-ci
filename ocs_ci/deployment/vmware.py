@@ -572,16 +572,13 @@ class VSPHEREUPI(VSPHEREBASE):
 
         # get datastore type and configure chrony for all nodes ONLY if
         # datastore type is vsan
-        # skip configuring chrony for OCP version 4.7, more details in
-        # bug 1910738
-        if Version.coerce(get_ocp_version()) < Version.coerce("4.7"):
-            datastore_type = self.vsphere.get_datastore_type_by_name(
-                self.datastore, self.datacenter
+        datastore_type = self.vsphere.get_datastore_type_by_name(
+            self.datastore, self.datacenter
+        )
+        if datastore_type != constants.VMFS:
+            configure_chrony_and_wait_for_machineconfig_status(
+                node_type="all", timeout=1800
             )
-            if datastore_type != constants.VMFS:
-                configure_chrony_and_wait_for_machineconfig_status(
-                    node_type="all", timeout=1800
-                )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
