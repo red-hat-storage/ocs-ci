@@ -38,7 +38,7 @@ class TestPvcUserInterface(object):
         """
         pvc_ui_obj = PvcUI(setup_ui)
         pvc_ui_obj.create_pvc_ui(sc_type, pvc_name, access_mode, pvc_size)
-        time.sleep(10)
+        time.sleep(2)
 
         pvc_objs = get_all_pvc_objs(namespace="openshift-storage")
         pvc = [pvc_obj for pvc_obj in pvc_objs if pvc_obj.name == pvc_name]

@@ -1,20 +1,15 @@
 import logging
-import time
-import wget
-import tempfile
-import os
-import shutil
 
-from zipfile import ZipFile
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
 
 
 from ocs_ci.utility.utils import run_cmd, get_kubeadmin_password
 from ocs_ci.ocs.ui.views import login
-from ocs_ci import framework
 
 
 logger = logging.getLogger(__name__)
@@ -34,52 +29,30 @@ class BaseUI:
         element = wait.until(ec.element_to_be_clickable((type, by_locator)))
         element.click()
 
-    def do_click_visibility(self, by_locator, type=By.PARTIAL_LINK_TEXT, timeout=30):
-        wait = WebDriverWait(self.driver, timeout=timeout)
-        element = wait.until(ec.visibility_of_element_located((type, by_locator)))
-        element.click()
-
     def do_send_keys(self, by_locator, text, type=By.XPATH, timeout=30):
         wait = WebDriverWait(self.driver, timeout)
         element = wait.until(ec.element_to_be_clickable((type, by_locator)))
         element.send_keys(text)
+
+    def is_expanded(self, by_locator, type=By.XPATH, timeout=30):
+        wait = WebDriverWait(self.driver, timeout)
+        element = wait.until(ec.element_to_be_clickable((type, by_locator)))
+        return element.get_attribute("aria-expanded")
+
+    def choose_expanded_mode(self, mode, by_locator, type):
+        current_mode = self.is_expanded(by_locator=by_locator, type=type)
+        if mode != current_mode:
+            self.do_click(by_locator=by_locator, type=type)
 
     def get_element_text(self, by_locator, type=By.XPATH, timeout=30):
         wait = WebDriverWait(self.driver, timeout)
         element = wait.until(ec.visibility_of_element_located((type, by_locator)))
         return element.text
 
-    def is_enabled(self, by_locator, type=By.XPATH, timeout=30):
-        wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.visibility_of_element_located((type, by_locator)))
-        return bool(element)
-
     def get_title(self, title, type=By.XPATH, timeout=30):
         wait = WebDriverWait(self.driver, timeout)
         wait.until(ec.title_is(type, title))
         return self.driver.title
-
-
-def install_chromedriver():
-    """
-    Install chromedriver
-
-    """
-    bin_dir = framework.config.RUN.get("bin_dir")
-    files_bin = os.listdir(bin_dir)
-    if "chromedriver" in files_bin:
-        return True
-    tmp_dir_path = tempfile.mkdtemp()
-    url = "https://chromedriver.storage.googleapis.com/87.0.4280.20/chromedriver_linux64.zip"
-    logger.info(f"download chromedriver {url}")
-    wget.download(url, tmp_dir_path)
-    files = os.listdir(tmp_dir_path)
-    chromedriver_file = os.path.join(tmp_dir_path, files[0])
-    zip = ZipFile(chromedriver_file)
-    logger.info(f"Unzip {chromedriver_file}")
-    zip.extractall(path=tmp_dir_path)
-    os.chmod(os.path.join(tmp_dir_path, "chromedriver"), 777)
-    shutil.move(os.path.join(tmp_dir_path, "chromedriver"), bin_dir)
 
 
 def login_ui(browser):
@@ -93,7 +66,6 @@ def login_ui(browser):
         driver(Selenium WebDriver)
 
     """
-    install_chromedriver()
     logger.info("Get URL of OCP console")
     console_url = run_cmd(
         "oc get consoles.config.openshift.io cluster -o"
@@ -104,29 +76,21 @@ def login_ui(browser):
     password = password.rstrip()
     if browser == "chrome":
         logger.info("chrome browser")
-        driver = webdriver.Chrome()
+        chrome_options = Options()
+        chrome_options.add_argument("--ignore-ssl-errors=yes")
+        chrome_options.add_argument("--ignore-certificate-errors")
+        # headless browsers are web browsers without a GUI
+        chrome_options.add_argument("--headless")
+        driver = webdriver.Chrome(
+            ChromeDriverManager().install(),
+            chrome_options=chrome_options,
+        )
     if browser == "firefox":
         logger.info("firefox browser")
         driver = webdriver.Firefox()
+
     wait = WebDriverWait(driver, 30)
     driver.get(console_url)
-    try:
-        logger.info("1")
-        time.sleep(10)
-        driver.find_element_by_xpath('//*[@id="details-button"]').click()
-        logger.info("2")
-        time.sleep(10)
-        driver.find_element_by_xpath('//*[@id="proceed-link"]').click()
-        logger.info("3")
-        time.sleep(10)
-        driver.find_element_by_xpath('//*[@id="details-button"]').click()
-        logger.info("4")
-        time.sleep(10)
-        driver.find_element_by_xpath('//*[@id="proceed-link"]').click()
-        logger.info("5")
-        time.sleep(10)
-    except Exception:
-        pass
     element = wait.until(ec.element_to_be_clickable((By.ID, "inputUsername")))
     element.send_keys("kubeadmin")
     element = wait.until(ec.element_to_be_clickable((By.ID, "inputPassword")))

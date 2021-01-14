@@ -28,11 +28,11 @@ class PvcUI(BaseUI):
         pvc_size (str): the size of pvc (GB)
 
         """
-        logger.info("Click on Storage Tab")
-        self.do_click(pvc["Storage Tab"])
-
         logger.info("Go to PVC Page")
-        self.do_click(pvc["PVC Page"], type=By.LINK_TEXT)
+        self.choose_expanded_mode(
+            mode="true", by_locator=pvc["Storage Tab"], type=By.XPATH
+        )
+        self.do_click(by_locator=pvc["PVC Page"], type=By.LINK_TEXT)
 
         logger.info("Select openshift-storage project")
         self.do_click(pvc["PVC Project Selector"], type=By.CSS_SELECTOR)
@@ -57,9 +57,6 @@ class PvcUI(BaseUI):
         logger.info("Create PVC")
         self.do_click(pvc["PVC Create"])
 
-        logger.info("Click on Storage Tab")
-        self.do_click(pvc["Storage Tab"])
-
     def delete_pvc_ui(self, pvc_name):
         """
         Delete pvc via UI
@@ -67,8 +64,11 @@ class PvcUI(BaseUI):
         pvc_name (str): Name of the pvc
 
         """
-        logger.info("Click on Storage Tab")
-        self.do_click(pvc["Storage Tab"])
+        logger.info("Go to PVC Page")
+        self.choose_expanded_mode(
+            mode="true", by_locator=pvc["Storage Tab"], type=By.XPATH
+        )
+        self.do_click(by_locator=pvc["PVC Page"], type=By.LINK_TEXT)
 
         logger.info("Go to PVC Page")
         self.do_click(pvc["PVC Page"], type=By.LINK_TEXT)
@@ -85,7 +85,6 @@ class PvcUI(BaseUI):
             except Exception:
                 pass
         logger.info("Click on Actions")
-        # 'button[data-test-id="actions-menu-button"]'
         self.do_click(pvc["PVC Actions"], type=By.CSS_SELECTOR)
 
         logger.info("Click on 'Delete PVC'")
