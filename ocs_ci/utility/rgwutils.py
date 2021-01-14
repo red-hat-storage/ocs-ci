@@ -1,5 +1,7 @@
 import logging
 
+from semantic_version import Version
+
 log = logging.getLogger(__name__)
 
 
@@ -25,9 +27,13 @@ def get_rgw_count(ocs_version, is_upgrade, version_before_upgrade):
 
     # Assume upgrade from prior version if one is not provided
     if is_upgrade:
-        log.debug("version_before_upgrade not provided, assuming prior release.")
-        version_before_upgrade = version_before_upgrade or round(
-            float(ocs_version) - 0.1, 1
+        semantic_ocs_version = Version.coerce(ocs_version)
+        version_before_upgrade = (
+            f"{semantic_ocs_version.major}.{semantic_ocs_version.minor - 1}"
+        )
+        log.info(
+            "version_before_upgrade not provided, assuming prior release is %s",
+            version_before_upgrade,
         )
 
     if (
