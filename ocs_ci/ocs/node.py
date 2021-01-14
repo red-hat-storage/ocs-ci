@@ -941,6 +941,8 @@ def delete_and_create_osd_node_vsphere_lso(osd_node_name, use_existing_node=Fals
     osd_pod = get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())[0]
     osd_id = pod.get_osd_pod_id(osd_pod)
     log.info(f"osd id to remove = {osd_id}")
+    # Save the node hostname before deleting the node
+    osd_node_hostname_label = get_node_hostname_label(osd_node)
 
     log.info("Scale down node deployments...")
     scale_down_deployments(osd_node_name)
@@ -962,12 +964,13 @@ def delete_and_create_osd_node_vsphere_lso(osd_node_name, use_existing_node=Fals
     )
     node_util.create_and_attach_volume(node=new_node, size=osd_size)
 
+    new_node_hostname_label = get_node_hostname_label(new_node)
     log.info(
         "Replace the old node with the new worker node in localVolumeDiscovery and localVolumeSet"
     )
     res = add_new_node_to_lvd_and_lvs(
-        old_node_name=get_node_hostname_label(osd_node),
-        new_node_name=get_node_hostname_label(new_node),
+        old_node_name=osd_node_hostname_label,
+        new_node_name=new_node_hostname_label,
     )
     assert res, "Failed to add the new node to LVD and LVS"
 
@@ -984,13 +987,9 @@ def delete_and_create_osd_node_vsphere_lso(osd_node_name, use_existing_node=Fals
     assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
     log.info("ocs-osd-removal-job completed successfully")
 
-    delete_released_pvs_in_sc(sc_name)
-
-    # Delete the crashcollector pod deployment
-    ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
-        f"delete deployment --selector=app=rook-ceph-crashcollector,node_name='{osd_node_name}'",
-        timeout=60,
-    )
+    is_old_pv_deleted = delete_released_pvs_in_sc(sc_name)
+    assert is_old_pv_deleted, "Failed to delete old pv"
+    log.info("Successfully deleted old pv")
 
     is_deleted = pod.delete_osd_removal_job(osd_id)
     assert is_deleted, "Failed to delete ocs-osd-removal-job"
@@ -1427,22 +1426,21 @@ def add_new_node_to_lvd_and_lvs(old_node_name, new_node_name):
     path_to_old_node = f"/spec/nodeSelector/nodeSelectorTerms/0/matchExpressions/0/values/{old_node_index}"
     params = f"""[{{"op": "replace", "path": "{path_to_old_node}", "value": "{new_node_name}"}}]"""
 
+    ocp_lvd_obj = OCP(
+        kind=constants.LOCAL_VOLUME_DISCOVERY,
+        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
+    )
+
     ocp_lvs_obj = OCP(
         kind=constants.LOCAL_VOLUME_SET,
         namespace=defaults.LOCAL_STORAGE_NAMESPACE,
         resource_name=constants.LOCAL_BLOCK_RESOURCE,
     )
 
-    ocp_lvd_obj = OCP(
-        kind=constants.LOCAL_VOLUME_DISCOVERY,
-        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
-        resource_name=constants.AUTO_DISCOVER_DEVICES_RESOURCE,
-    )
-
-    lvs_result = ocp_lvs_obj.patch(params=params, format_type="json")
     lvd_result = ocp_lvd_obj.patch(params=params, format_type="json")
+    lvs_result = ocp_lvs_obj.patch(params=params, format_type="json")
 
-    return lvs_result and lvd_result
+    return lvd_result and lvs_result
 
 
 def get_node_hostname_label(node_obj):
@@ -1456,4 +1454,4 @@ def get_node_hostname_label(node_obj):
         str: The node's hostname label
 
     """
-    return node_obj.get("matadata").get("labels").get(constants.HOSTNAME_LABEL)
+    return node_obj.get().get("metadata").get("labels").get(constants.HOSTNAME_LABEL)
