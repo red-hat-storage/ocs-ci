@@ -87,12 +87,14 @@ class BaseUI:
             self.do_click(by_locator=by_locator, type=type)
 
 
-def login_ui(browser):
+def login_ui(browser, headless=True, chrome_type=ChromeType.CHROMIUM):
     """
     Login to OpenShift Console
 
     Args:
         browser(str): type of browser (chrome, firefox..)
+        headless(bool): True- without GUI, False- with GUI
+        chrome_type (ChromeType): Select chrome type (chrome, chromium..)
 
     return:
         driver(Selenium WebDriver)
@@ -112,9 +114,11 @@ def login_ui(browser):
         chrome_options.add_argument("--ignore-ssl-errors=yes")
         chrome_options.add_argument("--ignore-certificate-errors")
         # headless browsers are web browsers without a GUI
-        chrome_options.add_argument("--headless")
+        if headless:
+            chrome_options.add_argument("--headless")
+        chrome_browser = chrome_type
         driver = webdriver.Chrome(
-            ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install(),
+            ChromeDriverManager(chrome_type=chrome_browser).install(),
             chrome_options=chrome_options,
         )
     if browser == "firefox":
