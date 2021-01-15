@@ -26,34 +26,65 @@ class BaseUI:
         self.driver = driver
 
     def do_click(self, by_locator, type=By.XPATH, timeout=30):
+        """
+        Click on Button/link on OpenShift Console
+
+        by_locator(str): Command that tells Selenium IDE which
+        GUI element needs to operate on.
+        type(By): Set of supported locator strategies.
+        timeout(int): Looks for a web element repeatedly until timeout(sec) happens.
+
+        """
         wait = WebDriverWait(self.driver, timeout)
         element = wait.until(ec.element_to_be_clickable((type, by_locator)))
         element.click()
 
     def do_send_keys(self, by_locator, text, type=By.XPATH, timeout=30):
+        """
+        Send text to element on OpenShift Console
+
+        by_locator(str): Command that tells Selenium IDE which
+        GUI element needs to operate on.
+        text(str): Send text to element
+        type(By): Set of supported locator strategies
+        timeout(int): Looks for a web element repeatedly until timeout(sec) happens.
+
+        """
         wait = WebDriverWait(self.driver, timeout)
         element = wait.until(ec.element_to_be_clickable((type, by_locator)))
         element.send_keys(text)
 
     def is_expanded(self, by_locator, type=By.XPATH, timeout=30):
+        """
+        Check whether an element is in an expanded or collapsed state
+
+        Args:
+            by_locator(str): Command that tells Selenium IDE which
+            GUI element needs to operate on.
+            type(By): Set of supported locator strategies
+            timeout(int): Looks for a web element repeatedly until timeout(sec) happens.
+
+        return:
+            (str): "true"-element expanded, "false"-element collapsed
+
+        """
         wait = WebDriverWait(self.driver, timeout)
         element = wait.until(ec.element_to_be_clickable((type, by_locator)))
         return element.get_attribute("aria-expanded")
 
     def choose_expanded_mode(self, mode, by_locator, type):
+        """
+        Select the element mode (expanded or collapsed)
+
+        by_locator(str): Command that tells Selenium IDE which
+        GUI element needs to operate on.
+        type(By): Set of supported locator strategies
+        mode(str): Element mode (expanded or collapsed)
+
+        """
         current_mode = self.is_expanded(by_locator=by_locator, type=type)
         if mode != current_mode:
             self.do_click(by_locator=by_locator, type=type)
-
-    def get_element_text(self, by_locator, type=By.XPATH, timeout=30):
-        wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.visibility_of_element_located((type, by_locator)))
-        return element.text
-
-    def get_title(self, title, type=By.XPATH, timeout=30):
-        wait = WebDriverWait(self.driver, timeout)
-        wait.until(ec.title_is(type, title))
-        return self.driver.title
 
 
 def login_ui(browser):
