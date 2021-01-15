@@ -3,6 +3,7 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants, node
+from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.framework.testlib import (
@@ -40,7 +41,11 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
 
         """
         self.pvcs, self.pods = create_pvcs_and_pods(
-            pvc_size=4, pods_for_rwx=2, num_of_rbd_pvc=15, num_of_cephfs_pvc=10
+            pvc_size=4,
+            pods_for_rwx=2,
+            num_of_rbd_pvc=15,
+            num_of_cephfs_pvc=10,
+            deployment_config=True,
         )
 
     @pytest.fixture(autouse=True)
@@ -97,9 +102,25 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
             ), f"Expansion failed for PVC {pvc_obj.name}"
         log.info("PVC expansion was successful on all PVCs")
 
+        # Find respun pods
+        new_pods_list = []
+        for pod_obj in self.pods:
+            new_pods = get_all_pods(
+                namespace=self.namespace,
+                selector=[pod_obj.labels.get("deploymentconfig")],
+                selector_label="deploymentconfig",
+                wait=True,
+            )
+            for pod_ob in new_pods:
+                pod_ob.pvc = pod_obj.pvc
+            new_pods_list.extend(new_pods)
+        assert len(new_pods_list) == len(
+            self.pods
+        ), "Couldn't find all pods after node reboot"
+
         # Run IO
         log.info("Run IO after PVC expansion.")
-        for pod_obj in self.pods:
+        for pod_obj in new_pods_list:
             wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
             storage_type = "block" if pod_obj.pvc.volume_mode == "Block" else "fs"
             pod_obj.io_proc = executor.submit(
@@ -111,7 +132,7 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
             )
 
         log.info("Wait for IO to complete on all pods")
-        for pod_obj in self.pods:
+        for pod_obj in new_pods_list:
             pod_obj.io_proc.result()
             fio_result = pod_obj.get_fio_results()
             err_count = fio_result.get("jobs")[0].get("error")
