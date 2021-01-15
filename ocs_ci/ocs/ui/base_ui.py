@@ -6,6 +6,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.utils import ChromeType
 
 
 from ocs_ci.utility.utils import run_cmd, get_kubeadmin_password
@@ -82,7 +83,7 @@ def login_ui(browser):
         # headless browsers are web browsers without a GUI
         chrome_options.add_argument("--headless")
         driver = webdriver.Chrome(
-            ChromeDriverManager().install(),
+            ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install(),
             chrome_options=chrome_options,
         )
     if browser == "firefox":
