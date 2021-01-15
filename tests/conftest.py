@@ -639,7 +639,13 @@ def pvc_factory_fixture(request, project_factory):
                 pv_obj.delete()
                 pv_obj.ocp.wait_for_delete(pv_obj.name)
             else:
-                pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+                # Workaround for bug 1915706, increasing timeout from 180 to 720
+                timeout = (
+                    720
+                    if config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM
+                    else 180
+                )
+                pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=timeout)
 
     request.addfinalizer(finalizer)
     return factory
