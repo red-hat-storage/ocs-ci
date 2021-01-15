@@ -9,6 +9,7 @@ from .azure import AZUREIPI
 from .gcp import GCPIPI
 from .vmware import VSPHEREUPI
 from .baremetal import BAREMETALUPI, BaremetalPSIUPI
+from .openshift_dedicated import OpenshiftDedicated
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class DeploymentFactory(object):
             "gcp_ipi": GCPIPI,
             "powervs_upi": IBMDeployment,
             "ibm_cloud_managed": IBMCloud,
+            "openshiftdedicated_managed": OpenshiftDedicated,
         }
 
     def get_deployment(self):
