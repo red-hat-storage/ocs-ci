@@ -157,6 +157,7 @@ OPENSHIFT_MONITORING_NAMESPACE = "openshift-monitoring"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 MOUNT_POINT = "/var/lib/www/html"
+TOLERATION_KEY = "node.ocs.openshift.io/storage"
 
 OCP_QE_MISC_REPO = "https://gitlab.cee.redhat.com/aosqe/flexy-templates.git"
 CRITICAL_ERRORS = ["core dumped", "oom_reaper"]

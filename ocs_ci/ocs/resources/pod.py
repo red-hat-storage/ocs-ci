@@ -1664,3 +1664,32 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
     except TimeoutExpiredError:
         logger.warning(f"Failed to get pod ocs-osd-removal-{osd_id}")
         return None
+
+
+def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
+    """
+    Function to check toleration on pods
+
+    Args:
+        toleration_key (str): The toleration key to check
+
+    """
+
+    pod_objs = get_all_pods(
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        selector=[constants.TOOL_APP_LABEL],
+        exclude_selector=True,
+    )
+    flag = False
+    for pod_obj in pod_objs:
+        resource_name = pod_obj.name
+        tolerations = pod_obj.get().get("spec").get("tolerations")
+        for key in tolerations:
+            if key["key"] == toleration_key:
+                flag = True
+        if flag:
+            logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
+        else:
+            logger.error(
+                f"The pod {resource_name} does not have toleration {toleration_key}"
+            )
