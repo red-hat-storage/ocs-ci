@@ -2733,8 +2733,8 @@ def log_alerts(request):
 
     try:
         prometheus = PrometheusAPI()
-    except Exception as e:
-        log.warning(f"There was a problem with connecting to Promeheus: {e.message}")
+    except Exception:
+        log.exception("There was a problem with connecting to Promeheus")
 
     def _collect_alerts():
         try:
@@ -2750,10 +2750,8 @@ def log_alerts(request):
                     f"There was a problem with collecting alerts for analysis: {alerts_response.text}"
                 )
                 return False
-        except Exception as e:
-            log.warning(
-                f"There was a problem with collecting alerts for analysis: {e.message}"
-            )
+        except Exception:
+            log.exception("There was a problem with collecting alerts for analysis")
             return False
 
     def _print_diff():
