@@ -26,7 +26,7 @@ from ocs_ci.utility import templating
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants, node
-from ocs_ci.framework.testlib import E2ETest, performance
+from ocs_ci.framework.testlib import E2ETest, performance, scale
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.helpers.helpers import get_logs_with_errors
 from ocs_ci.ocs.elasticsearch import ElasticSearch
@@ -336,13 +336,10 @@ def ripsaw(request, storageclass_factory):
 
 
 @performance
-class TestSmallFileWorkload(E2ETest):
+class TestSmallFileWorkloadPerf(E2ETest):
     """
-    Deploy Ripsaw operator and run SmallFile workload
-    SmallFile workload using https://github.com/distributed-system-analysis/smallfile
-    smallfile is a python-based distributed POSIX workload generator which can be
-    used to quickly measure performance for a variety of metadata-intensive
-    workloads
+    Deploy Ripsaw operator and run different performance tests.
+    Call common smallfile_worload routie to run SmallFile workload
     """
 
     @pytest.mark.parametrize(
@@ -370,173 +367,199 @@ class TestSmallFileWorkload(E2ETest):
             ),
         ],
     )
-    @pytest.mark.polarion_id("OCS-1295")
-    def test_smallfile_workload(
+    def test_performance_smallfile_workload(
         self, ripsaw, es, file_size, files, threads, samples, interface
     ):
-        """
-        Run SmallFile Workload
-        """
-
-        # Loading the main template yaml file for the benchmark
-        sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
-
-        # Saving the Original elastic-search IP and PORT - if defined in yaml
-        if "elasticsearch" in sf_data["spec"]:
-            sf_data["spec"]["elasticsearch"][
-                "url"
-            ] = f"http://{sf_data['spec']['elasticsearch']['server']}:{sf_data['spec']['elasticsearch']['port']}"
-            backup_es = sf_data["spec"]["elasticsearch"]
-        else:
-            log.warning("Elastic Search information does not exists in YAML file")
-            sf_data["spec"]["elasticsearch"] = {}
-
-        # Use the internal define elastic-search server in the test - if exist
-        if es:
-            sf_data["spec"]["elasticsearch"] = {
-                "url": f"http://{es.get_ip()}:{es.get_port()}",
-                "server": es.get_ip(),
-                "port": es.get_port(),
-            }
-
-        log.info("Apply Operator CRD")
-        ripsaw.apply_crd("resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml")
-        if interface == constants.CEPHBLOCKPOOL:
-            storageclass = constants.DEFAULT_STORAGECLASS_RBD
-        else:
-            storageclass = constants.DEFAULT_STORAGECLASS_CEPHFS
-        log.info(f"Using {storageclass} Storageclass")
-        sf_data["spec"]["workload"]["args"]["storageclass"] = storageclass
-        log.info("Running SmallFile bench")
-
-        """
-            Setting up the parameters for this test
-        """
-        sf_data["spec"]["workload"]["args"]["file_size"] = file_size
-        sf_data["spec"]["workload"]["args"]["files"] = files
-        sf_data["spec"]["workload"]["args"]["threads"] = threads
-        sf_data["spec"]["workload"]["args"]["samples"] = samples
-        """
-        Calculating the size of the volume that need to be test, it should
-        be at least twice in the size then the size of the files, and at
-        least 100Gi.
-
-        Since the file_size is in Kb and the vol_size need to be in Gb, more
-        calculation is needed.
-        """
-        vol_size = int(files * threads * file_size * 3)
-        vol_size = int(vol_size / constants.GB2KB)
-        if vol_size < 100:
-            vol_size = 100
-        sf_data["spec"]["workload"]["args"]["storagesize"] = f"{vol_size}Gi"
-        environment = get_environment_info()
-        if not environment["user"] == "":
-            sf_data["spec"]["test_user"] = environment["user"]
-        else:
-            # since full results object need this parameter, initialize it from CR file
-            environment["user"] = sf_data["spec"]["test_user"]
-
-        sf_data["spec"]["clustername"] = environment["clustername"]
-
-        sf_obj = OCS(**sf_data)
-        sf_obj.create()
-        log.info(f"The smallfile yaml file is {sf_data}")
-
-        # wait for benchmark pods to get created - takes a while
-        for bench_pod in TimeoutSampler(
-            240,
-            10,
-            get_pod_name_by_pattern,
-            "smallfile-client",
-            constants.RIPSAW_NAMESPACE,
-        ):
-            try:
-                if bench_pod[0] is not None:
-                    small_file_client_pod = bench_pod[0]
-                    break
-            except IndexError:
-                log.info("Bench pod not ready yet")
-
-        bench_pod = OCP(kind="pod", namespace=constants.RIPSAW_NAMESPACE)
-        log.info("Waiting for SmallFile benchmark to Run")
-        assert bench_pod.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            resource_name=small_file_client_pod,
-            sleep=30,
-            timeout=600,
-        )
-        # Getting the start time of the test
-        start_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
-
-        test_start_time = time.time()
-
-        # After testing manually, changing the timeout
-        timeout = 3600
-
-        # Getting the UUID from inside the benchmark pod
-        uuid = ripsaw.get_uuid(small_file_client_pod)
-        # Setting back the original elastic-search information
-        if backup_es:
-            sf_data["spec"]["elasticsearch"] = backup_es
-
-        full_results = SmallFileResultsAnalyse(uuid, sf_data)
-
-        # Initialize the results doc file.
-        for key in environment:
-            full_results.add_key(key, environment[key])
-
-        # Calculating the total size of the working data set - in GB
-        full_results.add_key(
-            "dataset",
-            file_size
-            * files
-            * threads
-            * full_results.results["clients"]
-            / constants.GB2KB,
+        smallfile_workload(
+            ripsaw, es, file_size, files, threads, samples, interface, False
         )
 
-        full_results.add_key(
-            "global_options",
-            {
-                "files": files,
-                "file_size": file_size,
-                "storageclass": sf_data["spec"]["workload"]["args"]["storageclass"],
-                "vol_size": sf_data["spec"]["workload"]["args"]["storagesize"],
-            },
+
+@scale
+class TestSmallFileWorkloadScale(E2ETest):
+    """
+    Deploy Ripsaw operator and run different scaletests.
+    Call common smallfile_worload routie to run SmallFile workload
+    """
+
+    @pytest.mark.parametrize(
+        argnames=["file_size", "files", "threads", "samples", "interface"],
+        argvalues=[pytest.param(*[16, 1000000, 4, 3, constants.CEPHFILESYSTEM])] * 5,
+    )
+    def test_performance_smallfile_workload(
+        self, ripsaw, es, file_size, files, threads, samples, interface
+    ):
+        smallfile_workload(
+            ripsaw, es, file_size, files, threads, samples, interface, True
         )
 
-        while True:
-            logs = bench_pod.exec_oc_cmd(
-                f"logs {small_file_client_pod}", out_yaml_format=False
-            )
-            if "RUN STATUS DONE" in logs:
-                # Getting the end time of the test
-                end_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
-                full_results.add_key(
-                    "test_time", {"start": start_time, "end": end_time}
-                )
-                # if Internal ES is exists, Copy all data from the Internal to main ES
-                if es:
-                    log.info("Copy all data from Internal ES to Main ES")
-                    es._copy(full_results.es)
-                full_results.read()
-                if not full_results.dont_check:
-                    full_results.add_key("hosts", full_results.get_clients_list())
-                    full_results.init_full_results()
-                    full_results.aggregate_host_results()
-                    test_status = full_results.aggregate_samples_results()
-                    full_results.es_write()
 
-                    # Creating full link to the results on the ES server
-                    log.info(
-                        f"The Result can be found at ; {full_results.results_link()}"
-                    )
-                else:
-                    test_status = True
+def smallfile_workload(
+    ripsaw, es, file_size, files, threads, samples, interface, skip_perf
+):
+    """
+    Run SmallFile Workload
+    SmallFile workload uses https://github.com/distributed-system-analysis/smallfile
 
+    smallfile is a python-based distributed POSIX workload generator which can be
+    used to quickly measure performance for a variety of metadata-intensive
+    workloads
+    """
+
+    # Loading the main template yaml file for the benchmark
+    sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
+
+    # Saving the Original elastic-search IP and PORT - if defined in yaml
+    if "elasticsearch" in sf_data["spec"]:
+        sf_data["spec"]["elasticsearch"][
+            "url"
+        ] = f"http://{sf_data['spec']['elasticsearch']['server']}:{sf_data['spec']['elasticsearch']['port']}"
+        backup_es = sf_data["spec"]["elasticsearch"]
+    else:
+        log.warning("Elastic Search information does not exists in YAML file")
+        sf_data["spec"]["elasticsearch"] = {}
+
+    # Use the internal define elastic-search server in the test - if exist
+    if es:
+        sf_data["spec"]["elasticsearch"] = {
+            "url": f"http://{es.get_ip()}:{es.get_port()}",
+            "server": es.get_ip(),
+            "port": es.get_port(),
+        }
+
+    log.info("Apply Operator CRD")
+    ripsaw.apply_crd("resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml")
+    if interface == constants.CEPHBLOCKPOOL:
+        storageclass = constants.DEFAULT_STORAGECLASS_RBD
+    else:
+        storageclass = constants.DEFAULT_STORAGECLASS_CEPHFS
+    log.info(f"Using {storageclass} Storageclass")
+    sf_data["spec"]["workload"]["args"]["storageclass"] = storageclass
+    log.info("Running SmallFile bench")
+
+    """
+        Setting up the parameters for this test
+    """
+    sf_data["spec"]["workload"]["args"]["file_size"] = file_size
+    sf_data["spec"]["workload"]["args"]["files"] = files
+    sf_data["spec"]["workload"]["args"]["threads"] = threads
+    sf_data["spec"]["workload"]["args"]["samples"] = samples
+    """
+    Calculating the size of the volume that need to be test, it should
+    be at least twice in the size then the size of the files, and at
+    least 100Gi.
+
+    Since the file_size is in Kb and the vol_size need to be in Gb, more
+    calculation is needed.
+    """
+    vol_size = int(files * threads * file_size * 3)
+    vol_size = int(vol_size / constants.GB2KB)
+    if vol_size < 100:
+        vol_size = 100
+    sf_data["spec"]["workload"]["args"]["storagesize"] = f"{vol_size}Gi"
+    environment = get_environment_info()
+    if not environment["user"] == "":
+        sf_data["spec"]["test_user"] = environment["user"]
+    else:
+        # since full results object need this parameter, initialize it from CR file
+        environment["user"] = sf_data["spec"]["test_user"]
+
+    sf_data["spec"]["clustername"] = environment["clustername"]
+
+    sf_obj = OCS(**sf_data)
+    sf_obj.create()
+    log.info(f"The smallfile yaml file is {sf_data}")
+
+    # wait for benchmark pods to get created - takes a while
+    for bench_pod in TimeoutSampler(
+        240,
+        10,
+        get_pod_name_by_pattern,
+        "smallfile-client",
+        constants.RIPSAW_NAMESPACE,
+    ):
+        try:
+            if bench_pod[0] is not None:
+                small_file_client_pod = bench_pod[0]
                 break
+        except IndexError:
+            log.info("Bench pod not ready yet")
 
-            if timeout < (time.time() - test_start_time):
-                raise TimeoutError("Timed out waiting for benchmark to complete")
-            time.sleep(30)
-        assert not get_logs_with_errors() and test_status, "Test Failed"
+    bench_pod = OCP(kind="pod", namespace=constants.RIPSAW_NAMESPACE)
+    log.info("Waiting for SmallFile benchmark to Run")
+    assert bench_pod.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        resource_name=small_file_client_pod,
+        sleep=30,
+        timeout=600,
+    )
+    if skip_perf:
+        return
+
+    # Getting the start time of the test
+    start_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
+
+    test_start_time = time.time()
+
+    # After testing manually, changing the timeout
+    timeout = 3600
+
+    # Getting the UUID from inside the benchmark pod
+    uuid = ripsaw.get_uuid(small_file_client_pod)
+    # Setting back the original elastic-search information
+    if backup_es:
+        sf_data["spec"]["elasticsearch"] = backup_es
+
+    full_results = SmallFileResultsAnalyse(uuid, sf_data)
+
+    # Initialize the results doc file.
+    for key in environment:
+        full_results.add_key(key, environment[key])
+
+    # Calculating the total size of the working data set - in GB
+    full_results.add_key(
+        "dataset",
+        file_size * files * threads * full_results.results["clients"] / constants.GB2KB,
+    )
+
+    full_results.add_key(
+        "global_options",
+        {
+            "files": files,
+            "file_size": file_size,
+            "storageclass": sf_data["spec"]["workload"]["args"]["storageclass"],
+            "vol_size": sf_data["spec"]["workload"]["args"]["storagesize"],
+        },
+    )
+
+    while True:
+        logs = bench_pod.exec_oc_cmd(
+            f"logs {small_file_client_pod}", out_yaml_format=False
+        )
+        if "RUN STATUS DONE" in logs:
+            # Getting the end time of the test
+            end_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
+            full_results.add_key("test_time", {"start": start_time, "end": end_time})
+            # if Internal ES is exists, Copy all data from the Internal to main ES
+            if es:
+                log.info("Copy all data from Internal ES to Main ES")
+                es._copy(full_results.es)
+            full_results.read()
+            if not full_results.dont_check:
+                full_results.add_key("hosts", full_results.get_clients_list())
+                full_results.init_full_results()
+                full_results.aggregate_host_results()
+                test_status = full_results.aggregate_samples_results()
+                full_results.es_write()
+
+                # Creating full link to the results on the ES server
+                log.info(f"The Result can be found at ; {full_results.results_link()}")
+            else:
+                test_status = True
+
+            break
+
+        if timeout < (time.time() - test_start_time):
+            raise TimeoutError("Timed out waiting for benchmark to complete")
+        time.sleep(30)
+    assert not get_logs_with_errors() and test_status, "Test Failed"
