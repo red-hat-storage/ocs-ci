@@ -125,7 +125,7 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     verify_pods_upgraded(old_images, selector=constants.MDS_APP_LABEL, count=2)
     if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
         rgw_count = get_rgw_count(
-            float(upgrade_version), True, float(version_before_upgrade)
+            upgrade_version.base_version, True, version_before_upgrade
         )
         verify_pods_upgraded(
             old_images,

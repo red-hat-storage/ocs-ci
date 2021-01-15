@@ -14,9 +14,9 @@ def get_rgw_count(ocs_version, is_upgrade, version_before_upgrade):
     Otherwise, RGW Count is 1
 
     Args:
-        ocs_version (str): OCS Version
+        ocs_version (str, float): OCS Version
         is_upgrade (bool): If cluster was upgraded to current version
-        version_before_upgrade (str): OCS Version prior to upgrade
+        version_before_upgrade (str, float): OCS Version prior to upgrade
 
     Returns:
         int: RGW Count
