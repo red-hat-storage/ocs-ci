@@ -1,4 +1,6 @@
 import logging
+import tempfile
+import os
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -24,8 +26,11 @@ class BaseUI:
 
     def __init__(self, driver):
         self.driver = driver
+        self.screenshots_folder = tempfile.mkdtemp()
+        logger.info(f"screenshots pictures:{self.screenshots_folder}")
+        self.cnt_screenshot = 0
 
-    def do_click(self, by_locator, type=By.XPATH, timeout=30):
+    def do_click(self, by_locator, type=By.XPATH, timeout=30, screenshot=True):
         """
         Click on Button/link on OpenShift Console
 
@@ -33,11 +38,14 @@ class BaseUI:
         GUI element needs to operate on.
         type(By): Set of supported locator strategies.
         timeout(int): Looks for a web element repeatedly until timeout(sec) happens.
+        screenshot(bool): True- take screenshot, False-no take screenshot
 
         """
         wait = WebDriverWait(self.driver, timeout)
         element = wait.until(ec.element_to_be_clickable((type, by_locator)))
         element.click()
+        if screenshot:
+            self.screenshot()
 
     def do_send_keys(self, by_locator, text, type=By.XPATH, timeout=30):
         """
@@ -86,6 +94,15 @@ class BaseUI:
         if mode != current_mode:
             self.do_click(by_locator=by_locator, type=type)
 
+    def screenshot(self):
+        """
+        Take screenshot using python code
+
+        """
+        self.cnt_screenshot += 1
+        filename = os.path.join(self.screenshots_folder, str(self.cnt_screenshot))
+        self.driver.save_screenshot(filename)
+
 
 def login_ui(browser, headless=True, chrome_type=ChromeType.CHROMIUM):
     """
@@ -126,6 +143,7 @@ def login_ui(browser, headless=True, chrome_type=ChromeType.CHROMIUM):
         driver = webdriver.Firefox()
 
     wait = WebDriverWait(driver, 30)
+    driver.maximize_window()
     driver.get(console_url)
     element = wait.until(ec.element_to_be_clickable((By.ID, "inputUsername")))
     element.send_keys("kubeadmin")
