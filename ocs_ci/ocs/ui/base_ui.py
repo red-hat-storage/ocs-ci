@@ -45,7 +45,7 @@ class BaseUI:
         element = wait.until(ec.element_to_be_clickable((type, by_locator)))
         element.click()
         if screenshot:
-            self.screenshot()
+            self.take_screenshot()
 
     def do_send_keys(self, by_locator, text, type=By.XPATH, timeout=30):
         """
@@ -94,7 +94,7 @@ class BaseUI:
         if mode != current_mode:
             self.do_click(by_locator=by_locator, type=type)
 
-    def screenshot(self):
+    def take_screenshot(self):
         """
         Take screenshot using python code
 
