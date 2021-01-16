@@ -100,7 +100,9 @@ class BaseUI:
 
         """
         self.cnt_screenshot += 1
-        filename = os.path.join(self.screenshots_folder, str(self.cnt_screenshot))
+        filename = os.path.join(
+            self.screenshots_folder, str(self.cnt_screenshot).zfill(3)
+        )
         self.driver.save_screenshot(filename)
 
 
