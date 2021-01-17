@@ -112,7 +112,7 @@ def delete_released_pvs_in_sc(sc_name):
         sc_name (str): The storage class name
 
     Returns:
-        bool: True, if the released PVs deleted successfully. False, otherwise
+        int: The number of PVs that have been deleted successfully.
 
     """
     num_of_deleted_pvs = 0
