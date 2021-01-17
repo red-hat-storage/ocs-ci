@@ -1286,24 +1286,6 @@ def untaint_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT, nodes_to_untaint=None
     return False
 
 
-def get_node_pods(node):
-    osd_pods = pod.get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    node_pods = [
-        osd_pod for osd_pod in osd_pods
-        if pod.get_pod_node(osd_pod).name == node.name
-    ]
-    return node_pods
-
-
-def scale_down_deployments(node_obj):
-    ocp = OCP(kind="node", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    pods_to_scale_down = get_node_pods_to_scale_down(node_obj)
-    for p in pods_to_scale_down:
-        deployment_name = pod.get_deployment_name(p.name)
-        cmd = f"scale deployment {deployment_name} --replicas=0"
-        ocp.exec_oc_cmd(cmd)
-
-
 def get_node_pods(node_name, pods_to_search=None):
     """
     Get all the pods of a specified node
