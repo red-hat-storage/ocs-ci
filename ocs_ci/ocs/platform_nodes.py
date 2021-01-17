@@ -21,7 +21,6 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     get_typed_worker_nodes,
     get_nodes,
-    generate_node_names_for_vsphere,
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
@@ -1515,7 +1514,7 @@ class VSPHEREUPINode(VMWareNodes):
 
             # adding node without terraform
             # clone VM
-            new_nodes_names = generate_node_names_for_vsphere(self.compute_count)
+            new_nodes_names = self.generate_node_names_for_vsphere()
             logger.info(f"New node names: {new_nodes_names}")
 
             # get the worker ignition
@@ -1572,6 +1571,30 @@ class VSPHEREUPINode(VMWareNodes):
                 nodes_approve_csr_num = pre_count_csr + self.compute_count + 1
 
             wait_for_all_nodes_csr_and_approve(expected_node_num=nodes_approve_csr_num)
+
+    def generate_node_names_for_vsphere(self, prefix="compute-"):
+        """
+        Generate the node names for vsphere platform
+
+        Args:
+            prefix (str): Prefix for node name
+
+        Returns:
+            list: List of node names
+
+        """
+        compute_vms = self.vsphere.get_compute_vms_in_pool(
+            self.cluster_name, self.datacenter, self.cluster
+        )
+        compute_node_names = [compute_vm.name for compute_vm in compute_vms]
+        logger.info(f"Current node names: {compute_node_names}")
+        compute_node_names.sort()
+
+        current_compute_suffix = int(compute_node_names[-1].split("-")[-1])
+        return [
+            f"{prefix}{current_compute_suffix + node_count}"
+            for node_count in range(1, self.compute_count + 1)
+        ]
 
 
 class BaremetalNodes(NodesBase):

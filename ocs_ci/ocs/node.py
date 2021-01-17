@@ -987,8 +987,11 @@ def delete_and_create_osd_node_vsphere_lso(osd_node_name, use_existing_node=Fals
     assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
     log.info("ocs-osd-removal-job completed successfully")
 
-    is_old_pv_deleted = delete_released_pvs_in_sc(sc_name)
-    assert is_old_pv_deleted, "Failed to delete old pv"
+    expected_num_of_deleted_pvs = 1
+    num_of_deleted_pvs = delete_released_pvs_in_sc(sc_name)
+    assert (
+        num_of_deleted_pvs == expected_num_of_deleted_pvs
+    ), f"num of deleted PVs is {num_of_deleted_pvs} instead of {expected_num_of_deleted_pvs}"
     log.info("Successfully deleted old pv")
 
     is_deleted = pod.delete_osd_removal_job(osd_id)
@@ -1175,28 +1178,6 @@ def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
 
     log.info("Verification steps from the ceph side finish successfully")
     return True
-
-
-def generate_node_names_for_vsphere(count, prefix="compute-"):
-    """
-    Generate the node names for vsphere platform
-
-    Args:
-        count (int): Number of node names to generate
-        prefix (str): Prefix for node name
-
-    Returns:
-        list: List of node names
-
-    """
-    compute_node_names = get_compute_node_names()
-    log.info(f"Current node names: {compute_node_names}")
-    compute_node_names.sort()
-    current_compute_suffix = int(compute_node_names[-1].split("-")[-1])
-    return [
-        f"{prefix}{current_compute_suffix + node_count}"
-        for node_count in range(1, count + 1)
-    ]
 
 
 def is_node_labeled(node_name, label=constants.OPERATOR_NODE_LABEL):
