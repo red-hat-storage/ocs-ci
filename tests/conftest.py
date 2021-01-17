@@ -67,6 +67,7 @@ from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
 )
+from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -2746,6 +2747,55 @@ def user_factory(request, htpasswd_identity_provider, htpasswd_path):
 @pytest.fixture(scope="session")
 def user_factory_session(request, htpasswd_identity_provider, htpasswd_path):
     return users.user_factory(request, htpasswd_path)
+
+
+@pytest.fixture(autouse=True)
+def log_alerts(request):
+    """
+    Log alerts at the beginning and end of each test case. At the end of test
+    case print a difference: what new alerts are in place after the test is
+    complete.
+
+    """
+    alerts_before = []
+    prometheus = None
+
+    try:
+        prometheus = PrometheusAPI()
+    except Exception:
+        log.exception("There was a problem with connecting to Promeheus")
+
+    def _collect_alerts():
+        try:
+            alerts_response = prometheus.get(
+                "alerts", payload={"silenced": False, "inhibited": False}
+            )
+            if alerts_response.ok:
+                alerts = alerts_response.json().get("data").get("alerts")
+                log.debug(f"Found alerts: {alerts}")
+                return alerts
+            else:
+                log.warning(
+                    f"There was a problem with collecting alerts for analysis: {alerts_response.text}"
+                )
+                return False
+        except Exception:
+            log.exception("There was a problem with collecting alerts for analysis")
+            return False
+
+    def _print_diff():
+        if alerts_before:
+            alerts_after = _collect_alerts()
+            if alerts_after:
+                alerts_new = [
+                    alert for alert in alerts_after if alert not in alerts_before
+                ]
+                if alerts_new:
+                    log.warning("During test were raised new alerts")
+                    log.warning(alerts_new)
+
+    alerts_before = _collect_alerts()
+    request.addfinalizer(_print_diff)
 
 
 @pytest.fixture(scope="session", autouse=True)
