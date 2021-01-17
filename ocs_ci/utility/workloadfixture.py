@@ -20,6 +20,19 @@ from ocs_ci.utility.prometheus import PrometheusAPI
 logger = logging.getLogger(__name__)
 
 
+def is_measurement_done(result_file):
+    """
+    Has the measurement been already performed and stored in a result file?
+
+    Returns:
+      bool: True if the measurement has been already performed.
+    """
+    if os.path.isfile(result_file) and os.access(result_file, os.R_OK):
+        logger.info("Measurements file %s is already created.", result_file)
+        return True
+    return False
+
+
 def measure_operation(
     operation, result_file, minimal_time=None, metadata=None, measure_after=False
 ):
@@ -86,16 +99,14 @@ def measure_operation(
 
     # check if file with results for this operation already exists
     # if it exists then use it
-    if os.path.isfile(result_file) and os.access(result_file, os.R_OK):
-        logger.info(
-            f"File {result_file} already created." f" Trying to use it for tests..."
-        )
+    if is_measurement_done(result_file):
         with open(result_file) as open_file:
             results = json.load(open_file)
             # indicate that we are not going to execute the workload, but
             # just reuse measurement from earlier run
             results["first_run"] = False
-        logger.info(f"File {result_file} loaded. Content of file:\n{results}")
+        logger.info("Measurement file %s loaded.", result_file)
+        logger.debug("Content of measurement file:\n%s", results)
 
     # if there is no file with results from previous run
     # then perform operation measurement
