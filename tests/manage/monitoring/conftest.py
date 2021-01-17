@@ -12,10 +12,11 @@ from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
-from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.utility.workloadfixture import measure_operation
+from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
+from ocs_ci.utility.workloadfixture import measure_operation, is_measurement_done
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
+import ocs_ci.ocs.exceptions
 
 
 logger = logging.getLogger(__name__)
@@ -668,7 +669,39 @@ def workload_idle(measurement_dir):
         return result
 
     test_file = os.path.join(measurement_dir, "measure_workload_idle.json")
+
+    # if io_in_bg detected, request and wait for it's temporary shutdown
+    # but only if the fixture will actually run and measure the workload
+    restart_io_in_bg = False
+    if not is_measurement_done(test_file) and config.RUN.get("io_in_bg"):
+        logger.info("io_in_bg detected, trying to pause it via load_status")
+        config.RUN["load_status"] = "to_be_paused"
+        restart_io_in_bg = True
+        timeout = 600
+        sleep_time = 60
+        ts = TimeoutSampler(timeout, sleep_time, config.RUN.get, "load_status")
+        try:
+            for load_status in ts:
+                if load_status == "paused":
+                    logger.info("io_in_bg seems paused now")
+                    break
+        except ocs_ci.ocs.exceptions.TimeoutExpiredError as ex:
+            error_msg = (
+                f"io_in_bf failed to stop after {timeout} timeout, "
+                "bug in io_in_bf (of ocs-ci) prevents execution of "
+                "test cases which uses this fixture, rerun the affected "
+                "test cases in a dedicated run and consider ocs-ci fix"
+            )
+            logger.error(ex)
+            logger.error(error_msg)
+            raise Exception(error_msg)
+    else:
+        logger.debug("io_in_bg not detected, good")
+
     measured_op = measure_operation(do_nothing, test_file)
+    if restart_io_in_bg:
+        logger.info("reverting load_status to resume io_in_bg")
+        config.RUN["load_status"] = "to_be_resumed"
     return measured_op
 
 
