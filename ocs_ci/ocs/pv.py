@@ -115,7 +115,7 @@ def delete_released_pvs_in_sc(sc_name):
         bool: True, if the released PVs deleted successfully. False, otherwise
 
     """
-    result = True
+    num_of_deleted_pvs = 0
 
     pv_objs = get_pv_objs_in_sc(sc_name)
     released_pvs = [
@@ -128,8 +128,8 @@ def delete_released_pvs_in_sc(sc_name):
         try:
             ocp.OCP().exec_oc_cmd(f"delete pv {pv_name}", timeout=timeout)
             logger.info(f"Successfully deleted pv {pv_name}")
+            num_of_deleted_pvs += 1
         except TimeoutExpired:
             logger.info(f"Failed to delete pv {pv_name} after {timeout} seconds")
-            result = False
 
-    return result
+    return num_of_deleted_pvs
