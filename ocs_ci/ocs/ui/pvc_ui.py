@@ -18,6 +18,17 @@ class PvcUI(BaseUI):
     def __init__(self, driver):
         super().__init__(driver)
 
+    def navigate_pvc_page(self):
+        """
+        Navigate to Persistent Volume Claims page
+
+        """
+        logger.info("Go to PVC Page")
+        self.choose_expanded_mode(
+            mode="true", by_locator=pvc["Storage Tab"], type=By.XPATH
+        )
+        self.do_click(by_locator=pvc["PVC Page"], type=By.LINK_TEXT)
+
     def create_pvc_ui(self, sc_type, pvc_name, access_mode, pvc_size):
         """
         Create PVC via UI.
@@ -28,11 +39,7 @@ class PvcUI(BaseUI):
         pvc_size (str): the size of pvc (GB)
 
         """
-        logger.info("Go to PVC Page")
-        self.choose_expanded_mode(
-            mode="true", by_locator=pvc["Storage Tab"], type=By.XPATH
-        )
-        self.do_click(by_locator=pvc["PVC Page"], type=By.LINK_TEXT)
+        self.navigate_pvc_page()
 
         logger.info("Select openshift-storage project")
         self.do_click(pvc["PVC Project Selector"], type=By.CSS_SELECTOR)
@@ -64,18 +71,17 @@ class PvcUI(BaseUI):
         pvc_name (str): Name of the pvc
 
         """
-        logger.info("Go to PVC Page")
-        self.choose_expanded_mode(
-            mode="true", by_locator=pvc["Storage Tab"], type=By.XPATH
-        )
-        self.do_click(by_locator=pvc["PVC Page"], type=By.LINK_TEXT)
-
-        logger.info("Go to PVC Page")
-        self.do_click(pvc["PVC Page"], type=By.LINK_TEXT)
+        self.navigate_pvc_page()
 
         logger.info("Select openshift-storage project")
         self.do_click(pvc["PVC Project Selector"], type=By.CSS_SELECTOR)
         self.do_click(pvc["PVC Select Project openshift-storage"], type=By.CSS_SELECTOR)
+
+        self.do_send_keys(
+            by_locator='input[data-test-id="item-filter"]',
+            type=By.CSS_SELECTOR,
+            text=pvc_name,
+        )
 
         logger.info(f"Go to PVC {pvc_name} Page")
         for i in range(2):

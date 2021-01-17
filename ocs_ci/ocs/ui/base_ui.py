@@ -1,6 +1,6 @@
 import logging
-import tempfile
 import os
+import time
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -11,6 +11,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.utils import ChromeType
 
 
+from ocs_ci.framework import config as ocsci_config
 from ocs_ci.utility.utils import run_cmd, get_kubeadmin_password
 from ocs_ci.ocs.ui.views import login
 
@@ -26,7 +27,11 @@ class BaseUI:
 
     def __init__(self, driver):
         self.driver = driver
-        self.screenshots_folder = tempfile.mkdtemp()
+        self.screenshots_folder = os.path.join(
+            os.path.expanduser(ocsci_config.RUN["log_dir"]),
+            f"screenshots_ui_{ocsci_config.RUN['run_id']}",
+        )
+        os.mkdir(self.screenshots_folder)
         logger.info(f"screenshots pictures:{self.screenshots_folder}")
         self.cnt_screenshot = 0
 
@@ -99,6 +104,7 @@ class BaseUI:
         Take screenshot using python code
 
         """
+        time.sleep(2)
         self.cnt_screenshot += 1
         filename = os.path.join(
             self.screenshots_folder, str(self.cnt_screenshot).zfill(3)
@@ -106,7 +112,7 @@ class BaseUI:
         self.driver.save_screenshot(filename)
 
 
-def login_ui(browser, headless=True, chrome_type=ChromeType.CHROMIUM):
+def login_ui(browser, headless=False, chrome_type=ChromeType.GOOGLE):
     """
     Login to OpenShift Console
 

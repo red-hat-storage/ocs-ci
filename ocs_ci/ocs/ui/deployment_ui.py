@@ -58,16 +58,36 @@ class DeploymentUI(BaseUI):
             raise ValueError("is_encryption arg must be a bool")
         self.is_encryption = is_encryption
 
+    def navigate_operatorhub(self):
+        """
+        Navigate to OperatorHub Page
+
+        """
+        logger.info("Click On Operators Tab")
+        self.choose_expanded_mode(
+            mode="true", by_locator=deployment["Operators Tab"], type=By.XPATH
+        )
+        logger.info("Click On OperatorHub Tab")
+        self.do_click(deployment["OperatorHub Tab"], type=By.LINK_TEXT)
+
+    def navigate_installed_operators(self):
+        """
+        Navigate to Installed Operators page
+
+        """
+        logger.info("Click On Installed Operators Tab")
+        self.choose_expanded_mode(
+            mode="true", by_locator=deployment["Operators Tab"], type=By.XPATH
+        )
+        logger.info("Click On OperatorHub Tab")
+        self.do_click(deployment["Installed Operators Tab"], type=By.LINK_TEXT)
+
     def install_ocs_opeartor(self):
         """
         Install OCS Opeartor
 
         """
-        logger.info("Click On Operators Tab")
-        self.do_click(deployment["Operators Tab"])
-
-        logger.info("Click On OperatorHub Tab")
-        self.do_click(deployment["OperatorHub Tab"], type=By.LINK_TEXT)
+        self.navigate_operatorhub()
 
         logger.info("Search OCS Operator")
         self.do_send_keys(
@@ -82,19 +102,12 @@ class DeploymentUI(BaseUI):
         logger.info("Click Install OCS")
         self.do_click(deployment["Click Install OCS"], type=By.CSS_SELECTOR)
 
-        logger.info("Click On Operators Tab")
-        self.do_click(deployment["Operators Tab"])
-
     def install_storage_cluster(self):
         """
         Install Storage Cluster
 
         """
-        logger.info("Click On Operators Tab")
-        self.do_click(deployment["Operators Tab"])
-
-        logger.info("Click On OperatorHub Tab")
-        self.do_click(deployment["Installed Operators Tab"], type=By.LINK_TEXT)
+        self.navigate_installed_operators()
 
         logger.info("Click On OCS Installed")
         self.do_click(deployment["OCS Installed"], type=By.CSS_SELECTOR)
