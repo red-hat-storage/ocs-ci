@@ -65,7 +65,7 @@ class DeploymentUI(BaseUI):
         """
         logger.info("Click On Operators Tab")
         self.choose_expanded_mode(
-            mode="true", by_locator=deployment["Operators Tab"], type=By.XPATH
+            mode=True, by_locator=deployment["Operators Tab"], type=By.XPATH
         )
         logger.info("Click On OperatorHub Tab")
         self.do_click(deployment["OperatorHub Tab"], type=By.LINK_TEXT)
@@ -77,7 +77,7 @@ class DeploymentUI(BaseUI):
         """
         logger.info("Click On Installed Operators Tab")
         self.choose_expanded_mode(
-            mode="true", by_locator=deployment["Operators Tab"], type=By.XPATH
+            mode=True, by_locator=deployment["Operators Tab"], type=By.XPATH
         )
         logger.info("Click On OperatorHub Tab")
         self.do_click(deployment["Installed Operators Tab"], type=By.LINK_TEXT)

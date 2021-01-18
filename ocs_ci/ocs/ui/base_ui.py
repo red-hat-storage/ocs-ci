@@ -10,7 +10,6 @@ from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.utils import ChromeType
 
-
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.utility.utils import run_cmd, get_kubeadmin_password
 from ocs_ci.ocs.ui.views import login
@@ -35,20 +34,20 @@ class BaseUI:
         logger.info(f"screenshots pictures:{self.screenshots_folder}")
         self.cnt_screenshot = 0
 
-    def do_click(self, by_locator, type=By.XPATH, timeout=30, screenshot=True):
+    def do_click(self, by_locator, type=By.XPATH, timeout=30):
         """
         Click on Button/link on OpenShift Console
 
-        by_locator(str): Command that tells Selenium IDE which
-        GUI element needs to operate on.
-        type(By): Set of supported locator strategies.
-        timeout(int): Looks for a web element repeatedly until timeout(sec) happens.
-        screenshot(bool): True- take screenshot, False-no take screenshot
+        by_locator (str): Command that tells Selenium IDE which
+            GUI element needs to operate on.
+        type (By): Set of supported locator strategies.
+        timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         """
         wait = WebDriverWait(self.driver, timeout)
         element = wait.until(ec.element_to_be_clickable((type, by_locator)))
         element.click()
+        screenshot = ocsci_config.UI_SELENIUM.get("screenshot")
         if screenshot:
             self.take_screenshot()
 
@@ -56,11 +55,11 @@ class BaseUI:
         """
         Send text to element on OpenShift Console
 
-        by_locator(str): Command that tells Selenium IDE which
-        GUI element needs to operate on.
-        text(str): Send text to element
-        type(By): Set of supported locator strategies
-        timeout(int): Looks for a web element repeatedly until timeout(sec) happens.
+        by_locator (str): Command that tells Selenium IDE which
+            GUI element needs to operate on.
+        text (str): Send text to element
+        type (By): Set of supported locator strategies
+        timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         """
         wait = WebDriverWait(self.driver, timeout)
@@ -72,27 +71,27 @@ class BaseUI:
         Check whether an element is in an expanded or collapsed state
 
         Args:
-            by_locator(str): Command that tells Selenium IDE which
-            GUI element needs to operate on.
-            type(By): Set of supported locator strategies
-            timeout(int): Looks for a web element repeatedly until timeout(sec) happens.
+            by_locator (str): Command that tells Selenium IDE which
+                GUI element needs to operate on.
+            type (By): Set of supported locator strategies
+            timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         return:
-            (str): "true"-element expanded, "false"-element collapsed
+            bool: True if element expended, False otherwise
 
         """
         wait = WebDriverWait(self.driver, timeout)
         element = wait.until(ec.element_to_be_clickable((type, by_locator)))
-        return element.get_attribute("aria-expanded")
+        return True if element.get_attribute("aria-expanded") == "true" else False
 
     def choose_expanded_mode(self, mode, by_locator, type):
         """
         Select the element mode (expanded or collapsed)
 
-        by_locator(str): Command that tells Selenium IDE which
-        GUI element needs to operate on.
-        type(By): Set of supported locator strategies
-        mode(str): Element mode (expanded or collapsed)
+        by_locator (str): Command that tells Selenium IDE which
+            GUI element needs to operate on.
+        type (By): Set of supported locator strategies
+        mode (bool): True if element expended, False otherwise
 
         """
         current_mode = self.is_expanded(by_locator=by_locator, type=type)
@@ -112,17 +111,12 @@ class BaseUI:
         self.driver.save_screenshot(filename)
 
 
-def login_ui(browser, headless=False, chrome_type=ChromeType.GOOGLE):
+def login_ui():
     """
     Login to OpenShift Console
 
-    Args:
-        browser(str): type of browser (chrome, firefox..)
-        headless(bool): True- without GUI, False- with GUI
-        chrome_type (ChromeType): Select chrome type (chrome, chromium..)
-
     return:
-        driver(Selenium WebDriver)
+        driver (Selenium WebDriver)
 
     """
     logger.info("Get URL of OCP console")
@@ -133,15 +127,25 @@ def login_ui(browser, headless=False, chrome_type=ChromeType.GOOGLE):
     logger.info("Get password of OCP console")
     password = get_kubeadmin_password()
     password = password.rstrip()
+    browser = ocsci_config.UI_SELENIUM.get("browser_type")
     if browser == "chrome":
         logger.info("chrome browser")
         chrome_options = Options()
-        chrome_options.add_argument("--ignore-ssl-errors=yes")
-        chrome_options.add_argument("--ignore-certificate-errors")
+
+        ignore_ssl = ocsci_config.UI_SELENIUM.get("ignore_ssl")
+        if ignore_ssl:
+            chrome_options.add_argument("--ignore-ssl-errors=yes")
+            chrome_options.add_argument("--ignore-certificate-errors")
+
         # headless browsers are web browsers without a GUI
+        headless = ocsci_config.UI_SELENIUM.get("headless")
         if headless:
             chrome_options.add_argument("--headless")
-        chrome_browser = chrome_type
+
+        chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
+        if chrome_browser_type == "chromium":
+            chrome_browser = ChromeType.CHROMIUM
+
         driver = webdriver.Chrome(
             ChromeDriverManager(chrome_type=chrome_browser).install(),
             chrome_options=chrome_options,
@@ -172,7 +176,7 @@ def close_browser(driver):
     Close Selenium WebDriver
 
     Args:
-        driver(Selenium WebDriver)
+        driver (Selenium WebDriver)
 
     """
     driver.close()

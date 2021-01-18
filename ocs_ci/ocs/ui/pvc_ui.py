@@ -25,7 +25,7 @@ class PvcUI(BaseUI):
         """
         logger.info("Go to PVC Page")
         self.choose_expanded_mode(
-            mode="true", by_locator=pvc["Storage Tab"], type=By.XPATH
+            mode=True, by_locator=pvc["Storage Tab"], type=By.XPATH
         )
         self.do_click(by_locator=pvc["PVC Page"], type=By.LINK_TEXT)
 

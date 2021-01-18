@@ -3546,9 +3546,9 @@ def es(request):
     return es
 
 
-@pytest.fixture(params=["chrome"], scope="function")
+@pytest.fixture(scope="function")
 def setup_ui(request):
-    driver = login_ui(request.param)
+    driver = login_ui()
 
     def finalizer():
         close_browser(driver)

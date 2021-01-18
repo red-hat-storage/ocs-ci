@@ -3,7 +3,7 @@ import pytest
 import time
 
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
-from ocs_ci.framework.testlib import tier1, skipif_ocs_version
+from ocs_ci.framework.testlib import ui, skipif_ocs_version
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, delete_pvcs
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class TestPvcUserInterface(object):
         pvcs = [pvc_obj for pvc_obj in pvc_objs if "test-pvc" in pvc_obj.name]
         delete_pvcs(pvc_objs=pvcs)
 
-    @tier1
+    @ui
     @skipif_ocs_version("<4.6")
     @pytest.mark.parametrize(
         argnames=["sc_type", "pvc_name", "access_mode", "pvc_size"],
