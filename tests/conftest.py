@@ -3622,3 +3622,10 @@ def es(request):
     es = ElasticSearch()
 
     return es
+
+
+def ceph_fs_use():
+    """
+    Bytes used value saved by cephfs small file scaling test.
+    """
+    return 0
