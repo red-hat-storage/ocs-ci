@@ -566,7 +566,7 @@ def add_node(machine_set, count):
     return True
 
 
-def wait_for_new_node_to_be_ready(machine_set, timeout=300):
+def wait_for_new_node_to_be_ready(machine_set, timeout=600):
     """
     Wait for the new node to reach ready state
 
