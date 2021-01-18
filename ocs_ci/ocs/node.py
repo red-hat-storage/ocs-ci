@@ -17,7 +17,7 @@ from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions
-from ocs_ci.ocs.pv import (
+from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
     verify_new_pv_available_in_sc,
     delete_released_pvs_in_sc,
@@ -914,7 +914,7 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
     return new_node_name
 
 
-def delete_and_create_osd_node_vsphere_lso(osd_node_name, use_existing_node=False):
+def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=False):
     """
     Unschedule, drain and delete osd node, and creating a new osd node.
     At the end of the function there should be the same number of osd nodes as

@@ -74,7 +74,7 @@ def delete_and_create_osd_node(osd_node_name):
             pytest.fail(msg_invalid)
     elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
         if is_lso_cluster():
-            new_node_name = node.delete_and_create_osd_node_vsphere_lso(
+            new_node_name = node.delete_and_create_osd_node_vsphere_upi_lso(
                 osd_node_name, use_existing_node=False
             )
 
