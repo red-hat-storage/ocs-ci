@@ -695,7 +695,7 @@ class MCG:
         bc = f" --backingstores={','.join(backingstore_name_list)} --placement={placement}"
         placement_parameter = (
             f"{constants.PLACEMENT_BUCKETCLASS} "
-            if float(config.ENV_DATA["ocs_version"]) < 4.7
+            if float(config.ENV_DATA["ocs_version"]) >= 4.7
             else ""
         )
         self.exec_mcg_cmd(f"bucketclass create {placement_parameter}{name}{bc}")
