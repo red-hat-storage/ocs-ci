@@ -38,8 +38,7 @@ class BaseUI:
         """
         Click on Button/link on OpenShift Console
 
-        by_locator (str): Command that tells Selenium IDE which
-            GUI element needs to operate on.
+        by_locator (str): GUI element needs to operate on.
         type (By): Set of supported locator strategies.
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
@@ -55,8 +54,7 @@ class BaseUI:
         """
         Send text to element on OpenShift Console
 
-        by_locator (str): Command that tells Selenium IDE which
-            GUI element needs to operate on.
+        by_locator (str): GUI element needs to operate on.
         text (str): Send text to element
         type (By): Set of supported locator strategies
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
@@ -71,8 +69,7 @@ class BaseUI:
         Check whether an element is in an expanded or collapsed state
 
         Args:
-            by_locator (str): Command that tells Selenium IDE which
-                GUI element needs to operate on.
+            by_locator (str): GUI element needs to operate on.
             type (By): Set of supported locator strategies
             timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
@@ -88,8 +85,7 @@ class BaseUI:
         """
         Select the element mode (expanded or collapsed)
 
-        by_locator (str): Command that tells Selenium IDE which
-            GUI element needs to operate on.
+        by_locator (str): GUI element needs to operate on.
         type (By): Set of supported locator strategies
         mode (bool): True if element expended, False otherwise
 
