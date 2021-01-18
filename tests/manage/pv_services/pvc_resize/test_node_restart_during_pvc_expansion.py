@@ -82,7 +82,7 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
         for pvc_obj in self.pvcs:
             log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expanded}G")
             pvc_obj.expand_proc = executor.submit(
-                pvc_obj.resize_pvc, pvc_size_expanded, True
+                pvc_obj.resize_pvc, pvc_size_expanded, False
             )
 
         # Check result of node 'restart_nodes'
@@ -94,13 +94,6 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
             status=constants.NODE_READY,
             timeout=300,
         )
-
-        # Verify pvc expansion status
-        for pvc_obj in self.pvcs:
-            assert (
-                pvc_obj.expand_proc.result()
-            ), f"Expansion failed for PVC {pvc_obj.name}"
-        log.info("PVC expansion was successful on all PVCs")
 
         # Find respun pods
         new_pods_list = []
@@ -117,6 +110,18 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
         assert len(new_pods_list) == len(
             self.pods
         ), "Couldn't find all pods after node reboot"
+
+        # Verify PVC expansion status
+        for pvc_obj in self.pvcs:
+            assert (
+                pvc_obj.expand_proc.result()
+            ), f"Expansion failed for PVC {pvc_obj.name}"
+            capacity = pvc_obj.get().get("status").get("capacity").get("storage")
+            assert capacity == f"{pvc_size_expanded}Gi", (
+                f"Capacity of PVC {pvc_obj.name} is not {pvc_size_expanded}Gi as "
+                f"expected, but {capacity}. Retrying."
+            )
+        log.info("PVC expansion was successful on all PVCs")
 
         # Run IO
         log.info("Run IO after PVC expansion.")
