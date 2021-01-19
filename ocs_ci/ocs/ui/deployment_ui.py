@@ -120,8 +120,8 @@ class DeploymentUI(BaseUI):
 
         if self.mode == "internal":
             self.install_internal_cluster()
-        elif self.mode == "lso":
-            self.install_lso_cluster()
+        else:
+            raise ValueError(f"Not Support on {self.mode}")
 
     def install_internal_cluster(self):
         """

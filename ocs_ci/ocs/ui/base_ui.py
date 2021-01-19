@@ -8,7 +8,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
-from webdriver_manager.utils import ChromeType
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.utility.utils import run_cmd, get_kubeadmin_password
@@ -43,12 +42,12 @@ class BaseUI:
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         """
-        wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.element_to_be_clickable((type, by_locator)))
-        element.click()
         screenshot = ocsci_config.UI_SELENIUM.get("screenshot")
         if screenshot:
             self.take_screenshot()
+        wait = WebDriverWait(self.driver, timeout)
+        element = wait.until(ec.element_to_be_clickable((type, by_locator)))
+        element.click()
 
     def do_send_keys(self, by_locator, text, type=By.XPATH, timeout=30):
         """
@@ -63,6 +62,9 @@ class BaseUI:
         wait = WebDriverWait(self.driver, timeout)
         element = wait.until(ec.element_to_be_clickable((type, by_locator)))
         element.send_keys(text)
+        screenshot = ocsci_config.UI_SELENIUM.get("screenshot")
+        if screenshot:
+            self.take_screenshot()
 
     def is_expanded(self, by_locator, type=By.XPATH, timeout=30):
         """
@@ -85,9 +87,9 @@ class BaseUI:
         """
         Select the element mode (expanded or collapsed)
 
+        mode (bool): True if element expended, False otherwise
         by_locator (str): GUI element needs to operate on.
         type (By): Set of supported locator strategies
-        mode (bool): True if element expended, False otherwise
 
         """
         current_mode = self.is_expanded(by_locator=by_locator, type=type)
@@ -99,10 +101,10 @@ class BaseUI:
         Take screenshot using python code
 
         """
-        time.sleep(2)
+        time.sleep(1)
         self.cnt_screenshot += 1
         filename = os.path.join(
-            self.screenshots_folder, str(self.cnt_screenshot).zfill(3)
+            self.screenshots_folder, f"{self.cnt_screenshot:03}.png"
         )
         self.driver.save_screenshot(filename)
 
@@ -139,16 +141,12 @@ def login_ui():
             chrome_options.add_argument("--headless")
 
         chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
-        if chrome_browser_type == "chromium":
-            chrome_browser = ChromeType.CHROMIUM
-
         driver = webdriver.Chrome(
-            ChromeDriverManager(chrome_type=chrome_browser).install(),
+            ChromeDriverManager(chrome_type=chrome_browser_type).install(),
             chrome_options=chrome_options,
         )
-    if browser == "firefox":
-        logger.info("firefox browser")
-        driver = webdriver.Firefox()
+    else:
+        raise ValueError(f"Not Support on {browser}")
 
     wait = WebDriverWait(driver, 30)
     driver.maximize_window()
