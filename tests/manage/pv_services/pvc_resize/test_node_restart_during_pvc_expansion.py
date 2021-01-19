@@ -43,8 +43,8 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
         self.pvcs, self.pods = create_pvcs_and_pods(
             pvc_size=4,
             pods_for_rwx=2,
-            num_of_rbd_pvc=15,
-            num_of_cephfs_pvc=10,
+            num_of_rbd_pvc=9,
+            num_of_cephfs_pvc=6,
             deployment_config=True,
         )
 
