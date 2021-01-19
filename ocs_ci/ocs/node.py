@@ -10,7 +10,7 @@ from ocs_ci.ocs.machine import get_machine_objs
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.ocs.ocp import OCP, switch_to_project
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
@@ -978,8 +978,6 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     is_new_pv_available = verify_new_pv_available_in_sc(old_pv_objs, sc_name)
     assert is_new_pv_available, "New pv is not available"
     log.info("Finished verifying that the new pv is available")
-
-    switch_to_project(defaults.ROOK_CLUSTER_NAMESPACE)
 
     osd_removal_job = pod.run_osd_removal_job(osd_id)
     assert osd_removal_job, "ocs-osd-removal failed to create"

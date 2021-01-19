@@ -1718,7 +1718,7 @@ def run_osd_removal_job(osd_id):
         cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_id} -o yaml"
 
     logger.info(f"Executing OSD removal job on OSD-{osd_id}")
-    ocp_obj = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
+    ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     osd_removal_job_yaml = ocp_obj.exec_oc_cmd(cmd)
     osd_removal_job = OCS(**osd_removal_job_yaml)
     osd_removal_job.create(do_reload=False)
@@ -1771,8 +1771,11 @@ def delete_osd_removal_job(osd_id):
 
     Returns:
         bool: True, if the ocs-osd-removal job deleted successfully. False, otherwise
+
     """
-    osd_removal_job = get_job_obj(f"ocs-osd-removal-{osd_id}")
+    osd_removal_job = get_job_obj(
+        f"ocs-osd-removal-{osd_id}", namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
     osd_removal_job.delete()
     try:
         osd_removal_job.ocp.wait_for_delete(resource_name=f"ocs-osd-removal-{osd_id}")
