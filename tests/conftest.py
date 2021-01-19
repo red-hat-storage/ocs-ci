@@ -255,11 +255,15 @@ def log_ocs_version(cluster):
     teardown = config.RUN["cli_params"].get("teardown")
     deploy = config.RUN["cli_params"].get("deploy")
     dev_mode = config.RUN["cli_params"].get("dev_mode")
+    skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
     if teardown and not deploy:
         log.info("Skipping version reporting for teardown.")
         return
     elif dev_mode:
         log.info("Skipping version reporting for development mode.")
+        return
+    elif skip_ocs_deployment:
+        log.info("Skipping version reporting since OCS deployment is skipped.")
         return
     cluster_version, image_dict = get_ocs_version()
     file_name = os.path.join(
