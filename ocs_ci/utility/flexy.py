@@ -7,6 +7,8 @@ import logging
 import os
 
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants
+from ocs_ci.utility.connection import Connection
 
 logger = logging.getLogger(__name__)
 
@@ -42,3 +44,28 @@ def load_cluster_info():
             config.DEPLOYMENT["int_svc_instance"] = cluster_info.get(
                 "INT_SVC_INSTANCE_PUBLIC_IP"
             )
+
+
+def configure_allowed_domains_in_proxy():
+    """
+    Configure squid proxy server - add domains which needs to be accessible
+    from disconnected cluster for test execution.
+
+    """
+    # configure proxy on INT_SVC_INSTANCE - allow access to required sites
+    private_key = os.path.expanduser(config.DEPLOYMENT["ssh_key_private"])
+    ssh_int_svc = Connection(
+        config.DEPLOYMENT.get("int_svc_instance"), "ec2-user", private_key
+    )
+    # as we are inserting the two lines before first line one by one,
+    # we have to launch the sed commands in reverse order
+    cmd = "sudo sed -i '1i http_access allow ocs_whitelist' /srv/squid/etc/squid.conf"
+    logger.info(ssh_int_svc.exec_cmd(cmd=cmd))
+    cmd = (
+        """sudo sed -i '1i acl ocs_whitelist dstdomain """
+        f"""{" ".join(constants.DISCON_CL_PROXY_ALLOWED_DOMAINS)}' """
+        """/srv/squid/etc/squid.conf"""
+    )
+    logger.info(ssh_int_svc.exec_cmd(cmd=cmd))
+    cmd = "sudo systemctl restart squid-proxy.service"
+    logger.info(ssh_int_svc.exec_cmd(cmd=cmd))

@@ -23,8 +23,10 @@ from ocs_ci.utility.utils import (
     login_to_mirror_registry,
     wait_for_machineconfigpool_status,
 )
-from ocs_ci.utility.connection import Connection
-from ocs_ci.utility.flexy import load_cluster_info
+from ocs_ci.utility.flexy import (
+    configure_allowed_domains_in_proxy,
+    load_cluster_info,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -323,7 +325,11 @@ class FlexyBase(object):
 
     def flexy_post_processing(self):
         """
-        Update global pull-secret and configure ntp (if required).
+        Pefrom few actions required after flexy execution:
+        - update global pull-secret
+        - login to mirror registry (disconected cluster)
+        - configure proxy server (disconnected cluster)
+        - configure ntp (if required)
         """
         # Apply pull secrets on ocp cluster
         kubeconfig = os.path.join(
@@ -335,28 +341,10 @@ class FlexyBase(object):
         # if on disconnected cluster, perform required tasks
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         if config.DEPLOYMENT.get("disconnected"):
+            # login to mirror registry
             login_to_mirror_registry(pull_secret_path)
-
-            # configure proxy on INT_SVC_INSTANCE - allow access to required sites
-            private_key = os.path.expanduser(config.DEPLOYMENT["ssh_key_private"])
-            ssh_int_svc = Connection(
-                config.DEPLOYMENT.get("int_svc_instance"), "ec2-user", private_key
-            )
-            # as we are inserting the two lines before first line one by one,
-            # we have to launch the sed commands in reverse order
-            cmd = (
-                "sudo sed -i '1i http_access allow ocs_whitelist' "
-                "/srv/squid/etc/squid.conf"
-            )
-            logger.info(ssh_int_svc.exec_cmd(cmd=cmd))
-            cmd = (
-                """sudo sed -i '1i acl ocs_whitelist dstdomain """
-                f"""{" ".join(constants.DISCON_CL_PROXY_ALLOWED_DOMAINS)}' """
-                """/srv/squid/etc/squid.conf"""
-            )
-            logger.info(ssh_int_svc.exec_cmd(cmd=cmd))
-            cmd = "sudo systemctl restart squid-proxy.service"
-            logger.info(ssh_int_svc.exec_cmd(cmd=cmd))
+            # configure additional allowed domains in proxy
+            configure_allowed_domains_in_proxy()
 
         # update pull-secret
         secret_cmd = (
