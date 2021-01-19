@@ -458,7 +458,10 @@ class Pod(OCS):
             str: Node name
 
         """
-        return self.pod_data["spec"]["nodeName"]
+        if config.ENV_DATA.get("platform", "").lower() == "aws":
+            return self.pod_data["spec"]["nodeSelector"]["kubernetes.io/hostname"]
+        else:
+            return self.pod_data["spec"]["nodeName"]
 
 
 # Helper functions for Pods
