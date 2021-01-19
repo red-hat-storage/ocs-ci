@@ -76,6 +76,7 @@ from ocs_ci.utility.utils import (
     get_openshift_client,
     get_system_architecture,
     get_testrun_name,
+    load_auth_config,
     ocsci_log_path,
     skipif_ocp_version,
     skipif_ocs_version,
@@ -183,6 +184,15 @@ def supported_configuration():
             f"required minimum specs of {min_cpu} vCPUs and {min_memory} RAM"
         )
         pytest.xfail(err_msg)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def auto_load_auth_config():
+    try:
+        auth_config = {"AUTH": load_auth_config()}
+        config.update(auth_config)
+    except FileNotFoundError:
+        pass  # If auth file doesn't exist we just ignore.
 
 
 @pytest.fixture(scope="class")
