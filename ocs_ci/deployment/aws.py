@@ -801,11 +801,14 @@ class AWSUPIFlexy(AWSBase):
             constants.FLEXY_RELATIVE_CLUSTER_DIR,
             "cf_stack_list2",
         )
-        with open(cf_stack_list2_file_path, "r+") as f:
-            lines = f.readlines()
-            for stack_name in stack_names:
-                if f"{stack_name}\n" not in lines:
-                    f.write(f"{stack_name}\n")
+        if os.path.exists(cf_stack_list2_file_path):
+            with open(cf_stack_list2_file_path, "r+") as f:
+                lines = f.readlines()
+                for stack_name in stack_names:
+                    if f"{stack_name}\n" not in lines:
+                        f.write(f"{stack_name}\n")
+        else:
+            logger.warning(f"File {cf_stack_list2_file_path} doesn't exists!")
 
         super(AWSUPIFlexy, self).destroy_cluster(log_level)
 
