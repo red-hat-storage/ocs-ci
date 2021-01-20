@@ -104,7 +104,8 @@ class BaseUI:
         time.sleep(1)
         current_date_and_time = datetime.datetime.now()
         filename = os.path.join(
-            self.screenshots_folder, f"{str(current_date_and_time)}.png"
+            self.screenshots_folder,
+            f"{(str(current_date_and_time)).replace(' ','_')}.png",
         )
         logger.info(f"Creating snapshot:{filename}")
         self.driver.save_screenshot(filename)
