@@ -5,6 +5,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.helpers import disruption_helpers
+from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import get_node_resource_utilization_from_adm_top
 
 log = logging.getLogger(__name__)
@@ -36,6 +37,9 @@ class TestPgSQLPodRespin(E2ETest):
         """
         # Deployment of postgres database
         pgsql.setup_postgresql(replicas=3)
+
+        # Initialize Sanity instance
+        self.sanity_helpers = Sanity()
 
     @pytest.mark.parametrize(
         argnames=["transactions", "pod_name"],
@@ -86,3 +90,6 @@ class TestPgSQLPodRespin(E2ETest):
 
         # Validate pgbench run and parse logs
         pgsql.validate_pgbench_run(pgbench_pods)
+
+        # Perform cluster and Ceph health checks
+        self.sanity_helpers.health_check(tries=40)

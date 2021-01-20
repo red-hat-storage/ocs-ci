@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import E2ETest, workloads
+from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.constants import STATUS_COMPLETED
 from ocs_ci.helpers import disruption_helpers
@@ -32,6 +33,10 @@ class TestJenkinsPodRespin(E2ETest):
         """
         JENKINS test setup
         """
+
+        # Initialize Sanity instance
+        self.sanity_helpers = Sanity()
+
         jenkins.create_ocs_jenkins_template()
 
     @pytest.mark.parametrize(
@@ -81,3 +86,6 @@ class TestJenkinsPodRespin(E2ETest):
 
         # Print table of builds
         jenkins.print_completed_builds_results()
+
+        # Perform cluster and Ceph health checks
+        self.sanity_helpers.health_check(tries=40)
