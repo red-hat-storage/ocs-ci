@@ -40,7 +40,7 @@ def select_osd_node_name():
 
 
 @retry(AssertionError, tries=2, delay=60)
-def check_verification_steps(old_node_name, new_node_name, old_osd_id):
+def check_node_replacement_verification_steps(old_node_name, new_node_name, old_osd_id):
     """
     Check if the verification steps finished successfully.
 
@@ -106,7 +106,7 @@ def delete_and_create_osd_node(osd_node_name):
                 osd_node_name, use_existing_node=False
             )
 
-    check_verification_steps(osd_node_name, new_node_name, old_osd_id)
+    check_node_replacement_verification_steps(osd_node_name, new_node_name, old_osd_id)
 
 
 @tier4
