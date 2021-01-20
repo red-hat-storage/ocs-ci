@@ -191,8 +191,8 @@ class TestMcgNamespaceS3Operations(E2ETest):
         )
         logger.info(f"Verifying Get object ACl response: {get_acl_res['Grants']}")
         assert (
-            get_acl_res["Grants"][0]["Grantee"]["DisplayName"] == "NooBaa"
-        ), "Invalid grantee"
+            get_acl_res["Grants"][0]["Grantee"]["ID"] == get_acl_res["Owner"]["ID"]
+        ), "Invalid Grant ID"
 
         logger.info(f"Deleting {ROOT_OBJ} and {COPY_OBJ} and verifying response")
         del_res = bucket_utils.s3_delete_objects(
@@ -226,17 +226,13 @@ class TestMcgNamespaceS3Operations(E2ETest):
         last_key = get_list_and_verify(
             first_page_res, obj_keys[:mid_index], "Contents", version="v1"
         )
-        next_page_res = bucket_utils.s3_list_objects_v1(
-            s3_obj=mcg_obj,
-            bucketname=ns_bucket,
-            max_keys=max_keys,
-            marker=first_page_res["NextMarker"]
-            if platform == constants.AZURE_PLATFORM
-            else last_key,
-        )
-        get_list_and_verify(
-            next_page_res, obj_keys[mid_index:], "Contents", version="v1"
-        )
+        if not platform == constants.AZURE_PLATFORM:
+            next_page_res = bucket_utils.s3_list_objects_v1(
+                s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys, marker=last_key
+            )
+            get_list_and_verify(
+                next_page_res, obj_keys[mid_index:], "Contents", version="v1"
+            )
 
         # List v1 with prefix and page entries
         logger.info(f"ListObjectsV1 operation on {ns_bucket} with prefix")
@@ -253,18 +249,17 @@ class TestMcgNamespaceS3Operations(E2ETest):
         last_key = get_list_and_verify(
             first_page_res, obj_keys[:mid_index], "Contents", "Drive/", version="v1"
         )
-        next_page_res = bucket_utils.s3_list_objects_v1(
-            s3_obj=mcg_obj,
-            bucketname=ns_bucket,
-            prefix="Drive/",
-            max_keys=max_keys,
-            marker=first_page_res["NextMarker"]
-            if platform == constants.AZURE_PLATFORM
-            else last_key,
-        )
-        get_list_and_verify(
-            next_page_res, obj_keys[mid_index:], "Contents", "Drive/", version="v1"
-        )
+        if not platform == constants.AZURE_PLATFORM:
+            next_page_res = bucket_utils.s3_list_objects_v1(
+                s3_obj=mcg_obj,
+                bucketname=ns_bucket,
+                prefix="Drive/",
+                max_keys=max_keys,
+                marker=last_key,
+            )
+            get_list_and_verify(
+                next_page_res, obj_keys[mid_index:], "Contents", "Drive/", version="v1"
+            )
 
         # List v1 with prefix, delimiter and page entries
         logger.info(f"ListObjectsV1 operation on {ns_bucket} with prefix and delimiter")
