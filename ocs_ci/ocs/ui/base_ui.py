@@ -42,11 +42,11 @@ class BaseUI:
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         """
+        wait = WebDriverWait(self.driver, timeout)
+        element = wait.until(ec.element_to_be_clickable((type, by_locator)))
         screenshot = ocsci_config.UI_SELENIUM.get("screenshot")
         if screenshot:
             self.take_screenshot()
-        wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.element_to_be_clickable((type, by_locator)))
         element.click()
 
     def do_send_keys(self, by_locator, text, type=By.XPATH, timeout=30):
