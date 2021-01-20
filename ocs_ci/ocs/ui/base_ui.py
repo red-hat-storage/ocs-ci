@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+import datetime
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -31,7 +32,6 @@ class BaseUI:
         )
         os.mkdir(self.screenshots_folder)
         logger.info(f"screenshots pictures:{self.screenshots_folder}")
-        self.cnt_screenshot = 0
 
     def do_click(self, by_locator, type=By.XPATH, timeout=30):
         """
@@ -102,10 +102,11 @@ class BaseUI:
 
         """
         time.sleep(1)
-        self.cnt_screenshot += 1
+        current_date_and_time = datetime.datetime.now()
         filename = os.path.join(
-            self.screenshots_folder, f"{self.cnt_screenshot:03}.png"
+            self.screenshots_folder, f"{str(current_date_and_time)}.png"
         )
+        logger.info(f"Creating snapshot:{filename}")
         self.driver.save_screenshot(filename)
 
 
