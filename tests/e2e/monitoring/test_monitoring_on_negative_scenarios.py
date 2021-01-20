@@ -292,7 +292,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             ceph_health_check(tries=40, delay=30)
 
         # Check the node are Ready state and check cluster is health ok
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=40)
 
         # Check for the created pvc metrics after rebooting the master nodes
         for pod_obj in pods:
@@ -320,6 +320,9 @@ class TestMonitoringBackedByOCS(E2ETest):
             assert check_pvcdata_collected_on_prometheus(
                 pod_obj.pvc.name
             ), f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
+
+        # Validate osd is up and ceph health is ok
+        self.sanity_helpers.health_check(tries=40)
 
     @pytest.mark.polarion_id("OCS-605")
     def test_monitoring_when_osd_down(self, pods):
@@ -351,7 +354,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         assert modify_osd_replica_count(resource_name=resource_name, replica_count=1)
 
         # Validate osd is up and ceph health is ok
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=40)
 
     @pytest.mark.polarion_id("OCS-606")
     def test_monitoring_when_one_of_the_prometheus_node_down(self, nodes, pods):
@@ -419,7 +422,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             wait_for_nodes_status_and_prometheus_health_check(pods)
 
         # Check the node are Ready state and check cluster is health ok
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=40)
 
     @pytest.mark.polarion_id("OCS-710")
     def test_monitoring_after_rebooting_node_where_mgr_is_running(self, nodes, pods):

@@ -97,4 +97,4 @@ class TestPgSQLNodeReboot(E2ETest):
         pgsql.validate_pgbench_run(pgbench_pods)
 
         # Perform cluster and Ceph health checks
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=40)

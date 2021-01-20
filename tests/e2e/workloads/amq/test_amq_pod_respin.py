@@ -5,6 +5,7 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.helpers.disruption_helpers import Disruptions
+from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.utils import TimeoutSampler
@@ -56,6 +57,9 @@ class TestAMQPodRespin(E2ETest):
         sc_name = default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
         self.amq, self.threads = amq_factory_fixture(sc_name=sc_name.name)
 
+        # Initialize Sanity instance
+        self.sanity_helpers = Sanity()
+
     @pytest.mark.parametrize(
         argnames=["pod_name"],
         argvalues=[
@@ -100,3 +104,6 @@ class TestAMQPodRespin(E2ETest):
             log.info("Validate message run completely")
             for thread in self.threads:
                 thread.result(timeout=1800)
+
+        # Perform cluster and Ceph health checks
+        self.sanity_helpers.health_check(tries=40)

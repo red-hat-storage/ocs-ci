@@ -51,4 +51,4 @@ class TestCouchBaseNodeDrain(E2ETest):
         bg_handler = flowtest.BackgroundOps()
         bg_ops = [self.cb.result]
         bg_handler.wait_for_bg_operations(bg_ops, timeout=3600)
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=40)

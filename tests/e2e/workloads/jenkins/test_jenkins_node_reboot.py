@@ -100,4 +100,4 @@ class TestJenkinsNodeReboot(E2ETest):
         jenkins.print_completed_builds_results()
 
         # Perform cluster and Ceph health checks
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=40)
