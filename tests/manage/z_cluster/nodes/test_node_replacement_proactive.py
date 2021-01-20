@@ -42,7 +42,7 @@ def select_osd_node_name():
 @retry(AssertionError, tries=2, delay=60)
 def check_node_replacement_verification_steps(old_node_name, new_node_name, old_osd_id):
     """
-    Check if the verification steps finished successfully.
+    Check if the node replacement verification steps finished successfully.
 
     Args:
         old_node_name (str): The name of the old node that has been deleted
@@ -50,7 +50,7 @@ def check_node_replacement_verification_steps(old_node_name, new_node_name, old_
         old_osd_id (str): The old osd id
 
     Raises:
-        AssertionError: If the verification steps failed.
+        AssertionError: If the node replacement verification steps failed.
 
     """
     assert node.node_replacement_verification_steps_ceph_side(
