@@ -122,7 +122,7 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
             capacity = pvc_obj.get().get("status").get("capacity").get("storage")
             assert capacity == f"{pvc_size_expanded}Gi", (
                 f"Capacity of PVC {pvc_obj.name} is not {pvc_size_expanded}Gi as "
-                f"expected, but {capacity}. Retrying."
+                f"expected, but {capacity}."
             )
         log.info("PVC expansion was successful on all PVCs")
 
