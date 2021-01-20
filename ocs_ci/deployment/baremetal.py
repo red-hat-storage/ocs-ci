@@ -232,7 +232,7 @@ class BAREMETALUPI(Deployment):
                     cmd = (
                         "wget -O "
                         f"{self.helper_node_details['bm_path_to_upload']}"
-                        "/rhcos-metal.x86_64.raw.gz "
+                        f"/{constants.BM_METAL_IMAGE} "
                         f"{metal_image_path}"
                     )
                     assert self.helper_node_handler.exec_cmd(
@@ -502,7 +502,7 @@ class BAREMETALUPI(Deployment):
             bm_install_files_loc = self.helper_node_details["bm_install_files"]
             extra_data_pxe = "rhcos-live-rootfs.x86_64.img coreos.inst.insecure"
             if ocp_version <= 4.6:
-                bm_metal_loc = f"coreos.inst.image_url={bm_install_files_loc}rhcos-metal.x86_64.raw.gz"
+                bm_metal_loc = f"coreos.inst.image_url={bm_install_files_loc}{constants.BM_METAL_IMAGE}"
             else:
                 bm_metal_loc = ""
             if ocp_version >= 4.6:

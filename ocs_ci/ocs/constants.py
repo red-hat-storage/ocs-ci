@@ -1087,6 +1087,7 @@ BM_DEFAULT_CLUSTER_NAME = "ocp-baremetal-auto"
 BM_STATUS_ABSENT = "ABSENT"
 BM_STATUS_PRESENT = "PRESENT"
 BM_STATUS_RESPONSE_UPDATED = "UPDATED"
+BM_METAL_IMAGE = "rhcos-metal.x86_64.raw.gz"
 
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
