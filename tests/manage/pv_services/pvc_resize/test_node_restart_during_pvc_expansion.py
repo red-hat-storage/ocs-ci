@@ -96,16 +96,20 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
 
         # Find respun pods
         new_pods_list = []
+        wait_to_stabilize = True
         for pod_obj in self.pods:
             new_pods = get_all_pods(
                 namespace=pod_obj.namespace,
                 selector=[pod_obj.labels.get("deploymentconfig")],
                 selector_label="deploymentconfig",
-                wait=False,
+                wait=wait_to_stabilize,
             )
             for pod_ob in new_pods:
                 pod_ob.pvc = pod_obj.pvc
             new_pods_list.extend(new_pods)
+            # Given enough time for pods to respin. So wait time
+            # is not needed for further iterations
+            wait_to_stabilize = False
         assert len(new_pods_list) == len(
             self.pods
         ), "Couldn't find all pods after node reboot"
