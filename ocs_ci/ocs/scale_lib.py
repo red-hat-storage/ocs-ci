@@ -996,5 +996,5 @@ def get_max_pvc_count():
         if "cluster.ocs.openshift.io/openshift-storage" not in labellist:
             continue
         count += 1
-    pvc_count = count * 500
+    pvc_count = count * constants.SCALE_MAX_PVCS_PER_NODE
     return pvc_count
