@@ -47,13 +47,13 @@ This platform supports deployment of OCP cluster + OCS cluster on top of it.
 
 ### Configuration files
 
-* `conf/ocsci/ibm_cloud_cluster_conf.yaml` - this file can be used for deployment
+* `conf/deployment/ibmcloud/ibm_cloud_vpc_cluster.yaml` - this file can be used for deployment
     on IBM Cloud - this config is for VPC gen 2 provider.
 
 You will need to create also credential file with secret data which should
 never be shared publicly in this repository.
 All needed values are mentioned as placeholders and commented out in
-`conf/ocsci/ibm_cloud_cluster_conf.yaml`
+`conf/deployment/ibmcloud/ibm_cloud_vpc_cluster.yaml`
 
 But an example is pasted also here:
 
@@ -68,6 +68,8 @@ AUTH:
   ibmcloud:
     api_key: IBM CLOUD API KEY PLACEHOLDER
     account_id: ACCOUNT ID PLACEHOLDER
+    ibm_cos_access_key_id: KEY PLACEHOLDER
+    ibm_cos_secret_access_key: SECRET PLACEHOLDER
 DEPLOYMENT:
   ocs_secret_dockerconfigjson: BASE64 OF QUAY SECRET PLACEHOLDER
 ```
@@ -94,6 +96,11 @@ Created At    2020-10-19T15:05+0000
 API Key       OUR_KEY
 Locked        false
 ```
+
+### How to get COS keys
+
+Please follow official
+[documentation](https://cloud.ibm.com/docs/cloud-object-storage?topic=cloud-object-storage-uhc-hmac-credentials-main).
 
 ### Deployment types
 
@@ -142,14 +149,15 @@ namespaces.
 There is also problem with secret in must-gather. As must gather is always
 created in temporary created namespace with random name we cannot use the same
 mechanism mentioned above. As a workaround we are able to use live must-gather
-after the GA of specific version. Or we have to use upstream image.
+after the GA of specific version. Or we have to use upstream image. By default
+we are using upstream image for IBM Cloud.
 
 Config files:
 
 * `/conf/ocsci/live-must-gather.yaml` - for usage of live GAed version of mus
   gather image
 * `conf/ocsci/upstream-must-gather.yaml` - for usage of upstream image, this is
-  also now part of `conf/ocsci/ibm_cloud_cluster_conf.yaml`
+  also now part of `conf/deployment/ibmcloud/ibm_cloud_vpc_cluster.yaml`
 
 #### Deployment of OCP takes long time
 

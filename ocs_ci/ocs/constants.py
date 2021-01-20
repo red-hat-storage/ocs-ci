@@ -486,6 +486,7 @@ OPERATOR_SOURCE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "operator-source.ya
 
 HTPASSWD_IDP_YAML = os.path.join(TEMPLATE_AUTHENTICATION_DIR, "htpasswd_provider.yaml")
 
+IBM_COS_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "ibm-cloud-secret.yaml")
 
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
@@ -705,6 +706,7 @@ LATEST_TAGS = (
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
 OCS_SUBSCRIPTION = "ocs-operator"
+ROOK_OPERATOR_CONFIGMAP = "rook-ceph-operator-config"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
