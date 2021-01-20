@@ -54,13 +54,13 @@ class PerfResult:
             self.es = Elasticsearch([{"host": self.server, "port": self.port}])
         except ESExp.ConnectionError:
             log.warning(
-                "can not connect to ES server {}:{}".format(self.server, self.port)
+                "Cannot connect to ES server {}:{}".format(self.server, self.port)
             )
 
         # Testing the connection to the elastic-search
         if not self.es.ping():
             log.warning(
-                "can not connect to ES server {}:{}".format(self.server, self.port)
+                "Cannot connect to ES server {}:{}".format(self.server, self.port)
             )
 
     def es_read(self):

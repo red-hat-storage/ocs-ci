@@ -216,7 +216,7 @@ class TestFIOBenchmark(E2ETest):
             )
             self.main_es = Elasticsearch([self.backup_es["url"]], verify_certs=True)
             if not self.main_es.ping():
-                log.warning("Can not connect to Main elasticsearch server")
+                log.warning("Cannot connect to Main elasticsearch server")
                 self.main_es = None
 
         else:
@@ -431,7 +431,7 @@ class TestFIOBenchmark(E2ETest):
                 time.sleep(10)
                 return True
             else:
-                log.warning("Can not upload data into the Main ES server")
+                log.warning("Cannot upload data into the Main ES server")
                 return False
 
     def cleanup(self):

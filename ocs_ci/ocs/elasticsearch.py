@@ -45,18 +45,6 @@ def elasticsearch_load(connection, target_path):
         if connection is None:
             log.warning("There is no elasticsearch server to load data into")
             return False
-        """
-        log.info(f"Loading data from {target_path} to ES server at {connection}")
-        log.info(f"Creating new ES connection to {connection}")
-        try:
-            main_es = Elasticsearch([connection], verify_certs=True)
-        except esexp.ConnectionError as ex:
-            log.error(f"Can not connect to the main ES server on {connection} - ({ex})")
-            return False
-        if not main_es.ping():
-            log.error(f"Can not connect to the main ES server on {connection}")
-            return False
-        """
         log.info(f"The ES connection is {connection}")
         for ind in all_files:
             if ".data." in ind:  # load only data files and not mapping info
@@ -261,13 +249,13 @@ class ElasticSearch(object):
         Create a connection to the local ES
 
         Returns:
-            Elasticsearch: elasticsearch connection object, None if can not connect to ES
+            Elasticsearch: elasticsearch connection object, None if Cannot connect to ES
 
         """
         try:
             es = Elasticsearch([{"host": self.get_ip(), "port": self.get_port()}])
         except esexp.ConnectionError:
-            log.warning("Can not connect to ES server in the LocalServer")
+            log.warning("Cannot connect to ES server in the LocalServer")
             es = None
         return es
 
@@ -342,7 +330,7 @@ class ElasticSearch(object):
             results = run_command(f"tar zxvf {target_path}/FullResults.tgz", **kwargs)
             log.debug(f"The untar results is {results}")
             if "Error in command" in results:
-                log.warning("Can not untar the dumped file")
+                log.warning("Cannot untar the dumped file")
                 return False
 
         return True
