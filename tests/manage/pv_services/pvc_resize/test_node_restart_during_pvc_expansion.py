@@ -99,7 +99,7 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
         new_pods_list = []
         for pod_obj in self.pods:
             new_pods = get_all_pods(
-                namespace=self.namespace,
+                namespace=pod_obj.namespace,
                 selector=[pod_obj.labels.get("deploymentconfig")],
                 selector_label="deploymentconfig",
                 wait=True,
