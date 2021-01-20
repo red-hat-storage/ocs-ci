@@ -34,6 +34,22 @@ def smallfile_workload(
     smallfile is a python-based distributed POSIX workload generator which can be
     used to quickly measure performance and scaling for a variety of metadata-intensive
     workloads
+
+    Args:
+        ripsaw -- Ripsaw fixture to setup/teardown ripsaw
+        es -- Elastic search fixture
+        scale_leaks -- scale leak checking fixture
+        file_siles -- size of file to be created
+        files -- number of files to be created
+        threads -- number of threads to run
+        samples -- samples taken if running performance tests
+        interface -- CephFileSystem or CephBlockPool
+
+    Returns:
+        backup_es (str) -- backup elastic search location
+        environment (dict) -- environment (user is changed at times)
+        sf_data (dict) -- small file data extracted from yaml and modified by this routine
+
     """
 
     # Loading the main template yaml file for the benchmark

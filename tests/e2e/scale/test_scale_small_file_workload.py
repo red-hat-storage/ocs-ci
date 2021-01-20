@@ -43,27 +43,35 @@ def scale_leaks(request):
     and compare with the cephfs usage at the finish.
     """
 
+    pytest.count = 0
+
     def teardown():
         """
         After all the ripsaw creation and deltion runs have finished,
         test to see if there was a leak in storage.
         """
         log.info("In scale_leaks teardown")
-        time.sleep(120)
         orig_data = pytest.ceph_fs_use
         now_data = get_cephfs_data()
+        still_going_down = True
+        while still_going_down:
+            log.info("Waiting for Ceph to finish cleaning up")
+            time.sleep(120)
+            new_data = get_cephfs_data()
+            still_going_down = False
+            for entry in new_data:
+                if new_data[entry] < now_data[entry]:
+                    still_going_down = True
+                    now_data[entry] = new_data[entry]
         for entry in now_data:
+            # Leak indicated if over %50 more storage is used.
             log.info(f"{entry} now uses {now_data[entry]} bytes")
-            log.info(f"{entry} originally used {now_data[entry]} bytes")
-            check = (now_data[entry] - orig_data[entry] < 1000000000,)
-            #
-            # Maybe we should do some more detailed checking here.
-            # For now, report an error if there is 1G that appears to leak.
-            #
-            errmsg = f"{entry} over 1G larger -- possible leak"
+            log.info(f"{entry} originally used {orig_data[entry]} bytes")
+            ratio = now_data[entry] / orig_data[entry]
+            check = ratio < 1.50
+            errmsg = f"{entry} over 50% larger -- possible leak"
             assert check, errmsg
 
-    pytest.ceph_fs_use = get_cephfs_data()
     request.addfinalizer(teardown)
 
     return scale_leaks
@@ -89,13 +97,21 @@ class TestSmallFileWorkloadScale(E2ETest):
     Call common smallfile_worload routie to run SmallFile workload
     """
 
+    # The first 2 tests set a baseline usage to compare with later tests.
+    # A leak is now determined based on a percentage increase.
     @pytest.mark.parametrize(
-        argnames=["file_size", "files", "threads", "samples", "interface"],
-        argvalues=[pytest.param(*[16, 1000000, 4, 3, constants.CEPHFILESYSTEM])] * 10,
+        argnames=["file_size", "files", "threads", "interface"],
+        argvalues=[pytest.param(*[16, 1000000, 4, constants.CEPHFILESYSTEM])] * 12,
     )
     def test_scale_smallfile_workload(
-        self, ripsaw, es, scale_leaks, file_size, files, threads, samples, interface
+        self, ripsaw, es, scale_leaks, file_size, files, threads, interface
     ):
         smallfile_workload(
-            ripsaw, es, scale_leaks, file_size, files, threads, samples, interface
+            ripsaw, es, scale_leaks, file_size, files, threads, 3, interface
         )
+        pytest.count += 1
+        run_data = get_cephfs_data()
+        for entry in run_data:
+            log.info(f"{entry} now uses {run_data[entry]} bytes")
+        if pytest.count == 2:
+            pytest.ceph_fs_use = run_data
