@@ -205,6 +205,16 @@ Configuration specific to external Ceph cluster
     * `key` - Admin keyring value used for the external Ceph cluster
 * `external_cluster_details` - base64 encoded data of json output from exporter script
 
+#### UI_SELENIUM
+
+Configuration specific to ui testing with selenium
+
+* `browser_type` - The type of browser (chrome,firefox)
+* `chrome_type` - The type of chrome browser (google-chrome,chromium,edge)
+* `headless` - Browser simulation program that does not have a user interface.
+* `screenshot` - A Screenshot in Selenium Webdriver is used for bug analysis.
+* `ignore_ssl` - Ignore the ssl certificate
+
 ## Example of accessing config/default data
 
 ```python

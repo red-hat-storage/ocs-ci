@@ -61,6 +61,8 @@ setup(
         "keystoneauth1==4.2.0",
         "range-key-dict==1.1.0",
         "GitPython==3.1.7",
+        "selenium==3.141.0",
+        "webdriver-manager==3.2.2",
     ],
     entry_points={
         "console_scripts": [
