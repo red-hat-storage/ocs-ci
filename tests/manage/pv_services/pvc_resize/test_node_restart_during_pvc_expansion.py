@@ -42,9 +42,8 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
         """
         self.pvcs, self.pods = create_pvcs_and_pods(
             pvc_size=4,
-            pods_for_rwx=2,
-            num_of_rbd_pvc=9,
-            num_of_cephfs_pvc=6,
+            num_of_rbd_pvc=12,
+            num_of_cephfs_pvc=8,
             deployment_config=True,
         )
 
@@ -102,7 +101,7 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
                 namespace=pod_obj.namespace,
                 selector=[pod_obj.labels.get("deploymentconfig")],
                 selector_label="deploymentconfig",
-                wait=True,
+                wait=False,
             )
             for pod_ob in new_pods:
                 pod_ob.pvc = pod_obj.pvc
