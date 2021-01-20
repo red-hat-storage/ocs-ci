@@ -233,6 +233,13 @@ class TestMcgNamespaceS3Operations(E2ETest):
             get_list_and_verify(
                 next_page_res, obj_keys[mid_index:], "Contents", version="v1"
             )
+        else:
+            logger.warning(
+                "Skipping next page entries for ListObjectV1(plain list) - not supported on Azure"
+            )
+            logger.warning(
+                "For more info: https://bugzilla.redhat.com/show_bug.cgi?id=1918188"
+            )
 
         # List v1 with prefix and page entries
         logger.info(f"ListObjectsV1 operation on {ns_bucket} with prefix")
@@ -259,6 +266,13 @@ class TestMcgNamespaceS3Operations(E2ETest):
             )
             get_list_and_verify(
                 next_page_res, obj_keys[mid_index:], "Contents", "Drive/", version="v1"
+            )
+        else:
+            logger.warning(
+                "Skipping next page entries for ListObjectV1(with prefix) - not supported on Azure"
+            )
+            logger.warning(
+                "For more info: https://bugzilla.redhat.com/show_bug.cgi?id=1918188"
             )
 
         # List v1 with prefix, delimiter and page entries
