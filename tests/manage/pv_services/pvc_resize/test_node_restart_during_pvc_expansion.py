@@ -137,6 +137,7 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
                 size="6G",
                 runtime=30,
                 fio_filename=f"{pod_obj.name}_file",
+                end_fsync=1,
             )
 
         log.info("Wait for IO to complete on all pods")

@@ -1742,7 +1742,7 @@ class AZURENodes(NodesBase):
                 node_names=node_names, status=constants.NODE_READY, timeout=timeout
             )
 
-    def restart_nodes(self, nodes, timeout=540, wait=True):
+    def restart_nodes(self, nodes, timeout=900, wait=True):
         """
         Restart Azure vm instances
 
