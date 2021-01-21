@@ -928,6 +928,9 @@ LOCAL_VOLUME_DISCOVERY = (
 LOCAL_VOLUME_SET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "local-volume-set.yaml")
 LOCAL_VOLUME_SET = "localvolumesets.local.storage.openshift.io"
 
+AUTO_DISCOVER_DEVICES_RESOURCE = "auto-discover-devices"
+LOCAL_BLOCK_RESOURCE = "localblock"
+
 # All worker default config files
 RHCOS_WORKER_CONF = os.path.join(CONF_DIR, "ocsci/aws_upi_rhcos_workers.yaml")
 AWS_WORKER_NODE_TEMPLATE = "06_cluster_worker_node.yaml"
