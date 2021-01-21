@@ -78,7 +78,10 @@ def validate_pvc_created_and_bound_on_monitoring_pods():
     """
     logger.info("Verify pvc are created")
     pvc_list = get_all_pvcs(namespace=defaults.OCS_MONITORING_NAMESPACE)
-    logger.info(f"PVC list {pvc_list}")
+    pvc_names = [pvc["metadata"]["name"] for pvc in pvc_list["items"]]
+    logger.info(
+        f"PVC list in {defaults.OCS_MONITORING_NAMESPACE} namespace: {pvc_names}"
+    )
 
     assert pvc_list[
         "items"
