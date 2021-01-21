@@ -2762,13 +2762,17 @@ def log_alerts(request):
     complete.
 
     """
+    teardown = config.RUN["cli_params"].get("teardown")
+    if teardown:
+        return
+
     alerts_before = []
     prometheus = None
 
     try:
         prometheus = PrometheusAPI()
     except Exception:
-        log.exception("There was a problem with connecting to Promeheus")
+        log.exception("There was a problem with connecting to Prometheus")
 
     def _collect_alerts():
         try:
