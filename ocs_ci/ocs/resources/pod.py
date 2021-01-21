@@ -26,9 +26,14 @@ from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
-from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.ocs import OCS, get_job_obj
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_cmd, check_timeout_reached, TimeoutSampler
+from ocs_ci.utility.utils import (
+    run_cmd,
+    check_timeout_reached,
+    TimeoutSampler,
+    get_ocp_version,
+)
 from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
 
@@ -1696,3 +1701,117 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
             logger.error(
                 f"The pod {resource_name} does not have toleration {toleration_key}"
             )
+
+
+def run_osd_removal_job(osd_id):
+    """
+    Run the ocs-osd-removal job
+
+    Args:
+        osd_id (str): The osd id
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: The ocs-osd-removal job object
+
+    """
+    ocp_version = float(get_ocp_version())
+    if ocp_version >= 4.6:
+        cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_id} -o yaml"
+    else:
+        cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_id} -o yaml"
+
+    logger.info(f"Executing OSD removal job on OSD-{osd_id}")
+    ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    osd_removal_job_yaml = ocp_obj.exec_oc_cmd(cmd)
+    osd_removal_job = OCS(**osd_removal_job_yaml)
+    osd_removal_job.create(do_reload=False)
+
+    return osd_removal_job
+
+
+def verify_osd_removal_job_completed_successfully(osd_id):
+    """
+    Verify that the ocs-osd-removal job completed successfully
+
+    Args:
+        osd_id (str): The osd id
+
+    Returns:
+        bool: True, if the ocs-osd-removal job completed successfully. False, otherwise
+
+    """
+    logger.info("Getting the ocs-osd-removal pod name")
+    osd_removal_pod_name = get_osd_removal_pod_name(osd_id)
+    osd_removal_pod_obj = get_pod_obj(
+        osd_removal_pod_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    is_completed = osd_removal_pod_obj.ocp.wait_for_resource(
+        condition=constants.STATUS_COMPLETED, resource_name=osd_removal_pod_name
+    )
+    if not is_completed:
+        logger.info("ocs-osd-removal pod job failed to complete")
+        return False
+
+    # Verify OSD removal from the ocs-osd-removal pod logs
+    logger.info(f"Verifying removal of OSD from {osd_removal_pod_name} pod logs")
+    logs = get_pod_logs(osd_removal_pod_name)
+    pattern = f"purged osd.{osd_id}"
+    if not re.search(pattern, logs):
+        logger.warning(
+            f"Didn't find the removal of OSD from {osd_removal_pod_name} pod logs"
+        )
+        return False
+
+    return True
+
+
+def delete_osd_removal_job(osd_id):
+    """
+    Delete the ocs-osd-removal job.
+
+    Args:
+        osd_id (str): The osd id
+
+    Returns:
+        bool: True, if the ocs-osd-removal job deleted successfully. False, otherwise
+
+    """
+    osd_removal_job = get_job_obj(
+        f"ocs-osd-removal-{osd_id}", namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    osd_removal_job.delete()
+    try:
+        osd_removal_job.ocp.wait_for_delete(resource_name=f"ocs-osd-removal-{osd_id}")
+    except TimeoutError:
+        logger.warning(f"ocs-osd-removal-{osd_id} job did not deleted successfully")
+        return False
+
+    return True
+
+
+def get_deployment_name(pod_name):
+    """
+    Get the deployment of the pod.
+
+    Args:
+        pod_name (str): The pod's name.
+
+    Returns:
+        The deployment of the specific pod name
+
+    """
+    return "-".join(pod_name.split("-")[:-2])
+
+
+def get_osd_pod_id(osd_pod):
+    """
+    Get the osd pod id
+
+    Args:
+        osd_pod (ocs_ci.ocs.resources.pod.Pod): The osd pod object
+
+    Returns:
+        str: The osd pod id
+
+    """
+    return osd_pod.get().get("metadata").get("labels").get("ceph-osd-id")
