@@ -211,7 +211,7 @@ class TestNodeReplacement(ManageTest):
 
         # Verify everything running fine
         log.info("Verifying All resources are Running and matches expected result")
-        self.sanity_helpers.health_check(tries=100)
+        self.sanity_helpers.health_check(tries=120)
 
         # Verify OSD encrypted
         if config.ENV_DATA.get("encryption_at_rest"):
