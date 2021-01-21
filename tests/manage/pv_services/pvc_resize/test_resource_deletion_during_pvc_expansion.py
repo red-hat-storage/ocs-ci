@@ -164,6 +164,7 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
                 runtime=30,
                 rate="10M",
                 fio_filename=f"{pod_obj.name}_f2",
+                end_fsync=1,
             )
 
         log.info("Wait for IO to complete on all pods")
