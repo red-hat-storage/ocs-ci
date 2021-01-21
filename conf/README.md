@@ -188,6 +188,20 @@ auth file or pulled from s3.
 
 * `test_quay_auth` - Config variable used during unit_testing
 
+##### ibmcloud
+
+IBM Cloud related section under AUTH config.
+
+* `api_key` - IBM Cloud API key for authentication. See
+  [documentation](https://cloud.ibm.com/docs/openshift?topic=openshift-access_cluster#access_api_key).
+* `account_id` - Account ID to be used for login to IBM Cloud
+* `ibm_cos_access_key_id` - COS (Cloud Object Storage) key ID. See
+  [documentation](https://cloud.ibm.com/docs/cloud-object-storage?topic=cloud-object-storage-uhc-hmac-credentials-main).
+* `ibm_cos_secret_access_key` - COS secret key (Follow the same documentation link above!)
+
+> All the configuration values mentioned above are required for IBM Cloud
+> deployment!
+
 #### FLEXY
 
 Configuration specific to flexy OCP cluster deployments
