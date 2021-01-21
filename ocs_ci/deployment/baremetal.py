@@ -188,6 +188,7 @@ class BAREMETALUPI(Deployment):
             with open(constants.RHCOS_IMAGES_FILE) as file_stream:
                 rhcos_images_file = yaml.safe_load(file_stream)
             ocp_version = get_ocp_version()
+            float_ocp_version = float(ocp_version)
             logger.info(rhcos_images_file)
             image_data = rhcos_images_file[ocp_version]
             # Download installer_initramfs
@@ -223,23 +224,24 @@ class BAREMETALUPI(Deployment):
             else:
                 raise RhcosImageNotFound
             # Download metal_bios
-            metal_image_path = (
-                constants.coreos_url_prefix + image_data["metal_bios_url"]
-            )
-            if check_for_rhcos_images(metal_image_path):
-                cmd = (
-                    "wget -O "
-                    f"{self.helper_node_details['bm_path_to_upload']}"
-                    "/rhcos-metal.x86_64.raw.gz "
-                    f"{metal_image_path}"
+            if float_ocp_version <= 4.6:
+                metal_image_path = (
+                    constants.coreos_url_prefix + image_data["metal_bios_url"]
                 )
-                assert self.helper_node_handler.exec_cmd(
-                    cmd=cmd
-                ), "Failed to Download required File"
-            else:
-                raise RhcosImageNotFound
+                if check_for_rhcos_images(metal_image_path):
+                    cmd = (
+                        "wget -O "
+                        f"{self.helper_node_details['bm_path_to_upload']}"
+                        f"/{constants.BM_METAL_IMAGE} "
+                        f"{metal_image_path}"
+                    )
+                    assert self.helper_node_handler.exec_cmd(
+                        cmd=cmd
+                    ), "Failed to Download required File"
+                else:
+                    raise RhcosImageNotFound
 
-            if ocp_version == "4.6":
+            if float_ocp_version >= 4.6:
                 # Download metal_bios
                 rootfs_image_path = (
                     constants.coreos_url_prefix + image_data["live_rootfs_url"]
@@ -281,12 +283,13 @@ class BAREMETALUPI(Deployment):
             )
             logger.info("Uploading PXE files")
             ocp_version = get_ocp_version()
+            float_ocp_version = float(ocp_version)
             for machine in self.mgmt_details:
                 if self.mgmt_details[machine].get("cluster_name") or self.mgmt_details[
                     machine
                 ].get("extra_node"):
                     pxe_file_path = self.create_pxe_files(
-                        ocp_version=ocp_version,
+                        ocp_version=float_ocp_version,
                         role=self.mgmt_details[machine].get("role"),
                     )
                     upload_file(
@@ -488,7 +491,7 @@ class BAREMETALUPI(Deployment):
             Create pxe file for giver role
 
             Args:
-                ocp_version (str): OCP version
+                ocp_version (float): OCP version
                 role (str): Role of node eg:- bootstrap,master,worker
 
             Returns:
@@ -498,7 +501,11 @@ class BAREMETALUPI(Deployment):
             extra_data = ""
             bm_install_files_loc = self.helper_node_details["bm_install_files"]
             extra_data_pxe = "rhcos-live-rootfs.x86_64.img coreos.inst.insecure"
-            if ocp_version == "4.6":
+            if ocp_version <= 4.6:
+                bm_metal_loc = f"coreos.inst.image_url={bm_install_files_loc}{constants.BM_METAL_IMAGE}"
+            else:
+                bm_metal_loc = ""
+            if ocp_version >= 4.6:
                 extra_data = (
                     f"coreos.live.rootfs_url={bm_install_files_loc}{extra_data_pxe}"
                 )
@@ -510,8 +517,7 @@ LABEL pxeboot
     MENU DEFAULT
     KERNEL rhcos-installer-kernel-x86_64
     APPEND ip=dhcp rd.neednet=1 initrd=rhcos-installer-initramfs.x86_64.img console=ttyS0 console=tty0 coreos.inst=yes \
-coreos.inst.install_dev=sda coreos.inst.image_url={bm_install_files_loc}\
-rhcos-metal.x86_64.raw.gz coreos.inst.ignition_url={bm_install_files_loc}{role}.ign \
+coreos.inst.install_dev=sda {bm_metal_loc} coreos.inst.ignition_url={bm_install_files_loc}{role}.ign \
 {extra_data}
 LABEL disk0
   MENU LABEL Boot disk (0x80)
