@@ -254,7 +254,11 @@ class CephCluster(object):
         self.scan_cluster()
 
         # Check Noobaa health
-        self.wait_for_noobaa_health_ok()
+        if (
+            config.ENV_DATA["platform"].lower()
+            != constants.OPENSHIFT_DEDICATED_PLATFORM
+        ):
+            self.wait_for_noobaa_health_ok()
 
     def noobaa_health_check(self):
         """

@@ -66,11 +66,25 @@ def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
         list: The nodes OCP instances
 
     """
-    typed_nodes = [
-        node
-        for node in get_node_objs()
-        if node_type in node.ocp.get_resource(resource_name=node.name, column="ROLES")
-    ]
+    if (
+        config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+        and node_type == constants.WORKER_MACHINE
+    ):
+        typed_nodes = [
+            node
+            for node in get_node_objs()
+            if node_type
+            in node.ocp.get_resource(resource_name=node.name, column="ROLES")
+            and constants.INFRA_MACHINE
+            not in node.ocp.get_resource(resource_name=node.name, column="ROLES")
+        ]
+    else:
+        typed_nodes = [
+            node
+            for node in get_node_objs()
+            if node_type
+            in node.ocp.get_resource(resource_name=node.name, column="ROLES")
+        ]
     if num_of_nodes:
         typed_nodes = typed_nodes[:num_of_nodes]
     return typed_nodes

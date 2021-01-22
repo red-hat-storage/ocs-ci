@@ -2,9 +2,11 @@ import pytest
 
 from ocs_ci.framework.testlib import MCGTest, tier1, skipif_ocs_version
 from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 
 # @pytest.mark.polarion_id("OCS-XXXX")
+@skipif_openshift_dedicated
 @tier1
 class TestEndpointAutoScale(MCGTest):
     """

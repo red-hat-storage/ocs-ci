@@ -75,9 +75,10 @@ class Sanity:
         if rgw_bucket_factory:
             self.obc_objs.extend(rgw_bucket_factory(1, "rgw-oc"))
 
-        self.obc_objs.extend(bucket_factory(amount=1, interface="OC"))
+        if bucket_factory:
+            self.obc_objs.extend(bucket_factory(amount=1, interface="OC"))
 
-        self.ceph_cluster.wait_for_noobaa_health_ok()
+            self.ceph_cluster.wait_for_noobaa_health_ok()
 
     def delete_resources(self):
         """
