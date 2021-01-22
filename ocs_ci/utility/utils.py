@@ -2448,14 +2448,15 @@ def get_image_with_digest(image):
     with prepare_customized_pull_secret(image) as authfile_fo:
         image_inspect = inspect_image(image, authfile_fo)
 
-    # we expect, that 'Digest' will match the first 'RepoDigests' - if not,
-    # raise UnexpectedImage
-    if image_inspect[0]["Digest"] in image_inspect[0]["RepoDigests"][0]:
-        return image_inspect[0]["RepoDigests"][0]
+    # we expect, that 'Digest' will match one of the images in 'RepoDigests',
+    # if not, raise UnexpectedImage
+    for image in image_inspect[0]["RepoDigests"]:
+        if image_inspect[0]["Digest"] in image:
+            return image
     else:
         raise UnexpectedImage(
             f"Image digest ({image_inspect[0]['Digest']}) doesn't match with "
-            f"first RepoDigests ({image_inspect[0]['RepoDigests']})."
+            f"any image from RepoDigests ({image_inspect[0]['RepoDigests']})."
         )
 
 
