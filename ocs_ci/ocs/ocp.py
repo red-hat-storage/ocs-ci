@@ -683,8 +683,6 @@ class OCP(object):
         """
         if config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM:
             timeout = 720
-        else:
-            timeout = 60
         start_time = time.time()
         while True:
             try:

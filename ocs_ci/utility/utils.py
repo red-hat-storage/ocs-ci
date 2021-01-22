@@ -1579,8 +1579,6 @@ def ceph_health_check(namespace=None, tries=20, delay=30):
     """
     if config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM:
         delay = 60
-    else:
-        delay = 30
     return retry(
         (CephHealthException, CommandFailed, subprocess.TimeoutExpired),
         tries=tries,

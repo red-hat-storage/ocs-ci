@@ -33,10 +33,7 @@ from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
-if config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM:
-    FIO_TIMEOUT = 1800
-else:
-    FIO_TIMEOUT = 600
+FIO_TIMEOUT = 600
 
 TEXT_CONTENT = (
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
