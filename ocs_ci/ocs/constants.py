@@ -1036,6 +1036,7 @@ SCALE_WORKER_DICT = {
     3000: {"aws": 24, "vmware": 30, "bm": 10, "azure": 30},
     4500: {"aws": 36, "vmware": 45, "bm": 15, "azure": 45},
 }
+SCALE_MAX_PVCS_PER_NODE = 500
 
 # Elasticsearch and codespeed constants
 ES_SERVER_IP = "10.0.78.167"
