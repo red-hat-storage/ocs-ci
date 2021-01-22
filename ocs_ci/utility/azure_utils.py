@@ -238,6 +238,18 @@ class AZURE:
                 if disk.name == volume.name:
                     return vm
 
+    def get_vm_names(self):
+        """
+        Get list of vms in azure resource group
+
+        Returns:
+           (list): list of Azure vm names
+
+        """
+        vm_list = self.compute_client.virtual_machines.list(self.cluster_resource_group)
+        vm_names = [vm.id.split("/")[-1] for vm in vm_list]
+        return vm_names
+
     def detach_volume(self, volume, node, timeout=120):
         """
         Detach volume if attached
