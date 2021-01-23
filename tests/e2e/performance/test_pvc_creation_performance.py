@@ -222,9 +222,9 @@ class TestPVCCreationPerformance(E2ETest):
         end_time = helpers.get_provision_time(self.interface, pvc_objs, status="end")
         total = end_time - start_time
         total_time = total.total_seconds()
-        if total_time > 45:
+        if total_time > 50:
             raise ex.PerformanceException(
                 f"{number_of_pvcs} PVCs creation (after initial deletion of "
-                f"75%) time is {total_time} and greater than 45 seconds"
+                f"75%) time is {total_time} and greater than 50 seconds"
             )
-        logging.info(f"{number_of_pvcs} PVCs creation time took less than a 45 seconds")
+        logging.info(f"{number_of_pvcs} PVCs creation time took less than a 50 seconds")
