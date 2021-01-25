@@ -171,6 +171,4 @@ class SanityExternalCluster(Sanity):
         Initializer for Sanity class - Init CephCluster() in order to
         set the cluster status before starting the tests
         """
-        self.pvc_objs = list()
-        self.pod_objs = list()
-        self.ceph_cluster = CephClusterExternal()
+        super(SanityExternalCluster, self).__init__()
