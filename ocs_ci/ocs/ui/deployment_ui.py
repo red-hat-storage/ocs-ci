@@ -1,9 +1,8 @@
 import logging
 
-from selenium.webdriver.common.by import By
-
-from ocs_ci.ocs.ui.views import deployment
+from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.base_ui import BaseUI
+from ocs_ci.utility.utils import get_ocp_version
 
 
 logger = logging.getLogger(__name__)
@@ -17,6 +16,12 @@ class DeploymentUI(BaseUI):
 
     def __init__(self, driver):
         super().__init__(driver)
+        ocp_version = get_ocp_version()
+        self.dep_loc = locators[ocp_version]["deployment"]
+        self.service_name = None
+        self.kms_address = None
+        self.kms_address_port = None
+        self.kms_token = None
 
     @property
     def select_mode(self):
@@ -58,17 +63,76 @@ class DeploymentUI(BaseUI):
             raise ValueError("is_encryption arg must be a bool")
         self.is_encryption = is_encryption
 
+    @property
+    def wide_encryption(self):
+        return self.is_wide_encryption
+
+    @wide_encryption.setter
+    def wide_encryption(self, is_wide_encryption):
+        if not isinstance(is_wide_encryption, bool):
+            raise ValueError("is_wide_encryption arg must be a bool")
+        self.is_wide_encryption = is_wide_encryption
+
+    @property
+    def class_encryption(self):
+        return self.is_class_encryption
+
+    @class_encryption.setter
+    def class_encryption(self, is_class_encryption):
+        if not isinstance(is_class_encryption, bool):
+            raise ValueError("is_class_encryption arg must be a bool")
+        self.is_class_encryption = is_class_encryption
+
+    @property
+    def select_service_name(self):
+        return self.service_name
+
+    @select_service_name.setter
+    def select_service_name(self, service_name):
+        if not isinstance(service_name, str):
+            raise ValueError("service_name arg must be a string")
+        self.service_name = service_name
+
+    @property
+    def select_kms_address(self):
+        return self.kms_address
+
+    @select_kms_address.setter
+    def select_kms_address(self, kms_address):
+        if not isinstance(kms_address, str):
+            raise ValueError("kms_address arg must be a string")
+        self.kms_address = kms_address
+
+    @property
+    def select_kms_address_port(self):
+        return self.kms_address_port
+
+    @select_kms_address_port.setter
+    def select_kms_address_port(self, kms_address_port):
+        if not isinstance(kms_address_port, str):
+            raise ValueError("kms_address_port arg must be a string")
+        self.kms_address_port = kms_address_port
+
+    @property
+    def select_kms_token(self):
+        return self.kms_token
+
+    @select_kms_token.setter
+    def select_kms_token(self, kms_token):
+        if not isinstance(kms_token, str):
+            raise ValueError("kms_token arg must be a string")
+        self.kms_token = kms_token
+
     def navigate_operatorhub(self):
         """
         Navigate to OperatorHub Page
 
         """
         logger.info("Click On Operators Tab")
-        self.choose_expanded_mode(
-            mode=True, by_locator=deployment["Operators Tab"], type=By.XPATH
-        )
+        self.choose_expanded_mode(mode=True, locator=self.dep_loc["operators_tab"])
+
         logger.info("Click On OperatorHub Tab")
-        self.do_click(deployment["OperatorHub Tab"], type=By.LINK_TEXT)
+        self.do_click(locator=self.dep_loc["operatorhub_tab"])
 
     def navigate_installed_operators(self):
         """
@@ -76,13 +140,12 @@ class DeploymentUI(BaseUI):
 
         """
         logger.info("Click On Installed Operators Tab")
-        self.choose_expanded_mode(
-            mode=True, by_locator=deployment["Operators Tab"], type=By.XPATH
-        )
-        logger.info("Click On OperatorHub Tab")
-        self.do_click(deployment["Installed Operators Tab"], type=By.LINK_TEXT)
+        self.choose_expanded_mode(mode=True, locator=self.dep_loc["operators_tab"])
 
-    def install_ocs_opeartor(self):
+        logger.info("Click On OperatorHub Tab")
+        self.do_click(self.dep_loc["installed_operators_tab"])
+
+    def install_ocs_operator(self):
         """
         Install OCS Opeartor
 
@@ -91,16 +154,14 @@ class DeploymentUI(BaseUI):
 
         logger.info("Search OCS Operator")
         self.do_send_keys(
-            deployment["Search Operators"],
-            text="OpenShift Container Storage",
-            type=By.CSS_SELECTOR,
+            self.dep_loc["search_operators"], text="OpenShift Container Storage"
         )
 
-        logger.info("Choose OCS")
-        self.do_click(deployment["Choose OCS"])
+        logger.info("Choose OCS Version")
+        self.do_click(self.dep_loc["choose_ocs_version"])
 
         logger.info("Click Install OCS")
-        self.do_click(deployment["Click Install OCS"], type=By.CSS_SELECTOR)
+        self.do_click(self.dep_loc["click_install_ocs"])
 
     def install_storage_cluster(self):
         """
@@ -109,14 +170,14 @@ class DeploymentUI(BaseUI):
         """
         self.navigate_installed_operators()
 
-        logger.info("Click On OCS Installed")
-        self.do_click(deployment["OCS Installed"], type=By.CSS_SELECTOR)
+        logger.info("Click on ocs operator on Installed Operators")
+        self.do_click(locator=self.dep_loc["ocs_operator_installed"])
 
-        logger.info("Storage Cluster Tab")
-        self.do_click(deployment["Storage Cluster Tab"], type=By.CSS_SELECTOR)
+        logger.info("Click on Storage Cluster")
+        self.do_click(locator=self.dep_loc["storage_cluster_tab"])
 
-        logger.info("Click On 'Create Storage Cluster'")
-        self.do_click(deployment["Create Storage Cluster"], type=By.CSS_SELECTOR)
+        logger.info("Click on Create Storage Cluster")
+        self.do_click(locator=self.dep_loc["create_storage_cluster"])
 
         if self.mode == "internal":
             self.install_internal_cluster()
@@ -125,29 +186,89 @@ class DeploymentUI(BaseUI):
 
     def install_internal_cluster(self):
         """
-        Install Dynamic Cluster
+        Install Internal Cluster
 
         """
-        logger.info("Click On 'Internal'")
-        self.do_click(deployment["Internal"], type=By.XPATH)
+        logger.info("Click Internal")
+        self.do_click(locator=self.dep_loc["internal_mode"])
 
-        logger.info("Select Storage Class")
-        self.do_click(deployment["Storage Class Dropdown"], type=By.CSS_SELECTOR)
-        self.do_click(deployment["thin"], type=By.CSS_SELECTOR)
+        logger.info("Configure Storage Class (thin on vmware, gp2 on aws)")
+        self.do_click(locator=self.dep_loc["storage_class_dropdown"])
+        self.do_click(locator=self.dep_loc["thin_sc"])
 
-        logger.info("Choose OSD Size")
-        self.do_click(deployment["OSD Size Dropdown"], type=By.CSS_SELECTOR)
-        self.do_click(deployment[self.osd_size], type=By.XPATH)
+        logger.info(f"Configure OSD Capacity {self.osd_size}")
+        self.choose_expanded_mode(mode=True, locator=self.dep_loc["osd_size_dropdown"])
+        self.do_click(locator=self.dep_loc[self.osd_size])
 
-        if self.is_encryption:
-            self.do_click(deployment["Enable Encryption"], type=By.XPATH)
+        logger.info("Select all worker nodes")
+        self.select_checkbox_status(status=True, locator=self.dep_loc["all_nodes"])
 
-        logger.info("Create Storage Cluster Page")
-        self.do_click(deployment["Create Storage Cluster Page"], type=By.XPATH)
+        logger.info("Next on step 'Select capacity and nodes'")
+        self.do_click(locator=self.dep_loc["next_capacity"])
 
-    def install_lso_cluster(self):
+        self.configure_encryption()
+
+        self.configure_kms()
+
+        logger.info("Click on Next on configure page")
+        self.do_click(locator=self.dep_loc["next_on_configure"])
+
+        logger.info("Create on Review and create page")
+        self.do_click(locator=self.dep_loc["create_on_review"])
+
+    def configure_encryption(self):
         """
-        Install LSO Cluster
+        Configure Encryption
 
         """
-        pass
+        if not self.is_encryption:
+            return True
+        logger.info("Enable Encryption")
+        self.select_checkbox_status(
+            status=True, locator=self.dep_loc["enable_encryption"]
+        )
+
+        if self.is_wide_encryption:
+            logger.info("Cluster-wide encryption")
+            self.select_checkbox_status(
+                status=True, locator=self.dep_loc["wide_encryption"]
+            )
+
+        if self.is_class_encryption:
+            logger.info("Storage class encryption")
+            self.select_checkbox_status(
+                status=True, locator=self.dep_loc["class_encryption"]
+            )
+
+    def configure_kms(self):
+        """
+        Configure KMS
+
+        """
+        if None in (
+            self.service_name,
+            self.kms_address,
+            self.kms_address_port,
+            self.kms_token,
+        ):
+            return True
+        logger.info("Enable kms server")
+        self.select_checkbox_status(
+            status=True, locator=self.dep_loc["class_encryption"]
+        )
+
+        logger.info(f"kms service name: {self.service_name}")
+        self.do_send_keys(
+            text=self.service_name, locator=self.dep_loc["kms_service_name"]
+        )
+
+        logger.info(f"kms address: {self.kms_address}")
+        self.do_send_keys(text=self.kms_address, locator=self.dep_loc["kms_address"])
+
+        logger.info(f"kms address port: {self.kms_address_port}")
+        self.do_send_keys(
+            text=self.kms_address_port, locator=self.dep_loc["kms_address_port"]
+        )
+
+        logger.info(f"kms_token: {self.kms_token}")
+        self.do_send_keys(text=self.kms_token, locator=self.dep_loc["kms_token"])
