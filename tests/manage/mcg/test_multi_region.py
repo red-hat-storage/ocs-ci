@@ -80,7 +80,7 @@ class TestMultiRegion(MCGTest):
     @skipif_ocs_version("==4.4")
     @pytest.mark.polarion_id("OCS-1784")
     def test_multiregion_mirror(
-        self, cld_mgr, mcg_obj, awscli_pod, multiregion_mirror_setup
+        self, cld_mgr, mcg_obj, awscli_pod_session, multiregion_mirror_setup
     ):
         """
         Test multi-region bucket creation using the S3 SDK
@@ -93,21 +93,18 @@ class TestMultiRegion(MCGTest):
         bucket_name = bucket.name
         aws_client = cld_mgr.aws_client
 
-        # Download test objects from the public bucket
-        downloaded_objs = retrieve_test_objects_to_pod(awscli_pod, "/aws/original/")
+        local_testobjs_dir_path = "/test_objects"
+        downloaded_objs = awscli_pod_session.exec_cmd_on_pod(
+            f"ls -A1 {local_testobjs_dir_path}"
+        ).split(" ")
 
         logger.info("Uploading all pod objects to MCG bucket")
-        local_testobjs_dir_path = "/aws/original"
-        local_temp_path = "/aws/temp"
+        local_temp_path = "/aws"
         mcg_bucket_path = f"s3://{bucket_name}"
-
-        sync_object_directory(
-            awscli_pod, "s3://" + constants.TEST_FILES_BUCKET, local_testobjs_dir_path
-        )
 
         # Upload test objects to the NooBucket
         sync_object_directory(
-            awscli_pod, local_testobjs_dir_path, mcg_bucket_path, mcg_obj
+            awscli_pod_session, local_testobjs_dir_path, mcg_bucket_path, mcg_obj
         )
 
         mcg_obj.check_if_mirroring_is_done(bucket_name)
@@ -120,18 +117,18 @@ class TestMultiRegion(MCGTest):
 
         # Verify integrity of B
         # Retrieve all objects from MCG bucket to result dir in Pod
-        sync_object_directory(awscli_pod, mcg_bucket_path, local_temp_path, mcg_obj)
+        sync_object_directory(awscli_pod_session, mcg_bucket_path, local_temp_path, mcg_obj)
 
         # Checksum is compared between original and result object
         for obj in downloaded_objs:
             assert verify_s3_object_integrity(
                 original_object_path=f"{local_testobjs_dir_path}/{obj}",
                 result_object_path=f"{local_temp_path}/{obj}",
-                awscli_pod=awscli_pod,
+                awscli_pod=awscli_pod_session,
             ), "Checksum comparision between original and result object failed"
 
         # Clean up the temp dir
-        awscli_pod.exec_cmd_on_pod(command=f'sh -c "rm -rf {local_temp_path}/*"')
+        awscli_pod_session.exec_cmd_on_pod(command=f'sh -c "rm -rf {local_temp_path}/*"')
 
         # Bring B down, bring A up
         logger.info("Blocking bucket B")
@@ -147,17 +144,19 @@ class TestMultiRegion(MCGTest):
 
         # Verify integrity of A
         # Retrieve all objects from MCG bucket to result dir in Pod
-        sync_object_directory(awscli_pod, mcg_bucket_path, local_temp_path, mcg_obj)
+        sync_object_directory(awscli_pod_session, mcg_bucket_path, local_temp_path, mcg_obj)
 
         # Checksum is compared between original and result object
         for obj in downloaded_objs:
             assert verify_s3_object_integrity(
                 original_object_path=f"{local_testobjs_dir_path}/{obj}",
                 result_object_path=f"{local_temp_path}/{obj}",
-                awscli_pod=awscli_pod,
+                awscli_pod=awscli_pod_session,
             ), "Checksum comparision between original and result object failed"
         # Bring B up
         aws_client.toggle_aws_bucket_readwrite(backingstore2.uls_name, block=False)
         mcg_obj.check_backingstore_state(
             "backing-store-" + backingstore2.name, BS_OPTIMAL
         )
+        # Clean up the temp dir
+        awscli_pod_session.exec_cmd_on_pod(command=f'sh -c "rm -rf {local_temp_path}"')
