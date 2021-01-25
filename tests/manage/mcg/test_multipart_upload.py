@@ -52,12 +52,12 @@ class TestS3MultipartUpload(MCGTest):
 
     @pytest.mark.polarion_id("OCS-1387")
     @tier1
-    def test_multipart_upload_operations(self, mcg_obj, awscli_pod, bucket_factory):
+    def test_multipart_upload_operations(self, mcg_obj, awscli_pod_session, bucket_factory):
         """
         Test Multipart upload operations on bucket and verifies the integrity of the downloaded object
         """
         bucket, key, origin_dir, res_dir, object_path, parts = setup(
-            awscli_pod, bucket_factory
+            awscli_pod_session, bucket_factory
         )
 
         # Abort all Multipart Uploads for this Bucket (optional, for starting over)
@@ -74,7 +74,7 @@ class TestS3MultipartUpload(MCGTest):
         # Uploading individual parts to the Bucket
         logger.info(f"Uploading individual parts to the bucket {bucket}")
         uploaded_parts = upload_parts(
-            mcg_obj, awscli_pod, bucket, key, res_dir, upload_id, parts
+            mcg_obj, awscli_pod_session, bucket, key, res_dir, upload_id, parts
         )
 
         # Listing the Uploaded parts
@@ -92,9 +92,9 @@ class TestS3MultipartUpload(MCGTest):
         logger.info(
             "Downloading the completed multipart object from MCG bucket to awscli pod"
         )
-        sync_object_directory(awscli_pod, object_path, res_dir, mcg_obj)
+        sync_object_directory(awscli_pod_session, object_path, res_dir, mcg_obj)
         assert verify_s3_object_integrity(
             original_object_path=f"{origin_dir}/{key}",
             result_object_path=f"{res_dir}/{key}",
-            awscli_pod=awscli_pod,
+            awscli_pod=awscli_pod_session,
         ), "Checksum comparision between original and result object failed"
