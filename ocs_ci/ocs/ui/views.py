@@ -10,8 +10,7 @@ login = {
 deployment_4_7 = {
     "click_install_ocs": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
     "choose_ocs_version": (
-        '//*[@id="content-scrollable"]/div[1]/div/div[2]/div/div/div[2]'
-        "/div[2]/div[1]/div/div/div/div[1]/a/div[1]",
+        '//*[@id="content-scrollable"]/div[1]/div/div[2]/div/div/div[2]/div[2]/div[1]/div/div/div/div[2]/a',
         By.XPATH,
     ),
     "search_operators": ('input[placeholder="Filter by keyword..."]', By.CSS_SELECTOR),
@@ -22,6 +21,17 @@ deployment_4_7 = {
         'a[data-test-id="horizontal-link-Storage Cluster"]',
         By.CSS_SELECTOR,
     ),
+    "ocs_operator_installed": (
+        '//*[@id="content-scrollable"]/div[1]/div[2]/div/div[2]/div/div/div/'
+        "div/div[1]/div/table/tbody/tr/td[1]/a/div/div[2]/h1",
+        By.XPATH,
+    ),
+    "verify_ocs_install": (
+        '//*[@id="content-scrollable"]/div[1]/div[2]/div/div[2]/div/div/div/div/div[1]/'
+        "div/table/tbody/tr/td[3]/div/span[1]/span/span",
+        By.XPATH,
+    ),
+    "search_ocs_install": ('input[data-test-id="item-filter"]', "css selector"),
     "create_storage_cluster": ('button[data-test="item-create"]', By.CSS_SELECTOR),
     "internal_mode": ('input[data-test="Internal-radio-input"]', By.CSS_SELECTOR),
     "storage_class_dropdown": (

@@ -132,6 +132,23 @@ class BaseUI:
         logger.info(f"Creating snapshot: {filename}")
         self.driver.save_screenshot(filename)
 
+    def get_text(self, locator, timeout=30, expected_text=None):
+        """
+        Check if the text matches the expected text.
+
+        Args:
+            locator (set): (GUI element needs to operate on (str), type (By))
+            timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
+            expected_text (string): The expected text.
+
+        return:
+            bool: True if the text matches the expected text, False otherwise
+
+        """
+        wait = WebDriverWait(self.driver, timeout)
+        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        return element.text == expected_text
+
 
 def login_ui():
     """

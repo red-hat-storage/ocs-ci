@@ -3,6 +3,8 @@ import logging
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.base_ui import BaseUI
 from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.utility.utils import TimeoutSampler
 
 
 logger = logging.getLogger(__name__)
@@ -18,10 +20,13 @@ class DeploymentUI(BaseUI):
         super().__init__(driver)
         ocp_version = get_ocp_version()
         self.dep_loc = locators[ocp_version]["deployment"]
-        self.service_name = None
-        self.kms_address = None
-        self.kms_address_port = None
-        self.kms_token = None
+        self.mode = "internal"
+        self.storage_class_type = "thin_sc"
+        self.osd_size = "0.5T"
+        self.is_encryption = False
+        self.is_wide_encryption = False
+        self.is_class_encryption = False
+        self.is_use_kms = False
 
     @property
     def select_mode(self):
@@ -92,6 +97,16 @@ class DeploymentUI(BaseUI):
         if not isinstance(service_name, str):
             raise ValueError("service_name arg must be a string")
         self.service_name = service_name
+
+    @property
+    def use_kms(self):
+        return self.is_use_kms
+
+    @use_kms.setter
+    def use_kms(self, is_use_kms):
+        if not isinstance(is_use_kms, bool):
+            raise ValueError("is_use_kms arg must be a bool")
+        self.is_use_kms = is_use_kms
 
     @property
     def select_kms_address(self):
@@ -216,17 +231,18 @@ class DeploymentUI(BaseUI):
         logger.info("Create on Review and create page")
         self.do_click(locator=self.dep_loc["create_on_review"])
 
+        self.verify_ocs_installation()
+
     def configure_encryption(self):
         """
         Configure Encryption
 
         """
-        if not self.is_encryption:
-            return True
-        logger.info("Enable Encryption")
-        self.select_checkbox_status(
-            status=True, locator=self.dep_loc["enable_encryption"]
-        )
+        if self.is_encryption:
+            logger.info("Enable Encryption")
+            self.select_checkbox_status(
+                status=True, locator=self.dep_loc["enable_encryption"]
+            )
 
         if self.is_wide_encryption:
             logger.info("Cluster-wide encryption")
@@ -245,30 +261,58 @@ class DeploymentUI(BaseUI):
         Configure KMS
 
         """
-        if None in (
-            self.service_name,
-            self.kms_address,
-            self.kms_address_port,
-            self.kms_token,
-        ):
-            return True
-        logger.info("Enable kms server")
-        self.select_checkbox_status(
-            status=True, locator=self.dep_loc["class_encryption"]
-        )
+        if self.is_use_kms:
+            logger.info(f"kms service name: {self.service_name}")
+            self.do_send_keys(
+                text=self.service_name, locator=self.dep_loc["kms_service_name"]
+            )
 
-        logger.info(f"kms service name: {self.service_name}")
+            logger.info(f"kms address: {self.kms_address}")
+            self.do_send_keys(
+                text=self.kms_address, locator=self.dep_loc["kms_address"]
+            )
+
+            logger.info(f"kms address port: {self.kms_address_port}")
+            self.do_send_keys(
+                text=self.kms_address_port, locator=self.dep_loc["kms_address_port"]
+            )
+
+            logger.info(f"kms_token: {self.kms_token}")
+            self.do_send_keys(text=self.kms_token, locator=self.dep_loc["kms_token"])
+
+    def verify_ocs_installation(self, timeout_install=300, sleep=20):
+        """
+        Verify OCS Installation
+
+        timeout_install (int): Time in seconds to wait
+        sleep (int): Sampling time in seconds
+
+        """
+        self.navigate_installed_operators()
+
         self.do_send_keys(
-            text=self.service_name, locator=self.dep_loc["kms_service_name"]
+            locator=self.dep_loc["search_ocs_install"],
+            text="OpenShift Container Storage",
         )
-
-        logger.info(f"kms address: {self.kms_address}")
-        self.do_send_keys(text=self.kms_address, locator=self.dep_loc["kms_address"])
-
-        logger.info(f"kms address port: {self.kms_address_port}")
-        self.do_send_keys(
-            text=self.kms_address_port, locator=self.dep_loc["kms_address_port"]
+        sample = TimeoutSampler(
+            timeout=timeout_install,
+            sleep=sleep,
+            func=self.get_text,
+            locator=self.dep_loc["verify_ocs_install"],
+            expected_text="Succeeded",
         )
+        if not sample.wait_for_func_status(result=True):
+            logger.error(
+                f"OCS Installation status is not Succeeded after {timeout_install} seconds"
+            )
+            raise TimeoutExpiredError
 
-        logger.info(f"kms_token: {self.kms_token}")
-        self.do_send_keys(text=self.kms_token, locator=self.dep_loc["kms_token"])
+    def install_ocs_ui(self):
+        """
+        Install OCS via UI
+
+        """
+        self.install_ocs_operator()
+        self.navigate_installed_operators()
+        self.verify_ocs_installation()
+        self.install_storage_cluster()

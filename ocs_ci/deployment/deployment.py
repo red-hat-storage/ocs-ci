@@ -68,6 +68,9 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
+from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
+from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
+
 
 logger = logging.getLogger(__name__)
 
@@ -669,19 +672,19 @@ class Deployment(object):
 
     def deployment_with_ui(self):
         """
-        This method will deploy OCS with openshift-console UI test.
+        This method will deploy OCS with openshift-console vi UI.
         """
-        logger.info("Deployment of OCS will be done by openshift-console")
-        ocp_console = OpenshiftConsole(
-            config.DEPLOYMENT.get("deployment_browser", constants.CHROME_BROWSER)
-        )
-        live_deploy = "1" if config.DEPLOYMENT.get("live_deployment") else "0"
-        env_vars = {
-            "OCS_LIVE": live_deploy,
-        }
-        ocp_console.run_openshift_console(
-            suite="ceph-storage-install", env_vars=env_vars, log_suffix="ui-deployment"
-        )
+        setup_ui = login_ui()
+        deployment_obj = DeploymentUI(setup_ui)
+        deployment_obj.mode = "internal"
+        deployment_obj.storage_class_type = "thin_sc"
+        deployment_obj.osd_size = "0.5T"
+        deployment_obj.is_encryption = False
+        deployment_obj.is_wide_encryption = False
+        deployment_obj.is_class_encryption = False
+        deployment_obj.is_use_kms = False
+        deployment_obj.install_ocs_ui()
+        close_browser(setup_ui)
 
     def deploy_with_external_mode(self):
         """
