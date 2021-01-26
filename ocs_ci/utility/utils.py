@@ -862,7 +862,7 @@ class TimeoutSampler(object):
         (using __iter__ function)
 
         Args:
-            result: Expected result from func.
+            result (bool): Expected result from func.
 
         Examples::
 
