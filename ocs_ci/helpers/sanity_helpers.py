@@ -173,4 +173,5 @@ class SanityExternalCluster(Sanity):
         """
         self.pvc_objs = list()
         self.pod_objs = list()
+        self.obc_objs = list()
         self.ceph_cluster = CephClusterExternal()
