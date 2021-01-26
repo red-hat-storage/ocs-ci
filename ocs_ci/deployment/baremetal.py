@@ -383,7 +383,15 @@ class BAREMETALUPI(Deployment):
             logger.info("Performing Disk cleanup")
             clean_disk()
             # We need NTP for OCS cluster to become clean
-            configure_chrony_and_wait_for_machineconfig_status(node_type="all")
+            worker_timeout = 400 * config.ENV_DATA["worker_replicas"]
+            master_timeout = 400 * config.ENV_DATA["master_replicas"]
+            if master_timeout <= worker_timeout:
+                chrony_timeout = worker_timeout
+            else:
+                chrony_timeout = master_timeout
+            configure_chrony_and_wait_for_machineconfig_status(
+                node_type="all", timeout=chrony_timeout
+            )
 
         def create_config(self):
             """
