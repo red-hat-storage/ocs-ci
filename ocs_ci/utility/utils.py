@@ -36,6 +36,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutException,
     TimeoutExpiredError,
     UnavailableBuildException,
+    UnexpectedImage,
     UnsupportedOSType,
 )
 from ocs_ci.utility.retry import retry
@@ -2399,6 +2400,125 @@ def convert_device_size(unformatted_size, units_to_covert_to):
     return conversion[units_to_covert_to][units]
 
 
+def prepare_customized_pull_secret(images=None):
+    """
+    Prepare customized pull-secret containing auth section related to given
+    image(s). If image(s) not defined or no related section is found, it will
+    use whole content of pull-secret.
+
+    Args:
+        images (str or list): image (or images) to match with auth section
+
+    Returns:
+        NamedTemporaryFile: prepared pull-secret
+
+    """
+    log.debug(f"Prepare customized pull-secret for images: {images}")
+    if type(images) == str:
+        images = [images]
+    # load pull-secret file to pull_secret dict
+    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+    with open(pull_secret_path) as pull_secret_fo:
+        pull_secret = json.load(pull_secret_fo)
+
+    authfile_content = {"auths": {}}
+    # if images defined, try to find auth section related to specified images
+    if images:
+        for image in images:
+            # find all auths which might be related to the specified image
+            tmp_auths = [auth for auth in pull_secret["auths"] if auth in image]
+            # get the most specific auth for particular image
+            tmp_auths = sorted(tmp_auths, key=len, reverse=True)
+            if tmp_auths:
+                # if there is match to particular auth, prepare authfile just with the
+                # matching auth
+                auth = tmp_auths[0]
+                # as key use only server name, without namespace
+                authfile_content["auths"][auth.split("/", 1)[0]] = pull_secret["auths"][
+                    auth
+                ]
+
+    if not authfile_content["auths"]:
+        authfile_content = pull_secret
+
+    # create temporary auth file
+    authfile_fo = NamedTemporaryFile(mode="w", prefix="authfile_")
+    json.dump(authfile_content, authfile_fo)
+    # ensure the content will be saved into the file
+    authfile_fo.flush()
+    return authfile_fo
+
+
+def inspect_image(image, authfile_fo):
+    """
+    Inspect image
+
+    Args:
+        image (str): image to inspect
+        authfile_fo (NamedTemporaryFile): pull-secret required for pulling the given image
+
+    Returns:
+        dict: json object of the inspected image
+
+    """
+    # pull original image (to be able to inspect it)
+    exec_cmd(f"podman image pull {image} --authfile {authfile_fo.name}")
+    # inspect the image
+    cmd_result = exec_cmd(f"podman image inspect {image}")
+    image_inspect = json.loads(cmd_result.stdout)
+    return image_inspect
+
+
+def get_image_with_digest(image):
+    """
+    Return image with sha256 digest for usage in disconnected environment
+
+    Args:
+        image (str): image
+
+    Raises:
+        UnexpectedImage: In case the image information is unexpected
+
+    Returns:
+        str: image with sha256 digest specification
+
+    """
+    if "@sha256:" in image:
+        return image
+    with prepare_customized_pull_secret(image) as authfile_fo:
+        image_inspect = inspect_image(image, authfile_fo)
+
+    # we expect, that 'Digest' will match one of the images in 'RepoDigests',
+    # if not, raise UnexpectedImage
+    for image in image_inspect[0]["RepoDigests"]:
+        if image_inspect[0]["Digest"] in image:
+            return image
+    else:
+        raise UnexpectedImage(
+            f"Image digest ({image_inspect[0]['Digest']}) doesn't match with "
+            f"any image from RepoDigests ({image_inspect[0]['RepoDigests']})."
+        )
+
+
+def login_to_mirror_registry(authfile):
+    """
+    Login to mirror registry
+
+    Args:
+        authfile (str): authfile (pull-secret) path
+
+    """
+    mirror_registry = config.DEPLOYMENT["mirror_registry"]
+    mirror_registry_user = config.DEPLOYMENT["mirror_registry_user"]
+    mirror_registry_password = config.DEPLOYMENT["mirror_registry_password"]
+    login_cmd = (
+        f"podman login --authfile {authfile} "
+        f"{mirror_registry} -u {mirror_registry_user} "
+        f"-p {mirror_registry_password} --tls-verify=false"
+    )
+    exec_cmd(login_cmd, (mirror_registry_user, mirror_registry_password))
+
+
 def mirror_image(image):
     """
     Mirror image to mirror image registry.
@@ -2411,42 +2531,13 @@ def mirror_image(image):
         str: the mirrored image link
 
     """
-    # load pull-secret file to pull_secret dict
-    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
-    with open(pull_secret_path) as pull_secret_fo:
-        pull_secret = json.load(pull_secret_fo)
+    with prepare_customized_pull_secret(image) as authfile_fo:
+        # login to mirror registry
+        login_to_mirror_registry(authfile_fo.name)
 
-    # find all auths which might be related to the specified image
-    tmp_auths = []
-    for auth in pull_secret["auths"]:
-        if auth in image:
-            tmp_auths.append(auth)
-    # get the most specific auth for particular image
-    tmp_auths = sorted(tmp_auths, key=len, reverse=True)
-    if tmp_auths:
-        # if there is match to particular auth, prepare authfile just with the
-        # matching auth
-        auth = tmp_auths[0]
-        # as key use only server name, without namespace
-        authfile_content = {
-            "auths": {auth.split("/", 1)[0]: pull_secret["auths"][auth]}
-        }
-    else:
-        # else use whole pull-secret
-        authfile_content = pull_secret
-
-    # create temporary auth file
-    with NamedTemporaryFile(mode="w", prefix="authfile_") as authfile_fo:
-        json.dump(authfile_content, authfile_fo)
-        # ensure the content will be saved into the file
-        authfile_fo.flush()
-        # pull original image (to be able to inspect it)
-        exec_cmd(f"podman image pull {image} --authfile {authfile_fo.name}")
-        # inspect the image and get full image url with tag
-        cmd_result = exec_cmd(f"podman image inspect {image}")
-        image_inspect = json.loads(cmd_result.stdout)
         # if there is any tag specified, use it in the full image url,
         # otherwise use url with digest
+        image_inspect = inspect_image(image, authfile_fo)
         if image_inspect[0].get("RepoTags"):
             orig_image_full = image_inspect[0]["RepoTags"][0]
         else:
@@ -2454,15 +2545,6 @@ def mirror_image(image):
         # prepare mirrored image url
         mirror_registry = config.DEPLOYMENT["mirror_registry"]
         mirrored_image = mirror_registry + re.sub(r"^[^/]*", "", orig_image_full)
-        # login to mirror registry
-        mirror_registry_user = config.DEPLOYMENT["mirror_registry_user"]
-        mirror_registry_password = config.DEPLOYMENT["mirror_registry_password"]
-        login_cmd = (
-            f"podman login --authfile {authfile_fo.name} "
-            f"{mirror_registry} -u {mirror_registry_user} "
-            f"-p {mirror_registry_password} --tls-verify=false"
-        )
-        exec_cmd(login_cmd, (mirror_registry_user, mirror_registry_password))
         # mirror the image
         logging.info(
             f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"

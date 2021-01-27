@@ -20,6 +20,10 @@ from uuid import uuid4
 import yaml
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.proxy import (
+    get_cluster_proxies,
+    update_container_with_proxy_env,
+)
 from ocs_ci.ocs.utils import mirror_image
 from ocs_ci.ocs import constants, defaults, node, ocp
 from ocs_ci.ocs.exceptions import (
@@ -267,22 +271,7 @@ def create_pod(
     update_container_with_mirrored_image(pod_data)
 
     # configure http[s]_proxy env variable, if required
-    try:
-        http_proxy, https_proxy, no_proxy = get_cluster_proxies()
-        if http_proxy:
-            if "containers" in pod_data["spec"]:
-                container = pod_data["spec"]["containers"][0]
-            else:
-                container = pod_data["spec"]["template"]["spec"]["containers"][0]
-            if "env" not in container:
-                container["env"] = []
-            container["env"].append({"name": "http_proxy", "value": http_proxy})
-            container["env"].append({"name": "https_proxy", "value": https_proxy})
-            container["env"].append({"name": "no_proxy", "value": no_proxy})
-    except KeyError as err:
-        logging.warning(
-            "Http(s)_proxy variable wasn't configured, " "'%s' key not found.", err
-        )
+    update_container_with_proxy_env(pod_data)
 
     if dc_deployment:
         ocs_obj = create_resource(**pod_data)
@@ -2782,38 +2771,6 @@ def get_pv_names():
     ocp_obj = ocp.OCP(kind=constants.PV)
     pv_objs = ocp_obj.get()["items"]
     return [pv_obj["metadata"]["name"] for pv_obj in pv_objs]
-
-
-def get_cluster_proxies():
-    """
-    Get http and https proxy configuration:
-
-     * If configuration ``ENV_DATA['http_proxy']`` (and prospectively
-       ``ENV_DATA['https_proxy']``) exists, return the respective values.
-       (If https_proxy not defined, use value from http_proxy.)
-     * If configuration ``ENV_DATA['http_proxy']`` doesn't exist, try to gather
-       cluster wide proxy configuration.
-     * If no proxy configuration found, return empty string for all http_proxy,
-       https_proxy and no_proxy.
-
-    Returns:
-        tuple: (http_proxy, https_proxy, no_proxy)
-
-    """
-    if "http_proxy" in config.ENV_DATA:
-        http_proxy = config.ENV_DATA["http_proxy"]
-        https_proxy = config.ENV_DATA.get("https_proxy", config.ENV_DATA["http_proxy"])
-        no_proxy = config.ENV_DATA.get("no_proxy", "")
-    else:
-        ocp_obj = ocp.OCP(kind=constants.PROXY, resource_name="cluster")
-        proxy_obj = ocp_obj.get()
-        http_proxy = proxy_obj.get("spec", {}).get("httpProxy", "")
-        https_proxy = proxy_obj.get("spec", {}).get("httpsProxy", "")
-        no_proxy = proxy_obj.get("status", {}).get("noProxy", "")
-    logger.info("Using http_proxy: '%s'", http_proxy)
-    logger.info("Using https_proxy: '%s'", https_proxy)
-    logger.info("Using no_proxy: '%s'", no_proxy)
-    return http_proxy, https_proxy, no_proxy
 
 
 def default_volumesnapshotclass(interface_type):
