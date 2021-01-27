@@ -1273,7 +1273,7 @@ def check_osd_tree_1az_vmware(osd_tree, number_of_osds):
     return check_osds_in_hosts_osd_tree(all_hosts_flatten, osd_tree)
 
 
-def check_osd_tree_3az(osd_tree, number_of_osds):
+def check_osd_tree_3az_cloud(osd_tree, number_of_osds):
     """
     Checks whether an OSD tree is created/modified correctly. This can be used as a verification step for
     deployment and cluster expansion tests.
@@ -1304,7 +1304,7 @@ def check_osd_tree_3az(osd_tree, number_of_osds):
     return check_osds_in_hosts_osd_tree(all_hosts_flatten, osd_tree)
 
 
-def check_osd_tree_1az(osd_tree, number_of_osds):
+def check_osd_tree_1az_cloud(osd_tree, number_of_osds):
     """
     Checks whether an OSD tree is created/modified correctly. This can be used as a verification step for
     deployment and cluster expansion tests.
@@ -1362,7 +1362,7 @@ def check_ceph_osd_tree():
     """
     Checks whether an OSD tree is created/modified correctly.
     It is a summary of the previous functions: 'check_osd_tree_1az_vmware',
-    'check_osd_tree_3az', 'check_osd_tree_1az'.
+    'check_osd_tree_3az_cloud', 'check_osd_tree_1az_cloud'.
 
     Returns:
          bool: True, if the ceph osd tree is formed correctly. Else False
@@ -1384,9 +1384,9 @@ def check_ceph_osd_tree():
             if tree_output["nodes"][i]["name"] in "rack0":
                 number_of_zones = 1
         if number_of_zones == 1:
-            return check_osd_tree_1az(tree_output, len(osd_pods))
+            return check_osd_tree_1az_cloud(tree_output, len(osd_pods))
         else:
-            return check_osd_tree_3az(tree_output, len(osd_pods))
+            return check_osd_tree_3az_cloud(tree_output, len(osd_pods))
 
 
 def check_ceph_osd_tree_after_node_replacement():
