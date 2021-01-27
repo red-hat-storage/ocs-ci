@@ -220,6 +220,24 @@ class AZURE:
         )
         return vm
 
+    def get_vm_power_status(self, vm_name):
+        """
+        Get the power status of VM
+
+        Args:
+           vm_name (str): Azure VM name
+
+        Returns :
+           str: Power status of Azure VM
+
+        """
+        vm = self.compute_client.virtual_machines.get(
+            self.cluster_resource_group, vm_name, expand="instanceView"
+        )
+        vm_statuses = vm.instance_view.statuses
+        vm_power_state = len(vm_statuses) >= 2 and vm_statuses[1].code.split("/")[1]
+        return vm_power_state
+
     def get_node_by_attached_volume(self, volume):
         """
         Get the Azure Vm instance that has the volume attached to
