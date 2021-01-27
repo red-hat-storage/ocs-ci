@@ -10,12 +10,16 @@ ENV_DATA:
   base_domain: 'azure.qe.rh-ocs.com'
   worker_availability_zones:
     - '1'
+    - '2'
+    - '3'
   master_availability_zones:
     - '1'
+    - '2'
+    - '3'
   worker_replicas: 3
   master_replicas: 3
   master_instance_type: 'Standard_D8s_v3'
   worker_instance_type: 'Standard_D16s_v3'
 REPORTING:
   polarion:
-    deployment_id: 'OCS-2371'
+    deployment_id: 'OCS-2461'
