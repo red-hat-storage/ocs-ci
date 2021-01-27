@@ -386,5 +386,5 @@ class AZURE:
                 graceful VM shutdown
 
         """
-        self.stop_vm_instances(vm_names, force=True)
+        self.stop_vm_instances(vm_names, force=force)
         self.start_vm_instances(vm_names)
