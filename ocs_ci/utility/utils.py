@@ -3021,3 +3021,37 @@ def get_ocp_upgrade_history():
     upgrade_history_info = cluster_version_info["status"]["history"]
     upgrade_history = [each_upgrade["version"] for each_upgrade in upgrade_history_info]
     return upgrade_history
+
+
+def apply_ssd_tuning_azure():
+    """
+    Workaround for Bug #1909793 - apply SSD tuning in Azure platform
+    See more details in the issue: #3764
+
+    """
+    log.info("Running WA for Bug 1909793")
+
+    # importing here to avoid circular imports
+    from ocs_ci.ocs.resources import pod
+
+    ct_pod = pod.get_ceph_tools_pod()
+    default_config = ct_pod.exec_ceph_cmd("ceph config dump")
+    log.info(f"Initial ceph config dump output: {default_config}")
+    config_options = [
+        "osd_op_num_threads_per_shard_ssd 2",
+        "osd_op_num_shards_ssd 8",
+        "osd_recovery_sleep_ssd 0",
+        "osd_snap_trim_sleep_ssd 0",
+        "osd_delete_sleep_ssd 0",
+        "bluestore_min_alloc_size_ssd 4K",
+        "bluestore_prefer_deferred_size_ssd 0",
+        "bluestore_compression_min_blob_size_ssd 8K",
+        "bluestore_compression_max_blob_size_ssd 64K",
+        "bluestore_cache_size_ssd 3G",
+        "bluestore_throttle_cost_per_io_ssd 4000",
+        "bluestore_deferred_batch_ops_ssd 16",
+    ]
+    for config_option in config_options:
+        ct_pod.exec_ceph_cmd(f"ceph config set osd {config_option}")
+    updated_config = ct_pod.exec_ceph_cmd("ceph config dump")
+    log.info(f"Current ceph config dump output: {updated_config}")
