@@ -360,7 +360,7 @@ class AZURE:
             )
             result.wait()
 
-    def stop_vm_instances(self, vm_names, force=True):
+    def stop_vm_instances(self, vm_names, force=False):
         """
         Stop Azure vm instances
 
@@ -376,7 +376,7 @@ class AZURE:
             )
             result.wait()
 
-    def restart_vm_instances_by_stop_and_start(self, vm_names, force=True):
+    def restart_vm_instances_by_stop_and_start(self, vm_names, force=False):
         """
         Stop and Start Azure vm instances
 
