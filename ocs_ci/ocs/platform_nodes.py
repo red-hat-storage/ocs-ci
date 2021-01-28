@@ -1907,6 +1907,28 @@ class AZURENodes(NodesBase):
             "attach nodes to cluster functionality is not implemented"
         )
 
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Make sure all VM instances up by the end of the test
+
+        """
+        self.cluster_nodes = get_node_objs()
+        vms = self.azure.get_vm_names()
+        assert (
+            vms
+        ), f"Failed to get VM objects for nodes {[n.name for n in self.cluster_nodes]}"
+
+        stopped_vms = [
+            vm
+            for vm in vms
+            if self.azure.get_vm_power_status(vm) == constants.VM_STOPPED
+            or self.azure.get_vm_power_status(vm) == constants.VM_STOPPING
+        ]
+        # Start the VMs
+        if stopped_vms:
+            logger.info(f"The following VMs are powered off: {stopped_vms}")
+            self.azure.start_vm_instance(stopped_vm for stopped_vm in stopped_vms)
+
 
 class VMWareLSONodes(VMWareNodes):
     """
