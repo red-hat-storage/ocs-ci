@@ -69,7 +69,7 @@ class PlatformNodesFactory:
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA["platform"]
-        if cluster.is_lso_cluster():
+        if cluster.is_lso_cluster() and platform == constants.VSPHERE_PLATFORM:
             platform += "_lso"
         return self.cls_map[platform]()
 
