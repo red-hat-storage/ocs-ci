@@ -1936,7 +1936,7 @@ class AZURENodes(NodesBase):
         # Start the VMs
         if stopped_vms:
             logger.info(f"The following VMs are powered off: {stopped_vms}")
-            self.azure.start_vm_instance(stopped_vm for stopped_vm in stopped_vms)
+            self.azure.start_vm_instances(stopped_vms)
 
 
 class VMWareLSONodes(VMWareNodes):
