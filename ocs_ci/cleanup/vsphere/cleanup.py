@@ -44,6 +44,8 @@ def delete_cluster(vsphere, cluster_name):
     vms = vsphere.get_all_vms_in_pool(cluster_name, datacenter, cluster)
     if not vms:
         logger.info(f"There is no VM's in resource pool {cluster_name}")
+        # delete the resource pool even though it empty
+        vsphere.destroy_pool(cluster_name, datacenter, cluster)
         return
 
     # Delete the disks
