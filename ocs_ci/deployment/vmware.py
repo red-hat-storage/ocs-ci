@@ -5,6 +5,7 @@ on vSphere platform
 import json
 import logging
 import os
+from shutil import rmtree
 import time
 
 import hcl
@@ -296,6 +297,14 @@ class VSPHEREBASE(Deployment):
 
         # destroy the folder in templates
         self.vsphere.destroy_folder(pool, self.cluster, self.datacenter)
+
+        # remove .terraform directory ( this is only to reclaim space )
+        terraform_plugins_dir = os.path.join(
+            config.ENV_DATA["cluster_path"],
+            constants.TERRAFORM_DATA_DIR,
+            constants.TERRAFORM_PLUGINS_DIR,
+        )
+        rmtree(terraform_plugins_dir, ignore_errors=True)
 
     def check_cluster_existence(self, cluster_name_prefix):
         """
