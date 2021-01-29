@@ -3038,18 +3038,19 @@ def apply_ssd_tuning_azure():
     default_config = ct_pod.exec_ceph_cmd("ceph config dump")
     log.info(f"Initial ceph config dump output: {default_config}")
     config_options = [
-        "osd_op_num_threads_per_shard_ssd 2",
-        "osd_op_num_shards_ssd 8",
-        "osd_recovery_sleep_ssd 0",
-        "osd_snap_trim_sleep_ssd 0",
-        "osd_delete_sleep_ssd 0",
-        "bluestore_min_alloc_size_ssd 4K",
-        "bluestore_prefer_deferred_size_ssd 0",
-        "bluestore_compression_min_blob_size_ssd 8K",
-        "bluestore_compression_max_blob_size_ssd 64K",
-        "bluestore_cache_size_ssd 3G",
-        "bluestore_throttle_cost_per_io_ssd 4000",
-        "bluestore_deferred_batch_ops_ssd 16",
+        "osd_op_num_threads_per_shard 2",
+        "osd_op_num_shards 8",
+        "osd_recovery_sleep 0",
+        "osd_snap_trim_sleep 0",
+        "osd_delete_sleep 0",
+        "bluestore_min_alloc_size 4K",
+        "bluestore_prefer_deferred_size 0",
+        "bluestore_compression_min_blob_size 8K",
+        "bluestore_compression_max_blob_size 64K",
+        "bluestore_max_blob_size 64K",
+        "bluestore_cache_size 3G",
+        "bluestore_throttle_cost_per_io 4000",
+        "bluestore_deferred_batch_ops 16",
     ]
     for config_option in config_options:
         ct_pod.exec_ceph_cmd(f"ceph config set osd {config_option}")
