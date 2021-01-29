@@ -648,6 +648,7 @@ VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
 VSPHERE_MAIN = os.path.join(VSPHERE_DIR, "main.tf")
 VSPHERE_VAR = os.path.join(VSPHERE_DIR, "variables.tf")
 TERRAFORM_DATA_DIR = "terraform_data"
+TERRAFORM_PLUGINS_DIR = ".terraform"
 SCALEUP_TERRAFORM_DATA_DIR = "scaleup_terraform_data"
 SCALEUP_VSPHERE_DIR = os.path.join(
     EXTERNAL_DIR, "openshift-misc/v4-testing-misc/v4-scaleup/vsphere/"
