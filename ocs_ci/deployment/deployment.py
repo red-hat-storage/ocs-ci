@@ -822,8 +822,7 @@ class Deployment(object):
             )
 
         # Change registry backend to OCS CEPHFS RWX PVC
-        if not config.DEPLOYMENT["external_mode"]:
-            registry.change_registry_backend_to_ocs()
+        registry.change_registry_backend_to_ocs()
 
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
