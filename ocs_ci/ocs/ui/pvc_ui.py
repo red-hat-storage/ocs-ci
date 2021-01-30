@@ -1,7 +1,7 @@
 import time
 import logging
 
-from ocs_ci.ocs.ui.base_ui import BaseUI
+from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version
 
@@ -9,7 +9,7 @@ from ocs_ci.utility.utils import get_ocp_version
 logger = logging.getLogger(__name__)
 
 
-class PvcUI(BaseUI):
+class PvcUI(PageNavigator):
     """
     User Interface Selenium
 
@@ -19,15 +19,6 @@ class PvcUI(BaseUI):
         super().__init__(driver)
         ocp_version = get_ocp_version()
         self.pvc_loc = locators[ocp_version]["pvc"]
-
-    def navigate_pvc_page(self):
-        """
-        Navigate to Persistent Volume Claims page
-
-        """
-        logger.info("Go to PVC Page")
-        self.choose_expanded_mode(mode=True, locator=self.pvc_loc["storage_tab"])
-        self.do_click(locator=self.pvc_loc["pvc_page"])
 
     def create_pvc_ui(self, sc_type, pvc_name, access_mode, pvc_size):
         """
@@ -39,7 +30,7 @@ class PvcUI(BaseUI):
         pvc_size (str): the size of pvc (GB)
 
         """
-        self.navigate_pvc_page()
+        self.navigate_persistentvolumeclaims_page()
 
         logger.info("Select openshift-storage project")
         self.do_click(self.pvc_loc["pvc_project_selector"])
@@ -71,7 +62,7 @@ class PvcUI(BaseUI):
         pvc_name (str): Name of the pvc
 
         """
-        self.navigate_pvc_page()
+        self.navigate_persistentvolumeclaims_page()
 
         logger.info("Select openshift-storage project")
         self.do_click(self.pvc_loc["pvc_project_selector"])

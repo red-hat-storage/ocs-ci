@@ -119,6 +119,22 @@ class BaseUI:
         if status != current_status:
             self.do_click(locator=locator)
 
+    def check_element_text(self, expected_text):
+        """
+        Check if the text matches the expected text.
+
+        Args:
+            expected_text (string): The expected text.
+
+        return:
+            bool: True if the text matches the expected text, False otherwise
+
+        """
+        element_list = self.driver.find_elements_by_xpath(
+            f"//*[contains(text(), '{expected_text}')]"
+        )
+        return len(element_list) > 0
+
     def take_screenshot(self):
         """
         Take screenshot using python code
@@ -132,22 +148,179 @@ class BaseUI:
         logger.info(f"Creating snapshot: {filename}")
         self.driver.save_screenshot(filename)
 
-    def get_text(self, locator, timeout=30, expected_text=None):
+
+class PageNavigator(BaseUI):
+    """
+    Page Navigator Class
+
+    """
+
+    def __init__(self, driver):
+        super().__init__(driver)
+        ocp_version = get_ocp_version()
+        self.page_nav = locators[ocp_version]["page"]
+
+    def navigate_overview_page(self):
         """
-        Check if the text matches the expected text.
-
-        Args:
-            locator (set): (GUI element needs to operate on (str), type (By))
-            timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
-            expected_text (string): The expected text.
-
-        return:
-            bool: True if the text matches the expected text, False otherwise
+        Navigate to Overview Page
 
         """
-        wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
-        return element.text == expected_text
+        logger.info("Navigate to Overview Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.do_click(locator=self.page_nav["overview_page"])
+
+    def navigate_projects_page(self):
+        """
+        Navigate to Projects Page
+
+        """
+        logger.info("Navigate to Projects Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.do_click(locator=self.page_nav["projects_page"])
+
+    def navigate_search_page(self):
+        """
+        Navigate to Search Page
+
+        """
+        logger.info("Navigate to Projects Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.do_click(locator=self.page_nav["search_page"])
+
+    def navigate_explore_page(self):
+        """
+        Navigate to Explore Page
+
+        """
+        logger.info("Navigate to Explore Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.do_click(locator=self.page_nav["explore_page"])
+
+    def navigate_events_page(self):
+        """
+        Navigate to Events Page
+
+        """
+        logger.info("Navigate to Events Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.do_click(locator=self.page_nav["events_page"])
+
+    def navigate_operatorhub_page(self):
+        """
+        Navigate to OperatorHub Page
+
+        """
+        logger.info("Navigate to OperatorHub Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
+        self.do_click(locator=self.page_nav["operatorhub_page"])
+
+    def navigate_installed_operators_page(self):
+        """
+        Navigate to Installed Operators Page
+
+        """
+        logger.info("Navigate to Installed Operators Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
+        self.do_click(self.page_nav["installed_operators_page"])
+
+    def navigate_persistentvolumes_page(self):
+        """
+        Navigate to Persistent Volumes Page
+
+        """
+        logger.info("Navigate to Persistent Volumes Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["persistentvolumes_page"])
+
+    def navigate_persistentvolumeclaims_page(self):
+        """
+        Navigate to Persistent Volume Claims Page
+
+        """
+        logger.info("Navigate to Persistent Volume Claims Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["persistentvolumeclaims_page"])
+
+    def navigate_storageclasses_page(self):
+        """
+        Navigate to Storage Classes Page
+
+        """
+        logger.info("Navigate to Storage Classes Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["storageclasses_page"])
+
+    def navigate_volumesnapshots_page(self):
+        """
+        Navigate to Storage Volume Snapshots Page
+
+        """
+        logger.info("Navigate to Storage Volume Snapshots Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["volumesnapshots_page"])
+
+    def navigate_volumesnapshotclasses_page(self):
+        """
+        Navigate to Volume Snapshot Classes Page
+
+        """
+        logger.info("Navigate to Volume Snapshot Classes Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["volumesnapshotclasses_page"])
+
+    def navigate_volumesnapshotcontents_page(self):
+        """
+        Navigate to Volume Snapshot Contents Page
+
+        """
+        logger.info("Navigate to Volume Snapshot Contents Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["volumesnapshotcontents_page"])
+
+    def navigate_object_buckets_page(self):
+        """
+        Navigate to Object Buckets Page
+
+        """
+        logger.info("Navigate to Object Buckets Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["object_buckets_page"])
+
+    def navigate_object_bucket_claims_page(self):
+        """
+        Navigate to Object Bucket Claims Page
+
+        """
+        logger.info("Navigate to Object Bucket Claims Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["object_bucket_claims_page"])
+
+    def navigate_alerting_page(self):
+        """
+        Navigate to Alerting Page
+
+        """
+        logger.info("Navigate to Alerting Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Monitoring"])
+        self.do_click(locator=self.page_nav["alerting_page"])
+
+    def navigate_metrics_page(self):
+        """
+        Navigate to Metrics Page
+
+        """
+        logger.info("Navigate to Metrics Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Monitoring"])
+        self.do_click(locator=self.page_nav["metrics_page"])
+
+    def navigate_dashboards_page(self):
+        """
+        Navigate to Dashboards Page
+
+        """
+        logger.info("Navigate to Dashboards Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Monitoring"])
+        self.do_click(locator=self.page_nav["dashboards_page"])
 
 
 def login_ui():
@@ -182,11 +355,10 @@ def login_ui():
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if not headless:
+        if headless:
             chrome_options.add_argument("--headless")
 
-        # chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
-        chrome_browser_type = "google-chrome"
+        chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
         driver = webdriver.Chrome(
             ChromeDriverManager(chrome_type=chrome_browser_type).install(),
             chrome_options=chrome_options,

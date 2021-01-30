@@ -1,16 +1,16 @@
 import logging
 
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.ocs.ui.base_ui import BaseUI
-from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler, run_cmd
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs import constants
 
 
 logger = logging.getLogger(__name__)
 
 
-class DeploymentUI(BaseUI):
+class DeploymentUI(PageNavigator):
     """
     Deployment OCS Operator via User Interface
 
@@ -23,7 +23,6 @@ class DeploymentUI(BaseUI):
         self.mode = "internal"
         self.storage_class_type = "thin_sc"
         self.osd_size = "0.5T"
-        self.is_encryption = False
         self.is_wide_encryption = False
         self.is_class_encryption = False
         self.is_use_kms = False
@@ -57,16 +56,6 @@ class DeploymentUI(BaseUI):
         if not isinstance(osd_size, str):
             raise ValueError("osd size arg must be a string")
         self.osd_size = osd_size
-
-    @property
-    def select_encryption(self):
-        return self.is_encryption
-
-    @select_encryption.setter
-    def select_encryption(self, is_encryption):
-        if not isinstance(is_encryption, bool):
-            raise ValueError("is_encryption arg must be a bool")
-        self.is_encryption = is_encryption
 
     @property
     def wide_encryption(self):
@@ -138,34 +127,19 @@ class DeploymentUI(BaseUI):
             raise ValueError("kms_token arg must be a string")
         self.kms_token = kms_token
 
-    def navigate_operatorhub(self):
+    def create_olm_yaml(self):
         """
-        Navigate to OperatorHub Page
-
-        """
-        logger.info("Click On Operators Tab")
-        self.choose_expanded_mode(mode=True, locator=self.dep_loc["operators_tab"])
-
-        logger.info("Click On OperatorHub Tab")
-        self.do_click(locator=self.dep_loc["operatorhub_tab"])
-
-    def navigate_installed_operators(self):
-        """
-        Navigate to Installed Operators page
+        Create OLM YAML file
 
         """
-        logger.info("Click On Installed Operators Tab")
-        self.choose_expanded_mode(mode=True, locator=self.dep_loc["operators_tab"])
-
-        logger.info("Click On OperatorHub Tab")
-        self.do_click(self.dep_loc["installed_operators_tab"])
+        run_cmd(f"oc create -f {constants.OLM_YAML}")
 
     def install_ocs_operator(self):
         """
         Install OCS Opeartor
 
         """
-        self.navigate_operatorhub()
+        self.navigate_operatorhub_page()
 
         logger.info("Search OCS Operator")
         self.do_send_keys(
@@ -177,13 +151,20 @@ class DeploymentUI(BaseUI):
 
         logger.info("Click Install OCS")
         self.do_click(self.dep_loc["click_install_ocs"])
+        self.do_click(self.dep_loc["click_install_ocs_page"])
 
     def install_storage_cluster(self):
         """
         Install Storage Cluster
 
         """
-        self.navigate_installed_operators()
+        self.navigate_installed_operators_page()
+
+        logger.info("Search OCS operator installed")
+        self.do_send_keys(
+            locator=self.dep_loc["search_ocs_installed"],
+            text="OpenShift Container Storage",
+        )
 
         logger.info("Click on ocs operator on Installed Operators")
         self.do_click(locator=self.dep_loc["ocs_operator_installed"])
@@ -209,7 +190,7 @@ class DeploymentUI(BaseUI):
 
         logger.info("Configure Storage Class (thin on vmware, gp2 on aws)")
         self.do_click(locator=self.dep_loc["storage_class_dropdown"])
-        self.do_click(locator=self.dep_loc["thin_sc"])
+        self.do_click(locator=self.dep_loc[self.storage_class_type])
 
         logger.info(f"Configure OSD Capacity {self.osd_size}")
         self.choose_expanded_mode(mode=True, locator=self.dep_loc["osd_size_dropdown"])
@@ -231,14 +212,12 @@ class DeploymentUI(BaseUI):
         logger.info("Create on Review and create page")
         self.do_click(locator=self.dep_loc["create_on_review"])
 
-        self.verify_ocs_installation()
-
     def configure_encryption(self):
         """
         Configure Encryption
 
         """
-        if self.is_encryption:
+        if self.is_wide_encryption or self.is_class_encryption:
             logger.info("Enable Encryption")
             self.select_checkbox_status(
                 status=True, locator=self.dep_loc["enable_encryption"]
@@ -288,7 +267,7 @@ class DeploymentUI(BaseUI):
         sleep (int): Sampling time in seconds
 
         """
-        self.navigate_installed_operators()
+        self.navigate_installed_operators_page()
 
         self.do_send_keys(
             locator=self.dep_loc["search_ocs_install"],
@@ -297,8 +276,7 @@ class DeploymentUI(BaseUI):
         sample = TimeoutSampler(
             timeout=timeout_install,
             sleep=sleep,
-            func=self.get_text,
-            locator=self.dep_loc["verify_ocs_install"],
+            func=self.check_element_text,
             expected_text="Succeeded",
         )
         if not sample.wait_for_func_status(result=True):
@@ -312,7 +290,7 @@ class DeploymentUI(BaseUI):
         Install OCS via UI
 
         """
+        self.create_olm_yaml()
         self.install_ocs_operator()
-        self.navigate_installed_operators()
         self.verify_ocs_installation()
         self.install_storage_cluster()
