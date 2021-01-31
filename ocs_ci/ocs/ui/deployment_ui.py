@@ -9,7 +9,8 @@ from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-
+from ocs_ci.ocs.resources.pod import get_all_pods
+from ocs_ci.ocs.node import get_ocs_nodes
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,7 @@ class DeploymentUI(PageNavigator):
                 catalog_source_data, catalog_source_manifest.name
             )
             run_cmd(f"oc create -f {catalog_source_manifest.name}", timeout=300)
+            run_cmd(f"oc create -f {constants.OLM_YAML}", timeout=300)
             time.sleep(60)
         except Exception as e:
             logger.info(e)
@@ -230,6 +232,20 @@ class DeploymentUI(PageNavigator):
 
         logger.info("Create on Review and create page")
         self.do_click(locator=self.dep_loc["create_on_review"])
+
+        self.verify_ocs_pods()
+
+    def verify_ocs_pods(self):
+        """
+        for debugging
+        """
+        time.sleep(600)
+        pod_objs = get_all_pods(namespace="openshift-storage")
+        for pod_obj in pod_objs:
+            logger.info(f"{pod_obj.name}\n")
+        nodes = get_ocs_nodes()
+        for node in nodes:
+            logger.info(f"{node.name}\n")
 
     def configure_encryption(self):
         """
