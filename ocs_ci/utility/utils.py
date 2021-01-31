@@ -11,6 +11,7 @@ import string
 import subprocess
 import time
 import traceback
+import stat
 from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -624,6 +625,53 @@ def get_openshift_installer(
     log.info(f"OpenShift Installer version: {installer_version}")
 
     return installer_binary_path
+
+
+def get_ocm_cli(
+    version=None,
+    bin_dir=None,
+    force_download=False,
+):
+    """
+    Download the OCM binary, if not already present.
+    Update env. PATH and get path of the OCM binary.
+
+    Args:
+        version (str): Version of the OCM to download
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+        force_download (bool): Force OCM download even if already present
+
+    Returns:
+        str: Path to the OCM binary
+
+    """
+    bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    ocm_filename = "ocm"
+    ocm_binary_path = os.path.join(bin_dir, ocm_filename)
+    if os.path.isfile(ocm_binary_path) and force_download:
+        delete_file(ocm_binary_path)
+    if os.path.isfile(ocm_binary_path):
+        log.debug(f"ocm exists ({ocm_binary_path}), skipping download.")
+    else:
+        log.info(f"Downloading ocm cli ({version}).")
+        prepare_bin_dir()
+        # record current working directory and switch to BIN_DIR
+        previous_dir = os.getcwd()
+        os.chdir(bin_dir)
+        url = f"https://github.com/openshift-online/ocm-cli/releases/download/v{version}/ocm-linux-amd64"
+        download_file(url, ocm_filename)
+        # return to the previous working directory
+        os.chdir(previous_dir)
+
+    current_file_permissions = os.stat(ocm_binary_path)
+    os.chmod(
+        ocm_binary_path,
+        current_file_permissions.st_mode | stat.S_IEXEC,
+    )
+    ocm_version = run_cmd(f"{ocm_binary_path} version")
+    log.info(f"OCM version: {ocm_version}")
+
+    return ocm_binary_path
 
 
 def get_openshift_client(
