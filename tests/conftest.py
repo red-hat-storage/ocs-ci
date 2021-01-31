@@ -2827,7 +2827,11 @@ def ceph_toolbox(request):
     deploy = config.RUN["cli_params"]["deploy"]
     teardown = config.RUN["cli_params"].get("teardown")
     skip_ocs = config.ENV_DATA["skip_ocs_deployment"]
-    if not (deploy or teardown or skip_ocs):
+    deploy_teardown = deploy or teardown
+    ocp_dedicated = (
+        config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+    )
+    if not (deploy_teardown or skip_ocs) or (ocp_dedicated and not deploy_teardown):
         try:
             # Creating toolbox pod
             setup_ceph_toolbox()
