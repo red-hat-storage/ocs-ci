@@ -1,9 +1,13 @@
 import logging
+import tempfile
+import time
 
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler, run_cmd
+from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 
 
@@ -22,7 +26,7 @@ class DeploymentUI(PageNavigator):
         self.dep_loc = locators[ocp_version]["deployment"]
         self.mode = "internal"
         self.storage_class_type = "thin_sc"
-        self.osd_size = "0.5T"
+        self.osd_size = "512"
         self.is_wide_encryption = False
         self.is_class_encryption = False
         self.is_use_kms = False
@@ -127,12 +131,25 @@ class DeploymentUI(PageNavigator):
             raise ValueError("kms_token arg must be a string")
         self.kms_token = kms_token
 
-    def create_olm_yaml(self):
+    def create_catalog_source_yaml(self):
         """
         Create OLM YAML file
 
         """
-        run_cmd(f"oc create -f {constants.OLM_YAML}")
+        try:
+            catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
+            image = config.DEPLOYMENT["default_ocs_registry_image"]
+            catalog_source_data["spec"]["image"] = image
+            catalog_source_manifest = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="catalog_source_manifest", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                catalog_source_data, catalog_source_manifest.name
+            )
+            run_cmd(f"oc create -f {catalog_source_manifest.name}", timeout=300)
+            time.sleep(60)
+        except Exception as e:
+            logger.info(e)
 
     def install_ocs_operator(self):
         """
@@ -158,6 +175,7 @@ class DeploymentUI(PageNavigator):
         Install Storage Cluster
 
         """
+        self.navigate_operatorhub_page()
         self.navigate_installed_operators_page()
 
         logger.info("Search OCS operator installed")
@@ -173,6 +191,7 @@ class DeploymentUI(PageNavigator):
         self.do_click(locator=self.dep_loc["storage_cluster_tab"])
 
         logger.info("Click on Create Storage Cluster")
+        self.refresh_page()
         self.do_click(locator=self.dep_loc["create_storage_cluster"])
 
         if self.mode == "internal":
@@ -290,7 +309,7 @@ class DeploymentUI(PageNavigator):
         Install OCS via UI
 
         """
-        self.create_olm_yaml()
+        self.create_catalog_source_yaml()
         self.install_ocs_operator()
         self.verify_ocs_installation()
         self.install_storage_cluster()

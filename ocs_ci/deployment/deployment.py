@@ -50,7 +50,6 @@ from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
 from ocs_ci.utility import templating, ibmcloud
 from ocs_ci.utility.flexy import load_cluster_info
-from ocs_ci.utility.openshift_console import OpenshiftConsole
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -394,8 +393,6 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
 
         if ui_deployment:
-            if not live_deployment:
-                self.create_ocs_operator_source()
             self.deployment_with_ui()
             # Skip the rest of the deployment when deploy via UI
             return
@@ -686,9 +683,14 @@ class Deployment(object):
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             deployment_obj.storage_class_type = "thin_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
-            deployment_obj.storage_class_type = "gp2_sc"
+            deployment_obj.storage_class_type = "thin_sc"
 
-        deployment_obj.osd_size = str(config.ENV_DATA.get("device_size", "0.5T"))
+        device_size = str(config.ENV_DATA.get("device_size"))
+        if device_size in ("512", "2048", "4096"):
+            deployment_obj.osd_size = device_size
+        else:
+            deployment_obj.osd_size = "512"
+
         deployment_obj.is_wide_encryption = config.ENV_DATA.get("encryption_at_rest")
         deployment_obj.is_class_encryption = False
         deployment_obj.is_use_kms = False

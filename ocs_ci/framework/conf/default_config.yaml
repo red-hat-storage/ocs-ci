@@ -68,7 +68,7 @@ DEPLOYMENT:
   # For UI deployment you have to set following parameter ui_deployment to True
   # UI deployment is not part of this framework, it will just do preparation
   # steps for openshift-console.
-  ui_deployment: False
+  ui_deployment: True
   # Following options are defaults for deployment from live content
   live_deployment: False
   preserve_bootstrap_node: False

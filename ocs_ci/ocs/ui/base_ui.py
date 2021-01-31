@@ -135,6 +135,13 @@ class BaseUI:
         )
         return len(element_list) > 0
 
+    def refresh_page(self):
+        """
+        Refresh Web Page
+
+        """
+        self.driver.refresh()
+
     def take_screenshot(self):
         """
         Take screenshot using python code
@@ -276,24 +283,6 @@ class PageNavigator(BaseUI):
         logger.info("Navigate to Volume Snapshot Contents Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         self.do_click(locator=self.page_nav["volumesnapshotcontents_page"])
-
-    def navigate_object_buckets_page(self):
-        """
-        Navigate to Object Buckets Page
-
-        """
-        logger.info("Navigate to Object Buckets Page")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        self.do_click(locator=self.page_nav["object_buckets_page"])
-
-    def navigate_object_bucket_claims_page(self):
-        """
-        Navigate to Object Bucket Claims Page
-
-        """
-        logger.info("Navigate to Object Bucket Claims Page")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        self.do_click(locator=self.page_nav["object_bucket_claims_page"])
 
     def navigate_alerting_page(self):
         """
