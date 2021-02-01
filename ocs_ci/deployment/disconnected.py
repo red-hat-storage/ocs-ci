@@ -60,6 +60,11 @@ def prepare_disconnected_ocs_deployment():
     - mirror related images to mirror registry
     - create imageContentSourcePolicy for the mirrored images
     - disable the default OperatorSources
+
+    Returns:
+        str: OCS registry image prepared for disconnected installation (with
+            sha256 digest)
+
     """
 
     logger.info("Prepare for disconnected OCS installation")
