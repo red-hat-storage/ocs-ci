@@ -259,3 +259,7 @@ class ImageIsNotDeletedOrNotFound(Exception):
 
 class UnhealthyBucket(Exception):
     pass
+
+
+class NotFoundError(Exception):
+    pass
