@@ -2457,7 +2457,7 @@ def prepare_customized_pull_secret(images=None):
     use whole content of pull-secret.
 
     Args:
-        images (str or list): image (or images) to match with auth section
+        images (str, list): image (or images) to match with auth section
 
     Returns:
         NamedTemporaryFile: prepared pull-secret

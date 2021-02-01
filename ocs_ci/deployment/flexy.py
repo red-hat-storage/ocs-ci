@@ -325,7 +325,7 @@ class FlexyBase(object):
 
     def flexy_post_processing(self):
         """
-        Pefrom few actions required after flexy execution:
+        Perform a few actions required after flexy execution:
         - update global pull-secret
         - login to mirror registry (disconected cluster)
         - configure proxy server (disconnected cluster)
