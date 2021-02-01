@@ -181,6 +181,20 @@ To enable ocs-ci to use this token, add the following to your `auth.yaml`:
 quay:
   access_token: 'YOUR_TOKEN'
 ```
+#### GitHub
+
+For disconnected cluster installation, we need to access github api (during
+downloading opm tool) which have very strict rate limit for unauthenticated
+requests ([60 requests per hour](https://docs.github.com/en/rest/overview/resources-in-the-rest-api#rate-limiting)).
+To avoid API rate limit exceeded errors, you can provide github authentication
+credentials (username and token) obtained on [Personal access tokens](https://github.com/settings/tokens)
+page (Settings -> Developer settings -> Personal access tokens).
+
+```yaml
+github:
+  username: "GITHUB_USERNAME"
+  token: "GITHUB_TOKEN"
+```
 
 ## Tests
 
