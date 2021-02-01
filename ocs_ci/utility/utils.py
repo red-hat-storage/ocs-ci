@@ -511,28 +511,30 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     return completed_process
 
 
-def download_file(url, filename):
+def download_file(url, filename, **kwargs):
     """
     Download a file from a specified url
 
     Args:
         url (str): URL of the file to download
         filename (str): Name of the file to write the download to
+        kwargs (dict): additional keyword arguments passed to requests.get(...)
 
     """
     log.debug(f"Download '{url}' to '{filename}'.")
     with open(filename, "wb") as f:
-        r = requests.get(url)
+        r = requests.get(url, **kwargs)
         assert r.ok, f"The URL {url} is not available! Status: {r.status_code}."
         f.write(r.content)
 
 
-def get_url_content(url):
+def get_url_content(url, **kwargs):
     """
     Return URL content
 
     Args:
         url (str): URL address to return
+        kwargs (dict): additional keyword arguments passed to requests.get(...)
     Returns:
         str: Content of URL
 
@@ -541,7 +543,7 @@ def get_url_content(url):
 
     """
     log.debug(f"Download '{url}' content.")
-    r = requests.get(url)
+    r = requests.get(url, **kwargs)
     assert r.ok, f"Couldn't load URL: {url} content! Status: {r.status_code}."
     return r.content
 
