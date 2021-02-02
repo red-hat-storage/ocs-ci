@@ -1771,6 +1771,9 @@ def mcg_obj_fixture(request, *args, **kwargs):
     Returns:
         MCG: An MCG resource
     """
+    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+        log.warning("As openshift dedicated is used, no MCG resource is returned")
+        return None
 
     mcg_obj = MCG(*args, **kwargs)
 
@@ -1959,19 +1962,27 @@ def rgw_bucket_factory_session(request, rgw_obj_session):
 @pytest.fixture()
 def bucket_factory(request, bucket_class_factory, mcg_obj):
     """
-    Returns an MCG bucket factory
+    Returns an MCG bucket factory.
+    If MCG object not found returns None
     """
-    return bucket_factory_fixture(request, bucket_class_factory, mcg_obj)
+    if mcg_obj:
+        return bucket_factory_fixture(request, bucket_class_factory, mcg_obj)
+    else:
+        return None
 
 
 @pytest.fixture(scope="session")
 def bucket_factory_session(request, bucket_class_factory_session, mcg_obj_session):
     """
-    Returns a session-scoped MCG bucket factory
+    Returns a session-scoped MCG bucket factory.
+    If session-scoped MCG object not found returns None
     """
-    return bucket_factory_fixture(
-        request, bucket_class_factory_session, mcg_obj_session
-    )
+    if mcg_obj_session:
+        return bucket_factory_fixture(
+            request, bucket_class_factory_session, mcg_obj_session
+        )
+    else:
+        return None
 
 
 def bucket_factory_fixture(
@@ -2140,11 +2151,15 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     Returns:
         func: Factory method - each call to this function creates
             a backingstore
+        None: If MCG object not found
 
     """
-    return backingstore_factory_implementation(
-        request, cld_mgr, mcg_obj, cloud_uls_factory
-    )
+    if mcg_obj:
+        return backingstore_factory_implementation(
+            request, cld_mgr, mcg_obj, cloud_uls_factory
+        )
+    else:
+        return None
 
 
 @pytest.fixture(scope="session")
@@ -2158,11 +2173,15 @@ def backingstore_factory_session(
     Returns:
         func: Factory method - each call to this function creates
             a backingstore
+        None: If session-scoped MCG object not found
 
     """
-    return backingstore_factory_implementation(
-        request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
-    )
+    if mcg_obj_session:
+        return backingstore_factory_implementation(
+            request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
+        )
+    else:
+        return None
 
 
 @pytest.fixture()
@@ -2174,9 +2193,15 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
     Returns:
         func: Factory method - each call to this function creates
             a bucketclass
+        None: If MCG object not found
 
     """
-    return bucketclass_factory_implementation(request, mcg_obj, backingstore_factory)
+    if mcg_obj:
+        return bucketclass_factory_implementation(
+            request, mcg_obj, backingstore_factory
+        )
+    else:
+        return None
 
 
 @pytest.fixture(scope="session")
@@ -2190,11 +2215,15 @@ def bucket_class_factory_session(
     Returns:
         func: Factory method - each call to this function creates
             a bucketclass
+        None: If session-scoped MCG object not found
 
     """
-    return bucketclass_factory_implementation(
-        request, mcg_obj_session, backingstore_factory_session
-    )
+    if mcg_obj_session:
+        return bucketclass_factory_implementation(
+            request, mcg_obj_session, backingstore_factory_session
+        )
+    else:
+        return None
 
 
 @pytest.fixture()
