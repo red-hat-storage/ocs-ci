@@ -257,5 +257,21 @@ class ImageIsNotDeletedOrNotFound(Exception):
     pass
 
 
+class UnsupportedVaultDeployMode(Exception):
+    pass
+
+
+class FailedVaultDeployment(Exception):
+    pass
+
+
+class VaultPlatformNotSupported(Exception):
+    pass
+
+
+class VaultUnsealFailed(Exception):
+    pass
+
+
 class UnhealthyBucket(Exception):
     pass

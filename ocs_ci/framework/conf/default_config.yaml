@@ -78,6 +78,8 @@ DEPLOYMENT:
   infra_nodes: False
   # How long should ocs-ci wait for `openshift-install create cluster` run?
   openshift_install_timeout: 3600
+  # Deployment with KMS (vault etc)
+  kms_deployment: False
 
 # Section for reporting configuration
 REPORTING:

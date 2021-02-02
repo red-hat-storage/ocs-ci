@@ -47,7 +47,11 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
-from ocs_ci.utility import templating, ibmcloud
+from ocs_ci.utility import (
+    templating,
+    ibmcloud,
+    kms as KMS,
+)
 from ocs_ci.utility.openshift_console import OpenshiftConsole
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -470,6 +474,9 @@ class Deployment(object):
         if self.platform == constants.IBM_POWER_PLATFORM:
             cluster_data = templating.load_yaml(constants.IBM_STORAGE_CLUSTER_YAML)
         else:
+            if config.DEPLOYMENT.get("kms_deployment"):
+                kms = KMS.get_kms_deployment()
+                kms.deploy()
             cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
 
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
@@ -637,6 +644,10 @@ class Deployment(object):
             cluster_data["spec"]["encryption"] = {
                 "enable": True,
             }
+            if config.DEPLOYMENT.get("kms_deployment"):
+                cluster_data["spec"]["encryption"]["kms"] = {
+                    "enable": True,
+                }
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
