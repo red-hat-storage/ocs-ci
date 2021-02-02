@@ -29,6 +29,7 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     ResourceWrongStatusException,
     UnsupportedPlatformError,
+    NoobaaHealthException,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
@@ -1054,6 +1055,9 @@ def health_checker(request, tier_marks_name):
                 if not (teardown or skip_ocs_deployment):
                     ceph_health_check_base()
                     log.info("Ceph health check passed at teardown")
+                    mcg_obj = MCG()
+                    if not mcg_obj.status:
+                        raise NoobaaHealthException("Noobaa health is NOT OK")
             except CephHealthException:
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
