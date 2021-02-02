@@ -9,8 +9,7 @@ from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_all_pods
-from ocs_ci.ocs.node import get_ocs_nodes
+
 
 logger = logging.getLogger(__name__)
 
@@ -233,19 +232,8 @@ class DeploymentUI(PageNavigator):
         logger.info("Create on Review and create page")
         self.do_click(locator=self.dep_loc["create_on_review"])
 
-        self.verify_ocs_pods()
-
-    def verify_ocs_pods(self):
-        """
-        for debugging
-        """
-        time.sleep(600)
-        pod_objs = get_all_pods(namespace="openshift-storage")
-        for pod_obj in pod_objs:
-            logger.info(f"{pod_obj.name}\n")
-        nodes = get_ocs_nodes()
-        for node in nodes:
-            logger.info(f"{node.name}\n")
+        logger.info("Sleep 10 second after click on 'create storage cluster'")
+        time.sleep(10)
 
     def configure_encryption(self):
         """
