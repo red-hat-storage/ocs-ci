@@ -80,6 +80,8 @@ DEPLOYMENT:
   openshift_install_timeout: 3600
   # redhat-operators CatalogSource image (used for disconnected installation)
   cs_redhat_operators_image: "registry.redhat.io/redhat/redhat-operator-index"
+  # Deployment with KMS (vault etc)
+  kms_deployment: False
 
 # Section for reporting configuration
 REPORTING:

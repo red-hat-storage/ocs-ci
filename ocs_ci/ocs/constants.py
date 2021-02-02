@@ -522,6 +522,24 @@ PODS_PER_NODE_COUNT_YAML = os.path.join(
 )
 
 ANSIBLE_INVENTORY_YAML = os.path.join("ocp-deployment", "inventory.yaml.j2")
+
+# External vault kms yamls
+EXTERNAL_VAULT_CA_CERT = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "ocs-kms-ca-secret.yaml"
+)
+EXTERNAL_VAULT_CLIENT_CERT = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "ocs-kms-client-cert.yaml"
+)
+EXTERNAL_VAULT_CLIENT_KEY = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "ocs-kms-client-key.yaml"
+)
+EXTERNAL_VAULT_KMS_TOKEN = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "ocs-kms-token.yaml"
+)
+EXTERNAL_VAULT_KMS_CONNECTION_DETAILS = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "ocs-kms-connection-details.yaml"
+)
+
 # constants
 RBD_INTERFACE = "rbd"
 CEPHFS_INTERFACE = "cephfs"
@@ -1187,6 +1205,18 @@ PRODUCTION_JOBS_PREFIX = ["jnk"]
 
 # Cloud Manager available platforms
 CLOUD_MNGR_PLATFORMS = ["AWS", "GCP", "AZURE", "IBMCOS"]
+
+# Vault related configurations
+VAULT_CENTOS_DEPS = ["yum-utils"]
+VAULT_CENTOS_REPO = "https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo"
+
+# Vault related constants
+VAULT_DEFAULT_CA_CERT = "ocs-kms-ca-secret"
+VAULT_DEFAULT_CLIENT_CERT = "ocs-kms-client-cert"
+VAULT_DEFAULT_CLIENT_KEY = "ocs-kms-client-key"
+VAULT_DEFAULT_NAMESPACE = ""
+VAULT_DEFAULT_PATH_PREFIX = "ocs"
+VAULT_DEFAULT_TLS_SERVER = ""
 
 # min and max Noobaa endpoints
 MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
