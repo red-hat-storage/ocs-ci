@@ -297,18 +297,19 @@ class AZURE:
             )
             raise
 
-    def restart_az_vm_instance(self, vm_name):
+    def restart_vm_instances(self, vm_names):
         """
-        Restart an Azure vm instance
+        Restart Azure vm instances
 
         Args:
-            vm_name: Name of azure vm instance
+            vm_names (list): Names of azure vm instances
 
         """
-        result = self.compute_client.virtual_machines.restart(
-            self.cluster_resource_group, vm_name
-        )
-        result.wait()
+        for vm_name in vm_names:
+            result = self.compute_client.virtual_machines.restart(
+                self.cluster_resource_group, vm_name
+            )
+            result.wait()
 
     def get_data_volumes(self, deviceset_pvs):
         """
@@ -345,28 +346,45 @@ class AZURE:
             self.cluster_resource_group, volume_name
         ).disk_state
 
-    def start_vm_instance(self, vm_name):
+    def start_vm_instances(self, vm_names):
         """
-        Start an Azure vm instance
+        Start Azure vm instances
 
         Args:
-            vm_name: Name of azure vm instance
+            vm_names (list): Names of azure vm instances
 
         """
-        result = self.compute_client.virtual_machines.start(
-            self.cluster_resource_group, vm_name
-        )
-        result.wait()
+        for vm_name in vm_names:
+            result = self.compute_client.virtual_machines.start(
+                self.cluster_resource_group, vm_name
+            )
+            result.wait()
 
-    def stop_vm_instance(self, vm_name):
+    def stop_vm_instances(self, vm_names, force=False):
         """
-        Stop an Azure vm instance
+        Stop Azure vm instances
 
         Args:
-            vm_name: Name of azure vm instance
+            vm_names (list): Names of azure vm instances
+            force (bool): True for non-graceful VM shutdown, False for
+                graceful VM shutdown
 
         """
-        result = self.compute_client.virtual_machines.power_off(
-            self.cluster_resource_group, vm_name
-        )
-        result.wait()
+        for vm_name in vm_names:
+            result = self.compute_client.virtual_machines.power_off(
+                self.cluster_resource_group, vm_name, skip_shutdown=force
+            )
+            result.wait()
+
+    def restart_vm_instances_by_stop_and_start(self, vm_names, force=False):
+        """
+        Stop and Start Azure vm instances
+
+        Args:
+            vm_names (list): Names of azure vm instances
+            force (bool): True for non-graceful VM shutdown, False for
+                graceful VM shutdown
+
+        """
+        self.stop_vm_instances(vm_names, force=force)
+        self.start_vm_instances(vm_names)
