@@ -26,38 +26,6 @@ class TestPVCCreationPerformance(E2ETest):
 
     pvc_size = "1Gi"
 
-    def create_mutiple_pvcs_statistics(
-        self, num_of_samples, teardown_factory, pvc_size
-    ):
-        """
-
-        Creates number (samples_num) of PVCs, measures creation time for each PVC and returns list of creation times.
-
-         Args:
-             num_of_samples: Number of the sampled created PVCs.
-             teardown_factory: A fixture used when we want a new resource that was created during the tests.
-             pvc_size: Size of the created PVCs.
-
-         Returns:
-             List of the creation times of all the created PVCs.
-
-        """
-        time_measures = []
-        for i in range(num_of_samples):
-            log.info(f"Start creation of PVC number {i + 1}.")
-
-            pvc_obj = helpers.create_pvc(sc_name=self.sc_obj.name, size=pvc_size)
-            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
-            pvc_obj.reload()
-            teardown_factory(pvc_obj)
-            create_time = helpers.measure_pvc_creation_time(
-                self.interface, pvc_obj.name
-            )
-            logging.info(f"PVC created in {create_time} seconds")
-
-            time_measures.append(create_time)
-        return time_measures
-
     @pytest.fixture()
     def base_setup(self, request, interface_iterate, storageclass_factory):
         """
@@ -81,49 +49,6 @@ class TestPVCCreationPerformance(E2ETest):
             pytest.param(*["2Ti"], marks=pytest.mark.polarion_id("OCS-2009")),
         ],
     )
-    @pytest.mark.usefixtures(base_setup.__name__)
-    def test_pvc_creation_measurement_performance(self, teardown_factory, pvc_size):
-        """
-        The test measures PVC creation times for sample_num volumes
-        (limit for the creation time for pvc is defined in accepted_create_time)
-        and compares the creation time of each to the accepted_create_time ( if greater - fails the test)
-        If all the measures are up to the accepted value
-        The test calculates .... difference between creation time of each one of the PVCs and the average
-        is not more than Accepted diff ( currently 5%)
-
-        Args:
-            teardown factory: A fixture used when we want a new resource that was created during the tests
-                               to be removed in the teardown phase.
-            pvc_size: Size of the created PVC
-        """
-        num_of_samples = 3
-        accepted_deviation_percent = 5
-        accepted_create_time = 3
-
-        create_measures = self.create_mutiple_pvcs_statistics(
-            num_of_samples, teardown_factory, pvc_size
-        )
-        log.info(f"Current measures are {create_measures}")
-
-        for i in range(num_of_samples):
-            if create_measures[i] > accepted_create_time:
-                raise ex.PerformanceException(
-                    f"PVC creation time is {create_measures[i]} and is greater than {accepted_create_time} seconds."
-                )
-
-        average = statistics.mean(create_measures)
-        st_deviation = statistics.stdev(create_measures)
-        log.info(
-            f"The average creation time for the sampled {num_of_samples} PVCs is {average}."
-        )
-
-        st_deviation_percent = abs(st_deviation - average) / average * 100.0
-        if st_deviation > accepted_deviation_percent:
-            raise ex.PerformanceException(
-                f"PVC creation time deviation is {st_deviation_percent}%"
-                f"and is greater than the allowed {accepted_deviation_percent}%."
-            )
-        push_to_pvc_time_dashboard(self.interface, "1-pvc-creation", st_deviation)
 
     @pytest.mark.usefixtures(base_setup.__name__)
     @polarion_id("OCS-1620")
