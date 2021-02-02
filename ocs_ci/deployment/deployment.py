@@ -766,92 +766,59 @@ class Deployment(object):
             image = prepare_disconnected_ocs_deployment()
 
         if config.DEPLOYMENT["external_mode"]:
-            logger.info("Deploying OCS on external mode RHCS")
-            return self.deploy_with_external_mode()
-        self.deploy_ocs_via_operator(image)
-        pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
-        cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
-        # Check for Ceph pods
-        assert pod.wait_for_resource(
-            condition="Running",
-            selector="app=rook-ceph-mon",
-            resource_count=3,
-            timeout=600,
-        )
-        assert pod.wait_for_resource(
-            condition="Running", selector="app=rook-ceph-mgr", timeout=600
-        )
-        assert pod.wait_for_resource(
-            condition="Running",
-            selector="app=rook-ceph-osd",
-            resource_count=3,
-            timeout=600,
-        )
-
-        # validate ceph mon/osd volumes are backed by pvc
-        validate_cluster_on_pvc()
-
-        # validate PDB creation of MON, MDS, OSD pods
-        validate_pdb_creation()
-
-        # Creating toolbox pod
-        setup_ceph_toolbox()
-
-        assert pod.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            selector="app=rook-ceph-tools",
-            resource_count=1,
-            timeout=600,
-        )
-
-        # Check for CephFilesystem creation in ocp
-        cfs_data = cfs.get()
-        cfs_name = cfs_data["items"][0]["metadata"]["name"]
-
-        if helpers.validate_cephfilesystem(cfs_name):
-            logger.info("MDS deployment is successful!")
-            defaults.CEPHFILESYSTEM_NAME = cfs_name
+            self.deploy_with_external_mode()
         else:
-            logger.error("MDS deployment Failed! Please check logs!")
+            self.deploy_ocs_via_operator(image)
+            pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
+            cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
+            # Check for Ceph pods
+            assert pod.wait_for_resource(
+                condition="Running",
+                selector="app=rook-ceph-mon",
+                resource_count=3,
+                timeout=600,
+            )
+            assert pod.wait_for_resource(
+                condition="Running", selector="app=rook-ceph-mgr", timeout=600
+            )
+            assert pod.wait_for_resource(
+                condition="Running",
+                selector="app=rook-ceph-osd",
+                resource_count=3,
+                timeout=600,
+            )
+
+            # validate ceph mon/osd volumes are backed by pvc
+            validate_cluster_on_pvc()
+
+            # validate PDB creation of MON, MDS, OSD pods
+            validate_pdb_creation()
+
+            # Creating toolbox pod
+            setup_ceph_toolbox()
+
+            assert pod.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector="app=rook-ceph-tools",
+                resource_count=1,
+                timeout=600,
+            )
+
+            # Check for CephFilesystem creation in ocp
+            cfs_data = cfs.get()
+            cfs_name = cfs_data["items"][0]["metadata"]["name"]
+
+            if helpers.validate_cephfilesystem(cfs_name):
+                logger.info("MDS deployment is successful!")
+                defaults.CEPHFILESYSTEM_NAME = cfs_name
+            else:
+                logger.error("MDS deployment Failed! Please check logs!")
 
         # Change monitoring backend to OCS
         if config.ENV_DATA.get("monitoring_enabled") and config.ENV_DATA.get(
             "persistent-monitoring"
         ):
-
-            sc = helpers.default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
-
-            # Get the list of monitoring pods
-            pods_list = get_all_pods(
-                namespace=defaults.OCS_MONITORING_NAMESPACE,
-                selector=["prometheus", "alertmanager"],
-            )
-
-            # Create configmap cluster-monitoring-config and reconfigure
-            # storage class and telemeter server (if the url is specified in a
-            # config file)
-            create_configmap_cluster_monitoring_pod(
-                sc_name=sc.name,
-                telemeter_server_url=config.ENV_DATA.get("telemeter_server_url"),
-            )
-
-            # Take some time to respin the pod
-            waiting_time = 45
-            logger.info(f"Waiting {waiting_time} seconds...")
-            time.sleep(waiting_time)
-
-            # Validate the pods are respinned and in running state
-            retry((CommandFailed, ResourceWrongStatusException), tries=3, delay=15)(
-                validate_pods_are_respinned_and_running_state
-            )(pods_list)
-
-            # Validate the pvc is created on monitoring pods
-            validate_pvc_created_and_bound_on_monitoring_pods()
-
-            # Validate the pvc are mounted on pods
-            retry((CommandFailed, AssertionError), tries=3, delay=15)(
-                validate_pvc_are_mounted_on_monitoring_pods
-            )(pods_list)
+            setup_persistent_monitoring()
         elif config.ENV_DATA.get("monitoring_enabled") and config.ENV_DATA.get(
             "telemeter_server_url"
         ):
@@ -865,7 +832,6 @@ class Deployment(object):
         registry.change_registry_backend_to_ocs()
 
         # Verify health of ceph cluster
-        # TODO: move destroy cluster logic to new CLI usage pattern?
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
         try:
             ceph_health_check(namespace=self.namespace, tries=30, delay=10)
@@ -1052,3 +1018,42 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     )
     # Wait for catalog source is ready
     catalog_source.wait_for_state("READY")
+
+
+def setup_persistent_monitoring():
+    """
+    Change monitoring backend to OCS
+    """
+    sc = helpers.default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
+
+    # Get the list of monitoring pods
+    pods_list = get_all_pods(
+        namespace=defaults.OCS_MONITORING_NAMESPACE,
+        selector=["prometheus", "alertmanager"],
+    )
+
+    # Create configmap cluster-monitoring-config and reconfigure
+    # storage class and telemeter server (if the url is specified in a
+    # config file)
+    create_configmap_cluster_monitoring_pod(
+        sc_name=sc.name,
+        telemeter_server_url=config.ENV_DATA.get("telemeter_server_url"),
+    )
+
+    # Take some time to respin the pod
+    waiting_time = 45
+    logger.info(f"Waiting {waiting_time} seconds...")
+    time.sleep(waiting_time)
+
+    # Validate the pods are respinned and in running state
+    retry((CommandFailed, ResourceWrongStatusException), tries=3, delay=15)(
+        validate_pods_are_respinned_and_running_state
+    )(pods_list)
+
+    # Validate the pvc is created on monitoring pods
+    validate_pvc_created_and_bound_on_monitoring_pods()
+
+    # Validate the pvc are mounted on pods
+    retry((CommandFailed, AssertionError), tries=3, delay=15)(
+        validate_pvc_are_mounted_on_monitoring_pods
+    )(pods_list)
