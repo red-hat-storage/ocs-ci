@@ -72,3 +72,17 @@ def test_get_vm_names():
     assert len(master_vms) >= 3
     worker_vms = [worker_vm for worker_vm in vm_name if "worker" in worker_vm]
     assert len(worker_vms) >= 3
+
+
+@libtest
+@azure_platform_required
+def test_get_vm_power_status():
+    """
+    Test of Azure get_vm_power_status() method implementation.
+    VM  of healthy OCS Cluster has 'running' status by default.
+    """
+    azure_depl = AZUREIPI()
+    vm_names = azure_depl.azure_util.get_vm_names()
+    logger.info(f"vm names are: {vm_names}")
+    status = azure_depl.azure_util.get_vm_power_status(vm_names[0])
+    assert "running" == status, f"Status of {vm_names[0]} is {status}"
