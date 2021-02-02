@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3
 from ocs_ci.framework.testlib import E2ETest, workloads, tier1, ignore_leftovers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +158,7 @@ class Testopenshiftloggingonocs(E2ETest):
 
     @pytest.mark.polarion_id("OCS-657")
     @tier1
+    @skipif_openshift_dedicated
     def test_create_new_project_to_verify_logging(
         self, create_pvc_and_deploymentconfig_pod
     ):

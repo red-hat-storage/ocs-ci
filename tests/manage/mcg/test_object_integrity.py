@@ -11,6 +11,7 @@ from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity,
     retrieve_anon_s3_resource,
 )
+from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ FILESIZE_SKIP = pytest.mark.skip("Current test filesize is too large.")
 RUNTIME_SKIP = pytest.mark.skip("Runtime is too long; Code needs to be parallelized")
 
 
+@skipif_openshift_dedicated
 class TestObjectIntegrity(MCGTest):
     """
     Test data integrity of various objects

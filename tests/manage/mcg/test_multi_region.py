@@ -20,10 +20,12 @@ from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity,
 )
 from ocs_ci.framework.testlib import MCGTest
+from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 
 
+@skipif_openshift_dedicated
 @skipif_aws_creds_are_missing
 class TestMultiRegion(MCGTest):
     """
