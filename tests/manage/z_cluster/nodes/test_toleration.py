@@ -7,7 +7,7 @@ from ocs_ci.ocs.resources.pod import (
     check_toleration_on_pods,
     wait_for_pods_to_be_running,
 )
-from ocs_ci.ocs.node import taint_ocs_nodes, untaint_ocs_nodes
+from ocs_ci.ocs.node import taint_nodes, untaint_ocs_nodes, get_ocs_nodes
 
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,8 @@ class TestTaintAndTolerations(E2ETest):
 
         """
         # taint nodes if not already tainted
-        taint_ocs_nodes()
+        nodes = get_ocs_nodes()
+        taint_nodes(nodes)
 
         # Check tolerations on pods under openshift-storage
         check_toleration_on_pods()
