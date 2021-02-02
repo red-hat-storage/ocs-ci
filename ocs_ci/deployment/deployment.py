@@ -1024,10 +1024,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
             upgrade, latest_tag=config.DEPLOYMENT.get("default_latest_tag", "latest")
         )
 
-    platform = config.ENV_DATA.get("platform").lower()
-    if platform == constants.IBM_POWER_PLATFORM:
-        # TEMP Hack... latest-stable-4.6 does not have ppc64le bits.
-        image_tag = "latest-4.6"
     catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
     cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
     change_cs_condition = (
