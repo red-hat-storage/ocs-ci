@@ -11,6 +11,7 @@ import yaml
 from ocs_ci.framework import config
 from ocs_ci.helpers.disconnected import get_opm_tool
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import NotFoundError
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
@@ -113,13 +114,23 @@ def prepare_disconnected_ocs_deployment():
         logger.info(f"Mirror images related to index image: {mirrored_index_image}")
         cmd = (
             f"oc adm catalog mirror {mirrored_index_image} -a {pull_secret_path} --insecure "
-            f"{config.DEPLOYMENT['mirror_registry']} --filter-by-os='.*'"
+            f"{config.DEPLOYMENT['mirror_registry']} --index-filter-by-os='.*'"
         )
-        exec_cmd(cmd, timeout=7200)
+        oc_acm_result = exec_cmd(cmd, timeout=7200)
+
+        for line in oc_acm_result.stdout.decode("utf-8").splitlines():
+            if "wrote mirroring manifests to" in line:
+                break
+        else:
+            raise NotFoundError(
+                "Manifests directory not printed to stdout of 'oc adm catalog mirror ...' command."
+            )
+        mirroring_manifests_dir = line.replace("wrote mirroring manifests to ", "")
+        logger.debug(f"Mirrored manifests directory: {mirroring_manifests_dir}")
 
         # create ImageContentSourcePolicy
         icsp_file = os.path.join(
-            f"{constants.MIRRORED_INDEX_IMAGE_NAME}-manifests",
+            f"{mirroring_manifests_dir}",
             "imageContentSourcePolicy.yaml",
         )
         exec_cmd(f"oc apply -f {icsp_file}")
