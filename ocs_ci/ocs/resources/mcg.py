@@ -676,7 +676,12 @@ class MCG:
         """
         backingstore_name_list = [backingstore.name for backingstore in backingstores]
         bc = f" --backingstores={','.join(backingstore_name_list)} --placement={placement}"
-        self.exec_mcg_cmd(f"bucketclass create {name}{bc}")
+        placement_parameter = (
+            f"{constants.PLACEMENT_BUCKETCLASS} "
+            if float(config.ENV_DATA["ocs_version"]) >= 4.7
+            else ""
+        )
+        self.exec_mcg_cmd(f"bucketclass create {placement_parameter}{name}{bc}")
 
     def check_if_mirroring_is_done(self, bucket_name, timeout=140):
         """
