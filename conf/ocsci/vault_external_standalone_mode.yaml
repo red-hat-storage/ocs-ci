@@ -2,6 +2,7 @@ DEPLOYMENT:
   kms_deployment: true
 
 ENV_DATA:
+  encryption_at_rest: true
   vault_deploy_mode: external
   KMS_PROVIDER: vault
   KMS_SERVICE_NAME: vault
@@ -14,3 +15,4 @@ ENV_DATA:
   VAULT_SKIP_VERIFY: 'false'
   VAULT_TLS_SERVER_NAME: ""
   VAULT_BACKEND_PATH: ""
+  VAULT_POLICY: ""

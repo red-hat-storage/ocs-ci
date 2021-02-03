@@ -4,12 +4,14 @@ currently supported KMSs: Vault
 
 """
 import logging
+import os
 
 import json
 import shlex
 import distro
 import tempfile
 import subprocess
+import base64
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -17,6 +19,8 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedVaultDeployMode,
     VaultPlatformNotSupported,
     VaultUnsealFailed,
+    VaultPathCreationFailed,
+    VaultPolicyCreationFailed,
 )
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
@@ -62,6 +66,7 @@ class Vault(KMS):
         self.vault_backend_path = None
         # Base64 encoded (with padding) token
         self.vault_path_token = None
+        self.vault_policy_name = None
 
     def deploy(self):
         """
@@ -88,7 +93,7 @@ class Vault(KMS):
 
         """
         self.vault_conf = self.gather_vault_config()
-        self.vault_server = self.vault_conf["VAULT_SERVER"]
+        self.vault_server = self.vault_conf["VAULT_ADDR"]
         self.port = self.vault_conf["PORT"]
         # Following vars needs to be gathered only in the case of
         # external vault
@@ -99,9 +104,19 @@ class Vault(KMS):
             self.vault_tls_server = self.vault_conf["VAULT_TLS_SERVER_NAME"]
         self.vault_root_token = self.vault_conf["VAULT_ROOT_TOKEN"]
 
+        # Update env vars for vault CLI usage
+        self.update_vault_env_vars()
         self.vault_prereq()
-        # TODO:
         self.create_ocs_vault_resources()
+
+    def update_vault_env_vars(self):
+        """
+        In order to run vault CLI we need following env vars
+        VAULT_ADDR, VAULT_TOKEN
+
+        """
+        os.environ["VAULT_ADDR"] = f"https://{self.vault_server}:{self.port}"
+        os.environ["VAULT_TOKEN"] = self.vault_root_token
 
     def create_ocs_vault_resources(self):
         """
@@ -143,7 +158,11 @@ class Vault(KMS):
 
         # create oc resource secret for token
         token_data = templating.load_yaml(constants.EXTERNAL_VAULT_KMS_TOKEN)
-        token_data["data"]["token"] = self.vault_path_token
+        # token has to base64 encoded (with padding)
+        token_data["data"]["token"] = base64.b64encode(
+            # encode() because b64encode expects a byte type
+            self.vault_path_token.encode()
+        ).decode()  # decode() because b64encode returns a byte type
         self.create_resource(token_data, prefix="token")
 
         # create ocs-kms-connection-details
@@ -153,8 +172,6 @@ class Vault(KMS):
         connection_data["data"][
             "VAULT_ADDR"
         ] = f"https://{self.vault_server}:{self.port}"
-        # TODO: generate backend path and token
-        # in vault_prereq
         connection_data["data"]["VAULT_BACKEND_PATH"] = self.vault_backend_path
         connection_data["data"]["VAULT_CACERT"] = self.ca_cert_name
         connection_data["data"]["VAULT_CLIENT_CERT"] = self.client_cert_name
@@ -236,9 +253,89 @@ class Vault(KMS):
         return outbuf["sealed"]
 
     def vault_create_backend_path(self):
-        # TODO: path creation, policy creation
-        # token generation for the policy
-        pass
+        """
+        create vault path to be used by OCS
+        """
+        if config.ENV_DATA.get("VAULT_BACKEND_PATH"):
+            self.vault_backend_path = config.ENV_DATA.get("VAULT_BACKEND_PATH")
+        else:
+            # Generate backend path name using prefix "ocs"
+            # "ocs-<cluster-id>"
+            self.cluster_id = self.get_cluster_id()
+            self.vault_backend_path = (
+                f"{constants.VAULT_DEFAULT_PATH_PREFIX}-{self.cluster_id}"
+            )
+        cmd = f"vault secrets enable -path={self.vault_backend_path} kv"
+        out = subprocess.check_output(shlex.split(cmd))
+        if "Success" in out.decode():
+            logger.info(f"vault path {self.vault_backend_path} created")
+        else:
+            raise VaultPathCreationFailed(
+                f"Failed to create path f{self.vault_backend_path}"
+            )
+        self.vault_create_policy()
+
+    def vault_create_policy(self):
+        """
+        Create a vault policy and generate token
+
+        """
+        policy = (
+            f'path "{self.vault_backend_path}/*" {{\n'
+            f'  capabilities = ["create", "read", "update","delete"]'
+            f"\n}}\n"
+            f'path "sys/mounts" {{\n'
+            f'capabilities = ["read"]\n'
+            f"}}"
+        )
+        vault_hcl = tempfile.NamedTemporaryFile(mode="w+", prefix="test", delete=False)
+        with open(vault_hcl.name, "w") as hcl:
+            hcl.write(policy)
+
+        if not config.ENV_DATA.get("VAULT_POLICY"):
+            self.vault_policy_name = (
+                f"{constants.VAULT_DEFAULT_POLICY_PREFIX}-" f"{self.cluster_id}"
+            )
+        else:
+            self.vault_policy_name = config.ENV_DATA.get("VAULT_POLICY")
+
+        cmd = f"vault policy write {self.vault_policy_name} {vault_hcl.name}"
+        out = subprocess.check_output(shlex.split(cmd))
+        if "Success" in out.decode():
+            logger.info(f"vault policy {self.vault_policy_name} created")
+        else:
+            raise VaultPolicyCreationFailed(
+                f"Failed to create policy f{self.vault_policy_name}"
+            )
+        self.vault_path_token = self.generate_vault_token()
+
+    def generate_vault_token(self):
+        """
+        Generate a token for self.vault_policy_name
+
+        Returns:
+            str: vault token
+
+        """
+        cmd = f"vault token create -policy={self.vault_policy_name} " f"--format=json"
+        out = subprocess.check_output(shlex.split(cmd))
+        json_out = json.loads(out)
+        return json_out["auth"]["client_token"]
+
+    def get_cluster_id(self):
+        """
+        Get cluster UUID
+        Not relying on metadata.json as user sometimes want to run
+        only with kubeconfig for some tests
+
+        Returns:
+            str: cluster UUID
+
+        """
+        cluster_id = run_cmd(
+            "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
+        )
+        return cluster_id
 
     def get_vault_cli(self):
         """

@@ -1216,6 +1216,7 @@ VAULT_DEFAULT_CLIENT_CERT = "ocs-kms-client-cert"
 VAULT_DEFAULT_CLIENT_KEY = "ocs-kms-client-key"
 VAULT_DEFAULT_NAMESPACE = ""
 VAULT_DEFAULT_PATH_PREFIX = "ocs"
+VAULT_DEFAULT_POLICY_PREFIX = "rook"
 VAULT_DEFAULT_TLS_SERVER = ""
 
 # min and max Noobaa endpoints
