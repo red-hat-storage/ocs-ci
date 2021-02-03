@@ -53,7 +53,11 @@ class OBC(object):
             kind="ObjectBucketClaim",
             resource_name=self.obc_name,
         ).get()
-        self.ob_name = obc_resource.get("spec").get("ObjectBucketName")
+        self.ob_name = obc_resource.get("spec").get(
+            "objectBucketName"
+            if float(config.ENV_DATA["ocs_version"]) >= 4.7
+            else "ObjectBucketName"
+        )
         self.bucket_name = obc_resource.get("spec").get("bucketName")
         ob_obj = OCP(
             namespace=self.namespace, kind="ObjectBucket", resource_name=self.ob_name
@@ -140,9 +144,9 @@ class ObjectBucket(ABC):
         return hash(self.name)
 
     def __eq__(self, other):
-        if type(other) == str:
+        if isinstance(other, str):
             return self.name == other
-        elif type(other) == ObjectBucket:
+        elif isinstance(other, ObjectBucket):
             return self.name == other.name
 
     def delete(self, verify=True):
