@@ -1,6 +1,8 @@
 """
 All the flexy related classes and functionality lives here
 """
+import base64
+import binascii
 import logging
 import os
 import yaml
@@ -211,11 +213,23 @@ class FlexyBase(object):
             self.flexy_host_private_conf_dir_path,
             self.flexy_private_conf_branch,
         )
+        # prepare flexy private repo keyfile (if it is base64 encoded)
+        keyfile = os.path.expanduser(constants.FLEXY_GIT_CRYPT_KEYFILE)
+        try:
+            with open(keyfile, "rb") as fd:
+                keyfile_content = base64.b64decode(fd.read())
+            logger.info(
+                "Private flexy repository git crypt keyfile is base64 encoded. "
+                f"Decoding it and saving to the same place ({keyfile})"
+            )
+            with open(keyfile, "wb") as fd:
+                fd.write(keyfile_content)
+        except binascii.Error:
+            logger.info(
+                f"Private flexy repository git crypt keyfile is already prepared ({keyfile})."
+            )
         # git-crypt unlock /path/to/keyfile
-        cmd = (
-            f"git-crypt unlock "
-            f"{os.path.expanduser(constants.FLEXY_GIT_CRYPT_KEYFILE)}"
-        )
+        cmd = f"git-crypt unlock {keyfile}"
         exec_cmd(cmd, cwd=self.flexy_host_private_conf_dir_path)
         logger.info("Unlocked the git repo")
 
