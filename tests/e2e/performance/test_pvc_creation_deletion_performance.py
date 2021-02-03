@@ -110,28 +110,28 @@ class TestPVCDeletionPerformance(E2ETest):
             deletion_time_measures: A list of PVC deletion time measurements
 
         """
-        accepted_creation_deviation_percent = 5
+        accepted_creation_deviation_percent = 20
         creation_average = statistics.mean(creation_time_measures)
         log.info(
             f"The average creation time for the sampled {len(creation_time_measures)} PVCs is {creation_average}."
         )
 
         creation_st_deviation = statistics.stdev(creation_time_measures)
-        creation_st_deviation_percent = abs(creation_st_deviation - creation_average) / creation_average * 100.0
+        creation_st_deviation_percent = creation_st_deviation / creation_average * 100.0
         if creation_st_deviation_percent > accepted_creation_deviation_percent:
             raise ex.PerformanceException(
-                f"PVC creation time deviation is {creation_st_deviation_percent}%"
+                f"PVC creation time deviation is {creation_st_deviation_percent}% "
                 f"and is greater than the allowed {accepted_creation_deviation_percent}%."
             )
 
-        accepted_deletion_deviation_percent = 10
+        accepted_deletion_deviation_percent = 20
         deletion_average = statistics.mean(deletion_time_measures)
         log.info(
             f"The average deletion time for the sampled {len(deletion_time_measures)} PVCs is {deletion_average}."
         )
 
         deletion_st_deviation = statistics.stdev(deletion_time_measures)
-        deletion_st_deviation_percent = abs(deletion_st_deviation - deletion_average) / deletion_average * 100.0
+        deletion_st_deviation_percent = deletion_st_deviation / deletion_average * 100.0
 
         if deletion_st_deviation_percent > accepted_deletion_deviation_percent:
             raise ex.PerformanceException(
