@@ -1087,7 +1087,7 @@ def get_worker_nodes_not_in_ocs():
 
 
 def node_replacement_verification_steps_user_side(
-    old_node_name, new_node_name, old_osd_id
+    old_node_name, new_node_name, new_osd_node_name, old_osd_id
 ):
     """
     Check the verification steps that the user should perform after the process
@@ -1096,6 +1096,7 @@ def node_replacement_verification_steps_user_side(
     Args:
         old_node_name (str): The name of the old node that has been deleted
         new_node_name (str): The name of the new node that has been created
+        new_osd_node_name (str): The name of the new node that has been added to osd nodes
         old_osd_id (str): The old osd id
 
     Returns:
@@ -1124,7 +1125,7 @@ def node_replacement_verification_steps_user_side(
         log.warning("Not all the pods in running state")
         return False
 
-    new_osd_pod = get_node_pods(new_node_name, pods_to_search=pod.get_osd_pods())[0]
+    new_osd_pod = get_node_pods(new_osd_node_name, pods_to_search=pod.get_osd_pods())[0]
     if not new_osd_pod:
         log.warning("Didn't find any osd pods running on the new node")
         return False
@@ -1141,7 +1142,9 @@ def node_replacement_verification_steps_user_side(
     return True
 
 
-def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
+def node_replacement_verification_steps_ceph_side(
+    old_node_name, new_node_name, new_osd_node_name
+):
     """
     Check the verification steps from the Ceph side, after the process
     of node replacement as described in the docs
@@ -1149,6 +1152,7 @@ def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
     Args:
         old_node_name (str): The name of the old node that has been deleted
         new_node_name (str): The name of the new node that has been created
+        new_osd_node_name (str): The name of the new node that has been added to osd nodes
 
     Returns:
         bool: True if all the verification steps passed. False otherwise
@@ -1158,7 +1162,7 @@ def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
         log.warning("Hostname didn't change")
         return False
 
-    wait_for_nodes_status([new_node_name])
+    wait_for_nodes_status([new_node_name, new_osd_node_name])
     # It can take some time until all the ocs pods are up and running
     # after the process of node replacement
     if not pod.wait_for_pods_to_be_running():
@@ -1167,17 +1171,16 @@ def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
 
     ct_pod = pod.get_ceph_tools_pod()
     ceph_osd_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd status")
-    if new_node_name not in ceph_osd_status:
-        log.warning("new node name not found in 'ceph osd status' output")
+    if new_osd_node_name not in ceph_osd_status:
+        log.warning("new osd node name not found in 'ceph osd status' output")
         return False
     if old_node_name in ceph_osd_status:
         log.warning("old node name found in 'ceph osd status' output")
         return False
 
-    osd_pods_obj = pod.get_osd_pods()
-    osd_node_names = [pod.get_pod_node(p).name for p in osd_pods_obj]
-    if new_node_name not in osd_node_names:
-        log.warning("the new hostname not found in osd node names")
+    osd_node_names = get_osd_running_nodes()
+    if new_osd_node_name not in osd_node_names:
+        log.warning("the new osd hostname not found in osd node names")
         return False
     if old_node_name in osd_node_names:
         log.warning("the old hostname found in osd node names")
@@ -1430,3 +1433,34 @@ def get_node_hostname_label(node_obj):
 
     """
     return node_obj.get().get("metadata").get("labels").get(constants.HOSTNAME_LABEL)
+
+
+def wait_for_new_osd_node(old_osd_node_names, timeout=180):
+    """
+    Wait for the new osd node to appear.
+
+    Args:
+        old_osd_node_names (list): List of the old osd node names
+        timeout (int): time to wait for the new osd node to appear
+
+    Returns:
+        str: The new osd node name if the new osd node appear in the specific timeout.
+            Else it returns None
+
+    """
+    try:
+        for current_osd_node_names in TimeoutSampler(
+            timeout=timeout, sleep=10, func=get_osd_running_nodes
+        ):
+            new_osd_node_names = [
+                node_name
+                for node_name in current_osd_node_names
+                if node_name not in old_osd_node_names
+            ]
+            if new_osd_node_names:
+                log.info(f"New osd node is {new_osd_node_names[0]}")
+                return new_osd_node_names[0]
+
+    except TimeoutExpiredError:
+        log.warning(f"New osd node didn't appear after {timeout} seconds")
+        return None
