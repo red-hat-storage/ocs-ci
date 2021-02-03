@@ -100,7 +100,7 @@ class PASTest(BaseTest):
 
     def set_storageclass(self, interface):
         """
-        Setting the benchmark CDR storageclass
+        Setting the benchmark CRD storageclass
 
         Args:
             interface (str): The interface which will used in the test
