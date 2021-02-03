@@ -174,7 +174,7 @@ EXTERNAL_MODE:
 # This section is related to ui testing with selenium
 UI_SELENIUM:
   browser_type: "chrome"
-  chrome_type: "chromium"
+  chrome_type: "google-chrome"
   headless: True
   screenshot: True
   ignore_ssl: True
