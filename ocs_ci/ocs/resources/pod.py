@@ -69,7 +69,8 @@ class Pod(OCS):
         """
         self.pod_data = kwargs
         # configure http[s]_proxy env variable, if applicable
-        update_container_with_proxy_env(self.pod_data)
+        if config.DEPLOYMENT.get("disconnected"):
+            update_container_with_proxy_env(self.pod_data)
         super(Pod, self).__init__(**kwargs)
 
         with tempfile.NamedTemporaryFile(
