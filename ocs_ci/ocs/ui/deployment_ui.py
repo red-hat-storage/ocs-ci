@@ -138,7 +138,9 @@ class DeploymentUI(PageNavigator):
         """
         try:
             catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
-            image = config.DEPLOYMENT["default_ocs_registry_image"]
+            image = config.DEPLOYMENT.get(
+                "ocs_registry_image", config.DEPLOYMENT["default_ocs_registry_image"]
+            )
             catalog_source_data["spec"]["image"] = image
             catalog_source_manifest = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="catalog_source_manifest", delete=False
