@@ -772,11 +772,14 @@ class Deployment(object):
             pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
             cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
             # Check for Ceph pods
+            mon_pod_timeout = (
+                900 if self.platform == constants.IBMCLOUD_PLATFORM else 600
+            )
             assert pod.wait_for_resource(
                 condition="Running",
                 selector="app=rook-ceph-mon",
                 resource_count=3,
-                timeout=600,
+                timeout=mon_pod_timeout,
             )
             assert pod.wait_for_resource(
                 condition="Running", selector="app=rook-ceph-mgr", timeout=600
