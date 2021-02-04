@@ -284,7 +284,7 @@ class DeploymentUI(PageNavigator):
             logger.info(f"kms_token: {self.kms_token}")
             self.do_send_keys(text=self.kms_token, locator=self.dep_loc["kms_token"])
 
-    def verify_ocs_installation(self, timeout_install=300, sleep=20):
+    def verify_ocs_operator_succeeded(self, timeout_install=300, sleep=20):
         """
         Verify OCS Installation
 
@@ -317,5 +317,5 @@ class DeploymentUI(PageNavigator):
         """
         self.create_catalog_source_yaml()
         self.install_ocs_operator()
-        self.verify_ocs_installation()
+        self.verify_ocs_operator_succeeded()
         self.install_storage_cluster()
