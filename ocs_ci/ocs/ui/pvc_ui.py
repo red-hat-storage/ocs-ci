@@ -1,4 +1,3 @@
-import time
 import logging
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
@@ -71,12 +70,7 @@ class PvcUI(PageNavigator):
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
         logger.info(f"Go to PVC {pvc_name} Page")
-        for i in range(2):
-            try:
-                time.sleep(2)
-                self.do_click(self.pvc_loc["pvc_test"])
-            except Exception:
-                pass
+        self.do_click(self.pvc_loc["pvc_test"])
 
         logger.info("Click on Actions")
         self.do_click(self.pvc_loc["pvc_actions"])

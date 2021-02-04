@@ -284,6 +284,24 @@ class PageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         self.do_click(locator=self.page_nav["volumesnapshotcontents_page"])
 
+    def navigate_object_buckets_page(self):
+        """
+        Navigate to Object Buckets Page
+
+        """
+        logger.info("Navigate to Object Buckets Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["object_buckets_page"])
+
+    def navigate_object_bucket_claims_page(self):
+        """
+        Navigate to Object Bucket Claims Page
+
+        """
+        logger.info("Navigate to Object Bucket Claims Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["object_bucket_claims_page"])
+
     def navigate_alerting_page(self):
         """
         Navigate to Alerting Page
@@ -344,7 +362,7 @@ def login_ui():
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if headless:
+        if not headless:
             chrome_options.add_argument("--headless")
 
         chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")

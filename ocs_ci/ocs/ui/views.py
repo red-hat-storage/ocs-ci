@@ -54,8 +54,6 @@ deployment_4_7 = {
 }
 
 pvc = {
-    "storage_tab": ("//button[normalize-space(text())='Storage']", By.XPATH),
-    "pvc_page": ("Persistent Volume Claims", By.LINK_TEXT),
     "pvc_project_selector": (
         'button[class="pf-c-dropdown__toggle pf-m-plain"]',
         By.CSS_SELECTOR,
@@ -64,34 +62,34 @@ pvc = {
         'a[id="openshift-storage-link"]',
         By.CSS_SELECTOR,
     ),
-    "pvc_create_button": ("//*[@id='yaml-create']", By.XPATH),
-    "pvc_storage_class_selector": ("//*[@id='storageclass-dropdown']", By.XPATH),
+    "pvc_create_button": ('button[data-test="item-create"]', By.CSS_SELECTOR),
+    "pvc_storage_class_selector": (
+        'button[data-test="storageclass-dropdown"]',
+        By.CSS_SELECTOR,
+    ),
     "ocs-storagecluster-ceph-rbd": (
-        "//*[@id='ocs-storagecluster-ceph-rbd-link']/span",
-        By.XPATH,
+        'a[id="ocs-storagecluster-ceph-rbd-link"]',
+        By.CSS_SELECTOR,
     ),
     "ocs-storagecluster-cephfs": (
-        "//*[@id='ocs-storagecluster-cephfs-link']/span",
-        By.XPATH,
+        'a[id="ocs-storagecluster-cephfs-link"]',
+        By.CSS_SELECTOR,
     ),
-    "pvc_name": ("//*[@id='pvc-name']", By.XPATH),
+    "pvc_name": ('input[data-test="pvc-name"]', By.CSS_SELECTOR),
     "ReadWriteOnce": (
-        "//*[@id='content-scrollable']/div/form/div[1]/div[3]/label[1]/input",
-        By.XPATH,
+        'input[data-test="Single User (RWO)-radio-input"]',
+        By.CSS_SELECTOR,
     ),
     "ReadWriteMany": (
-        "//*[@id='content-scrollable']/div/form/div[1]/div[3]/label[2]/input",
-        By.XPATH,
+        'input[data-test="Shared Access (RWX)-radio-input"]',
+        By.CSS_SELECTOR,
     ),
-    "ReadOnlyMany": (
-        "//*[@id='content-scrollable']/div/form/div[1]/div[3]/label[3]/input",
-        By.XPATH,
-    ),
-    "pvc_size": ("//*[@id='request-size-input']", By.XPATH),
-    "pvc_create": ("//*[@id='save-changes']", By.XPATH),
+    "ReadOnlyMany": ('input[data-test="Read Only (ROX)-radio-input"]', By.CSS_SELECTOR),
+    "pvc_size": ('input[data-test="pvc-size"]', By.CSS_SELECTOR),
+    "pvc_create": ('button[data-test="create-pvc"]', By.CSS_SELECTOR),
     "pvc_actions": ('button[data-test-id="actions-menu-button"]', By.CSS_SELECTOR),
     "pvc_delete": (
-        'button[data-test-action="Delete Persistent Volume Claim"]',
+        'button[data-test-action="Delete PersistentVolumeClaim"]',
         By.CSS_SELECTOR,
     ),
     "confirm_pvc_deletion": ('button[data-test="confirm-action"]', By.CSS_SELECTOR),
@@ -116,6 +114,8 @@ page_nav = {
     "volumesnapshots_page": ("VolumeSnapshots", By.LINK_TEXT),
     "volumesnapshotclasses_page": ("VolumeSnapshotClasses", By.LINK_TEXT),
     "volumesnapshotcontents_page": ("VolumeSnapshotContents", By.LINK_TEXT),
+    "object_buckets_page": ("Object Buckets", By.LINK_TEXT),
+    "object_bucket_claims_page": ("Object Bucket Claims", By.LINK_TEXT),
     "Monitoring": ("//button[text()='Monitoring']", By.XPATH),
     "alerting_page": ("Alerting", By.LINK_TEXT),
     "metrics_page": ("Metrics", By.LINK_TEXT),
