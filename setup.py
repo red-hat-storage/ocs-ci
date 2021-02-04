@@ -66,6 +66,7 @@ setup(
         # greenlet 1.0.0 is broken on ppc64le
         # https://github.com/python-greenlet/greenlet/issues/230
         "greenlet<1.0.0",
+        "distro>=1.5.0",
     ],
     entry_points={
         "console_scripts": [
