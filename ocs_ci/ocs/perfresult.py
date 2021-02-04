@@ -95,7 +95,7 @@ class PerfResult:
 
         log.info(f"Writing all data to ES server {self.es}")
         self.add_key("all_results", self.all_results)
-        log.info(
+        log.debug(
             f"Params : index={self.new_index}, "
             f"doc_type=_doc, body={self.results}, id={self.uuid}"
         )
