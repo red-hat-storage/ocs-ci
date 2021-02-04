@@ -362,7 +362,7 @@ def login_ui():
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if not headless:
+        if headless:
             chrome_options.add_argument("--headless")
 
         chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
