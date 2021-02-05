@@ -33,9 +33,12 @@ def get_cluster_proxies():
         http_proxy = proxy_obj.get("spec", {}).get("httpProxy", "")
         https_proxy = proxy_obj.get("spec", {}).get("httpsProxy", "")
         no_proxy = proxy_obj.get("status", {}).get("noProxy", "")
-    logger.info("Using http_proxy: '%s'", http_proxy)
-    logger.info("Using https_proxy: '%s'", https_proxy)
-    logger.info("Using no_proxy: '%s'", no_proxy)
+        config.ENV_DATA["http_proxy"] = http_proxy
+        config.ENV_DATA["https_proxy"] = https_proxy
+        config.ENV_DATA["no_proxy"] = no_proxy
+    logger.debug("Using http_proxy: '%s'", http_proxy)
+    logger.debug("Using https_proxy: '%s'", https_proxy)
+    logger.debug("Using no_proxy: '%s'", no_proxy)
     return http_proxy, https_proxy, no_proxy
 
 
