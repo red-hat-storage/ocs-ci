@@ -186,6 +186,11 @@ skipif_openshift_dedicated = pytest.mark.skipif(
     reason="Test will not run on Openshift dedicated cluster",
 )
 
+skipif_ibm_cloud = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == "ibm_cloud",
+    reason="Test will not run on IBM cloud",
+)
+
 skipif_external_mode = pytest.mark.skipif(
     config.DEPLOYMENT.get("external_mode") is True,
     reason="Test will not run on External Mode cluster",
