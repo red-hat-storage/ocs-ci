@@ -268,8 +268,10 @@ def ocs_install_verification(
             "Verifying ceph osd tree output and checking for device set PVC names "
             "in the output."
         )
-
-        if config.DEPLOYMENT.get("local_storage"):
+        # https://github.com/red-hat-storage/ocs-ci/issues/3820
+        if config.DEPLOYMENT.get("local_storage") or config.DEPLOYMENT.get(
+            "ui_deployment"
+        ):
             deviceset_pvcs = [osd.get_node() for osd in get_osd_pods()]
             # removes duplicate hostname
             deviceset_pvcs = list(set(deviceset_pvcs))
