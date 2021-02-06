@@ -263,15 +263,15 @@ def ocs_install_verification(
     log.info("Verified node and provisioner secret names in storage class.")
 
     # Verify ceph osd tree output
-    if not config.DEPLOYMENT["external_mode"]:
+    # https://github.com/red-hat-storage/ocs-ci/issues/3820
+    if (not config.DEPLOYMENT["external_mode"]) and (
+        not config.DEPLOYMENT.get("ui_deployment")
+    ):
         log.info(
             "Verifying ceph osd tree output and checking for device set PVC names "
             "in the output."
         )
-        # https://github.com/red-hat-storage/ocs-ci/issues/3820
-        if config.DEPLOYMENT.get("local_storage") or config.DEPLOYMENT.get(
-            "ui_deployment"
-        ):
+        if config.DEPLOYMENT.get("local_storage"):
             deviceset_pvcs = [osd.get_node() for osd in get_osd_pods()]
             # removes duplicate hostname
             deviceset_pvcs = list(set(deviceset_pvcs))
