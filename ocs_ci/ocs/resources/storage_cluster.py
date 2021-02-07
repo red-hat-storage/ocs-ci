@@ -262,45 +262,44 @@ def ocs_install_verification(
     )
     log.info("Verified node and provisioner secret names in storage class.")
 
-    # Verify ceph osd tree output
     # https://github.com/red-hat-storage/ocs-ci/issues/3820
-    if (not config.DEPLOYMENT["external_mode"]) and (
-        not config.DEPLOYMENT.get("ui_deployment")
-    ):
-        log.info(
-            "Verifying ceph osd tree output and checking for device set PVC names "
-            "in the output."
-        )
-        if config.DEPLOYMENT.get("local_storage"):
-            deviceset_pvcs = [osd.get_node() for osd in get_osd_pods()]
-            # removes duplicate hostname
-            deviceset_pvcs = list(set(deviceset_pvcs))
-        else:
-            deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
+    if not config.DEPLOYMENT.get("ui_deployment"):
+        # Verify ceph osd tree output
+        if not config.DEPLOYMENT["external_mode"]:
+            log.info(
+                "Verifying ceph osd tree output and checking for device set PVC names "
+                "in the output."
+            )
+            if config.DEPLOYMENT.get("local_storage"):
+                deviceset_pvcs = [osd.get_node() for osd in get_osd_pods()]
+                # removes duplicate hostname
+                deviceset_pvcs = list(set(deviceset_pvcs))
+            else:
+                deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
 
-        ct_pod = get_ceph_tools_pod()
-        osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree", format="json")
-        schemas = {
-            "root": constants.OSD_TREE_ROOT,
-            "rack": constants.OSD_TREE_RACK,
-            "host": constants.OSD_TREE_HOST,
-            "osd": constants.OSD_TREE_OSD,
-            "region": constants.OSD_TREE_REGION,
-            "zone": constants.OSD_TREE_ZONE,
-        }
-        schemas["host"]["properties"]["name"] = {"enum": deviceset_pvcs}
-        for item in osd_tree["nodes"]:
-            validate(instance=item, schema=schemas[item["type"]])
-            if item["type"] == "host":
-                deviceset_pvcs.remove(item["name"])
-        assert not deviceset_pvcs, (
-            f"These device set PVCs are not given in ceph osd tree output "
-            f"- {deviceset_pvcs}"
-        )
-        log.info(
-            "Verified ceph osd tree output. Device set PVC names are given in the "
-            "output."
-        )
+            ct_pod = get_ceph_tools_pod()
+            osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree", format="json")
+            schemas = {
+                "root": constants.OSD_TREE_ROOT,
+                "rack": constants.OSD_TREE_RACK,
+                "host": constants.OSD_TREE_HOST,
+                "osd": constants.OSD_TREE_OSD,
+                "region": constants.OSD_TREE_REGION,
+                "zone": constants.OSD_TREE_ZONE,
+            }
+            schemas["host"]["properties"]["name"] = {"enum": deviceset_pvcs}
+            for item in osd_tree["nodes"]:
+                validate(instance=item, schema=schemas[item["type"]])
+                if item["type"] == "host":
+                    deviceset_pvcs.remove(item["name"])
+            assert not deviceset_pvcs, (
+                f"These device set PVCs are not given in ceph osd tree output "
+                f"- {deviceset_pvcs}"
+            )
+            log.info(
+                "Verified ceph osd tree output. Device set PVC names are given in the "
+                "output."
+            )
 
     # TODO: Verify ceph osd tree output have osd listed as ssd
     # TODO: Verify ceph osd tree output have zone or rack based on AZ
