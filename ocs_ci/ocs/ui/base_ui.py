@@ -157,6 +157,7 @@ class BaseUI:
         self.driver.save_screenshot(filename)
         # WA - https://bugs.chromium.org/p/chromedriver/issues/detail?id=628
         self.driver.execute_script("document.body.style.zoom='100%'")
+        time.sleep(0.5)
 
 
 class PageNavigator(BaseUI):
