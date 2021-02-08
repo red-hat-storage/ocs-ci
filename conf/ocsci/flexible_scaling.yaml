@@ -1,0 +1,6 @@
+---
+# This configuration file is used for enable flexible scaling in the deployment
+# Valid only for OCS >= 4.7
+# https://issues.redhat.com/browse/KNIP-1544
+ENV_DATA:
+  enable_flexible_scaling: true
