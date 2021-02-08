@@ -34,7 +34,7 @@ deployment_4_7 = {
         By.CSS_SELECTOR,
     ),
     "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
-    "gp2_sc": ('a[id="gp2"]', By.CSS_SELECTOR),
+    "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
     "osd_size_dropdown": ('button[data-test-id="dropdown-button"]', By.CSS_SELECTOR),
     "512": ('button[data-test-dropdown-menu="512Gi"]', By.CSS_SELECTOR),
     "2048": ('button[data-test-dropdown-menu="2Ti"]', By.CSS_SELECTOR),
