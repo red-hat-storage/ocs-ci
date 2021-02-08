@@ -682,7 +682,7 @@ class Deployment(object):
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             deployment_obj.storage_class_type = "thin_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
-            deployment_obj.storage_class_type = "thin_sc"
+            deployment_obj.storage_class_type = "gp2_sc"
 
         device_size = str(config.ENV_DATA.get("device_size"))
         if device_size in ("512", "2048", "4096"):
