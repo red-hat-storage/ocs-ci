@@ -575,8 +575,21 @@ class Deployment(object):
 
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
 
+<<<<<<< HEAD
         deviceset_data = cluster_data["spec"]["storageDeviceSets"][0]
         device_size = int(config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE))
+=======
+        # Flexible scaling is available from version 4.7
+        if config.ENV_DATA.get("enable_flexible_scaling") and config.DEPLOYMENT.get(
+            "local_storage"
+        ):
+            ocs_version = float(config.ENV_DATA["ocs_version"])
+            if ocs_version < 4.7:
+                error_message = "Flexible scaling can be enabled only on OCS >= 4.7!"
+                logger.error(error_message)
+                raise UnsupportedFeatureError(error_message)
+            cluster_data["spec"]["flexibleScaling"] = True
+>>>>>>> Delete "else" statment
 
         # set size of request for storage
         if self.platform.lower() == constants.BAREMETAL_PLATFORM:
