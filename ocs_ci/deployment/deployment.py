@@ -580,16 +580,16 @@ class Deployment(object):
         device_size = int(config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE))
 =======
         # Flexible scaling is available from version 4.7
-        if config.ENV_DATA.get("enable_flexible_scaling") and config.DEPLOYMENT.get(
-            "local_storage"
-        ):
-            ocs_version = float(config.ENV_DATA["ocs_version"])
-            if ocs_version < 4.7:
-                error_message = "Flexible scaling can be enabled only on OCS >= 4.7!"
-                logger.error(error_message)
-                raise UnsupportedFeatureError(error_message)
+        ocs_version = float(config.ENV_DATA["ocs_version"])
+        if config.DEPLOYMENT.get("local_storage") and ocs_version >= 4.7:
             cluster_data["spec"]["flexibleScaling"] = True
+<<<<<<< HEAD
 >>>>>>> Delete "else" statment
+=======
+            # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
+            cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
+            cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
+>>>>>>> On LSO cluster (OCS4.7<=version)
 
         # set size of request for storage
         if self.platform.lower() == constants.BAREMETAL_PLATFORM:
