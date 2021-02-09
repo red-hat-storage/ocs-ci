@@ -64,7 +64,6 @@ from ocs_ci.utility.utils import (
     add_stage_cert,
     modify_csv,
     wait_for_machineconfigpool_status,
-    apply_ssd_tuning_azure,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -135,11 +134,6 @@ class Deployment(object):
         if not config.ENV_DATA["skip_ocs_deployment"]:
             try:
                 self.deploy_ocs()
-
-                # WA for Bug 1909793
-                ocs_version = float(config.ENV_DATA["ocs_version"])
-                if self.platform == constants.AZURE_PLATFORM and ocs_version < 4.7:
-                    apply_ssd_tuning_azure()
 
                 if config.REPORTING["collect_logs_on_success_run"]:
                     collect_ocs_logs("deployment", ocp=False, status_failure=False)
