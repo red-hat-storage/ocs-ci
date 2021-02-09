@@ -281,6 +281,22 @@ class VaultPolicyCreationFailed(Exception):
     pass
 
 
+class KMSNotSupported(Exception):
+    pass
+
+
+class KMSConnectionDetailsError(Exception):
+    pass
+
+
+class KMSTokenError(Exception):
+    pass
+
+
+class KMSResourceNotCleanedup(Exception):
+    pass
+
+
 class UnhealthyBucket(Exception):
     pass
 

@@ -8,24 +8,27 @@ import os
 
 import json
 import shlex
-import distro
 import tempfile
 import subprocess
 import base64
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
     UnsupportedVaultDeployMode,
-    VaultPlatformNotSupported,
     VaultUnsealFailed,
     VaultPathCreationFailed,
     VaultPolicyCreationFailed,
+    KMSNotSupported,
+    KMSConnectionDetailsError,
+    KMSTokenError,
+    KMSResourceNotCleanedup,
 )
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     load_auth_config,
     run_cmd,
+    get_vault_cli,
 )
 
 logger = logging.getLogger(__name__)
@@ -92,6 +95,17 @@ class Vault(KMS):
             exceptions.FailedVaultDeployment
 
         """
+        self.gather_init_vault_conf()
+        # Update env vars for vault CLI usage
+        self.update_vault_env_vars()
+        self.vault_prereq()
+        self.create_ocs_vault_resources()
+
+    def gather_init_vault_conf(self):
+        """
+        Gather vault configuration and init the vars
+
+        """
         self.vault_conf = self.gather_vault_config()
         self.vault_server = self.vault_conf["VAULT_ADDR"]
         self.port = self.vault_conf["PORT"]
@@ -103,11 +117,6 @@ class Vault(KMS):
             self.client_key_base64 = self.vault_conf["VAULT_CLIENT_KEY_BASE64"]
             self.vault_tls_server = self.vault_conf["VAULT_TLS_SERVER_NAME"]
         self.vault_root_token = self.vault_conf["VAULT_ROOT_TOKEN"]
-
-        # Update env vars for vault CLI usage
-        self.update_vault_env_vars()
-        self.vault_prereq()
-        self.create_ocs_vault_resources()
 
     def update_vault_env_vars(self):
         """
@@ -205,7 +214,7 @@ class Vault(KMS):
         like unsealing the vault, path creation and token creation
 
         """
-        self.get_vault_cli()
+        get_vault_cli()
         self.vault_unseal()
         self.vault_create_backend_path()
 
@@ -337,28 +346,6 @@ class Vault(KMS):
         )
         return cluster_id
 
-    def get_vault_cli(self):
-        """
-        Download vault based on platform
-        basically for CLI purpose
-
-        """
-        if distro.linux_distribution == "CentOS Linux":
-            deps = " ".join(constants.VAULT_CENTOS_DEPS)
-            cmd = f"sudo yum install -y {deps} "
-            run_cmd(cmd)
-            cmd = (
-                f"sudo yum-config-manager --add-repo " f"{constants.VAULT_CENTOS_REPO}"
-            )
-            run_cmd(cmd)
-            cmd = "sudo yum -y install vault"
-            run_cmd(cmd)
-        else:
-            raise (
-                VaultPlatformNotSupported,
-                "Vault CLI for this platform not supported",
-            )
-
     def deploy_vault_internal(self):
         """
         This function takes care of deployment and configuration for
@@ -379,10 +366,138 @@ class Vault(KMS):
             vault_conf = load_auth_config()["vault"]
             return vault_conf
 
+    def get_vault_backend_path(self):
+        """
+        Fetch the vault backend path used for this deployment
+        This can be obtained from kubernetes secret resource
+        'ocs-kms-connection-details'
+
+        apiVersion: v1
+        data:
+          KMS_PROVIDER: vault
+          KMS_SERVICE_NAME: vault
+          VAULT_ADDR: https://xx.xx.xx.xx:8200
+          VAULT_BACKEND_PATH: ocs
+
+        """
+        if not self.vault_backend_path:
+            connection_details = ocp.OCP(
+                kind="ConfigMap",
+                resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+            try:
+                self.vault_backend_path = connection_details.get().get("data")[
+                    "VAULT_BACKEND_PATH"
+                ]
+            except IndexError:
+                raise KMSConnectionDetailsError("KMS connection details not available")
+
+    def get_vault_path_token(self):
+        """
+        Fetch token from kubernetes secret
+        we need this to find the vault policy
+        default name in case of ocs is 'ocs-kms-token'
+
+        apiVersion: v1
+        data:
+          token: cy5DRXBKV0lVbzNFQjM1VHlGMFNURzZQWms=
+        kind: Secret
+        metadata:
+          name: ocs-kms-token
+          namespace: openshift-storage
+          type: Opaque
+
+        """
+        if not self.vault_path_token:
+            vault_token = ocp.OCP(
+                kind="Secret",
+                resource_name=constants.VAULT_KMS_TOKEN_RESOURCE,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+            try:
+                token = vault_token.get().get()["data"]["token"]
+                self.vault_path_token = base64.b64decode(token).decode()
+            except IndexError:
+                raise KMSTokenError("Couldn't find KMS token")
+
+    def get_vault_policy(self):
+        """
+        Get the policy name based on token from vault
+
+        """
+        if not self.vault_policy_name:
+            cmd = f"vault token lookup {self.vault_path_token}"
+            out = subprocess.check_output(shlex.split(cmd))
+            json_out = json.loads(out)
+            for policy in json_out["data"]["policies"]:
+                if self.cluster_id in policy:
+                    self.vault_policy_name = policy
+
+    def remove_vault_backend_path(self):
+        """
+        remove vault path
+
+        """
+        cmd = f"vault secrets disable {self.vault_backend_path}"
+        subprocess.check_output(shlex.split(cmd))
+        # Check if path doesn't appear in the list
+        cmd = "vault secrets list --format=json"
+        out = subprocess.check_output(shlex.split(cmd))
+        json_out = json.loads(out)
+        for path in json_out.keys():
+            if self.vault_backend_path in path:
+                raise KMSResourceNotCleanedup(
+                    f"Path {self.vault_backend_path} not deleted"
+                )
+        logger.info(f"Vault path {self.vault_backend_path} deleted")
+
+    def remove_vault_policy(self):
+        """
+        Cleanup the policy we used
+
+        """
+        cmd = f"vault policy delete {self.vault_policy_name} "
+        subprocess.check_output(shlex.split(cmd))
+        # Check if policy still exists
+        cmd = "vault policy list --format=json"
+        out = subprocess.check_output(shlex.split(cmd))
+        json_out = json.loads(out)
+        if self.vault_policy_name in json_out:
+            raise KMSResourceNotCleanedup(
+                f"Policy {self.vault_policy_name} not deleted"
+            )
+        logger.info(f"Vault policy {self.vault_policy_name} deleted")
+
+    def cleanup(self):
+        """
+        Cleanup the backend resources in case of external
+
+        """
+        if not self.vault_server:
+            self.gather_init_vault_conf()
+        # TODO:
+        # get vault path
+        self.get_vault_backend_path()
+        # from token secret get token
+        self.get_vault_path_token()
+        # from token get policy
+        if not self.cluster_id:
+            self.cluster_id = self.get_cluster_id()
+        self.get_vault_policy()
+        # Delete the policy and backend path from vault
+        # we need root token of vault in the env
+        self.update_vault_env_vars()
+        self.remove_vault_backend_path()
+        self.remove_vault_policy()
+
 
 kms_map = {"vault": Vault}
 
 
 def get_kms_deployment():
     provider = config.DEPLOYMENT["kms_provider"]
-    return kms_map[provider]()
+    try:
+        return kms_map[provider]()
+    except KeyError:
+        raise KMSNotSupported("Not a supported KMS deployment")

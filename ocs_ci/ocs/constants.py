@@ -1207,8 +1207,8 @@ PRODUCTION_JOBS_PREFIX = ["jnk"]
 CLOUD_MNGR_PLATFORMS = ["AWS", "GCP", "AZURE", "IBMCOS"]
 
 # Vault related configurations
-VAULT_CENTOS_DEPS = ["yum-utils"]
-VAULT_CENTOS_REPO = "https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo"
+VAULT_VERSION_INFO_URL = "https://github.com/hashicorp/vault/releases/latest"
+VAULT_DOWNLOAD_BASE_URL = "https://releases.hashicorp.com/vault/"
 
 # Vault related constants
 VAULT_DEFAULT_CA_CERT = "ocs-kms-ca-secret"
@@ -1218,6 +1218,8 @@ VAULT_DEFAULT_NAMESPACE = ""
 VAULT_DEFAULT_PATH_PREFIX = "ocs"
 VAULT_DEFAULT_POLICY_PREFIX = "rook"
 VAULT_DEFAULT_TLS_SERVER = ""
+VAULT_KMS_CONNECTION_DETAILS_RESOURCE = "ocs-kms-connection-details"
+VAULT_KMS_TOKEN_RESOURCE = "ocs-kms-token"
 
 # min and max Noobaa endpoints
 MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1

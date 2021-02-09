@@ -39,6 +39,7 @@ from ocs_ci.ocs.exceptions import (
     UnavailableBuildException,
     UnexpectedImage,
     UnsupportedOSType,
+    VaultPlatformNotSupported,
 )
 from ocs_ci.utility.retry import retry
 
@@ -722,6 +723,44 @@ def get_openshift_client(
     log.info(f"OpenShift Client version: {client_version}")
 
     return client_binary_path
+
+
+def get_vault_cli(bind_dir=None, force_download=False):
+    """
+    Download vault based on platform
+    basically for CLI purpose. Binary will be directly
+    put into ocs_ci/bin/ directory
+
+    """
+    res = requests.get(constants.VAULT_VERSION_INFO_URL)
+    version = res.url.split("/")[-1].lstrip("v")
+    bin_dir = os.path.expanduser(bind_dir or config.RUN["bin_dir"])
+    system = platform.system()
+    if "Darwin" not in system and "Linux" not in system:
+        raise VaultPlatformNotSupported("Not a supported platform")
+
+    system = system.lower()
+    zip_file = f"vault_{version}_{system}_amd64.zip"
+    vault_cli_filename = "vault"
+    vault_binary_path = os.path.join(bind_dir, vault_cli_filename)
+    if os.path.isfile(vault_binary_path) and force_download:
+        delete_file(vault_binary_path)
+    if os.path.isfile(vault_binary_path):
+        log.debug(
+            f"Vault CLI binary already exists {vault_binary_path}, skipping download."
+        )
+    else:
+        log.info(f"Downloading vault cli {version}")
+        prepare_bin_dir()
+        previous_dir = os.getcwd()
+        os.chdir(bin_dir)
+        url = f"{constants.VAULT_DOWNLOAD_BASE_URL}/{version}/{zip_file}"
+        download_file(url, zip_file)
+        run_cmd(f"unzip {zip_file}")
+        delete_file(zip_file)
+        os.chdir(previous_dir)
+    vault_ver = run_cmd(f"{vault_binary_path} version")
+    log.info(f"Vault cli version:{vault_ver}")
 
 
 def ensure_nightly_build_availability(build_url):
