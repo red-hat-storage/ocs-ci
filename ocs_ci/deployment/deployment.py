@@ -566,7 +566,11 @@ class Deployment(object):
                 deviceset_data["dataPVCTemplate"]["spec"][
                     "storageClassName"
                 ] = self.DEFAULT_STORAGECLASS_LSO
-                if self.platform.lower() == constants.AWS_PLATFORM:
+                lso_type = config.DEPLOYMENT.get("type")
+                if (
+                    self.platform.lower() == constants.AWS_PLATFORM
+                    and not lso_type == constants.AWS_EBS
+                ):
                     deviceset_data["count"] = 2
                 if ocs_version >= 4.5:
                     deviceset_data["resources"] = {
