@@ -172,6 +172,7 @@ class DeploymentUI(PageNavigator):
         logger.info("Click Install OCS")
         self.do_click(self.dep_loc["click_install_ocs"])
         self.do_click(self.dep_loc["click_install_ocs_page"])
+        time.sleep(60)
 
     def install_storage_cluster(self):
         """
@@ -292,6 +293,7 @@ class DeploymentUI(PageNavigator):
         sleep (int): Sampling time in seconds
 
         """
+        self.navigate_operatorhub_page()
         self.navigate_installed_operators_page()
 
         self.do_send_keys(
