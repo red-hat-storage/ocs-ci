@@ -154,6 +154,7 @@ class BaseUI:
         )
         logger.info(f"Creating snapshot: {filename}")
         self.driver.save_screenshot(filename)
+        time.sleep(0.5)
 
 
 class PageNavigator(BaseUI):
