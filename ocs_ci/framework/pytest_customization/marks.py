@@ -181,6 +181,12 @@ skipif_bm = pytest.mark.skipif(
     reason="Test will not run on Bare Metal",
 )
 
+skipif_bmpsi = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == "baremetalpsi"
+    and config.DEPLOYMENT.get("local_storage") is True,
+    reason="Test will not run on Baremetal PSI",
+)
+
 skipif_openshift_dedicated = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == "openshiftdedicated",
     reason="Test will not run on Openshift dedicated cluster",
