@@ -54,7 +54,6 @@ from ocs_ci.utility import (
     ibmcloud,
     kms as KMS,
 )
-from ocs_ci.utility.openshift_console import OpenshiftConsole
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
