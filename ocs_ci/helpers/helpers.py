@@ -2933,7 +2933,7 @@ def verify_cli_cmd_output(
         debug_node(str): name of node
 
     Returns:
-        True: All strings  included in the command output
+        bool: True of all strings are included in the command output, False otherwise
 
     """
     cmd_start = ""
