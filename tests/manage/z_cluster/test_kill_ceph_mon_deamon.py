@@ -35,10 +35,9 @@ class TestKillCephMonDaemon(ManageTest):
 
     def test_kill_ceph_mon_process(self):
         """
-        Kill ceph mon daemon
+        Verify coredumpctl list updated after killing ceph mon daemon
 
         """
-        # wait till volume is available
         log.info("Get Node name where mon pod running")
         mon_pods = get_mon_pods()
         mon_pod = mon_pods[0]
@@ -52,7 +51,11 @@ class TestKillCephMonDaemon(ManageTest):
         pid = ""
         out = run_cmd(cmd=cmd)
         for line in out.split("\n"):
-            if ("setuser-match-path" in line) and ("167" in line):
+            if (
+                ("setuser-match-path" in line)
+                and ("167" in line)
+                and ("ceph-mon" in line)
+            ):
                 pid = line.split()[1]
         if not pid.isnumeric():
             raise Exception("The ceph-mon process-id was not found.")
@@ -62,26 +65,28 @@ class TestKillCephMonDaemon(ManageTest):
         cmd = cmd_gen + cmd_kill
         run_cmd(cmd=cmd)
 
-        log.info("Verify that we have a crash event for ceph-mon crash")
+        log.info(
+            "Verify that we have a crash event for ceph-mon crash ['ceph crash ls' command]"
+        )
         sample = TimeoutSampler(
             timeout=600,
             sleep=10,
             func=verify_cli_cmd_output,
-            cmd="ceph crash ls-new",
+            cmd="ceph crash ls",
             expected_output_lst=["mon."],
             cephtool_cmd=True,
         )
         if not sample.wait_for_func_status(True):
             raise Exception("ceph mon process does not killed")
 
-        log.info("Check coredump log ")
+        log.info("Verify coredumpctl list updated after killing ceph mon daemon")
         sample = TimeoutSampler(
             timeout=600,
             sleep=10,
             func=verify_cli_cmd_output,
             cmd="coredumpctl list",
-            expected_output_lst=["mon."],
-            cephtool_cmd=True,
+            expected_output_lst=["ceph-mon"],
+            debug_node=node_name,
         )
         if not sample.wait_for_func_status(True):
             raise Exception("coredump not getting generated for ceph mon daemon crash")

@@ -2944,6 +2944,7 @@ def verify_cli_cmd_output(
         cmd_start = f"oc debug node/{debug_node} -- chroot /host "
 
     out = run_cmd(cmd=cmd_start + cmd)
+    logger.info(out)
     for expected_output in expected_output_lst:
         if expected_output not in out:
             return False
