@@ -87,4 +87,4 @@ class TestAddCapacityNodeRestart(ManageTest):
 
         logging.info("Finished verifying add capacity osd storage with node restart")
         logging.info("Waiting for ceph health check to finished...")
-        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=90)
+        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=180)
