@@ -78,6 +78,8 @@ DEPLOYMENT:
   infra_nodes: False
   # How long should ocs-ci wait for `openshift-install create cluster` run?
   openshift_install_timeout: 3600
+  # redhat-operators CatalogSource image (used for disconnected installation)
+  cs_redhat_operators_image: "registry.redhat.io/redhat/redhat-operator-index"
 
 # Section for reporting configuration
 REPORTING:
@@ -146,6 +148,10 @@ ENV_DATA:
   disk_enable_uuid: 'TRUE'
   # Encoding type for the ignition config
   ignition_data_encoding: base64
+  # opm tool github owner and repository (used in api url for downloading opm tool)
+  opm_owner_repo: "operator-framework/operator-registry"
+  # opm tool release tag (particular version or "latest") to be downloaded
+  opm_release_tag: "latest"
 
 # This section is related to upgrade
 UPGRADE:
