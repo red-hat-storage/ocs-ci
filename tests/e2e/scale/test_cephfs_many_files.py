@@ -73,7 +73,10 @@ class MillionFilesOnCephfs(object):
         with open(constants.CSI_CEPHFS_POD_YAML, "r") as pod_fd:
             pod_info = yaml.safe_load(pod_fd)
         pvc_name = pod_info["spec"]["volumes"][0]["persistentVolumeClaim"]["claimName"]
-        self.pod_name = pod_info["metadata"]["name"]
+        # Make sure the pvc and pod names are unique, so AlreadyExists
+        # exceptions are not thrown.
+        pvc_name += str(uuid.uuid4())
+        self.pod_name = pod_info["metadata"]["name"] + str(uuid.uuid4())
         config.RUN["cli_params"]["teardown"] = True
         self.cephfs_pvc = helpers.create_pvc(
             sc_name=constants.DEFAULT_STORAGECLASS_CEPHFS,
