@@ -681,6 +681,8 @@ class OCP(object):
             bool: True in case resource deletion is successful
 
         """
+        if config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM:
+            timeout = 720
         start_time = time.time()
         while True:
             try:
