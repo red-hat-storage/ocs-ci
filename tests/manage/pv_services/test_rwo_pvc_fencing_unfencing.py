@@ -696,6 +696,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         )
 
     @skipif_bm
+    @skipif_ibm_cloud
     @tier4b
     @pytest.mark.parametrize(
         argnames=[
@@ -845,6 +846,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         )
 
     @skipif_bm
+    @skipif_ibm_cloud
     @tier4c
     @pytest.mark.parametrize(
         argnames=[
