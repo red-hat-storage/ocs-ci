@@ -69,7 +69,7 @@ class TestPgSQLNodeReboot(E2ETest):
         node.schedule_nodes([typed_node_name])
 
         # Perform cluster and Ceph health checks
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=40)
 
         # Wait for pg_bench pod to complete
         pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)

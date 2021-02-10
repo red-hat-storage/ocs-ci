@@ -188,6 +188,20 @@ auth file or pulled from s3.
 
 * `test_quay_auth` - Config variable used during unit_testing
 
+##### ibmcloud
+
+IBM Cloud related section under AUTH config.
+
+* `api_key` - IBM Cloud API key for authentication. See
+  [documentation](https://cloud.ibm.com/docs/openshift?topic=openshift-access_cluster#access_api_key).
+* `account_id` - Account ID to be used for login to IBM Cloud
+* `ibm_cos_access_key_id` - COS (Cloud Object Storage) key ID. See
+  [documentation](https://cloud.ibm.com/docs/cloud-object-storage?topic=cloud-object-storage-uhc-hmac-credentials-main).
+* `ibm_cos_secret_access_key` - COS secret key (Follow the same documentation link above!)
+
+> All the configuration values mentioned above are required for IBM Cloud
+> deployment!
+
 #### FLEXY
 
 Configuration specific to flexy OCP cluster deployments
@@ -204,6 +218,16 @@ Configuration specific to external Ceph cluster
 * `admin_keyring`
     * `key` - Admin keyring value used for the external Ceph cluster
 * `external_cluster_details` - base64 encoded data of json output from exporter script
+
+#### UI_SELENIUM
+
+Configuration specific to ui testing with selenium
+
+* `browser_type` - The type of browser (chrome,firefox)
+* `chrome_type` - The type of chrome browser (google-chrome,chromium,edge)
+* `headless` - Browser simulation program that does not have a user interface.
+* `screenshot` - A Screenshot in Selenium Webdriver is used for bug analysis.
+* `ignore_ssl` - Ignore the ssl certificate
 
 ## Example of accessing config/default data
 

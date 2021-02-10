@@ -152,12 +152,12 @@ def add_worker_node(instance_type=None):
         config.ENV_DATA["deployment_type"] == "upi"
         and config.ENV_DATA["platform"].lower() == "vsphere"
     ):
-        log.info("Running pgsql on existing worker nodes")
+        log.info("Running scale test on existing worker nodes.")
     elif (
         config.ENV_DATA["deployment_type"] == "upi"
         and config.ENV_DATA["platform"].lower() == "baremetal"
     ):
-        log.info("Running pgsql on existing worker nodes")
+        log.info("Running scale test on existing worker nodes.")
     elif (
         config.ENV_DATA["deployment_type"] == "upi"
         and config.ENV_DATA["platform"].lower() == "azure"

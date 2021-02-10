@@ -114,7 +114,13 @@ class TestNodesMaintenance(ManageTest):
         ],
     )
     def test_node_maintenance(
-        self, reduce_and_resume_cluster_load, node_type, pvc_factory, pod_factory
+        self,
+        reduce_and_resume_cluster_load,
+        node_type,
+        pvc_factory,
+        pod_factory,
+        bucket_factory,
+        rgw_bucket_factory,
     ):
         """
         OCS-1269/OCS-1272:
@@ -136,7 +142,9 @@ class TestNodesMaintenance(ManageTest):
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
         # run IO and delete the resources
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
         self.sanity_helpers.delete_resources()
 
         # Mark the node back to schedulable
@@ -156,7 +164,13 @@ class TestNodesMaintenance(ManageTest):
         ],
     )
     def test_node_maintenance_restart_activate(
-        self, nodes, pvc_factory, pod_factory, node_type
+        self,
+        nodes,
+        pvc_factory,
+        pod_factory,
+        node_type,
+        bucket_factory,
+        rgw_bucket_factory,
     ):
         """
         OCS-1292/OCS-1293:
@@ -215,7 +229,9 @@ class TestNodesMaintenance(ManageTest):
         # functionality by creating resources (pools, storageclasses,
         # PVCs, pods - both CephFS and RBD), run IO and delete the resources
         self.sanity_helpers.health_check()
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
         self.sanity_helpers.delete_resources()
 
     @tier3
@@ -252,7 +268,9 @@ class TestNodesMaintenance(ManageTest):
 
     @tier2
     @pytest.mark.polarion_id("OCS-1274")
-    def test_2_nodes_different_types(self, pvc_factory, pod_factory):
+    def test_2_nodes_different_types(
+        self, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+    ):
         """
         OCS-1274:
         - Maintenance (mark as unscheduable and drain) 1 worker node and 1
@@ -278,7 +296,9 @@ class TestNodesMaintenance(ManageTest):
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
         # run IO and delete the resources
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
         self.sanity_helpers.delete_resources()
 
         # Mark the nodes back to schedulable
@@ -299,7 +319,13 @@ class TestNodesMaintenance(ManageTest):
         ],
     )
     def test_simultaneous_drain_of_two_ocs_nodes(
-        self, pvc_factory, pod_factory, dc_pod_factory, interface
+        self,
+        pvc_factory,
+        pod_factory,
+        dc_pod_factory,
+        interface,
+        bucket_factory,
+        rgw_bucket_factory,
     ):
         """
         OCS-2128/OCS-2129:
@@ -400,7 +426,9 @@ class TestNodesMaintenance(ManageTest):
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
         # run IO and delete the resources
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
         self.sanity_helpers.delete_resources()
 
         # Perform cluster and Ceph health checks

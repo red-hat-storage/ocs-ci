@@ -56,6 +56,7 @@ from ocs_ci.ocs.resources.pod import (
     get_rgw_pods,
     delete_deploymentconfig_pods,
     get_pods_having_label,
+    get_deployments_having_label,
     Pod,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
@@ -69,6 +70,8 @@ from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
 )
+from ocs_ci.utility.flexy import load_cluster_info
+from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -77,6 +80,7 @@ from ocs_ci.utility.utils import (
     get_openshift_client,
     get_system_architecture,
     get_testrun_name,
+    load_auth_config,
     ocsci_log_path,
     skipif_ocp_version,
     skipif_ocs_version,
@@ -92,6 +96,8 @@ from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.amq import AMQ
+from ocs_ci.ocs.elasticsearch import ElasticSearch
+from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 
 log = logging.getLogger(__name__)
 
@@ -185,6 +191,15 @@ def supported_configuration():
         pytest.xfail(err_msg)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def auto_load_auth_config():
+    try:
+        auth_config = {"AUTH": load_auth_config()}
+        config.update(auth_config)
+    except FileNotFoundError:
+        pass  # If auth file doesn't exist we just ignore.
+
+
 @pytest.fixture(scope="class")
 def secret_factory_class(request):
     return secret_factory_fixture(request)
@@ -255,11 +270,15 @@ def log_ocs_version(cluster):
     teardown = config.RUN["cli_params"].get("teardown")
     deploy = config.RUN["cli_params"].get("deploy")
     dev_mode = config.RUN["cli_params"].get("dev_mode")
+    skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
     if teardown and not deploy:
         log.info("Skipping version reporting for teardown.")
         return
     elif dev_mode:
         log.info("Skipping version reporting for development mode.")
+        return
+    elif skip_ocs_deployment:
+        log.info("Skipping version reporting since OCS deployment is skipped.")
         return
     cluster_version, image_dict = get_ocs_version()
     file_name = os.path.join(
@@ -640,7 +659,13 @@ def pvc_factory_fixture(request, project_factory):
                 pv_obj.delete()
                 pv_obj.ocp.wait_for_delete(pv_obj.name)
             else:
-                pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+                # Workaround for bug 1915706, increasing timeout from 180 to 720
+                timeout = (
+                    720
+                    if config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM
+                    else 180
+                )
+                pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=timeout)
 
     request.addfinalizer(finalizer)
     return factory
@@ -985,6 +1010,17 @@ def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
     record_testsuite_property("polarion-testrun-id", polarion_testrun_name)
     record_testsuite_property("polarion-testrun-status-id", "inprogress")
     record_testsuite_property("polarion-custom-isautomated", "True")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def additional_testsuite_properties(record_testsuite_property, pytestconfig):
+    """
+    Configures additional custom testsuite properties for junit xml
+    """
+    # add logs url
+    logs_url = config.RUN.get("logs_url")
+    if logs_url:
+        record_testsuite_property("logs-url", logs_url)
 
 
 @pytest.fixture(scope="session")
@@ -1657,7 +1693,13 @@ def rgw_obj_fixture(request):
     Returns:
         RGW: An RGW resource
     """
-    return RGW()
+    rgw_deployments = get_deployments_having_label(
+        label=constants.RGW_APP_LABEL, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    if rgw_deployments:
+        return RGW()
+    else:
+        return None
 
 
 @pytest.fixture()
@@ -1666,10 +1708,9 @@ def rgw_deployments(request):
     Return RGW deployments or skip the test.
 
     """
-    oc = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+    rgw_deployments = get_deployments_having_label(
+        label=constants.RGW_APP_LABEL, namespace=config.ENV_DATA["cluster_namespace"]
     )
-    rgw_deployments = oc.get(selector=constants.RGW_APP_LABEL)["items"]
     if rgw_deployments:
         return rgw_deployments
     else:
@@ -1733,6 +1774,9 @@ def mcg_obj_fixture(request, *args, **kwargs):
     Returns:
         MCG: An MCG resource
     """
+    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+        log.warning("As openshift dedicated is used, no MCG resource is returned")
+        return None
 
     mcg_obj = MCG(*args, **kwargs)
 
@@ -1904,30 +1948,44 @@ def verify_rgw_restart_count_fixture(request):
 
 @pytest.fixture()
 def rgw_bucket_factory(request, rgw_obj):
-    return bucket_factory_fixture(request, rgw_obj=rgw_obj)
+    if rgw_obj:
+        return bucket_factory_fixture(request, rgw_obj=rgw_obj)
+    else:
+        return None
 
 
 @pytest.fixture(scope="session")
 def rgw_bucket_factory_session(request, rgw_obj_session):
-    return bucket_factory_fixture(request, rgw_obj=rgw_obj_session)
+    if rgw_obj_session:
+        return bucket_factory_fixture(request, rgw_obj=rgw_obj_session)
+    else:
+        return None
 
 
 @pytest.fixture()
 def bucket_factory(request, bucket_class_factory, mcg_obj):
     """
-    Returns an MCG bucket factory
+    Returns an MCG bucket factory.
+    If MCG object not found returns None
     """
-    return bucket_factory_fixture(request, bucket_class_factory, mcg_obj)
+    if mcg_obj:
+        return bucket_factory_fixture(request, bucket_class_factory, mcg_obj)
+    else:
+        return None
 
 
 @pytest.fixture(scope="session")
 def bucket_factory_session(request, bucket_class_factory_session, mcg_obj_session):
     """
-    Returns a session-scoped MCG bucket factory
+    Returns a session-scoped MCG bucket factory.
+    If session-scoped MCG object not found returns None
     """
-    return bucket_factory_fixture(
-        request, bucket_class_factory_session, mcg_obj_session
-    )
+    if mcg_obj_session:
+        return bucket_factory_fixture(
+            request, bucket_class_factory_session, mcg_obj_session
+        )
+    else:
+        return None
 
 
 def bucket_factory_fixture(
@@ -2096,11 +2154,15 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     Returns:
         func: Factory method - each call to this function creates
             a backingstore
+        None: If MCG object not found
 
     """
-    return backingstore_factory_implementation(
-        request, cld_mgr, mcg_obj, cloud_uls_factory
-    )
+    if mcg_obj:
+        return backingstore_factory_implementation(
+            request, cld_mgr, mcg_obj, cloud_uls_factory
+        )
+    else:
+        return None
 
 
 @pytest.fixture(scope="session")
@@ -2114,11 +2176,15 @@ def backingstore_factory_session(
     Returns:
         func: Factory method - each call to this function creates
             a backingstore
+        None: If session-scoped MCG object not found
 
     """
-    return backingstore_factory_implementation(
-        request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
-    )
+    if mcg_obj_session:
+        return backingstore_factory_implementation(
+            request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
+        )
+    else:
+        return None
 
 
 @pytest.fixture()
@@ -2132,11 +2198,15 @@ def bucket_class_factory(
     Returns:
         func: Factory method - each call to this function creates
             a bucketclass
+        None: If MCG object not found
 
     """
-    return bucketclass_factory_implementation(
-        request, mcg_obj, backingstore_factory, namespace_store_factory
-    )
+    if mcg_obj:
+        return bucketclass_factory_implementation(
+            request, mcg_obj, backingstore_factory, namespace_store_factory
+        )
+    else:
+        return None
 
 
 @pytest.fixture(scope="session")
@@ -2153,14 +2223,18 @@ def bucket_class_factory_session(
     Returns:
         func: Factory method - each call to this function creates
             a bucketclass
+        None: If session-scoped MCG object not found
 
     """
-    return bucketclass_factory_implementation(
-        request,
-        mcg_obj_session,
-        backingstore_factory_session,
-        namespace_store_factory_session,
-    )
+    if mcg_obj_session:
+        return bucketclass_factory_implementation(
+            request,
+            mcg_obj_session,
+            backingstore_factory_session,
+            namespace_store_factory_session,
+        )
+    else:
+        return None
 
 
 @pytest.fixture()
@@ -2359,6 +2433,7 @@ def pgsql_factory_fixture(request):
         transactions=None,
         scaling_factor=None,
         timeout=None,
+        sc_name=None,
     ):
         """
         Factory to start pgsql workload
@@ -2373,7 +2448,7 @@ def pgsql_factory_fixture(request):
 
         """
         # Setup postgres
-        pgsql.setup_postgresql(replicas=replicas)
+        pgsql.setup_postgresql(replicas=replicas, sc_name=sc_name)
 
         # Create pgbench benchmark
         pgsql.create_pgbench_benchmark(
@@ -2461,7 +2536,7 @@ def couchbase_factory_fixture(request):
     """
     couchbase = CouchBase()
 
-    def factory(replicas=3, run_in_bg=False, skip_analyze=True):
+    def factory(replicas=3, run_in_bg=False, skip_analyze=True, sc_name=None):
         """
         Factory to start couchbase workload
 
@@ -2473,7 +2548,7 @@ def couchbase_factory_fixture(request):
         # Setup couchbase
         couchbase.setup_cb()
         # Create couchbase workers
-        couchbase.create_couchbase_worker(replicas=replicas)
+        couchbase.create_couchbase_worker(replicas=replicas, sc_name=sc_name)
         # Run couchbase workload
         couchbase.run_workload(replicas=replicas, run_in_bg=run_in_bg)
         # Run sanity check on data logs
@@ -2730,6 +2805,59 @@ def user_factory_session(request, htpasswd_identity_provider, htpasswd_path):
     return users.user_factory(request, htpasswd_path)
 
 
+@pytest.fixture(autouse=True)
+def log_alerts(request):
+    """
+    Log alerts at the beginning and end of each test case. At the end of test
+    case print a difference: what new alerts are in place after the test is
+    complete.
+
+    """
+    teardown = config.RUN["cli_params"].get("teardown")
+    if teardown:
+        return
+
+    alerts_before = []
+    prometheus = None
+
+    try:
+        prometheus = PrometheusAPI()
+    except Exception:
+        log.exception("There was a problem with connecting to Prometheus")
+
+    def _collect_alerts():
+        try:
+            alerts_response = prometheus.get(
+                "alerts", payload={"silenced": False, "inhibited": False}
+            )
+            if alerts_response.ok:
+                alerts = alerts_response.json().get("data").get("alerts")
+                log.debug(f"Found alerts: {alerts}")
+                return alerts
+            else:
+                log.warning(
+                    f"There was a problem with collecting alerts for analysis: {alerts_response.text}"
+                )
+                return False
+        except Exception:
+            log.exception("There was a problem with collecting alerts for analysis")
+            return False
+
+    def _print_diff():
+        if alerts_before:
+            alerts_after = _collect_alerts()
+            if alerts_after:
+                alerts_new = [
+                    alert for alert in alerts_after if alert not in alerts_before
+                ]
+                if alerts_new:
+                    log.warning("During test were raised new alerts")
+                    log.warning(alerts_new)
+
+    alerts_before = _collect_alerts()
+    request.addfinalizer(_print_diff)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def ceph_toolbox(request):
     """
@@ -2739,7 +2867,11 @@ def ceph_toolbox(request):
     deploy = config.RUN["cli_params"]["deploy"]
     teardown = config.RUN["cli_params"].get("teardown")
     skip_ocs = config.ENV_DATA["skip_ocs_deployment"]
-    if not (deploy or teardown or skip_ocs):
+    deploy_teardown = deploy or teardown
+    ocp_dedicated = (
+        config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+    )
+    if not (deploy_teardown or skip_ocs) or (ocp_dedicated and not deploy_teardown):
         try:
             # Creating toolbox pod
             setup_ceph_toolbox()
@@ -3570,3 +3702,43 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture()
+def es(request):
+    """
+    Create In-cluster elastic-search deployment for benchmark-operator tests.
+
+    using the name es - as shortcut for elastic-search for simplicity
+    """
+
+    def teardown():
+        es.cleanup()
+
+    request.addfinalizer(teardown)
+
+    es = ElasticSearch()
+
+    return es
+
+
+@pytest.fixture(scope="function")
+def setup_ui(request):
+    driver = login_ui()
+
+    def finalizer():
+        close_browser(driver)
+
+    request.addfinalizer(finalizer)
+
+    return driver
+
+
+@pytest.fixture(scope="session", autouse=True)
+def load_cluster_info_file(request):
+    """
+    This fixture tries to load cluster_info.json file if exists (on cluster
+    installed via Flexy) and apply the information to the config object (for
+    example related to disconnected cluster)
+    """
+    load_cluster_info()

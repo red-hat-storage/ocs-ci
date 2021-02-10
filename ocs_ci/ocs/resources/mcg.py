@@ -29,6 +29,7 @@ from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
 from ocs_ci.utility import templating
+from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
@@ -179,28 +180,10 @@ class MCG:
                     not pods
                 ), "RGW pods should not exist in the current platform/cluster"
 
-        elif config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS or (
-            config.ENV_DATA.get("platform") == constants.AZURE_PLATFORM
-        ):
-            rgw_count = (
-                2
-                if float(config.ENV_DATA["ocs_version"]) >= 4.5
-                and not (check_if_cluster_was_upgraded())
-                else 1
+        elif config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
+            rgw_count = get_rgw_count(
+                config.ENV_DATA["ocs_version"], check_if_cluster_was_upgraded(), None
             )
-
-            # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
-            if (
-                float(config.ENV_DATA["ocs_version"]) == 4.4
-                and config.ENV_DATA.get("platform") == constants.AZURE_PLATFORM
-            ):
-                rgw_count = 1
-            if (
-                float(config.ENV_DATA["ocs_version"]) == 4.5
-                and config.ENV_DATA.get("platform") == constants.AZURE_PLATFORM
-                and (check_if_cluster_was_upgraded())
-            ):
-                rgw_count = 1
             logger.info(
                 f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform'
             )
@@ -780,7 +763,12 @@ class MCG:
         """
         backingstore_name_list = [backingstore.name for backingstore in backingstores]
         bc = f" --backingstores={','.join(backingstore_name_list)} --placement={placement}"
-        self.exec_mcg_cmd(f"bucketclass create {name}{bc}")
+        placement_parameter = (
+            f"{constants.PLACEMENT_BUCKETCLASS} "
+            if float(config.ENV_DATA["ocs_version"]) >= 4.7
+            else ""
+        )
+        self.exec_mcg_cmd(f"bucketclass create {placement_parameter}{name}{bc}")
 
     def check_if_mirroring_is_done(self, bucket_name, timeout=140):
         """

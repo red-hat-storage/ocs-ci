@@ -15,6 +15,7 @@ from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
 from ocs_ci.utility import localstorage, utils
 from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.ocs.exceptions import UnsupportedFeatureError
+from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd
 
 log = logging.getLogger(__name__)
@@ -126,23 +127,9 @@ def ocs_install_verification(
         ) * int(storage_cluster.data["spec"]["storageDeviceSets"][0]["replica"])
     rgw_count = None
     if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
-        #  RGW count is 1 if OCS version < 4.5 or the cluster was upgraded from version <= 4.4
-        if (
-            float(config.ENV_DATA["ocs_version"]) < 4.5
-            or float(config.ENV_DATA["ocs_version"]) == 4.5
-            and (post_upgrade_verification and float(version_before_upgrade) < 4.5)
-        ):
-            rgw_count = 1
-        else:
-            rgw_count = 2
-
-    # # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
-    if config.ENV_DATA.get("platform") == constants.AZURE_PLATFORM:
-        if float(config.ENV_DATA["ocs_version"]) == 4.4 or (
-            float(config.ENV_DATA["ocs_version"]) == 4.5
-            and (post_upgrade_verification and float(version_before_upgrade) < 4.5)
-        ):
-            rgw_count = 1
+        rgw_count = get_rgw_count(
+            ocs_version, post_upgrade_verification, version_before_upgrade
+        )
 
     min_eps = constants.MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT
     max_eps = (
@@ -275,15 +262,19 @@ def ocs_install_verification(
     )
     log.info("Verified node and provisioner secret names in storage class.")
 
+    # https://github.com/red-hat-storage/ocs-ci/issues/3820
     # Verify ceph osd tree output
-    if not config.DEPLOYMENT["external_mode"]:
+    if not (
+        config.DEPLOYMENT.get("ui_deployment") or config.DEPLOYMENT["external_mode"]
+    ):
         log.info(
             "Verifying ceph osd tree output and checking for device set PVC names "
             "in the output."
         )
-
         if config.DEPLOYMENT.get("local_storage"):
             deviceset_pvcs = [osd.get_node() for osd in get_osd_pods()]
+            # removes duplicate hostname
+            deviceset_pvcs = list(set(deviceset_pvcs))
         else:
             deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
 

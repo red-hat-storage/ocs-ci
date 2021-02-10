@@ -20,7 +20,7 @@ setup(
         "gevent==20.9.0",
         "reportportal-client==3.2.3",
         "requests==2.23.0",
-        "paramiko==2.4.2",
+        "paramiko==2.7.2",
         "pyyaml>=4.2b1",
         "jinja2==2.10.1",
         "openshift==0.11.2",
@@ -61,6 +61,11 @@ setup(
         "keystoneauth1==4.2.0",
         "range-key-dict==1.1.0",
         "GitPython==3.1.7",
+        "selenium==3.141.0",
+        "webdriver-manager==3.2.2",
+        # greenlet 1.0.0 is broken on ppc64le
+        # https://github.com/python-greenlet/greenlet/issues/230
+        "greenlet<1.0.0",
     ],
     entry_points={
         "console_scripts": [

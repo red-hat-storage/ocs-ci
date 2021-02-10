@@ -761,8 +761,16 @@ def setup_ceph_toolbox(force_setup=False):
             keyring_dict = ocsci_config.EXTERNAL_MODE.get("admin_keyring")
             env = [{"name": "ROOK_ADMIN_SECRET", "value": keyring_dict["key"]}]
             toolbox["spec"]["template"]["spec"]["containers"][0]["env"] = env
+            # add ceph volumeMounts
+            ceph_volume_mount_path = {"mountPath": "/etc/ceph", "name": "ceph-config"}
+            ceph_volume = {"name": "ceph-config", "emptyDir": {}}
+            toolbox["spec"]["template"]["spec"]["containers"][0]["volumeMounts"].append(
+                ceph_volume_mount_path
+            )
+            toolbox["spec"]["template"]["spec"]["volumes"].append(ceph_volume)
             rook_toolbox = OCS(**toolbox)
             rook_toolbox.create()
+            return
         # for OCS >= 4.3 there is new toolbox pod deployment done here:
         # https://github.com/openshift/ocs-operator/pull/207/
         log.info("starting ceph toolbox pod")
@@ -867,7 +875,12 @@ def collect_noobaa_db_dump(log_dir_path):
     ocs_log_dir_path = os.path.join(log_dir_path, "noobaa_db_dump")
     create_directory_path(ocs_log_dir_path)
     ocs_log_dir_path = os.path.join(ocs_log_dir_path, "nbcore.gz")
-    nb_db_pod.exec_cmd_on_pod("mongodump --archive=nbcore.gz --gzip --db=nbcore")
+    if float(ocsci_config.ENV_DATA["ocs_version"]) < 4.7:
+        cmd = "mongodump --archive=nbcore.gz --gzip --db=nbcore"
+    else:
+        cmd = 'bash -c "pg_dump nbcore | gzip > nbcore.gz"'
+
+    nb_db_pod.exec_cmd_on_pod(cmd)
     download_file_from_pod(
         pod_name=nb_db_pod.name,
         remotepath="/opt/app-root/src/nbcore.gz",

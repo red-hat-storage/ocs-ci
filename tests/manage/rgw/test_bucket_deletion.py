@@ -33,7 +33,7 @@ class TestBucketDeletion:
         """
         for bucket in rgw_bucket_factory(amount, interface):
             logger.info(f"Deleting bucket: {bucket.name}")
-            assert bucket.delete()
+            bucket.delete()
 
     @pytest.mark.parametrize(
         argnames="interface",

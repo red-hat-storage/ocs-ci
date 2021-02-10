@@ -5,6 +5,7 @@ on vSphere platform
 import json
 import logging
 import os
+from shutil import rmtree
 import time
 
 import hcl
@@ -297,6 +298,14 @@ class VSPHEREBASE(Deployment):
         # destroy the folder in templates
         self.vsphere.destroy_folder(pool, self.cluster, self.datacenter)
 
+        # remove .terraform directory ( this is only to reclaim space )
+        terraform_plugins_dir = os.path.join(
+            config.ENV_DATA["cluster_path"],
+            constants.TERRAFORM_DATA_DIR,
+            constants.TERRAFORM_PLUGINS_DIR,
+        )
+        rmtree(terraform_plugins_dir, ignore_errors=True)
+
     def check_cluster_existence(self, cluster_name_prefix):
         """
         Check cluster existence according to cluster name prefix
@@ -572,16 +581,13 @@ class VSPHEREUPI(VSPHEREBASE):
 
         # get datastore type and configure chrony for all nodes ONLY if
         # datastore type is vsan
-        # skip configuring chrony for OCP version 4.7, more details in
-        # bug 1910738
-        if Version.coerce(get_ocp_version()) < Version.coerce("4.7"):
-            datastore_type = self.vsphere.get_datastore_type_by_name(
-                self.datastore, self.datacenter
+        datastore_type = self.vsphere.get_datastore_type_by_name(
+            self.datastore, self.datacenter
+        )
+        if datastore_type != constants.VMFS:
+            configure_chrony_and_wait_for_machineconfig_status(
+                node_type="all", timeout=1800
             )
-            if datastore_type != constants.VMFS:
-                configure_chrony_and_wait_for_machineconfig_status(
-                    node_type="all", timeout=1800
-                )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """

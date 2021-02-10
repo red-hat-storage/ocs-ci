@@ -169,3 +169,12 @@ FLEXY:
 EXTERNAL_MODE:
   admin_keyring:
     key: PLACE_HOLDER
+
+
+# This section is related to ui testing with selenium
+UI_SELENIUM:
+  browser_type: "chrome"
+  chrome_type: "google-chrome"
+  headless: True
+  screenshot: True
+  ignore_ssl: True

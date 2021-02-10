@@ -30,7 +30,6 @@ def test_deployment(pvc_factory, pod_factory):
             else:
                 sanity_helpers = Sanity()
             sanity_helpers.health_check()
-            sanity_helpers.create_resources(pvc_factory, pod_factory)
             sanity_helpers.delete_resources()
 
     if teardown:

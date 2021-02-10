@@ -14,6 +14,7 @@ import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
+from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
@@ -48,7 +49,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
 from ocs_ci.utility import templating, ibmcloud
-from ocs_ci.utility.openshift_console import OpenshiftConsole
+from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -65,6 +66,8 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
+from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
+from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +135,7 @@ class Deployment(object):
         if not config.ENV_DATA["skip_ocs_deployment"]:
             try:
                 self.deploy_ocs()
+
                 if config.REPORTING["collect_logs_on_success_run"]:
                     collect_ocs_logs("deployment", ocp=False, status_failure=False)
             except Exception as e:
@@ -305,15 +309,19 @@ class Deployment(object):
         # Wait for catalog source is ready
         catalog_source.wait_for_state("READY")
 
-    def create_ocs_operator_source(self):
+    def create_ocs_operator_source(self, image=None):
         """
         This prepare catalog or operator source for OCS deployment.
+
+        Args:
+            image (str): Image of ocs registry.
+
         """
         if config.DEPLOYMENT.get("stage"):
             # deployment from stage
             self.create_stage_operator_source()
         else:
-            create_catalog_source()
+            create_catalog_source(image)
 
     def subscribe_ocs(self):
         """
@@ -366,16 +374,18 @@ class Deployment(object):
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
 
-    def deploy_ocs_via_operator(self):
+    def deploy_ocs_via_operator(self, image=None):
         """
         Method for deploy OCS via OCS operator
+
+        Args:
+            image (str): Image of ocs registry.
+
         """
         ui_deployment = config.DEPLOYMENT.get("ui_deployment")
         live_deployment = config.DEPLOYMENT.get("live_deployment")
 
         if ui_deployment:
-            if not live_deployment:
-                self.create_ocs_operator_source()
             self.deployment_with_ui()
             # Skip the rest of the deployment when deploy via UI
             return
@@ -394,7 +404,7 @@ class Deployment(object):
                 create_ocs_secret(self.namespace)
                 create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         if not live_deployment:
-            self.create_ocs_operator_source()
+            self.create_ocs_operator_source(image)
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
@@ -418,6 +428,35 @@ class Deployment(object):
             logger.info("Deleting all pods in openshift-storage namespace")
             exec_cmd(f"oc delete pod --all -n {self.namespace}")
         csv.wait_for_phase("Succeeded", timeout=720)
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+            config_map = ocp.OCP(
+                kind="configmap",
+                namespace=self.namespace,
+                resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+            )
+            config_map.get(retry=10, wait=5)
+            config_map_patch = (
+                '\'{"data": {"ROOK_CSI_KUBELET_DIR_PATH": "/var/data/kubelet"}}\''
+            )
+            logger.info("Patching config map to change KUBLET DIR PATH")
+            exec_cmd(
+                f"oc patch configmap -n {self.namespace} "
+                f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
+            )
+            logger.info("Creating secret for IBM Cloud Object Storage")
+            with open(constants.IBM_COS_SECRET_YAML, "r") as cos_secret_fd:
+                cos_secret_data = yaml.load(cos_secret_fd, Loader=yaml.SafeLoader)
+            key_id = config.AUTH["ibmcloud"]["ibm_cos_access_key_id"]
+            key_secret = config.AUTH["ibmcloud"]["ibm_cos_secret_access_key"]
+            cos_secret_data["data"]["IBM_COS_ACCESS_KEY_ID"] = key_id
+            cos_secret_data["data"]["IBM_COS_SECRET_ACCESS_KEY"] = key_secret
+            cos_secret_data_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="cos_secret", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                cos_secret_data, cos_secret_data_yaml.name
+            )
+            exec_cmd(f"oc create -f {cos_secret_data_yaml.name}")
 
         # Modify the CSV with custom values if required
         if all(
@@ -613,7 +652,7 @@ class Deployment(object):
             mode="w+", prefix="cluster_storage", delete=False
         )
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
-        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=1200)
         if config.DEPLOYMENT["infra_nodes"]:
             _ocp = ocp.OCP(kind="node")
             _ocp.exec_oc_cmd(
@@ -623,19 +662,33 @@ class Deployment(object):
 
     def deployment_with_ui(self):
         """
-        This method will deploy OCS with openshift-console UI test.
+        Deployment OCS Operator via OpenShift Console
+
         """
-        logger.info("Deployment of OCS will be done by openshift-console")
-        ocp_console = OpenshiftConsole(
-            config.DEPLOYMENT.get("deployment_browser", constants.CHROME_BROWSER)
-        )
-        live_deploy = "1" if config.DEPLOYMENT.get("live_deployment") else "0"
-        env_vars = {
-            "OCS_LIVE": live_deploy,
-        }
-        ocp_console.run_openshift_console(
-            suite="ceph-storage-install", env_vars=env_vars, log_suffix="ui-deployment"
-        )
+        setup_ui = login_ui()
+        deployment_obj = DeploymentUI(setup_ui)
+
+        if config.DEPLOYMENT.get("local_storage"):
+            deployment_obj.mode = "lso"
+        else:
+            deployment_obj.mode = "internal"
+
+        if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            deployment_obj.storage_class_type = "thin_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+            deployment_obj.storage_class_type = "gp2_sc"
+
+        device_size = str(config.ENV_DATA.get("device_size"))
+        if device_size in ("512", "2048", "4096"):
+            deployment_obj.osd_size = device_size
+        else:
+            deployment_obj.osd_size = "512"
+
+        deployment_obj.is_wide_encryption = config.ENV_DATA.get("encryption_at_rest")
+        deployment_obj.is_class_encryption = False
+        deployment_obj.is_use_kms = False
+        deployment_obj.install_ocs_ui()
+        close_browser(setup_ui)
 
     def deploy_with_external_mode(self):
         """
@@ -705,6 +758,7 @@ class Deployment(object):
         Handle OCS deployment, since OCS deployment steps are common to any
         platform, implementing OCS deployment here in base class.
         """
+        image = None
         ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
         try:
             ceph_cluster.get().get("items")[0]
@@ -713,93 +767,68 @@ class Deployment(object):
         except (IndexError, CommandFailed):
             logger.info("Running OCS basic installation")
 
+        # disconnected installation?
+        load_cluster_info()
+        if config.DEPLOYMENT.get("disconnected"):
+            image = prepare_disconnected_ocs_deployment()
+
         if config.DEPLOYMENT["external_mode"]:
-            logger.info("Deploying OCS on external mode RHCS")
-            return self.deploy_with_external_mode()
-        self.deploy_ocs_via_operator()
-        pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
-        cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
-        # Check for Ceph pods
-        assert pod.wait_for_resource(
-            condition="Running",
-            selector="app=rook-ceph-mon",
-            resource_count=3,
-            timeout=600,
-        )
-        assert pod.wait_for_resource(
-            condition="Running", selector="app=rook-ceph-mgr", timeout=600
-        )
-        assert pod.wait_for_resource(
-            condition="Running",
-            selector="app=rook-ceph-osd",
-            resource_count=3,
-            timeout=600,
-        )
-
-        # validate ceph mon/osd volumes are backed by pvc
-        validate_cluster_on_pvc()
-
-        # validate PDB creation of MON, MDS, OSD pods
-        validate_pdb_creation()
-
-        # Creating toolbox pod
-        setup_ceph_toolbox()
-
-        assert pod.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            selector="app=rook-ceph-tools",
-            resource_count=1,
-            timeout=600,
-        )
-
-        # Check for CephFilesystem creation in ocp
-        cfs_data = cfs.get()
-        cfs_name = cfs_data["items"][0]["metadata"]["name"]
-
-        if helpers.validate_cephfilesystem(cfs_name):
-            logger.info("MDS deployment is successful!")
-            defaults.CEPHFILESYSTEM_NAME = cfs_name
+            self.deploy_with_external_mode()
         else:
-            logger.error("MDS deployment Failed! Please check logs!")
+            self.deploy_ocs_via_operator(image)
+            pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
+            cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
+            # Check for Ceph pods
+            mon_pod_timeout = (
+                900 if self.platform == constants.IBMCLOUD_PLATFORM else 600
+            )
+            assert pod.wait_for_resource(
+                condition="Running",
+                selector="app=rook-ceph-mon",
+                resource_count=3,
+                timeout=mon_pod_timeout,
+            )
+            assert pod.wait_for_resource(
+                condition="Running", selector="app=rook-ceph-mgr", timeout=600
+            )
+            assert pod.wait_for_resource(
+                condition="Running",
+                selector="app=rook-ceph-osd",
+                resource_count=3,
+                timeout=600,
+            )
+
+            # validate ceph mon/osd volumes are backed by pvc
+            validate_cluster_on_pvc()
+
+            # validate PDB creation of MON, MDS, OSD pods
+            validate_pdb_creation()
+
+            # Creating toolbox pod
+            setup_ceph_toolbox()
+
+            assert pod.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector="app=rook-ceph-tools",
+                resource_count=1,
+                timeout=600,
+            )
+
+            # Check for CephFilesystem creation in ocp
+            cfs_data = cfs.get()
+            cfs_name = cfs_data["items"][0]["metadata"]["name"]
+
+            if helpers.validate_cephfilesystem(cfs_name):
+                logger.info("MDS deployment is successful!")
+                defaults.CEPHFILESYSTEM_NAME = cfs_name
+            else:
+                logger.error("MDS deployment Failed! Please check logs!")
 
         # Change monitoring backend to OCS
         if config.ENV_DATA.get("monitoring_enabled") and config.ENV_DATA.get(
             "persistent-monitoring"
         ):
-
-            sc = helpers.default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
-
-            # Get the list of monitoring pods
-            pods_list = get_all_pods(
-                namespace=defaults.OCS_MONITORING_NAMESPACE,
-                selector=["prometheus", "alertmanager"],
-            )
-
-            # Create configmap cluster-monitoring-config and reconfigure
-            # storage class and telemeter server (if the url is specified in a
-            # config file)
-            create_configmap_cluster_monitoring_pod(
-                sc_name=sc.name,
-                telemeter_server_url=config.ENV_DATA.get("telemeter_server_url"),
-            )
-
-            # Take some time to respin the pod
-            waiting_time = 45
-            logger.info(f"Waiting {waiting_time} seconds...")
-            time.sleep(waiting_time)
-
-            # Validate the pods are respinned and in running state
-            retry((CommandFailed, ResourceWrongStatusException), tries=3, delay=15)(
-                validate_pods_are_respinned_and_running_state
-            )(pods_list)
-
-            # Validate the pvc is created on monitoring pods
-            validate_pvc_created_and_bound_on_monitoring_pods()
-
-            # Validate the pvc are mounted on pods
-            retry((CommandFailed, AssertionError), tries=3, delay=15)(
-                validate_pvc_are_mounted_on_monitoring_pods
-            )(pods_list)
+            setup_persistent_monitoring()
         elif config.ENV_DATA.get("monitoring_enabled") and config.ENV_DATA.get(
             "telemeter_server_url"
         ):
@@ -813,7 +842,6 @@ class Deployment(object):
         registry.change_registry_backend_to_ocs()
 
         # Verify health of ceph cluster
-        # TODO: move destroy cluster logic to new CLI usage pattern?
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
         try:
             ceph_health_check(namespace=self.namespace, tries=30, delay=10)
@@ -972,10 +1000,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
             upgrade, latest_tag=config.DEPLOYMENT.get("default_latest_tag", "latest")
         )
 
-    platform = config.ENV_DATA.get("platform").lower()
-    if platform == constants.IBM_POWER_PLATFORM:
-        # TEMP Hack... latest-stable-4.6 does not have ppc64le bits.
-        image_tag = "latest-4.6"
     catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
     cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
     change_cs_condition = (
@@ -1000,3 +1024,42 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     )
     # Wait for catalog source is ready
     catalog_source.wait_for_state("READY")
+
+
+def setup_persistent_monitoring():
+    """
+    Change monitoring backend to OCS
+    """
+    sc = helpers.default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
+
+    # Get the list of monitoring pods
+    pods_list = get_all_pods(
+        namespace=defaults.OCS_MONITORING_NAMESPACE,
+        selector=["prometheus", "alertmanager"],
+    )
+
+    # Create configmap cluster-monitoring-config and reconfigure
+    # storage class and telemeter server (if the url is specified in a
+    # config file)
+    create_configmap_cluster_monitoring_pod(
+        sc_name=sc.name,
+        telemeter_server_url=config.ENV_DATA.get("telemeter_server_url"),
+    )
+
+    # Take some time to respin the pod
+    waiting_time = 45
+    logger.info(f"Waiting {waiting_time} seconds...")
+    time.sleep(waiting_time)
+
+    # Validate the pods are respinned and in running state
+    retry((CommandFailed, ResourceWrongStatusException), tries=3, delay=15)(
+        validate_pods_are_respinned_and_running_state
+    )(pods_list)
+
+    # Validate the pvc is created on monitoring pods
+    validate_pvc_created_and_bound_on_monitoring_pods()
+
+    # Validate the pvc are mounted on pods
+    retry((CommandFailed, AssertionError), tries=3, delay=15)(
+        validate_pvc_are_mounted_on_monitoring_pods
+    )(pods_list)

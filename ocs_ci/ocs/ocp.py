@@ -191,6 +191,7 @@ class OCP(object):
         all_namespaces=False,
         retry=0,
         wait=3,
+        dont_raise=False,
     ):
         """
         Get command - 'oc get <resource>'
@@ -202,12 +203,15 @@ class OCP(object):
             all_namespaces (bool): Equal to oc get <resource> -A
             retry (int): Number of attempts to retry to get resource
             wait (int): Number of seconds to wait between attempts for retry
+            dont_raise (bool): If True will raise when get is not found
 
         Example:
             get('my-pv1')
 
         Returns:
             dict: Dictionary represents a returned yaml file
+            None: Incase dont_raise is True and get is not found
+
         """
         resource_name = resource_name if resource_name else self.resource_name
         selector = selector if selector else self.selector
@@ -234,7 +238,10 @@ class OCP(object):
                 retry -= 1
                 if not retry:
                     log.warning("Number of attempts to get resource reached!")
-                    raise
+                    if not dont_raise:
+                        raise
+                    else:
+                        return None
                 else:
                     log.info(
                         f"Number of attempts: {retry} to get resource: "
@@ -956,6 +963,10 @@ def get_ocs_version():
     ocp_cluster = OCP(
         namespace=config.ENV_DATA["cluster_namespace"], kind="", resource_name="csv"
     )
+    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+        for item in ocp_cluster.get()["items"]:
+            if item["metadata"]["name"].startswith("ocs-operator"):
+                return item["spec"]["version"]
     return ocp_cluster.get()["items"][0]["spec"]["version"]
 
 

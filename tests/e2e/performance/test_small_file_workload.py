@@ -19,18 +19,13 @@ import numpy as np
 from elasticsearch import exceptions as ESExp
 
 # Local modules
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
-from ocs_ci.ocs import constants, node
-from ocs_ci.framework.testlib import E2ETest, performance
+from ocs_ci.ocs import constants
+from ocs_ci.framework.testlib import performance
 from ocs_ci.ocs.perfresult import PerfResult
-from ocs_ci.helpers.helpers import get_logs_with_errors
-from ocs_ci.ocs.elasticsearch import ElasticSearch
-from ocs_ci.ocs.version import get_environment_info
+from ocs_ci.helpers.helpers import get_full_test_logs_path
+from ocs_ci.ocs.perftests import PASTest
 
 log = logging.getLogger(__name__)
 
@@ -104,7 +99,7 @@ class SmallFileResultsAnalyse(PerfResult):
             self.all_results = self.es.search(
                 index=self.index, body=query, size=self.records
             )
-            log.info(self.all_results)
+            log.debug(self.all_results)
 
             if not self.all_results["hits"]["hits"]:
                 log.warning("No data in ES server, disabling results calculation")
@@ -190,7 +185,7 @@ class SmallFileResultsAnalyse(PerfResult):
         """
 
         res = {}
-        log.info(f"The results to combine {results}")
+        log.debug(f"The results to combine {results}")
         for rec in results.keys():
             record = results[rec]
             for key in self.managed_keys.keys():
@@ -234,13 +229,13 @@ class SmallFileResultsAnalyse(PerfResult):
 
         Returns:
             bool: True if results deviation (between samples) is les or equal
-                       to 5%, otherwise False
+                       to 20%, otherwise False
 
         """
 
         test_pass = True
         for op in self.results["operations"]:
-            log.info(f'Aggregating {op} - {self.results["full-res"][op]}')
+            log.debug(f'Aggregating {op} - {self.results["full-res"][op]}')
             results = self.combine_results(self.results["full-res"][op], False)
 
             log.info(f"Check IOPS {op} samples deviation")
@@ -305,24 +300,6 @@ class SmallFileResultsAnalyse(PerfResult):
 
 
 @pytest.fixture(scope="function")
-def es(request):
-
-    # Create internal ES only if Cloud platform is tested
-    if node.get_provider().lower() in constants.CLOUD_PLATFORMS:
-        es = ElasticSearch()
-    else:
-        es = None
-
-    def teardown():
-        if es is not None:
-            es.cleanup()
-            time.sleep(10)
-
-    request.addfinalizer(teardown)
-    return es
-
-
-@pytest.fixture(scope="function")
 def ripsaw(request, storageclass_factory):
     def teardown():
         ripsaw.cleanup()
@@ -336,7 +313,7 @@ def ripsaw(request, storageclass_factory):
 
 
 @performance
-class TestSmallFileWorkload(E2ETest):
+class TestSmallFileWorkload(PASTest):
     """
     Deploy Ripsaw operator and run SmallFile workload
     SmallFile workload using https://github.com/distributed-system-analysis/smallfile
@@ -344,6 +321,11 @@ class TestSmallFileWorkload(E2ETest):
     used to quickly measure performance for a variety of metadata-intensive
     workloads
     """
+
+    def setup(self):
+        super(TestSmallFileWorkload, self).setup()
+        self.benchmark_name = "SmallFiles"
+        self.client_pod_name = "smallfile-client"
 
     @pytest.mark.parametrize(
         argnames=["file_size", "files", "threads", "samples", "interface"],
@@ -377,41 +359,26 @@ class TestSmallFileWorkload(E2ETest):
         """
         Run SmallFile Workload
         """
+        self.full_log_path = get_full_test_logs_path(cname=self)
+        self.full_log_path += f"-{file_size}-{files}-{threads}-{samples}-{interface}"
+        log.info(f"Logs file path name is : {self.full_log_path}")
 
         # Loading the main template yaml file for the benchmark
-        sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
+        self.crd_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
 
-        # Saving the Original elastic-search IP and PORT - if defined in yaml
-        if "elasticsearch" in sf_data["spec"]:
-            backup_es = sf_data["spec"]["elasticsearch"]
-        else:
-            log.warning("Elastic Search information does not exists in YAML file")
-            sf_data["spec"]["elasticsearch"] = {}
+        self.es_info_backup(es)
 
-        # Use the internal define elastic-search server in the test - if exist
-        if es:
-            sf_data["spec"]["elasticsearch"] = {
-                "server": es.get_ip(),
-                "port": es.get_port(),
-            }
-
-        log.info("Apply Operator CRD")
-        ripsaw.apply_crd("resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml")
-        if interface == constants.CEPHBLOCKPOOL:
-            storageclass = constants.DEFAULT_STORAGECLASS_RBD
-        else:
-            storageclass = constants.DEFAULT_STORAGECLASS_CEPHFS
-        log.info(f"Using {storageclass} Storageclass")
-        sf_data["spec"]["workload"]["args"]["storageclass"] = storageclass
+        self.ripsaw_deploy(ripsaw)
+        self.set_storageclass(interface=interface)
         log.info("Running SmallFile bench")
 
         """
             Setting up the parameters for this test
         """
-        sf_data["spec"]["workload"]["args"]["file_size"] = file_size
-        sf_data["spec"]["workload"]["args"]["files"] = files
-        sf_data["spec"]["workload"]["args"]["threads"] = threads
-        sf_data["spec"]["workload"]["args"]["samples"] = samples
+        self.crd_data["spec"]["workload"]["args"]["file_size"] = file_size
+        self.crd_data["spec"]["workload"]["args"]["files"] = files
+        self.crd_data["spec"]["workload"]["args"]["threads"] = threads
+        self.crd_data["spec"]["workload"]["args"]["samples"] = samples
         """
         Calculating the size of the volume that need to be test, it should
         be at least twice in the size then the size of the files, and at
@@ -424,62 +391,23 @@ class TestSmallFileWorkload(E2ETest):
         vol_size = int(vol_size / constants.GB2KB)
         if vol_size < 100:
             vol_size = 100
-        sf_data["spec"]["workload"]["args"]["storagesize"] = f"{vol_size}Gi"
-        environment = get_environment_info()
-        if not environment["user"] == "":
-            sf_data["spec"]["test_user"] = environment["user"]
-        else:
-            # since full results object need this parameter, initialize it from CR file
-            environment["user"] = sf_data["spec"]["test_user"]
+        self.crd_data["spec"]["workload"]["args"]["storagesize"] = f"{vol_size}Gi"
+        self.get_env_info()
 
-        sf_data["spec"]["clustername"] = environment["clustername"]
-
-        sf_obj = OCS(**sf_data)
-        sf_obj.create()
-        log.info(f"The smallfile yaml file is {sf_data}")
-
-        # wait for benchmark pods to get created - takes a while
-        for bench_pod in TimeoutSampler(
-            240,
-            10,
-            get_pod_name_by_pattern,
-            "smallfile-client",
-            constants.RIPSAW_NAMESPACE,
-        ):
-            try:
-                if bench_pod[0] is not None:
-                    small_file_client_pod = bench_pod[0]
-                    break
-            except IndexError:
-                log.info("Bench pod not ready yet")
-
-        bench_pod = OCP(kind="pod", namespace=constants.RIPSAW_NAMESPACE)
-        log.info("Waiting for SmallFile benchmark to Run")
-        assert bench_pod.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            resource_name=small_file_client_pod,
-            sleep=30,
-            timeout=600,
-        )
-        # Getting the start time of the test
-        start_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
-
-        test_start_time = time.time()
-
-        # After testing manually, changing the timeout
-        timeout = 3600
+        self.deploy_and_wait_for_wl_to_start(timeout=240, sleep=10)
 
         # Getting the UUID from inside the benchmark pod
-        uuid = ripsaw.get_uuid(small_file_client_pod)
-        # Setting back the original elastic-search information
-        if backup_es:
-            sf_data["spec"]["elasticsearch"] = backup_es
+        uuid = ripsaw.get_uuid(self.client_pod)
 
-        full_results = SmallFileResultsAnalyse(uuid, sf_data)
+        # Setting back the original elastic-search information
+        if self.backup_es:
+            self.crd_data["spec"]["elasticsearch"] = self.backup_es
+
+        full_results = SmallFileResultsAnalyse(uuid, self.crd_data)
 
         # Initialize the results doc file.
-        for key in environment:
-            full_results.add_key(key, environment[key])
+        for key in self.environment:
+            full_results.add_key(key, self.environment[key])
 
         # Calculating the total size of the working data set - in GB
         full_results.add_key(
@@ -496,43 +424,33 @@ class TestSmallFileWorkload(E2ETest):
             {
                 "files": files,
                 "file_size": file_size,
-                "storageclass": sf_data["spec"]["workload"]["args"]["storageclass"],
-                "vol_size": sf_data["spec"]["workload"]["args"]["storagesize"],
+                "storageclass": self.crd_data["spec"]["workload"]["args"][
+                    "storageclass"
+                ],
+                "vol_size": self.crd_data["spec"]["workload"]["args"]["storagesize"],
             },
         )
 
-        while True:
-            logs = bench_pod.exec_oc_cmd(
-                f"logs {small_file_client_pod}", out_yaml_format=False
+        self.wait_for_wl_to_finish(timeout=3600, sleep=30)
+
+        if "RUN STATUS DONE" in self.test_logs:
+            # Getting the end time of the test
+            full_results.add_key(
+                "test_time", {"start": self.start_time, "end": self.end_time}
             )
-            if "RUN STATUS DONE" in logs:
-                # Getting the end time of the test
-                end_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
-                full_results.add_key(
-                    "test_time", {"start": start_time, "end": end_time}
-                )
-                # if Internal ES is exists, Copy all data from the Internal to main ES
-                if es:
-                    log.info("Copy all data from Internal ES to Main ES")
-                    es._copy(full_results.es)
-                full_results.read()
-                if not full_results.dont_check:
-                    full_results.add_key("hosts", full_results.get_clients_list())
-                    full_results.init_full_results()
-                    full_results.aggregate_host_results()
-                    test_status = full_results.aggregate_samples_results()
-                    full_results.es_write()
+            # if Internal ES is exists, Copy all data from the Internal to main ES
+            self.copy_es_data(es)
+            full_results.read()
+            if not full_results.dont_check:
+                full_results.add_key("hosts", full_results.get_clients_list())
+                full_results.init_full_results()
+                full_results.aggregate_host_results()
+                test_status = full_results.aggregate_samples_results()
+                full_results.es_write()
 
-                    # Creating full link to the results on the ES server
-                    log.info(
-                        f"The Result can be found at ; {full_results.results_link()}"
-                    )
-                else:
-                    test_status = True
+                # Creating full link to the results on the ES server
+                log.info(f"The Result can be found at : {full_results.results_link()}")
+            else:
+                test_status = True
 
-                break
-
-            if timeout < (time.time() - test_start_time):
-                raise TimeoutError("Timed out waiting for benchmark to complete")
-            time.sleep(30)
-        assert not get_logs_with_errors() and test_status, "Test Failed"
+        assert test_status, "Test Failed !"

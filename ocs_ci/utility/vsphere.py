@@ -1365,3 +1365,19 @@ class VSPHERE(object):
                     break
 
         return virtual_disk_device
+
+    def get_compute_vms_in_pool(self, name, dc, cluster):
+        """
+        Gets all compute VM's in Resource pool
+
+        Args:
+            name (str): Resource pool name
+            dc (str): Datacenter name
+            cluster (str): Cluster name
+
+        Returns:
+            list: VM instances (vim.VirtualMachine)
+
+        """
+        vms = self.get_all_vms_in_pool(name, dc, cluster)
+        return [vm for vm in vms if vm.name.startswith("compute")]

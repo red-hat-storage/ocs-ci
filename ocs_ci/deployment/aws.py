@@ -791,12 +791,29 @@ class AWSUPIFlexy(AWSBase):
         self.aws.delete_apps_record_set()
         self.aws.delete_apps_record_set(from_base_domain=True)
 
+        stack_names = self.aws.get_worker_stacks()
+        stack_names.sort()
+
+        # add additional worker nodes to the cf_stack_list2 (if there are any)
+        cf_stack_list2_file_path = os.path.join(
+            self.cluster_path,
+            constants.FLEXY_HOST_DIR,
+            constants.FLEXY_RELATIVE_CLUSTER_DIR,
+            "cf_stack_list2",
+        )
+        if os.path.exists(cf_stack_list2_file_path):
+            with open(cf_stack_list2_file_path, "r+") as f:
+                lines = f.readlines()
+                for stack_name in stack_names:
+                    if f"{stack_name}\n" not in lines:
+                        f.write(f"{stack_name}\n")
+        else:
+            logger.warning(f"File {cf_stack_list2_file_path} doesn't exists!")
+
         super(AWSUPIFlexy, self).destroy_cluster(log_level)
 
         # Delete master, bootstrap, security group, and worker stacks
         suffixes = ["ma", "bs", "sg"]
-        stack_names = self.aws.get_worker_stacks()
-        stack_names.sort()
         stack_names.reverse()
         stack_names.extend([f"{self.cluster_name}-{s}" for s in suffixes])
         logger.info(f"Deleting stacks: {stack_names}")

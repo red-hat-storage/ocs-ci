@@ -1,10 +1,12 @@
 """
-Test to measure pvc scale creation & deletion time. Total pvc count would be 1500
+Test to measure pvc scale creation & deletion time. Total pvc count would be
+500 times the number of worker nodes
 """
 import logging
 import csv
 import pytest
 import time
+from timeit import default_timer
 
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pvc
@@ -27,6 +29,7 @@ class TestPVCCreationDeletionScale(E2ETest):
         """
         Create a new project
         """
+        self.start_time = default_timer()
         proj_obj = project_factory()
         self.namespace = proj_obj.namespace
 
@@ -55,7 +58,7 @@ class TestPVCCreationDeletionScale(E2ETest):
         Measuring PVC creation time while scaling PVC
         Measure PVC deletion time after creation test
         """
-        scale_pvc_count = 1500
+        scale_pvc_count = scale_lib.get_max_pvc_count()
         log.info(f"Start creating {access_mode}-{interface} {scale_pvc_count} PVC")
         if interface == constants.CEPHBLOCKPOOL:
             sc_name = constants.DEFAULT_STORAGECLASS_RBD
@@ -153,16 +156,19 @@ class TestPVCCreationDeletionScale(E2ETest):
             for k, v in pvc_deletion_time.items():
                 csv_obj.writerow([k, v])
         logging.info(f"Delete data present in {log_path}-deletion-time.csv file")
+        end_time = default_timer()
+        logging.info(f"Elapsed time -- {end_time - self.start_time} seconds")
 
     @polarion_id("OCS-1885")
     @pytest.mark.usefixtures(namespace.__name__)
     def test_all_4_type_pvc_creation_deletion_scale(self, namespace, tmp_path):
         """
-        Measuring PVC creation time while scaling PVC of all 4 types, Total 1500 PVCs
+        Measuring PVC creation time while scaling PVC of all 4 types,
+        A total of 500 times the number of worker nodes
         will be created, i.e. 375 each pvc type
         Measure PVC deletion time in scale env
         """
-        scale_pvc_count = 1500
+        scale_pvc_count = scale_lib.get_max_pvc_count()
         log.info(f"Start creating {scale_pvc_count} PVC of all 4 types")
         cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
         rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
@@ -277,3 +283,5 @@ class TestPVCCreationDeletionScale(E2ETest):
             for k, v in fs_pvc_deletion_time.items():
                 csv_obj.writerow([k, v])
         logging.info(f"Delete data present in {log_path}-deletion-time.csv file")
+        end_time = default_timer()
+        logging.info(f"Elapsed time -- {end_time - self.start_time} seconds")
