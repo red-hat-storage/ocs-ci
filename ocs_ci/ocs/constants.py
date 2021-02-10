@@ -1028,6 +1028,17 @@ DISCON_CL_PROXY_ALLOWED_DOMAINS = (
     "mirrorlist.centos.org",
     "mirror.centos.org",
 )
+# mirrored redhat-operators index image for catalog source namespace and name
+MIRRORED_INDEX_IMAGE_NAMESPACE = "olm-mirror"
+MIRRORED_INDEX_IMAGE_NAME = "redhat-operator-index"
+# following packages are required for live disconnected cluster installation
+# (all images related to those packages will be mirrored to the mirror registry)
+DISCON_CL_REQUIRED_PACKAGES = [
+    # "elasticsearch-operator",
+    "local-storage-operator",
+    "ocs-operator",
+]
+
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
