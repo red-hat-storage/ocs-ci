@@ -19,6 +19,7 @@ from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_openshift_dedicated,
+    skipif_bmpsi,
     cloud_platform_required,
     vsphere_platform_required,
 )
@@ -202,6 +203,7 @@ class TestNodeReplacementWithIO(ManageTest):
 @cloud_platform_required
 @vsphere_platform_required
 @skipif_openshift_dedicated
+@skipif_bmpsi
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement proactive

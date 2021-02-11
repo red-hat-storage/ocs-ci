@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_i3,
     skipif_bm,
     skipif_external_mode,
+    skipif_bmpsi,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -63,6 +64,7 @@ def add_capacity_test():
 @skipif_openshift_dedicated
 @skipif_aws_i3
 @skipif_bm
+@skipif_bmpsi
 @skipif_external_mode
 class TestAddCapacity(ManageTest):
     """
