@@ -2,6 +2,7 @@
 This module contains platform specific methods and classes for deployment
 on vSphere platform
 """
+import glob
 import json
 import logging
 import os
@@ -385,6 +386,8 @@ class VSPHEREUPI(VSPHEREBASE):
             Pre-Requisites for vSphere UPI Deployment
             """
             super(VSPHEREUPI.OCPDeployment, self).deploy_prereq()
+            # generate manifests
+            self.generate_manifests()
             # create ignitions
             self.create_ignitions()
             self.kubeconfig = os.path.join(
@@ -436,6 +439,33 @@ class VSPHEREUPI(VSPHEREBASE):
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
             with open(install_config, "w") as f:
                 f.write(install_config_str)
+
+        def generate_manifests(self):
+            """
+            Generates manifest files
+            """
+            logger.info("creating manifest files for the cluster")
+            run_cmd(f"{self.installer} create manifests --dir {self.cluster_path}")
+
+            # remove machines and machinesets
+            # Some of the manifests produced are for creating machinesets
+            # and machine objects. We should remove these, because we don't
+            # want to involve the machine-API operator and
+            # machine-api-operator during install.
+            manifest_files_path = os.path.join(self.cluster_path, "openshift")
+            files_to_remove = glob.glob(
+                f"{manifest_files_path}/99_openshift-cluster-api_"
+                f"master-machines-*.yaml"
+            )
+            files_to_remove.extend(
+                glob.glob(
+                    f"{manifest_files_path}/99_openshift-cluster-api_"
+                    f"worker-machineset-*.yaml"
+                )
+            )
+            logger.debug(f"Removing machines and machineset files: {files_to_remove}")
+            for each_file in files_to_remove:
+                os.remove(each_file)
 
         def create_ignitions(self):
             """
