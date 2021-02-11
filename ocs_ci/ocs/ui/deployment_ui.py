@@ -154,24 +154,31 @@ class DeploymentUI(PageNavigator):
         except Exception as e:
             logger.info(e)
 
-    def install_ocs_operator(self):
+    def install_operator(self, operator_name):
         """
-        Install OCS Opeartor
+        Install Opeartor
 
         """
         self.navigate_operatorhub_page()
 
-        logger.info("Search OCS Operator")
+        logger.info(f"Search {operator_name} Operator")
         self.do_send_keys(
-            self.dep_loc["search_operators"], text="OpenShift Container Storage"
+            self.dep_loc["search_operators"], text=operator_name
         )
 
-        logger.info("Choose OCS Version")
-        self.do_click(self.dep_loc["choose_ocs_version"])
+        logger.info(f"Choose {operator_name} Version")
+        if operator_name == "OpenShift Container Storage":
+            self.do_click(self.dep_loc["choose_ocs_version"])
+        elif operator_name == "Local Storage":
+            self.do_click(self.dep_loc["choose_lso_version"])
+        else:
+            raise ValueError(f"Operator {operator_name} not supported")
 
-        logger.info("Click Install OCS")
-        self.do_click(self.dep_loc["click_install_ocs"])
-        self.do_click(self.dep_loc["click_install_ocs_page"])
+        logger.info("Click Install {operator_name}")
+        self.do_click(self.dep_loc["click_install_operator"])
+        if operator_name == "OpenShift Container Storage":
+            self.do_click(self.dep_loc["enable_monitoring"])
+        self.do_click(self.dep_loc["click_install_operator_page"])
         time.sleep(60)
 
     def install_storage_cluster(self):
@@ -184,7 +191,7 @@ class DeploymentUI(PageNavigator):
 
         logger.info("Search OCS operator installed")
         self.do_send_keys(
-            locator=self.dep_loc["search_ocs_installed"],
+            locator=self.dep_loc["search_operator_installed"],
             text="OpenShift Container Storage",
         )
 
@@ -200,6 +207,8 @@ class DeploymentUI(PageNavigator):
 
         if self.mode == "internal":
             self.install_internal_cluster()
+        elif self.mode == "lso":
+            self.install_lso_cluster()
         else:
             raise ValueError(f"Not Support on {self.mode}")
 
@@ -234,6 +243,46 @@ class DeploymentUI(PageNavigator):
 
         logger.info("Create on Review and create page")
         self.do_click(locator=self.dep_loc["create_on_review"])
+
+        logger.info("Sleep 10 second after click on 'create storage cluster'")
+        time.sleep(10)
+
+    def install_lso_cluster(self):
+        """
+        Install LSO cluster on AWS attached devices
+
+        """
+        logger.info("Click Internal - Attached Devices")
+        self.do_click(locator=self.dep_loc["attached_devices_mode"])
+
+        # All nodes will be added by default. TODO: add node selection option
+        logger.info("Go to Step 2")
+        self.do_click(locator=self.dep_loc["submit_button"])
+
+        logger.info("Enter volume set name")
+        self.do_send_keys(
+            self.dep_loc["volume_set_name"], text="localblock"
+        )
+
+        logger.info("Go to Step 3")
+        self.do_click(locator=self.dep_loc["submit_button"])
+
+        logger.info("Confirm storage class creation")
+        self.do_click(locator=self.dep_loc["yes_button"])
+
+        logger.info("Sleep for 60 seconds to wait for nodes to be discovered")
+        time.sleep(60)
+
+        logger.info("Go to Step 4")
+        self.do_click(locator=self.dep_loc["submit_button"])
+
+        # Encryption is disabled by default. TODO: add encryption
+
+        logger.info("Go to Step 5")
+        self.do_click(locator=self.dep_loc["submit_button"])
+
+        logger.info("Click Create button")
+        self.do_click(locator=self.dep_loc["submit_button"])
 
         logger.info("Sleep 10 second after click on 'create storage cluster'")
         time.sleep(10)
@@ -318,6 +367,8 @@ class DeploymentUI(PageNavigator):
 
         """
         self.create_catalog_source_yaml()
-        self.install_ocs_operator()
+        if self.mode == "lso":
+            self.install_operator("Local Storage")
+        self.install_operator("OpenShift Container Storage")
         self.verify_ocs_operator_succeeded()
         self.install_storage_cluster()

@@ -8,10 +8,15 @@ login = {
 }
 
 deployment_4_7 = {
-    "click_install_ocs": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
-    "click_install_ocs_page": ('button[data-test="install-operator"]', By.CSS_SELECTOR),
+    "click_install_operator": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
+    "click_install_operator_page": ('button[data-test="install-operator"]', By.CSS_SELECTOR),
+    "enable_monitoring": ('input[data-test="enable-monitoring"]', By.CSS_SELECTOR),
     "choose_ocs_version": (
         'a[data-test="ocs-operator-ocs-catalogsource-openshift-marketplace"]',
+        By.CSS_SELECTOR,
+    ),
+    "choose_lso_version": (
+        'a[data-test="local-storage-operator-redhat-operators-openshift-marketplace"]',
         By.CSS_SELECTOR,
     ),
     "search_operators": ('input[placeholder="Filter by keyword..."]', By.CSS_SELECTOR),
@@ -26,9 +31,13 @@ deployment_4_7 = {
         'a[data-test-operator-row="OpenShift Container Storage"]',
         By.CSS_SELECTOR,
     ),
-    "search_ocs_install": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
+    "search_operator_install": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "create_storage_cluster": ('button[data-test="item-create"]', By.CSS_SELECTOR),
     "internal_mode": ('input[data-test="Internal-radio-input"]', By.CSS_SELECTOR),
+    "attached_devices_mode": (
+        'input[data-test="Internal - Attached Devices-radio-input"]',
+        By.CSS_SELECTOR
+    ),
     "storage_class_dropdown": (
         'button[data-test="storage-class-dropdown"]',
         By.CSS_SELECTOR,
@@ -52,6 +61,9 @@ deployment_4_7 = {
     "next_on_configure": ("//*[contains(text(), 'Next')]", By.XPATH),
     "create_on_review": ("//button[text()='Create']", By.XPATH),
     "search_ocs_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
+    "submit_button": ('button[type="submit"]', By.CSS_SELECTOR),
+    "volume_set_name": ("create-lvs-volume-set-name", By.ID),
+    "yes_button": ("//button[text()='Yes']", By.XPATH),
 }
 
 pvc = {
