@@ -273,12 +273,12 @@ def ocs_install_verification(
             deviceset_pvcs = [osd.get_node() for osd in get_osd_pods()]
             # removes duplicate hostname
             deviceset_pvcs = list(set(deviceset_pvcs))
-        else:
-            deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
             if config.ENV_DATA.get("platform") == constants.BAREMETAL_PLATFORM:
                 deviceset_pvcs = [
                     deviceset.replace(".", "-") for deviceset in deviceset_pvcs
                 ]
+        else:
+            deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
 
         ct_pod = get_ceph_tools_pod()
         osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree", format="json")
