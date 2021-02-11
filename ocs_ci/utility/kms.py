@@ -372,12 +372,14 @@ class Vault(KMS):
         This can be obtained from kubernetes secret resource
         'ocs-kms-connection-details'
 
-        apiVersion: v1
-        data:
-          KMS_PROVIDER: vault
-          KMS_SERVICE_NAME: vault
-          VAULT_ADDR: https://xx.xx.xx.xx:8200
-          VAULT_BACKEND_PATH: ocs
+        .. code-block:: none
+
+            apiVersion: v1
+            data:
+              KMS_PROVIDER: vault
+              KMS_SERVICE_NAME: vault
+              VAULT_ADDR: https://xx.xx.xx.xx:8200
+              VAULT_BACKEND_PATH: ocs
 
         """
         if not self.vault_backend_path:
@@ -399,14 +401,16 @@ class Vault(KMS):
         we need this to find the vault policy
         default name in case of ocs is 'ocs-kms-token'
 
-        apiVersion: v1
-        data:
-          token: cy5DRXBKV0lVbzNFQjM1VHlGMFNURzZQWms=
-        kind: Secret
-        metadata:
-          name: ocs-kms-token
-          namespace: openshift-storage
-          type: Opaque
+        .. code-block:: none
+
+            apiVersion: v1
+            data:
+              token: cy5DRXBKV0lVbzNFQjM1VHlGMFNURzZQWms=
+            kind: Secret
+            metadata:
+              name: ocs-kms-token
+            namespace: openshift-storage
+            type: Opaque
 
         """
         if not self.vault_path_token:
