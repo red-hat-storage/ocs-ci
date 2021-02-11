@@ -36,13 +36,10 @@ class TestRwoPVCFencingUnfencing(ManageTest):
     KNIP-677 OCS support for Automated fencing/unfencing RWO PV
     """
 
+    expected_mon_count = 3  # Min. mon count for ceph health to be OK
+    num_of_app_pods_per_node = 2  # Pods of each interface type on nodes going to fail
     pvc_size = 10  # size in Gi
-
-    # Pods of each interface type to be run on nodes which are going to fail
-    num_of_app_pods_per_node = 2
-
     short_nw_fail_time = 300  # Duration in seconds for short network failure
-
     prolong_nw_fail_time = 900  # Duration in seconds for prolong network failure
 
     @pytest.fixture()
@@ -802,7 +799,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         if not external_mode:
             # Wait for mon and osd pods to reach Running state
             selectors_to_check = {
-                constants.MON_APP_LABEL: 3,
+                constants.MON_APP_LABEL: self.expected_mon_count,
                 constants.OSD_APP_LABEL: ceph_cluster.osd_count,
             }
             for selector, count in selectors_to_check.items():
@@ -814,7 +811,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                     sleep=60,
                 ), f"{count} expected pods with selector {selector} are not in Running state"
 
-            if ceph_cluster.mon_count == 3:
+            if ceph_cluster.mon_count == self.expected_mon_count:
                 # Check ceph health
                 toolbox_status = ceph_cluster.POD.get_resource_status(
                     ceph_cluster.toolbox.name
@@ -945,7 +942,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         if not external_mode:
             # Wait for mon and osd pods to reach Running state
             selectors_to_check = {
-                constants.MON_APP_LABEL: 3,
+                constants.MON_APP_LABEL: self.expected_mon_count,
                 constants.OSD_APP_LABEL: ceph_cluster.osd_count,
             }
             for selector, count in selectors_to_check.items():
@@ -957,7 +954,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                     sleep=60,
                 ), f"{count} expected pods with selector {selector} are not in Running state"
 
-            if ceph_cluster.mon_count == 3:
+            if ceph_cluster.mon_count == self.expected_mon_count:
                 # Check ceph health
                 toolbox_status = ceph_cluster.POD.get_resource_status(
                     ceph_cluster.toolbox.name
