@@ -8,8 +8,14 @@ login = {
 }
 
 deployment_4_7 = {
-    "click_install_operator": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
-    "click_install_operator_page": ('button[data-test="install-operator"]', By.CSS_SELECTOR),
+    "click_install_operator": (
+        'a[data-test-id="operator-install-btn"]',
+        By.CSS_SELECTOR,
+    ),
+    "click_install_operator_page": (
+        'button[data-test="install-operator"]',
+        By.CSS_SELECTOR,
+    ),
     "enable_monitoring": ('input[data-test="enable-monitoring"]', By.CSS_SELECTOR),
     "choose_ocs_version": (
         'a[data-test="ocs-operator-ocs-catalogsource-openshift-marketplace"]',
@@ -36,7 +42,7 @@ deployment_4_7 = {
     "internal_mode": ('input[data-test="Internal-radio-input"]', By.CSS_SELECTOR),
     "attached_devices_mode": (
         'input[data-test="Internal - Attached Devices-radio-input"]',
-        By.CSS_SELECTOR
+        By.CSS_SELECTOR,
     ),
     "storage_class_dropdown": (
         'button[data-test="storage-class-dropdown"]',

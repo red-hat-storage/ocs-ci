@@ -162,9 +162,7 @@ class DeploymentUI(PageNavigator):
         self.navigate_operatorhub_page()
 
         logger.info(f"Search {operator_name} Operator")
-        self.do_send_keys(
-            self.dep_loc["search_operators"], text=operator_name
-        )
+        self.do_send_keys(self.dep_loc["search_operators"], text=operator_name)
 
         logger.info(f"Choose {operator_name} Version")
         if operator_name == "OpenShift Container Storage":
@@ -260,9 +258,7 @@ class DeploymentUI(PageNavigator):
         self.do_click(locator=self.dep_loc["submit_button"])
 
         logger.info("Enter volume set name")
-        self.do_send_keys(
-            self.dep_loc["volume_set_name"], text="localblock"
-        )
+        self.do_send_keys(self.dep_loc["volume_set_name"], text="localblock")
 
         logger.info("Go to Step 3")
         self.do_click(locator=self.dep_loc["submit_button"])
