@@ -257,27 +257,11 @@ class ImageIsNotDeletedOrNotFound(Exception):
     pass
 
 
-class UnsupportedVaultDeployMode(Exception):
+class VaultDeploymentError(Exception):
     pass
 
 
-class FailedVaultDeployment(Exception):
-    pass
-
-
-class VaultPlatformNotSupported(Exception):
-    pass
-
-
-class VaultUnsealFailed(Exception):
-    pass
-
-
-class VaultPathCreationFailed(Exception):
-    pass
-
-
-class VaultPolicyCreationFailed(Exception):
+class VaultOperationError(Exception):
     pass
 
 
@@ -293,7 +277,7 @@ class KMSTokenError(Exception):
     pass
 
 
-class KMSResourceNotCleanedup(Exception):
+class KMSResourceCleaneupError(Exception):
     pass
 
 

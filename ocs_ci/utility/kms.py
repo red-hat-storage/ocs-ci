@@ -15,14 +15,12 @@ import base64
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
-    UnsupportedVaultDeployMode,
-    VaultUnsealFailed,
-    VaultPathCreationFailed,
-    VaultPolicyCreationFailed,
+    VaultDeploymentError,
+    VaultOperationError,
     KMSNotSupported,
     KMSConnectionDetailsError,
     KMSTokenError,
-    KMSResourceNotCleanedup,
+    KMSResourceCleaneupError,
 )
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
@@ -82,7 +80,7 @@ class Vault(KMS):
         elif self.vault_deploy_mode == "internal":
             self.deploy_vault_internal()
         else:
-            raise UnsupportedVaultDeployMode("Not a supported vault deployment mode")
+            raise VaultDeploymentError("Not a supported vault deployment mode")
 
     def deploy_vault_external(self):
         """
@@ -91,26 +89,25 @@ class Vault(KMS):
         an external vault service already exists and we will be just
         configuring the necessary OCP objects for OCS like secrets, token etc
 
-        Raises:
-            exceptions.FailedVaultDeployment
-
         """
         self.gather_init_vault_conf()
         # Update env vars for vault CLI usage
         self.update_vault_env_vars()
-        self.vault_prereq()
+        get_vault_cli()
+        self.vault_unseal()
+        self.vault_create_backend_path()
         self.create_ocs_vault_resources()
 
     def gather_init_vault_conf(self):
         """
         Gather vault configuration and init the vars
+        This function currently gathers only for external mode
+        Gathering for internal mode woulde be different
 
         """
         self.vault_conf = self.gather_vault_config()
         self.vault_server = self.vault_conf["VAULT_ADDR"]
         self.port = self.vault_conf["PORT"]
-        # Following vars needs to be gathered only in the case of
-        # external vault
         if not config.ENV_DATA.get("VAULT_SKIP_VERIFY"):
             self.ca_cert_base64 = self.vault_conf["VAULT_CACERT_BASE64"]
             self.client_cert_base64 = self.vault_conf["VAULT_CLIENT_CERT_BASE64"]
@@ -121,7 +118,7 @@ class Vault(KMS):
     def update_vault_env_vars(self):
         """
         In order to run vault CLI we need following env vars
-        VAULT_ADDR, VAULT_TOKEN
+        VAULT_ADDR and VAULT_TOKEN
 
         """
         os.environ["VAULT_ADDR"] = f"https://{self.vault_server}:{self.port}"
@@ -178,9 +175,7 @@ class Vault(KMS):
         connection_data = templating.load_yaml(
             constants.EXTERNAL_VAULT_KMS_CONNECTION_DETAILS
         )
-        connection_data["data"][
-            "VAULT_ADDR"
-        ] = f"https://{self.vault_server}:{self.port}"
+        connection_data["data"]["VAULT_ADDR"] = os.environ["VAULT_ADDR"]
         connection_data["data"]["VAULT_BACKEND_PATH"] = self.vault_backend_path
         connection_data["data"]["VAULT_CACERT"] = self.ca_cert_name
         connection_data["data"]["VAULT_CLIENT_CERT"] = self.client_cert_name
@@ -206,24 +201,14 @@ class Vault(KMS):
             mode="w+", prefix=prefix, delete=False
         )
         templating.dump_data_to_temp_yaml(resource_data, resource_data_yaml.name)
-        run_cmd(f"oc create -f {resource_data_yaml.name}", timeout=1200)
-
-    def vault_prereq(self):
-        """
-        This function handles prerequisites on the vault side
-        like unsealing the vault, path creation and token creation
-
-        """
-        get_vault_cli()
-        self.vault_unseal()
-        self.vault_create_backend_path()
+        run_cmd(f"oc create -f {resource_data_yaml.name}", timeout=300)
 
     def vault_unseal(self):
         """
         Unseal vault if sealed
 
         Raises:
-            VaultUnsealFailed exception
+            VaultOperationError: In case unseal operation failed
 
         """
         if self.vault_sealed():
@@ -233,7 +218,7 @@ class Vault(KMS):
                 self._vault_unseal(self.vault_conf[kkey])
             # Check if vault is unsealed or not
             if self.vault_sealed():
-                raise VaultUnsealFailed("Failed to Unseal vault")
+                raise VaultOperationError("Failed to Unseal vault")
             else:
                 logger.info("Vault has been successfully unsealed")
         else:
@@ -253,7 +238,7 @@ class Vault(KMS):
     def vault_sealed(self):
         """
         Returns:
-            True or False: if vault is sealed then return True else False
+            bool: if vault is sealed then return True else False
 
         """
         status_cmd = "vault status --format=json"
@@ -264,6 +249,9 @@ class Vault(KMS):
     def vault_create_backend_path(self):
         """
         create vault path to be used by OCS
+
+        Raises:
+            VaultOperationError exception
         """
         if config.ENV_DATA.get("VAULT_BACKEND_PATH"):
             self.vault_backend_path = config.ENV_DATA.get("VAULT_BACKEND_PATH")
@@ -279,7 +267,7 @@ class Vault(KMS):
         if "Success" in out.decode():
             logger.info(f"vault path {self.vault_backend_path} created")
         else:
-            raise VaultPathCreationFailed(
+            raise VaultOperationError(
                 f"Failed to create path f{self.vault_backend_path}"
             )
         self.vault_create_policy()
@@ -287,6 +275,9 @@ class Vault(KMS):
     def vault_create_policy(self):
         """
         Create a vault policy and generate token
+
+        Raises:
+            VaultOperationError exception
 
         """
         policy = (
@@ -313,7 +304,7 @@ class Vault(KMS):
         if "Success" in out.decode():
             logger.info(f"vault policy {self.vault_policy_name} created")
         else:
-            raise VaultPolicyCreationFailed(
+            raise VaultOperationError(
                 f"Failed to create policy f{self.vault_policy_name}"
             )
         self.vault_path_token = self.generate_vault_token()
@@ -350,9 +341,6 @@ class Vault(KMS):
         """
         This function takes care of deployment and configuration for
         internal mode vault deployment on OCP
-
-        Raises:
-            exceptions.FailedVaultDeployment
 
         """
         pass
@@ -451,7 +439,7 @@ class Vault(KMS):
         json_out = json.loads(out)
         for path in json_out.keys():
             if self.vault_backend_path in path:
-                raise KMSResourceNotCleanedup(
+                raise KMSResourceCleaneupError(
                     f"Path {self.vault_backend_path} not deleted"
                 )
         logger.info(f"Vault path {self.vault_backend_path} deleted")
@@ -468,7 +456,7 @@ class Vault(KMS):
         out = subprocess.check_output(shlex.split(cmd))
         json_out = json.loads(out)
         if self.vault_policy_name in json_out:
-            raise KMSResourceNotCleanedup(
+            raise KMSResourceCleaneupError(
                 f"Policy {self.vault_policy_name} not deleted"
             )
         logger.info(f"Vault policy {self.vault_policy_name} deleted")

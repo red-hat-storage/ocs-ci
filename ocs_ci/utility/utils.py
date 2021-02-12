@@ -39,7 +39,6 @@ from ocs_ci.ocs.exceptions import (
     UnavailableBuildException,
     UnexpectedImage,
     UnsupportedOSType,
-    VaultPlatformNotSupported,
 )
 from ocs_ci.utility.retry import retry
 
@@ -737,7 +736,7 @@ def get_vault_cli(bind_dir=None, force_download=False):
     bin_dir = os.path.expanduser(bind_dir or config.RUN["bin_dir"])
     system = platform.system()
     if "Darwin" not in system and "Linux" not in system:
-        raise VaultPlatformNotSupported("Not a supported platform")
+        raise UnsupportedOSType("Not a supported platform for vault")
 
     system = system.lower()
     zip_file = f"vault_{version}_{system}_amd64.zip"
