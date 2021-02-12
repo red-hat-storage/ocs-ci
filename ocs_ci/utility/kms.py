@@ -27,6 +27,7 @@ from ocs_ci.utility.utils import (
     load_auth_config,
     run_cmd,
     get_vault_cli,
+    get_running_cluster_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -258,7 +259,7 @@ class Vault(KMS):
         else:
             # Generate backend path name using prefix "ocs"
             # "ocs-<cluster-id>"
-            self.cluster_id = self.get_cluster_id()
+            self.cluster_id = get_running_cluster_id()
             self.vault_backend_path = (
                 f"{constants.VAULT_DEFAULT_PATH_PREFIX}-{self.cluster_id}"
             )
@@ -321,21 +322,6 @@ class Vault(KMS):
         out = subprocess.check_output(shlex.split(cmd))
         json_out = json.loads(out)
         return json_out["auth"]["client_token"]
-
-    def get_cluster_id(self):
-        """
-        Get cluster UUID
-        Not relying on metadata.json as user sometimes want to run
-        only with kubeconfig for some tests
-
-        Returns:
-            str: cluster UUID
-
-        """
-        cluster_id = run_cmd(
-            "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
-        )
-        return cluster_id
 
     def deploy_vault_internal(self):
         """
@@ -468,14 +454,13 @@ class Vault(KMS):
         """
         if not self.vault_server:
             self.gather_init_vault_conf()
-        # TODO:
         # get vault path
         self.get_vault_backend_path()
         # from token secret get token
         self.get_vault_path_token()
         # from token get policy
         if not self.cluster_id:
-            self.cluster_id = self.get_cluster_id()
+            self.cluster_id = get_running_cluster_id()
         self.get_vault_policy()
         # Delete the policy and backend path from vault
         # we need root token of vault in the env

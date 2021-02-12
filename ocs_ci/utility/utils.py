@@ -3094,6 +3094,23 @@ def get_cluster_id(cluster_path):
     return metadata["clusterID"]
 
 
+def get_running_cluster_id():
+    """
+    Get cluster UUID
+    Not relying on metadata.json as user sometimes want to run
+    only with kubeconfig for some tests. For this function to work
+    cluster has to be in running state
+
+    Returns:
+        str: cluster UUID
+
+    """
+    cluster_id = run_cmd(
+        "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
+    )
+    return cluster_id
+
+
 def get_ocp_upgrade_history():
     """
     Gets the OCP upgrade history for the cluster
