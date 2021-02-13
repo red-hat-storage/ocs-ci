@@ -254,4 +254,12 @@ class TestPVCDeletionPerformance(E2ETest):
         pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
             interface=self.interface, pv_name_list=pv_name_list
         )
-        logging.info(f"{msg_prefix} {number_of_pvcs} PVCs deletion time took {pvc_deletion_time}")
+
+        accepted_pvc_deletion_time = number_of_pvcs * 2 # 2 secs for each PVC
+        if pvc_deletion_time > accepted_pvc_deletion_time:
+            raise ex.PerformanceException(
+                f"{msg_prefix} {number_of_pvcs} PVCs deletion time is {pvc_deletion_time} and is "
+                f"greater than {accepted_pvc_deletion_time} seconds"
+            )
+
+        logging.info(f"{msg_prefix} {number_of_pvcs} PVCs deletion time is {pvc_deletion_time} seconds.")
