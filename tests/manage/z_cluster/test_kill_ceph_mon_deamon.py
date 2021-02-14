@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier4a, bugzilla
+from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla
 from ocs_ci.ocs.resources.pod import get_pod_node, get_mon_pods, get_ceph_tools_pod
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler
@@ -10,7 +10,7 @@ from ocs_ci.helpers.helpers import verify_cli_cmd_output
 log = logging.getLogger(__name__)
 
 
-@tier4a
+@tier1
 @bugzilla("1904917")
 class TestKillCephMonDaemon(ManageTest):
     """
@@ -39,9 +39,11 @@ class TestKillCephMonDaemon(ManageTest):
 
         """
         log.info("Get Node name where mon pod running")
-        mon_pods = get_mon_pods()
-        mon_pod = mon_pods[0]
-        node_obj = get_pod_node(mon_pod)
+        # mon_pods = get_mon_pods()
+        # mon_pod = mon_pods[0]
+        # node_obj = get_pod_node(mon_pod)
+        mon_pod_nodes = [get_pod_node(pod) for pod in get_mon_pods()]
+        node_obj = mon_pod_nodes[0]
         node_name = node_obj.name
         cmd_gen = "oc debug node/" + node_name + " -- chroot /host "
 
