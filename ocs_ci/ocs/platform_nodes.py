@@ -13,7 +13,7 @@ from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.deployment.vmware import update_machine_conf
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
-from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
+from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils, powernodes
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.ocs import constants, ocp, exceptions, cluster
@@ -65,11 +65,12 @@ class PlatformNodesFactory:
             "azure": AZURENodes,
             "gcp": NodesBase,
             "vsphere_lso": VMWareLSONodes,
+            "powervs": IBMPowerNodes,
         }
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA["platform"]
-        if cluster.is_lso_cluster():
+        if cluster.is_lso_cluster() and platform == constants.VSPHERE_PLATFORM:
             platform += "_lso"
         return self.cls_map[platform]()
 
@@ -1712,6 +1713,113 @@ class BaremetalNodes(NodesBase):
         return default_config_dict
 
 
+class IBMPowerNodes(NodesBase):
+    """
+    IBM Power Nodes class
+    """
+
+    def __init__(self):
+        super(IBMPowerNodes, self).__init__()
+        self.powernodes = powernodes.POWERNodes()
+
+    def stop_nodes(self, nodes, force=True):
+        """
+        Stop PowerNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force nodes stop, False otherwise
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.stop_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            raise NotImplementedError(
+                "This is not libvirt environment. Stop nodes not implemented"
+            )
+
+    def start_nodes(self, nodes, force=True):
+        """
+        Start PowerNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): Wait for node status
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.start_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            raise NotImplementedError(
+                "This is not libvirt environment. Start nodes not implemented"
+            )
+
+    def restart_nodes(self, nodes, timeout=540, wait=True, force=True):
+        """
+        Restart PowerNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+            wait (bool): True if need to wait till the restarted node reaches timeout
+            force (bool): True for force BM stop, False otherwise
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.restart_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            raise NotImplementedError(
+                "This is not libvirt environment. Restart nodes not implemented"
+            )
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        """
+        Restart PowerNodes with stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force node stop, False otherwise
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.restart_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            raise NotImplementedError(
+                "This is not libvirt environment. Restart nodes by stop and start not implemented"
+            )
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Make sure all PowerNodes are up by the end of the test
+        """
+        if not self.powernodes.iskvm():
+            raise NotImplementedError(
+                "This is not libvirt environment. Restart nodes by stop and start teardown not implemented"
+            )
+
+        self.cluster_nodes = get_node_objs()
+        stopped_powernodes = [
+            powernode
+            for powernode in self.cluster_nodes
+            if self.powernodes.verify_machine_is_down(powernode) is True
+        ]
+
+        if stopped_powernodes:
+            logger.info(
+                f"The following PowerNodes are powered off: {stopped_powernodes}"
+            )
+            self.powernodes.start_powernodes_machines(stopped_powernodes)
+
+
 class AZURENodes(NodesBase):
     """
     Azure Nodes class
@@ -1721,7 +1829,7 @@ class AZURENodes(NodesBase):
         super(AZURENodes, self).__init__()
         self.azure = azure_utils.AZURE()
 
-    def stop_nodes(self, nodes, timeout=540, wait=True):
+    def stop_nodes(self, nodes, timeout=540, wait=True, force=True):
         """
         Stop Azure vm instances
 
@@ -1729,14 +1837,15 @@ class AZURENodes(NodesBase):
             nodes (list): The OCS objects of the nodes
             wait (bool): True for waiting the instances to stop, False otherwise
             timeout (int): time in seconds to wait for node to reach 'not ready' state.
+            force (bool): True for force VM stop, False otherwise
 
         """
         if not nodes:
             raise ValueError("No nodes found to stop")
 
         node_names = [n.name for n in nodes]
-        for node_name in node_names:
-            self.azure.stop_vm_instance(node_name)
+        self.azure.stop_vm_instances(node_names, force=force)
+
         if wait:
             # When the node is not reachable then the node reaches status NotReady.
             logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
@@ -1757,8 +1866,8 @@ class AZURENodes(NodesBase):
         if not nodes:
             raise ValueError("No nodes found to start")
         node_names = [n.name for n in nodes]
-        for node_name in node_names:
-            self.azure.start_vm_instance(node_name)
+        self.azure.start_vm_instances(node_names)
+
         if wait:
             # When the node is reachable then the node reaches status Ready.
             logger.info(f"Waiting for nodes: {node_names} to reach ready state")
@@ -1782,8 +1891,7 @@ class AZURENodes(NodesBase):
             logger.error("No nodes found for restarting")
             raise ValueError
         node_names = [n.name for n in nodes]
-        for node_name in node_names:
-            self.azure.restart_az_vm_instance(node_name)
+        self.azure.restart_vm_instances(node_names)
 
         if wait:
             """
@@ -1804,7 +1912,9 @@ class AZURENodes(NodesBase):
                 node_names=node_names, status=constants.NODE_READY, timeout=timeout
             )
 
-    def restart_nodes_by_stop_and_start(self, nodes, timeout=540, wait=True):
+    def restart_nodes_by_stop_and_start(
+        self, nodes, timeout=540, wait=True, force=True
+    ):
         """
         Restart Azure vm instances by stop and start
 
@@ -1814,12 +1924,19 @@ class AZURENodes(NodesBase):
                 READY state. False otherwise
             timeout (int): time in seconds to wait for node to reach 'not ready' state,
                 and 'ready' state.
+            force (bool): True for force VM stop, False otherwise
 
         """
         if not nodes:
             raise ValueError("No nodes found for restarting")
-        self.stop_nodes(nodes, timeout=timeout, wait=wait)
-        self.start_nodes(nodes, timeout=timeout, wait=wait)
+        node_names = [n.name for n in nodes]
+        self.azure.restart_vm_instances_by_stop_and_start(node_names, force=force)
+
+        if wait:
+            logger.info(f"Waiting for nodes: {node_names} to reach ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY, timeout=timeout
+            )
 
     def get_data_volumes(self):
         """
@@ -1906,6 +2023,28 @@ class AZURENodes(NodesBase):
         raise NotImplementedError(
             "attach nodes to cluster functionality is not implemented"
         )
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Make sure all VM instances up by the end of the test
+
+        """
+        self.cluster_nodes = get_node_objs()
+        vms = self.azure.get_vm_names()
+        assert (
+            vms
+        ), f"Failed to get VM objects for nodes {[n.name for n in self.cluster_nodes]}"
+
+        stopped_vms = [
+            vm
+            for vm in vms
+            if self.azure.get_vm_power_status(vm) == constants.VM_STOPPED
+            or self.azure.get_vm_power_status(vm) == constants.VM_STOPPING
+        ]
+        # Start the VMs
+        if stopped_vms:
+            logger.info(f"The following VMs are powered off: {stopped_vms}")
+            self.azure.start_vm_instances(stopped_vms)
 
 
 class VMWareLSONodes(VMWareNodes):

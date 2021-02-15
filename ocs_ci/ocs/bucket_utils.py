@@ -781,7 +781,7 @@ def s3_get_object(s3_obj, bucketname, object_key, versionid=""):
     )
 
 
-def s3_delete_object(s3_obj, bucketname, object_key, versionid=""):
+def s3_delete_object(s3_obj, bucketname, object_key, versionid=None):
     """
     Simple Boto3 client based Delete object
 
@@ -795,9 +795,12 @@ def s3_delete_object(s3_obj, bucketname, object_key, versionid=""):
         dict : Delete object response
 
     """
-    return s3_obj.s3_client.delete_object(
-        Bucket=bucketname, Key=object_key, VersionId=versionid
-    )
+    if versionid:
+        return s3_obj.s3_client.delete_object(
+            Bucket=bucketname, Key=object_key, VersionId=versionid
+        )
+    else:
+        return s3_obj.s3_client.delete_object(Bucket=bucketname, Key=object_key)
 
 
 def s3_put_bucket_website(s3_obj, bucketname, website_config):

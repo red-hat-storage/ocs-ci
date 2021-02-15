@@ -14,6 +14,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
 )
+from ocs_ci.ocs.exceptions import CSVNotFound
 from ocs_ci.utility import templating, utils
 
 log = logging.getLogger(__name__)
@@ -214,6 +215,9 @@ def get_ocs_csv():
     Returns:
         CSV: OCS CSV object
 
+    Raises:
+        CSVNotFound: In case no CSV found.
+
     """
     namespace = config.ENV_DATA["cluster_namespace"]
     operator_selector = get_selector_for_ocs_operator()
@@ -224,7 +228,18 @@ def get_ocs_csv():
         subscription_plan_approval=subscription_plan_approval,
     )
     channel = config.DEPLOYMENT.get("ocs_csv_channel")
-    ocs_csv_name = ocs_package_manifest.get_current_csv(channel=channel)
+    ocs_csv_name = None
+    # OCS CSV is extracted from the available CSVs in cluster namespace
+    # for Openshift dedicated platform
+    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+        ocp_cluster = OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="csv")
+        for item in ocp_cluster.get()["items"]:
+            if item["metadata"]["name"].startswith(defaults.OCS_OPERATOR_NAME):
+                ocs_csv_name = item["metadata"]["name"]
+        if not ocs_csv_name:
+            raise CSVNotFound("No OCS CSV found for openshift dedicated")
+    else:
+        ocs_csv_name = ocs_package_manifest.get_current_csv(channel=channel)
     ocs_csv = CSV(resource_name=ocs_csv_name, namespace=namespace)
     log.info(f"Check if OCS operator: {ocs_csv_name} is in Succeeded phase.")
     ocs_csv.wait_for_phase(phase="Succeeded", timeout=600)

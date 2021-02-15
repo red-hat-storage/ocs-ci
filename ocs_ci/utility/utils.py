@@ -11,6 +11,7 @@ import string
 import subprocess
 import time
 import traceback
+import stat
 from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -36,6 +37,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutException,
     TimeoutExpiredError,
     UnavailableBuildException,
+    UnexpectedImage,
     UnsupportedOSType,
 )
 from ocs_ci.utility.retry import retry
@@ -509,28 +511,30 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     return completed_process
 
 
-def download_file(url, filename):
+def download_file(url, filename, **kwargs):
     """
     Download a file from a specified url
 
     Args:
         url (str): URL of the file to download
         filename (str): Name of the file to write the download to
+        kwargs (dict): additional keyword arguments passed to requests.get(...)
 
     """
     log.debug(f"Download '{url}' to '{filename}'.")
     with open(filename, "wb") as f:
-        r = requests.get(url)
+        r = requests.get(url, **kwargs)
         assert r.ok, f"The URL {url} is not available! Status: {r.status_code}."
         f.write(r.content)
 
 
-def get_url_content(url):
+def get_url_content(url, **kwargs):
     """
     Return URL content
 
     Args:
         url (str): URL address to return
+        kwargs (dict): additional keyword arguments passed to requests.get(...)
     Returns:
         str: Content of URL
 
@@ -539,7 +543,7 @@ def get_url_content(url):
 
     """
     log.debug(f"Download '{url}' content.")
-    r = requests.get(url)
+    r = requests.get(url, **kwargs)
     assert r.ok, f"Couldn't load URL: {url} content! Status: {r.status_code}."
     return r.content
 
@@ -623,6 +627,53 @@ def get_openshift_installer(
     log.info(f"OpenShift Installer version: {installer_version}")
 
     return installer_binary_path
+
+
+def get_ocm_cli(
+    version=None,
+    bin_dir=None,
+    force_download=False,
+):
+    """
+    Download the OCM binary, if not already present.
+    Update env. PATH and get path of the OCM binary.
+
+    Args:
+        version (str): Version of the OCM to download
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+        force_download (bool): Force OCM download even if already present
+
+    Returns:
+        str: Path to the OCM binary
+
+    """
+    bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    ocm_filename = "ocm"
+    ocm_binary_path = os.path.join(bin_dir, ocm_filename)
+    if os.path.isfile(ocm_binary_path) and force_download:
+        delete_file(ocm_binary_path)
+    if os.path.isfile(ocm_binary_path):
+        log.debug(f"ocm exists ({ocm_binary_path}), skipping download.")
+    else:
+        log.info(f"Downloading ocm cli ({version}).")
+        prepare_bin_dir()
+        # record current working directory and switch to BIN_DIR
+        previous_dir = os.getcwd()
+        os.chdir(bin_dir)
+        url = f"https://github.com/openshift-online/ocm-cli/releases/download/v{version}/ocm-linux-amd64"
+        download_file(url, ocm_filename)
+        # return to the previous working directory
+        os.chdir(previous_dir)
+
+    current_file_permissions = os.stat(ocm_binary_path)
+    os.chmod(
+        ocm_binary_path,
+        current_file_permissions.st_mode | stat.S_IEXEC,
+    )
+    ocm_version = run_cmd(f"{ocm_binary_path} version")
+    log.info(f"OCM version: {ocm_version}")
+
+    return ocm_binary_path
 
 
 def get_openshift_client(
@@ -796,6 +847,9 @@ class TimeoutSampler(object):
         """ Timeout in seconds. """
         self.sleep = sleep
         """ Sleep interval seconds. """
+        # check that given timeout and sleep values makes sense
+        if self.timeout < self.sleep:
+            raise ValueError("timeout should be larger than sleep time")
 
         self.func = func
         """ A function to sample. """
@@ -819,17 +873,39 @@ class TimeoutSampler(object):
             self.start_time = time.time()
         while True:
             self.last_sample_time = time.time()
+            if self.timeout <= (self.last_sample_time - self.start_time):
+                raise self.timeout_exc_cls(*self.timeout_exc_args)
             try:
                 yield self.func(*self.func_args, **self.func_kwargs)
             except Exception as ex:
                 msg = f"Exception raised during iteration: {ex}"
-                logging.error(msg)
-            if self.timeout < (time.time() - self.start_time):
+                log.exception(msg)
+            if self.timeout <= (time.time() - self.start_time):
                 raise self.timeout_exc_cls(*self.timeout_exc_args)
-            log.info(
-                f"Going to sleep for {self.sleep} seconds" " before next iteration"
-            )
+            log.info("Going to sleep for %d seconds before next iteration", self.sleep)
             time.sleep(self.sleep)
+
+    def wait_for_func_value(self, value):
+        """
+        Implements common usecase of TimeoutSampler: waiting until func (given
+        function) returns a given value.
+
+        Args:
+            value: Expected return value of func we are waiting for.
+        """
+        try:
+            for i_value in self:
+                if i_value == value:
+                    break
+        except self.timeout_exc_cls:
+            log.error(
+                "function %s failed to return expected value %s "
+                "after multiple retries during %d second timeout",
+                self.func.__name__,
+                value,
+                self.timeout,
+            )
+            raise
 
     def wait_for_func_status(self, result):
         """
@@ -850,15 +926,30 @@ class TimeoutSampler(object):
 
         """
         try:
-            for res in self:
-                if result == res:
-                    return True
+            self.wait_for_func_value(result)
+            return True
         except self.timeout_exc_cls:
-            log.error(
-                f"({self.func.__name__}) return incorrect status "
-                f"after {self.timeout} second timeout"
-            )
             return False
+
+
+class TimeoutIterator(TimeoutSampler):
+    """
+    Wrapper of TimeoutSampler which separates parameters of the class itself
+    and func arguments in __init__ method. Such way of passing function with
+    parameters is used in python standard library.
+
+    This allows more explicit usage, which improves readability, eg.::
+
+        t1 = TimeoutIterator(timeout=60, sleep=5, func=foo, func_args=[bar])
+        t2 = TimeoutIterator(3600, sleep=10, func=foo, func_args=[bar])
+    """
+
+    def __init__(self, timeout, sleep, func, func_args=None, func_kwargs=None):
+        if func_args is None:
+            func_args = []
+        if func_kwargs is None:
+            func_kwargs = {}
+        super().__init__(timeout, sleep, func, *func_args, **func_kwargs)
 
 
 def get_random_str(size=13):
@@ -1577,6 +1668,8 @@ def ceph_health_check(namespace=None, tries=20, delay=30):
             delay of 30 seconds if default values are not changed via args.
 
     """
+    if config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM:
+        delay = 60
     return retry(
         (CephHealthException, CommandFailed, subprocess.TimeoutExpired),
         tries=tries,
@@ -2359,6 +2452,125 @@ def convert_device_size(unformatted_size, units_to_covert_to):
     return conversion[units_to_covert_to][units]
 
 
+def prepare_customized_pull_secret(images=None):
+    """
+    Prepare customized pull-secret containing auth section related to given
+    image(s). If image(s) not defined or no related section is found, it will
+    use whole content of pull-secret.
+
+    Args:
+        images (str, list): image (or images) to match with auth section
+
+    Returns:
+        NamedTemporaryFile: prepared pull-secret
+
+    """
+    log.debug(f"Prepare customized pull-secret for images: {images}")
+    if type(images) == str:
+        images = [images]
+    # load pull-secret file to pull_secret dict
+    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+    with open(pull_secret_path) as pull_secret_fo:
+        pull_secret = json.load(pull_secret_fo)
+
+    authfile_content = {"auths": {}}
+    # if images defined, try to find auth section related to specified images
+    if images:
+        for image in images:
+            # find all auths which might be related to the specified image
+            tmp_auths = [auth for auth in pull_secret["auths"] if auth in image]
+            # get the most specific auth for particular image
+            tmp_auths = sorted(tmp_auths, key=len, reverse=True)
+            if tmp_auths:
+                # if there is match to particular auth, prepare authfile just with the
+                # matching auth
+                auth = tmp_auths[0]
+                # as key use only server name, without namespace
+                authfile_content["auths"][auth.split("/", 1)[0]] = pull_secret["auths"][
+                    auth
+                ]
+
+    if not authfile_content["auths"]:
+        authfile_content = pull_secret
+
+    # create temporary auth file
+    authfile_fo = NamedTemporaryFile(mode="w", prefix="authfile_")
+    json.dump(authfile_content, authfile_fo)
+    # ensure the content will be saved into the file
+    authfile_fo.flush()
+    return authfile_fo
+
+
+def inspect_image(image, authfile_fo):
+    """
+    Inspect image
+
+    Args:
+        image (str): image to inspect
+        authfile_fo (NamedTemporaryFile): pull-secret required for pulling the given image
+
+    Returns:
+        dict: json object of the inspected image
+
+    """
+    # pull original image (to be able to inspect it)
+    exec_cmd(f"podman image pull {image} --authfile {authfile_fo.name}")
+    # inspect the image
+    cmd_result = exec_cmd(f"podman image inspect {image}")
+    image_inspect = json.loads(cmd_result.stdout)
+    return image_inspect
+
+
+def get_image_with_digest(image):
+    """
+    Return image with sha256 digest for usage in disconnected environment
+
+    Args:
+        image (str): image
+
+    Raises:
+        UnexpectedImage: In case the image information is unexpected
+
+    Returns:
+        str: image with sha256 digest specification
+
+    """
+    if "@sha256:" in image:
+        return image
+    with prepare_customized_pull_secret(image) as authfile_fo:
+        image_inspect = inspect_image(image, authfile_fo)
+
+    # we expect, that 'Digest' will match one of the images in 'RepoDigests',
+    # if not, raise UnexpectedImage
+    for image in image_inspect[0]["RepoDigests"]:
+        if image_inspect[0]["Digest"] in image:
+            return image
+    else:
+        raise UnexpectedImage(
+            f"Image digest ({image_inspect[0]['Digest']}) doesn't match with "
+            f"any image from RepoDigests ({image_inspect[0]['RepoDigests']})."
+        )
+
+
+def login_to_mirror_registry(authfile):
+    """
+    Login to mirror registry
+
+    Args:
+        authfile (str): authfile (pull-secret) path
+
+    """
+    mirror_registry = config.DEPLOYMENT["mirror_registry"]
+    mirror_registry_user = config.DEPLOYMENT["mirror_registry_user"]
+    mirror_registry_password = config.DEPLOYMENT["mirror_registry_password"]
+    login_cmd = (
+        f"podman login --authfile {authfile} "
+        f"{mirror_registry} -u {mirror_registry_user} "
+        f"-p {mirror_registry_password} --tls-verify=false"
+    )
+    exec_cmd(login_cmd, (mirror_registry_user, mirror_registry_password))
+
+
 def mirror_image(image):
     """
     Mirror image to mirror image registry.
@@ -2371,42 +2583,13 @@ def mirror_image(image):
         str: the mirrored image link
 
     """
-    # load pull-secret file to pull_secret dict
-    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
-    with open(pull_secret_path) as pull_secret_fo:
-        pull_secret = json.load(pull_secret_fo)
+    with prepare_customized_pull_secret(image) as authfile_fo:
+        # login to mirror registry
+        login_to_mirror_registry(authfile_fo.name)
 
-    # find all auths which might be related to the specified image
-    tmp_auths = []
-    for auth in pull_secret["auths"]:
-        if auth in image:
-            tmp_auths.append(auth)
-    # get the most specific auth for particular image
-    tmp_auths = sorted(tmp_auths, key=len, reverse=True)
-    if tmp_auths:
-        # if there is match to particular auth, prepare authfile just with the
-        # matching auth
-        auth = tmp_auths[0]
-        # as key use only server name, without namespace
-        authfile_content = {
-            "auths": {auth.split("/", 1)[0]: pull_secret["auths"][auth]}
-        }
-    else:
-        # else use whole pull-secret
-        authfile_content = pull_secret
-
-    # create temporary auth file
-    with NamedTemporaryFile(mode="w", prefix="authfile_") as authfile_fo:
-        json.dump(authfile_content, authfile_fo)
-        # ensure the content will be saved into the file
-        authfile_fo.flush()
-        # pull original image (to be able to inspect it)
-        exec_cmd(f"podman image pull {image} --authfile {authfile_fo.name}")
-        # inspect the image and get full image url with tag
-        cmd_result = exec_cmd(f"podman image inspect {image}")
-        image_inspect = json.loads(cmd_result.stdout)
         # if there is any tag specified, use it in the full image url,
         # otherwise use url with digest
+        image_inspect = inspect_image(image, authfile_fo)
         if image_inspect[0].get("RepoTags"):
             orig_image_full = image_inspect[0]["RepoTags"][0]
         else:
@@ -2414,15 +2597,6 @@ def mirror_image(image):
         # prepare mirrored image url
         mirror_registry = config.DEPLOYMENT["mirror_registry"]
         mirrored_image = mirror_registry + re.sub(r"^[^/]*", "", orig_image_full)
-        # login to mirror registry
-        mirror_registry_user = config.DEPLOYMENT["mirror_registry_user"]
-        mirror_registry_password = config.DEPLOYMENT["mirror_registry_password"]
-        login_cmd = (
-            f"podman login --authfile {authfile_fo.name} "
-            f"{mirror_registry} -u {mirror_registry_user} "
-            f"-p {mirror_registry_password} --tls-verify=false"
-        )
-        exec_cmd(login_cmd, (mirror_registry_user, mirror_registry_password))
         # mirror the image
         logging.info(
             f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"

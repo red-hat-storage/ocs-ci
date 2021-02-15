@@ -1,0 +1,4 @@
+---
+# This configuration file is used for enable deployment OCS operator via UI (Selenium Framework)
+DEPLOYMENT:
+  ui_deployment: True

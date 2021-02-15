@@ -681,6 +681,8 @@ class OCP(object):
             bool: True in case resource deletion is successful
 
         """
+        if config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM:
+            timeout = 720
         start_time = time.time()
         while True:
             try:
@@ -963,6 +965,10 @@ def get_ocs_version():
     ocp_cluster = OCP(
         namespace=config.ENV_DATA["cluster_namespace"], kind="", resource_name="csv"
     )
+    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+        for item in ocp_cluster.get()["items"]:
+            if item["metadata"]["name"].startswith("ocs-operator"):
+                return item["spec"]["version"]
     return ocp_cluster.get()["items"][0]["spec"]["version"]
 
 

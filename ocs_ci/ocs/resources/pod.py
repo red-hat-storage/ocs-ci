@@ -16,6 +16,7 @@ import base64
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.ocp import OCP, verify_images_upgraded
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
@@ -67,6 +68,8 @@ class Pod(OCS):
             Copy of ocs/defaults.py::<some pod> dictionary
         """
         self.pod_data = kwargs
+        # configure http[s]_proxy env variable, if applicable
+        update_container_with_proxy_env(self.pod_data)
         super(Pod, self).__init__(**kwargs)
 
         with tempfile.NamedTemporaryFile(

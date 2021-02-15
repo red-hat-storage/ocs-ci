@@ -17,8 +17,12 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
-from ocs_ci.utility.retry import retry
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_openshift_dedicated,
+    skipif_bmpsi,
+    cloud_platform_required,
+    vsphere_platform_required,
+)
 
 from ocs_ci.helpers.sanity_helpers import Sanity
 
@@ -33,31 +37,36 @@ def select_osd_node_name():
         str: the selected osd node name
 
     """
-    osd_pods_obj = pod.get_osd_pods()
-    osd_node_name = pod.get_pod_node(random.choice(osd_pods_obj)).name
+    osd_node_names = node.get_osd_running_nodes()
+    osd_node_name = random.choice(osd_node_names)
     log.info(f"Selected OSD is {osd_node_name}")
     return osd_node_name
 
 
-@retry(AssertionError, tries=2, delay=60)
-def check_node_replacement_verification_steps(old_node_name, new_node_name, old_osd_id):
+def check_node_replacement_verification_steps(
+    old_node_name, new_node_name, old_osd_node_names, old_osd_id
+):
     """
     Check if the node replacement verification steps finished successfully.
 
     Args:
         old_node_name (str): The name of the old node that has been deleted
         new_node_name (str): The name of the new node that has been created
+        old_osd_node_names (list): The name of the new node that has been added to osd nodes
         old_osd_id (str): The old osd id
 
     Raises:
         AssertionError: If the node replacement verification steps failed.
 
     """
+    new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names)
+    assert new_osd_node_name, "New osd node not found"
+
     assert node.node_replacement_verification_steps_ceph_side(
-        old_node_name, new_node_name
+        old_node_name, new_node_name, new_osd_node_name
     )
     assert node.node_replacement_verification_steps_user_side(
-        old_node_name, new_node_name, old_osd_id
+        old_node_name, new_node_name, new_osd_node_name, old_osd_id
     )
 
 
@@ -72,6 +81,8 @@ def delete_and_create_osd_node(osd_node_name):
     new_node_name = None
     osd_pod = node.get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())[0]
     old_osd_id = pod.get_osd_pod_id(osd_pod)
+
+    old_osd_node_names = node.get_osd_running_nodes()
 
     # error message for invalid deployment configuration
     msg_invalid = (
@@ -106,7 +117,10 @@ def delete_and_create_osd_node(osd_node_name):
                 osd_node_name, use_existing_node=False
             )
 
-    check_node_replacement_verification_steps(osd_node_name, new_node_name, old_osd_id)
+    log.info("Start node replacement verification steps...")
+    check_node_replacement_verification_steps(
+        osd_node_name, new_node_name, old_osd_node_names, old_osd_id
+    )
 
 
 @tier4
@@ -186,7 +200,10 @@ class TestNodeReplacementWithIO(ManageTest):
 @tier4a
 @acceptance
 @ignore_leftovers
+@cloud_platform_required
+@vsphere_platform_required
 @skipif_openshift_dedicated
+@skipif_bmpsi
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement proactive

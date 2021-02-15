@@ -8,6 +8,10 @@ ENV_DATA:
   region: 'eastus'
   azure_base_domain_resource_group_name: 'ocsqe'
   base_domain: 'azure.qe.rh-ocs.com'
+  worker_availability_zones:
+    - '1'
+  master_availability_zones:
+    - '1'
   worker_replicas: 3
   master_replicas: 3
   master_instance_type: 'Standard_D8s_v3'

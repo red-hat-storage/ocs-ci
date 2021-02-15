@@ -254,7 +254,11 @@ class CephCluster(object):
         self.scan_cluster()
 
         # Check Noobaa health
-        self.wait_for_noobaa_health_ok()
+        if (
+            config.ENV_DATA["platform"].lower()
+            != constants.OPENSHIFT_DEDICATED_PLATFORM
+        ):
+            self.wait_for_noobaa_health_ok()
 
     def noobaa_health_check(self):
         """
@@ -1273,11 +1277,11 @@ def check_osd_tree_1az_vmware(osd_tree, number_of_osds):
     return check_osds_in_hosts_osd_tree(all_hosts_flatten, osd_tree)
 
 
-def check_osd_tree_3az_aws(osd_tree, number_of_osds):
+def check_osd_tree_3az_cloud(osd_tree, number_of_osds):
     """
     Checks whether an OSD tree is created/modified correctly. This can be used as a verification step for
     deployment and cluster expansion tests.
-    This function is specifically for ocs cluster created on 3 AZ AWS config
+    This function is specifically for ocs cluster created on 3 AZ config
 
     Args:
         osd_tree (dict): Dictionary of the values which represent 'osd tree'.
@@ -1304,11 +1308,11 @@ def check_osd_tree_3az_aws(osd_tree, number_of_osds):
     return check_osds_in_hosts_osd_tree(all_hosts_flatten, osd_tree)
 
 
-def check_osd_tree_1az_aws(osd_tree, number_of_osds):
+def check_osd_tree_1az_cloud(osd_tree, number_of_osds):
     """
     Checks whether an OSD tree is created/modified correctly. This can be used as a verification step for
     deployment and cluster expansion tests.
-    This function is specifically for ocs cluster created on 1 AZ AWS config
+    This function is specifically for ocs cluster created on 1 AZ config
 
     Args:
         osd_tree (dict): Dictionary of the values which represent 'osd tree'.
@@ -1362,7 +1366,7 @@ def check_ceph_osd_tree():
     """
     Checks whether an OSD tree is created/modified correctly.
     It is a summary of the previous functions: 'check_osd_tree_1az_vmware',
-    'check_osd_tree_3az_aws', 'check_osd_tree_1az_aws'.
+    'check_osd_tree_3az_cloud', 'check_osd_tree_1az_cloud'.
 
     Returns:
          bool: True, if the ceph osd tree is formed correctly. Else False
@@ -1376,17 +1380,17 @@ def check_ceph_osd_tree():
     if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
         return check_osd_tree_1az_vmware(tree_output, len(osd_pods))
 
-    aws_number_of_zones = 3
-    if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+    number_of_zones = 3
+    if config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS:
         # parse the osd tree. if it contains a node 'rack' then it's a
-        # AWS_1AZ cluster. Else, 3 AWS_3AZ cluster
+        # 1AZ cluster. Else, 3 3AZ cluster
         for i in range(len(tree_output["nodes"])):
             if tree_output["nodes"][i]["name"] in "rack0":
-                aws_number_of_zones = 1
-        if aws_number_of_zones == 1:
-            return check_osd_tree_1az_aws(tree_output, len(osd_pods))
+                number_of_zones = 1
+        if number_of_zones == 1:
+            return check_osd_tree_1az_cloud(tree_output, len(osd_pods))
         else:
-            return check_osd_tree_3az_aws(tree_output, len(osd_pods))
+            return check_osd_tree_3az_cloud(tree_output, len(osd_pods))
 
 
 def check_ceph_osd_tree_after_node_replacement():

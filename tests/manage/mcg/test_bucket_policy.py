@@ -38,10 +38,12 @@ from ocs_ci.ocs.constants import (
     bucket_version_action_list,
     object_version_action_list,
 )
+from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 
 
+@skipif_openshift_dedicated
 @skipif_ocs_version("<4.3")
 class TestS3BucketPolicy(MCGTest):
     """
@@ -238,7 +240,10 @@ class TestS3BucketPolicy(MCGTest):
         # Admin sets policy on obc bucket with obc account principal
         bucket_policy_generated = gen_bucket_policy(
             user_list=[obc_obj.obc_account, user.email_id],
-            actions_list=["PutObject"],
+            actions_list=["PutObject"]
+            if float(config.ENV_DATA["ocs_version"]) <= 4.6
+            else ["GetObject", "DeleteObject"],
+            effect="Allow" if float(config.ENV_DATA["ocs_version"]) <= 4.6 else "Deny",
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
         )
         bucket_policy = json.dumps(bucket_policy_generated)
@@ -292,7 +297,7 @@ class TestS3BucketPolicy(MCGTest):
         else:
             assert False, "Get object succeeded when it should have failed"
 
-        if float(config.ENV_DATA["ocs_version"]) >= 4.6:
+        if float(config.ENV_DATA["ocs_version"]) == 4.6:
             logger.info(
                 f"Verifying whether the user: "
                 f"{obc_obj.obc_account} is able to access Get action"
@@ -342,7 +347,10 @@ class TestS3BucketPolicy(MCGTest):
         # Admin sets a policy on obc-account bucket with noobaa-account principal (cross account access)
         new_policy_generated = gen_bucket_policy(
             user_list=user.email_id,
-            actions_list=["GetObject", "DeleteObject"],
+            actions_list=["GetObject", "DeleteObject"]
+            if float(config.ENV_DATA["ocs_version"]) <= 4.6
+            else ["PutObject"],
+            effect="Allow" if float(config.ENV_DATA["ocs_version"]) <= 4.6 else "Deny",
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
         )
         new_policy = json.dumps(new_policy_generated)

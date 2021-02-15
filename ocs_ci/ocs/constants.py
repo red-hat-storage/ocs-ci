@@ -66,6 +66,7 @@ ROOK_EXAMPLES_DIR = os.path.join(
 ROOK_CSI_RBD_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "rbd")
 ROOK_CSI_CEPHFS_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "cephfs")
 CLEANUP_YAML = "cleanup.yaml.j2"
+MANIFESTS_DIR = "manifests"
 
 
 # Statuses
@@ -156,6 +157,7 @@ OPENSHIFT_INGRESS_NAMESPACE = "openshift-ingress"
 OPENSHIFT_MONITORING_NAMESPACE = "openshift-monitoring"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
+INFRA_MACHINE = "infra"
 MOUNT_POINT = "/var/lib/www/html"
 TOLERATION_KEY = "node.ocs.openshift.io/storage"
 
@@ -487,6 +489,11 @@ OPERATOR_SOURCE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "operator-source.ya
 HTPASSWD_IDP_YAML = os.path.join(TEMPLATE_AUTHENTICATION_DIR, "htpasswd_provider.yaml")
 
 IBM_COS_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "ibm-cloud-secret.yaml")
+OCS_OPERATOR_CSV_YAML = "ocs-operator.clusterserviceversion.yaml"
+
+TEMPLATE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "imageContentSourcePolicy-template.yaml"
+)
 
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
@@ -537,6 +544,12 @@ INSTANCE_TERMINATED = 48
 VM_POWERED_OFF = "poweredOff"
 VM_POWERED_ON = "poweredOn"
 
+# Azure VM power statuses
+VM_STOPPED = "deallocated"
+VM_STOPPING = "deallocating"
+VM_STARTED = "running"
+VM_STARTING = "starting"
+
 # Node statuses
 NODE_READY = "Ready"
 NODE_NOT_READY = "NotReady"
@@ -579,6 +592,7 @@ OPERATOR_CS_QUAY_API_QUERY = (
     "tag/?onlyActiveTags=true&limit={tag_limit}"
 )
 OPTIONAL_OPERATORS_SELECTOR = "catalog=optional-operators"
+OCS_OPERATOR_BUNDLE_IMAGE = "quay.io/rhceph-dev/ocs-operator-bundle"
 
 # OCP related constants
 OPENSHIFT_UPGRADE_INFO_API = (
@@ -605,7 +619,13 @@ IBM_POWER_PLATFORM = "powervs"
 BAREMETALPSI_PLATFORM = "baremetalpsi"
 RGW_PLATFORM = "rgw"
 IBMCLOUD_PLATFORM = "ibm_cloud"
-ON_PREM_PLATFORMS = [VSPHERE_PLATFORM, BAREMETAL_PLATFORM, BAREMETALPSI_PLATFORM]
+OPENSHIFT_DEDICATED_PLATFORM = "openshiftdedicated"
+ON_PREM_PLATFORMS = [
+    VSPHERE_PLATFORM,
+    BAREMETAL_PLATFORM,
+    BAREMETALPSI_PLATFORM,
+    IBM_POWER_PLATFORM,
+]
 CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
 
 # ignition files
@@ -635,6 +655,7 @@ VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
 VSPHERE_MAIN = os.path.join(VSPHERE_DIR, "main.tf")
 VSPHERE_VAR = os.path.join(VSPHERE_DIR, "variables.tf")
 TERRAFORM_DATA_DIR = "terraform_data"
+TERRAFORM_PLUGINS_DIR = ".terraform"
 SCALEUP_TERRAFORM_DATA_DIR = "scaleup_terraform_data"
 SCALEUP_VSPHERE_DIR = os.path.join(
     EXTERNAL_DIR, "openshift-misc/v4-testing-misc/v4-scaleup/vsphere/"
@@ -983,17 +1004,41 @@ FLEXY_DEFAULT_PRIVATE_CONF_REPO = (
     "https://gitlab.cee.redhat.com/ocs/flexy-ocs-private.git"
 )
 FLEXY_JENKINS_USER = "jenkins"
-JENKINS_NFS_CURRENT_CLUSTER_DIR = "/home/jenkins/current-cluster-dir"
 FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
 FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
-FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/flexy/ocp4:v1.3"
+FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/flexy/ocp4:latest"
 FLEXY_ENV_FILE_UPDATED_NAME = "ocs-flexy-env-file-updated.env"
 FLEXY_ENV_FILE_UPDATED_PATH = os.path.join(
     FLEXY_HOST_DIR_PATH, FLEXY_ENV_FILE_UPDATED_NAME
 )
-REGISTRY_SVC = "registry.svc.ci.openshift.org/ocp/release"
+REGISTRY_SVC = "registry.ci.openshift.org/ocp/release"
 FLEXY_USER_LOCAL_UID = 101000
+
+# domains required to be accessible through proxy on disconnected cluster
+DISCON_CL_PROXY_ALLOWED_DOMAINS = (
+    ".debian.org",
+    ".fedoraproject.org",
+    "ocsci-test-files.s3.amazonaws.com",
+    ".elb.amazonaws.com",
+    "s3.openshift-storage.svc",
+    ".s3.us-west-1.amazonaws.com",
+    ".s3.us-east-2.amazonaws.com",
+    "s3.amazonaws.com",
+    "mirrorlist.centos.org",
+    "mirror.centos.org",
+)
+# mirrored redhat-operators index image for catalog source namespace and name
+MIRRORED_INDEX_IMAGE_NAMESPACE = "olm-mirror"
+MIRRORED_INDEX_IMAGE_NAME = "redhat-operator-index"
+# following packages are required for live disconnected cluster installation
+# (all images related to those packages will be mirrored to the mirror registry)
+DISCON_CL_REQUIRED_PACKAGES = [
+    # "elasticsearch-operator",
+    "local-storage-operator",
+    "ocs-operator",
+]
+
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
@@ -1095,12 +1140,19 @@ BM_STATUS_PRESENT = "PRESENT"
 BM_STATUS_RESPONSE_UPDATED = "UPDATED"
 BM_METAL_IMAGE = "rhcos-metal.x86_64.raw.gz"
 
+# MCG constants
+PLACEMENT_BUCKETCLASS = "placement-bucketclass"
+
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
 MCG_NS_AZURE_ENDPOINT = "https://blob.core.windows.net"
 MCG_NS_RESOURCE = "ns_resource"
 MCG_NS_BUCKET = "ns-bucket"
 MCG_CONNECTION = "connection"
+
+# MCG version-dependent constants
+OBJECTBUCKETNAME_46ANDBELOW = "ObjectBucketName"
+OBJECTBUCKETNAME_47ANDABOVE = "objectBucketName"
 
 # Cloud provider default endpoints
 # Upon use, utilize .format() to replace the curly braces where necessary

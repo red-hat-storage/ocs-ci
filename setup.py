@@ -63,6 +63,9 @@ setup(
         "GitPython==3.1.7",
         "selenium==3.141.0",
         "webdriver-manager==3.2.2",
+        # greenlet 1.0.0 is broken on ppc64le
+        # https://github.com/python-greenlet/greenlet/issues/230
+        "greenlet<1.0.0",
     ],
     entry_points={
         "console_scripts": [
