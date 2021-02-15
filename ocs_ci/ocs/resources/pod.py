@@ -1672,12 +1672,18 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
         str: The osd removal pod name
 
     """
+    ocp_version = float(get_ocp_version())
+    if ocp_version >= 4.7:
+        pattern = "ocs-osd-removal-job"
+    else:
+        pattern = f"ocs-osd-removal-{osd_id}"
+
     try:
         for osd_removal_pod_names in TimeoutSampler(
             timeout=timeout,
             sleep=5,
             func=get_pod_name_by_pattern,
-            pattern=f"ocs-osd-removal-{osd_id}",
+            pattern=pattern,
         ):
             if osd_removal_pod_names:
                 osd_removal_pod_name = osd_removal_pod_names[0]
@@ -1791,14 +1797,18 @@ def delete_osd_removal_job(osd_id):
         bool: True, if the ocs-osd-removal job deleted successfully. False, otherwise
 
     """
-    osd_removal_job = get_job_obj(
-        f"ocs-osd-removal-{osd_id}", namespace=defaults.ROOK_CLUSTER_NAMESPACE
-    )
+    ocp_version = float(get_ocp_version())
+    if ocp_version >= 4.7:
+        job_name = "ocs-osd-removal-job"
+    else:
+        job_name = f"ocs-osd-removal-{osd_id}"
+
+    osd_removal_job = get_job_obj(job_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     osd_removal_job.delete()
     try:
-        osd_removal_job.ocp.wait_for_delete(resource_name=f"ocs-osd-removal-{osd_id}")
+        osd_removal_job.ocp.wait_for_delete(resource_name=job_name)
     except TimeoutError:
-        logger.warning(f"ocs-osd-removal-{osd_id} job did not deleted successfully")
+        logger.warning(f"{job_name} job did not deleted successfully")
         return False
 
     return True
