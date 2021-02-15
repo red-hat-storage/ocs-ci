@@ -71,7 +71,7 @@ def bucket_class_factory(
                     Spread | Mirror
 
                 - backingstore_dict (dict): A dictionary compatible with the backing store factory
-                                            requirements. (Described in backingstore.py, under _create_backingstore)
+                  requirements. (Described in backingstore.py, under _create_backingstore)
 
                 - namespace_policy_dict (dict):  A dictionary compatible with the namespace store factory.
                 Needs to contain the following keys and values:
