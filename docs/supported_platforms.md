@@ -20,10 +20,25 @@ TODO document this platform
 
 ## Azure
 
-TODO document this platform
+File `osServicePrincipal.json` in `~/.azure/` directory with proper credentials
+is required. The file looks like this:
 
-* `base_domain` in `ENV_DATA` section have to be properly configured for
-  particular deployment (see for example `conf/ocsci/azure_qe_rh_ocs_com_domain.yaml` file)
+```json
+{
+  "subscriptionId": "...",
+  "clientId": "...",
+  "clientSecret": "...",
+  "tenantId": "..."
+}
+```
+
+To deploy ocs-ci cluster on Azure platform using one of OCS QE subscriptions,
+you need to specify one deployment config file from `conf/deployment/azure/`
+directory (which one to use depends on the type of deployment one needs to
+use) and also one config file with azure `base_domain` value (either
+`conf/ocsci/azure_qe_rh_ocs_com_domain.yaml` or
+`conf/ocsci/azure2_qe_rh_ocs_com_domain.yaml` file), because each azure
+subscription has it's own domain name.
 
 ### Deployment types
 
