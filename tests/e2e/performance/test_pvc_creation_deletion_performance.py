@@ -20,13 +20,13 @@ log = logging.getLogger(__name__)
 
 
 @performance
-class TestPVCDeletionPerformance(E2ETest):
+class TestPVCCreationDeletionPerformance(E2ETest):
     """
     Test to verify PVC deletion performance
     """
 
     @pytest.fixture()
-    def base_setup(self, request, interface_iterate, storageclass_factory, pod_factory):
+    def base_setup(self, interface_iterate, storageclass_factory, pod_factory):
         """
         A setup phase for the test
 
@@ -51,7 +51,8 @@ class TestPVCDeletionPerformance(E2ETest):
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_pvc_creation_deletion_measurement_performance(self, teardown_factory, pvc_size):
         """
-        Measuring PVC deletion time is within supported limits
+        Measuring PVC creation and deletion times
+        and verifying that the times are within supported limits
         """
 
         num_of_samples = 5
@@ -105,7 +106,7 @@ class TestPVCDeletionPerformance(E2ETest):
         """
            Analyses the PVC creation and deletion times. If these times, for both creation and deletion, are within
            the given limits and the standard deviation is smaller than the predefined accepted one,
-           writes them to the codespeed. Otherwise, fails the test
+           writes them to the codespeed dashboard. Otherwise, fails the test
         Args:
             creation_time_measures: A list of PVC creation time measurements
             deletion_time_measures: A list of PVC deletion time measurements
@@ -172,11 +173,12 @@ class TestPVCDeletionPerformance(E2ETest):
             interface=self.interface, pvc=pvc_obj, status=constants.STATUS_RUNNING
         )
 
-        filesize = 10 # filesize to written is always 10 GB
+        # filesize to be written is always 10 GB
+        filesize = 10
         file_size = f"{int(filesize * 1024)}M"
 
         log.info(f"Starting IO on the POD {pod_obj.name}")
-        # Going to run only write IO to fill the PVC for the snapshot
+        # Going to run only write IO
         pod_obj.fillup_fs(size=file_size, fio_filename=f"{pod_obj.name}_file")
 
         # Wait for fio to finish
@@ -222,6 +224,7 @@ class TestPVCDeletionPerformance(E2ETest):
                 )
 
                 executor.submit(pvc_obj.reload)
+
         # Get pvc_name, require pvc_name to fetch deletion time data from log
         threads = list()
         for pvc_obj in pvc_objs:
@@ -254,8 +257,10 @@ class TestPVCDeletionPerformance(E2ETest):
         pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
             interface=self.interface, pv_name_list=pv_name_list
         )
+        log.info(f"{msg_prefix} {number_of_pvcs} bulk deletion time is {pvc_deletion_time}")
 
-        accepted_pvc_deletion_time = number_of_pvcs * 2 # 2 secs for each PVC
+        # accepted deletion time is 2 secs for each PVC
+        accepted_pvc_deletion_time = number_of_pvcs * 2
         if pvc_deletion_time > accepted_pvc_deletion_time:
             raise ex.PerformanceException(
                 f"{msg_prefix} {number_of_pvcs} PVCs deletion time is {pvc_deletion_time} and is "
