@@ -608,6 +608,19 @@ class MCG:
         nss_data["metadata"]["name"] = nss_name
         nss_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
 
+        try:
+            rgw_map = {
+                "type": "s3-compatible",
+                "s3Compatible": {
+                    "targetBucket": target_bucket_name,
+                    "endpoint": cld_mgr.rgw_client.endpoint,
+                    "signatureVersion": "v4",
+                    "secret": {"name": cld_mgr.rgw_client.secret.name},
+                },
+            }
+        except AttributeError:
+            rgw_map = None
+
         NSS_MAPPING = {
             constants.AWS_PLATFORM: {
                 "type": "aws-s3",
@@ -623,15 +636,7 @@ class MCG:
                     "secret": {"name": cld_mgr.azure_client.secret.name},
                 },
             },
-            constants.RGW_PLATFORM: {
-                "type": "s3-compatible",
-                "s3Compatible": {
-                    "targetBucket": target_bucket_name,
-                    "endpoint": cld_mgr.rgw_client.endpoint,
-                    "signatureVersion": "v4",
-                    "secret": {"name": cld_mgr.rgw_client.secret.name},
-                },
-            },
+            constants.RGW_PLATFORM: rgw_map,
         }
 
         nss_data["spec"] = NSS_MAPPING[platform]

@@ -109,7 +109,9 @@ class NamespaceStore:
         """
         return (
             OCP(
-                kind="namespacestore", namespace=self.namespace, resource_name=self.name
+                kind="namespacestore",
+                namespace=config.ENV_DATA["cluster_namespace"],
+                resource_name=self.name,
             ).get()["status"]["phase"]
             == constants.STATUS_READY
         )
@@ -167,10 +169,14 @@ def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
 
     cmdMap = {"oc": mcg_obj.create_namespace_store, "cli": ""}  # TODO
 
+    try:
+        rgw_endpoint = RGW().get_credentials()[0]
+    except CommandFailed:
+        rgw_endpoint = None
     endpointMap = {
         constants.AWS_PLATFORM: constants.MCG_NS_AWS_ENDPOINT,
         constants.AZURE_PLATFORM: constants.MCG_NS_AZURE_ENDPOINT,
-        constants.RGW_PLATFORM: RGW().get_credentials()[0],
+        constants.RGW_PLATFORM: rgw_endpoint,
     }
 
     def _create_nss(method, nss_dict):

@@ -14,7 +14,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.testlib import skipif_ocs_version
+from ocs_ci.framework.testlib import skipif_ocs_version, on_prem_platform_required
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ class TestNamespace(MCGTest):
         argvalues=[
             pytest.param(("oc", {"aws": [(1, "eu-central-1")]})),
             pytest.param(("oc", {"azure": [(1, None)]})),
-            pytest.param(("oc", {"rgw": [(1, None)]})),
+            pytest.param(("oc", {"rgw": [(1, None)]}), marks=on_prem_platform_required),
         ],
         # A test ID list for describing the parametrized tests
         # <CLOUD_PROVIDER>-<METHOD>-<AMOUNT-OF-BACKINGSTORES>
@@ -87,7 +87,8 @@ class TestNamespace(MCGTest):
                         "type": "Single",
                         "namespacestore_dict": {"rgw": [(1, None)]},
                     },
-                }
+                },
+                marks=on_prem_platform_required,
             ),
             pytest.param(
                 {
