@@ -310,6 +310,8 @@ MCG_BACKINGSTORE_SECRET_YAML = os.path.join(TEMPLATE_MCG_DIR, "BackingStoreSecre
 
 MCG_BACKINGSTORE_YAML = os.path.join(TEMPLATE_MCG_DIR, "BackingStore.yaml")
 
+MCG_NAMESPACESTORE_YAML = os.path.join(TEMPLATE_MCG_DIR, "NamespaceStore.yaml")
+
 PV_BACKINGSTORE_YAML = os.path.join(TEMPLATE_MCG_DIR, "PVBackingStore.yaml")
 
 MCG_BUCKETCLASS_YAML = os.path.join(TEMPLATE_MCG_DIR, "BucketClass.yaml")
@@ -1147,8 +1149,12 @@ PLACEMENT_BUCKETCLASS = "placement-bucketclass"
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
 MCG_NS_AZURE_ENDPOINT = "https://blob.core.windows.net"
 MCG_NS_RESOURCE = "ns_resource"
+MCG_NSS = "ns-store"
 MCG_NS_BUCKET = "ns-bucket"
 MCG_CONNECTION = "connection"
+NAMESPACE_POLICY_TYPE_SINGLE = "Single"
+NAMESPACE_POLICY_TYPE_MULTI = "Multi"
+NAMESPACE_POLICY_TYPE_CACHE = "Cache"
 
 # MCG version-dependent constants
 OBJECTBUCKETNAME_46ANDBELOW = "ObjectBucketName"
