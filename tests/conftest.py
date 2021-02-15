@@ -2042,6 +2042,9 @@ def bucket_factory_fixture(
             bucketclass if bucketclass is None else bucket_class_factory(bucketclass)
         )
 
+        if bucketclass:
+            interface = bucketclass["interface"]
+
         for i in range(amount):
             bucket_name = helpers.create_unique_resource_name(
                 resource_description="bucket", resource_type=interface.lower()
