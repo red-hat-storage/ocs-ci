@@ -22,6 +22,9 @@ TODO document this platform
 
 TODO document this platform
 
+* `base_domain` in `ENV_DATA` section have to be properly configured for
+  particular deployment (see for example `conf/ocsci/azure_qe_rh_ocs_com_domain.yaml` file)
+
 ### Deployment types
 
 #### UPI
