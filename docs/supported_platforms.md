@@ -37,8 +37,9 @@ you need to specify one deployment config file from `conf/deployment/azure/`
 directory (which one to use depends on the type of deployment one needs to
 use) and also one config file with azure `base_domain` value (either
 `conf/ocsci/azure_qe_rh_ocs_com_domain.yaml` or
-`conf/ocsci/azure2_qe_rh_ocs_com_domain.yaml` file), because each azure
-subscription has it's own domain name.
+`conf/ocsci/azure2_qe_rh_ocs_com_domain.yaml` or similar newly created with
+proper `base_domain` configuration), because each azure subscription has it's
+own domain name.
 
 ### Deployment types
 
