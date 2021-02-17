@@ -21,6 +21,7 @@ from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
     verify_new_pv_available_in_sc,
     delete_released_pvs_in_sc,
+    get_pv_size,
 )
 
 
@@ -1464,3 +1465,52 @@ def wait_for_new_osd_node(old_osd_node_names, timeout=180):
     except TimeoutExpiredError:
         log.warning(f"New osd node didn't appear after {timeout} seconds")
         return None
+
+
+def add_new_node_and_label_upi_lso(
+    node_type,
+    num_nodes,
+    mark_for_ocs_label=True,
+    node_conf=None,
+    attach_disk=True,
+    disk_size=None,
+):
+    """
+    Add a new node for aws/vmware upi lso platform and label it
+
+    Args:
+        node_type (str): Type of node, RHEL or RHCOS
+        num_nodes (int): number of nodes to add
+        mark_for_ocs_label (bool): True if label the new node
+        node_conf (dict): The node configurations.
+        attach_disk (bool): True, if attach a new disk to the new node. False otherwise
+        disk_size (int): The size of the new disk to attach. If not specified,
+            the disk size will be equal to the size of the previous disk.
+
+    Returns:
+        list: new spun node names
+
+    """
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
+
+    new_node_names = add_new_node_and_label_upi(
+        node_type, num_nodes, mark_for_ocs_label, node_conf
+    )
+    new_node_objs = get_node_objs(node_names=new_node_names)
+
+    # Check if we need to attach disk to the new nodes
+    if attach_disk:
+        if not disk_size:
+            pv_objs = get_pv_objs_in_sc(sc_name=constants.LOCAL_BLOCK_RESOURCE)
+            disk_size = get_pv_size(pv_objs[-1])
+
+        for node_obj in new_node_objs:
+            log.info(
+                f"Create a new disk with size {disk_size}, and attach to node {node_obj.name}"
+            )
+            node_util.create_and_attach_volume(node=node_obj, size=disk_size)
+
+    return new_node_names
