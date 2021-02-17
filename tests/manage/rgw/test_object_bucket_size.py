@@ -1,5 +1,4 @@
 import logging
-
 import pytest
 
 from ocs_ci.framework.testlib import (
@@ -9,7 +8,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
 )
 from ocs_ci.ocs import constants
-
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 from ocs_ci.ocs.bucket_utils import get_bucket_available_size
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
