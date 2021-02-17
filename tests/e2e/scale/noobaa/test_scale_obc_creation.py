@@ -17,16 +17,19 @@ log = logging.getLogger(__name__)
 class TestScaleOCBCreation(E2ETest):
     """
     OBC scale creation, creating up to max support number of OBCs.
+    OBCs are created in the Multicloud Object Gateway and
+    Ceph Object Gateway (RGW)
+
     """
 
     namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
     sc_name = constants.NOOBAA_SC
     sc_rgw_name = constants.DEFAULT_STORAGECLASS_RGW
-    scale_obc_count = 500
+    scale_obc_count = 1000
     num_obc_batch = 50
 
     @skipif_aws_creds_are_missing
-    @pytest.mark.polarion_id("OCS-0000")
+    @pytest.mark.polarion_id("OCS-2478")
     def test_scale_mcg_obc_creation(self, tmp_path, timeout=60):
         """
         MCG OBC creation using Noobaa storage class
@@ -68,7 +71,7 @@ class TestScaleOCBCreation(E2ETest):
         scale_noobaa_lib.cleanup(self.namespace)
 
     @vsphere_platform_required
-    @pytest.mark.polarion_id("OCS-0000")
+    @pytest.mark.polarion_id("OCS-2479")
     def test_scale_rgw_obc_creation(self, tmp_path, timeout=60):
         """
         MCG OBC creation using RGW storage class
@@ -111,7 +114,7 @@ class TestScaleOCBCreation(E2ETest):
         scale_noobaa_lib.cleanup(self.namespace)
 
     @vsphere_platform_required
-    @pytest.mark.polarion_id("OCS-0000")
+    @pytest.mark.polarion_id("OCS-2480")
     def test_scale_mcg_rgw_obc_creation(self, tmp_path, timeout=60):
         """
         OBC creation for both MCG and RGW storage class
