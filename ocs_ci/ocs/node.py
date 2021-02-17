@@ -278,6 +278,30 @@ def get_node_ips(node_type="worker"):
         raise NotImplementedError
 
 
+def get_node_ip_addresses(ipkind):
+    """
+    Gets a dictionary of required IP addresses for all nodes
+
+    Args:
+        ipkind: ExternalIP or InternalIP or Hostname
+
+    Returns:
+        dict: Internal or Exteranl IP addresses keyed off of node name
+
+    """
+    ocp = OCP(kind=constants.NODE)
+    masternodes = ocp.get(selector=constants.MASTER_LABEL).get("items")
+    workernodes = ocp.get(selector=constants.WORKER_LABEL).get("items")
+    nodes = masternodes + workernodes
+
+    return {
+        node["metadata"]["name"]: each["address"]
+        for node in nodes
+        for each in node["status"]["addresses"]
+        if each["type"] == ipkind
+    }
+
+
 def add_new_node_and_label_it(machineset_name, num_nodes=1, mark_for_ocs_label=True):
     """
     Add a new node for ipi and label it
