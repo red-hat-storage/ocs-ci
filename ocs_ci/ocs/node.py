@@ -946,9 +946,6 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
         str: The new node name
 
     """
-    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
-    from ocs_ci.ocs.resources.storage_cluster import get_osd_size
-
     sc_name = constants.LOCAL_BLOCK_RESOURCE
     old_pv_objs = get_pv_objs_in_sc(sc_name)
 
@@ -971,13 +968,7 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
 
     # If we use LSO, we need to create and attach a new disk manually
     new_node = get_node_objs(node_names=[new_node_name])[0]
-    plt = PlatformNodesFactory()
-    node_util = plt.get_nodes_platform()
-    osd_size = get_osd_size()
-    log.info(
-        f"Create a new disk with size {osd_size}, and attach to node {new_node_name}"
-    )
-    node_util.create_and_attach_volume(node=new_node, size=osd_size)
+    add_disk_to_upi_node(node_obj=new_node)
 
     new_node_hostname_label = get_node_hostname_label(new_node)
     log.info(
@@ -1491,11 +1482,6 @@ def add_new_node_and_label_upi_lso(
         list: new spun node names
 
     """
-    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
-
-    plt = PlatformNodesFactory()
-    node_util = plt.get_nodes_platform()
-
     new_node_names = add_new_node_and_label_upi(
         node_type, num_nodes, mark_for_ocs_label, node_conf
     )
@@ -1503,14 +1489,32 @@ def add_new_node_and_label_upi_lso(
 
     # Check if we need to attach disk to the new nodes
     if attach_disk:
-        if not disk_size:
-            pv_objs = get_pv_objs_in_sc(sc_name=constants.LOCAL_BLOCK_RESOURCE)
-            disk_size = get_pv_size(pv_objs[-1])
-
         for node_obj in new_node_objs:
             log.info(
                 f"Create a new disk with size {disk_size}, and attach to node {node_obj.name}"
             )
-            node_util.create_and_attach_volume(node=node_obj, size=disk_size)
+            add_disk_to_upi_node(node_obj, disk_size)
 
     return new_node_names
+
+
+def add_disk_to_upi_node(node_obj, disk_size=None):
+    """
+    Add new disk to lso upi node
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+        disk_size (int): The size of the new disk to attach. If not specified,
+            the disk size will be equal to the size of the previous disk.
+
+    """
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
+
+    if not disk_size:
+        pv_objs = get_pv_objs_in_sc(sc_name=constants.LOCAL_BLOCK_RESOURCE)
+        disk_size = get_pv_size(pv_objs[-1])
+
+    node_util.create_and_attach_volume(node=node_obj, size=disk_size)
