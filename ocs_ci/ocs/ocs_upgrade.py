@@ -391,7 +391,7 @@ class OCSUpgrade(object):
                 self.get_parsed_versions()[1] > self.get_parsed_versions()[0]
             )
             if self.ocs_registry_image:
-                image_url, new_image_tag = self.ocs_registry_image.split(":")
+                image_url, new_image_tag = self.ocs_registry_image.rsplit(":", 1)
             elif config.UPGRADE.get("upgrade_to_latest", True) or version_change:
                 new_image_tag = get_latest_ds_olm_tag()
             else:
