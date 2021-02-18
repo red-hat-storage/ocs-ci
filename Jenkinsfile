@@ -37,6 +37,7 @@ pipeline {
           sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
           if [ ! -z '${env.EMAIL}' ]; then
             sudo yum install -y /usr/sbin/postfix
+            sudo sed -i -e "s|inet_protocols = .*|inet_protocols = ipv4|" /etc/postfix/main.cf
             sudo systemctl start postfix
           fi
           sudo yum install -y python38-devel
