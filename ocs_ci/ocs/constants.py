@@ -284,6 +284,10 @@ CEPHFILESYSTEM_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "CephFileSystem.yaml")
 
 CEPHBLOCKPOOL_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "cephblockpool.yaml")
 
+VSPHERE_THICK_STORAGECLASS_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "vsphere_storageclass_thick.yaml"
+)
+
 CSI_RBD_STORAGECLASS_YAML = os.path.join(TEMPLATE_CSI_RBD_DIR, "storageclass.yaml")
 
 ROOK_CSI_RBD_STORAGECLASS_YAML = os.path.join(ROOK_CSI_RBD_DIR, "storageclass.yaml")
