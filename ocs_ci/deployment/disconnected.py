@@ -95,7 +95,7 @@ def prepare_disconnected_ocs_deployment():
             f"-p {','.join(constants.DISCON_CL_REQUIRED_PACKAGES)} "
             f"-t {mirrored_index_image}"
         )
-        # opm tool doesn't have --atuhfile parameter, we have to suply auth
+        # opm tool doesn't have --authfile parameter, we have to supply auth
         # file through env variable
         os.environ["REGISTRY_AUTH_FILE"] = pull_secret_path
         exec_cmd(cmd)
