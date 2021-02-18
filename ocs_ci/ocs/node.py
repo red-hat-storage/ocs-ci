@@ -968,7 +968,7 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
 
     # If we use LSO, we need to create and attach a new disk manually
     new_node = get_node_objs(node_names=[new_node_name])[0]
-    add_disk_to_upi_node(node_obj=new_node)
+    add_disk_to_node(node_obj=new_node)
 
     new_node_hostname_label = get_node_hostname_label(new_node)
     log.info(
@@ -1458,8 +1458,8 @@ def wait_for_new_osd_node(old_osd_node_names, timeout=180):
         return None
 
 
-def add_new_node_and_label_upi_lso(
-    node_type,
+def add_new_nodes_and_label_upi_lso(
+    node_os_type,
     num_nodes,
     mark_for_ocs_label=True,
     node_conf=None,
@@ -1470,7 +1470,7 @@ def add_new_node_and_label_upi_lso(
     Add a new node for aws/vmware upi lso platform and label it
 
     Args:
-        node_type (str): Type of node, RHEL or RHCOS
+        node_os_type (str): Type of node, RHEL or RHCOS
         num_nodes (int): number of nodes to add
         mark_for_ocs_label (bool): True if label the new node
         node_conf (dict): The node configurations.
@@ -1483,7 +1483,7 @@ def add_new_node_and_label_upi_lso(
 
     """
     new_node_names = add_new_node_and_label_upi(
-        node_type, num_nodes, mark_for_ocs_label, node_conf
+        node_os_type, num_nodes, mark_for_ocs_label, node_conf
     )
     new_node_objs = get_node_objs(node_names=new_node_names)
 
@@ -1493,14 +1493,14 @@ def add_new_node_and_label_upi_lso(
             log.info(
                 f"Create a new disk with size {disk_size}, and attach to node {node_obj.name}"
             )
-            add_disk_to_upi_node(node_obj, disk_size)
+            add_disk_to_node(node_obj, disk_size)
 
     return new_node_names
 
 
-def add_disk_to_upi_node(node_obj, disk_size=None):
+def add_disk_to_node(node_obj, disk_size=None):
     """
-    Add new disk to lso upi node
+    Add a new disk to a node
 
     Args:
         node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
