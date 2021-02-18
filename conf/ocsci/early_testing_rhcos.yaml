@@ -1,0 +1,4 @@
+---
+# This config will provide the necessary values for early testing of RHCOS based on RHEL 8.4
+ENV_DATA:
+  vm_template: "rhcos-47.84.202102161611-0-vmware.x86_64"
