@@ -33,12 +33,12 @@ pipeline {
       steps {
         script { LAST_STAGE=env.STAGE_NAME }
         sh """
+          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
+          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
           if [ ! -z '${env.EMAIL}' ]; then
             sudo yum install -y /usr/sbin/postfix
             sudo systemctl start postfix
           fi
-          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
-          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
           sudo yum install -y python38-devel
           python3 -V
           pip3 install --user virtualenv
