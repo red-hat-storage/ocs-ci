@@ -97,3 +97,18 @@ class LoadBalancer(object):
         # remove bootstrap IP
         cmd = f"sudo sed -i '/{bootstrap_ip}/d' {constants.HAPROXY_LOCATION}"
         self.lb.exec_cmd(cmd)
+
+    def update_haproxy_with_nodes(self, nodes):
+        """
+        Args:
+            nodes (list): List of nodes to update in haproxy
+
+        """
+        ports = ["80", "443"]
+        for port in ports:
+            for node in nodes:
+                cmd = (
+                    f"sudo sed -i '0,/.*:{port} check$/s/.*:{port} check$/        server "
+                    f"{node} {node}:80 check\\n&/' {constants.HAPROXY_LOCATION}"
+                )
+                self.lb.exec_cmd(cmd)

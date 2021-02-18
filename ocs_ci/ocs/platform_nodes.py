@@ -10,12 +10,16 @@ import boto3
 import yaml
 
 from ocs_ci.deployment.terraform import Terraform
-from ocs_ci.deployment.vmware import update_machine_conf
+from ocs_ci.deployment.vmware import (
+    clone_openshift_installer,
+    update_machine_conf,
+)
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils, powernodes
-from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
+from ocs_ci.utility.load_balancer import LoadBalancer
+from ocs_ci.utility.retry import retry
 from ocs_ci.ocs import constants, ocp, exceptions, cluster
 from ocs_ci.ocs.node import (
     get_node_objs,
@@ -41,6 +45,7 @@ from ocs_ci.utility.utils import (
     get_running_ocp_version,
     set_aws_region,
     run_cmd,
+    get_module_ip,
 )
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.utility.vsphere_nodes import VSPHERENode
@@ -1425,6 +1430,7 @@ class VSPHEREUPINode(VMWareNodes):
         if Version.coerce(ocp_version) >= Version.coerce("4.5"):
             set_aws_region()
             self.folder_structure = True
+            config.ENV_DATA["folder_structure"] = True
 
         # Initialize Terraform
         self.previous_dir = os.getcwd()
@@ -1464,15 +1470,16 @@ class VSPHEREUPINode(VMWareNodes):
         """
         to_change = "clone {"
         add_file_block = f"{constants.LIFECYCLE}\n  {to_change}"
-        logging.debug(
-            f"Adding {constants.LIFECYCLE} to" f" {constants.INSTALLER_MACHINE_CONF}"
+        vm_machine_conf = (
+            constants.VM_MAIN
+            if self.folder_structure
+            else constants.INSTALLER_MACHINE_CONF
         )
-        replace_content_in_file(
-            constants.INSTALLER_MACHINE_CONF, to_change, add_file_block
-        )
+        logging.debug(f"Adding {constants.LIFECYCLE} to {vm_machine_conf}")
+        replace_content_in_file(vm_machine_conf, to_change, add_file_block)
 
         # update the machine configurations
-        update_machine_conf()
+        update_machine_conf(self.folder_structure)
 
     @retry(
         (NoValidConnectionsError, AuthenticationException),
@@ -1497,9 +1504,14 @@ class VSPHEREUPINode(VMWareNodes):
         vmnode.set_host_name(host_name)
         vmnode.reboot()
 
-    def add_node(self):
+    def add_node(self, use_terraform=True):
         """
         Add nodes to the current cluster
+
+        Args:
+            use_terraform (bool): if True use terraform to add nodes,
+                otherwise use manual steps to add nodes
+
         """
         if self.node_type == constants.RHCOS:
             logger.info(f"Adding Nodes of type {self.node_type}")
@@ -1513,65 +1525,112 @@ class VSPHEREUPINode(VMWareNodes):
             pre_count_csr = len(existing_csr_data)
             logger.debug(f"Existing CSR count before adding nodes: {pre_count_csr}")
 
-            # adding node without terraform
-            # clone VM
-            new_nodes_names = self.generate_node_names_for_vsphere(self.compute_count)
-            logger.info(f"New node names: {new_nodes_names}")
+            if use_terraform:
+                self.add_nodes_with_terraform()
+            else:
+                self.add_nodes_without_terraform()
 
-            # get the worker ignition
-            worker_ignition_path = os.path.join(self.cluster_path, constants.WORKER_IGN)
-            worker_ignition_base64 = run_cmd(f"base64 -w0 {worker_ignition_path}")
-            data = {
-                "disk.EnableUUID": config.ENV_DATA["disk_enable_uuid"],
-                "guestinfo.ignition.config.data": worker_ignition_base64,
-                "guestinfo.ignition.config.data.encoding": config.ENV_DATA[
-                    "ignition_data_encoding"
-                ],
-            }
-
-            # clone VM
-            for node_name in new_nodes_names:
-                self.vsphere.clone_vm(
-                    node_name,
-                    config.ENV_DATA["vm_template"],
-                    self.datacenter,
-                    self.cluster_name,
-                    self.datastore,
-                    config.ENV_DATA["vsphere_cluster"],
-                    int(config.ENV_DATA["worker_num_cpus"]),
-                    int(config.ENV_DATA["compute_memory"]),
-                    125829120,
-                    config.ENV_DATA["vm_network"],
-                    power_on=True,
-                    **data,
-                )
-            logger.info("Sleeping for 120 sec to settle down the VMs")
-            time.sleep(120)
-
-            # set hostname
-            for node_name in new_nodes_names:
-                for ip in TimeoutSampler(
-                    600,
-                    60,
-                    self.vsphere.find_ip_by_vm,
-                    node_name,
-                    self.datacenter,
-                    config.ENV_DATA["vsphere_cluster"],
-                    self.cluster_name,
-                ):
-                    if not ("<unset>" in ip or "127.0.0.1" in ip):
-                        logger.info("setting host name")
-                        self.wait_for_connection_and_set_host_name(ip, node_name)
-                        break
-
+            # give some time to settle down the newly added nodes
             time.sleep(self.wait_time)
 
+            # approve pending CSRs
             if constants.CSR_BOOTSTRAPPER_NODE in existing_csr_data:
                 nodes_approve_csr_num = pre_count_csr + self.compute_count
             else:
                 nodes_approve_csr_num = pre_count_csr + self.compute_count + 1
 
             wait_for_all_nodes_csr_and_approve(expected_node_num=nodes_approve_csr_num)
+
+    def add_nodes_with_terraform(self):
+        """
+        Add nodes using terraform
+        """
+        terraform_state_file = os.path.join(
+            self.terraform_data_dir, "terraform.tfstate"
+        )
+        ips_before_adding_nodes = get_module_ip(
+            terraform_state_file, constants.COMPUTE_MODULE
+        )
+        logger.debug(f"Compute IP's before adding new nodes: {ips_before_adding_nodes}")
+
+        # clone openshift installer
+        clone_openshift_installer()
+        self._update_terraform()
+        self._update_machine_conf()
+
+        # initialize terraform and apply
+        os.chdir(self.terraform_data_dir)
+        self.terraform.initialize()
+        self.terraform.apply(self.terraform_var, module=constants.COMPUTE_MODULE)
+        self.terraform.apply(self.terraform_var, module=constants.COMPUTE_MODULE_VM)
+        os.chdir(self.previous_dir)
+
+        # get the newly added compute IPs
+        ips_after_adding_nodes = get_module_ip(
+            terraform_state_file, constants.COMPUTE_MODULE
+        )
+        logger.debug(f"Compute IP's after adding new nodes: {ips_after_adding_nodes}")
+        new_node_ips = list(set(ips_after_adding_nodes) - set(ips_before_adding_nodes))
+        logger.info(f"Newly added compute IP's: {new_node_ips}")
+
+        # inform load balancer regarding newly added nodes
+        lb = LoadBalancer()
+        lb.update_haproxy_with_nodes(new_node_ips)
+        lb.restart_haproxy()
+
+    def add_nodes_without_terraform(self):
+        """
+        Add nodes without terraform
+        """
+        # generate new node names
+        new_nodes_names = self.generate_node_names_for_vsphere(self.compute_count)
+        logger.info(f"New node names: {new_nodes_names}")
+
+        # get the worker ignition
+        worker_ignition_path = os.path.join(self.cluster_path, constants.WORKER_IGN)
+        worker_ignition_base64 = run_cmd(f"base64 -w0 {worker_ignition_path}")
+        data = {
+            "disk.EnableUUID": config.ENV_DATA["disk_enable_uuid"],
+            "guestinfo.ignition.config.data": worker_ignition_base64,
+            "guestinfo.ignition.config.data.encoding": config.ENV_DATA[
+                "ignition_data_encoding"
+            ],
+        }
+
+        # clone VM
+        for node_name in new_nodes_names:
+            self.vsphere.clone_vm(
+                node_name,
+                config.ENV_DATA["vm_template"],
+                self.datacenter,
+                self.cluster_name,
+                self.datastore,
+                config.ENV_DATA["vsphere_cluster"],
+                int(config.ENV_DATA["worker_num_cpus"]),
+                int(config.ENV_DATA["compute_memory"]),
+                125829120,
+                config.ENV_DATA["vm_network"],
+                power_on=True,
+                **data,
+            )
+        logger.info(f"Sleeping for {self.wait_time} sec to settle down the VMs")
+        time.sleep(self.wait_time)
+
+        # set hostname
+        for node_name in new_nodes_names:
+            for ip in TimeoutSampler(
+                600,
+                60,
+                self.vsphere.find_ip_by_vm,
+                node_name,
+                self.datacenter,
+                config.ENV_DATA["vsphere_cluster"],
+                self.cluster_name,
+            ):
+                if not ("<unset>" in ip or "127.0.0.1" in ip):
+                    logger.info("setting host name")
+                    self.wait_for_connection_and_set_host_name(ip, node_name)
+                    break
 
     def generate_node_names_for_vsphere(self, count, prefix="compute-"):
         """
