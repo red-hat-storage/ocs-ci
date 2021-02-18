@@ -2297,7 +2297,7 @@ def get_ocs_version_from_image(image):
 
     """
     try:
-        version = image.split(":")[1].lstrip("latest-").lstrip("stable-")
+        version = image.rsplit(":", 1)[1].lstrip("latest-").lstrip("stable-")
         version = Version.coerce(version)
         return "{major}.{minor}".format(major=version.major, minor=version.minor)
     except ValueError:

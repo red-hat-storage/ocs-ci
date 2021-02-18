@@ -50,7 +50,7 @@ class CatalogSource(OCP):
         except CommandFailed:
             logger.warning(f"Cannot find CatalogSource object {self.resource_name}")
             return None
-        return data["spec"]["image"].split(":")[1]
+        return data["spec"]["image"].rsplit(":", 1)[1]
 
     def get_image_url(self):
         """
@@ -66,7 +66,7 @@ class CatalogSource(OCP):
         except CommandFailed:
             logger.warning(f"Cannot find CatalogSource object {self.resource_name}")
             return None
-        return data["spec"]["image"].split(":")[0]
+        return data["spec"]["image"].rsplit(":", 1)[0]
 
     def check_state(self, state):
         """
