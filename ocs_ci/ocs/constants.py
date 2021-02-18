@@ -524,20 +524,19 @@ PODS_PER_NODE_COUNT_YAML = os.path.join(
 ANSIBLE_INVENTORY_YAML = os.path.join("ocp-deployment", "inventory.yaml.j2")
 
 # External vault kms yamls
+EXTERNAL_VAULT_TEMPLATES = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "vault")
 EXTERNAL_VAULT_CA_CERT = os.path.join(
-    TEMPLATE_OPENSHIFT_INFRA_DIR, "ocs-kms-ca-secret.yaml"
+    EXTERNAL_VAULT_TEMPLATES, "ocs-kms-ca-secret.yaml"
 )
 EXTERNAL_VAULT_CLIENT_CERT = os.path.join(
-    TEMPLATE_OPENSHIFT_INFRA_DIR, "ocs-kms-client-cert.yaml"
+    EXTERNAL_VAULT_TEMPLATES, "ocs-kms-client-cert.yaml"
 )
 EXTERNAL_VAULT_CLIENT_KEY = os.path.join(
-    TEMPLATE_OPENSHIFT_INFRA_DIR, "ocs-kms-client-key.yaml"
+    EXTERNAL_VAULT_TEMPLATES, "ocs-kms-client-key.yaml"
 )
-EXTERNAL_VAULT_KMS_TOKEN = os.path.join(
-    TEMPLATE_OPENSHIFT_INFRA_DIR, "ocs-kms-token.yaml"
-)
+EXTERNAL_VAULT_KMS_TOKEN = os.path.join(EXTERNAL_VAULT_TEMPLATES, "ocs-kms-token.yaml")
 EXTERNAL_VAULT_KMS_CONNECTION_DETAILS = os.path.join(
-    TEMPLATE_OPENSHIFT_INFRA_DIR, "ocs-kms-connection-details.yaml"
+    EXTERNAL_VAULT_TEMPLATES, "ocs-kms-connection-details.yaml"
 )
 
 # constants
@@ -1208,18 +1207,17 @@ CLOUD_MNGR_PLATFORMS = ["AWS", "GCP", "AZURE", "IBMCOS"]
 
 # Vault related configurations
 VAULT_VERSION_INFO_URL = "https://github.com/hashicorp/vault/releases/latest"
-VAULT_DOWNLOAD_BASE_URL = "https://releases.hashicorp.com/vault/"
+VAULT_DOWNLOAD_BASE_URL = "https://releases.hashicorp.com/vault"
 
 # Vault related constants
-VAULT_DEFAULT_CA_CERT = "ocs-kms-ca-secret"
-VAULT_DEFAULT_CLIENT_CERT = "ocs-kms-client-cert"
-VAULT_DEFAULT_CLIENT_KEY = "ocs-kms-client-key"
+
 VAULT_DEFAULT_NAMESPACE = ""
 VAULT_DEFAULT_PATH_PREFIX = "ocs"
 VAULT_DEFAULT_POLICY_PREFIX = "rook"
 VAULT_DEFAULT_TLS_SERVER = ""
 VAULT_KMS_CONNECTION_DETAILS_RESOURCE = "ocs-kms-connection-details"
 VAULT_KMS_TOKEN_RESOURCE = "ocs-kms-token"
+VAULT_CLIENT_CERT_PATH = os.path.join(DATA_DIR, "vault-client.crt")
 
 # min and max Noobaa endpoints
 MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1

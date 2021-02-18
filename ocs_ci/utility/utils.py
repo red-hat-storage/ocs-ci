@@ -730,6 +730,10 @@ def get_vault_cli(bind_dir=None, force_download=False):
     basically for CLI purpose. Binary will be directly
     put into ocs_ci/bin/ directory
 
+    Args:
+        bind_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+        force_download (bool): Force vault cli download even if already present
+
     """
     res = requests.get(constants.VAULT_VERSION_INFO_URL)
     version = res.url.split("/")[-1].lstrip("v")
@@ -741,7 +745,7 @@ def get_vault_cli(bind_dir=None, force_download=False):
     system = system.lower()
     zip_file = f"vault_{version}_{system}_amd64.zip"
     vault_cli_filename = "vault"
-    vault_binary_path = os.path.join(bind_dir, vault_cli_filename)
+    vault_binary_path = os.path.join(bin_dir, vault_cli_filename)
     if os.path.isfile(vault_binary_path) and force_download:
         delete_file(vault_binary_path)
     if os.path.isfile(vault_binary_path):
@@ -3128,3 +3132,23 @@ def get_ocp_upgrade_history():
     upgrade_history_info = cluster_version_info["status"]["history"]
     upgrade_history = [each_upgrade["version"] for each_upgrade in upgrade_history_info]
     return upgrade_history
+
+
+def get_default_if_keyval_empty(dictionary, key, default_val):
+    """
+    if Key has an empty value OR key doesn't exist
+    then return default value
+
+    Args:
+        dictionary (dict): Dictionary where we have to lookup
+        key (str): key to lookup
+        default_val (str): If key doesn't have value then return
+            this default_val
+
+    Returns:
+        dictionary[key] if value is present else default_val
+
+    """
+    if not dictionary.get(key):
+        return default_val
+    return dictionary.get(key)

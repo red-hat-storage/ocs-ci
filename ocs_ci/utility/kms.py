@@ -13,7 +13,7 @@ import subprocess
 import base64
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.exceptions import (
     VaultDeploymentError,
     VaultOperationError,
@@ -28,6 +28,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     get_vault_cli,
     get_running_cluster_id,
+    get_default_if_keyval_empty,
 )
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,27 @@ class Vault(KMS):
         """
         os.environ["VAULT_ADDR"] = f"https://{self.vault_server}:{self.port}"
         os.environ["VAULT_TOKEN"] = self.vault_root_token
+        os.environ["VAULT_FORMAT"] = "json"
+        # setup client crt so that vault cli works smoothly
+        # if 'VAULT_SKIP_VERIFY' is True then no need to do
+        # this call as vault would have configured for http
+        if (
+            not config.ENV_DATA.get("VAULT_SKIP_VERIFY")
+            and config.ENV_DATA.get("vault_deploy_mode") == "external"
+        ):
+            self.setup_vault_client_cert()
+            os.environ["VAULT_CACERT"] = constants.VAULT_CLIENT_CERT_PATH
+
+    def setup_vault_client_cert(self):
+        """
+        For Vault cli interaction with the server we need client cert
+        to talk to HTTPS on the vault server
+
+        """
+        cert_str = base64.b64decode(self.client_cert_base64).decode()
+        with open(constants.VAULT_CLIENT_CERT_PATH, "w") as cert:
+            cert.write(cert_str)
+            logger.info(f"Created cert file at {constants.VAULT_CLIENT_CERT_PATH}")
 
     def create_ocs_vault_resources(self):
         """
@@ -136,8 +158,8 @@ class Vault(KMS):
         if not config.ENV_DATA.get("VAULT_SKIP_VERIFY"):
             # create ca cert secret
             ca_data = templating.load_yaml(constants.EXTERNAL_VAULT_CA_CERT)
-            self.ca_cert_name = config.ENV_DATA.get(
-                "VAULT_CACERT", constants.VAULT_DEFAULT_CA_CERT
+            self.ca_cert_name = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CACERT", defaults.VAULT_DEFAULT_CA_CERT
             )
             ca_data["metadata"]["name"] = self.ca_cert_name
             ca_data["data"]["cert"] = self.ca_cert_base64
@@ -147,8 +169,8 @@ class Vault(KMS):
             client_cert_data = templating.load_yaml(
                 constants.EXTERNAL_VAULT_CLIENT_CERT
             )
-            self.client_cert_name = config.ENV_DATA.get(
-                "VAULT_CLIENT_CERT", constants.VAULT_DEFAULT_CLIENT_CERT
+            self.client_cert_name = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CLIENT_CERT", defaults.VAULT_DEFAULT_CLIENT_CERT
             )
             client_cert_data["metadata"]["name"] = self.client_cert_name
             client_cert_data["data"]["cert"] = self.client_cert_base64
@@ -156,10 +178,10 @@ class Vault(KMS):
 
             # create client key secert
             client_key_data = templating.load_yaml(constants.EXTERNAL_VAULT_CLIENT_KEY)
-            self.client_key_name = config.ENV_DATA.get(
-                "VAULT_CLIENT_KEY", constants.VAULT_DEFAULT_CLIENT_KEY
+            self.client_key_name = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CLIENT_KEY", defaults.VAULT_DEFAULT_CLIENT_KEY
             )
-            self.client_key_name["metadata"]["name"] = self.client_key_name
+            client_key_data["metadata"]["name"] = self.client_key_name
             client_key_data["data"]["key"] = self.client_key_base64
             self.create_resource(client_key_data, prefix="clientkey")
 
@@ -473,7 +495,7 @@ kms_map = {"vault": Vault}
 
 
 def get_kms_deployment():
-    provider = config.DEPLOYMENT["kms_provider"]
+    provider = config.ENV_DATA["KMS_PROVIDER"]
     try:
         return kms_map[provider]()
     except KeyError:
