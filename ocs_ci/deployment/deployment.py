@@ -878,12 +878,6 @@ class Deployment(object):
         Args:
             log_level (str): log level for installer (default: DEBUG)
         """
-        # If KMS is configured, clean up the backend resources
-        # we are doing it before OCP cleanup
-        if config.DEPLOYMENT.get("kms_deployment"):
-            kms = KMS.get_kms_deployment()
-            kms.cleanup()
-
         if self.platform == constants.IBM_POWER_PLATFORM:
             if not config.ENV_DATA["skip_ocs_deployment"]:
                 self.destroy_ocs()

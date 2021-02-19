@@ -58,6 +58,7 @@ class Vault(KMS):
         super().__init__("vault")
         self.vault_server = None
         self.port = None
+        self.cluster_id = None
         # Name of kubernetes resources
         # for ca_cert, client_cert, client_key
         self.ca_cert_name = None
@@ -416,7 +417,7 @@ class Vault(KMS):
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             )
             try:
-                token = vault_token.get().get()["data"]["token"]
+                token = vault_token.get().get("data")["token"]
                 self.vault_path_token = base64.b64decode(token).decode()
             except IndexError:
                 raise KMSTokenError("Couldn't find KMS token")
@@ -476,6 +477,8 @@ class Vault(KMS):
         """
         if not self.vault_server:
             self.gather_init_vault_conf()
+
+        self.update_vault_env_vars()
         # get vault path
         self.get_vault_backend_path()
         # from token secret get token
@@ -486,7 +489,6 @@ class Vault(KMS):
         self.get_vault_policy()
         # Delete the policy and backend path from vault
         # we need root token of vault in the env
-        self.update_vault_env_vars()
         self.remove_vault_backend_path()
         self.remove_vault_policy()
 
