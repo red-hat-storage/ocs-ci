@@ -1,12 +1,11 @@
 ---
-storage_class_yaml:
-  apiVersion: storage.k8s.io/v1
-  kind: StorageClass
-  metadata:
-    name: thick
-  parameters:
-    datastore: vsanDatastore
-    diskformat: thick
-  provisioner: kubernetes.io/vsphere-volume
-  reclaimPolicy: Delete
-  volumeBindingMode: Immediate
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: thick
+parameters:
+  datastore: vsanDatastore
+  diskformat: thick
+provisioner: kubernetes.io/vsphere-volume
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
