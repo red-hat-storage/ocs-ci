@@ -16,7 +16,11 @@ from ocs_ci.utility import localstorage, utils
 from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.ocs.exceptions import UnsupportedFeatureError
 from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler
+from ocs_ci.ocs.resources.pv import get_pv_objs_in_sc
+from ocs_ci.ocs.machine import get_labeled_nodes
+from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 
 log = logging.getLogger(__name__)
 
@@ -590,3 +594,95 @@ def get_all_storageclass():
         )
     ]
     return storageclass
+
+
+def add_capacity_lso(new_node):
+    """"""
+    new_node = "compute-5"
+    labeled_nodes = get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+    count = len(labeled_nodes)
+
+    logging.info(f"Add {new_node} to Local Volume Set")
+    path_to_nodes = (
+        f"/spec/nodeSelector/nodeSelectorTerms/0/matchExpressions/0/values/-"
+    )
+    params = f"""[{{"op": "add", "path": "{path_to_nodes}", "value": "{new_node}"}}]"""
+    ocp_lvs_obj = OCP(
+        kind=constants.LOCAL_VOLUME_SET,
+        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
+        resource_name=constants.LOCAL_BLOCK_RESOURCE,
+    )
+    ocp_lvs_obj.patch(params=params, format_type="json")
+
+    logging.info(f"Add {new_node} to Local Volume Discovery")
+    ocp_lvd_obj = OCP(
+        kind=constants.LOCAL_VOLUME_DISCOVERY,
+        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
+    )
+    ocp_lvd_obj.patch(params=params, format_type="json")
+
+    logging.info(f"Change count field to {count} on Storage Cluster")
+    path_to_count = f"/spec/storageDeviceSets/0/count"
+    params = f"""[{{"op": "replace", "path": "{path_to_count}", "value": {count}}}]"""
+    storage_cluster_obj = OCP(
+        kind=constants.STORAGECLUSTER, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    resource = storage_cluster_obj.get()["items"][0]
+    resource_name = resource["metadata"]["name"]
+    storage_cluster_obj.patch(
+        resource_name=resource_name, params=params, format_type="json"
+    )
+
+    logging.info(f"Wait for {count} pvs on localblock storage class")
+    for pvs_lb in TimeoutSampler(
+        timeout=600, sleep=10, func=get_pv_objs_in_sc, sc_name="localblock"
+    ):
+        if len(pvs_lb) == count:
+            break
+
+    logging.info("Wait for deviceset pvcs to be in Bound state")
+    for deviceset_pvcs in TimeoutSampler(
+        timeout=600,
+        sleep=10,
+        func=get_deviceset_pvcs,
+    ):
+        if len(deviceset_pvcs) == count:
+            break
+    for deviceset_pvc in deviceset_pvcs:
+        wait_for_resource_state(
+            resource=deviceset_pvc,
+            state=constants.STATUS_BOUND,
+            timeout=300,  # Timeout given 5 minutes
+        )
+
+    logging.info("Wait for osd pods to be in Running state")
+    for osd_pods in TimeoutSampler(
+        timeout=600,
+        sleep=10,
+        func=get_osd_pods,
+    ):
+        if len(osd_pods) == count:
+            break
+    for osd_pod in osd_pods:
+        wait_for_resource_state(
+            resource=osd_pod, state=constants.STATUS_RUNNING, timeout=300
+        )
+
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    ct_pod = get_ceph_tools_pod()
+    osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
+    for node in osd_tree["nodes"]:
+        if node["name"] in labeled_nodes:
+            worker_node = node["name"]
+            assert node["type"] == "host", f"{worker_node} node is not host"
+
+    ceph_df = ct_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+    actual_capacity = ceph_df["pools"][0]["stats"]["max_avail"]
+    osd_size = pvs_lb[0].get("spec").get("capacity").get("storage")
+    osd_size_int = int(osd_size.replace("Gi", ""))
+    import math
+
+    expected_capacity = int((osd_size_int * math.pow(2, 30) * count) / 3 * 0.85)
+    if (0.9 * expected_capacity) > actual_capacity:
+        assert ValueError, "Storage capacity is lower than expected"
