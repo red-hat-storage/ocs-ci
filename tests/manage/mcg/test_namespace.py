@@ -217,7 +217,7 @@ class TestNamespace(MCGTest):
 
         # Upload files to NS bucket
         self.write_files_to_pod_and_upload(
-            mcg_obj, awscli_pod, bucket_to_write=ns_bucket, amount=3
+            mcg_obj, awscli_pod, bucket_to_write=ns_bucket.name, amount=3
         )
         # Read files directly from AWS
         self.download_files(
