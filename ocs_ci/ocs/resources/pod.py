@@ -1810,7 +1810,7 @@ def delete_osd_removal_job(osd_id):
     try:
         osd_removal_job.ocp.wait_for_delete(resource_name=job_name)
     except TimeoutError:
-        logger.warning(f"{job_name} job did not deleted successfully")
+        logger.warning(f"{job_name} job did not get deleted successfully")
         return False
 
     return True
