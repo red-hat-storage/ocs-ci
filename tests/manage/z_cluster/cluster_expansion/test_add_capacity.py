@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_bm,
     skipif_external_mode,
     skipif_bmpsi,
+    skipif_no_lso,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -23,6 +24,8 @@ from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.ocs.resources.storage_cluster import add_capacity_lso
+from ocs_ci.ocs.node import add_new_node_and_label_upi
 
 
 def add_capacity_test():
@@ -95,3 +98,24 @@ class TestAddCapacityPreUpgrade(ManageTest):
         Test to add variable capacity to the OSD cluster while IOs running
         """
         add_capacity_test()
+
+
+@tier1
+@skipif_no_lso
+@skipif_external_mode
+@skipif_bm
+@skipif_aws_i3
+@skipif_ocs_version("<4.7")
+class TestAddCapacityLso(ManageTest):
+    """
+    Automates adding variable capacity to the lso cluster
+
+    """
+
+    def test_add_capacity_lso(self):
+        """
+        Test to add capacity to the lso cluster
+
+        """
+        new_nodes = add_new_node_and_label_upi()
+        add_capacity_lso(new_node=new_nodes[0])

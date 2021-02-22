@@ -3,6 +3,7 @@ StorageCluster related functionalities
 """
 import logging
 import re
+import math
 
 from jsonschema import validate
 
@@ -11,7 +12,6 @@ from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.exceptions import ResourceNotFoundError
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
-from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
 from ocs_ci.utility import localstorage, utils
 from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.ocs.exceptions import UnsupportedFeatureError
@@ -21,6 +21,11 @@ from ocs_ci.ocs.resources.pv import get_pv_objs_in_sc
 from ocs_ci.ocs.machine import get_labeled_nodes
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
+from ocs_ci.ocs.resources.pod import (
+    get_pods_having_label,
+    get_osd_pods,
+    get_ceph_tools_pod,
+)
 
 log = logging.getLogger(__name__)
 
@@ -597,8 +602,13 @@ def get_all_storageclass():
 
 
 def add_capacity_lso(new_node):
-    """"""
-    new_node = "compute-5"
+    """
+    Add capacity on lso cluster
+
+    Args:
+        new_node (str): The name of the new node.
+
+    """
     labeled_nodes = get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
     count = len(labeled_nodes)
 
@@ -668,8 +678,7 @@ def add_capacity_lso(new_node):
             resource=osd_pod, state=constants.STATUS_RUNNING, timeout=300
         )
 
-    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
-
+    logging.info("Verify OSD tree")
     ct_pod = get_ceph_tools_pod()
     osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
     for node in osd_tree["nodes"]:
@@ -677,12 +686,11 @@ def add_capacity_lso(new_node):
             worker_node = node["name"]
             assert node["type"] == "host", f"{worker_node} node is not host"
 
+    logging.info("Check lso cluster space utilization")
     ceph_df = ct_pod.exec_ceph_cmd(ceph_cmd="ceph df")
     actual_capacity = ceph_df["pools"][0]["stats"]["max_avail"]
     osd_size = pvs_lb[0].get("spec").get("capacity").get("storage")
     osd_size_int = int(osd_size.replace("Gi", ""))
-    import math
-
     expected_capacity = int((osd_size_int * math.pow(2, 30) * count) / 3 * 0.85)
     if (0.9 * expected_capacity) > actual_capacity:
         assert ValueError, "Storage capacity is lower than expected"
