@@ -33,7 +33,7 @@ pipeline {
       steps {
         script { LAST_STAGE=env.STAGE_NAME }
         sh """
-          sudo yum install -y python38-devel
+          sudo yum install -y gcc python38-devel
           python3 -V
           pip3 install --user virtualenv
           python3 -m virtualenv -p python3.8 venv
