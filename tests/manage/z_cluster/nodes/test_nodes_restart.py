@@ -6,7 +6,7 @@ from ocs_ci.framework.testlib import (
     tier4a,
     ignore_leftovers,
     ManageTest,
-    aws_platform_required,
+    cloud_platform_required,
     bugzilla,
     skipif_no_lso,
 )
@@ -55,7 +55,7 @@ class TestNodesRestart(ManageTest):
             pytest.param(*[True], marks=pytest.mark.polarion_id("OCS-894")),
             pytest.param(
                 *[False],
-                marks=[pytest.mark.polarion_id("OCS-895"), aws_platform_required],
+                marks=[pytest.mark.polarion_id("OCS-895"), cloud_platform_required],
             ),
         ],
     )
