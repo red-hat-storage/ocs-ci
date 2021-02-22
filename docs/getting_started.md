@@ -63,6 +63,14 @@ necessary dependencies
    * `pip install -r requirements-dev.txt`
    * `pre-commit install --hook-type pre-commit --hook-type commit-msg`
 
+
+## OCS-CI Container Image
+  We also have ocs-ci container image available at quay.io/ocsci/ocs-ci, the image
+  is build using the latest branch. It is still experimental as the ci requires
+  configuration files that needs to be available for it to work properly.
+
+  The image is provided so that users can use it for development purpose.
+
 ## Initial Setup
 
 ### OCS-CI config
