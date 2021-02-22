@@ -1673,7 +1673,8 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
 
     """
     ocp_version = float(get_ocp_version())
-    if ocp_version >= 4.7:
+    ocs_version = float(config.ENV_DATA["ocs_version"])
+    if ocp_version >= 4.6 and ocs_version >= 4.7:
         pattern = "ocs-osd-removal-job"
     else:
         pattern = f"ocs-osd-removal-{osd_id}"
@@ -1798,7 +1799,8 @@ def delete_osd_removal_job(osd_id):
 
     """
     ocp_version = float(get_ocp_version())
-    if ocp_version >= 4.7:
+    ocs_version = float(config.ENV_DATA["ocs_version"])
+    if ocp_version >= 4.6 and ocs_version >= 4.7:
         job_name = "ocs-osd-removal-job"
     else:
         job_name = f"ocs-osd-removal-{osd_id}"
