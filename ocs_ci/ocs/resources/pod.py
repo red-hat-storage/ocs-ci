@@ -270,17 +270,18 @@ class Pod(OCS):
             .get("mountPath")
         )
 
-    def workload_setup(self, storage_type, jobs=1):
+    def workload_setup(self, storage_type, jobs=1, path=None):
         """
         Do setup on pod for running FIO
 
         Args:
             storage_type (str): 'fs' or 'block'
             jobs (int): Number of jobs to execute FIO
+            path (str): Mount path
         """
         work_load = "fio"
         name = f"test_workload_{work_load}"
-        path = self.get_storage_path(storage_type)
+        path = path or self.get_storage_path(storage_type)
         # few io parameters for Fio
 
         self.wl_obj = workload.WorkLoad(name, path, work_load, storage_type, self, jobs)
@@ -302,6 +303,7 @@ class Pod(OCS):
         bs="4K",
         end_fsync=0,
         invalidate=None,
+        path=None,
     ):
         """
         Execute FIO on a pod
@@ -331,10 +333,11 @@ class Pod(OCS):
             end_fsync (int): If 1, fio will sync file contents when a write
                 stage has completed. Fio default is 0
             invalidate (bool): Invalidate the buffer/page cache parts of the files to be used prior to starting I/O
+            path (str): Mount path
 
         """
         if not self.wl_setup_done:
-            self.workload_setup(storage_type=storage_type, jobs=jobs)
+            self.workload_setup(storage_type=storage_type, jobs=jobs, path=path)
 
         if io_direction == "rw":
             self.io_params = templating.load_yaml(constants.FIO_IO_RW_PARAMS_YAML)
