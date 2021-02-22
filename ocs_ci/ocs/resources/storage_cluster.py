@@ -613,9 +613,7 @@ def add_capacity_lso(new_node):
     count = len(labeled_nodes)
 
     logging.info(f"Add {new_node} to Local Volume Set")
-    path_to_nodes = (
-        f"/spec/nodeSelector/nodeSelectorTerms/0/matchExpressions/0/values/-"
-    )
+    path_to_nodes = "/spec/nodeSelector/nodeSelectorTerms/0/matchExpressions/0/values/-"
     params = f"""[{{"op": "add", "path": "{path_to_nodes}", "value": "{new_node}"}}]"""
     ocp_lvs_obj = OCP(
         kind=constants.LOCAL_VOLUME_SET,
@@ -632,7 +630,7 @@ def add_capacity_lso(new_node):
     ocp_lvd_obj.patch(params=params, format_type="json")
 
     logging.info(f"Change count field to {count} on Storage Cluster")
-    path_to_count = f"/spec/storageDeviceSets/0/count"
+    path_to_count = "/spec/storageDeviceSets/0/count"
     params = f"""[{{"op": "replace", "path": "{path_to_count}", "value": {count}}}]"""
     storage_cluster_obj = OCP(
         kind=constants.STORAGECLUSTER, namespace=defaults.ROOK_CLUSTER_NAMESPACE
