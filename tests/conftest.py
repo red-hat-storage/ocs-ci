@@ -1108,6 +1108,13 @@ def cluster(request, log_cli_level):
     )
     get_openshift_client(force_download=force_download)
 
+    # set environment variable for early testing of RHCOS
+    if config.ENV_DATA.get("early_testing"):
+        release_img = config.ENV_DATA["RELEASE_IMG"]
+        log.info(f"Running early testing of RHCOS with release image: {release_img}")
+        os.environ["RELEASE_IMG"] = release_img
+        os.environ["OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE"] = release_img
+
     if deploy:
         # Deploy cluster
         deployer.deploy_cluster(log_cli_level)

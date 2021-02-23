@@ -1,4 +1,6 @@
 ---
 # This config will provide the necessary values for early testing of RHCOS based on RHEL 8.4
 ENV_DATA:
-  vm_template: "rhcos-47.84.202102161611-0-vmware.x86_64"
+  early_testing: True
+  RELEASE_IMG: "registry.ci.openshift.org/rhcos-devel/rhel4784:4.7.0-rc.2"
+  vm_template: "rhcos-47.84.202102221652-0-vmware.x86_64"
