@@ -2017,17 +2017,16 @@ def replace_content_in_file(file, old, new):
     """
     # Read the file
     with open(rf"{file}", "r") as fd:
-        file_data = fd.read()
+        file_data = [line.rstrip("\n") for line in fd.readlines()]
 
     # Replace/add the new data
-    if old in file_data:
-        file_data = file_data.replace(old, new)
-    else:
-        file_data = new + file_data
-
+    file_data = [new if old in line else line for line in file_data]
+    if new not in file_data:
+        file_data.append(new)
+    file_data = [f"{line}\n" for line in file_data]
     # Write the file out again
     with open(rf"{file}", "w") as fd:
-        fd.write(file_data)
+        fd.writelines(file_data)
 
 
 @retry((CommandFailed), tries=100, delay=10, backoff=1)

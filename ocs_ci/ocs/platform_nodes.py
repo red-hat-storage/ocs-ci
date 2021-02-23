@@ -1453,7 +1453,6 @@ class VSPHEREUPINode(VMWareNodes):
             self.cluster_path, constants.TERRAFORM_DATA_DIR, "terraform.tfvars"
         )
         compute_str = "compute_count ="
-        to_change = f'{compute_str} "{self.current_compute_count}"'
         updated_compute_str = f'{compute_str} "{self.target_compute_count}"'
         logging.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
 
@@ -1462,7 +1461,7 @@ class VSPHEREUPINode(VMWareNodes):
         shutil.copyfile(self.terraform_var, original_file)
         logging.info(f"original terraform file: {original_file}")
 
-        replace_content_in_file(self.terraform_var, to_change, updated_compute_str)
+        replace_content_in_file(self.terraform_var, compute_str, updated_compute_str)
 
     def _update_machine_conf(self):
         """
