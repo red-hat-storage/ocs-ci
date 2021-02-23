@@ -1,8 +1,10 @@
+---
 apiVersion: noobaa.io/v1alpha1
-kind: BucketClass
+kind: NamespaceStore
 metadata:
-  name: default
+  name: namespace-store
   namespace: openshift-storage
   labels:
     app: noobaa
-spec:
+  finalizers:
+    - noobaa.io/finalizer
