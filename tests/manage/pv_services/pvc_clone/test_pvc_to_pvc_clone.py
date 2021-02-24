@@ -88,7 +88,7 @@ class TestClone(ManageTest):
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
         cloned_pvc_obj = pvc.create_pvc_clone(sc_name, parent_pvc, clone_yaml)
         teardown_factory(cloned_pvc_obj)
-        helpers.wait_for_resource_state(cloned_pvc_obj, constants.STATUS_BOUND)
+        helpers.wait_for_resource_state(cloned_pvc_obj, constants.STATUS_BOUND, 100)
         cloned_pvc_obj.reload()
 
         # Create and attach pod to the pvc
