@@ -39,7 +39,7 @@ def add_capacity_test():
     osd_pod_names_post_expansion = [pod.name for pod in osd_pods_post_expansion]
     restarted_osds = list()
     logger.info(
-        "Checking if existing OSD pods were restarted post add capacity (bug 1931601)"
+        "Checking if existing OSD pods were restarted (deleted) post add capacity (bug 1931601)"
     )
 
     for pod in existing_osd_pod_names:
@@ -47,7 +47,7 @@ def add_capacity_test():
             restarted_osds.append(pod)
     assert (
         len(restarted_osds) == 0
-    ), f"The following OSD pods were restarted post add capacity: {restarted_osds}"
+    ), f"The following OSD pods were restarted (deleted) post add capacity: {restarted_osds}"
 
     pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
     pod.wait_for_resource(
