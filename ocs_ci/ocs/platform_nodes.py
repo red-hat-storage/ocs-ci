@@ -1453,7 +1453,13 @@ class VSPHEREUPINode(VMWareNodes):
             self.cluster_path, constants.TERRAFORM_DATA_DIR, "terraform.tfvars"
         )
         compute_str = "compute_count ="
-        to_change = f'{compute_str} "{self.current_compute_count}"'
+
+        # get the existing compute value from terraform.tfvars
+        with open(rf"{self.terraform_var}", "r") as fd:
+            file_data = fd.read()
+        compute_value_in_tfvars = file_data.split("compute_count = ")[1].split()[0]
+
+        to_change = f"{compute_str} {compute_value_in_tfvars}"
         updated_compute_str = f'{compute_str} "{self.target_compute_count}"'
         logging.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
 
