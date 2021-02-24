@@ -58,8 +58,10 @@ class TestAddNode(ManageTest):
                 f"The worker nodes number before expansion {len(node.get_worker_nodes())}"
             )
             if config.ENV_DATA.get("rhel_user"):
-                pytest.skip("Skipping add RHEL node, code unavailable")
-            node_type = constants.RHCOS
+                node_type = constants.RHEL_OS
+            else:
+                node_type = constants.RHCOS
+
             assert add_new_node_and_label_upi(node_type, new_nodes), "Add node failed"
             logger.info(
                 f"The worker nodes number after expansion {len(node.get_worker_nodes())}"
