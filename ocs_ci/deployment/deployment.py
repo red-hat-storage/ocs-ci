@@ -46,6 +46,7 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state,
 )
+from ocs_ci.ocs.resources.storage_cluster import setup_ceph_debug
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
 from ocs_ci.utility.flexy import load_cluster_info
@@ -698,6 +699,12 @@ class Deployment(object):
                 cluster_data["spec"]["encryption"]["kms"] = {
                     "enable": True,
                 }
+
+        if config.DEPLOYMENT["ceph_debug"]:
+            setup_ceph_debug()
+            cluster_data["spec"]["managedResources"] = {
+                "cephConfig": {"reconcileStrategy": "ignore"}
+            }
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False

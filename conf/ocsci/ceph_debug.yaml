@@ -1,0 +1,3 @@
+---
+DEPLOYMENT:
+  ceph_debug: True

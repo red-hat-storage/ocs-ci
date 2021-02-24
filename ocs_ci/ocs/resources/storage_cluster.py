@@ -1,8 +1,9 @@
 """
 StorageCluster related functionalities
 """
-import logging
 import re
+import logging
+import tempfile
 
 from jsonschema import validate
 
@@ -12,7 +13,7 @@ from ocs_ci.ocs.exceptions import ResourceNotFoundError
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
-from ocs_ci.utility import localstorage, utils
+from ocs_ci.utility import localstorage, utils, templating
 from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.ocs.exceptions import UnsupportedFeatureError
 from ocs_ci.utility.rgwutils import get_rgw_count
@@ -591,3 +592,29 @@ def get_all_storageclass():
         )
     ]
     return storageclass
+
+
+def setup_ceph_debug():
+    """
+    Set Ceph to run in debug log level using a ConfigMap.
+    This functionality is available starting OCS 4.7.
+
+    """
+    ceph_debug_log_configmap_data = templating.load_yaml(
+        constants.CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP
+    )
+    ceph_debug_log_configmap_data["data"]["config"] = (
+        "\n"
+        + "\n".join(constants.ROOK_CEPH_CONFIG_VALUES)
+        + "\n"
+        + "\n".join(constants.CEPH_DEBUG_CONFIG_VALUES)
+    )
+
+    ceph_configmap_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="config_map", delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        ceph_debug_log_configmap_data, ceph_configmap_yaml.name
+    )
+    log.info("Setting Ceph to work in debug log level using a new ConfigMap resource")
+    run_cmd(f"oc create -f {ceph_configmap_yaml.name}")

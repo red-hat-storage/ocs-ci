@@ -129,7 +129,7 @@ to the pytest.
    <pattern_to_replace_from::pattern_to_replace_to>, while '::' is the delimiter
 * `--dev-mode` - Runs in development mode. Skip the checks like collecting
    cluster versions, collection ocs versions, health checks etc.
-
+* `--ceph-debug` - Deploy with Ceph in debug log level. This option is available starting OCS 4.7
 ## Examples
 
 Deployment and teardown of the test cluster can be done automatically with
