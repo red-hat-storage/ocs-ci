@@ -5,10 +5,7 @@ import time
 from ocs_ci.ocs import constants, scale_noobaa_lib
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
-from ocs_ci.framework.pytest_customization.marks import (
-    vsphere_platform_required,
-    skipif_aws_creds_are_missing,
-)
+from ocs_ci.framework.pytest_customization.marks import vsphere_platform_required
 
 log = logging.getLogger(__name__)
 
@@ -25,10 +22,9 @@ class TestScaleOCBCreation(E2ETest):
     namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
     sc_name = constants.NOOBAA_SC
     sc_rgw_name = constants.DEFAULT_STORAGECLASS_RGW
-    scale_obc_count = 1000
+    scale_obc_count = 100
     num_obc_batch = 50
 
-    @skipif_aws_creds_are_missing
     @pytest.mark.polarion_id("OCS-2478")
     def test_scale_mcg_obc_creation(self, tmp_path, timeout=60):
         """
@@ -74,7 +70,7 @@ class TestScaleOCBCreation(E2ETest):
     @pytest.mark.polarion_id("OCS-2479")
     def test_scale_rgw_obc_creation(self, tmp_path, timeout=60):
         """
-        MCG OBC creation using RGW storage class
+        OBC creation using RGW storage class
         This test case only runs on vSphere cluster deployment
         """
 

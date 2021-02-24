@@ -20,11 +20,12 @@ def construct_obc_creation_yaml_bulk_for_kube_job(no_of_obc, sc_name, namespace)
         sc_name (str): storage class name using for obc creation
         namespace(str): Namespace uses to create bulk of obc
     Returns:
+
          obc_dict_list (list): List of all obc.yaml dicts
 
     """
 
-    # Construct obc.yaml for the no_of_required_pvc count
+    # Construct obc.yaml for the no_of_obc count
     # append all the obc.yaml dict to obc_dict_list and return the list
     obc_dict_list = list()
     for i in range(no_of_obc):
@@ -40,7 +41,7 @@ def construct_obc_creation_yaml_bulk_for_kube_job(no_of_obc, sc_name, namespace)
 
 
 def check_all_obc_reached_bound_state_in_kube_job(
-    kube_job_obj, namespace, no_of_obc, timeout=300
+    kube_job_obj, namespace, no_of_obc, timeout=300, wait_time=20
 ):
     """
     Function to check either bulk created OBCs reached Bound state using kube_job
@@ -49,13 +50,14 @@ def check_all_obc_reached_bound_state_in_kube_job(
         kube_job_obj (obj): Kube Job Object
         namespace (str): Namespace of OBC's created
         no_of_obc (int): Bulk OBC count
-        timeout: a timeout for all the obc in kube job to reach bound status
+        timeout (second): a timeout for all the obc in kube job to reach bound state
+        wait_time (int): number of wait time to ensure all OCBs to reach bound state
 
     Returns:
         obc_bound_list (list): List of all OBCs which is in Bound state.
 
-    Asserts:
-        If not all OBC reached to Bound state.
+    Raises:
+        AssertionError: If not all OBC reached to Bound state
 
     """
     # Check all OBCs to reach Bound state
@@ -67,9 +69,10 @@ def check_all_obc_reached_bound_state_in_kube_job(
         job_get_output = kube_job_obj.get(namespace=namespace)
         for i in range(no_of_obc):
             status = job_get_output["items"][i]["status"]["phase"]
-            while not status:
-                status = job_get_output["items"][i]["status"]["phase"]
-                time.sleep(5)
+            time.sleep(5)
+            # while not status:
+            #     status = job_get_output["items"][i]["status"]["phase"]
+            #    time.sleep(5)
             logging.info(
                 f"obc {job_get_output['items'][i]['metadata']['name']} status {status}"
             )
@@ -83,9 +86,9 @@ def check_all_obc_reached_bound_state_in_kube_job(
         if len(obc_not_bound_list):
             time.sleep(timeout)
             while_iteration_count += 1
-            if while_iteration_count >= 20:
+            if while_iteration_count >= wait_time:
                 assert logging.error(
-                    f" Listed OBCs took more than {timeout*20} secs to bound {obc_not_bound_list}"
+                    f" Listed OBCs took more than {timeout*wait_time} secs to be bounded {obc_not_bound_list}"
                 )
                 break
             obc_not_bound_list.clear()
@@ -101,8 +104,10 @@ def check_all_obc_reached_bound_state_in_kube_job(
 def cleanup(namespace):
     """
     Delete all OBCs created in the cluster
+
     Args:
         namespace (str): Namespace of OBC's deleting
+
     """
     obc_name_list = oc_get_all_obc_names()
     log.info(f"Deleting {len(obc_name_list)} OBCs")
