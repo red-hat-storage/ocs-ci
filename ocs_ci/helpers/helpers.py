@@ -2936,14 +2936,15 @@ def verify_cli_cmd_output(
         bool: True of all strings are included in the command output, False otherwise
 
     """
-    cmd_start = ""
     if cephtool_cmd is True:
         tool_pod = pod.get_ceph_tools_pod()
         cmd_start = f"oc rsh -n openshift-storage {tool_pod.name} "
+        cmd = f"{cmd_start} {cmd}"
     elif debug_node is not None:
-        cmd_start = f"oc debug node/{debug_node} -- chroot /host "
+        cmd_start = f"oc debug nodes/{debug_node} -- chroot /host /bin/bash -c "
+        cmd = f'{cmd_start} "{cmd}"'
 
-    out = run_cmd(cmd=cmd_start + cmd)
+    out = run_cmd(cmd=cmd)
     logger.info(out)
     for expected_output in expected_output_lst:
         if expected_output not in out:

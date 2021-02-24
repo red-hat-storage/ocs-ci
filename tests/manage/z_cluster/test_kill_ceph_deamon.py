@@ -18,13 +18,13 @@ log = logging.getLogger(__name__)
 
 @tier1
 @bugzilla("1904917")
-class TestKillCephMonDaemon(ManageTest):
+class TestKillCephDaemon(ManageTest):
     """
     Verify coredump getting generated for ceph daemon crash
 
     """
 
-    @pytest.fixture(scope="function")
+    @pytest.fixture(scope="function", autouse=True)
     def teardown(self, request):
         """
         Archive a crash report so that it is no longer considered for the
@@ -43,11 +43,11 @@ class TestKillCephMonDaemon(ManageTest):
         argnames=["daemon_type"],
         argvalues=[
             pytest.param(*["mon"], marks=pytest.mark.polarion_id("OCS-2491")),
-            pytest.param(*["mgr"], marks=pytest.mark.polarion_id("OCS-2491")),
-            pytest.param(*["osd"], marks=pytest.mark.polarion_id("OCS-2491")),
+            pytest.param(*["osd"], marks=pytest.mark.polarion_id("OCS-2492")),
+            pytest.param(*["mgr"], marks=pytest.mark.polarion_id("OCS-2493")),
         ],
     )
-    def test_kill_ceph_mon_process(self, daemon_type):
+    def test_coredump_check_for_ceph_daemon_crash(self, daemon_type):
         """
         Verify coredumpctl list updated after killing daemon
 
@@ -65,6 +65,14 @@ class TestKillCephMonDaemon(ManageTest):
 
         node_name = node_obj.name
         cmd_gen = "oc debug node/" + node_name + " -- chroot /host "
+
+        log.info(
+            "Delete 'posted' directory /var/lib/rook/openshift-storage/crash/posted/"
+        )
+        cmd_bash = f"oc debug nodes/{node_name} -- chroot /host /bin/bash -c "
+        cmd_delete_files = '"rm -rf /var/lib/rook/openshift-storage/crash/posted/*"'
+        cmd = cmd_bash + cmd_delete_files
+        run_cmd(cmd=cmd)
 
         log.info(f"find ceph-{daemon_type} process-id")
         cmd_pid = f"pidof ceph-{daemon_type}"
@@ -102,6 +110,19 @@ class TestKillCephMonDaemon(ManageTest):
             func=verify_cli_cmd_output,
             cmd="coredumpctl list",
             expected_output_lst=[daemon_type],
+            debug_node=node_name,
+        )
+        if not sample.wait_for_func_status(True):
+            raise Exception(
+                f"coredump not getting generated for ceph-{daemon_type} daemon crash"
+            )
+
+        sample = TimeoutSampler(
+            timeout=600,
+            sleep=10,
+            func=verify_cli_cmd_output,
+            cmd="ls -ltr /var/lib/rook/openshift-storage/crash/posted/",
+            expected_output_lst=[":"],
             debug_node=node_name,
         )
         if not sample.wait_for_func_status(True):
