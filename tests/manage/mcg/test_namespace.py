@@ -1,7 +1,10 @@
 import logging
 import pytest
+
 from ocs_ci.framework.testlib import (
     MCGTest,
+    on_prem_platform_required,
+    skipif_ocs_version,
     tier1,
     tier2,
     tier3,
@@ -22,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 @skipif_openshift_dedicated
 @skipif_aws_creds_are_missing
+@skipif_ocs_version("<4.6")
 class TestNamespace(MCGTest):
     """
     Test creation of a namespace resource
@@ -217,7 +221,7 @@ class TestNamespace(MCGTest):
 
         # Upload files to NS bucket
         self.write_files_to_pod_and_upload(
-            mcg_obj, awscli_pod, bucket_to_write=ns_bucket, amount=3
+            mcg_obj, awscli_pod, bucket_to_write=ns_bucket.name, amount=3
         )
         # Read files directly from AWS
         self.download_files(
@@ -548,6 +552,7 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2280")
     @pytest.mark.bugzilla("1900760")
+    @skipif_ocs_version("<4.7")
     @tier3
     def test_create_resource_with_invalid_target_bucket(
         self, mcg_obj, mcg_connection_factory

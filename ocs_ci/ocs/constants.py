@@ -1105,6 +1105,7 @@ BOOTSTRAP_MODULE = "module.ipam_bootstrap"
 LOAD_BALANCER_MODULE = "module.ipam_lb"
 COMPUTE_MODULE = "module.ipam_compute"
 CONTROL_PLANE = "module.ipam_control_plane"
+COMPUTE_MODULE_VM = "module.compute_vm"
 
 # proxy location
 HAPROXY_LOCATION = "/etc/haproxy/haproxy.conf"

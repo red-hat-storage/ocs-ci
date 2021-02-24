@@ -129,7 +129,7 @@ class Testopenshiftloggingonocs(E2ETest):
             for pod in pod_list
             if ("delete" not in pod.name)
             and ("rollover" not in pod.name)
-            and (pod.name.startswith("elasticsearch"))
+            and (pod.name.startswith("elasticsearch-cdm"))
         ]
         elasticsearch_pod_obj = random.choice(elasticsearch_pod)
         return elasticsearch_pod_obj

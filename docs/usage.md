@@ -79,6 +79,9 @@ to the pytest.
   * `4.2`: for nightly 4.2 OCP build
   * `4.2-ga`: for latest GAed 4.2 OCP build from stable channel
   * `4.2-ga-minus1`: for latest GAed 4.2 build (stable channel) - 1
+* `--ocp-installer-version` - Specific OCP installer version to be used for deployment.
+  This option will generally be used for non-GA or nightly builds. (e.g. 4.5.5).
+  This option will overwrite any values set via --ocp-version
 * `--ocs-registry-image` - ocs registry image to be used for deployment
     (e.g quay.io/rhceph-dev/ocs-olm-operator:latest-4.2). In case this parameter
     is passed, the version is parsed from the registry image name but only

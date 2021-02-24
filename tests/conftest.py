@@ -98,6 +98,7 @@ from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
+from ocs_ci.ocs.ripsaw import RipSaw
 
 log = logging.getLogger(__name__)
 
@@ -3742,3 +3743,17 @@ def load_cluster_info_file(request):
     example related to disconnected cluster)
     """
     load_cluster_info()
+
+
+@pytest.fixture(scope="function")
+def ripsaw(request):
+
+    # Create benchmark Operator (formerly ripsaw)
+    ripsaw = RipSaw()
+
+    def teardown():
+        ripsaw.cleanup()
+        time.sleep(10)
+
+    request.addfinalizer(teardown)
+    return ripsaw

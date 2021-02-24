@@ -6,43 +6,18 @@ import pytest
 import time
 import json
 
-from elasticsearch import Elasticsearch
-
-from ocs_ci.ocs import defaults
-from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.ocs.ripsaw import RipSaw
+from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import constants
 from ocs_ci.utility.performance_dashboard import push_perf_dashboard
-from ocs_ci.framework import config
-from ocs_ci.framework.testlib import E2ETest, performance, skipif_ocs_version
+from ocs_ci.framework.testlib import performance, skipif_ocs_version
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.helpers.helpers import get_full_test_logs_path
-from ocs_ci.ocs.elasticsearch import elasticsearch_load
-
+from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.cluster import CephCluster, calculate_compression_ratio
-from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.helpers.performance_lib import run_command
 
 log = logging.getLogger(__name__)
-dev_mode = config.RUN["cli_params"].get("dev_mode")
-
-
-@pytest.fixture(scope="function")
-def ripsaw(request):
-
-    # Create benchmark Operator (formerly ripsaw)
-    ripsaw = RipSaw()
-
-    def teardown():
-        ripsaw.cleanup()
-        time.sleep(10)
-
-    request.addfinalizer(teardown)
-    return ripsaw
 
 
 class FIOResultsAnalyse(PerfResult):
@@ -141,10 +116,12 @@ class FIOResultsAnalyse(PerfResult):
             )
         # Todo: Fail test if 5% deviation from benchmark value
 
-    def codespeed_push(self):
+    def codespeed_push(self, dev_mode=False):
         """
         Pushing the results into codespeed, for random test only!
 
+        Args:
+            dev_mode (bool): does the test run in development mode, if true, don't push the results.
         """
 
         # do not push results in case of development run
@@ -170,66 +147,20 @@ class FIOResultsAnalyse(PerfResult):
 
 
 @performance
-class TestFIOBenchmark(E2ETest):
+class TestFIOBenchmark(PASTest):
     """
     Run FIO perf test using ripsaw benchmark
 
     """
 
-    def ripsaw_deploy(self, ripsaw):
+    def setup(self):
         """
-        Deploy the benchmark operator (formally ripsaw) CRD
-
-        Args:
-            ripsaw (obj): benchmark operator object
-
+        Setting up test parameters
         """
-        log.info("Deploying benchmark operator (ripsaw)")
-        ripsaw.apply_crd("resources/crds/" "ripsaw_v1alpha1_ripsaw_crd.yaml")
-
-    def es_info_backup(self, elasticsearch):
-        """
-        Saving the Original elastic-search IP and PORT - if defined in yaml
-
-        Args:
-            elasticsearch (obj): elasticsearch object
-
-        """
-
-        # for development mode use the Dev ES server
-        if dev_mode:
-            if "elasticsearch" in self.fio_cr["spec"]:
-                self.fio_cr["spec"]["elasticsearch"] = {
-                    "server": defaults.ELASTICSEARCH_DEV_IP,
-                    "port": defaults.ELASTICSEARCE_PORT,
-                    "url": f"http://{defaults.ELASTICSEARCH_DEV_IP}:{defaults.ELASTICSEARCE_PORT}",
-                }
-
-        if "elasticsearch" in self.fio_cr["spec"]:
-            self.fio_cr["spec"]["elasticsearch"]["url"] = (
-                f"http://{self.fio_cr['spec']['elasticsearch']['server']}:"
-                f"{self.fio_cr['spec']['elasticsearch']['port']}"
-            )
-            self.backup_es = self.fio_cr["spec"]["elasticsearch"]
-            log.info(
-                f"Creating object for the Main ES server on {self.backup_es['url']}"
-            )
-            self.main_es = Elasticsearch([self.backup_es["url"]], verify_certs=True)
-            if not self.main_es.ping():
-                log.warning("Cannot connect to Main elasticsearch server")
-                self.main_es = None
-
-        else:
-            log.warning("Elastic Search information does not exists in YAML file")
-            self.fio_cr["spec"]["elasticsearch"] = {}
-
-        # Use the internal define elastic-search server in the test - if exist
-        if elasticsearch:
-            self.fio_cr["spec"]["elasticsearch"] = {
-                "server": elasticsearch.get_ip(),
-                "port": elasticsearch.get_port(),
-                "url": f"http://{elasticsearch.get_ip()}:{elasticsearch.get_port()}",
-            }
+        log.info("Starting the test setup")
+        super(TestFIOBenchmark, self).setup()
+        self.benchmark_name = "FIO"
+        self.client_pod_name = "fio-client"
 
     def setting_storage_usage(self):
         """
@@ -238,39 +169,42 @@ class TestFIOBenchmark(E2ETest):
 
         """
 
+        # for development mode - use parameters for short test run
+        if self.dev_mode:
+            log.info("Setting up parameters for development mode")
+            self.crd_data["spec"]["workload"]["args"]["filesize"] = "1GiB"
+            self.crd_data["spec"]["workload"]["args"]["storagesize"] = "5Gi"
+            self.crd_data["spec"]["workload"]["args"]["servers"] = 2
+            self.crd_data["spec"]["workload"]["args"]["samples"] = 2
+            self.crd_data["spec"]["workload"]["args"]["read_runtime"] = 30
+            self.crd_data["spec"]["workload"]["args"]["write_runtime"] = 30
+            self.crd_data["spec"]["workload"]["args"]["bs"] = ["64KiB"]
+            self.total_data_set = 20
+            self.filesize = 3
+            return
+
         ceph_cluster = CephCluster()
         ceph_capacity = ceph_cluster.get_ceph_capacity()
         log.info(f"Total storage capacity is {ceph_capacity} GiB")
         self.total_data_set = int(ceph_capacity * 0.4)
         self.filesize = int(
-            self.fio_cr["spec"]["workload"]["args"]["filesize"].replace("GiB", "")
+            self.crd_data["spec"]["workload"]["args"]["filesize"].replace("GiB", "")
         )
         # To make sure the number of App pods will not be more then 50, in case
         # of large data set, changing the size of the file each pod will work on
         if self.total_data_set > 500:
             self.filesize = int(ceph_capacity * 0.008)
-            self.fio_cr["spec"]["workload"]["args"]["filesize"] = f"{self.filesize}GiB"
+            self.crd_data["spec"]["workload"]["args"][
+                "filesize"
+            ] = f"{self.filesize}GiB"
             # make sure that the storage size is larger then the file size
-            self.fio_cr["spec"]["workload"]["args"][
+            self.crd_data["spec"]["workload"]["args"][
                 "storagesize"
             ] = f"{int(self.filesize * 1.2)}Gi"
-        self.fio_cr["spec"]["workload"]["args"]["servers"] = int(
+        self.crd_data["spec"]["workload"]["args"]["servers"] = int(
             self.total_data_set / self.filesize
         )
         log.info(f"Total Data set to work on is : {self.total_data_set} GiB")
-
-    def get_env_info(self):
-        """
-        Getting the environment information and update the workload RC if
-        necessary.
-
-        """
-        self.environment = get_environment_info()
-        if not self.environment["user"] == "":
-            self.fio_cr["spec"]["test_user"] = self.environment["user"]
-        self.fio_cr["spec"]["clustername"] = self.environment["clustername"]
-
-        log.debug(f"Environment information is : {self.environment}")
 
     def setting_io_pattern(self, io_pattern):
         """
@@ -281,81 +215,13 @@ class TestFIOBenchmark(E2ETest):
 
         """
         if io_pattern == "sequential":
-            self.fio_cr["spec"]["workload"]["args"]["jobs"] = ["write", "read"]
-            self.fio_cr["spec"]["workload"]["args"]["iodepth"] = 1
+            self.crd_data["spec"]["workload"]["args"]["jobs"] = ["write", "read"]
+            self.crd_data["spec"]["workload"]["args"]["iodepth"] = 1
         if io_pattern == "random":
-            self.fio_cr["spec"]["workload"]["args"]["jobs"] = ["randwrite", "randread"]
-
-    def deploy_and_wait_for_wl_to_start(self):
-        """
-        Deploy the workload and wait until it start working
-
-        Returns:
-            obj : the FIO client pod object
-
-        """
-        log.info(f"The FIO CR file is {self.fio_cr}")
-        self.fio_cr_obj = OCS(**self.fio_cr)
-        self.fio_cr_obj.create()
-
-        # Wait for fio client pod to be created
-        for fio_pod in TimeoutSampler(
-            900, 20, get_pod_name_by_pattern, "fio-client", constants.RIPSAW_NAMESPACE
-        ):
-            try:
-                if fio_pod[0] is not None:
-                    fio_client_pod = fio_pod[0]
-                    break
-            except IndexError:
-                log.info("Bench pod not ready yet")
-
-        # Getting the start time of the test
-        self.start_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
-        return fio_client_pod
-
-    def wait_for_wl_to_finish(self, fio_client_pod):
-        """
-        Waiting until the workload is finished
-
-        Args:
-            fio_client_pod (obj): the FIO client pod object
-
-        Returns:
-            str: the end time of the workload
-
-        """
-        if dev_mode:
-            timeout = 3600
-            sleeptime = 30
-        else:
-            timeout = 18000
-            sleeptime = 300
-
-        log.info("Waiting for fio_client to complete")
-        pod_obj = OCP(kind="pod")
-        pod_obj.wait_for_resource(
-            condition="Completed",
-            resource_name=fio_client_pod,
-            timeout=timeout,
-            sleep=sleeptime,
-        )
-
-        # Getting the end time of the test
-        end_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
-
-        output = run_cmd(f"oc logs {fio_client_pod}")
-        log_file_name = f"{self.full_log_path}/test-pod.log"
-        with open(log_file_name, "w") as f:
-            f.write(output)
-        log.info(f"The Test log is can be found at : {log_file_name}")
-
-        try:
-            if "Fio failed to execute" not in output:
-                log.info("FIO has completed successfully")
-        except IOError:
-            log.info("FIO failed to complete")
-
-        return end_time
+            self.crd_data["spec"]["workload"]["args"]["jobs"] = [
+                "randwrite",
+                "randread",
+            ]
 
     def init_full_results(self, full_results):
         """
@@ -374,69 +240,49 @@ class TestFIOBenchmark(E2ETest):
         # Setting the global parameters of the test
         full_results.add_key("dataset", f"{self.total_data_set}GiB")
         full_results.add_key(
-            "file_size", self.fio_cr["spec"]["workload"]["args"]["filesize"]
+            "file_size", self.crd_data["spec"]["workload"]["args"]["filesize"]
         )
         full_results.add_key(
-            "servers", self.fio_cr["spec"]["workload"]["args"]["servers"]
+            "servers", self.crd_data["spec"]["workload"]["args"]["servers"]
         )
         full_results.add_key(
-            "samples", self.fio_cr["spec"]["workload"]["args"]["samples"]
+            "samples", self.crd_data["spec"]["workload"]["args"]["samples"]
         )
         full_results.add_key(
-            "operations", self.fio_cr["spec"]["workload"]["args"]["jobs"]
+            "operations", self.crd_data["spec"]["workload"]["args"]["jobs"]
         )
         full_results.add_key(
-            "block_sizes", self.fio_cr["spec"]["workload"]["args"]["bs"]
+            "block_sizes", self.crd_data["spec"]["workload"]["args"]["bs"]
         )
         full_results.add_key(
-            "io_depth", self.fio_cr["spec"]["workload"]["args"]["iodepth"]
+            "io_depth", self.crd_data["spec"]["workload"]["args"]["iodepth"]
         )
-        full_results.add_key("jobs", self.fio_cr["spec"]["workload"]["args"]["numjobs"])
+        full_results.add_key(
+            "jobs", self.crd_data["spec"]["workload"]["args"]["numjobs"]
+        )
         full_results.add_key(
             "runtime",
             {
-                "read": self.fio_cr["spec"]["workload"]["args"]["read_runtime"],
-                "write": self.fio_cr["spec"]["workload"]["args"]["write_runtime"],
+                "read": self.crd_data["spec"]["workload"]["args"]["read_runtime"],
+                "write": self.crd_data["spec"]["workload"]["args"]["write_runtime"],
             },
         )
         full_results.add_key(
-            "storageclass", self.fio_cr["spec"]["workload"]["args"]["storageclass"]
+            "storageclass", self.crd_data["spec"]["workload"]["args"]["storageclass"]
         )
         full_results.add_key(
-            "vol_size", self.fio_cr["spec"]["workload"]["args"]["storagesize"]
+            "vol_size", self.crd_data["spec"]["workload"]["args"]["storagesize"]
         )
         return full_results
 
-    def copy_es_data(self, elasticsearch):
-        """
-        Copy data from Internal ES (if exists) to the main ES
-
-        Args:
-            elasticsearch (obj): elasticsearch object (if exits)
-
-        Returns:
-            bool: True if data was copy to the main ES False otherwise
-
-        """
-        if elasticsearch:
-            log.info("Copy all data from Internal ES to Main ES")
-            log.info("Dumping data from the Internal ES to tar ball file")
-            elasticsearch.dumping_all_data(self.full_log_path)
-            es_connection = self.backup_es
-            es_connection["host"] = es_connection.pop("server")
-            es_connection.pop("url")
-            if elasticsearch_load(self.main_es, self.full_log_path):
-                # Adding this sleep between the copy and the analyzing of the results
-                # since sometimes the results of the read (just after write) are empty
-                time.sleep(10)
-                return True
-            else:
-                log.warning("Cannot upload data into the Main ES server")
-                return False
-
     def cleanup(self):
+        """
+        Do cleanup in the benchmark-operator namespace.
+        delete the benchmark, an make sure no PVC's an no PV's are left.
+
+        """
         log.info("Deleting FIO benchmark")
-        self.fio_cr_obj.delete()
+        self.benchmark_obj.delete()
         time.sleep(180)
 
         # Getting all PVCs created in the test (if left).
@@ -472,6 +318,32 @@ class TestFIOBenchmark(E2ETest):
                 log.info(f"Going to delete {pv}")
                 run_command(f"oc delete pv {pv}")
 
+    def run(self):
+        """
+        Run the test, and wait until it finished
+
+        """
+        self.deploy_and_wait_for_wl_to_start(timeout=900)
+        # Getting the UUID from inside the benchmark pod
+        self.uuid = self.ripsaw.get_uuid(self.client_pod)
+        # Setting back the original elastic-search information
+        if self.backup_es:
+            self.crd_data["spec"]["elasticsearch"] = self.backup_es
+        if self.dev_mode:
+            timeout = 600
+            sleeptime = 30
+        else:
+            timeout = 18000
+            sleeptime = 300
+
+        self.wait_for_wl_to_finish(timeout=timeout, sleep=sleeptime)
+
+        try:
+            if "Fio failed to execute" not in self.test_logs:
+                log.info("FIO has completed successfully")
+        except IOError:
+            log.warning("FIO failed to complete")
+
     @pytest.mark.parametrize(
         argnames=["interface", "io_pattern"],
         argvalues=[
@@ -497,50 +369,47 @@ class TestFIOBenchmark(E2ETest):
         """
         This is a basic fio perf test - non-compressed volumes
 
+        Args:
+            interface (str): the interface that need to be tested - CephFS / RBD
+            io_pattern (str): the I/O pattern to do - random / sequential
+
         """
 
+        # Getting the full path for the test logs
         self.full_log_path = get_full_test_logs_path(cname=self)
         self.full_log_path += f"-{interface}-{io_pattern}"
         log.info(f"Logs file path name is : {self.full_log_path}")
 
-        self.ripsaw_deploy(ripsaw)
+        # deploy the benchmark-operator (ripsaw)
+        self.ripsaw = ripsaw
+        self.ripsaw_deploy(self.ripsaw)
 
-        if interface == "CephBlockPool":
-            sc = constants.CEPHBLOCKPOOL_SC
-        else:
-            sc = constants.CEPHFILESYSTEM_SC
-
-        # Create fio benchmark
         log.info("Create resource file for fio workload")
-        self.fio_cr = templating.load_yaml(constants.FIO_CR_YAML)
+        self.crd_data = templating.load_yaml(constants.FIO_CR_YAML)
 
         # Saving the Original elastic-search IP and PORT - if defined in yaml
         self.es_info_backup(es)
+
+        self.set_storageclass(interface=interface)
 
         # Setting the data set to 40% of the total storage capacity
         self.setting_storage_usage()
 
         self.get_env_info()
 
-        self.fio_cr["spec"]["workload"]["args"]["storageclass"] = sc
         self.setting_io_pattern(io_pattern)
-        fio_client_pod = self.deploy_and_wait_for_wl_to_start()
 
-        # Getting the UUID from inside the benchmark pod
-        uuid = ripsaw.get_uuid(fio_client_pod)
-        # Setting back the original elastic-search information
-        self.fio_cr["spec"]["elasticsearch"] = self.backup_es
+        self.run()
 
         # Initialize the results doc file.
         full_results = self.init_full_results(
-            FIOResultsAnalyse(uuid, self.fio_cr, self.full_log_path, self.main_es)
+            FIOResultsAnalyse(
+                self.uuid, self.crd_data, self.full_log_path, self.main_es
+            )
         )
 
         # Setting the global parameters of the test
         full_results.add_key("io_pattern", io_pattern)
-
-        end_time = self.wait_for_wl_to_finish(fio_client_pod)
-        full_results.add_key("test_time", {"start": self.start_time, "end": end_time})
 
         # Clean up fio benchmark
         self.cleanup()
@@ -553,9 +422,11 @@ class TestFIOBenchmark(E2ETest):
         # Writing the analyzed test results to the Elastic-Search server
         if self.main_es is not None:
             full_results.es_write()
-            full_results.codespeed_push()  # Push results to codespeed
+            full_results.codespeed_push(
+                dev_mode=self.dev_mode
+            )  # Push results to codespeed
             # Creating full link to the results on the ES server
-            log.info(f"The Result can be found at ; {full_results.results_link()}")
+            log.info(f"The Result can be found at : {full_results.results_link()}")
 
     @skipif_ocs_version("<4.6")
     @pytest.mark.parametrize(
@@ -582,11 +453,22 @@ class TestFIOBenchmark(E2ETest):
 
         """
 
+        # Getting the full path for the test logs
         self.full_log_path = get_full_test_logs_path(cname=self)
         self.full_log_path += f"-{io_pattern}-{bs}-{cmp_ratio}"
         log.info(f"Logs file path name is : {self.full_log_path}")
 
-        self.ripsaw_deploy(ripsaw)
+        # deploy the benchmark-operator (ripsaw)
+        self.ripsaw = ripsaw
+        self.ripsaw_deploy(self.ripsaw)
+
+        log.info("Create resource file for fio workload")
+        self.crd_data = templating.load_yaml(
+            "ocs_ci/templates/workloads/fio/benchmark_fio_cmp.yaml"
+        )
+
+        # Saving the Original elastic-search IP and PORT - if defined in yaml
+        self.es_info_backup(es)
 
         log.info("Creating compressed pool & SC")
         sc_obj = storageclass_factory(
@@ -599,41 +481,28 @@ class TestFIOBenchmark(E2ETest):
         sc = sc_obj.name
         pool_name = run_cmd(f"oc get sc {sc} -o jsonpath={{'.parameters.pool'}}")
         # Create fio benchmark
-        log.info("Create resource file for fio workload")
-        self.fio_cr = templating.load_yaml(
-            "ocs_ci/templates/workloads/fio/benchmark_fio_cmp.yaml"
-        )
-        self.fio_cr["spec"]["workload"]["args"]["bs"] = [bs]
-        self.fio_cr["spec"]["workload"]["args"]["prefill_bs"] = bs
-        self.fio_cr["spec"]["workload"]["args"]["cmp_ratio"] = cmp_ratio
-
-        # Saving the Original elastic-search IP and PORT - if defined in yaml
-        self.es_info_backup(es)
+        self.crd_data["spec"]["workload"]["args"]["bs"] = [bs]
+        self.crd_data["spec"]["workload"]["args"]["prefill_bs"] = bs
+        self.crd_data["spec"]["workload"]["args"]["cmp_ratio"] = cmp_ratio
 
         # Setting the data set to 40% of the total storage capacity
         self.setting_storage_usage()
 
         self.get_env_info()
 
-        self.fio_cr["spec"]["workload"]["args"]["storageclass"] = sc
+        self.crd_data["spec"]["workload"]["args"]["storageclass"] = sc
         self.setting_io_pattern(io_pattern)
-        fio_client_pod = self.deploy_and_wait_for_wl_to_start()
-
-        # Getting the UUID from inside the benchmark pod
-        uuid = ripsaw.get_uuid(fio_client_pod)
-        # Setting back the original elastic-search information
-        self.fio_cr["spec"]["elasticsearch"] = self.backup_es
+        self.run()
 
         # Initialize the results doc file.
         full_results = self.init_full_results(
-            FIOResultsAnalyse(uuid, self.fio_cr, self.full_log_path, self.main_es)
+            FIOResultsAnalyse(
+                self.uuid, self.crd_data, self.full_log_path, self.main_es
+            )
         )
 
         # Setting the global parameters of the test
         full_results.add_key("io_pattern", io_pattern)
-
-        end_time = self.wait_for_wl_to_finish(fio_client_pod)
-        full_results.add_key("test_time", {"start": self.start_time, "end": end_time})
 
         # Clean up fio benchmark
         self.copy_es_data(es)
@@ -642,11 +511,10 @@ class TestFIOBenchmark(E2ETest):
         ratio = calculate_compression_ratio(pool_name)
 
         full_results.add_key("cmp_ratio", {"expected": cmp_ratio, "actual": ratio})
+        log.debug(f"Full results is : {full_results.results}")
         full_results.analyze_results()  # Analyze the results
-        # TODO: change the info message to Warning/Error after
-        #  prefill at ripsaw will be fixed Ripsaw PR - #505
         if (cmp_ratio + 5) < ratio or ratio < (cmp_ratio - 5):
-            log.info(
+            log.warning(
                 f"The compression ratio is {ratio}% "
                 f"while the expected ratio is {cmp_ratio}%"
             )
@@ -662,4 +530,3 @@ class TestFIOBenchmark(E2ETest):
         self.cleanup()
         sc_obj.delete()
         sc_obj.ocp.wait_for_delete(resource_name=sc, timeout=300, sleep=5)
-        log.debug(f"Full results is : {full_results.results}")

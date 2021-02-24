@@ -7,7 +7,6 @@ ENV_DATA:
   deployment_type: 'ipi'
   region: 'eastus'
   azure_base_domain_resource_group_name: 'ocsqe'
-  base_domain: 'azure.qe.rh-ocs.com'
   worker_availability_zones:
     - '1'
   master_availability_zones:
