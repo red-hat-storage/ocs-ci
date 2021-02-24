@@ -270,6 +270,8 @@ class BAREMETALUPI(Deployment):
             Deploy
             """
             # Uploading pxe files
+            master_count = 0
+            worker_count = 0
             logger.info("Deploying OCP cluster for Bare Metal platform")
             logger.info(f"Openshift-installer will be using log level:{log_cli_level}")
             upload_file(
@@ -320,28 +322,23 @@ class BAREMETALUPI(Deployment):
                     self.mgmt_details[machine].get("cluster_name")
                     == constants.BM_DEFAULT_CLUSTER_NAME
                 ):
-                    secrets = [
-                        self.mgmt_details[machine]["mgmt_username"],
-                        self.mgmt_details[machine]["mgmt_password"],
-                    ]
-                    # Changes boot prioriy to pxe
-                    cmd = (
-                        f"ipmitool -I lanplus -U {self.mgmt_details[machine]['mgmt_username']} "
-                        f"-P {self.mgmt_details[machine]['mgmt_password']} "
-                        f"-H {self.mgmt_details[machine]['mgmt_console']} chassis bootdev pxe"
-                    )
-                    run_cmd(cmd=cmd, secrets=secrets)
-                    sleep(2)
-                    # Power On Machine
-                    cmd = (
-                        f"ipmitool -I lanplus -U {self.mgmt_details[machine]['mgmt_username']} "
-                        f"-P {self.mgmt_details[machine]['mgmt_password']} "
-                        f"-H {self.mgmt_details[machine]['mgmt_console']} chassis power cycle || "
-                        f"ipmitool -I lanplus -U {self.mgmt_details[machine]['mgmt_username']} "
-                        f"-P {self.mgmt_details[machine]['mgmt_password']} "
-                        f"-H {self.mgmt_details[machine]['mgmt_console']} chassis power on"
-                    )
-                    run_cmd(cmd=cmd, secrets=secrets)
+                    if self.mgmt_details[machine]["role"] == "bootstrap":
+                        self.set_pxe_boot_and_reboot(machine)
+
+                    elif (
+                        self.mgmt_details[machine]["role"] == constants.MASTER_MACHINE
+                        and master_count <= config.ENV_DATA["master_replicas"]
+                    ):
+                        self.set_pxe_boot_and_reboot(machine)
+                        master_count += 1
+
+                    elif (
+                        self.mgmt_details[machine]["role"] == constants.WORKER_MACHINE
+                        and worker_count < config.ENV_DATA["worker_replicas"]
+                    ):
+                        self.set_pxe_boot_and_reboot(machine)
+                        worker_count += 1
+
             logger.info("waiting for bootstrap to complete")
             try:
                 run_cmd(
@@ -536,6 +533,39 @@ LABEL disk0
             with open(temp_file.name, "w") as t_file:
                 t_file.writelines(default_pxe_file)
             return temp_file.name
+
+        def set_pxe_boot_and_reboot(self, machine):
+            """
+            Ipmi Set Pxe boot and Restart the machine
+
+            Args:
+                machine (str): Machine Name
+
+            Returns:
+
+            """
+            secrets = [
+                self.mgmt_details[machine]["mgmt_username"],
+                self.mgmt_details[machine]["mgmt_password"],
+            ]
+            # Changes boot prioriy to pxe
+            cmd = (
+                f"ipmitool -I lanplus -U {self.mgmt_details[machine]['mgmt_username']} "
+                f"-P {self.mgmt_details[machine]['mgmt_password']} "
+                f"-H {self.mgmt_details[machine]['mgmt_console']} chassis bootdev pxe"
+            )
+            run_cmd(cmd=cmd, secrets=secrets)
+            sleep(2)
+            # Power On Machine
+            cmd = (
+                f"ipmitool -I lanplus -U {self.mgmt_details[machine]['mgmt_username']} "
+                f"-P {self.mgmt_details[machine]['mgmt_password']} "
+                f"-H {self.mgmt_details[machine]['mgmt_console']} chassis power cycle || "
+                f"ipmitool -I lanplus -U {self.mgmt_details[machine]['mgmt_username']} "
+                f"-P {self.mgmt_details[machine]['mgmt_password']} "
+                f"-H {self.mgmt_details[machine]['mgmt_console']} chassis power on"
+            )
+            run_cmd(cmd=cmd, secrets=secrets)
 
 
 def clean_disk():
