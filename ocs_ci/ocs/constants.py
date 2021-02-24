@@ -681,6 +681,7 @@ CLUSTER_LAUNCHER_VSPHERE_DIR = os.path.join(
 CLUSTER_LAUNCHER_MACHINE_CONF = "vsphere/machines/vsphere-rhel-machine.tf"
 
 TERRAFORM_VARS = "terraform.tfvars"
+TERRAFORM_TFSTATE = "terraform.tfstate"
 VM_DISK_TYPE = "thin"
 VM_DISK_MODE = "persistent"
 INSTALLER_DEFAULT_DNS = "1.1.1.1"
@@ -1106,6 +1107,9 @@ LOAD_BALANCER_MODULE = "module.ipam_lb"
 COMPUTE_MODULE = "module.ipam_compute"
 CONTROL_PLANE = "module.ipam_control_plane"
 COMPUTE_MODULE_VM = "module.compute_vm"
+
+# terraform types
+VSPHERE_VM_TYPE = "vsphere_virtual_machine"
 
 # proxy location
 HAPROXY_LOCATION = "/etc/haproxy/haproxy.conf"

@@ -151,6 +151,15 @@ class NodesBase(object):
     def create_nodes(self, node_conf, node_type, num_nodes):
         raise NotImplementedError("Create nodes functionality not implemented")
 
+    def delete_node(self, name):
+        """
+        Delete nodes to the current cluster
+
+        Args:
+            node (str): Node name to delete.
+        """
+        raise NotImplementedError("Delete node functionality is not implemented")
+
     def attach_nodes_to_cluster(self, node_list):
         raise NotImplementedError(
             "attach nodes to cluster functionality is not implemented"
@@ -1461,7 +1470,12 @@ class VSPHEREUPINode(VMWareNodes):
         shutil.copyfile(self.terraform_var, original_file)
         logging.info(f"original terraform file: {original_file}")
 
-        replace_content_in_file(self.terraform_var, compute_str, updated_compute_str)
+        replace_content_in_file(
+            self.terraform_var,
+            compute_str,
+            updated_compute_str,
+            match_and_replace_line=True,
+        )
 
     def _update_machine_conf(self):
         """
@@ -1545,7 +1559,7 @@ class VSPHEREUPINode(VMWareNodes):
         Add nodes using terraform
         """
         terraform_state_file = os.path.join(
-            self.terraform_data_dir, "terraform.tfstate"
+            self.terraform_data_dir, constants.TERRAFORM_TFSTATE
         )
         ips_before_adding_nodes = get_module_ip(
             terraform_state_file, constants.COMPUTE_MODULE
@@ -1630,6 +1644,39 @@ class VSPHEREUPINode(VMWareNodes):
                     logger.info("setting host name")
                     self.wait_for_connection_and_set_host_name(ip, node_name)
                     break
+
+    def delete_node(self, name, use_terraform=True):
+        """
+        Delete nodes to the current cluster
+
+        Args:
+            node (str): Node name to delete.
+            use_terraform (bool): if True use terraform to delete node,
+                otherwise use manual steps to delete node.
+
+        """
+        if use_terraform:
+            self.delete_node_with_terraform(name)
+        else:
+            raise NotImplementedError("Only terraform method is currently implemented")
+
+    def delete_node_with_terraform(self, name):
+        """
+        Delete node using terraform
+
+        Args:
+            name (str): Name of node to delete.
+
+        """
+        terraform_var_file = os.path.join(
+            self.terraform_data_dir,
+            constants.TERRAFORM_DATA_DIR,
+            constants.TERRAFORM_VARS,
+        )
+        logger.info(f"Deleting node: {name} via terraform")
+        self.terraform.destroy_module(
+            terraform_var_file, f"{constants.VSPHERE_VM_TYPE}.{name}"
+        )
 
     def generate_node_names_for_vsphere(self, count, prefix="compute-"):
         """

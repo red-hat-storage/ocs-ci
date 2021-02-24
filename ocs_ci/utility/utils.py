@@ -2004,7 +2004,7 @@ def read_file_as_str(filepath):
     return content
 
 
-def replace_content_in_file(file, old, new):
+def replace_content_in_file(file, old, new, match_and_replace_line=False):
     """
     Replaces contents in file, if old value is not found, it adds
     new value to the file
@@ -2013,16 +2013,30 @@ def replace_content_in_file(file, old, new):
         file (str): Name of the file in which contents will be replaced
         old (str): Data to search for
         new (str): Data to replace the old value
+        match_and_replace_line (bool): If True, it will match a line if
+            `old` pattern is found in the line. The whole line will be replaced
+            with `new` content.
+            Otherwise it will replace only `old` string with `new` string but
+            the rest of the line will be intact. This is the default option.
 
     """
     # Read the file
     with open(rf"{file}", "r") as fd:
         file_data = [line.rstrip("\n") for line in fd.readlines()]
 
-    # Replace/add the new data
-    file_data = [new if old in line else line for line in file_data]
-    if new not in file_data:
-        file_data.append(new)
+    if match_and_replace_line:
+        # Replace the whole line with `new` string if the line contains `old`
+        # string pattern.
+        file_data = [new if old in line else line for line in file_data]
+    else:
+        # Replace the old string by new
+        file_data = [
+            line.replace(old, new) if old in line else line for line in file_data
+        ]
+    updated_data = [line for line in file_data if new in line]
+    # In case the old pattern wasn't found it will be added as first line
+    if not updated_data:
+        file_data.insert(0, new)
     file_data = [f"{line}\n" for line in file_data]
     # Write the file out again
     with open(rf"{file}", "w") as fd:

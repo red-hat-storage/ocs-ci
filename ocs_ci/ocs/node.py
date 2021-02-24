@@ -911,6 +911,11 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
         node_type = constants.RHCOS
 
     if not use_existing_node:
+        log.info(f"Removing node {osd_node_name} from vSphere!")
+        from ocs_ci.ocs.platform_nodes import VSPHEREUPINode
+
+        node_util = VSPHEREUPINode()
+        node_util.delete_node(osd_node_name)
         log.info("Preparing to create a new node...")
         new_node_names = add_new_node_and_label_upi(node_type, 1)
         new_node_name = new_node_names[0]
