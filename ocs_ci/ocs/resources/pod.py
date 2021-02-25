@@ -496,6 +496,41 @@ class Pod(OCS):
         else:
             return self.pod_data["spec"]["nodeName"]
 
+    def mount_device(self, mount_path, do_format=True):
+        """
+        Mount RBD block volume using ext4 filesystem
+
+        Args:
+            mount_path (str): Mount path to use
+            do_format (str): True if ext4 formatting has to be done, False otherwise.
+                Ext4 signature should be already present if format is False
+
+        """
+        pkg_mgrs = ["apt-get", "yum"]
+        pkg_mgr_present = None
+        for pkg_mgr in pkg_mgrs:
+            try:
+                self.exec_cmd_on_pod(f"which {pkg_mgr}", out_yaml_format=False)
+                pkg_mgr_present = pkg_mgr
+                break
+            except CommandFailed:
+                logger.debug(f"Package manager is not {pkg_mgr}")
+        assert (
+            pkg_mgr_present
+        ), f"Couldn't identify the package manager on pod {self.name}."
+        logger.info(f"Package manager on pod {self.name} is {pkg_mgr_present}")
+
+        device_path = self.get_storage_path(storage_type="block")
+        if do_format:
+            self.install_packages(["e2fsprogs"])
+            self.exec_cmd_on_pod(
+                command=f"mkfs.ext4 {device_path}", out_yaml_format=False
+            )
+        self.exec_cmd_on_pod(
+            command=f"mount -t ext4 {device_path} {mount_path}",
+            out_yaml_format=False,
+        )
+
 
 # Helper functions for Pods
 
