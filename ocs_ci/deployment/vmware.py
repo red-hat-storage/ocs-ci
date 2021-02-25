@@ -1048,6 +1048,11 @@ def generate_terraform_vars_with_folder():
     ssh_public_key_path = os.path.expanduser(config.DEPLOYMENT["ssh_key"])
     config.ENV_DATA["ssh_public_key_path"] = ssh_public_key_path
 
+    # overwrite RHCOS template
+    # This use-case is mainly used for early RHCOS testing
+    if config.ENV_DATA.get("vm_template_overwrite"):
+        config.ENV_DATA["vm_template"] = config.ENV_DATA["vm_template_overwrite"]
+
     create_terraform_var_file("terraform_4_5.tfvars.j2")
 
 
