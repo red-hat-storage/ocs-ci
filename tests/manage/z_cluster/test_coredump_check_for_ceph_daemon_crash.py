@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.ocs.resources.pod import (
     get_pod_node,
@@ -62,9 +63,7 @@ class TestKillCephDaemon(ManageTest):
         elif daemon_type == "osd":
             osd_pod_nodes = [get_pod_node(pod) for pod in get_osd_pods()]
             node_obj = osd_pod_nodes[0]
-
         node_name = node_obj.name
-        cmd_gen = "oc debug node/" + node_name + " -- chroot /host "
 
         log.info(
             "Delete 'posted' directory /var/lib/rook/openshift-storage/crash/posted/"
@@ -76,6 +75,7 @@ class TestKillCephDaemon(ManageTest):
 
         log.info(f"find ceph-{daemon_type} process-id")
         cmd_pid = f"pidof ceph-{daemon_type}"
+        cmd_gen = "oc debug node/" + node_name + " -- chroot /host "
         cmd = cmd_gen + cmd_pid
         out = run_cmd(cmd=cmd)
         pid = out.strip()
@@ -83,9 +83,11 @@ class TestKillCephDaemon(ManageTest):
             raise Exception(f"The ceph-{daemon_type} process-id was not found.")
 
         log.info(f"Kill ceph-{daemon_type} process-id {pid}")
-        cmd_kill = f"kill -11 {pid}"
-        cmd = cmd_gen + cmd_kill
-        run_cmd(cmd=cmd)
+        disruptions_obj = Disruptions()
+        disruptions_obj.daemon_pid = pid
+        disruptions_obj.kill_daemon(
+            node_name=node_name, check_new_pid=False, kill_signal="11"
+        )
 
         log.info(f"Verify that we have a crash event for ceph-{daemon_type} crash")
         sample = TimeoutSampler(
