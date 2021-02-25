@@ -30,8 +30,8 @@ class TestSnapshotRestoreWithDifferentVolumeMode(ManageTest):
     def setup(
         self,
         project_factory,
-        create_pvcs_and_pods,
         snapshot_restore_factory,
+        create_pvcs_and_pods,
         pod_factory,
     ):
         """
@@ -39,7 +39,7 @@ class TestSnapshotRestoreWithDifferentVolumeMode(ManageTest):
 
         """
         self.pvcs, self.pods = create_pvcs_and_pods(
-            pvc_size=5,
+            pvc_size=3,
             pods_for_rwx=1,
             access_modes_rbd=[
                 "ReadWriteOnce",

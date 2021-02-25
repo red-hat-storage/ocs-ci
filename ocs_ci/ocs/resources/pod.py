@@ -503,7 +503,7 @@ class Pod(OCS):
         Args:
             mount_path (str): Mount path to use
             do_format (str): True if ext4 formatting has to be done, False otherwise.
-                Ext4 signature should be already present if format is False
+                Ext4 signature should be already present if do_format is False
 
         """
         pkg_mgrs = ["apt-get", "yum"]
@@ -518,7 +518,7 @@ class Pod(OCS):
         assert (
             pkg_mgr_present
         ), f"Couldn't identify the package manager on pod {self.name}."
-        logger.info(f"Package manager on pod {self.name} is {pkg_mgr_present}")
+        logger.debug(f"Package manager on pod {self.name} is {pkg_mgr_present}")
 
         device_path = self.get_storage_path(storage_type="block")
         if do_format:
