@@ -526,6 +526,19 @@ class Pod(OCS):
             self.exec_cmd_on_pod(
                 command=f"mkfs.ext4 {device_path}", out_yaml_format=False
             )
+
+        # Create directory if not present
+        try:
+            self.exec_cmd_on_pod(command=f"find {mount_path}", out_yaml_format=False)
+        except CommandFailed as cmd_fail:
+            if "No such file or directory" in str(cmd_fail):
+                self.exec_cmd_on_pod(
+                    command=f"mkdir -p {mount_path}",
+                    out_yaml_format=False,
+                )
+            else:
+                raise
+
         self.exec_cmd_on_pod(
             command=f"mount -t ext4 {device_path} {mount_path}",
             out_yaml_format=False,
