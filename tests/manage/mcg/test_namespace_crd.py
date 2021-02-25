@@ -288,6 +288,78 @@ class TestNamespace(MCGTest):
         # Compare between uploaded files and downloaded files
         assert self.compare_dirs(awscli_pod, amount=3)
 
+    @tier1
+    @pytest.mark.polarion_id("OCS-2258")
+    def test_distribution_of_objects_in_ns_bucket_crd(
+        self,
+        mcg_obj,
+        cld_mgr,
+        awscli_pod,
+        bucket_factory,
+        namespace_store_factory,
+    ):
+        """
+        Test that uploaded objects into resources were correctly uploaded even
+        when some file is the same and downloaded after that.
+        """
+        logger.info("Create the namespace resources and verify health")
+        nss_tup = ("oc", {"rgw": [(1, "eu-central-1")]})
+        ns_store1 = namespace_store_factory(*nss_tup)
+        nss_tup = ("oc", {"aws": [(1, "eu-central-1")]})
+        ns_store2 = namespace_store_factory(*nss_tup)
+
+        logger.info("Upload files directly to first target bucket")
+        rgw_creds = {
+            "access_key_id": cld_mgr.rgw_client.access_key,
+            "access_key": cld_mgr.rgw_client.secret_key,
+            "endpoint": cld_mgr.rgw_client.endpoint,
+        }
+        self.write_files_to_pod_and_upload(
+            mcg_obj,
+            awscli_pod,
+            bucket_to_write=ns_store1.uls_name,
+            amount=4,
+            s3_creds=rgw_creds,
+        )
+
+        logger.info("Create the namespace bucket on top of the namespace resource")
+        bucketclass_dict = (
+            {
+                "interface": "OC",
+                "namespace_policy_dict": {
+                    "type": "Multi",
+                    "namespacestores": [ns_store1, ns_store2],
+                },
+            },
+        )
+
+        ns_bucket = bucket_factory(
+            amount=1,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0]
+
+        logger.info("Rewrite 3 files and upload them directly to second target bucket")
+        aws_creds = {
+            "access_key_id": cld_mgr.aws_client.access_key,
+            "access_key": cld_mgr.aws_client.secret_key,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "region": self.DEFAULT_REGION,
+        }
+        self.write_files_to_pod_and_upload(
+            mcg_obj,
+            awscli_pod,
+            bucket_to_write=ns_store2.uls_name,
+            amount=3,
+            s3_creds=aws_creds,
+        )
+
+        logger.info("Read files from ns bucket")
+        self.download_files(mcg_obj, awscli_pod, bucket_to_read=rand_ns_bucket)
+
+        logger.info("Compare between uploaded files and downloaded files")
+        assert self.compare_dirs(awscli_pod, amount=4)
+
     def write_files_to_pod_and_upload(
         self, mcg_obj, awscli_pod, bucket_to_write, amount=1, s3_creds=None
     ):
