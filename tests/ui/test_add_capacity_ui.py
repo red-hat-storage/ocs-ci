@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class TestAddCapacityUI(object):
     """
-    est Add Capacity on via UI
+    Test Add Capacity on via UI
 
     """
 

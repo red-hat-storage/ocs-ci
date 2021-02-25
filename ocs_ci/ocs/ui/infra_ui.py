@@ -14,11 +14,6 @@ class InfraUI(PageNavigator):
     """
     InfraUI Class
 
-    *Add capacity
-    *Node Replacement
-    *Device Replacement
-    *Add Node
-
     """
 
     def __init__(self, driver):
