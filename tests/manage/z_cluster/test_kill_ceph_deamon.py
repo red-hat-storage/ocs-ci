@@ -4,7 +4,7 @@ import pytest
 from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.helpers.helpers import verify_cli_cmd_output
+from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.ocs.resources.pod import (
     get_pod_node,
     get_mon_pods,
@@ -91,7 +91,7 @@ class TestKillCephDaemon(ManageTest):
         sample = TimeoutSampler(
             timeout=600,
             sleep=10,
-            func=verify_cli_cmd_output,
+            func=run_cmd_verify_cli_output,
             cmd="ceph crash ls",
             expected_output_lst=[daemon_type],
             cephtool_cmd=True,
@@ -107,7 +107,7 @@ class TestKillCephDaemon(ManageTest):
         sample = TimeoutSampler(
             timeout=600,
             sleep=10,
-            func=verify_cli_cmd_output,
+            func=run_cmd_verify_cli_output,
             cmd="coredumpctl list",
             expected_output_lst=[daemon_type],
             debug_node=node_name,
@@ -120,7 +120,7 @@ class TestKillCephDaemon(ManageTest):
         sample = TimeoutSampler(
             timeout=600,
             sleep=10,
-            func=verify_cli_cmd_output,
+            func=run_cmd_verify_cli_output,
             cmd="ls -ltr /var/lib/rook/openshift-storage/crash/posted/",
             expected_output_lst=[":"],
             debug_node=node_name,

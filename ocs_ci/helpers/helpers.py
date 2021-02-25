@@ -2920,7 +2920,7 @@ def get_mon_pdb():
     return disruptions_allowed, min_available_mon
 
 
-def verify_cli_cmd_output(
+def run_cmd_verify_cli_output(
     cmd=None, expected_output_lst=(), cephtool_cmd=False, debug_node=None
 ):
     """
