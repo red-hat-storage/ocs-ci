@@ -840,9 +840,11 @@ class VSPHEREIPI(VSPHEREBASE):
         def deploy(self, log_cli_level="DEBUG"):
             """
             Deployment specific to OCP cluster on this platform
+
             Args:
                 log_cli_level (str): openshift installer's log level
                     (default: "DEBUG")
+                    
             """
 
             logger.info("Deploying OCP cluster")
