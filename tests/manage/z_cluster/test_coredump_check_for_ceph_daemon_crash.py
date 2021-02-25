@@ -131,3 +131,7 @@ class TestKillCephDaemon(ManageTest):
             raise Exception(
                 f"coredump not getting generated for ceph-{daemon_type} daemon crash"
             )
+
+        logging.info("Silence the ceph warnings by “archiving” the crash")
+        tool_pod = get_ceph_tools_pod()
+        tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all", format=None)
