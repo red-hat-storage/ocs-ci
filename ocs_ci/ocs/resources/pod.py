@@ -510,7 +510,7 @@ class Pod(OCS):
         else:
             return self.pod_data["spec"]["nodeName"]
 
-    def mount_device(self, mount_path, do_format=True):
+    def mount_device(self, mount_path, do_format=True, read_only=False):
         """
         Mount RBD block volume using ext4 filesystem
 
@@ -518,6 +518,7 @@ class Pod(OCS):
             mount_path (str): Mount path to use
             do_format (str): True if ext4 formatting has to be done, False otherwise.
                 Ext4 signature should be already present if do_format is False
+            read_only (bool): True to mount as read only, False otherwise
 
         """
         device_path = self.get_storage_path(storage_type="block")
@@ -539,8 +540,11 @@ class Pod(OCS):
             else:
                 raise
 
+        mount_cmd = f"mount -t ext4 {device_path} {mount_path}"
+        if read_only:
+            mount_cmd = f"{mount_cmd} -r"
         self.exec_cmd_on_pod(
-            command=f"mount -t ext4 {device_path} {mount_path}",
+            command=mount_cmd,
             out_yaml_format=False,
         )
 

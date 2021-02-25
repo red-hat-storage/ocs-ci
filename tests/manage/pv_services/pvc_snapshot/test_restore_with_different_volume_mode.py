@@ -129,12 +129,10 @@ class TestSnapshotRestoreWithDifferentVolumeMode(ManageTest):
         access_modes_dict = {
             constants.VOLUME_MODE_FILESYSTEM: [
                 constants.ACCESS_MODE_RWO,
-                constants.ACCESS_MODE_ROX,
             ],
             constants.VOLUME_MODE_BLOCK: [
                 constants.ACCESS_MODE_RWX,
                 constants.ACCESS_MODE_RWO,
-                constants.ACCESS_MODE_ROX,
             ],
         }
 
@@ -224,7 +222,12 @@ class TestSnapshotRestoreWithDifferentVolumeMode(ManageTest):
         # Mount volume
         for pod_obj in restore_pod_objs:
             if pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK:
-                pod_obj.mount_device(mount_path=mount_path, do_format=False)
+                pod_obj.mount_device(
+                    mount_path=mount_path,
+                    do_format=False,
+                    read_only=pod_obj.pvc.get_pvc_access_mode
+                    == constants.ACCESS_MODE_ROX,
+                )
 
         # Verify md5sum
         for pod_obj in restore_pod_objs:
@@ -393,7 +396,12 @@ class TestSnapshotRestoreWithDifferentVolumeMode(ManageTest):
         # Mount volume
         for pod_obj in restore_pod_objs_new:
             if pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK:
-                pod_obj.mount_device(mount_path=mount_path, do_format=False)
+                pod_obj.mount_device(
+                    mount_path=mount_path,
+                    do_format=False,
+                    read_only=pod_obj.pvc.get_pvc_access_mode
+                    == constants.ACCESS_MODE_ROX,
+                )
 
         # Verify md5sum
         for pod_obj in restore_pod_objs_new:
