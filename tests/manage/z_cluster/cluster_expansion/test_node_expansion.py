@@ -1,5 +1,4 @@
 import logging
-import pytest
 
 from ocs_ci.framework.testlib import tier1, ignore_leftovers, ManageTest
 from ocs_ci.ocs import machine as machine_utils
