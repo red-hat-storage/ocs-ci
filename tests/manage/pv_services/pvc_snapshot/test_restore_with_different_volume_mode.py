@@ -191,6 +191,11 @@ class TestSnapshotRestoreWithDifferentVolumeMode(ManageTest):
         log.info("Attach the restored PVCs to pods")
         restore_pod_objs = []
         for pvc_obj in restore_pvcs:
+            pod_dict_path = (
+                constants.CSI_RBD_RAW_BLOCK_POD_YAML
+                if (pvc_obj.data["spec"]["volumeMode"] == "Block")
+                else ""
+            )
             # Create 2 pods if access mode is RWX or ROX, else 1
             for _ in range(
                 int(
@@ -204,6 +209,7 @@ class TestSnapshotRestoreWithDifferentVolumeMode(ManageTest):
                     pvc=pvc_obj,
                     status="",
                     node_name=next(nodes_iter),
+                    pod_dict_path=pod_dict_path,
                     raw_block_pv=pvc_obj.data["spec"]["volumeMode"] == "Block",
                 )
                 log.info(
@@ -354,6 +360,11 @@ class TestSnapshotRestoreWithDifferentVolumeMode(ManageTest):
         log.info("Attach the rewly restored PVCs to pods")
         restore_pod_objs_new = []
         for pvc_obj in restore_pvcs_new:
+            pod_dict_path = (
+                constants.CSI_RBD_RAW_BLOCK_POD_YAML
+                if (pvc_obj.data["spec"]["volumeMode"] == "Block")
+                else ""
+            )
             # Create 2 pods if access mode is RWX or ROX, else 1
             for _ in range(
                 int(
@@ -367,6 +378,7 @@ class TestSnapshotRestoreWithDifferentVolumeMode(ManageTest):
                     pvc=pvc_obj,
                     status="",
                     node_name=next(nodes_iter),
+                    pod_dict_path=pod_dict_path,
                     raw_block_pv=pvc_obj.data["spec"]["volumeMode"] == "Block",
                 )
                 log.info(
