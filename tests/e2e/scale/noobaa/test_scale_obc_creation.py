@@ -22,7 +22,7 @@ class TestScaleOCBCreation(E2ETest):
     namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
     sc_name = constants.NOOBAA_SC
     sc_rgw_name = constants.DEFAULT_STORAGECLASS_RGW
-    scale_obc_count = 100
+    scale_obc_count = 1000
     num_obc_batch = 50
 
     @pytest.mark.polarion_id("OCS-2478")
