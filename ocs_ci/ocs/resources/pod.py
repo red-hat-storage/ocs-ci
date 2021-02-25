@@ -415,10 +415,24 @@ class Pod(OCS):
             packages (list): List of packages to install
 
         """
+        pkg_mgrs = ["apt-get", "yum"]
+        pkg_mgr_present = None
+        for pkg_mgr in pkg_mgrs:
+            try:
+                self.exec_cmd_on_pod(f"which {pkg_mgr}", out_yaml_format=False)
+                pkg_mgr_present = pkg_mgr
+                break
+            except CommandFailed:
+                logger.debug(f"Package manager is not {pkg_mgr}")
+        assert (
+            pkg_mgr_present
+        ), f"Couldn't identify the package manager on pod {self.name}."
+        logger.debug(f"Package manager on pod {self.name} is {pkg_mgr_present}")
+
         if isinstance(packages, list):
             packages = " ".join(packages)
 
-        cmd = f"yum install {packages} -y"
+        cmd = f"{pkg_mgr_present} install {packages} -y"
         self.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
     def copy_to_server(self, server, authkey, localpath, remotepath, user=None):
@@ -506,20 +520,6 @@ class Pod(OCS):
                 Ext4 signature should be already present if do_format is False
 
         """
-        pkg_mgrs = ["apt-get", "yum"]
-        pkg_mgr_present = None
-        for pkg_mgr in pkg_mgrs:
-            try:
-                self.exec_cmd_on_pod(f"which {pkg_mgr}", out_yaml_format=False)
-                pkg_mgr_present = pkg_mgr
-                break
-            except CommandFailed:
-                logger.debug(f"Package manager is not {pkg_mgr}")
-        assert (
-            pkg_mgr_present
-        ), f"Couldn't identify the package manager on pod {self.name}."
-        logger.debug(f"Package manager on pod {self.name} is {pkg_mgr_present}")
-
         device_path = self.get_storage_path(storage_type="block")
         if do_format:
             self.install_packages(["e2fsprogs"])
