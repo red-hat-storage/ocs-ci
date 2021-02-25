@@ -1828,7 +1828,7 @@ def ceph_health_check_base(namespace=None):
         timeout=60,
     )
     health = run_cmd(f"oc -n {namespace} exec {tools_pod} -- ceph health")
-    if health.strip():
+    if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
     else:
