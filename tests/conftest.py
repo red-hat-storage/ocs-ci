@@ -65,7 +65,7 @@ from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import aws
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility import templating
-from ocs_ci.utility import users
+from ocs_ci.utility import users, kms as KMS
 from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
@@ -1100,6 +1100,11 @@ def cluster(request, log_cli_level):
     if teardown:
 
         def cluster_teardown_finalizer():
+            # If KMS is configured, clean up the backend resources
+            # we are doing it before OCP cleanup
+            if config.DEPLOYMENT.get("kms_deployment"):
+                kms = KMS.get_kms_deployment()
+                kms.cleanup()
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)

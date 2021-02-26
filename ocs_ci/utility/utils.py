@@ -724,6 +724,48 @@ def get_openshift_client(
     return client_binary_path
 
 
+def get_vault_cli(bind_dir=None, force_download=False):
+    """
+    Download vault based on platform
+    basically for CLI purpose. Binary will be directly
+    put into ocs_ci/bin/ directory
+
+    Args:
+        bind_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+        force_download (bool): Force vault cli download even if already present
+
+    """
+    res = requests.get(constants.VAULT_VERSION_INFO_URL)
+    version = res.url.split("/")[-1].lstrip("v")
+    bin_dir = os.path.expanduser(bind_dir or config.RUN["bin_dir"])
+    system = platform.system()
+    if "Darwin" not in system and "Linux" not in system:
+        raise UnsupportedOSType("Not a supported platform for vault")
+
+    system = system.lower()
+    zip_file = f"vault_{version}_{system}_amd64.zip"
+    vault_cli_filename = "vault"
+    vault_binary_path = os.path.join(bin_dir, vault_cli_filename)
+    if os.path.isfile(vault_binary_path) and force_download:
+        delete_file(vault_binary_path)
+    if os.path.isfile(vault_binary_path):
+        log.debug(
+            f"Vault CLI binary already exists {vault_binary_path}, skipping download."
+        )
+    else:
+        log.info(f"Downloading vault cli {version}")
+        prepare_bin_dir()
+        previous_dir = os.getcwd()
+        os.chdir(bin_dir)
+        url = f"{constants.VAULT_DOWNLOAD_BASE_URL}/{version}/{zip_file}"
+        download_file(url, zip_file)
+        run_cmd(f"unzip {zip_file}")
+        delete_file(zip_file)
+        os.chdir(previous_dir)
+    vault_ver = run_cmd(f"{vault_binary_path} version")
+    log.info(f"Vault cli version:{vault_ver}")
+
+
 def ensure_nightly_build_availability(build_url):
     base_build_url = build_url.rsplit("/", 1)[0]
     r = requests.get(base_build_url)
@@ -3056,6 +3098,23 @@ def get_cluster_id(cluster_path):
     return metadata["clusterID"]
 
 
+def get_running_cluster_id():
+    """
+    Get cluster UUID
+    Not relying on metadata.json as user sometimes want to run
+    only with kubeconfig for some tests. For this function to work
+    cluster has to be in running state
+
+    Returns:
+        str: cluster UUID
+
+    """
+    cluster_id = run_cmd(
+        "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
+    )
+    return cluster_id
+
+
 def get_ocp_upgrade_history():
     """
     Gets the OCP upgrade history for the cluster
@@ -3073,3 +3132,23 @@ def get_ocp_upgrade_history():
     upgrade_history_info = cluster_version_info["status"]["history"]
     upgrade_history = [each_upgrade["version"] for each_upgrade in upgrade_history_info]
     return upgrade_history
+
+
+def get_default_if_keyval_empty(dictionary, key, default_val):
+    """
+    if Key has an empty value OR key doesn't exist
+    then return default value
+
+    Args:
+        dictionary (dict): Dictionary where we have to lookup
+        key (str): key to lookup
+        default_val (str): If key doesn't have value then return
+            this default_val
+
+    Returns:
+        dictionary[key] if value is present else default_val
+
+    """
+    if not dictionary.get(key):
+        return default_val
+    return dictionary.get(key)
