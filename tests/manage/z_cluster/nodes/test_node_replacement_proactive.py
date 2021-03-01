@@ -8,7 +8,6 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
     tier4,
     tier4a,
-    acceptance,
     ManageTest,
     ignore_leftovers,
     aws_platform_required,
@@ -198,7 +197,6 @@ class TestNodeReplacementWithIO(ManageTest):
 
 @tier4
 @tier4a
-@acceptance
 @ignore_leftovers
 @cloud_platform_required
 @vsphere_platform_required
