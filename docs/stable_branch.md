@@ -9,6 +9,7 @@ requires the use of our stable branch.
 
 The initial proposal, discussion, and implementation details can be found in a
 [shared google doc](https://docs.google.com/document/d/15rqGVDEWFTFsg6FOOBeWUYYrwBa9wi0rZtdfOYi_-zg/edit).
+Note this document is only available to Red Hat internal accounts.
 
 ## Definition of Stable
 Before we can start accepting code to our stable branch, we need to determine what "stable"
