@@ -1,7 +1,13 @@
 import logging
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import polarion_id, bugzilla, tier4, tier4a
+from ocs_ci.framework.testlib import (
+    polarion_id,
+    bugzilla,
+    skipif_openshift_dedicated,
+    tier4,
+    tier4a,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
@@ -13,6 +19,7 @@ log = logging.getLogger(__name__)
 @tier4a
 @polarion_id("OCS-1254")
 @bugzilla("1835290")
+@skipif_openshift_dedicated
 def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
     """
     Test that there are appropriate alerts when NooBaa Bucket Quota is reached.
@@ -64,6 +71,52 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
                 "warning",
             ),
         ]
+
+    for target_label, target_msg, target_states, target_severity in expected_alerts:
+        prometheus.check_alert_list(
+            label=target_label,
+            msg=target_msg,
+            alerts=alerts,
+            states=target_states,
+            severity=target_severity,
+        )
+        # the time to wait is increased because it takes more time for OCS
+        # cluster to resolve its issues
+        pg_wait = 480
+        api.check_alert_cleared(
+            label=target_label,
+            measure_end_time=measure_noobaa_exceed_bucket_quota.get("stop"),
+            time_min=pg_wait,
+        )
+
+
+@tier4
+@tier4a
+@polarion_id("OCS-2498")
+@skipif_openshift_dedicated
+def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted):
+    """
+    Test that there are appropriate alerts when target bucket used of
+    namespace store used in namespace bucket is deleted.
+    """
+    api = prometheus.PrometheusAPI()
+
+    alerts = measure_noobaa_exceed_bucket_quota.get("prometheus_alerts")
+
+    expected_alerts = [
+        (
+            constants.ALERT_NAMESPACEBUCKETERRORSTATE,
+            "",
+            ["pending", "firing"],
+            "warning",
+        ),
+        (
+            constants.ALERT_NAMESPACERESOURCEERRORSTATE,
+            "",
+            ["pending", "firing"],
+            "warning",
+        ),
+    ]
 
     for target_label, target_msg, target_states, target_severity in expected_alerts:
         prometheus.check_alert_list(
