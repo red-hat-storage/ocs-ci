@@ -45,7 +45,7 @@ class TestNamespace(MCGTest):
     @pytest.mark.parametrize(
         argnames="nss_tup",
         argvalues=[
-            pytest.param(("oc", {"aws": [(1, "eu-central-1")]})),
+            pytest.param(("oc", {"aws": [(1, self.DEFAULT_REGION)]})),
             pytest.param(("oc", {"azure": [(1, None)]})),
             pytest.param(("oc", {"rgw": [(1, None)]}), marks=on_prem_platform_required),
         ],
@@ -108,7 +108,7 @@ class TestNamespace(MCGTest):
                     "namespace_policy_dict": {
                         "type": "Multi",
                         "namespacestore_dict": {
-                            "aws": [(1, "eu-central-1")],
+                            "aws": [(1, self.DEFAULT_REGION)],
                             "azure": [(1, None)],
                         },
                     },
@@ -121,7 +121,7 @@ class TestNamespace(MCGTest):
                     "namespace_policy_dict": {
                         "type": "Multi",
                         "namespacestore_dict": {
-                            "aws": [(2, "eu-central-1")],
+                            "aws": [(2, self.DEFAULT_REGION)],
                         },
                     },
                 },
@@ -187,7 +187,7 @@ class TestNamespace(MCGTest):
                     "interface": "OC",
                     "namespace_policy_dict": {
                         "type": "Single",
-                        "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
+                        "namespacestore_dict": {"aws": [(1, self.DEFAULT_REGION)]},
                     },
                 },
                 marks=pytest.mark.polarion_id("OCS-2257"),
@@ -243,7 +243,7 @@ class TestNamespace(MCGTest):
                     "interface": "OC",
                     "namespace_policy_dict": {
                         "type": "Single",
-                        "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
+                        "namespacestore_dict": {"aws": [(1, self.DEFAULT_REGION)]},
                     },
                 },
                 marks=pytest.mark.polarion_id("OCS-2258"),
@@ -303,23 +303,23 @@ class TestNamespace(MCGTest):
         when some file is the same and downloaded after that.
         """
         logger.info("Create the namespace resources and verify health")
-        nss_tup = ("oc", {"rgw": [(1, "eu-central-1")]})
-        ns_store1 = namespace_store_factory(*nss_tup)
-        nss_tup = ("oc", {"aws": [(1, "eu-central-1")]})
-        ns_store2 = namespace_store_factory(*nss_tup)
+        nss_tup = ("oc", {"azure": [(1, None)]})
+        ns_store1 = namespace_store_factory(*nss_tup)[0]
+        nss_tup = ("oc", {"aws": [(1, self.DEFAULT_REGION)]})
+        ns_store2 = namespace_store_factory(*nss_tup)[0]
 
         logger.info("Upload files directly to first target bucket")
-        rgw_creds = {
-            "access_key_id": cld_mgr.rgw_client.access_key,
-            "access_key": cld_mgr.rgw_client.secret_key,
-            "endpoint": cld_mgr.rgw_client.endpoint,
+        azure_creds = {
+            "access_key_id": cld_mgr.azure_client.access_key,
+            "access_key": cld_mgr.azure_client.secret_key,
+            "endpoint": cld_mgr.azure_client.endpoint,
         }
         self.write_files_to_pod_and_upload(
             mcg_obj,
             awscli_pod,
             bucket_to_write=ns_store1.uls_name,
             amount=4,
-            s3_creds=rgw_creds,
+            s3_creds=azure_creds,
         )
 
         logger.info("Create the namespace bucket on top of the namespace resource")
@@ -355,10 +355,296 @@ class TestNamespace(MCGTest):
         )
 
         logger.info("Read files from ns bucket")
-        self.download_files(mcg_obj, awscli_pod, bucket_to_read=rand_ns_bucket)
+        self.download_files(mcg_obj, awscli_pod, bucket_to_read=ns_bucket)
 
         logger.info("Compare between uploaded files and downloaded files")
         assert self.compare_dirs(awscli_pod, amount=4)
+
+    @pytest.mark.polarion_id("OCS-2290")
+    @tier2
+    def test_create_ns_bucket_from_utilized_resources_rpc(
+        self,
+        mcg_obj,
+        cld_mgr,
+        awscli_pod,
+        namespace_store_factory,
+        bucket_factory,
+        rgw_deployments,
+    ):
+        """
+        Test Write to 2 resources, create bucket from them and read from the NS bucket.
+        """
+        logger.info("Create the namespace resources and verify health")
+        nss_tup = ("oc", {"azure": [(1, None)]})
+        ns_store1 = namespace_store_factory(*nss_tup)[0]
+        nss_tup = ("oc", {"aws": [(1, self.DEFAULT_REGION)]})
+        ns_store2 = namespace_store_factory(*nss_tup)[0]
+        logger.info("Upload files directly to cloud target buckets")
+        azure_creds = {
+            "access_key_id": cld_mgr.azure_client.access_key,
+            "access_key": cld_mgr.azure_client.secret_key,
+            "endpoint": cld_mgr.azure_client.endpoint,
+        }
+        aws_creds = {
+            "access_key_id": cld_mgr.aws_client.access_key,
+            "access_key": cld_mgr.aws_client.secret_key,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "region": self.DEFAULT_REGION,
+        }
+        self.write_files_to_pod_and_upload(
+            mcg_obj,
+            awscli_pod,
+            bucket_to_write=ns_store1.uls_name,
+            amount=3,
+            s3_creds=azure_creds,
+        )
+        self.write_files_to_pod_and_upload(
+            mcg_obj,
+            awscli_pod,
+            bucket_to_write=ns_store2.uls_name,
+            amount=3,
+            s3_creds=aws_creds,
+        )
+        logger.info("Create the namespace bucket on top of the namespace resource")
+        bucketclass_dict = (
+            {
+                "interface": "OC",
+                "namespace_policy_dict": {
+                    "type": "Multi",
+                    "namespacestores": [ns_store1, ns_store2],
+                },
+            },
+        )
+        ns_bucket = bucket_factory(
+            amount=1,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0].name
+        logger.info("Read files from ns bucket")
+        self.download_files(mcg_obj, awscli_pod, bucket_to_read=ns_bucket)
+        logger.info("Compare between uploaded files and downloaded files")
+        assert self.compare_dirs(awscli_pod, amount=3)
+
+    @pytest.mark.polarion_id("OCS-2282")
+    @tier3
+    def test_delete_resource_used_in_ns_bucket_crd(
+        self, namespace_store_factory, bucket_factory
+    ):
+        """
+        Test that a proper error message is reported when invalid target
+        bucket is provided during namespace resource creation.
+        """
+        logger.info("Create the namespace resources and verify health")
+        nss_tup = ("oc", {"azure": [(1, None)]})
+        ns_store1 = namespace_store_factory(*nss_tup)[0]
+        nss_tup = ("oc", {"aws": [(1, self.DEFAULT_REGION)]})
+        ns_store2 = namespace_store_factory(*nss_tup)[0]
+
+        logger.info("Create the namespace bucket on top of the namespace stores")
+        bucketclass_dict = (
+            {
+                "interface": "OC",
+                "namespace_policy_dict": {
+                    "type": "Multi",
+                    "namespacestores": [ns_store1, ns_store2],
+                },
+            },
+        )
+        ns_bucket = bucket_factory(
+            amount=1,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0].name
+        assert 0
+
+    @tier4
+    @tier4a
+    @pytest.mark.parametrize(
+        argnames=["mcg_pod"],
+        argvalues=[
+            pytest.param(*["noobaa-db"], marks=pytest.mark.polarion_id("OCS-2291")),
+            pytest.param(*["noobaa-core"], marks=pytest.mark.polarion_id("OCS-2319")),
+            pytest.param(
+                *["noobaa-operator"], marks=pytest.mark.polarion_id("OCS-2320")
+            ),
+        ],
+    )
+    def test_respin_mcg_pod_and_check_data_integrity_crd(
+        self,
+        mcg_obj,
+        cld_mgr,
+        awscli_pod,
+        namespace_store_factory,
+        bucket_factory,
+        mcg_pod,
+    ):
+        """
+        Test Write to ns bucket using CRDs and read directly from AWS.
+        Respin one of mcg pods when data are uploaded.
+        """
+
+        logger.info("Create the namespace resources and verify health")
+        nss_tup = ("oc", {"aws": [(1, self.DEFAULT_REGION)]})
+        ns_store1 = namespace_store_factory(*nss_tup)[0]
+
+        logger.info("Create the namespace bucket on top of the namespace stores")
+        bucketclass_dict = (
+            {
+                "interface": "OC",
+                "namespace_policy_dict": {
+                    "type": "Single",
+                    "namespacestores": [ns_store1],
+                },
+            },
+        )
+        logger.info("Create the namespace bucket on top of the namespace resource")
+        ns_bucket = bucket_factory(
+            amount=1,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0].name
+        s3_creds = {
+            "access_key_id": cld_mgr.aws_client.access_key,
+            "access_key": cld_mgr.aws_client.secret_key,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "region": self.DEFAULT_REGION,
+        }
+
+        logger.info("Upload files to NS bucket")
+        self.write_files_to_pod_and_upload(
+            mcg_obj, awscli_pod, bucket_to_write=ns_bucket, amount=3
+        )
+
+        logger.info(f"Respin mcg resource {mcg_pod}")
+        noobaa_pods = pod.get_noobaa_pods()
+        pod_obj = [pod for pod in noobaa_pods if pod.name.startswith(mcg_pod)][0]
+        pod_obj.delete(force=True)
+        logger.info("Wait for noobaa pods to come up")
+        assert pod_obj.ocp.wait_for_resource(
+            condition="Running",
+            selector="app=noobaa",
+            resource_count=len(noobaa_pods),
+            timeout=1000,
+        )
+        logger.info("Wait for noobaa health to be OK")
+        ceph_cluster_obj = CephCluster()
+        ceph_cluster_obj.wait_for_noobaa_health_ok()
+
+        logger.info("Read files directly from AWS")
+        self.download_files(
+            mcg_obj, awscli_pod, bucket_to_read=ns_bucket.uls_name, s3_creds=s3_creds
+        )
+
+        logger.info("Compare between uploaded files and downloaded files")
+        assert self.compare_dirs(awscli_pod, amount=3)
+
+    @pytest.mark.polarion_id("OCS-2293")
+    @tier4
+    @tier4a
+    @skipif_ocs_version(">4.6")
+    def test_namespace_bucket_creation_with_many_resources_crd(
+        self, namespace_store_factory, bucket_factory
+    ):
+        """
+        Test namespace bucket creation using the CRD.
+        Use 100+ read resources.
+        """
+        logger.info("Create namespace resources and verify health")
+        nss_tup = ("oc", {"aws": [(100, self.DEFAULT_REGION)]})
+        ns_resources = namespace_store_factory(*nss_tup)[0]
+
+        logger.info("Create the namespace bucket with many namespace resources")
+        bucketclass_dict = (
+            {
+                "interface": "OC",
+                "namespace_policy_dict": {
+                    "type": "Mulsti",
+                    "namespacestores": ns_resources,
+                },
+            },
+        )
+        logger.info("Create the namespace bucket on top of the namespace resource")
+        bucket_factory(
+            amount=1,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )
+
+    @pytest.mark.polarion_id("OCS-2325")
+    @tier4
+    @tier4a
+    def test_block_read_resource_in_namespace_bucket_crd(
+        self, mcg_obj, awscli_pod, namespace_store_factory, bucket_factory, cld_mgr
+    ):
+        """
+        Test blocking namespace resource in namespace bucket.
+        Check data availability.
+        """
+        aws_client = cld_mgr.aws_client
+        s3_creds = {
+            "access_key_id": cld_mgr.aws_client.access_key,
+            "access_key": cld_mgr.aws_client.secret_key,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "region": self.DEFAULT_REGION,
+        }
+
+        logger.info("Create namespace resources and verify health")
+        nss_tup = ("oc", {"aws": [(2, self.DEFAULT_REGION)]})
+        ns_store1, ns_store2 = namespace_store_factory()
+
+        logger.info("Upload files to NS resources")
+        self.write_files_to_pod_and_upload(
+            mcg_obj,
+            awscli_pod,
+            bucket_to_write=ns_store1[0],
+            amount=3,
+            s3_creds=s3_creds,
+        )
+        self.write_files_to_pod_and_upload(
+            mcg_obj,
+            awscli_pod,
+            bucket_to_write=ns_store2[0],
+            amount=2,
+            s3_creds=s3_creds,
+        )
+
+        logger.info("Create the namespace bucket")
+        bucketclass_dict = (
+            {
+                "interface": "OC",
+                "namespace_policy_dict": {
+                    "type": "Multi",
+                    "namespacestores": [ns_store1, ns_store2],
+                },
+            },
+        )
+
+        ns_bucket = bucket_factory(
+            amount=1,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0]
+
+        logger.info("Bring ns_store1 down")
+        aws_client.toggle_aws_bucket_readwrite(ns_store1.uls_name)
+
+        logger.info("Read files directly from AWS")
+        try:
+            self.download_files(mcg_obj, awscli_pod, bucket_to_read=ns_bucket)
+        except CommandFailed:
+            logger.info("Attempt to read files failed as expected")
+            logger.info("Bring ns_store1 up")
+            aws_client.toggle_aws_bucket_readwrite(ns_store1.uls_name, block=False)
+        else:
+            logger.info("Bring ns_store1 up")
+            aws_client.toggle_aws_bucket_readwrite(ns_store1.uls_name, block=False)
+            msg = (
+                "It should not be possible to download from Namespace bucket "
+                "in current state according to "
+                "https://bugzilla.redhat.com/show_bug.cgi?id=1887417#c2"
+            )
+            logger.error(msg)
+            assert False, msg
 
     def write_files_to_pod_and_upload(
         self, mcg_obj, awscli_pod, bucket_to_write, amount=1, s3_creds=None

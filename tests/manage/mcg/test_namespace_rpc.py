@@ -22,7 +22,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 
