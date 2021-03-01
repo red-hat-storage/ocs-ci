@@ -12,8 +12,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs import defaults
-from ocs_ci.ocs import constants, exceptions, ocp
+from ocs_ci.ocs import constants, exceptions, ocp, defaults
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
