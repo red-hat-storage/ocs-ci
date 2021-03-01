@@ -30,5 +30,5 @@ spec:
     - registry-proxy.engineering.redhat.com/rh-osbs/rhceph
     source: registry.redhat.io/ocs4/rhceph-rhel8
   - mirrors:
-    - registry-proxy.engineering.redhat.com/rh-osbs/ocs-bundle-operator
+    - registry-proxy.engineering.redhat.com/rh-osbs/ocs-operator-bundle
     source: registry.redhat.io/ocs4/ocs-operator-bundle

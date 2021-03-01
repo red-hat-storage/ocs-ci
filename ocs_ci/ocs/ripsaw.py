@@ -1,4 +1,3 @@
-
 """
 RipSaw Class to run various workloads and scale tests
 """
@@ -19,7 +18,7 @@ log = logging.getLogger(__name__)
 
 class RipSaw(object):
     """
-      Workload operation using RipSaw
+    Workload operation using RipSaw
     """
 
     def __init__(self, **kwargs):
@@ -41,13 +40,15 @@ class RipSaw(object):
             run_cmd('oc apply -f my_custom_bench')
         """
         self.args = kwargs
-        self.repo = self.args.get('repo', 'https://github.com/cloud-bulldozer/ripsaw')
-        self.branch = self.args.get('branch', 'master')
-        self.namespace = self.args.get('namespace', RIPSAW_NAMESPACE)
+        self.repo = self.args.get(
+            "repo", "https://github.com/cloud-bulldozer/benchmark-operator"
+        )
+        self.branch = self.args.get("branch", "master")
+        self.namespace = self.args.get("namespace", RIPSAW_NAMESPACE)
         self.pgsql_is_setup = False
         self.ocp = OCP()
-        self.ns_obj = OCP(kind='namespace')
-        self.pod_obj = OCP(namespace=RIPSAW_NAMESPACE, kind='pod')
+        self.ns_obj = OCP(kind="namespace")
+        self.pod_obj = OCP(namespace=RIPSAW_NAMESPACE, kind="pod")
         self._create_namespace()
         self._clone_ripsaw()
 
@@ -61,20 +62,15 @@ class RipSaw(object):
         """
         clone the ripaw repo
         """
-        self.dir = tempfile.mkdtemp(prefix='ripsaw_')
+        self.dir = tempfile.mkdtemp(prefix="ripsaw_")
         try:
-            log.info(f'cloning ripsaw in {self.dir}')
-            git_clone_cmd = f'git clone -b {self.branch} {self.repo} '
-            run(
-                git_clone_cmd,
-                shell=True,
-                cwd=self.dir,
-                check=True
-            )
-            self.crd = 'resources/crds/'
-            self.operator = 'resources/operator.yaml'
-        except (CommandFailed, CalledProcessError)as cf:
-            log.error('Error during cloning of ripsaw repository')
+            log.info(f"cloning ripsaw in {self.dir}")
+            git_clone_cmd = f"git clone -b {self.branch} {self.repo} "
+            run(git_clone_cmd, shell=True, cwd=self.dir, check=True)
+            self.crd = "resources/crds/"
+            self.operator = "resources/operator.yaml"
+        except (CommandFailed, CalledProcessError) as cf:
+            log.error("Error during cloning of ripsaw repository")
             raise cf
 
     def apply_crd(self, crd):
@@ -84,10 +80,10 @@ class RipSaw(object):
         Args:
             crd (str): Name of file to apply
         """
-        self.dir += '/ripsaw'
-        run('oc apply -f deploy', shell=True, check=True, cwd=self.dir)
-        run(f'oc apply -f {crd}', shell=True, check=True, cwd=self.dir)
-        run(f'oc apply -f {self.operator}', shell=True, check=True, cwd=self.dir)
+        self.dir += "/benchmark-operator"
+        run("oc apply -f deploy", shell=True, check=True, cwd=self.dir)
+        run(f"oc apply -f {crd}", shell=True, check=True, cwd=self.dir)
+        run(f"oc apply -f {self.operator}", shell=True, check=True, cwd=self.dir)
 
     def get_uuid(self, benchmark):
         """
@@ -105,28 +101,28 @@ class RipSaw(object):
         count = 0
         while count <= 5:
             try:
-                output = self.pod_obj.exec_oc_cmd(f'exec {benchmark} -- env')
+                output = self.pod_obj.exec_oc_cmd(f"exec {benchmark} -- env")
                 break
             except CommandFailed:
                 time.sleep(3)
                 count += 1
-        uuid = ''
+        uuid = ""
         if output:
             for line in output.split():
-                if 'uuid=' in line:
-                    uuid = line.split('=')[1]
+                if "uuid=" in line:
+                    uuid = line.split("=")[1]
                     break
-            log.info(f'The UUID of the test is : {uuid}')
+            log.info(f"The UUID of the test is : {uuid}")
         else:
-            log.error(f'Can not get the UUID from {benchmark}')
+            log.error(f"Can not get the UUID from {benchmark}")
 
         return uuid
 
     def cleanup(self):
-        run(f'oc delete -f {self.crd}', shell=True, cwd=self.dir)
-        run(f'oc delete -f {self.operator}', shell=True, cwd=self.dir)
-        run('oc delete -f deploy', shell=True, cwd=self.dir)
-        run_cmd(f'oc delete project {self.namespace}')
+        run(f"oc delete -f {self.crd}", shell=True, cwd=self.dir)
+        run(f"oc delete -f {self.operator}", shell=True, cwd=self.dir)
+        run("oc delete -f deploy", shell=True, cwd=self.dir)
+        run_cmd(f"oc delete project {self.namespace}")
         self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=180)
         # Reset namespace to default
         switch_to_default_rook_cluster_project()

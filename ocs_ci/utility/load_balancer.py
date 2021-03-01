@@ -18,6 +18,7 @@ class LoadBalancer(object):
     """
     A class that handles all operations related to load balancer
     """
+
     def __init__(self, host=None, user=None, private_key=None):
         """
         Initialize all required variables
@@ -31,7 +32,7 @@ class LoadBalancer(object):
         self.host = host or self._get_host()
         self.user = user or constants.VSPHERE_NODE_USER
         self.private_key = private_key or os.path.expanduser(
-            config.DEPLOYMENT['ssh_key_private']
+            config.DEPLOYMENT["ssh_key_private"]
         )
         self.lb = Connection(self.host, self.user, self.private_key)
 
@@ -44,20 +45,15 @@ class LoadBalancer(object):
 
         """
         self.terraform_state_file = os.path.join(
-            config.ENV_DATA['cluster_path'],
-            "terraform_data",
-            "terraform.tfstate"
+            config.ENV_DATA["cluster_path"], "terraform_data", "terraform.tfstate"
         )
 
         if not os.path.isfile(self.terraform_state_file):
             raise FileNotFoundError(
-                errno.ENOENT,
-                os.strerror(errno.ENOENT),
-                self.terraform_state_file
+                errno.ENOENT, os.strerror(errno.ENOENT), self.terraform_state_file
             )
         ip_address = get_module_ip(
-            self.terraform_state_file,
-            constants.LOAD_BALANCER_MODULE
+            self.terraform_state_file, constants.LOAD_BALANCER_MODULE
         )
         return ip_address[0]
 
@@ -80,9 +76,7 @@ class LoadBalancer(object):
         logger.info("Restarting haproxy service on load balancer")
         retcode, _, _ = self.restart_service("haproxy.service")
         if retcode:
-            logger.info(
-                "Successfully restarted haproxy service on load balancer"
-            )
+            logger.info("Successfully restarted haproxy service on load balancer")
             _rc = True
         return _rc
 
@@ -91,8 +85,7 @@ class LoadBalancer(object):
         Removes bootstrap IP from haproxy.conf
         """
         bootstrap_ip = get_module_ip(
-            self.terraform_state_file,
-            constants.BOOTSTRAP_MODULE
+            self.terraform_state_file, constants.BOOTSTRAP_MODULE
         )[0]
         # backup the conf file
         cmd = (
@@ -104,3 +97,18 @@ class LoadBalancer(object):
         # remove bootstrap IP
         cmd = f"sudo sed -i '/{bootstrap_ip}/d' {constants.HAPROXY_LOCATION}"
         self.lb.exec_cmd(cmd)
+
+    def update_haproxy_with_nodes(self, nodes):
+        """
+        Args:
+            nodes (list): List of nodes to update in haproxy
+
+        """
+        ports = ["80", "443"]
+        for port in ports:
+            for node in nodes:
+                cmd = (
+                    f"sudo sed -i '0,/.*:{port} check$/s/.*:{port} check$/        server "
+                    f"{node} {node}:80 check\\n&/' {constants.HAPROXY_LOCATION}"
+                )
+                self.lb.exec_cmd(cmd)

@@ -7,9 +7,11 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import (
-    TimeoutExpiredError, UnsupportedPlatformError,
-    ResourceNotFoundError, UnexpectedBehaviour,
-    ResourceWrongStatusException
+    TimeoutExpiredError,
+    UnsupportedPlatformError,
+    ResourceNotFoundError,
+    UnexpectedBehaviour,
+    ResourceWrongStatusException,
 )
 
 log = logging.getLogger(__name__)
@@ -27,16 +29,16 @@ def get_machine_objs(machine_names=None):
         list: Cluster machine OCS objects
     """
     machines_obj = OCP(
-        kind='Machine', namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+        kind="Machine", namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
     )
-    machine_dicts = machines_obj.get()['items']
+    machine_dicts = machines_obj.get()["items"]
     if not machine_names:
         return [OCS(**obj) for obj in machine_dicts]
     else:
         return [
-            OCS(**obj) for obj in machine_dicts if (
-                obj.get('metadata').get('name') in machine_names
-            )
+            OCS(**obj)
+            for obj in machine_dicts
+            if (obj.get("metadata").get("name") in machine_names)
         ]
 
 
@@ -53,18 +55,17 @@ def get_machineset_objs(machineset_names=None):
 
     """
     machinesets_obj = OCP(
-        kind=constants.MACHINESETS,
-        namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+        kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
     )
 
-    machineset_dicts = machinesets_obj.get()['items']
+    machineset_dicts = machinesets_obj.get()["items"]
     if not machineset_names:
         return [OCS(**obj) for obj in machineset_dicts]
     else:
         return [
-            OCS(**obj) for obj in machineset_dicts if (
-                obj.get('metadata').get('name') in machineset_names
-            )
+            OCS(**obj)
+            for obj in machineset_dicts
+            if (obj.get("metadata").get("name") in machineset_names)
         ]
 
 
@@ -80,8 +81,13 @@ def get_machines(machine_type=constants.WORKER_MACHINE):
     """
     machines_obj = get_machine_objs()
     machines = [
-        n for n in machines_obj if machine_type in n.get().get('metadata')
-        .get('labels').get('machine.openshift.io/cluster-api-machine-role')
+        n
+        for n in machines_obj
+        if machine_type
+        in n.get()
+        .get("metadata")
+        .get("labels")
+        .get("machine.openshift.io/cluster-api-machine-role")
     ]
     return machines
 
@@ -97,7 +103,7 @@ def delete_machine(machine_name):
         CommandFailed: In case yaml_file and resource_name wasn't provided
     """
     machine_obj = OCP(
-        kind='machine', namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+        kind="machine", namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
     )
     log.info(f"Deleting machine {machine_name}")
     machine_obj.delete(resource_name=machine_name)
@@ -115,10 +121,13 @@ def get_machine_type(machine_name):
     """
     machines_obj = get_machine_objs([machine_name])
     for machine in machines_obj:
-        if machine.get().get('metadata').get('name') == machine_name:
-            machine_type = machine.get().get('metadata').get(
-                'labels'
-            ).get('machine.openshift.io/cluster-api-machine-role')
+        if machine.get().get("metadata").get("name") == machine_name:
+            machine_type = (
+                machine.get()
+                .get("metadata")
+                .get("labels")
+                .get("machine.openshift.io/cluster-api-machine-role")
+            )
             log.info(f"{machine_name} is a {machine_type} type")
             return machine_type
         break
@@ -134,8 +143,8 @@ def get_labeled_nodes(label):
         list: List of names of labeled nodes
     """
     ocp_node_obj = OCP(kind=constants.NODE)
-    nodes = ocp_node_obj.get(selector=label).get('items')
-    labeled_nodes_list = [node.get('metadata').get('name') for node in nodes]
+    nodes = ocp_node_obj.get(selector=label).get("items")
+    labeled_nodes_list = [node.get("metadata").get("name") for node in nodes]
     return labeled_nodes_list
 
 
@@ -159,13 +168,12 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
             new_machine = machine
             break
     if new_machine is not None:
-        log.info(
-            f"Checking the state of new spinned machine {new_machine.name}"
-        )
-        state = new_machine.get().get(
-            'metadata'
-        ).get('annotations').get(
-            'machine.openshift.io/instance-state'
+        log.info(f"Checking the state of new spinned machine {new_machine.name}")
+        state = (
+            new_machine.get()
+            .get("metadata")
+            .get("annotations")
+            .get("machine.openshift.io/instance-state")
         )
         log.info(f"{new_machine.name} is in {state} state")
         return state == constants.STATUS_RUNNING.islower()
@@ -173,7 +181,11 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
 
 
 def create_custom_machineset(
-    role='app', instance_type='m4.xlarge', label='app-scale', zone='a'
+    role="app",
+    instance_type="m4.xlarge",
+    labels=None,
+    taints=None,
+    zone="a",
 ):
     """
     Function to create custom machineset works only for AWS
@@ -183,7 +195,8 @@ def create_custom_machineset(
     Args:
         role (str): Role type to be added for node eg: it will be app,worker
         instance_type (str): Type of aws instance
-        label (str): Label to be added to the node
+        label (list): List of Labels (key, val) to be added to the node
+        taints (list): List of taints to be applied
         zone (str): Machineset zone for node creation.
 
     Returns:
@@ -195,73 +208,119 @@ def create_custom_machineset(
 
     """
     # check for platform, since it's supported only for IPI
-    if config.ENV_DATA['deployment_type'] == 'ipi':
+    if config.ENV_DATA["deployment_type"] == "ipi":
         machinesets_obj = OCP(
-            kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+            kind=constants.MACHINESETS,
+            namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
         )
-        for machine in machinesets_obj.get()['items']:
+        for machine in machinesets_obj.get()["items"]:
             # Get inputs from existing machineset config.
-            region = machine.get('spec').get('template').get('spec').get(
-                'providerSpec').get('value').get('placement').get('region')
-            aws_zone = machine.get('spec').get('template').get('spec').get(
-                'providerSpec').get('value').get('placement').get('availabilityZone')
-            cls_id = machine.get('spec').get('selector').get('matchLabels').get(
-                'machine.openshift.io/cluster-api-cluster')
-            ami_id = machine.get('spec').get('template').get('spec').get(
-                'providerSpec').get('value').get('ami').get('id')
+            region = (
+                machine.get("spec")
+                .get("template")
+                .get("spec")
+                .get("providerSpec")
+                .get("value")
+                .get("placement")
+                .get("region")
+            )
+            aws_zone = (
+                machine.get("spec")
+                .get("template")
+                .get("spec")
+                .get("providerSpec")
+                .get("value")
+                .get("placement")
+                .get("availabilityZone")
+            )
+            cls_id = (
+                machine.get("spec")
+                .get("selector")
+                .get("matchLabels")
+                .get("machine.openshift.io/cluster-api-cluster")
+            )
+            ami_id = (
+                machine.get("spec")
+                .get("template")
+                .get("spec")
+                .get("providerSpec")
+                .get("value")
+                .get("ami")
+                .get("id")
+            )
             if aws_zone == f"{region}{zone}":
                 machineset_yaml = templating.load_yaml(constants.MACHINESET_YAML)
 
                 # Update machineset_yaml with required values.
-                machineset_yaml['metadata']['labels'][
-                    'machine.openshift.io/cluster-api-cluster'
+                machineset_yaml["metadata"]["labels"][
+                    "machine.openshift.io/cluster-api-cluster"
                 ] = cls_id
-                machineset_yaml['metadata']['name'] = f"{cls_id}-{role}-{aws_zone}"
-                machineset_yaml['spec']['selector']['matchLabels'][
-                    'machine.openshift.io/cluster-api-cluster'
+                machineset_yaml["metadata"]["name"] = f"{cls_id}-{role}-{aws_zone}"
+                machineset_yaml["spec"]["selector"]["matchLabels"][
+                    "machine.openshift.io/cluster-api-cluster"
                 ] = cls_id
-                machineset_yaml['spec']['selector']['matchLabels'][
-                    'machine.openshift.io/cluster-api-machineset'
+                machineset_yaml["spec"]["selector"]["matchLabels"][
+                    "machine.openshift.io/cluster-api-machineset"
                 ] = f"{cls_id}-{role}-{aws_zone}"
-                machineset_yaml['spec']['template']['metadata']['labels'][
-                    'machine.openshift.io/cluster-api-cluster'
+                machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                    "machine.openshift.io/cluster-api-cluster"
                 ] = cls_id
-                machineset_yaml['spec']['template']['metadata']['labels'][
-                    'machine.openshift.io/cluster-api-machine-role'
+                machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                    "machine.openshift.io/cluster-api-machine-role"
                 ] = role
-                machineset_yaml['spec']['template']['metadata']['labels'][
-                    'machine.openshift.io/cluster-api-machine-type'
+                machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                    "machine.openshift.io/cluster-api-machine-type"
                 ] = role
-                machineset_yaml['spec']['template']['metadata']['labels'][
-                    'machine.openshift.io/cluster-api-machineset'
+                machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                    "machine.openshift.io/cluster-api-machineset"
                 ] = f"{cls_id}-{role}-{aws_zone}"
-                machineset_yaml['spec']['template']['spec'][
-                    'metadata'
-                ]['labels'][f"node-role.kubernetes.io/{role}"] = f"{label}"
-                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
-                    'ami'
-                ]['id'] = ami_id
-                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
-                    'iamInstanceProfile'
-                ]['id'] = f"{cls_id}-worker-profile"
-                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
-                    'instanceType'
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "ami"
+                ]["id"] = ami_id
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "iamInstanceProfile"
+                ]["id"] = f"{cls_id}-worker-profile"
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "instanceType"
                 ] = instance_type
-                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
-                    'placement'
-                ]['availabilityZone'] = aws_zone
-                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
-                    'placement'
-                ]['region'] = region
-                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
-                    'securityGroups'
-                ][0]['filters'][0]['values'][0] = f"{cls_id}-worker-sg"
-                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
-                    'subnet'
-                ]['filters'][0]['values'][0] = f"{cls_id}-private-{aws_zone}"
-                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
-                    'tags'
-                ][0]['name'] = f"kubernetes.io/cluster/{cls_id}"
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "placement"
+                ]["availabilityZone"] = aws_zone
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "placement"
+                ]["region"] = region
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "securityGroups"
+                ][0]["filters"][0]["values"][0] = f"{cls_id}-worker-sg"
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "subnet"
+                ]["filters"][0]["values"][0] = f"{cls_id}-private-{aws_zone}"
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "tags"
+                ][0]["name"] = f"kubernetes.io/cluster/{cls_id}"
+
+                # Apply the labels
+                if labels:
+                    for label in labels:
+                        machineset_yaml["spec"]["template"]["spec"]["metadata"][
+                            "labels"
+                        ][label[0]] = label[1]
+                    # Remove app label in case of infra nodes
+                    if role == "infra":
+                        machineset_yaml["spec"]["template"]["spec"]["metadata"][
+                            "labels"
+                        ].pop(constants.APP_LABEL, None)
+
+                # Apply the Taints
+                # ex taint list looks like:
+                # [ {'effect': 'NoSchedule',
+                #    'key': 'node.ocs.openshift.io/storage',
+                #    'value': 'true',
+                #  }, {'effect': 'Schedule', 'key': 'xyz', 'value': 'False'} ]
+                if taints:
+                    machineset_yaml["spec"]["template"]["spec"].update(
+                        {"taints": taints}
+                    )
 
                 # Create new custom machineset
                 ms_obj = OCS(**machineset_yaml)
@@ -273,6 +332,69 @@ def create_custom_machineset(
                     raise ResourceNotFoundError("Machineset resource not found")
     else:
         raise UnsupportedPlatformError("Functionality not supported in UPI")
+
+
+def create_ocs_infra_nodes(num_nodes):
+    """
+    Create infra node instances
+
+    Args:
+        num_nodes (int): Number of instances to be created
+
+    Returns:
+        list: list of instance names
+
+    """
+    ms_names = []
+    zone_list = []
+    labels = [
+        ("node-role.kubernetes.io/infra", ""),
+        ("cluster.ocs.openshift.io/openshift-storage", ""),
+    ]
+    taints = [
+        {
+            "effect": "NoSchedule",
+            "key": "node.ocs.openshift.io/storage",
+            "value": "true",
+        }
+    ]
+    instance_type = config.ENV_DATA.get("infra_instance_type", "m5.4xlarge")
+
+    # If infra zones are provided then take it from conf else
+    # extract from workers
+    if config.ENV_DATA.get("infra_availability_zones"):
+        zone_list = [i[-1] for i in config.ENV_DATA["infra_availability_zones"]]
+    else:
+        machinesets_obj = OCP(
+            kind=constants.MACHINESETS,
+            namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
+        )
+        for machine in machinesets_obj.get()["items"]:
+            aws_zone = (
+                machine.get("spec")
+                .get("template")
+                .get("spec")
+                .get("providerSpec")
+                .get("value")
+                .get("placement")
+                .get("availabilityZone")
+            )
+            zone_list.append(aws_zone[-1])
+
+    ms_names.extend(
+        [
+            create_custom_machineset(
+                role="infra",
+                instance_type=instance_type,
+                labels=labels,
+                taints=taints,
+                zone=zone_list[i % len(zone_list)],
+            )
+            for i in range(num_nodes)
+        ]
+    )
+
+    return ms_names
 
 
 def delete_custom_machineset(machine_set):
@@ -289,7 +411,7 @@ def delete_custom_machineset(machine_set):
 
     """
     ocp = OCP(namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
-    ocp.exec_oc_cmd(f'delete machineset {machine_set}')
+    ocp.exec_oc_cmd(f"delete machineset {machine_set}")
     if not check_machineset_exists(machine_set):
         logging.info(f"Machineset {machine_set} deleted")
     else:
@@ -321,10 +443,15 @@ def get_machinesets():
         machine_sets (list): list of machine sets
     """
     machine_sets = list()
-    machinesets_obj = OCP(kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
-    for machine in machinesets_obj.get()['items']:
-        machine_sets.append(machine.get('spec').get('selector').get(
-            'matchLabels').get('machine.openshift.io/cluster-api-machineset')
+    machinesets_obj = OCP(
+        kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+    )
+    for machine in machinesets_obj.get()["items"]:
+        machine_sets.append(
+            machine.get("spec")
+            .get("selector")
+            .get("matchLabels")
+            .get("machine.openshift.io/cluster-api-machineset")
         )
 
     return machine_sets
@@ -343,12 +470,8 @@ def get_machine_from_machineset(machine_set):
     machine_objs = get_machine_objs()
     machine_set_list = []
     for machine in machine_objs:
-        if machine.get().get(
-                'metadata'
-        ).get('name')[:-6] == machine_set:
-            machine_set_list.append(
-                machine.get().get('metadata').get('name')
-            )
+        if machine.get().get("metadata").get("name")[:-6] == machine_set:
+            machine_set_list.append(machine.get().get("metadata").get("name"))
     return machine_set_list
 
 
@@ -366,7 +489,7 @@ def get_machine_from_node_name(node_name):
     machine_objs = get_machine_objs()
     for machine in machine_objs:
         machine_dict = machine.get()
-        if machine_dict['status']['nodeRef']['name'] == node_name:
+        if machine_dict["status"]["nodeRef"]["name"] == node_name:
             return machine.name
 
 
@@ -383,9 +506,12 @@ def get_machineset_from_machine_name(machine_name):
     machine_objs = get_machine_objs()
     for machine in machine_objs:
         if machine.name == machine_name:
-            return machine.get().get(
-                'metadata'
-            ).get('labels').get('machine.openshift.io/cluster-api-machineset')
+            return (
+                machine.get()
+                .get("metadata")
+                .get("labels")
+                .get("machine.openshift.io/cluster-api-machineset")
+            )
 
 
 def get_replica_count(machine_set):
@@ -398,8 +524,10 @@ def get_replica_count(machine_set):
     Returns:
         replica count (int): replica count of a machine set
     """
-    machinesets_obj = OCP(kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
-    return machinesets_obj.get(resource_name=machine_set).get('spec').get('replicas')
+    machinesets_obj = OCP(
+        kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+    )
+    return machinesets_obj.get(resource_name=machine_set).get("spec").get("replicas")
 
 
 def get_ready_replica_count(machine_set):
@@ -413,12 +541,13 @@ def get_ready_replica_count(machine_set):
         ready_replica (int): replica count which are in ready state
     """
     machinesets_obj = OCP(
-        kind=constants.MACHINESETS,
-        namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+        kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
     )
-    return machinesets_obj.get(
-        resource_name=machine_set
-    ).get('status').get('readyReplicas')
+    return (
+        machinesets_obj.get(resource_name=machine_set)
+        .get("status")
+        .get("readyReplicas")
+    )
 
 
 def add_node(machine_set, count):
@@ -433,11 +562,11 @@ def add_node(machine_set, count):
         bool: True if commands executes successfully
     """
     ocp = OCP(namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
-    ocp.exec_oc_cmd(f'scale --replicas={count} machinesets {machine_set}')
+    ocp.exec_oc_cmd(f"scale --replicas={count} machinesets {machine_set}")
     return True
 
 
-def wait_for_new_node_to_be_ready(machine_set, timeout=300):
+def wait_for_new_node_to_be_ready(machine_set, timeout=600):
     """
     Wait for the new node to reach ready state
 
@@ -463,9 +592,7 @@ def wait_for_new_node_to_be_ready(machine_set, timeout=300):
             "Replica count didn't match ready replica count"
         )
         raise ResourceWrongStatusException(
-            machine_set, [
-                m.describe() for m in get_machineset_objs(machine_set)
-            ]
+            machine_set, [m.describe() for m in get_machineset_objs(machine_set)]
         )
 
 
@@ -480,7 +607,7 @@ def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     """
 
     sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
-    return sc_obj.get().get('items')[0].get('metadata').get('name')
+    return sc_obj.get().get("items")[0].get("metadata").get("name")
 
 
 def add_annotation_to_machine(annotation, machine_name):
@@ -491,10 +618,7 @@ def add_annotation_to_machine(annotation, machine_name):
         eg: annotation = "machine.openshift.io/exclude-node-draining=''"
         machine_name (str): machine name
     """
-    ocp_obj = OCP(
-        kind='machine',
-        namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
-    )
+    ocp_obj = OCP(kind="machine", namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
     command = f"annotate machine {machine_name} {annotation}"
     log.info(f"Adding annotation: {command} to machine {machine_name} ")
     ocp_obj.exec_oc_cmd(command)

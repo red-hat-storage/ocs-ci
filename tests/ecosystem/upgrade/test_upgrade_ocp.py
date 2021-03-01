@@ -6,7 +6,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_latest_ocp_version,
     expose_ocp_version,
-    ceph_health_check
+    ceph_health_check,
 )
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
@@ -26,7 +26,7 @@ class TestUpgradeOCP(ManageTest):
     5. monitor cluster health
     """
 
-    def test_upgrade_ocp(self, reduce_cluster_load):
+    def test_upgrade_ocp(self, reduce_and_resume_cluster_load):
         """
         Tests OCS stability when upgrading OCP
 
@@ -36,19 +36,19 @@ class TestUpgradeOCP(ManageTest):
         with CephHealthMonitor(ceph_cluster):
 
             ocp_channel = config.UPGRADE.get(
-                'ocp_channel', ocp.get_ocp_upgrade_channel()
+                "ocp_channel", ocp.get_ocp_upgrade_channel()
             )
-            ocp_upgrade_version = config.UPGRADE.get('ocp_upgrade_version')
+            ocp_upgrade_version = config.UPGRADE.get("ocp_upgrade_version")
             if not ocp_upgrade_version:
                 ocp_upgrade_version = get_latest_ocp_version(channel=ocp_channel)
-                ocp_arch = config.UPGRADE['ocp_arch']
+                ocp_arch = config.UPGRADE["ocp_arch"]
                 target_image = f"{ocp_upgrade_version}-{ocp_arch}"
             elif ocp_upgrade_version.endswith(".nightly"):
                 target_image = expose_ocp_version(ocp_upgrade_version)
 
             logger.info(f"Target image; {target_image}")
 
-            image_path = config.UPGRADE['ocp_upgrade_path']
+            image_path = config.UPGRADE["ocp_upgrade_path"]
             cluster_operators = ocp.get_all_cluster_operators()
             logger.info(f" oc version: {ocp.get_current_oc_version()}")
             # Verify Upgrade subscription channel:
@@ -57,7 +57,7 @@ class TestUpgradeOCP(ManageTest):
                 timeout=250,
                 sleep=15,
                 func=ocp.verify_ocp_upgrade_channel,
-                channel_variable=ocp_channel
+                channel_variable=ocp_channel,
             ):
                 if sampler:
                     logger.info(f"OCP Channel:{ocp_channel}")
@@ -72,7 +72,8 @@ class TestUpgradeOCP(ManageTest):
                 logger.info(f"Checking upgrade status of {ocp_operator}:")
                 # ############ Workaround for issue 2624 #######
                 name_changed_between_versions = (
-                    'service-catalog-apiserver', 'service-catalog-controller-manager'
+                    "service-catalog-apiserver",
+                    "service-catalog-controller-manager",
                 )
                 if ocp_operator in name_changed_between_versions:
                     logger.info(f"{ocp_operator} upgrade will not be verified")
@@ -85,7 +86,7 @@ class TestUpgradeOCP(ManageTest):
                     sleep=60,
                     func=ocp.confirm_cluster_operator_version,
                     target_version=target_image,
-                    cluster_operator=ocp_operator
+                    cluster_operator=ocp_operator,
                 ):
                     if sampler:
                         logger.info(f"{ocp_operator} upgrade completed!")
@@ -101,7 +102,7 @@ class TestUpgradeOCP(ManageTest):
                     timeout=2700,
                     sleep=60,
                     func=ocp.verify_cluster_operator_status,
-                    cluster_operator=ocp_operator
+                    cluster_operator=ocp_operator,
                 ):
                     if sampler:
                         break
@@ -110,9 +111,7 @@ class TestUpgradeOCP(ManageTest):
             # Post upgrade validation: check cluster version status
             logger.info("Checking clusterversion status")
             for sampler in TimeoutSampler(
-                timeout=900,
-                sleep=15,
-                func=ocp.validate_cluster_version_status
+                timeout=900, sleep=15, func=ocp.validate_cluster_version_status
             ):
                 if sampler:
                     logger.info("Upgrade Completed Successfully!")

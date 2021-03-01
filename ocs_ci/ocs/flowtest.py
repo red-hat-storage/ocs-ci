@@ -3,7 +3,7 @@ import logging
 from ocs_ci.ocs import node, defaults, exceptions, constants
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.resources import pod as pod_helpers
-from ocs_ci.ocs.resources.pod import check_pods_in_running_state
+from ocs_ci.ocs.resources.pod import wait_for_storage_pods
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from ocs_ci.helpers.sanity_helpers import Sanity
 
@@ -15,6 +15,7 @@ class FlowOperations:
     Flow based operations class
 
     """
+
     def __init__(self):
         """
         Initialize Sanity instance
@@ -22,7 +23,13 @@ class FlowOperations:
         """
         self.sanity_helpers = Sanity()
 
-    def validate_cluster(self, cluster_check=False, node_status=False, pod_status=False, operation_name=""):
+    def validate_cluster(
+        self,
+        cluster_check=False,
+        node_status=False,
+        pod_status=False,
+        operation_name="",
+    ):
         """
         Validates various ceph and ocs cluster checks
 
@@ -42,11 +49,17 @@ class FlowOperations:
             logger.info(f"{operation_name}: Verifying whether node is ready")
             wait_for_nodes_status(status=constants.NODE_READY, timeout=300)
         if pod_status:
-            logger.info(f"{operation_name}: Verifying StorageCluster pods are in running/completed state")
-            assert check_pods_in_running_state(), 'Some pods were not in expected state'
+            logger.info(
+                f"{operation_name}: Verifying StorageCluster pods are in running/completed state"
+            )
+            wait_for_storage_pods()
 
     def node_operations_entry_criteria(
-        self, node_type, number_of_nodes, operation_name="Node Operation", network_fail_time=None
+        self,
+        node_type,
+        number_of_nodes,
+        operation_name="Node Operation",
+        network_fail_time=None,
     ):
         """
         Entry criteria function for node related operations
@@ -64,9 +77,7 @@ class FlowOperations:
         self.validate_cluster(node_status=True, operation_name=operation_name)
 
         logger.info(f"Getting parameters related to: {operation_name}")
-        typed_nodes = node.get_typed_nodes(
-            node_type=node_type, num_of_nodes=number_of_nodes
-        )
+        typed_nodes = node.get_nodes(node_type=node_type, num_of_nodes=number_of_nodes)
         if network_fail_time:
             return typed_nodes, network_fail_time
         else:
@@ -82,9 +93,12 @@ class FlowOperations:
         """
         self.validate_cluster(operation_name="Add Capacity")
 
-        logger.info("Add capacity: Getting restart count of pods before adding capacity")
+        logger.info(
+            "Add capacity: Getting restart count of pods before adding capacity"
+        )
         restart_count_before = pod_helpers.get_pod_restarts_count(
-            defaults.ROOK_CLUSTER_NAMESPACE)
+            defaults.ROOK_CLUSTER_NAMESPACE
+        )
 
         logger.info("Add capacity entry: Getting OSD pod count before adding capacity")
         osd_pods_before = pod_helpers.get_osd_pods()
@@ -104,23 +118,30 @@ class FlowOperations:
 
         logger.info("Add capacity: Getting restart count of pods after adding capacity")
         restart_count_after = pod_helpers.get_pod_restarts_count(
-            defaults.ROOK_CLUSTER_NAMESPACE)
-        logger.info(f"Sum of restart count before = {sum(restart_count_before.values())}")
+            defaults.ROOK_CLUSTER_NAMESPACE
+        )
+        logger.info(
+            f"Sum of restart count before = {sum(restart_count_before.values())}"
+        )
         logger.info(f"Sum of restart count after = {sum(restart_count_after.values())}")
-        assert sum(restart_count_before.values()) == sum(restart_count_after.values(
-        )), "Exit criteria verification FAILED: One or more pods got restarted"
+        assert sum(restart_count_before.values()) == sum(
+            restart_count_after.values()
+        ), "Exit criteria verification FAILED: One or more pods got restarted"
 
         osd_pods_after = pod_helpers.get_osd_pods()
         number_of_osds_added = len(osd_pods_after) - len(osd_pods_before)
-        logger.info(f"Number of OSDs added = {number_of_osds_added}, "
-                    f"before = {len(osd_pods_before)}, after = {len(osd_pods_after)}")
-        assert number_of_osds_added == 3, "Exit criteria verification FAILED: osd count mismatch"
+        logger.info(
+            f"Number of OSDs added = {number_of_osds_added}, "
+            f"before = {len(osd_pods_before)}, after = {len(osd_pods_after)}"
+        )
+        assert (
+            number_of_osds_added == 3
+        ), "Exit criteria verification FAILED: osd count mismatch"
 
         logger.info("Add capacity: Exit criteria verification: Success")
 
 
 class BackgroundOps:
-
     def __init__(self):
         self.OPERATION_COMPLETED = False
 
@@ -132,12 +153,14 @@ class BackgroundOps:
             bool : True if function runs successfully
 
         """
-        iterations = kwargs.get('iterations', 1)
+        iterations = kwargs.get("iterations", 1)
         func_name = func.__name__
-        del kwargs['iterations']
+        del kwargs["iterations"]
         for i in range(iterations):
             if self.OPERATION_COMPLETED:
-                logger.info(f"{func_name}: Done with execution. Stopping the thread. In iteration {i}")
+                logger.info(
+                    f"{func_name}: Done with execution. Stopping the thread. In iteration {i}"
+                )
                 return True
             else:
                 func(*args, **kwargs)
@@ -154,9 +177,7 @@ class BackgroundOps:
         """
         self.OPERATION_COMPLETED = True
         for thread in bg_ops:
-            sample = TimeoutSampler(
-                timeout=timeout, sleep=10, func=thread.done
-            )
+            sample = TimeoutSampler(timeout=timeout, sleep=10, func=thread.done)
             assert sample.wait_for_func_status(result=True)
 
             try:

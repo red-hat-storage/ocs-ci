@@ -21,7 +21,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.utility.utils import run_cmd, update_container_with_mirrored_image
+from ocs_ci.utility.utils import exec_cmd, run_cmd, update_container_with_mirrored_image
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
 from ocs_ci.ocs import defaults, constants
 from ocs_ci.framework import config
@@ -40,8 +40,12 @@ class OCP(object):
     _has_phase = False
 
     def __init__(
-        self, api_version='v1', kind='Service', namespace=None,
-        resource_name='', selector=None,
+        self,
+        api_version="v1",
+        kind="Service",
+        namespace=None,
+        resource_name="",
+        selector=None,
     ):
         """
         Initializer function
@@ -91,8 +95,13 @@ class OCP(object):
         self._data = self.get()
 
     def exec_oc_cmd(
-        self, command, out_yaml_format=True, secrets=None, timeout=600,
-        ignore_error=False, **kwargs
+        self,
+        command,
+        out_yaml_format=True,
+        secrets=None,
+        timeout=600,
+        ignore_error=False,
+        **kwargs,
     ):
         """
         Executing 'oc' command
@@ -115,32 +124,29 @@ class OCP(object):
 
         """
         oc_cmd = "oc "
-        cluster_dir_kubeconfig = os.path.join(
-            config.ENV_DATA['cluster_path'],
-            config.RUN.get('kubeconfig_location')
-        )
-        if os.getenv('KUBECONFIG'):
-            kubeconfig = os.getenv('KUBECONFIG')
-        elif os.path.exists(cluster_dir_kubeconfig):
-            kubeconfig = cluster_dir_kubeconfig
-        else:
-            kubeconfig = None
+        env_kubeconfig = os.getenv("KUBECONFIG")
+        if not env_kubeconfig or not os.path.exists(env_kubeconfig):
+            cluster_dir_kubeconfig = os.path.join(
+                config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
+            )
+            if os.path.exists(cluster_dir_kubeconfig):
+                oc_cmd += f"--kubeconfig {cluster_dir_kubeconfig} "
 
         if self.namespace:
             oc_cmd += f"-n {self.namespace} "
 
-        if kubeconfig:
-            oc_cmd += f"--kubeconfig {kubeconfig} "
-
         oc_cmd += command
         out = run_cmd(
-            cmd=oc_cmd, secrets=secrets, timeout=timeout,
-            ignore_error=ignore_error, **kwargs
+            cmd=oc_cmd,
+            secrets=secrets,
+            timeout=timeout,
+            ignore_error=ignore_error,
+            **kwargs,
         )
 
         try:
-            if out.startswith('hints = '):
-                out = out[out.index('{'):]
+            if out.startswith("hints = "):
+                out = out[out.index("{") :]
         except ValueError:
             pass
 
@@ -165,21 +171,27 @@ class OCP(object):
         """
         # Appending one empty value in list for string manipulation
         create_cmd_list = copy.deepcopy(cmd_list)
-        create_cmd_list.append(' ')
-        err_msg = 'CMD FAILED'
+        create_cmd_list.append(" ")
+        err_msg = "CMD FAILED"
         cmd = f" || echo '{err_msg}';".join(create_cmd_list)
-        debug_cmd = f"debug nodes/{node} -- chroot /host /bin/bash -c \"{cmd}\""
-        out = str(self.exec_oc_cmd(
-            command=debug_cmd, out_yaml_format=False, timeout=timeout
-        ))
+        debug_cmd = f'debug nodes/{node} -- chroot /host /bin/bash -c "{cmd}"'
+        out = str(
+            self.exec_oc_cmd(command=debug_cmd, out_yaml_format=False, timeout=timeout)
+        )
         if err_msg in out:
             raise CommandFailed
         else:
             return out
 
     def get(
-        self, resource_name='', out_yaml_format=True, selector=None,
-        all_namespaces=False, retry=0, wait=3
+        self,
+        resource_name="",
+        out_yaml_format=True,
+        selector=None,
+        all_namespaces=False,
+        retry=0,
+        wait=3,
+        dont_raise=False,
     ):
         """
         Get command - 'oc get <resource>'
@@ -191,12 +203,15 @@ class OCP(object):
             all_namespaces (bool): Equal to oc get <resource> -A
             retry (int): Number of attempts to retry to get resource
             wait (int): Number of seconds to wait between attempts for retry
+            dont_raise (bool): If True will raise when get is not found
 
         Example:
             get('my-pv1')
 
         Returns:
             dict: Dictionary represents a returned yaml file
+            None: Incase dont_raise is True and get is not found
+
         """
         resource_name = resource_name if resource_name else self.resource_name
         selector = selector if selector else self.selector
@@ -223,7 +238,10 @@ class OCP(object):
                 retry -= 1
                 if not retry:
                     log.warning("Number of attempts to get resource reached!")
-                    raise
+                    if not dont_raise:
+                        raise
+                    else:
+                        return None
                 else:
                     log.info(
                         f"Number of attempts: {retry} to get resource: "
@@ -232,7 +250,7 @@ class OCP(object):
                     )
                     time.sleep(wait if wait else 1)
 
-    def describe(self, resource_name='', selector=None, all_namespaces=False):
+    def describe(self, resource_name="", selector=None, all_namespaces=False):
         """
         Get command - 'oc describe <resource>'
 
@@ -254,7 +272,7 @@ class OCP(object):
             command += f" --selector={selector}"
         return self.exec_oc_cmd(command, out_yaml_format=False)
 
-    def create(self, yaml_file=None, resource_name='', out_yaml_format=True):
+    def create(self, yaml_file=None, resource_name="", out_yaml_format=True):
         """
         Creates a new resource
 
@@ -270,8 +288,7 @@ class OCP(object):
         """
         if not (yaml_file or resource_name):
             raise CommandFailed(
-                "At least one of resource_name or yaml_file have to "
-                "be provided"
+                "At least one of resource_name or yaml_file have to " "be provided"
             )
         command = "create "
         if yaml_file:
@@ -285,7 +302,7 @@ class OCP(object):
         log.debug(f"{yaml.dump(output)}")
         return output
 
-    def delete(self, yaml_file=None, resource_name='', wait=True, force=False):
+    def delete(self, yaml_file=None, resource_name="", wait=True, force=False):
         """
         Deletes a resource
 
@@ -306,8 +323,7 @@ class OCP(object):
         """
         if not (yaml_file or resource_name):
             raise CommandFailed(
-                "At least one of resource_name or yaml_file have to "
-                "be provided"
+                "At least one of resource_name or yaml_file have to " "be provided"
             )
 
         command = "delete "
@@ -336,7 +352,7 @@ class OCP(object):
         command = f"apply -f {yaml_file}"
         return self.exec_oc_cmd(command)
 
-    def patch(self, resource_name='', params=None, format_type=''):
+    def patch(self, resource_name="", params=None, format_type=""):
         """
         Applies changes to resources
 
@@ -350,13 +366,13 @@ class OCP(object):
 
         """
         resource_name = resource_name or self.resource_name
-        params = "\'" + f"{params}" + "\'"
+        params = "'" + f"{params}" + "'"
         command = f"patch {self.kind} {resource_name} -n {self.namespace} -p {params}"
         if format_type:
             command += f" --type {format_type}"
         log.info(f"Command: {command}")
         result = self.exec_oc_cmd(command)
-        if 'patched' in result:
+        if "patched" in result:
             return True
         return False
 
@@ -407,9 +423,7 @@ class OCP(object):
         command = f"oc delete project {project_name}"
         if f' "{project_name}" deleted' in run_cmd(f"{command}"):
             return True
-        raise CommandFailed(
-            f"{project_name} was not deleted"
-        )
+        raise CommandFailed(f"{project_name} was not deleted")
 
     def login(self, user, password):
         """
@@ -421,9 +435,10 @@ class OCP(object):
 
         Returns:
             str: output of login command
+
         """
-        command = f"oc login -u {user} -p {password}"
-        status = run_cmd(command)
+        command = ["oc", "login", "-u", user, "-p", password]
+        status = exec_cmd(command, secrets=[password])
         return status
 
     def login_as_sa(self):
@@ -433,7 +448,7 @@ class OCP(object):
         Returns:
             str: output of login command
         """
-        kubeconfig = os.getenv('KUBECONFIG')
+        kubeconfig = os.getenv("KUBECONFIG")
         command = "oc login -u system:admin "
         if kubeconfig:
             command += f"--kubeconfig {kubeconfig}"
@@ -447,14 +462,21 @@ class OCP(object):
         Returns:
             str: access token
         """
-        command = 'whoami --show-token'
+        command = "whoami --show-token"
         token = self.exec_oc_cmd(command, out_yaml_format=False).rstrip()
         return token
 
     def wait_for_resource(
-        self, condition, resource_name='', column='STATUS', selector=None,
-        resource_count=0, timeout=60, sleep=3,
-        dont_allow_other_resources=False, error_condition=None,
+        self,
+        condition,
+        resource_name="",
+        column="STATUS",
+        selector=None,
+        resource_count=0,
+        timeout=60,
+        sleep=3,
+        dont_allow_other_resources=False,
+        error_condition=None,
     ):
         """
         Wait for a resource to reach to a desired condition
@@ -496,12 +518,15 @@ class OCP(object):
                 f" from error condition '{error_condition}'"
                 " which describes unexpected error state."
             )
-        log.info((
-            f"Waiting for a resource(s) of kind {self._kind}"
-            f" identified by name '{resource_name}'"
-            f" using selector {selector}"
-            f" at column name {column}"
-            f" to reach desired condition {condition}"))
+        log.info(
+            (
+                f"Waiting for a resource(s) of kind {self._kind}"
+                f" identified by name '{resource_name}'"
+                f" using selector {selector}"
+                f" at column name {column}"
+                f" to reach desired condition {condition}"
+            )
+        )
         resource_name = resource_name if resource_name else self.resource_name
         selector = selector if selector else self.selector
 
@@ -518,7 +543,10 @@ class OCP(object):
                 if resource_name:
                     retry = int(timeout / sleep if sleep else timeout / 1)
                     status = self.get_resource(
-                        resource_name, column, retry=retry, wait=sleep,
+                        resource_name,
+                        column,
+                        retry=retry,
+                        wait=sleep,
                     )
                     if status == condition:
                         log.info(
@@ -526,9 +554,12 @@ class OCP(object):
                             " reached condition!"
                         )
                         return True
-                    log.info((
-                        f"status of {resource_name} at column {column} was {status},"
-                        f" but we were waiting for {condition}"))
+                    log.info(
+                        (
+                            f"status of {resource_name} at column {column} was {status},"
+                            f" but we were waiting for {condition}"
+                        )
+                    )
                     actual_status = status
                     if error_condition is not None and status == error_condition:
                         raise ResourceInUnexpectedState(
@@ -536,21 +567,24 @@ class OCP(object):
                             f" is {status}."
                         )
                 # More than 1 resources returned
-                elif sample.get('kind') == 'List':
+                elif sample.get("kind") == "List":
                     in_condition = []
                     in_condition_len = 0
                     actual_status = []
-                    sample = sample['items']
+                    sample = sample["items"]
                     sample_len = len(sample)
                     for item in sample:
                         try:
-                            item_name = item.get('metadata').get('name')
+                            item_name = item.get("metadata").get("name")
                             status = self.get_resource(item_name, column)
                             actual_status.append(status)
                             if status == condition:
                                 in_condition.append(item)
                                 in_condition_len = len(in_condition)
-                            if error_condition is not None and status == error_condition:
+                            if (
+                                error_condition is not None
+                                and status == error_condition
+                            ):
                                 raise ResourceInUnexpectedState(
                                     f"Status of '{item_name}' "
                                     f" at column {column} is {status}."
@@ -585,24 +619,29 @@ class OCP(object):
                         exp_num_str = f"all {resource_count}"
                     else:
                         exp_num_str = "all"
-                    log.info((
-                        f"status of {resource_name} at column {column} - item(s) were {actual_status},"
-                        f" but we were waiting"
-                        f" for {exp_num_str} of them to be {condition}"))
+                    log.info(
+                        (
+                            f"status of {resource_name} at column {column} - item(s) were {actual_status},"
+                            f" but we were waiting"
+                            f" for {exp_num_str} of them to be {condition}"
+                        )
+                    )
         except TimeoutExpiredError as ex:
             log.error(f"timeout expired: {ex}")
-            log.error((
-                f"Wait for {self._kind} resource {resource_name} at column {column}"
-                f" to reach desired condition {condition} failed,"
-                f" last actual status was {actual_status}"))
+            log.error(
+                (
+                    f"Wait for {self._kind} resource {resource_name} at column {column}"
+                    f" to reach desired condition {condition} failed,"
+                    f" last actual status was {actual_status}"
+                )
+            )
             # run `oc describe` on the resources we were waiting for to provide
             # evidence so that we can understand what was wrong
             output = self.describe(resource_name, selector=selector)
             log.warning(
-                "Description of the resource(s) we were waiting for:\n%s",
-                output
+                "Description of the resource(s) we were waiting for:\n%s", output
             )
-            raise(ex)
+            raise (ex)
         except ResourceInUnexpectedState:
             log.error(
                 (
@@ -614,18 +653,17 @@ class OCP(object):
                 resource_name,
                 column,
                 condition,
-                error_condition
+                error_condition,
             )
             output = self.describe(resource_name, selector=selector)
             log.warning(
-                "Description of the resource(s) we were waiting for:\n%s",
-                output
+                "Description of the resource(s) we were waiting for:\n%s", output
             )
             raise
 
         return False
 
-    def wait_for_delete(self, resource_name='', timeout=60, sleep=3):
+    def wait_for_delete(self, resource_name="", timeout=60, sleep=3):
         """
         Wait for a resource to be deleted
 
@@ -643,15 +681,15 @@ class OCP(object):
             bool: True in case resource deletion is successful
 
         """
+        if config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM:
+            timeout = 720
         start_time = time.time()
         while True:
             try:
                 self.get(resource_name=resource_name)
             except CommandFailed as ex:
                 if "NotFound" in str(ex):
-                    log.info(
-                        f"{self.kind} {resource_name} got deleted successfully"
-                    )
+                    log.info(f"{self.kind} {resource_name} got deleted successfully")
                     return True
                 else:
                     raise ex
@@ -665,9 +703,7 @@ class OCP(object):
                 raise TimeoutError(msg)
             time.sleep(sleep)
 
-    def get_resource(
-        self, resource_name, column, retry=0, wait=3, selector=None
-    ):
+    def get_resource(self, resource_name, column, retry=0, wait=3, selector=None):
         """
         Get a column value for a resource based on:
         'oc get <resource_kind> <resource_name>' command
@@ -687,31 +723,32 @@ class OCP(object):
         selector = selector if selector else self.selector
         # Get the resource in str format
         resource = self.get(
-            resource_name=resource_name, out_yaml_format=False, retry=retry,
-            wait=wait, selector=selector
+            resource_name=resource_name,
+            out_yaml_format=False,
+            retry=retry,
+            wait=wait,
+            selector=selector,
         )
         # get the list of titles
-        titles = re.sub(r'\s{2,}', ',', resource)  # noqa: W605
-        titles = titles.split(',')
+        titles = re.sub(r"\s{2,}", ",", resource)  # noqa: W605
+        titles = titles.split(",")
         # Get the index of column
         column_index = titles.index(column)
         resource = shlex.split(resource)
         # Get the values from the output including access modes in capital
         # letters
         resource_info = [
-            i for i in resource if (
-                not i.isupper() or i in ('RWO', 'RWX', 'ROX')
-            )
+            i for i in resource if (not i.isupper() or i in ("RWO", "RWX", "ROX"))
         ]
         # WA, Failed to parse "oc get build" command
         # https://github.com/red-hat-storage/ocs-ci/issues/2312
         try:
-            if self.data['items'][0]['kind'].lower() == 'build' and (
-                self.data['items'][0].get(
-                    'metadata'
-                ).get(
-                    'annotations'
-                ).get('openshift.io/build-config.name') == 'jax-rs-build'
+            if self.data["items"][0]["kind"].lower() == "build" and (
+                self.data["items"][0]
+                .get("metadata")
+                .get("annotations")
+                .get("openshift.io/build-config.name")
+                == "jax-rs-build"
             ):
                 return resource_info[column_index - 1]
         except Exception:
@@ -732,9 +769,9 @@ class OCP(object):
                 format
         """
 
-        return self.get_resource(resource_name, 'STATUS')
+        return self.get_resource(resource_name, "STATUS")
 
-    def check_name_is_specified(self, resource_name=''):
+    def check_name_is_specified(self, resource_name=""):
         """
         Check if the name of the resource is specified in class level and
         if not raise the exception.
@@ -744,9 +781,7 @@ class OCP(object):
                 specified.
 
         """
-        resource_name = (
-            resource_name if resource_name else self.resource_name
-        )
+        resource_name = resource_name if resource_name else self.resource_name
         if not resource_name:
             raise ResourceNameNotSpecifiedException(
                 "Resource name has to be specified in class!"
@@ -795,10 +830,8 @@ class OCP(object):
             log.info(f"Cannot find resource object {self.resource_name}")
             return False
         try:
-            current_phase = data['status']['phase']
-            log.info(
-                f"Resource {self.resource_name} is in phase: {current_phase}!"
-            )
+            current_phase = data["status"]["phase"]
+            log.info(f"Resource {self.resource_name} is in phase: {current_phase}!")
             return current_phase == phase
         except KeyError:
             log.info(
@@ -828,13 +861,10 @@ class OCP(object):
         """
         self.check_function_supported(self._has_phase)
         self.check_name_is_specified()
-        sampler = TimeoutSampler(
-            timeout, sleep, self.check_phase, phase=phase
-        )
+        sampler = TimeoutSampler(timeout, sleep, func=self.check_phase, phase=phase)
         if not sampler.wait_for_func_status(True):
             raise ResourceInUnexpectedState(
-                f"Resource: {self.resource_name} is not in expected phase: "
-                f"{phase}"
+                f"Resource: {self.resource_name} is not in expected phase: " f"{phase}"
             )
 
     def is_exist(self, resource_name="", selector=None):
@@ -862,9 +892,7 @@ class OCP(object):
             log.info(f"Resource: {resource_name}, selector: {selector} found.")
             return True
         except CommandFailed:
-            log.info(
-                f"Resource: {resource_name}, selector: {selector} not found."
-            )
+            log.info(f"Resource: {resource_name}, selector: {selector} not found.")
             return False
 
     def get_logs(
@@ -907,7 +935,7 @@ class OCP(object):
             out_yaml_format=False,
             secrets=secrets,
             timeout=timeout,
-            ignore_error=ignore_error
+            ignore_error=ignore_error,
         )
         return output
 
@@ -921,10 +949,8 @@ def get_clustername():
 
     """
 
-    ocp_cluster = OCP(
-        namespace='openshift-console', kind='',
-        resource_name='route')
-    return ocp_cluster.get()['items'][0]['spec']['host'].split('.')[2]
+    ocp_cluster = OCP(namespace="openshift-console", kind="", resource_name="route")
+    return ocp_cluster.get()["items"][0]["spec"]["host"].split(".")[2]
 
 
 def get_ocs_version():
@@ -937,9 +963,13 @@ def get_ocs_version():
     """
 
     ocp_cluster = OCP(
-        namespace=config.ENV_DATA['cluster_namespace'],
-        kind='', resource_name='csv')
-    return ocp_cluster.get()['items'][0]['spec']['version']
+        namespace=config.ENV_DATA["cluster_namespace"], kind="", resource_name="csv"
+    )
+    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+        for item in ocp_cluster.get()["items"]:
+            if item["metadata"]["name"].startswith("ocs-operator"):
+                return item["spec"]["version"]
+    return ocp_cluster.get()["items"][0]["spec"]["version"]
 
 
 def get_ocs_parsed_version():
@@ -968,9 +998,11 @@ def get_build():
     """
 
     ocp_cluster = OCP(
-        namespace=config.ENV_DATA['cluster_namespace'],
-        kind='', resource_name='clusterversion')
-    return ocp_cluster.get()['items'][0]['status']['desired']['version']
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind="",
+        resource_name="clusterversion",
+    )
+    return ocp_cluster.get()["items"][0]["status"]["desired"]["version"]
 
 
 def get_ocp_channel():
@@ -983,9 +1015,11 @@ def get_ocp_channel():
     """
 
     ocp_cluster = OCP(
-        namespace=config.ENV_DATA['cluster_namespace'],
-        kind='', resource_name='clusterversion')
-    return ocp_cluster.get()['items'][0]['spec']['channel']
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind="",
+        resource_name="clusterversion",
+    )
+    return ocp_cluster.get()["items"][0]["spec"]["channel"]
 
 
 def switch_to_project(project_name):
@@ -998,11 +1032,11 @@ def switch_to_project(project_name):
     Returns:
         bool: True on success, False otherwise
     """
-    log.info(f'Switching to project {project_name}')
-    cmd = f'oc project {project_name}'
+    log.info(f"Switching to project {project_name}")
+    cmd = f"oc project {project_name}"
     success_msgs = [
         f'Now using project "{project_name}"',
-        f'Already on project "{project_name}"'
+        f'Already on project "{project_name}"',
     ]
     ret = run_cmd(cmd)
     if any(msg in ret for msg in success_msgs):
@@ -1037,10 +1071,10 @@ def rsync(src, dst, node, dst_node=True, extra_params=""):
     """
     pod_name = f"rsync-{node.replace('.', '-')}"
     pod_data = load_yaml(constants.RSYNC_POD_YAML)
-    pod_data['metadata']['name'] = pod_name
-    pod_data['spec']['nodeName'] = node
+    pod_data["metadata"]["name"] = pod_name
+    pod_data["spec"]["nodeName"] = node
     update_container_with_mirrored_image(pod_data)
-    pod = OCP(kind='pod', namespace=constants.DEFAULT_NAMESPACE)
+    pod = OCP(kind="pod", namespace=constants.DEFAULT_NAMESPACE)
     src = src if dst_node else f"{pod_name}:/host{src}"
     dst = f"{pod_name}:/host{dst}" if dst_node else dst
     try:
@@ -1079,8 +1113,8 @@ def get_images(data, images=None):
         if set(("name", "value")) <= data.keys() and (
             type(data["name"]) == str and data["name"].endswith("_IMAGE")
         ):
-            image_name = data["name"].rstrip('_IMAGE').lower()
-            image = data['value']
+            image_name = data["name"].rstrip("_IMAGE").lower()
+            image = data["value"]
             images[image_name] = image
         else:
             for key, value in data.items():
@@ -1088,7 +1122,7 @@ def get_images(data, images=None):
                 if value_type in (dict, list):
                     get_images(value, images)
                 elif value_type == str and key == "image":
-                    image_name = data.get('name')
+                    image_name = data.get("name")
                     if image_name:
                         images[image_name] = value
     elif data_type == list:
@@ -1113,14 +1147,13 @@ def verify_images_upgraded(old_images, object_data):
     not_upgraded_images = set(
         [image for image in current_images.values() if image in old_images]
     )
-    name = object_data['metadata']['name']
+    name = object_data["metadata"]["name"]
     if not_upgraded_images:
         raise NonUpgradedImagesFoundError(
             f"Images: {not_upgraded_images} weren't upgraded in: {name}!"
         )
     log.info(
-        f"All the images: {current_images} were successfully upgraded in: "
-        f"{name}!"
+        f"All the images: {current_images} were successfully upgraded in: " f"{name}!"
     )
 
 
@@ -1140,8 +1173,10 @@ def confirm_cluster_operator_version(target_version, cluster_operator):
     cur_version = get_cluster_operator_version(cluster_operator)
     log.info(f"current {cluster_operator} operator version is: {cur_version}")
     if cur_version == target_version or target_version.startswith(cur_version):
-        log.info(f"{cluster_operator} cluster operator upgrade to build"
-                 f" {target_version} completed")
+        log.info(
+            f"{cluster_operator} cluster operator upgrade to build"
+            f" {target_version} completed"
+        )
         return True
 
     log.debug(f"{cluster_operator} upgrade not yet completed")
@@ -1174,7 +1209,7 @@ def get_current_oc_version():
 
     """
     ocp = OCP()
-    oc_json = ocp.exec_oc_cmd('version -o json', out_yaml_format=False)
+    oc_json = ocp.exec_oc_cmd("version -o json", out_yaml_format=False)
     log.debug(f"oc_json=: {oc_json}")
     oc_dict = json.loads(oc_json)
     log.debug(f"oc_dict=: {oc_dict}")
@@ -1193,12 +1228,12 @@ def get_cluster_operator_version(cluster_operator_name):
         str: cluster operator version: ClusterOperator image version
 
     """
-    ocp = OCP(kind='ClusterOperator')
+    ocp = OCP(kind="ClusterOperator")
     operator_info = ocp.get(cluster_operator_name)
     log.debug(f"operator info: {operator_info}")
-    operator_status = operator_info.get('status')
-    version = operator_status.get('versions')[0]['version']
-    version = version.rstrip('_openshift')
+    operator_status = operator_info.get("status")
+    version = operator_status.get("versions")[0]["version"]
+    version = version.rstrip("_openshift")
 
     return version
 
@@ -1211,13 +1246,13 @@ def get_all_cluster_operators():
         list: cluster-operator names
 
     """
-    ocp = OCP(kind='ClusterOperator')
+    ocp = OCP(kind="ClusterOperator")
     operator_info = ocp.get("-o name", out_yaml_format=False, all_namespaces=True)
     operators_full_names = str(operator_info).split()
     operator_names = list()
     for name in operators_full_names:
         log.debug(f"original operator name: {name}")
-        new_name = name.lstrip('clusteroperator.config.openshift.io').lstrip('/')
+        new_name = name.lstrip("clusteroperator.config.openshift.io").lstrip("/")
         log.info(f"fixed operator name: {new_name}")
         operator_names.append(new_name)
 
@@ -1239,19 +1274,19 @@ def verify_cluster_operator_status(cluster_operator):
         is "degraded" or "progressing"
 
     """
-    ocp = OCP(kind='clusteroperators')
+    ocp = OCP(kind="clusteroperators")
     operator_data = ocp.get(
-        resource_name=f'{cluster_operator} -o json', out_yaml_format=False
+        resource_name=f"{cluster_operator} -o json", out_yaml_format=False
     )
-    conditions = operator_data['status']['conditions']
+    conditions = operator_data["status"]["conditions"]
     for condition in conditions:
-        if condition['type'] == 'Degraded' and condition['status'] == 'True':
-            log.info(f'{cluster_operator} status is Degraded')
+        if condition["type"] == "Degraded" and condition["status"] == "True":
+            log.info(f"{cluster_operator} status is Degraded")
             return False
-        elif condition['type'] == 'Progressing' and condition['status'] == 'True':
-            log.info(f'{cluster_operator} status is Progressing')
+        elif condition["type"] == "Progressing" and condition["status"] == "True":
+            log.info(f"{cluster_operator} status is Progressing")
             return False
-    log.info(f'{cluster_operator} status is valid')
+    log.info(f"{cluster_operator} status is valid")
 
     return True
 
@@ -1268,20 +1303,20 @@ def validate_cluster_version_status():
 
     """
     ocp = OCP(kind="clusterversion")
-    operator_data = ocp.get('-o json', out_yaml_format=False)
-    conditions = operator_data['items'][0].get('status').get('conditions', [])
+    operator_data = ocp.get("-o json", out_yaml_format=False)
+    conditions = operator_data["items"][0].get("status").get("conditions", [])
     for condition in conditions:
-        if condition['type'] == 'Progressing' and condition['status'] == 'True':
-            log.info('cluster version status is Progressing')
+        if condition["type"] == "Progressing" and condition["status"] == "True":
+            log.info("cluster version status is Progressing")
             return False
-        elif condition['type'] == 'Failing' and condition['status'] == 'True':
-            log.info('cluster version status is Failing')
+        elif condition["type"] == "Failing" and condition["status"] == "True":
+            log.info("cluster version status is Failing")
             return False
-        elif condition['type'] == 'Available' and condition['status'] != 'True':
-            log.info('cluster status is not available')
+        elif condition["type"] == "Available" and condition["status"] != "True":
+            log.info("cluster status is not available")
             return False
 
-    log.info('Cluster version validation - OK!')
+    log.info("Cluster version validation - OK!")
     return True
 
 
@@ -1295,17 +1330,15 @@ def get_ocp_upgrade_channel():
     """
     ocp = OCP(kind="clusterversion")
     log.info("Gathering Subscription Channel information")
-    operator_version = ocp.get('-o json', out_yaml_format=False)
+    operator_version = ocp.get("-o json", out_yaml_format=False)
     log.debug(f"cluster version: {operator_version}")
-    channel = operator_version['items'][0].get('spec').get('channel')
+    channel = operator_version["items"][0].get("spec").get("channel")
     log.info(f"Subscription Channel: {channel}")
 
     return channel
 
 
-def patch_ocp_upgrade_channel(
-    channel_variable=config.UPGRADE['ocp_channel']
-):
+def patch_ocp_upgrade_channel(channel_variable=config.UPGRADE["ocp_channel"]):
     """
     Using 'oc patch clusterversion' if new OCP upgrade channel is
     different than current one
@@ -1327,9 +1360,7 @@ def patch_ocp_upgrade_channel(
         log.info("No patch needed")
 
 
-def verify_ocp_upgrade_channel(
-    channel_variable=config.UPGRADE['ocp_channel']
-):
+def verify_ocp_upgrade_channel(channel_variable=config.UPGRADE["ocp_channel"]):
     """
     When upgrade OCP version, verify that subscription channel is same
     as current one
@@ -1371,6 +1402,4 @@ def wait_for_cluster_connectivity(tries=200, delay=3):
     """
     service = OCP()
     log.info("Waiting for cluster connectivity")
-    return retry(
-        CommandFailed, tries=tries, delay=delay, backoff=1
-    )(service.get)()
+    return retry(CommandFailed, tries=tries, delay=delay, backoff=1)(service.get)()

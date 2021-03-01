@@ -3,9 +3,12 @@ from subprocess import Popen, PIPE
 from ocs_ci.framework.testlib import workloads
 import logging
 from ocs_ci.utility.svt import (
-    svt_project_clone, svt_create_venv_setup,
-    svt_cluster_loader, svt_cleanup
+    svt_project_clone,
+    svt_create_venv_setup,
+    svt_cluster_loader,
+    svt_cleanup,
 )
+
 log = logging.getLogger(__name__)
 
 
@@ -37,12 +40,12 @@ class TestRegistryWorkload:
             log.info(f"Running command {cmd}")
             build = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE)
             stdout, stderr = build.communicate()
-            out = stderr.split('\n'.encode())[-5].split()[-1]
+            out = stderr.split("\n".encode())[-5].split()[-1]
             log.info(stderr)
             # Sometimes builds just fails and we accept a small # of failures
             # so checking the number of builds succeeded instead of failures as
             # suggested by OCP team
-            assert (int(out) >= 100), 'More failed builds found'
+            assert int(out) >= 100, "More failed builds found"
 
         finally:
             print("Calling svt cleanup")

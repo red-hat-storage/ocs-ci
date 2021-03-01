@@ -16,25 +16,41 @@ from ocs_ci.deployment.vmware import (
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
-from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
-from ocs_ci.utility.retry import retry
+from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils, powernodes
 from ocs_ci.utility.csr import approve_pending_csr
-from ocs_ci.ocs import constants, ocp, exceptions
+from ocs_ci.utility.load_balancer import LoadBalancer
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs import constants, ocp, exceptions, cluster
 from ocs_ci.ocs.node import (
-    get_node_objs, get_typed_worker_nodes, get_typed_nodes,
+    get_node_objs,
+    get_typed_worker_nodes,
+    get_nodes,
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.csr import (
-    get_nodes_csr, wait_for_all_nodes_csr_and_approve,
+    get_nodes_csr,
+    wait_for_all_nodes_csr_and_approve,
 )
 from ocs_ci.utility.utils import (
-    get_cluster_name, get_infra_id, create_rhelpod,
+    get_cluster_name,
+    get_infra_id,
+    create_rhelpod,
     replace_content_in_file,
-    get_ocp_version, TimeoutSampler,
-    delete_file, AZInfo, download_file_from_git_repo,
+    get_ocp_version,
+    TimeoutSampler,
+    delete_file,
+    AZInfo,
+    download_file_from_git_repo,
+    get_running_ocp_version,
+    set_aws_region,
+    run_cmd,
+    get_module_ip,
 )
 from ocs_ci.ocs.node import wait_for_nodes_status
+from ocs_ci.utility.vsphere_nodes import VSPHERENode
+from paramiko.ssh_exception import NoValidConnectionsError, AuthenticationException
+from semantic_version import Version
 
 logger = logging.getLogger(__name__)
 
@@ -44,18 +60,23 @@ class PlatformNodesFactory:
     A factory class to get specific nodes platform object
 
     """
+
     def __init__(self):
         self.cls_map = {
-            'AWS': AWSNodes,
-            'vsphere': VMWareNodes,
-            'aws': AWSNodes,
-            'baremetal': BaremetalNodes,
-            'azure': AZURENodes,
-            'gcp': NodesBase
+            "AWS": AWSNodes,
+            "vsphere": VMWareNodes,
+            "aws": AWSNodes,
+            "baremetal": BaremetalNodes,
+            "azure": AZURENodes,
+            "gcp": NodesBase,
+            "vsphere_lso": VMWareLSONodes,
+            "powervs": IBMPowerNodes,
         }
 
     def get_nodes_platform(self):
-        platform = config.ENV_DATA['platform']
+        platform = config.ENV_DATA["platform"]
+        if cluster.is_lso_cluster() and platform == constants.VSPHERE_PLATFORM:
+            platform += "_lso"
         return self.cls_map[platform]()
 
 
@@ -65,19 +86,16 @@ class NodesBase(object):
     Should be inherited by specific platform classes
 
     """
+
     def __init__(self):
-        self.cluster_path = config.ENV_DATA['cluster_path']
-        self.platform = config.ENV_DATA['platform']
-        self.deployment_type = config.ENV_DATA['deployment_type']
-        self.nodes_map = {
-            'AWSUPINode': AWSUPINode, 'VSPHEREUPINode': VSPHEREUPINode
-        }
+        self.cluster_path = config.ENV_DATA["cluster_path"]
+        self.platform = config.ENV_DATA["platform"]
+        self.deployment_type = config.ENV_DATA["deployment_type"]
+        self.nodes_map = {"AWSUPINode": AWSUPINode, "VSPHEREUPINode": VSPHEREUPINode}
         self.wait_time = 120
 
     def get_data_volumes(self):
-        raise NotImplementedError(
-            "Get data volume functionality is not implemented"
-        )
+        raise NotImplementedError("Get data volume functionality is not implemented")
 
     def get_node_by_attached_volume(self, volume):
         raise NotImplementedError(
@@ -85,19 +103,13 @@ class NodesBase(object):
         )
 
     def stop_nodes(self, nodes):
-        raise NotImplementedError(
-            "Stop nodes functionality is not implemented"
-        )
+        raise NotImplementedError("Stop nodes functionality is not implemented")
 
     def start_nodes(self, nodes):
-        raise NotImplementedError(
-            "Start nodes functionality is not implemented"
-        )
+        raise NotImplementedError("Start nodes functionality is not implemented")
 
     def restart_nodes(self, nodes, wait=True):
-        raise NotImplementedError(
-            "Restart nodes functionality is not implemented"
-        )
+        raise NotImplementedError("Restart nodes functionality is not implemented")
 
     def restart_nodes_by_stop_and_start(self, nodes, force=True):
         raise NotImplementedError(
@@ -105,14 +117,10 @@ class NodesBase(object):
         )
 
     def detach_volume(self, volume, node=None, delete_from_backend=True):
-        raise NotImplementedError(
-            "Detach volume functionality is not implemented"
-        )
+        raise NotImplementedError("Detach volume functionality is not implemented")
 
     def attach_volume(self, volume, node):
-        raise NotImplementedError(
-            "Attach volume functionality is not implemented"
-        )
+        raise NotImplementedError("Attach volume functionality is not implemented")
 
     def wait_for_volume_attach(self, volume):
         raise NotImplementedError(
@@ -141,9 +149,7 @@ class NodesBase(object):
         self.attach_nodes_to_cluster(node_list)
 
     def create_nodes(self, node_conf, node_type, num_nodes):
-        raise NotImplementedError(
-            "Create nodes functionality not implemented"
-        )
+        raise NotImplementedError("Create nodes functionality not implemented")
 
     def attach_nodes_to_cluster(self, node_list):
         raise NotImplementedError(
@@ -161,9 +167,7 @@ class NodesBase(object):
             dict: of default config loaded
 
         """
-        assert os.path.exists(default_config_path), (
-            'Config file doesnt exists'
-        )
+        assert os.path.exists(default_config_path), "Config file doesnt exists"
 
         with open(default_config_path) as f:
             default_config_dict = yaml.safe_load(f)
@@ -176,15 +180,16 @@ class VMWareNodes(NodesBase):
     VMWare nodes class
 
     """
+
     def __init__(self):
         super(VMWareNodes, self).__init__()
         self.cluster_name = config.ENV_DATA.get("cluster_name")
-        self.server = config.ENV_DATA['vsphere_server']
-        self.user = config.ENV_DATA['vsphere_user']
-        self.password = config.ENV_DATA['vsphere_password']
-        self.cluster = config.ENV_DATA['vsphere_cluster']
-        self.datacenter = config.ENV_DATA['vsphere_datacenter']
-        self.datastore = config.ENV_DATA['vsphere_datastore']
+        self.server = config.ENV_DATA["vsphere_server"]
+        self.user = config.ENV_DATA["vsphere_user"]
+        self.password = config.ENV_DATA["vsphere_password"]
+        self.cluster = config.ENV_DATA["vsphere_cluster"]
+        self.datacenter = config.ENV_DATA["vsphere_datacenter"]
+        self.datastore = config.ENV_DATA["vsphere_datastore"]
         self.vsphere = vsphere.VSPHERE(self.server, self.user, self.password)
 
     def get_vms(self, nodes):
@@ -201,7 +206,7 @@ class VMWareNodes(NodesBase):
         vms_in_pool = self.vsphere.get_all_vms_in_pool(
             self.cluster_name, self.datacenter, self.cluster
         )
-        node_names = [node.get().get('metadata').get('name') for node in nodes]
+        node_names = [node.get().get("metadata").get("name") for node in nodes]
         vms = []
         for node in node_names:
             node_vms = [vm for vm in vms_in_pool if vm.name in node]
@@ -222,7 +227,7 @@ class VMWareNodes(NodesBase):
         if not pvs:
             pvs = get_deviceset_pvs()
         return [
-            pv.get().get('spec').get('vsphereVolume').get('volumePath') for pv in pvs
+            pv.get().get("spec").get("vsphereVolume").get("volumePath") for pv in pvs
         ]
 
     def get_node_by_attached_volume(self, volume):
@@ -240,9 +245,7 @@ class VMWareNodes(NodesBase):
 
         """
         vms = self.get_vms(nodes)
-        assert vms, (
-            f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
-        )
+        assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
         self.vsphere.stop_vms(vms, force=force)
 
     def start_nodes(self, nodes, wait=True):
@@ -254,9 +257,7 @@ class VMWareNodes(NodesBase):
 
         """
         vms = self.get_vms(nodes)
-        assert vms, (
-            f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
-        )
+        assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
         self.vsphere.start_vms(vms)
 
     def restart_nodes(self, nodes, force=True, timeout=300, wait=True):
@@ -273,9 +274,7 @@ class VMWareNodes(NodesBase):
         """
         num_events_pre_reboot = {}
         vms = self.get_vms(nodes)
-        assert vms, (
-            f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
-        )
+        assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
 
         for node in nodes:
             reboot_events_cmd = (
@@ -283,7 +282,7 @@ class VMWareNodes(NodesBase):
                 f"{node.name},reason=Rebooted -o yaml"
             )
             num_events_pre_reboot[node.name] = len(
-                node.ocp.exec_oc_cmd(reboot_events_cmd)['items']
+                node.ocp.exec_oc_cmd(reboot_events_cmd)["items"]
             )
 
         self.vsphere.restart_vms(vms, force=force)
@@ -302,8 +301,7 @@ class VMWareNodes(NodesBase):
             nodes_names = [n.name for n in nodes]
 
             wait_for_nodes_status(
-                node_names=nodes_names, status=constants.NODE_READY,
-                timeout=timeout
+                node_names=nodes_names, status=constants.NODE_READY, timeout=timeout
             )
             for node in nodes:
                 reboot_events_cmd = (
@@ -311,9 +309,8 @@ class VMWareNodes(NodesBase):
                     f"{node.name},reason=Rebooted -o yaml"
                 )
                 assert num_events_pre_reboot[node.name] < len(
-                    node.ocp.exec_oc_cmd(reboot_events_cmd)['items']), (
-                    f"Reboot event not found on node {node.name}"
-                )
+                    node.ocp.exec_oc_cmd(reboot_events_cmd)["items"]
+                ), f"Reboot event not found on node {node.name}"
                 logger.info(f"Node {node.name} rebooted")
 
     def restart_nodes_by_stop_and_start(self, nodes, force=True):
@@ -326,9 +323,7 @@ class VMWareNodes(NodesBase):
 
         """
         vms = self.get_vms(nodes)
-        assert vms, (
-            f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
-        )
+        assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
         self.vsphere.restart_vms_by_stop_and_start(vms, force=force)
 
     def detach_volume(self, volume, node=None, delete_from_backend=True):
@@ -344,8 +339,7 @@ class VMWareNodes(NodesBase):
         """
         vm = self.get_vms([node])[0]
         self.vsphere.remove_disk(
-            vm=vm, identifier=volume, key='volume_path',
-            datastore=delete_from_backend
+            vm=vm, identifier=volume, key="volume_path", datastore=delete_from_backend
         )
 
     def create_and_attach_volume(self, node, size):
@@ -376,11 +370,13 @@ class VMWareNodes(NodesBase):
         """
         self.cluster_nodes = get_node_objs()
         vms = self.get_vms(self.cluster_nodes)
-        assert vms, (
-            f"Failed to get VM objects for nodes {[n.name for n in self.cluster_nodes]}"
-        )
+        assert (
+            vms
+        ), f"Failed to get VM objects for nodes {[n.name for n in self.cluster_nodes]}"
         stopped_vms = [
-            vm for vm in vms if self.vsphere.get_vm_power_status(vm) == constants.VM_POWERED_OFF
+            vm
+            for vm in vms
+            if self.vsphere.get_vm_power_status(vm) == constants.VM_POWERED_OFF
         ]
         # Start the VMs
         if stopped_vms:
@@ -400,7 +396,7 @@ class VMWareNodes(NodesBase):
 
         """
         node_cls = self.nodes_map[
-            f'{self.platform.upper()}{self.deployment_type.upper()}Node'
+            f"{self.platform.upper()}{self.deployment_type.upper()}Node"
         ]
         node_cls_obj = node_cls(node_conf, node_type, num_nodes)
         node_cls_obj.add_node()
@@ -411,6 +407,7 @@ class AWSNodes(NodesBase):
     AWS EC2 instances class
 
     """
+
     def __init__(self):
         super(AWSNodes, self).__init__()
         self.aws = aws.AWS()
@@ -451,21 +448,16 @@ class AWSNodes(NodesBase):
             OCS: The OCS object of the EC2 instance
 
         """
-        instance_ids = [
-            at.get('InstanceId') for at in volume.attachments
-        ]
-        assert instance_ids, (
-            f"EBS Volume {volume.id} is not attached to any EC2 instance"
-        )
+        instance_ids = [at.get("InstanceId") for at in volume.attachments]
+        assert (
+            instance_ids
+        ), f"EBS Volume {volume.id} is not attached to any EC2 instance"
         instance_id = instance_ids[0]
         all_nodes = get_node_objs()
         nodes = [
-            n for n in all_nodes if instance_id in n.get()
-            .get('spec').get('providerID')
+            n for n in all_nodes if instance_id in n.get().get("spec").get("providerID")
         ]
-        assert nodes, (
-            f"Failed to find the OCS object for EC2 instance {instance_id}"
-        )
+        assert nodes, f"Failed to find the OCS object for EC2 instance {instance_id}"
         return nodes[0]
 
     def stop_nodes(self, nodes, wait=True):
@@ -479,9 +471,9 @@ class AWSNodes(NodesBase):
 
         """
         instances = self.get_ec2_instances(nodes)
-        assert instances, (
-            f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
-        )
+        assert (
+            instances
+        ), f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
         self.aws.stop_ec2_instances(instances=instances, wait=wait)
 
     def start_nodes(self, instances=None, nodes=None, wait=True):
@@ -495,9 +487,9 @@ class AWSNodes(NodesBase):
 
         """
         instances = instances or self.get_ec2_instances(nodes)
-        assert instances, (
-            f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
-        )
+        assert (
+            instances
+        ), f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
         self.aws.start_ec2_instances(instances=instances, wait=wait)
 
     def restart_nodes(self, nodes, timeout=300, wait=True):
@@ -515,8 +507,7 @@ class AWSNodes(NodesBase):
         num_events_pre_reboot = {}
         instances = self.get_ec2_instances(nodes)
         assert instances, (
-            f"Failed to get the EC2 instances for "
-            f"nodes {[n.name for n in nodes]}"
+            f"Failed to get the EC2 instances for " f"nodes {[n.name for n in nodes]}"
         )
 
         for node in nodes:
@@ -525,7 +516,7 @@ class AWSNodes(NodesBase):
                 f"{node.name},reason=Rebooted -o yaml"
             )
             num_events_pre_reboot[node.name] = len(
-                node.ocp.exec_oc_cmd(reboot_events_cmd)['items']
+                node.ocp.exec_oc_cmd(reboot_events_cmd)["items"]
             )
 
         self.aws.restart_ec2_instances(instances=instances)
@@ -542,12 +533,9 @@ class AWSNodes(NodesBase):
             time.sleep(60)
 
             nodes_names = [n.name for n in nodes]
-            logger.info(
-                f"Waiting for nodes: {nodes_names} to reach ready state"
-            )
+            logger.info(f"Waiting for nodes: {nodes_names} to reach ready state")
             wait_for_nodes_status(
-                node_names=nodes_names, status=constants.NODE_READY,
-                timeout=timeout
+                node_names=nodes_names, status=constants.NODE_READY, timeout=timeout
             )
             for node in nodes:
                 reboot_events_cmd = (
@@ -555,9 +543,8 @@ class AWSNodes(NodesBase):
                     f"{node.name},reason=Rebooted -o yaml"
                 )
                 assert num_events_pre_reboot[node.name] < len(
-                    node.ocp.exec_oc_cmd(reboot_events_cmd)['items']), (
-                    f"Reboot event not found on node {node.name}"
-                )
+                    node.ocp.exec_oc_cmd(reboot_events_cmd)["items"]
+                ), f"Reboot event not found on node {node.name}"
                 logger.info(f"Node {node.name} rebooted")
 
     def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=True):
@@ -572,9 +559,9 @@ class AWSNodes(NodesBase):
         Returns:
         """
         instances = self.get_ec2_instances(nodes)
-        assert instances, (
-            f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
-        )
+        assert (
+            instances
+        ), f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
         self.aws.restart_ec2_instances_by_stop_and_start(
             instances=instances, wait=wait, force=force
         )
@@ -620,9 +607,7 @@ class AWSNodes(NodesBase):
 
         """
         volume.load()
-        volume_attachments = [
-            at.get('InstanceId') for at in volume.attachments
-        ]
+        volume_attachments = [at.get("InstanceId") for at in volume.attachments]
         if not volume_attachments:
             instance = self.get_ec2_instances([node])
             assert instance, f"Failed to get the EC2 instance for nodes {node.name}"
@@ -647,23 +632,18 @@ class AWSNodes(NodesBase):
                 instance, False otherwise
 
         """
+
         def get_volume_attachments(ebs_volume):
             ebs_volume.reload()
             return ebs_volume.attachments
 
         try:
-            for sample in TimeoutSampler(
-                300, 3, get_volume_attachments, volume
-            ):
-                logger.info(
-                    f"EBS volume {volume.id} attachments are: {sample}"
-                )
+            for sample in TimeoutSampler(300, 3, get_volume_attachments, volume):
+                logger.info(f"EBS volume {volume.id} attachments are: {sample}")
                 if sample:
                     return True
         except TimeoutExpiredError:
-            logger.error(
-                f"Volume {volume.id} failed to be attached to an EC2 instance"
-            )
+            logger.error(f"Volume {volume.id} failed to be attached to an EC2 instance")
             return False
 
     def restart_nodes_by_stop_and_start_teardown(self):
@@ -674,9 +654,9 @@ class AWSNodes(NodesBase):
         # Get the cluster nodes ec2 instances
         self.cluster_nodes = get_node_objs()
         ec2_instances = self.get_ec2_instances(self.cluster_nodes)
-        assert ec2_instances, (
-            f"Failed to get ec2 instances for nodes {[n.name for n in self.cluster_nodes]}"
-        )
+        assert (
+            ec2_instances
+        ), f"Failed to get ec2 instances for nodes {[n.name for n in self.cluster_nodes]}"
 
         logger.info(
             "Getting the instances that are in status 'stopping' (if there are any), "
@@ -684,8 +664,9 @@ class AWSNodes(NodesBase):
             "so it will be possible to start them"
         )
         stopping_instances = {
-            key: val for key, val in ec2_instances.items() if
-            self.aws.get_instances_status_by_id(key) == constants.INSTANCE_STOPPING
+            key: val
+            for key, val in ec2_instances.items()
+            if self.aws.get_instances_status_by_id(key) == constants.INSTANCE_STOPPING
         }
 
         logger.info(
@@ -697,8 +678,9 @@ class AWSNodes(NodesBase):
                 instance = self.aws.get_ec2_instance(stopping_instance.key())
                 instance.wait_until_stopped()
         stopped_instances = {
-            key: val for key, val in ec2_instances.items() if
-            self.aws.get_instances_status_by_id(key) == constants.INSTANCE_STOPPED
+            key: val
+            for key, val in ec2_instances.items()
+            if self.aws.get_instances_status_by_id(key) == constants.INSTANCE_STOPPED
         }
 
         # Start the instances
@@ -720,10 +702,10 @@ class AWSNodes(NodesBase):
         """
         node_list = []
         node_cls = self.nodes_map[
-            f'{self.platform.upper()}{self.deployment_type.upper()}Node'
+            f"{self.platform.upper()}{self.deployment_type.upper()}Node"
         ]
 
-        if node_type.upper() == 'RHCOS':
+        if node_type.upper() == "RHCOS":
             workers_stacks = self.aws.get_worker_stacks()
             logger.info(f"Existing worker stacks: {workers_stacks}")
             existing_indexes = self.get_existing_indexes(workers_stacks)
@@ -731,14 +713,14 @@ class AWSNodes(NodesBase):
             slots_available = self.get_available_slots(existing_indexes, num_nodes)
             logger.info(f"Available indexes: {slots_available}")
             for slot in slots_available:
-                node_conf['zone'] = self.az.get_zone_number()
+                node_conf["zone"] = self.az.get_zone_number()
                 node_id = slot
                 node_list.append(node_cls(node_conf, node_type))
                 node_list[-1]._prepare_node(node_id)
-        elif node_type.upper() == 'RHEL':
-            rhel_workers = len(get_typed_worker_nodes('rhel'))
+        elif node_type.upper() == "RHEL":
+            rhel_workers = len(get_typed_worker_nodes("rhel"))
             for i in range(num_nodes):
-                node_conf['zone'] = self.az.get_zone_number()
+                node_conf["zone"] = self.az.get_zone_number()
                 node_id = i + rhel_workers
                 node_list.append(node_cls(node_conf, node_type))
                 node_list[-1]._prepare_node(node_id)
@@ -746,7 +728,7 @@ class AWSNodes(NodesBase):
         # Make sure that csr is approved for all the nodes
         # not making use of csr.py functions as aws rhcos has long
         # delays for csr to appear
-        if node_type.upper() == 'RHCOS':
+        if node_type.upper() == "RHCOS":
             self.approve_all_nodes_csr(node_list)
 
         return node_list
@@ -755,7 +737,7 @@ class AWSNodes(NodesBase):
         (exceptions.PendingCSRException, exceptions.TimeoutExpiredError),
         tries=4,
         delay=10,
-        backoff=1
+        backoff=1,
     )
     def approve_all_nodes_csr(self, node_list):
         """
@@ -768,18 +750,13 @@ class AWSNodes(NodesBase):
              PendingCSRException: If any pending csrs exists
 
         """
-        node_names = [
-            node.aws_instance_obj.private_dns_name for node in node_list
-        ]
+        node_names = [node.aws_instance_obj.private_dns_name for node in node_list]
 
         sample = TimeoutSampler(
-            timeout=600, sleep=3, func=self.all_nodes_found,
-            node_names=node_names
+            timeout=600, sleep=3, func=self.all_nodes_found, node_names=node_names
         )
         if not sample.wait_for_func_status(result=True):
-            raise exceptions.PendingCSRException(
-                "All nodes csr not approved"
-            )
+            raise exceptions.PendingCSRException("All nodes csr not approved")
 
     def all_nodes_found(self, node_names):
         """
@@ -797,9 +774,7 @@ class AWSNodes(NodesBase):
         approve_pending_csr()
         get_nodes_cmd = "get nodes -o wide"
         oc_obj = ocp.OCP()
-        nodes_wide_out = oc_obj.exec_oc_cmd(
-            get_nodes_cmd, out_yaml_format=False
-        )
+        nodes_wide_out = oc_obj.exec_oc_cmd(get_nodes_cmd, out_yaml_format=False)
         for line in nodes_wide_out.splitlines():
             for node in node_names:
                 if node in line:
@@ -846,7 +821,7 @@ class AWSNodes(NodesBase):
         """
         temp = []
         for index in index_list:
-            temp.append(int(re.findall(r'\d+', index.split('-')[-1])[-1]))
+            temp.append(int(re.findall(r"\d+", index.split("-")[-1])[-1]))
         temp.sort()
         return temp
 
@@ -858,7 +833,7 @@ class AWSNodes(NodesBase):
             node_list (list): of AWSUPINode/AWSIPINode objects
 
         """
-        if self.deployment_type.lower() == 'upi':
+        if self.deployment_type.lower() == "upi":
             self.attach_nodes_to_upi_cluster(node_list)
 
     def attach_nodes_to_upi_cluster(self, node_list):
@@ -871,7 +846,7 @@ class AWSNodes(NodesBase):
             node_list (list): of AWSUPINode objects
 
         """
-        if node_list[0].node_type == 'RHEL':
+        if node_list[0].node_type == "RHEL":
             self.attach_rhel_nodes_to_upi_cluster(node_list)
 
     def attach_rhel_nodes_to_upi_cluster(self, node_list):
@@ -883,9 +858,7 @@ class AWSNodes(NodesBase):
 
         """
         rhel_pod_name = "rhel-ansible"
-        rhel_pod_obj = create_rhelpod(
-            constants.DEFAULT_NAMESPACE, rhel_pod_name, 600
-        )
+        rhel_pod_obj = create_rhelpod(constants.DEFAULT_NAMESPACE, rhel_pod_name, 600)
         timeout = 4000  # For ansible-playbook
 
         # copy openshift-dev.pem to RHEL ansible pod
@@ -893,30 +866,22 @@ class AWSNodes(NodesBase):
         pem_dst_path = "/openshift-dev.pem"
         pod.upload(rhel_pod_obj.name, pem_src_path, pem_dst_path)
         repo_dst_path = constants.YUM_REPOS_PATH
-        repo = os.path.join(
-            constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo"
-        )
+        repo = os.path.join(constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo")
         assert os.path.exists(repo), f"Required repo file {repo} doesn't exist!"
         repo_file = os.path.basename(repo)
-        pod.upload(
-            rhel_pod_obj.name, repo, repo_dst_path
-        )
+        pod.upload(rhel_pod_obj.name, repo, repo_dst_path)
         # copy the .pem file for our internal repo on all nodes
         # including ansible pod
         # get it from URL
         mirror_pem_file_path = os.path.join(
-            constants.DATA_DIR,
-            constants.INTERNAL_MIRROR_PEM_FILE
+            constants.DATA_DIR, constants.INTERNAL_MIRROR_PEM_FILE
         )
         dst = constants.PEM_PATH
         pod.upload(rhel_pod_obj.name, mirror_pem_file_path, dst)
         # Install scp on pod
         rhel_pod_obj.install_packages("openssh-clients")
         # distribute repo file to all RHEL workers
-        hosts = [
-            node.aws_instance_obj.private_dns_name for node in
-            node_list
-        ]
+        hosts = [node.aws_instance_obj.private_dns_name for node in node_list]
         # Check whether every host is acceptin ssh connections
         for host in hosts:
             self.check_connection(rhel_pod_obj, host, pem_dst_path)
@@ -927,41 +892,39 @@ class AWSNodes(NodesBase):
                 host, pem_dst_path, disable, user=constants.EC2_USER
             )
             rhel_pod_obj.copy_to_server(
-                host, pem_dst_path,
+                host,
+                pem_dst_path,
                 os.path.join(repo_dst_path, repo_file),
-                os.path.join('/tmp', repo_file),
-                user=constants.EC2_USER
+                os.path.join("/tmp", repo_file),
+                user=constants.EC2_USER,
             )
             rhel_pod_obj.exec_cmd_on_node(
-                host, pem_dst_path,
+                host,
+                pem_dst_path,
                 f'sudo mv {os.path.join("/tmp", repo_file)} {repo_dst_path}',
-                user=constants.EC2_USER
+                user=constants.EC2_USER,
             )
             rhel_pod_obj.copy_to_server(
-                host, pem_dst_path,
+                host,
+                pem_dst_path,
                 os.path.join(dst, constants.INTERNAL_MIRROR_PEM_FILE),
-                os.path.join('/tmp', constants.INTERNAL_MIRROR_PEM_FILE),
+                os.path.join("/tmp", constants.INTERNAL_MIRROR_PEM_FILE),
                 user=constants.EC2_USER,
             )
             cmd = (
-                f'sudo mv '
+                f"sudo mv "
                 f'{os.path.join("/tmp/", constants.INTERNAL_MIRROR_PEM_FILE)} '
-                f'{dst}'
+                f"{dst}"
             )
             rhel_pod_obj.exec_cmd_on_node(
-                host, pem_dst_path,
-                cmd, user=constants.EC2_USER
+                host, pem_dst_path, cmd, user=constants.EC2_USER
             )
         # copy kubeconfig to pod
         kubeconfig = os.path.join(
-            self.cluster_path, config.RUN.get('kubeconfig_location')
+            self.cluster_path, config.RUN.get("kubeconfig_location")
         )
         pod.upload(rhel_pod_obj.name, kubeconfig, "/")
-        pull_secret_path = os.path.join(
-            constants.TOP_DIR,
-            "data",
-            "pull-secret"
-        )
+        pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
         pod.upload(rhel_pod_obj.name, pull_secret_path, "/tmp/")
         host_file = self.build_ansible_inventory(hosts)
         pod.upload(rhel_pod_obj.name, host_file, "/")
@@ -974,9 +937,7 @@ class AWSNodes(NodesBase):
                 f"{constants.SCALEUP_ANSIBLE_PLAYBOOK}"
             )
 
-            rhel_pod_obj.exec_cmd_on_pod(
-                cmd, out_yaml_format=False, timeout=timeout
-            )
+            rhel_pod_obj.exec_cmd_on_pod(cmd, out_yaml_format=False, timeout=timeout)
             self.verify_nodes_added(hosts)
         finally:
             rhel_pod_obj.delete(force=True)
@@ -993,19 +954,16 @@ class AWSNodes(NodesBase):
 
         """
         timeout = 600
-        ocp_obj = ocp.OCP(kind='node')
+        ocp_obj = ocp.OCP(kind="node")
         node_info = ocp_obj.get()
         for i in range(len(hosts)):
-            for entry in node_info['items']:
-                for each in entry['status']['addresses']:
-                    if each['type'] == 'Hostname':
-                        if each['address'] in hosts:
-                            logging.info(
-                                f"Checking status for {each['address']}"
-                            )
+            for entry in node_info["items"]:
+                for each in entry["status"]["addresses"]:
+                    if each["type"] == "Hostname":
+                        if each["address"] in hosts:
+                            logging.info(f"Checking status for {each['address']}")
                             sample = TimeoutSampler(
-                                timeout, 3,
-                                self.get_ready_status, entry
+                                timeout, 3, self.get_ready_status, entry
                             )
                             try:
                                 assert sample.wait_for_func_status(result=True)
@@ -1025,9 +983,9 @@ class AWSNodes(NodesBase):
             bool: True if node is Ready else False
 
         """
-        for cond in node_info['status']['conditions']:
-            if cond['type'] == 'Ready':
-                if not cond['status'] == "True":
+        for cond in node_info["status"]["conditions"]:
+            if cond["type"] == "Ready":
+                if not cond["status"] == "True":
                     return False
                 else:
                     return True
@@ -1045,11 +1003,11 @@ class AWSNodes(NodesBase):
         """
         _templating = templating.Templating()
         ansible_host_file = dict()
-        ansible_host_file['ansible_user'] = constants.EC2_USER
-        ansible_host_file['ansible_become'] = 'True'
-        ansible_host_file['pod_kubeconfig'] = '/kubeconfig'
-        ansible_host_file['pod_pull_secret'] = '/tmp/pull-secret'
-        ansible_host_file['rhel_worker_nodes'] = hosts
+        ansible_host_file["ansible_user"] = constants.EC2_USER
+        ansible_host_file["ansible_become"] = "True"
+        ansible_host_file["pod_kubeconfig"] = "/kubeconfig"
+        ansible_host_file["pod_pull_secret"] = "/tmp/pull-secret"
+        ansible_host_file["rhel_worker_nodes"] = hosts
 
         logging.info(ansible_host_file)
         data = _templating.render_template(
@@ -1058,7 +1016,7 @@ class AWSNodes(NodesBase):
         )
         logging.debug("Ansible hosts file:%s", data)
         host_file_path = "/tmp/hosts"
-        with open(host_file_path, 'w') as f:
+        with open(host_file_path, "w") as f:
             f.write(data)
         return host_file_path
 
@@ -1074,10 +1032,8 @@ class AWSNodes(NodesBase):
             pem_dst_path (str): path to private key for ssh
 
         """
-        cmd = 'ls'
-        rhel_pod_obj.exec_cmd_on_node(
-            host, pem_dst_path, cmd, user=constants.EC2_USER
-        )
+        cmd = "ls"
+        rhel_pod_obj.exec_cmd_on_node(host, pem_dst_path, cmd, user=constants.EC2_USER)
 
     def get_stack_name_of_node(self, node_name):
         """
@@ -1099,6 +1055,7 @@ class AWSUPINode(AWSNodes):
     Node object representing AWS upi nodes
 
     """
+
     def __init__(self, node_conf, node_type):
         super(AWSUPINode, self).__init__()
         self.node_conf = node_conf
@@ -1106,11 +1063,9 @@ class AWSUPINode(AWSNodes):
         self.node_type = node_type
         #  This variable will hold the AWS instance object
         self.aws_instance_obj = None
-        self.region = config.ENV_DATA['region']
+        self.region = config.ENV_DATA["region"]
         self.cluster_name = get_cluster_name(self.cluster_path)
-        self.client = boto3.client(
-            'ec2', region_name=self.region
-        )
+        self.client = boto3.client("ec2", region_name=self.region)
         # cloudformation
         self.cf = self.aws.cf_client
         self.infra_id = get_infra_id(self.cluster_path)
@@ -1123,17 +1078,17 @@ class AWSUPINode(AWSNodes):
             node_id (int): Unique integer id for node
 
         """
-        if self.node_type == 'RHEL':
+        if self.node_type == "RHEL":
             conf = self._prepare_rhel_node_conf()
-            conf['node_id'] = node_id
+            conf["node_id"] = node_id
             try:
                 self.aws_instance_obj = self._prepare_upi_rhel_node(conf)
             except Exception:
                 logger.error("Failed to create RHEL node")
                 raise
-        elif self.node_type == 'RHCOS':
+        elif self.node_type == "RHCOS":
             conf = self._prepare_rhcos_node_conf()
-            conf['node_id'] = node_id
+            conf["node_id"] = node_id
             try:
                 self.aws_instance_obj = self._prepare_upi_rhcos_node(conf)
             except Exception:
@@ -1151,7 +1106,7 @@ class AWSUPINode(AWSNodes):
 
         """
         conf = self.read_default_config(constants.RHCOS_WORKER_CONF)
-        default_conf = conf.get('ENV_DATA')
+        default_conf = conf.get("ENV_DATA")
         merge_dict(default_conf, self.node_conf)
         logger.info(f"Config after merge is {default_conf}")
         return default_conf
@@ -1169,16 +1124,16 @@ class AWSUPINode(AWSNodes):
 
         """
         logger.info(f"new rhcos node conf = {conf}")
-        stack_name = conf.get('stack_name')
-        if conf.get('stack_name'):
-            suffix = stack_name.split('-')[-1]
+        stack_name = conf.get("stack_name")
+        if conf.get("stack_name"):
+            suffix = stack_name.split("-")[-1]
         else:
             suffix = f"no{conf.get('zone')}"
 
         self.gather_worker_data(suffix)
         worker_template_path = self.get_rhcos_worker_template()
         self.bucket_name = constants.AWS_S3_UPI_BUCKET
-        self.template_obj_key = f'{self.cluster_name}-workertemplate'
+        self.template_obj_key = f"{self.cluster_name}-workertemplate"
         self.add_cert_to_template(worker_template_path)
         self.aws.upload_file_to_s3_bucket(
             self.bucket_name, self.template_obj_key, worker_template_path
@@ -1186,12 +1141,10 @@ class AWSUPINode(AWSNodes):
         s3_url = self.aws.get_s3_bucket_object_url(
             self.bucket_name, self.template_obj_key
         )
-        params_list = self.build_stack_params(
-            conf['node_id'], conf
-        )
-        capabilities = ['CAPABILITY_NAMED_IAM']
+        params_list = self.build_stack_params(conf["node_id"], conf)
+        capabilities = ["CAPABILITY_NAMED_IAM"]
         self.stack_name, self.stack_id = self.aws.create_stack(
-            s3_url, conf['node_id'], params_list, capabilities
+            s3_url, conf["node_id"], params_list, capabilities
         )
         instance_id = self.aws.get_stack_instance_id(
             self.stack_name, constants.AWS_WORKER_LOGICAL_RESOURCE_ID
@@ -1214,34 +1167,24 @@ class AWSUPINode(AWSNodes):
 
         """
         param_list = []
-        pk = 'ParameterKey'
-        pv = 'ParameterValue'
+        pk = "ParameterKey"
+        pv = "ParameterValue"
 
-        param_list.append({pk: 'Index', pv: str(index)})
-        param_list.append({pk: 'InfrastructureName', pv: self.infra_id})
-        param_list.append({pk: 'RhcosAmi', pv: self.worker_image_id})
+        param_list.append({pk: "Index", pv: str(index)})
+        param_list.append({pk: "InfrastructureName", pv: self.infra_id})
+        param_list.append({pk: "RhcosAmi", pv: self.worker_image_id})
+        param_list.append({pk: "IgnitionLocation", pv: self.worker_ignition_location})
+        param_list.append({pk: "Subnet", pv: self.worker_subnet})
         param_list.append(
             {
-                pk: 'IgnitionLocation', pv: self.worker_ignition_location
-            }
-        )
-        param_list.append({pk: 'Subnet', pv: self.worker_subnet})
-        param_list.append(
-            {
-                pk: 'WorkerSecurityGroupId',
-                pv: self.worker_security_group[0].get('GroupId')
+                pk: "WorkerSecurityGroupId",
+                pv: self.worker_security_group[0].get("GroupId"),
             }
         )
         param_list.append(
-            {
-                pk: 'WorkerInstanceProfileName', pv: self.worker_instance_profile
-            }
+            {pk: "WorkerInstanceProfileName", pv: self.worker_instance_profile}
         )
-        param_list.append(
-            {
-                pk: 'WorkerInstanceType', pv: conf['worker_instance_type']
-            }
-        )
+        param_list.append({pk: "WorkerInstanceType", pv: conf["worker_instance_type"]})
 
         return param_list
 
@@ -1253,10 +1196,7 @@ class AWSUPINode(AWSNodes):
             worker_template_path (str): Path where template file is located
 
         """
-        worker_ignition_path = os.path.join(
-            self.cluster_path,
-            constants.WORKER_IGN
-        )
+        worker_ignition_path = os.path.join(self.cluster_path, constants.WORKER_IGN)
         cert = self.get_cert_content(worker_ignition_path)
         self.update_template_with_cert(worker_template_path, cert)
 
@@ -1276,11 +1216,9 @@ class AWSUPINode(AWSNodes):
             logger.info("=====ORIGINAL=====")
             logger.info(orig_content)
             final_content = re.sub(
-                r'{}'.format(search_str),
-                r'{}'.format(cert),
-                orig_content
+                r"{}".format(search_str), r"{}".format(cert), orig_content
             )
-        with open(temp, 'w') as wfp:
+        with open(temp, "w") as wfp:
             logger.info(final_content)
             wfp.write(final_content)
         os.rename(temp, worker_template_path)
@@ -1299,11 +1237,9 @@ class AWSUPINode(AWSNodes):
         assert os.path.exists(worker_ignition_path)
         with open(worker_ignition_path, "r") as fp:
             content = json.loads(fp.read())
-            tls_data = content.get('ignition').get('security').get('tls')
-            cert_content = tls_data.get('certificateAuthorities')[0].get(
-                'source'
-            )
-            formatted_cert = cert_content.split(',')[1]
+            tls_data = content.get("ignition").get("security").get("tls")
+            cert_content = tls_data.get("certificateAuthorities")[0].get("source")
+            formatted_cert = cert_content.split(",")[1]
         return formatted_cert
 
     def get_rhcos_worker_template(self):
@@ -1314,25 +1250,22 @@ class AWSUPINode(AWSNodes):
             path (str): local path to template file
 
         """
-        common_base = 'functionality-testing'
-        ocp_version = get_ocp_version('_')
+        common_base = "functionality-testing"
+        ocp_version = get_ocp_version("_")
         relative_template_path = os.path.join(
-            f'aos-{ocp_version}',
-            'hosts/upi_on_aws-cloudformation-templates'
+            f"aos-{ocp_version}", "hosts/upi_on_aws-cloudformation-templates"
         )
 
         path_to_file = os.path.join(
-            f'{common_base}',
-            f'{relative_template_path}',
-            f'{constants.AWS_WORKER_NODE_TEMPLATE}'
+            f"{common_base}",
+            f"{relative_template_path}",
+            f"{constants.AWS_WORKER_NODE_TEMPLATE}",
         )
         logger.info(
             f"Getting file '{path_to_file}' from "
             f"git repository {constants.OCP_QE_MISC_REPO}"
         )
-        tmp_file = os.path.join(
-            '/tmp', constants.AWS_WORKER_NODE_TEMPLATE
-        )
+        tmp_file = os.path.join("/tmp", constants.AWS_WORKER_NODE_TEMPLATE)
         download_file_from_git_repo(constants.OCP_QE_MISC_REPO, path_to_file, tmp_file)
         return tmp_file
 
@@ -1343,7 +1276,7 @@ class AWSUPINode(AWSNodes):
 
         """
         conf = self.read_default_config(constants.RHEL_WORKERS_CONF)
-        default_conf = conf.get('ENV_DATA')
+        default_conf = conf.get("ENV_DATA")
         merge_dict(default_conf, self.node_conf)
         logger.info(f"Merged dict is {default_conf}")
         return default_conf
@@ -1357,45 +1290,43 @@ class AWSUPINode(AWSNodes):
 
         """
         cluster_id = get_infra_id(self.cluster_path)
-        node_id = node_conf['node_id']
-        zone = node_conf.get('zone')
+        node_id = node_conf["node_id"]
+        zone = node_conf.get("zone")
         logger.info("Creating RHEL worker node")
-        self.gather_worker_data(f'no{zone}')
+        self.gather_worker_data(f"no{zone}")
         response = self.client.run_instances(
             BlockDeviceMappings=[
                 {
-                    'DeviceName': node_conf['root_disk'],
-                    'Ebs': {
-                        'DeleteOnTermination': True,
-                        'VolumeSize': node_conf['root_disk_size'],
-                        'VolumeType': 'gp2'
+                    "DeviceName": node_conf["root_disk"],
+                    "Ebs": {
+                        "DeleteOnTermination": True,
+                        "VolumeSize": node_conf["root_disk_size"],
+                        "VolumeType": "gp2",
                     },
                 },
             ],
-            ImageId=node_conf['rhel_worker_ami'],
+            ImageId=node_conf["rhel_worker_ami"],
             SubnetId=self.worker_subnet,
-            InstanceType=node_conf['rhel_worker_instance_type'],
+            InstanceType=node_conf["rhel_worker_instance_type"],
             MaxCount=1,
             MinCount=1,
-            Monitoring={
-                'Enabled': False
-            },
+            Monitoring={"Enabled": False},
             SecurityGroupIds=[
-                self.worker_security_group[0]['GroupId'],
+                self.worker_security_group[0]["GroupId"],
             ],
-            KeyName='openshift-dev'
+            KeyName="openshift-dev",
         )
-        inst_id = response['Instances'][0]['InstanceId']
-        worker_ec2 = boto3.resource('ec2', region_name=self.region)
+        inst_id = response["Instances"][0]["InstanceId"]
+        worker_ec2 = boto3.resource("ec2", region_name=self.region)
         worker_instance = worker_ec2.Instance(inst_id)
         worker_instance.wait_until_running()
-        worker_name = f'{cluster_id}-rhel-worker-{node_id}'
+        worker_name = f"{cluster_id}-rhel-worker-{node_id}"
         worker_ec2.create_tags(
             Resources=[inst_id],
             Tags=[
-                {'Key': 'Name', 'Value': f'{worker_name}'},
-                {'Key': self.worker_tag[0], 'Value': self.worker_tag[1]}
-            ]
+                {"Key": "Name", "Value": f"{worker_name}"},
+                {"Key": self.worker_tag[0], "Value": self.worker_tag[1]},
+            ],
         )
         logging.info(self.worker_iam_role)
         self.client.associate_iam_instance_profile(
@@ -1404,7 +1335,7 @@ class AWSUPINode(AWSNodes):
         )
         return worker_instance
 
-    def gather_worker_data(self, suffix='no0'):
+    def gather_worker_data(self, suffix="no0"):
         """
         Gather various info like vpc, iam role, subnet,security group,
         cluster tag from existing RHCOS workers
@@ -1413,10 +1344,10 @@ class AWSUPINode(AWSNodes):
             suffix (str): suffix to get resource of worker node, 'no0' by default
 
         """
-        stack_name = f'{self.cluster_name}-{suffix}'
+        stack_name = f"{self.cluster_name}-{suffix}"
         resource = self.cf.list_stack_resources(StackName=stack_name)
         worker_id = self.get_worker_resource_id(resource)
-        ec2 = boto3.resource('ec2', region_name=self.region)
+        ec2 = boto3.resource("ec2", region_name=self.region)
         worker_instance = ec2.Instance(worker_id)
         self.worker_vpc = worker_instance.vpc.id
         self.worker_subnet = worker_instance.subnet.id
@@ -1430,7 +1361,7 @@ class AWSUPINode(AWSNodes):
         self.worker_ignition_location = self.aws.get_worker_ignition_location(
             stack_name
         )
-        del self.worker_iam_role['Id']
+        del self.worker_iam_role["Id"]
 
     def get_kube_tag(self, tags):
         """
@@ -1446,8 +1377,8 @@ class AWSUPINode(AWSNodes):
 
         """
         for each in tags:
-            if 'kubernetes' in each['Key']:
-                return each['Key'], each['Value']
+            if "kubernetes" in each["Key"]:
+                return each["Key"], each["Value"]
 
     def get_worker_resource_id(self, resource):
         """
@@ -1460,13 +1391,14 @@ class AWSUPINode(AWSNodes):
             str: ID of worker stack resource
 
         """
-        return resource['StackResourceSummaries'][0]['PhysicalResourceId']
+        return resource["StackResourceSummaries"][0]["PhysicalResourceId"]
 
 
 class VSPHEREUPINode(VMWareNodes):
     """
     Node object representing VMWARE UPI nodes
     """
+
     def __init__(self, node_conf, node_type, compute_count):
         """
         Initialize necessary variables
@@ -1481,19 +1413,35 @@ class VSPHEREUPINode(VMWareNodes):
         self.node_conf = node_conf
         self.node_type = node_type
         self.compute_count = compute_count
-        self.current_compute_count = len(get_typed_nodes())
-        self.target_compute_count = (
-            self.current_compute_count + self.compute_count
-        )
+        self.current_compute_count = len(get_nodes())
+        self.target_compute_count = self.current_compute_count + self.compute_count
+
+        # update the terraform installer path in ENV_DATA
+        # DON'T download terraform again since we need to use the same
+        # version as deployment
+        bin_dir = os.path.expanduser(config.RUN["bin_dir"])
+        terraform_filename = "terraform"
+        terraform_binary_path = os.path.join(bin_dir, terraform_filename)
+        config.ENV_DATA["terraform_installer"] = terraform_binary_path
+
+        # get OCP version
+        ocp_version = get_running_ocp_version()
+        self.folder_structure = False
+        if Version.coerce(ocp_version) >= Version.coerce("4.5"):
+            set_aws_region()
+            self.folder_structure = True
+            config.ENV_DATA["folder_structure"] = True
+
+        # Initialize Terraform
         self.previous_dir = os.getcwd()
         self.terraform_data_dir = os.path.join(
-            self.cluster_path,
-            constants.TERRAFORM_DATA_DIR
+            self.cluster_path, constants.TERRAFORM_DATA_DIR
         )
         self.terraform_work_dir = constants.VSPHERE_DIR
         self.terraform = Terraform(self.terraform_work_dir)
         self.upi_repo_path = os.path.join(
-            constants.EXTERNAL_DIR, 'installer',
+            constants.EXTERNAL_DIR,
+            "installer",
         )
 
     def _update_terraform(self):
@@ -1502,13 +1450,11 @@ class VSPHEREUPINode(VMWareNodes):
         """
         logger.debug("Updating terraform variables")
         self.terraform_var = os.path.join(
-            self.cluster_path,
-            constants.TERRAFORM_DATA_DIR,
-            "terraform.tfvars"
+            self.cluster_path, constants.TERRAFORM_DATA_DIR, "terraform.tfvars"
         )
-        compute_str = 'compute_count ='
-        to_change = f"{compute_str} \"{self.current_compute_count}\""
-        updated_compute_str = f"{compute_str} \"{self.target_compute_count}\""
+        compute_str = "compute_count ="
+        to_change = f'{compute_str} "{self.current_compute_count}"'
+        updated_compute_str = f'{compute_str} "{self.target_compute_count}"'
         logging.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
 
         # backup the terraform variable file
@@ -1516,11 +1462,7 @@ class VSPHEREUPINode(VMWareNodes):
         shutil.copyfile(self.terraform_var, original_file)
         logging.info(f"original terraform file: {original_file}")
 
-        replace_content_in_file(
-            self.terraform_var,
-            to_change,
-            updated_compute_str
-        )
+        replace_content_in_file(self.terraform_var, to_change, updated_compute_str)
 
     def _update_machine_conf(self):
         """
@@ -1528,22 +1470,48 @@ class VSPHEREUPINode(VMWareNodes):
         """
         to_change = "clone {"
         add_file_block = f"{constants.LIFECYCLE}\n  {to_change}"
-        logging.debug(
-            f"Adding {constants.LIFECYCLE} to"
-            f" {constants.INSTALLER_MACHINE_CONF}"
+        vm_machine_conf = (
+            constants.VM_MAIN
+            if self.folder_structure
+            else constants.INSTALLER_MACHINE_CONF
         )
-        replace_content_in_file(
-            constants.INSTALLER_MACHINE_CONF,
-            to_change,
-            add_file_block
-        )
+        logging.debug(f"Adding {constants.LIFECYCLE} to {vm_machine_conf}")
+        replace_content_in_file(vm_machine_conf, to_change, add_file_block)
 
         # update the machine configurations
-        update_machine_conf()
+        update_machine_conf(self.folder_structure)
 
-    def add_node(self):
+    @retry(
+        (NoValidConnectionsError, AuthenticationException),
+        tries=20,
+        delay=30,
+        backoff=1,
+    )
+    def wait_for_connection_and_set_host_name(self, ip, host_name):
+        """
+        Waits for connection to establish to the node and sets the hostname
+
+        Args:
+            ip (str): IP of the node
+            host_name (str): Host name to set for the node
+
+        Raises:
+            NoValidConnectionsError: Raises if connection is not established
+            AuthenticationException: Raises if credentials are not correct
+
+        """
+        vmnode = VSPHERENode(ip)
+        vmnode.set_host_name(host_name)
+        vmnode.reboot()
+
+    def add_node(self, use_terraform=True):
         """
         Add nodes to the current cluster
+
+        Args:
+            use_terraform (bool): if True use terraform to add nodes,
+                otherwise use manual steps to add nodes
+
         """
         if self.node_type == constants.RHCOS:
             logger.info(f"Adding Nodes of type {self.node_type}")
@@ -1551,35 +1519,150 @@ class VSPHEREUPINode(VMWareNodes):
                 f"Existing worker nodes: {self.current_compute_count}, "
                 f"New nodes to add: {self.compute_count}"
             )
-            clone_openshift_installer()
-            self._update_terraform()
-            self._update_machine_conf()
 
             # Gets the existing CSR data
             existing_csr_data = get_nodes_csr()
             pre_count_csr = len(existing_csr_data)
             logger.debug(f"Existing CSR count before adding nodes: {pre_count_csr}")
 
-            os.chdir(self.terraform_data_dir)
-            self.terraform.initialize()
-            self.terraform.apply(self.terraform_var)
-            os.chdir(self.previous_dir)
+            if use_terraform:
+                self.add_nodes_with_terraform()
+            else:
+                self.add_nodes_without_terraform()
+
+            # give some time to settle down the newly added nodes
             time.sleep(self.wait_time)
 
+            # approve pending CSRs
             if constants.CSR_BOOTSTRAPPER_NODE in existing_csr_data:
                 nodes_approve_csr_num = pre_count_csr + self.compute_count
             else:
                 nodes_approve_csr_num = pre_count_csr + self.compute_count + 1
 
-            wait_for_all_nodes_csr_and_approve(
-                expected_node_num=nodes_approve_csr_num
+            wait_for_all_nodes_csr_and_approve(expected_node_num=nodes_approve_csr_num)
+
+    def add_nodes_with_terraform(self):
+        """
+        Add nodes using terraform
+        """
+        terraform_state_file = os.path.join(
+            self.terraform_data_dir, "terraform.tfstate"
+        )
+        ips_before_adding_nodes = get_module_ip(
+            terraform_state_file, constants.COMPUTE_MODULE
+        )
+        logger.debug(f"Compute IP's before adding new nodes: {ips_before_adding_nodes}")
+
+        # clone openshift installer
+        clone_openshift_installer()
+        self._update_terraform()
+        self._update_machine_conf()
+
+        # initialize terraform and apply
+        os.chdir(self.terraform_data_dir)
+        self.terraform.initialize()
+        self.terraform.apply(self.terraform_var, module=constants.COMPUTE_MODULE)
+        self.terraform.apply(self.terraform_var, module=constants.COMPUTE_MODULE_VM)
+        os.chdir(self.previous_dir)
+
+        # get the newly added compute IPs
+        ips_after_adding_nodes = get_module_ip(
+            terraform_state_file, constants.COMPUTE_MODULE
+        )
+        logger.debug(f"Compute IP's after adding new nodes: {ips_after_adding_nodes}")
+        new_node_ips = list(set(ips_after_adding_nodes) - set(ips_before_adding_nodes))
+        logger.info(f"Newly added compute IP's: {new_node_ips}")
+
+        # inform load balancer regarding newly added nodes
+        lb = LoadBalancer()
+        lb.update_haproxy_with_nodes(new_node_ips)
+        lb.restart_haproxy()
+
+    def add_nodes_without_terraform(self):
+        """
+        Add nodes without terraform
+        """
+        # generate new node names
+        new_nodes_names = self.generate_node_names_for_vsphere(self.compute_count)
+        logger.info(f"New node names: {new_nodes_names}")
+
+        # get the worker ignition
+        worker_ignition_path = os.path.join(self.cluster_path, constants.WORKER_IGN)
+        worker_ignition_base64 = run_cmd(f"base64 -w0 {worker_ignition_path}")
+        data = {
+            "disk.EnableUUID": config.ENV_DATA["disk_enable_uuid"],
+            "guestinfo.ignition.config.data": worker_ignition_base64,
+            "guestinfo.ignition.config.data.encoding": config.ENV_DATA[
+                "ignition_data_encoding"
+            ],
+        }
+
+        # clone VM
+        for node_name in new_nodes_names:
+            self.vsphere.clone_vm(
+                node_name,
+                config.ENV_DATA["vm_template"],
+                self.datacenter,
+                self.cluster_name,
+                self.datastore,
+                config.ENV_DATA["vsphere_cluster"],
+                int(config.ENV_DATA["worker_num_cpus"]),
+                int(config.ENV_DATA["compute_memory"]),
+                125829120,
+                config.ENV_DATA["vm_network"],
+                power_on=True,
+                **data,
             )
+        logger.info(f"Sleeping for {self.wait_time} sec to settle down the VMs")
+        time.sleep(self.wait_time)
+
+        # set hostname
+        for node_name in new_nodes_names:
+            for ip in TimeoutSampler(
+                600,
+                60,
+                self.vsphere.find_ip_by_vm,
+                node_name,
+                self.datacenter,
+                config.ENV_DATA["vsphere_cluster"],
+                self.cluster_name,
+            ):
+                if not ("<unset>" in ip or "127.0.0.1" in ip):
+                    logger.info("setting host name")
+                    self.wait_for_connection_and_set_host_name(ip, node_name)
+                    break
+
+    def generate_node_names_for_vsphere(self, count, prefix="compute-"):
+        """
+        Generate the node names for vsphere platform
+
+        Args:
+            count (int): Number of node names to generate
+            prefix (str): Prefix for node name
+
+        Returns:
+            list: List of node names
+
+        """
+        compute_vms = self.vsphere.get_compute_vms_in_pool(
+            self.cluster_name, self.datacenter, self.cluster
+        )
+        compute_node_names = [compute_vm.name for compute_vm in compute_vms]
+        logger.info(f"Current node names: {compute_node_names}")
+        compute_node_names.sort()
+
+        current_compute_suffix = int(compute_node_names[-1].split("-")[-1])
+        return [
+            f"{prefix}{current_compute_suffix + node_count}"
+            for node_count in range(1, count + 1)
+        ]
 
 
 class BaremetalNodes(NodesBase):
     """
     Baremetal Nodes class
     """
+
     def __init__(self):
         super(BaremetalNodes, self).__init__()
         self.baremetal = baremetal.BAREMETAL()
@@ -1625,7 +1708,9 @@ class BaremetalNodes(NodesBase):
         self.cluster_nodes = get_node_objs()
         bms = self.baremetal.get_nodes_ipmi_ctx(self.cluster_nodes)
         stopped_bms = [
-            bm for bm in bms if self.baremetal.get_power_status(bm) == constants.VM_POWERED_OFF
+            bm
+            for bm in bms
+            if self.baremetal.get_power_status(bm) == constants.VM_POWERED_OFF
         ]
 
         if stopped_bms:
@@ -1635,9 +1720,7 @@ class BaremetalNodes(NodesBase):
             bm.session.close()
 
     def get_data_volumes(self):
-        raise NotImplementedError(
-            "Get data volume functionality is not implemented"
-        )
+        raise NotImplementedError("Get data volume functionality is not implemented")
 
     def get_node_by_attached_volume(self, volume):
         raise NotImplementedError(
@@ -1645,14 +1728,10 @@ class BaremetalNodes(NodesBase):
         )
 
     def detach_volume(self, volume, node=None, delete_from_backend=True):
-        raise NotImplementedError(
-            "Detach volume functionality is not implemented"
-        )
+        raise NotImplementedError("Detach volume functionality is not implemented")
 
     def attach_volume(self, volume, node):
-        raise NotImplementedError(
-            "Attach volume functionality is not implemented"
-        )
+        raise NotImplementedError("Attach volume functionality is not implemented")
 
     def wait_for_volume_attach(self, volume):
         raise NotImplementedError(
@@ -1685,9 +1764,7 @@ class BaremetalNodes(NodesBase):
             dict: of default config loaded
 
         """
-        assert os.path.exists(default_config_path), (
-            'Config file doesnt exists'
-        )
+        assert os.path.exists(default_config_path), "Config file doesnt exists"
 
         with open(default_config_path) as f:
             default_config_dict = yaml.safe_load(f)
@@ -1695,25 +1772,169 @@ class BaremetalNodes(NodesBase):
         return default_config_dict
 
 
+class IBMPowerNodes(NodesBase):
+    """
+    IBM Power Nodes class
+    """
+
+    def __init__(self):
+        super(IBMPowerNodes, self).__init__()
+        self.powernodes = powernodes.POWERNodes()
+
+    def stop_nodes(self, nodes, force=True):
+        """
+        Stop PowerNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force nodes stop, False otherwise
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.stop_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            raise NotImplementedError(
+                "This is not libvirt environment. Stop nodes not implemented"
+            )
+
+    def start_nodes(self, nodes, force=True):
+        """
+        Start PowerNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): Wait for node status
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.start_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            raise NotImplementedError(
+                "This is not libvirt environment. Start nodes not implemented"
+            )
+
+    def restart_nodes(self, nodes, timeout=540, wait=True, force=True):
+        """
+        Restart PowerNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+            wait (bool): True if need to wait till the restarted node reaches timeout
+            force (bool): True for force BM stop, False otherwise
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.restart_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            raise NotImplementedError(
+                "This is not libvirt environment. Restart nodes not implemented"
+            )
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        """
+        Restart PowerNodes with stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force node stop, False otherwise
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.restart_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            raise NotImplementedError(
+                "This is not libvirt environment. Restart nodes by stop and start not implemented"
+            )
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Make sure all PowerNodes are up by the end of the test
+        """
+        if not self.powernodes.iskvm():
+            raise NotImplementedError(
+                "This is not libvirt environment. Restart nodes by stop and start teardown not implemented"
+            )
+
+        self.cluster_nodes = get_node_objs()
+        stopped_powernodes = [
+            powernode
+            for powernode in self.cluster_nodes
+            if self.powernodes.verify_machine_is_down(powernode) is True
+        ]
+
+        if stopped_powernodes:
+            logger.info(
+                f"The following PowerNodes are powered off: {stopped_powernodes}"
+            )
+            self.powernodes.start_powernodes_machines(stopped_powernodes)
+
+
 class AZURENodes(NodesBase):
     """
     Azure Nodes class
     """
+
     def __init__(self):
         super(AZURENodes, self).__init__()
         self.azure = azure_utils.AZURE()
 
-    def stop_nodes(self, nodes):
-        raise NotImplementedError(
-            "Stop nodes functionality is not implemented"
-        )
+    def stop_nodes(self, nodes, timeout=540, wait=True, force=True):
+        """
+        Stop Azure vm instances
 
-    def start_nodes(self, nodes):
-        raise NotImplementedError(
-            "Start nodes functionality is not implemented"
-        )
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to stop, False otherwise
+            timeout (int): time in seconds to wait for node to reach 'not ready' state.
+            force (bool): True for force VM stop, False otherwise
 
-    def restart_nodes(self, nodes, timeout=540, wait=True):
+        """
+        if not nodes:
+            raise ValueError("No nodes found to stop")
+
+        node_names = [n.name for n in nodes]
+        self.azure.stop_vm_instances(node_names, force=force)
+
+        if wait:
+            # When the node is not reachable then the node reaches status NotReady.
+            logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_NOT_READY, timeout=timeout
+            )
+
+    def start_nodes(self, nodes, timeout=540, wait=True):
+        """
+        Start Azure vm instances
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to start, False otherwise
+            timeout (int): time in seconds to wait for node to reach 'ready' state.
+
+        """
+        if not nodes:
+            raise ValueError("No nodes found to start")
+        node_names = [n.name for n in nodes]
+        self.azure.start_vm_instances(node_names)
+
+        if wait:
+            # When the node is reachable then the node reaches status Ready.
+            logger.info(f"Waiting for nodes: {node_names} to reach ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY, timeout=timeout
+            )
+
+    def restart_nodes(self, nodes, timeout=900, wait=True):
         """
         Restart Azure vm instances
 
@@ -1729,8 +1950,7 @@ class AZURENodes(NodesBase):
             logger.error("No nodes found for restarting")
             raise ValueError
         node_names = [n.name for n in nodes]
-        for node_name in node_names:
-            self.azure.restart_az_vm_instance(node_name)
+        self.azure.restart_vm_instances(node_names)
 
         if wait:
             """
@@ -1742,19 +1962,39 @@ class AZURENodes(NodesBase):
             When the reboot operation is completed and the instance is
             reachable the OCP node reaches status Ready.
             """
-            logger.info(
-                f"Waiting for nodes: {node_names} to reach not ready state"
-            )
+            logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
             wait_for_nodes_status(
-                node_names=node_names, status=constants.NODE_NOT_READY,
-                timeout=timeout
+                node_names=node_names, status=constants.NODE_NOT_READY, timeout=timeout
             )
-            logger.info(
-                f"Waiting for nodes: {node_names} to reach ready state"
-            )
+            logger.info(f"Waiting for nodes: {node_names} to reach ready state")
             wait_for_nodes_status(
-                node_names=node_names, status=constants.NODE_READY,
-                timeout=timeout
+                node_names=node_names, status=constants.NODE_READY, timeout=timeout
+            )
+
+    def restart_nodes_by_stop_and_start(
+        self, nodes, timeout=540, wait=True, force=True
+    ):
+        """
+        Restart Azure vm instances by stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes / Azure Vm instance
+            wait (bool): True if need to wait till the restarted node reaches
+                READY state. False otherwise
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+            force (bool): True for force VM stop, False otherwise
+
+        """
+        if not nodes:
+            raise ValueError("No nodes found for restarting")
+        node_names = [n.name for n in nodes]
+        self.azure.restart_vm_instances_by_stop_and_start(node_names, force=force)
+
+        if wait:
+            logger.info(f"Waiting for nodes: {node_names} to reach ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY, timeout=timeout
             )
 
     def get_data_volumes(self):
@@ -1781,12 +2021,8 @@ class AZURENodes(NodesBase):
         """
         vm = self.azure.get_node_by_attached_volume(volume)
         all_nodes = get_node_objs()
-        nodes = [
-            n for n in all_nodes if n.name == vm.name
-        ]
-        assert nodes, (
-            f"Failed to find the OCS object for Azure Vm instance {vm.name}"
-        )
+        nodes = [n for n in all_nodes if n.name == vm.name]
+        assert nodes, f"Failed to find the OCS object for Azure Vm instance {vm.name}"
         return nodes[0]
 
     def detach_volume(self, volume, node=None, delete_from_backend=True):
@@ -1803,9 +2039,7 @@ class AZURENodes(NodesBase):
         self.azure.detach_volume(volume, node)
 
     def attach_volume(self, volume, node):
-        raise NotImplementedError(
-            "Attach volume functionality is not implemented"
-        )
+        raise NotImplementedError("Attach volume functionality is not implemented")
 
     def wait_for_volume_attach(self, volume):
         """
@@ -1825,9 +2059,7 @@ class AZURENodes(NodesBase):
             for sample in TimeoutSampler(
                 300, 3, self.azure.get_disk_state, volume.name
             ):
-                logger.info(
-                    f"Volume id: {volume.name} has status: {sample}"
-                )
+                logger.info(f"Volume id: {volume.name} has status: {sample}")
                 if sample == "Attached":
                     return True
         except TimeoutExpiredError:
@@ -1849,4 +2081,67 @@ class AZURENodes(NodesBase):
     def attach_nodes_to_cluster(self, node_list):
         raise NotImplementedError(
             "attach nodes to cluster functionality is not implemented"
+        )
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Make sure all VM instances up by the end of the test
+
+        """
+        self.cluster_nodes = get_node_objs()
+        vms = self.azure.get_vm_names()
+        assert (
+            vms
+        ), f"Failed to get VM objects for nodes {[n.name for n in self.cluster_nodes]}"
+
+        stopped_vms = [
+            vm
+            for vm in vms
+            if self.azure.get_vm_power_status(vm) == constants.VM_STOPPED
+            or self.azure.get_vm_power_status(vm) == constants.VM_STOPPING
+        ]
+        # Start the VMs
+        if stopped_vms:
+            logger.info(f"The following VMs are powered off: {stopped_vms}")
+            self.azure.start_vm_instances(stopped_vms)
+
+
+class VMWareLSONodes(VMWareNodes):
+    """
+    VMWare LSO nodes class
+
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def get_data_volumes(self, pvs=None):
+        """
+        Get the data vSphere volumes
+
+        Args:
+            pvs (list): PV OCS objects
+
+        Returns:
+            list: vSphere volumes
+
+        """
+        if not pvs:
+            pvs = get_deviceset_pvs()
+        return [pv.get().get("spec").get("local").get("path") for pv in pvs]
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        """
+        Detach disk from a VM and delete from datastore if specified
+
+        Args:
+            volume (str): Volume path
+            node (OCS): The OCS object representing the node
+            delete_from_backend (bool): True for deleting the disk (vmdk)
+                from backend datastore, False otherwise
+
+        """
+        vm = self.get_vms([node])[0]
+        self.vsphere.remove_disk(
+            vm=vm, identifier=volume, key="disk_name", datastore=delete_from_backend
         )

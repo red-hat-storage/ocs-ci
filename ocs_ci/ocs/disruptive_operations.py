@@ -1,7 +1,11 @@
 import logging
 import time
 
-from ocs_ci.ocs.node import get_typed_nodes, get_node_name
+from ocs_ci.ocs.node import (
+    get_nodes,
+    get_node_name,
+    get_osd_running_nodes,
+)
 from ocs_ci.ocs.resources.pod import get_ocs_operator_pod, get_pod_node
 from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
 from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
@@ -35,7 +39,6 @@ def worker_node_shutdown(abrupt):
         AssertionError: in case the ceph-tools pod was not recovered
 
     """
-
     nodes = PlatformNodesFactory().get_nodes_platform()
     log.info(f"Abrupt {abrupt}")
     # get ocs-operator node:
@@ -43,7 +46,7 @@ def worker_node_shutdown(abrupt):
 
     # get workers node objects:
     node_to_shutdown = list()
-    for node in get_typed_nodes():
+    for node in get_nodes():
         node_name = get_node_name(node)
         log.info(f"node: {node_name}, ocs operator node: {ocs_operator_node_name}")
         if node_name == ocs_operator_node_name:
@@ -55,8 +58,35 @@ def worker_node_shutdown(abrupt):
 
     log.info("Sleeping 5 minutes")
     time.sleep(320)
-    assert wait_for_ct_pod_recovery(), "Ceph tools pod failed to come up on another node"
+    assert (
+        wait_for_ct_pod_recovery()
+    ), "Ceph tools pod failed to come up on another node"
     if abrupt:
         log.info("Abrupt Shutdown")
         if node_to_shutdown:
             nodes.start_nodes(nodes=node_to_shutdown)
+
+
+def osd_node_reboot():
+    """
+    Rebooting worker node that running OSD
+
+    Raises:
+        AssertionError: in case the ceph-tools pod was not recovered
+
+    """
+    nodes = PlatformNodesFactory().get_nodes_platform()
+    osd_nodes_names = get_osd_running_nodes()
+    osd_node_to_reboot = list()
+    for node in get_nodes():
+        node_name = get_node_name(node)
+        if node_name == osd_nodes_names[0]:
+            osd_node_to_reboot.append(node)
+    log.info(f"Rebooting OSD node: {get_node_name(osd_node_to_reboot[0])}")
+    nodes.restart_nodes(osd_node_to_reboot)
+
+    log.info("Sleeping 5 minutes")
+    time.sleep(320)
+    assert (
+        wait_for_ct_pod_recovery()
+    ), "Ceph tools pod failed to come up on another node"

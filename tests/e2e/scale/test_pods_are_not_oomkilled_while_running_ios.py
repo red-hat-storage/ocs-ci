@@ -9,7 +9,7 @@ from ocs_ci.framework.testlib import E2ETest, scale
 from ocs_ci.helpers.helpers import (
     default_storage_class,
     validate_pod_oomkilled,
-    validate_pods_are_running_and_not_restarted
+    validate_pods_are_running_and_not_restarted,
 )
 from ocs_ci.utility.utils import ceph_health_check
 
@@ -25,8 +25,8 @@ log = logging.getLogger(__name__)
         ),
         pytest.param(
             constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2049")
-        )
-    ]
+        ),
+    ],
 )
 class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
     """
@@ -37,9 +37,7 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
     """
 
     @pytest.fixture()
-    def base_setup(
-        self, interface, pvc_factory, pod_factory
-    ):
+    def base_setup(self, interface, pvc_factory, pod_factory):
         """
         A setup phase for the test:
         get all the ceph pods information,
@@ -48,7 +46,7 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
         """
         # Setting the io_size_gb to 40% of the total PVC capacity
         ceph_pod = Pod.get_ceph_tools_pod()
-        external = config.DEPLOYMENT['external_mode']
+        external = config.DEPLOYMENT["external_mode"]
         if external:
             ocp_obj = ocp.OCP()
             if interface == constants.CEPHBLOCKPOOL:
@@ -57,37 +55,45 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
                 resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
             cmd = f"get sc {resource_name} -o yaml"
             pool_data = ocp_obj.exec_oc_cmd(cmd)
-            pool = pool_data['parameters']['pool']
+            pool = pool_data["parameters"]["pool"]
 
         else:
-            pool = constants.DEFAULT_BLOCKPOOL if interface == constants.CEPHBLOCKPOOL else constants.DATA_POOL
+            pool = (
+                constants.DEFAULT_BLOCKPOOL
+                if interface == constants.CEPHBLOCKPOOL
+                else constants.DATA_POOL
+            )
 
         ceph_replica = ceph_pod.exec_ceph_cmd(ceph_cmd=f"ceph osd pool get {pool} size")
-        replica = ceph_replica['size']
+        replica = ceph_replica["size"]
         ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
-        ceph_capacity = int(ceph_status['stats']['total_bytes']) / replica / constants.GB
+        ceph_capacity = (
+            int(ceph_status["stats"]["total_bytes"]) / replica / constants.GB
+        )
         pvc_size_gb = int(ceph_capacity * 0.5)
         io_size_gb = int(pvc_size_gb * 0.4)
         io_size_gb = 400 if io_size_gb >= 400 else io_size_gb
 
         pod_objs = get_all_pods(
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            selector=['noobaa', 'rook-ceph-osd-prepare', 'rook-ceph-drain-canary'],
-            exclude_selector=True
+            selector=["noobaa", "rook-ceph-osd-prepare", "rook-ceph-drain-canary"],
+            exclude_selector=True,
         )
 
         # Create maxsize pvc, app pod and run ios
         self.sc = default_storage_class(interface_type=interface)
 
         self.pvc_obj = pvc_factory(
-            interface=interface, storageclass=self.sc, size=pvc_size_gb,
+            interface=interface,
+            storageclass=self.sc,
+            size=pvc_size_gb,
         )
 
         self.pod_obj = pod_factory(interface=interface, pvc=self.pvc_obj)
 
         log.info(f"Running FIO to fill PVC size: {io_size_gb}G")
         self.pod_obj.run_io(
-            'fs', size=f"{io_size_gb}G", io_direction='write', runtime=480
+            "fs", size=f"{io_size_gb}G", io_direction="write", runtime=480
         )
 
         log.info("Waiting for IO results")
@@ -105,19 +111,25 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
         pod_objs = base_setup
 
         for pod in pod_objs:
-            pod_name = pod.get().get('metadata').get('name')
-            restart_count = pod.get().get('status').get('containerStatuses')[0].get('restartCount')
-            for item in pod.get().get('status').get('containerStatuses'):
+            pod_name = pod.get().get("metadata").get("name")
+            if "debug" in pod_name:
+                logging.info(f"Skipping {pod_name} pod from validation")
+                continue
+            restart_count = (
+                pod.get().get("status").get("containerStatuses")[0].get("restartCount")
+            )
+            for item in pod.get().get("status").get("containerStatuses"):
                 # Validate pod is oomkilled
-                container_name = item.get('name')
+                container_name = item.get("name")
                 assert validate_pod_oomkilled(
                     pod_name=pod_name, container=container_name
                 ), f"Pod {pod_name} OOMKILLED while running IOs"
 
             # Validate pod is running and not restarted
             assert validate_pods_are_running_and_not_restarted(
-                pod_name=pod_name, pod_restart_count=restart_count,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                pod_name=pod_name,
+                pod_restart_count=restart_count,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             ), f"Pod {pod_name} is either not running or restarted while running IOs"
 
         # Check ceph health is OK

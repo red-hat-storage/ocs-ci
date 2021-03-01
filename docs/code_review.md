@@ -50,7 +50,14 @@
     changes, and once all comments are addressed, you can squash related
     commits together and force push to the branch. Then we will just merge
     whole PR.
+* When squashing and merging a PR, do your best to clean up the commit message. This
+    message should be a clear description of the changes that were introduced. Please
+    remove any duplicated sign off messages as well as any messages that contain little
+    or no information such as "fixup" or "addressed comments." These messages don't do
+    us any good once things are merged to master and just clutter up the git log. If
+    there is any doubt around what the message should be, consult with the PR's author.
 * If the pull request introduces a workaround, the reviewer should check that
   rules noted in [Tracking of workarounds](./workarounds.md) page are
   followed. The person merging a workaround is responsible for checking that all
   information related to the workaround is correct.
+* MCG test cases should work on any cloud platform (AWS, Azure, GCP, ...).

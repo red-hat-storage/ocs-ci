@@ -15,6 +15,7 @@ class Terraform(object):
     """
     Wrapper for terraform
     """
+
     def __init__(self, path, bin_path=None):
         """
         Initialize required variables needed for terraform
@@ -26,7 +27,7 @@ class Terraform(object):
         """
         self.path = path
         self.terraform_installer = bin_path or os.path.expanduser(
-            config.ENV_DATA['terraform_installer']
+            config.ENV_DATA["terraform_installer"]
         )
 
     def initialize(self, upgrade=False):
@@ -45,20 +46,23 @@ class Terraform(object):
             cmd = f"{self.terraform_installer} init {self.path}"
         run_cmd(cmd, timeout=1200)
 
-    def apply(self, tfvars, bootstrap_complete=False):
+    def apply(self, tfvars, bootstrap_complete=False, module=None):
         """
         Apply the changes required to reach the desired state of the configuration
 
         Args:
             tfvars (str): path to terraform.tfvars file
             bootstrap_complete (bool): Removes bootstrap node if True
+            module (str): Module to apply
+                e.g: constants.COMPUTE_MODULE
 
         """
         bootstrap_complete_param = (
             "-var bootstrap_complete=true" if bootstrap_complete else ""
         )
+        module_param = f"-target={module}" if module else ""
         cmd = (
-            f"{self.terraform_installer} apply '-var-file={tfvars}'"
+            f"{self.terraform_installer} apply {module_param} '-var-file={tfvars}'"
             f" -auto-approve {bootstrap_complete_param} '{self.path}'"
         )
 
@@ -95,13 +99,10 @@ class Terraform(object):
         """
         if json_format:
             cmd = (
-                f"{self.terraform_installer} output -json -state={tfstate}"
-                f" {module}"
+                f"{self.terraform_installer} output -json -state={tfstate}" f" {module}"
             )
         else:
-            cmd = (
-                f"{self.terraform_installer} output -state={tfstate} {module}"
-            )
+            cmd = f"{self.terraform_installer} output -state={tfstate} {module}"
         return run_cmd(cmd)
 
     def destroy_module(self, tfvars, module):

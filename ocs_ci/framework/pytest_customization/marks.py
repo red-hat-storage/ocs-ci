@@ -35,7 +35,14 @@ tier4c = compose(tier4, pytest.mark.tier4c)
 tier_after_upgrade = pytest.mark.tier_after_upgrade(value=5)
 
 tier_marks = [
-    tier1, tier2, tier3, tier4, tier4a, tier4b, tier4c, tier_after_upgrade,
+    tier1,
+    tier2,
+    tier3,
+    tier4,
+    tier4a,
+    tier4b,
+    tier4c,
+    tier_after_upgrade,
 ]
 
 # build acceptance
@@ -97,105 +104,123 @@ run_this = pytest.mark.run_this
 
 # Skip marks
 skip_inconsistent = pytest.mark.skip(
-    reason='Currently the reduction is too inconsistent leading to inconsistent test results'
+    reason="Currently the reduction is too inconsistent leading to inconsistent test results"
 )
 
 # Skipif marks
 skipif_aws_creds_are_missing = pytest.mark.skipif(
     (
-        load_auth_config().get('AUTH', {}).get('AWS', {}).get('AWS_ACCESS_KEY_ID') is None
-        and 'AWS_ACCESS_KEY_ID' not in os.environ
+        load_auth_config().get("AUTH", {}).get("AWS", {}).get("AWS_ACCESS_KEY_ID")
+        is None
+        and "AWS_ACCESS_KEY_ID" not in os.environ
         and update_config_from_s3() is None
     ),
     reason=(
         "AWS credentials weren't found in the local auth.yaml "
         "and couldn't be fetched from the cloud"
-    )
+    ),
 )
 
 google_api_required = pytest.mark.skipif(
-    not os.path.exists(os.path.expanduser(
-        config.RUN['google_api_secret'])
-    ), reason="Google API credentials don't exist"
+    not os.path.exists(os.path.expanduser(config.RUN["google_api_secret"])),
+    reason="Google API credentials don't exist",
 )
 
 aws_platform_required = pytest.mark.skipif(
-    config.ENV_DATA['platform'].lower() != 'aws',
-    reason="Test runs ONLY on AWS deployed cluster"
+    config.ENV_DATA["platform"].lower() != "aws",
+    reason="Test runs ONLY on AWS deployed cluster",
 )
 
 azure_platform_required = pytest.mark.skipif(
-    config.ENV_DATA['platform'].lower() != 'azure',
-    reason="Test runs ONLY on Azure deployed cluster"
+    config.ENV_DATA["platform"].lower() != "azure",
+    reason="Test runs ONLY on Azure deployed cluster",
 )
 
 gcp_platform_required = pytest.mark.skipif(
-    config.ENV_DATA['platform'].lower() != 'gcp',
-    reason="Test runs ONLY on GCP deployed cluster"
+    config.ENV_DATA["platform"].lower() != "gcp",
+    reason="Test runs ONLY on GCP deployed cluster",
 )
 
 cloud_platform_required = pytest.mark.skipif(
-    config.ENV_DATA['platform'].lower() not in CLOUD_PLATFORMS,
-    reason="Test runs ONLY on cloud based deployed cluster"
+    config.ENV_DATA["platform"].lower() not in CLOUD_PLATFORMS,
+    reason="Test runs ONLY on cloud based deployed cluster",
 )
 
 on_prem_platform_required = pytest.mark.skipif(
-    config.ENV_DATA['platform'].lower() not in ON_PREM_PLATFORMS,
-    reason="Test runs ONLY on on-prem based deployed cluster"
+    config.ENV_DATA["platform"].lower() not in ON_PREM_PLATFORMS,
+    reason="Test runs ONLY on on-prem based deployed cluster",
 )
 
 rh_internal_lab_required = pytest.mark.skipif(
-    (config.ENV_DATA['platform'].lower() == 'aws'
-     or config.ENV_DATA['platform'].lower() == 'azure'),
-    reason="Tests will not run in AWS or Azure Cloud"
+    (
+        config.ENV_DATA["platform"].lower() == "aws"
+        or config.ENV_DATA["platform"].lower() == "azure"
+    ),
+    reason="Tests will not run in AWS or Azure Cloud",
 )
 
 vsphere_platform_required = pytest.mark.skipif(
-    config.ENV_DATA['platform'].lower() != 'vsphere',
-    reason="Test runs ONLY on VSPHERE deployed cluster"
+    config.ENV_DATA["platform"].lower() != "vsphere",
+    reason="Test runs ONLY on VSPHERE deployed cluster",
 )
 
 ipi_deployment_required = pytest.mark.skipif(
-    config.ENV_DATA['deployment_type'].lower() != 'ipi',
-    reason="Test runs ONLY on IPI deployed cluster"
+    config.ENV_DATA["deployment_type"].lower() != "ipi",
+    reason="Test runs ONLY on IPI deployed cluster",
 )
 
 skipif_aws_i3 = pytest.mark.skipif(
-    config.ENV_DATA['platform'].lower() == 'aws'
-    and config.DEPLOYMENT.get('local_storage') is True,
-    reason="Test will not run on AWS i3"
+    config.ENV_DATA["platform"].lower() == "aws"
+    and config.DEPLOYMENT.get("local_storage") is True,
+    reason="Test will not run on AWS i3",
 )
 
 skipif_bm = pytest.mark.skipif(
-    config.ENV_DATA['platform'].lower() == 'baremetal'
-    and config.DEPLOYMENT.get('local_storage') is True,
-    reason="Test will not run on Bare Metal"
+    config.ENV_DATA["platform"].lower() == "baremetal"
+    and config.DEPLOYMENT.get("local_storage") is True,
+    reason="Test will not run on Bare Metal",
+)
+
+skipif_bmpsi = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == "baremetalpsi"
+    and config.DEPLOYMENT.get("local_storage") is True,
+    reason="Test will not run on Baremetal PSI",
+)
+
+skipif_openshift_dedicated = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == "openshiftdedicated",
+    reason="Test will not run on Openshift dedicated cluster",
+)
+
+skipif_ibm_cloud = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == "ibm_cloud",
+    reason="Test will not run on IBM cloud",
 )
 
 skipif_external_mode = pytest.mark.skipif(
-    config.DEPLOYMENT.get('external_mode') is True,
-    reason="Test will not run on External Mode cluster"
+    config.DEPLOYMENT.get("external_mode") is True,
+    reason="Test will not run on External Mode cluster",
 )
 
 skipif_lso = pytest.mark.skipif(
-    config.DEPLOYMENT.get('local_storage') is True,
-    reason="Test will not run on LSO deployed cluster"
+    config.DEPLOYMENT.get("local_storage") is True,
+    reason="Test will not run on LSO deployed cluster",
 )
 
 skipif_no_lso = pytest.mark.skipif(
-    not config.DEPLOYMENT.get('local_storage'),
-    reason="Test run only on LSO deployed cluster"
+    not config.DEPLOYMENT.get("local_storage"),
+    reason="Test run only on LSO deployed cluster",
 )
 
 metrics_for_external_mode_required = pytest.mark.skipif(
-    float(config.ENV_DATA['ocs_version']) < 4.6
-    and config.DEPLOYMENT.get('external_mode') is True,
-    reason="Metrics is not enabled for external mode OCS <4.6"
+    float(config.ENV_DATA["ocs_version"]) < 4.6
+    and config.DEPLOYMENT.get("external_mode") is True,
+    reason="Metrics is not enabled for external mode OCS <4.6",
 )
 
 # Filter warnings
 filter_insecure_request_warning = pytest.mark.filterwarnings(
-    'ignore::urllib3.exceptions.InsecureRequestWarning'
+    "ignore::urllib3.exceptions.InsecureRequestWarning"
 )
 
 # collect Prometheus metrics if test fails with this mark

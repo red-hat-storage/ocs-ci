@@ -4,12 +4,12 @@ compute:
   - name: worker
     platform:
       aws:
-        type: {{ worker_instance_type | default('m4.large') }}
+        type: {{ worker_instance_type | default('m5.4xlarge') }}
 {% if worker_availability_zones %}
         zones:
-  {% for zone in worker_availability_zones %}
+{% for zone in worker_availability_zones %}
         - {{ zone }}
-  {% endfor %}
+{% endfor %}
 {% endif %}
     replicas: {{ worker_replicas | default(3) }}
 controlPlane:
@@ -19,9 +19,9 @@ controlPlane:
       type: {{ master_instance_type | default('m4.xlarge') }}
 {% if master_availability_zones %}
       zones:
-  {% for zone in master_availability_zones %}
+{% for zone in master_availability_zones %}
       - {{ zone }}
-  {% endfor %}
+{% endfor %}
 {% endif %}
   replicas: {{ master_replicas | default(3) }}
 metadata:

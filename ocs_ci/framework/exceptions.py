@@ -1,11 +1,10 @@
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MIN_CHARACTERS,
-    CLUSTER_NAME_MAX_CHARACTERS
+    CLUSTER_NAME_MAX_CHARACTERS,
 )
 
 
 class ClusterPathNotProvidedError(Exception):
-
     def __str__(self):
         return "Please provide a --cluster-path that is empty or non-existant."
 
@@ -15,7 +14,7 @@ class ClusterNameLengthError(Exception):
         self,
         name,
         min_length=CLUSTER_NAME_MIN_CHARACTERS,
-        max_length=CLUSTER_NAME_MAX_CHARACTERS
+        max_length=CLUSTER_NAME_MAX_CHARACTERS,
     ):
         self.name = name
         self.min_length = min_length
@@ -29,6 +28,5 @@ class ClusterNameLengthError(Exception):
 
 
 class ClusterNameNotProvidedError(Exception):
-
     def __str__(self):
         return "Please provide a valid --cluster-name."

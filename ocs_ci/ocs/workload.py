@@ -8,8 +8,7 @@ log = logging.getLogger(__name__)
 
 class WorkLoad(object):
     def __init__(
-        self, name=None, path=None, work_load=None, storage_type='fs',
-        pod=None, jobs=1
+        self, name=None, path=None, work_load=None, storage_type="fs", pod=None, jobs=1
     ):
         """
         Args:
@@ -39,7 +38,7 @@ class WorkLoad(object):
             # with fio workload. We will be dynamically loading the module
             # based on its name.
             self.work_load_mod = importlib.import_module(
-                f'ocs_ci.utility.workloads.{self.work_load}'
+                f"ocs_ci.utility.workloads.{self.work_load}"
             )
         except ModuleNotFoundError as ex:
             log.error(f"No workload found with name {self.work_load}")
@@ -63,7 +62,7 @@ class WorkLoad(object):
             bool: True if setup is success else False
         """
         if self.pod:
-            setup_conf['pod'] = self.pod
+            setup_conf["pod"] = self.pod
         return self.work_load_mod.setup(**setup_conf)
 
     def run(self, **conf):
@@ -79,10 +78,10 @@ class WorkLoad(object):
         Returns:
             result (Future): Returns a concurrent.future object
         """
-        conf['pod'] = self.pod
-        conf['path'] = self.path
-        conf['type'] = self.storage_type
-        conf['numjobs'] = self.jobs
+        conf["pod"] = self.pod
+        conf["path"] = self.path
+        conf["type"] = self.storage_type
+        conf["numjobs"] = self.jobs
         future_obj = self.thread_exec.submit(self.work_load_mod.run, **conf)
         log.info("Done submitting..")
         return future_obj

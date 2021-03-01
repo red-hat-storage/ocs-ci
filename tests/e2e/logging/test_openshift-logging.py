@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3
 from ocs_ci.framework.testlib import E2ETest, workloads, tier1, ignore_leftovers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 
@@ -30,15 +31,13 @@ def setup_fixture(install_logging):
 
 
 @pytest.mark.skipif(
-    get_ocp_version() == "4.6",
+    get_ocp_version() == "4.7",
     reason=(
-        "Skipping logging tests on OCP 4.6 cause of issue: "
+        "Skipping logging tests on OCP 4.7 cause of issue: "
         "https://github.com/red-hat-storage/ocs-ci/issues/2823"
-    )
+    ),
 )
-@pytest.mark.usefixtures(
-    setup_fixture.__name__
-)
+@pytest.mark.usefixtures(setup_fixture.__name__)
 @ignore_leftovers
 class Testopenshiftloggingonocs(E2ETest):
     """
@@ -47,8 +46,8 @@ class Testopenshiftloggingonocs(E2ETest):
 
     @pytest.fixture()
     def create_pvc_and_deploymentconfig_pod(self, request, pvc_factory):
-        """
-        """
+        """"""
+
         def finalizer():
             delete_deploymentconfig_pods(pod_obj)
 
@@ -60,16 +59,20 @@ class Testopenshiftloggingonocs(E2ETest):
         # Create service_account to get privilege for deployment pods
         sa_name = helpers.create_serviceaccount(pvc_obj.project.namespace)
 
-        helpers.add_scc_policy(sa_name=sa_name.name, namespace=pvc_obj.project.namespace)
+        helpers.add_scc_policy(
+            sa_name=sa_name.name, namespace=pvc_obj.project.namespace
+        )
 
         pod_obj = helpers.create_pod(
             interface_type=constants.CEPHBLOCKPOOL,
             pvc_name=pvc_obj.name,
             namespace=pvc_obj.project.namespace,
             sa_name=sa_name.name,
-            dc_deployment=True
+            dc_deployment=True,
         )
-        helpers.wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
+        helpers.wait_for_resource_state(
+            resource=pod_obj, state=constants.STATUS_RUNNING
+        )
         return pod_obj, pvc_obj
 
     @retry(ModuleNotFoundError, tries=5, delay=200, backoff=1)
@@ -87,14 +90,16 @@ class Testopenshiftloggingonocs(E2ETest):
         if get_ocp_version() <= "4.4":
 
             project_index = elasticsearch_pod_obj.exec_cmd_on_pod(
-                command='indices', out_yaml_format=False
+                command="indices", out_yaml_format=False
             )
             if project in project_index:
-                logger.info(f'The project {project} exists in the EFK stack')
+                logger.info(f"The project {project} exists in the EFK stack")
                 for item in project_index.split("\n"):
                     if project in item:
                         logger.info(item.strip())
-                        assert 'green' in item.strip(), f"Project {project} is Unhealthy"
+                        assert (
+                            "green" in item.strip()
+                        ), f"Project {project} is Unhealthy"
             else:
                 raise ModuleNotFoundError
         else:
@@ -107,7 +112,7 @@ class Testopenshiftloggingonocs(E2ETest):
             )
             logger.info(project_out)
 
-            if project_out['hits']['max_score']:
+            if project_out["hits"]["max_score"]:
                 logger.info("The Project exists on the EFK stack")
             else:
                 raise ModuleNotFoundError
@@ -120,10 +125,11 @@ class Testopenshiftloggingonocs(E2ETest):
 
         pod_list = get_all_pods(namespace=constants.OPENSHIFT_LOGGING_NAMESPACE)
         elasticsearch_pod = [
-            pod for pod in pod_list if ('delete' not in pod.name) and (
-                'rollover' not in pod.name) and (
-                pod.name.startswith('elasticsearch')
-            )
+            pod
+            for pod in pod_list
+            if ("delete" not in pod.name)
+            and ("rollover" not in pod.name)
+            and (pod.name.startswith("elasticsearch-cdm"))
         ]
         elasticsearch_pod_obj = random.choice(elasticsearch_pod)
         return elasticsearch_pod_obj
@@ -138,21 +144,24 @@ class Testopenshiftloggingonocs(E2ETest):
         """
 
         elasticsearch_pod_obj = self.get_elasticsearch_pod_obj()
-        cmd = f'es_util --query=project.{project}.*/_count'
+        cmd = f"es_util --query=project.{project}.*/_count"
         if get_ocp_version() >= "4.5":
             cmd = (
                 'es_util --query=*/_count?pretty -d \'{"query": {"match":'
                 f'{{"kubernetes.namespace_name": "{project}"}}}}}}\''
             )
         project_filecount = elasticsearch_pod_obj.exec_cmd_on_pod(command=cmd)
-        assert project_filecount['_shards']['successful'] != 0, (
-            f"No files found in project {project}"
-        )
-        logger.info(f'Total number of files and shards in project {project_filecount}')
+        assert (
+            project_filecount["_shards"]["successful"] != 0
+        ), f"No files found in project {project}"
+        logger.info(f"Total number of files and shards in project {project_filecount}")
 
     @pytest.mark.polarion_id("OCS-657")
     @tier1
-    def test_create_new_project_to_verify_logging(self, create_pvc_and_deploymentconfig_pod):
+    @skipif_openshift_dedicated
+    def test_create_new_project_to_verify_logging(
+        self, create_pvc_and_deploymentconfig_pod
+    ):
         """
         This function creates new project to verify logging in EFK stack
         1. Creates new project
@@ -165,7 +174,7 @@ class Testopenshiftloggingonocs(E2ETest):
         pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
 
         # Running IO on the app_pod
-        pod_obj.run_io(storage_type='fs', size=6000)
+        pod_obj.run_io(storage_type="fs", size=6000)
 
         # Validating if the project exists in EFK stack
         project = pvc_obj.project.namespace
@@ -173,7 +182,9 @@ class Testopenshiftloggingonocs(E2ETest):
 
     @pytest.mark.polarion_id("OCS-650")
     @workloads
-    def test_respin_osd_pods_to_verify_logging(self, create_pvc_and_deploymentconfig_pod):
+    def test_respin_osd_pods_to_verify_logging(
+        self, create_pvc_and_deploymentconfig_pod
+    ):
         """
         This function creates projects before and after respin of osd
         and verify project existence in EFK stack.
@@ -192,7 +203,7 @@ class Testopenshiftloggingonocs(E2ETest):
 
         # Delete the OSD pod
         disruption = disruption_helpers.Disruptions()
-        disruption.set_resource(resource='osd')
+        disruption.set_resource(resource="osd")
         disruption.delete_resource()
 
         # Check the health of the cluster-logging

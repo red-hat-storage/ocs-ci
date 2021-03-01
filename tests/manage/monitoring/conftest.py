@@ -12,10 +12,11 @@ from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
-from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.utility.workloadfixture import measure_operation
+from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
+from ocs_ci.utility.workloadfixture import measure_operation, is_measurement_done
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
+import ocs_ci.ocs.exceptions
 
 
 logger = logging.getLogger(__name__)
@@ -32,11 +33,10 @@ def measure_stop_ceph_mgr(measurement_dir):
             Ceph Manager pod
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT,
-        namespace=config.ENV_DATA['cluster_namespace']
+        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
     )
-    mgr_deployments = oc.get(selector=constants.MGR_APP_LABEL)['items']
-    mgr = mgr_deployments[0]['metadata']['name']
+    mgr_deployments = oc.get(selector=constants.MGR_APP_LABEL)["items"]
+    mgr = mgr_deployments[0]["metadata"]["name"]
 
     def stop_mgr():
         """
@@ -60,7 +60,7 @@ def measure_stop_ceph_mgr(measurement_dir):
         time.sleep(run_time)
         return oc.get(mgr)
 
-    test_file = os.path.join(measurement_dir, 'measure_stop_ceph_mgr.json')
+    test_file = os.path.join(measurement_dir, "measure_stop_ceph_mgr.json")
     measured_op = measure_operation(stop_mgr, test_file)
     logger.info(f"Upscaling deployment {mgr} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
@@ -83,14 +83,10 @@ def measure_stop_ceph_mon(measurement_dir):
             Ceph Monitor pod
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT,
-        namespace=config.ENV_DATA['cluster_namespace']
+        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
     )
-    mon_deployments = oc.get(selector=constants.MON_APP_LABEL)['items']
-    mons = [
-        deployment['metadata']['name']
-        for deployment in mon_deployments
-    ]
+    mon_deployments = oc.get(selector=constants.MON_APP_LABEL)["items"]
+    mons = [deployment["metadata"]["name"] for deployment in mon_deployments]
 
     # get monitor deployments to stop, leave even number of monitors
     split_index = len(mons) // 2 if len(mons) > 3 else 2
@@ -124,23 +120,20 @@ def measure_stop_ceph_mon(measurement_dir):
         time.sleep(run_time)
         return mons_to_stop
 
-    test_file = os.path.join(measurement_dir, 'measure_stop_ceph_mon.json')
+    test_file = os.path.join(measurement_dir, "measure_stop_ceph_mon.json")
     measured_op = measure_operation(stop_mon, test_file)
 
     # expected minimal downtime of a mon inflicted by this fixture
-    measured_op['min_downtime'] = run_time - (60 * 2)
+    measured_op["min_downtime"] = run_time - (60 * 2)
 
     # get new list of monitors to make sure that new monitors were deployed
-    mon_deployments = oc.get(selector=constants.MON_APP_LABEL)['items']
-    mons = [
-        deployment['metadata']['name']
-        for deployment in mon_deployments
-    ]
+    mon_deployments = oc.get(selector=constants.MON_APP_LABEL)["items"]
+    mons = [deployment["metadata"]["name"] for deployment in mon_deployments]
 
     # check that downscaled monitors are removed as OCS should redeploy them
     # but only when we are running this for the first time
     check_old_mons_deleted = all(mon not in mons for mon in mons_to_stop)
-    if measured_op['first_run'] and not check_old_mons_deleted:
+    if measured_op["first_run"] and not check_old_mons_deleted:
         for mon in mons_to_stop:
             logger.info(f"Upscaling deployment {mon} back to 1")
             oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mon}")
@@ -165,14 +158,10 @@ def measure_stop_ceph_osd(measurement_dir):
             Ceph osd pod
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT,
-        namespace=config.ENV_DATA.get('cluster_namespace')
+        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA.get("cluster_namespace")
     )
-    osd_deployments = oc.get(selector=constants.OSD_APP_LABEL).get('items')
-    osds = [
-        deployment.get('metadata').get('name')
-        for deployment in osd_deployments
-    ]
+    osd_deployments = oc.get(selector=constants.OSD_APP_LABEL).get("items")
+    osds = [deployment.get("metadata").get("name") for deployment in osd_deployments]
 
     # get osd deployments to stop, leave even number of osd
     osd_to_stop = osds[-1]
@@ -203,7 +192,7 @@ def measure_stop_ceph_osd(measurement_dir):
         time.sleep(run_time)
         return osd_to_stop
 
-    test_file = os.path.join(measurement_dir, 'measure_stop_ceph_osd.json')
+    test_file = os.path.join(measurement_dir, "measure_stop_ceph_osd.json")
     measured_op = measure_operation(stop_osd, test_file)
     logger.info(f"Upscaling deployment {osd_to_stop} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_to_stop}")
@@ -227,23 +216,20 @@ def measure_corrupt_pg(measurement_dir):
         corrupting Ceph Placement Group
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT,
-        namespace=config.ENV_DATA.get('cluster_namespace')
+        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA.get("cluster_namespace")
     )
-    osd_deployments = oc.get(selector=constants.OSD_APP_LABEL).get('items')
-    osd_deployment = osd_deployments[0].get('metadata').get('name')
+    osd_deployments = oc.get(selector=constants.OSD_APP_LABEL).get("items")
+    osd_deployment = osd_deployments[0].get("metadata").get("name")
     ct_pod = pod.get_ceph_tools_pod()
-    pool_name = helpers.create_unique_resource_name('corrupted', 'pool')
-    ct_pod.exec_ceph_cmd(
-        f"ceph osd pool create {pool_name} 1 1"
-    )
-    logger.info('Setting osd noout flag')
-    ct_pod.exec_ceph_cmd('ceph osd set noout')
+    pool_name = helpers.create_unique_resource_name("corrupted", "pool")
+    ct_pod.exec_ceph_cmd(f"ceph osd pool create {pool_name} 1 1")
+    logger.info("Setting osd noout flag")
+    ct_pod.exec_ceph_cmd("ceph osd set noout")
     logger.info(f"Put object into {pool_name}")
-    pool_object = 'test_object'
+    pool_object = "test_object"
     ct_pod.exec_ceph_cmd(f"rados -p {pool_name} put {pool_object} /etc/passwd")
     logger.info(f"Looking for Placement Group with {pool_object} object")
-    pg = ct_pod.exec_ceph_cmd(f"ceph osd map {pool_name} {pool_object}")['pgid']
+    pg = ct_pod.exec_ceph_cmd(f"ceph osd map {pool_name} {pool_object}")["pgid"]
     logger.info(f"Found Placement Group: {pg}")
 
     dummy_deployment, dummy_pod = helpers.create_dummy_osd(osd_deployment)
@@ -278,8 +264,8 @@ def measure_corrupt_pg(measurement_dir):
             f"{osd_deployment.split('-')[-1]} --pgid {pg} {pool_object} "
             f"set-bytes /etc/shadow --no-mon-config"
         )
-        logger.info('Unsetting osd noout flag')
-        ct_pod.exec_ceph_cmd('ceph osd unset noout')
+        logger.info("Unsetting osd noout flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset noout")
         ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pg}")
         oc.exec_oc_cmd(f"scale --replicas=0 deployment/{dummy_deployment}")
         oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_deployment}")
@@ -287,7 +273,7 @@ def measure_corrupt_pg(measurement_dir):
         time.sleep(run_time)
         return osd_deployment
 
-    test_file = os.path.join(measurement_dir, 'measure_corrupt_pg.json')
+    test_file = os.path.join(measurement_dir, "measure_corrupt_pg.json")
     measured_op = measure_operation(corrupt_pg, test_file)
     logger.info(f"Deleting pool {pool_name}")
     ct_pod.exec_ceph_cmd(
@@ -305,6 +291,7 @@ def measure_corrupt_pg(measurement_dir):
 
     return measured_op
 
+
 #
 # IO Workloads
 #
@@ -318,12 +305,8 @@ def measure_corrupt_pg(measurement_dir):
 
 @pytest.fixture
 def workload_storageutilization_05p_rbd(
-        project,
-        fio_pvc_dict,
-        fio_job_dict,
-        fio_configmap_dict,
-        measurement_dir,
-        tmp_path):
+    project, fio_pvc_dict, fio_job_dict, fio_configmap_dict, measurement_dir, tmp_path
+):
     fixture_name = "workload_storageutilization_05p_rbd"
     measured_op = workload_fio_storageutilization(
         fixture_name,
@@ -333,19 +316,21 @@ def workload_storageutilization_05p_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.05)
+        target_percentage=0.05,
+    )
     return measured_op
 
 
 @pytest.fixture
 def workload_storageutilization_50p_rbd(
-        project,
-        fio_pvc_dict,
-        fio_job_dict,
-        fio_configmap_dict,
-        measurement_dir,
-        tmp_path,
-        supported_configuration):
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
+    supported_configuration,
+):
     fixture_name = "workload_storageutilization_50p_rbd"
     measured_op = workload_fio_storageutilization(
         fixture_name,
@@ -355,18 +340,15 @@ def workload_storageutilization_50p_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.5)
+        target_percentage=0.5,
+    )
     return measured_op
 
 
 @pytest.fixture
 def workload_storageutilization_checksum_rbd(
-        project,
-        fio_pvc_dict,
-        fio_job_dict,
-        fio_configmap_dict,
-        measurement_dir,
-        tmp_path):
+    project, fio_pvc_dict, fio_job_dict, fio_configmap_dict, measurement_dir, tmp_path
+):
     fixture_name = "workload_storageutilization_checksum_rbd"
     measured_op = workload_fio_storageutilization(
         fixture_name,
@@ -377,19 +359,21 @@ def workload_storageutilization_checksum_rbd(
         measurement_dir,
         tmp_path,
         target_size=10,
-        with_checksum=True)
+        with_checksum=True,
+    )
     return measured_op
 
 
 @pytest.fixture
 def workload_storageutilization_85p_rbd(
-        project,
-        fio_pvc_dict,
-        fio_job_dict,
-        fio_configmap_dict,
-        measurement_dir,
-        tmp_path,
-        supported_configuration):
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
+    supported_configuration,
+):
     fixture_name = "workload_storageutilization_85p_rbd"
     measured_op = workload_fio_storageutilization(
         fixture_name,
@@ -399,19 +383,21 @@ def workload_storageutilization_85p_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.85)
+        target_percentage=0.85,
+    )
     return measured_op
 
 
 @pytest.fixture
 def workload_storageutilization_95p_rbd(
-        project,
-        fio_pvc_dict,
-        fio_job_dict,
-        fio_configmap_dict,
-        measurement_dir,
-        tmp_path,
-        supported_configuration):
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
+    supported_configuration,
+):
     fixture_name = "workload_storageutilization_95p_rbd"
     measured_op = workload_fio_storageutilization(
         fixture_name,
@@ -421,18 +407,15 @@ def workload_storageutilization_95p_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.95)
+        target_percentage=0.95,
+    )
     return measured_op
 
 
 @pytest.fixture
 def workload_storageutilization_05p_cephfs(
-        project,
-        fio_pvc_dict,
-        fio_job_dict,
-        fio_configmap_dict,
-        measurement_dir,
-        tmp_path):
+    project, fio_pvc_dict, fio_job_dict, fio_configmap_dict, measurement_dir, tmp_path
+):
     fixture_name = "workload_storageutilization_05p_cephfs"
     measured_op = workload_fio_storageutilization(
         fixture_name,
@@ -442,19 +425,21 @@ def workload_storageutilization_05p_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.05)
+        target_percentage=0.05,
+    )
     return measured_op
 
 
 @pytest.fixture
 def workload_storageutilization_50p_cephfs(
-        project,
-        fio_pvc_dict,
-        fio_job_dict,
-        fio_configmap_dict,
-        measurement_dir,
-        tmp_path,
-        supported_configuration):
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
+    supported_configuration,
+):
     fixture_name = "workload_storageutilization_50p_cephfs"
     measured_op = workload_fio_storageutilization(
         fixture_name,
@@ -464,19 +449,21 @@ def workload_storageutilization_50p_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.5)
+        target_percentage=0.5,
+    )
     return measured_op
 
 
 @pytest.fixture
 def workload_storageutilization_85p_cephfs(
-        project,
-        fio_pvc_dict,
-        fio_job_dict,
-        fio_configmap_dict,
-        measurement_dir,
-        tmp_path,
-        supported_configuration):
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
+    supported_configuration,
+):
     fixture_name = "workload_storageutilization_85p_cephfs"
     measured_op = workload_fio_storageutilization(
         fixture_name,
@@ -486,19 +473,21 @@ def workload_storageutilization_85p_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.85)
+        target_percentage=0.85,
+    )
     return measured_op
 
 
 @pytest.fixture
 def workload_storageutilization_95p_cephfs(
-        project,
-        fio_pvc_dict,
-        fio_job_dict,
-        fio_configmap_dict,
-        measurement_dir,
-        tmp_path,
-        supported_configuration):
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
+    supported_configuration,
+):
     fixture_name = "workload_storageutilization_95p_cephfs"
     measured_op = workload_fio_storageutilization(
         fixture_name,
@@ -508,7 +497,8 @@ def workload_storageutilization_95p_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.95)
+        target_percentage=0.95,
+    )
     return measured_op
 
 
@@ -517,12 +507,8 @@ def workload_storageutilization_95p_cephfs(
 
 @pytest.fixture
 def workload_storageutilization_10g_rbd(
-        project,
-        fio_pvc_dict,
-        fio_job_dict,
-        fio_configmap_dict,
-        measurement_dir,
-        tmp_path):
+    project, fio_pvc_dict, fio_job_dict, fio_configmap_dict, measurement_dir, tmp_path
+):
     fixture_name = "workload_storageutilization_10G_rbd"
     measured_op = workload_fio_storageutilization(
         fixture_name,
@@ -532,18 +518,15 @@ def workload_storageutilization_10g_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_size=10)
+        target_size=10,
+    )
     return measured_op
 
 
 @pytest.fixture
 def workload_storageutilization_10g_cephfs(
-        project,
-        fio_pvc_dict,
-        fio_job_dict,
-        fio_configmap_dict,
-        measurement_dir,
-        tmp_path):
+    project, fio_pvc_dict, fio_job_dict, fio_configmap_dict, measurement_dir, tmp_path
+):
     fixture_name = "workload_storageutilization_10G_cephfs"
     measured_op = workload_fio_storageutilization(
         fixture_name,
@@ -553,17 +536,13 @@ def workload_storageutilization_10g_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_size=10)
+        target_size=10,
+    )
     return measured_op
 
 
 @pytest.fixture
-def measure_noobaa_exceed_bucket_quota(
-    measurement_dir,
-    request,
-    mcg_obj,
-    awscli_pod
-):
+def measure_noobaa_exceed_bucket_quota(measurement_dir, request, mcg_obj, awscli_pod):
     """
     Create NooBaa bucket, set its capacity quota to 2GB and fill it with data.
 
@@ -572,23 +551,13 @@ def measure_noobaa_exceed_bucket_quota(
         corrupting Ceph Placement Group
     """
     bucket_name = create_unique_resource_name(
-        resource_description='bucket',
-        resource_type='s3'
+        resource_description="bucket", resource_type="s3"
     )
-    bucket = MCGS3Bucket(
-        bucket_name,
-        mcg=mcg_obj
-    )
+    bucket = MCGS3Bucket(bucket_name, mcg=mcg_obj)
     mcg_obj.send_rpc_query(
-        'bucket_api',
-        'update_bucket',
-        {
-            'name': bucket_name,
-            'quota': {
-                'unit': 'GIGABYTE',
-                'size': 2
-            }
-        }
+        "bucket_api",
+        "update_bucket",
+        {"name": bucket_name, "quota": {"unit": "GIGABYTE", "size": 2}},
     )
     bucket_info = mcg_obj.get_bucket_info(bucket.name)
     logger.info(f"Bucket {bucket.name} storage: {bucket_info['storage']}")
@@ -614,21 +583,18 @@ def measure_noobaa_exceed_bucket_quota(
         nonlocal awscli_pod
         # run_time of operation
         run_time = 60 * 14
-        awscli_pod.exec_cmd_on_pod(
-            'dd if=/dev/zero of=/tmp/testfile bs=1M count=500'
-        )
+        awscli_pod.exec_cmd_on_pod("dd if=/dev/zero of=/tmp/testfile bs=1M count=500")
         for i in range(1, 6):
             awscli_pod.exec_cmd_on_pod(
                 craft_s3_command(
-                    f"cp /tmp/testfile s3://{bucket_name}/testfile{i}",
-                    mcg_obj
+                    f"cp /tmp/testfile s3://{bucket_name}/testfile{i}", mcg_obj
                 ),
                 out_yaml_format=False,
                 secrets=[
                     mcg_obj.access_key_id,
                     mcg_obj.access_key,
-                    mcg_obj.s3_endpoint
-                ]
+                    mcg_obj.s3_endpoint,
+                ],
             )
 
         logger.info(f"Waiting for {run_time} seconds")
@@ -636,8 +602,7 @@ def measure_noobaa_exceed_bucket_quota(
         return bucket_name
 
     test_file = os.path.join(
-        measurement_dir,
-        'measure_noobaa_exceed__bucket_quota.json'
+        measurement_dir, "measure_noobaa_exceed__bucket_quota.json"
     )
     measured_op = measure_operation(exceed_bucket_quota, test_file)
 
@@ -648,16 +613,9 @@ def measure_noobaa_exceed_bucket_quota(
     logger.info(f"Deleting data from bucket {bucket_name}")
     for i in range(1, 6):
         awscli_pod.exec_cmd_on_pod(
-            craft_s3_command(
-                f"rm s3://{bucket_name}/testfile{i}",
-                mcg_obj
-            ),
+            craft_s3_command(f"rm s3://{bucket_name}/testfile{i}", mcg_obj),
             out_yaml_format=False,
-            secrets=[
-                mcg_obj.access_key_id,
-                mcg_obj.access_key,
-                mcg_obj.s3_endpoint
-            ]
+            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint],
         )
     return measured_op
 
@@ -678,6 +636,7 @@ def workload_idle(measurement_dir):
     which expects idle workload in such case would be misleading, so we fail
     the workload in such case.
     """
+
     def count_ceph_components():
         ct_pod = pod.get_ceph_tools_pod()
         ceph_osd_ls_list = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd ls")
@@ -686,8 +645,7 @@ def workload_idle(measurement_dir):
         # https://github.com/red-hat-storage/ocs-ci/issues/1152
         osd_num = len(ceph_osd_ls_list) + 1
         mon_num = len(ct_pod.exec_ceph_cmd(ceph_cmd="ceph mon metadata"))
-        logger.info(
-            f"There are {osd_num} OSDs, {mon_num} MONs")
+        logger.info(f"There are {osd_num} OSDs, {mon_num} MONs")
         return osd_num, mon_num
 
     def do_nothing():
@@ -702,15 +660,48 @@ def workload_idle(measurement_dir):
         # workload fixture.
         msg = (
             "Assumption that nothing serious is happening not met, "
-            "number of selected ceph components should be the same")
+            "number of selected ceph components should be the same"
+        )
         assert osd_num_1 == osd_num_2, msg
         assert mon_num_1 == mon_num_2, msg
         assert osd_num_1 >= 3, "OCS cluster should have at least 3 OSDs"
-        result = {'osd_num': osd_num_1, 'mon_num': mon_num_1}
+        result = {"osd_num": osd_num_1, "mon_num": mon_num_1}
         return result
 
-    test_file = os.path.join(measurement_dir, 'measure_workload_idle.json')
+    test_file = os.path.join(measurement_dir, "measure_workload_idle.json")
+
+    # if io_in_bg detected, request and wait for it's temporary shutdown
+    # but only if the fixture will actually run and measure the workload
+    restart_io_in_bg = False
+    if not is_measurement_done(test_file) and config.RUN.get("io_in_bg"):
+        logger.info("io_in_bg detected, trying to pause it via load_status")
+        config.RUN["load_status"] = "to_be_paused"
+        restart_io_in_bg = True
+        timeout = 600
+        sleep_time = 60
+        ts = TimeoutSampler(timeout, sleep_time, config.RUN.get, "load_status")
+        try:
+            for load_status in ts:
+                if load_status == "paused":
+                    logger.info("io_in_bg seems paused now")
+                    break
+        except ocs_ci.ocs.exceptions.TimeoutExpiredError as ex:
+            error_msg = (
+                f"io_in_bf failed to stop after {timeout} timeout, "
+                "bug in io_in_bf (of ocs-ci) prevents execution of "
+                "test cases which uses this fixture, rerun the affected "
+                "test cases in a dedicated run and consider ocs-ci fix"
+            )
+            logger.error(ex)
+            logger.error(error_msg)
+            raise Exception(error_msg)
+    else:
+        logger.debug("io_in_bg not detected, good")
+
     measured_op = measure_operation(do_nothing, test_file)
+    if restart_io_in_bg:
+        logger.info("reverting load_status to resume io_in_bg")
+        config.RUN["load_status"] = "to_be_resumed"
     return measured_op
 
 
@@ -726,8 +717,7 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments):
 
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT,
-        namespace=config.ENV_DATA['cluster_namespace']
+        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
     )
 
     def stop_rgw():
@@ -743,19 +733,19 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments):
         nonlocal oc
         nonlocal rgw_deployments
         for rgw_deployment in rgw_deployments:
-            rgw = rgw_deployment['metadata']['name']
+            rgw = rgw_deployment["metadata"]["name"]
             logger.info(f"Downscaling deployment {rgw} to 0")
             oc.exec_oc_cmd(f"scale --replicas=0 deployment/{rgw}")
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
         return rgw_deployments
 
-    test_file = os.path.join(measurement_dir, 'measure_stop_rgw.json')
+    test_file = os.path.join(measurement_dir, "measure_stop_rgw.json")
     measured_op = measure_operation(stop_rgw, test_file)
 
-    logger.info('Return RGW pods')
+    logger.info("Return RGW pods")
     for rgw_deployment in rgw_deployments:
-        rgw = rgw_deployment['metadata']['name']
+        rgw = rgw_deployment["metadata"]["name"]
         logger.info(f"Upscaling deployment {rgw} to 1")
         oc.exec_oc_cmd(f"scale --replicas=1 deployment/{rgw}")
 

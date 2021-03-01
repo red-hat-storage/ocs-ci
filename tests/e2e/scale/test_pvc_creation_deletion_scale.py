@@ -1,9 +1,12 @@
 """
-Test to measure pvc scale creation & deletion time. Total pvc count would be 1500
+Test to measure pvc scale creation & deletion time. Total pvc count would be
+500 times the number of worker nodes
 """
 import logging
 import csv
 import pytest
+import time
+from timeit import default_timer
 
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pvc
@@ -20,11 +23,13 @@ class TestPVCCreationDeletionScale(E2ETest):
     """
     Base class for PVC scale creation and deletion
     """
+
     @pytest.fixture()
     def namespace(self, project_factory):
         """
         Create a new project
         """
+        self.start_time = default_timer()
         proj_obj = project_factory()
         self.namespace = proj_obj.namespace
 
@@ -33,17 +38,17 @@ class TestPVCCreationDeletionScale(E2ETest):
         argvalues=[
             pytest.param(
                 *[constants.ACCESS_MODE_RWO, constants.CEPHBLOCKPOOL],
-                marks=pytest.mark.polarion_id("OCS-1225")
+                marks=pytest.mark.polarion_id("OCS-1225"),
             ),
             pytest.param(
                 *[constants.ACCESS_MODE_RWX, constants.CEPHBLOCKPOOL],
-                marks=pytest.mark.polarion_id("OCS-2010")
+                marks=pytest.mark.polarion_id("OCS-2010"),
             ),
             pytest.param(
                 *[constants.ACCESS_MODE_RWX, constants.CEPHFS_INTERFACE],
-                marks=pytest.mark.polarion_id("OCS-2008")
+                marks=pytest.mark.polarion_id("OCS-2008"),
             ),
-        ]
+        ],
     )
     @pytest.mark.usefixtures(namespace.__name__)
     def test_multiple_pvc_creation_deletion_scale(
@@ -53,7 +58,7 @@ class TestPVCCreationDeletionScale(E2ETest):
         Measuring PVC creation time while scaling PVC
         Measure PVC deletion time after creation test
         """
-        scale_pvc_count = 1500
+        scale_pvc_count = scale_lib.get_max_pvc_count()
         log.info(f"Start creating {access_mode}-{interface} {scale_pvc_count} PVC")
         if interface == constants.CEPHBLOCKPOOL:
             sc_name = constants.DEFAULT_STORAGECLASS_RBD
@@ -71,12 +76,16 @@ class TestPVCCreationDeletionScale(E2ETest):
         # There is 2 kube_job to reduce the load, observed time_out problems
         # during delete process of single kube_job and heavy load.
         job_file1 = ObjectConfFile(
-            name='job_profile_1', obj_dict_list=pvc_dict_list1,
-            project=self.namespace, tmp_path=tmp_path
+            name="job_profile_1",
+            obj_dict_list=pvc_dict_list1,
+            project=self.namespace,
+            tmp_path=tmp_path,
         )
         job_file2 = ObjectConfFile(
-            name='job_profile_2', obj_dict_list=pvc_dict_list2,
-            project=self.namespace, tmp_path=tmp_path
+            name="job_profile_2",
+            obj_dict_list=pvc_dict_list2,
+            project=self.namespace,
+            tmp_path=tmp_path,
         )
 
         # Create kube_job
@@ -85,13 +94,15 @@ class TestPVCCreationDeletionScale(E2ETest):
 
         # Check all the PVC reached Bound state
         pvc_bound_list = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
-            kube_job_obj=job_file1, namespace=self.namespace,
-            no_of_pvc=int(scale_pvc_count / 2)
+            kube_job_obj=job_file1,
+            namespace=self.namespace,
+            no_of_pvc=int(scale_pvc_count / 2),
         )
         pvc_bound_list.extend(
             scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
-                kube_job_obj=job_file2, namespace=self.namespace,
-                no_of_pvc=int(scale_pvc_count / 2)
+                kube_job_obj=job_file2,
+                namespace=self.namespace,
+                no_of_pvc=int(scale_pvc_count / 2),
             )
         )
 
@@ -99,7 +110,9 @@ class TestPVCCreationDeletionScale(E2ETest):
 
         # Get PVC creation time
         pvc_create_time = helpers.measure_pvc_creation_time_bulk(
-            interface=interface, pvc_name_list=pvc_bound_list
+            interface=interface,
+            pvc_name_list=pvc_bound_list,
+            wait_time=300,
         )
 
         # TODO: Update below code with google API, to record value in spreadsheet
@@ -109,23 +122,26 @@ class TestPVCCreationDeletionScale(E2ETest):
             csv_obj = csv.writer(fd)
             for k, v in pvc_create_time.items():
                 csv_obj.writerow([k, v])
-        logging.info(
-            f"Create data present in {log_path}-creation-time.csv file"
-        )
+        logging.info(f"Create data present in {log_path}-creation-time.csv file")
 
         # Get pv_name, require pv_name to fetch deletion time data from log
         pv_name_list = list()
         get_kube_job_1 = job_file1.get(namespace=self.namespace)
         for i in range(int(scale_pvc_count / 2)):
-            pv_name_list.append(get_kube_job_1['items'][i]['spec']['volumeName'])
+            pv_name_list.append(get_kube_job_1["items"][i]["spec"]["volumeName"])
 
         get_kube_job_2 = job_file2.get(namespace=self.namespace)
         for i in range(int(scale_pvc_count / 2)):
-            pv_name_list.append(get_kube_job_2['items'][i]['spec']['volumeName'])
+            pv_name_list.append(get_kube_job_2["items"][i]["spec"]["volumeName"])
 
         # Delete kube_job
         job_file1.delete(namespace=self.namespace)
         job_file2.delete(namespace=self.namespace)
+
+        # Adding 1min wait time for PVC deletion logs to be updated
+        # Observed failure when we immediately check the logs for pvc delete time
+        # https://github.com/red-hat-storage/ocs-ci/issues/3371
+        time.sleep(60)
 
         # Get PVC deletion time
         pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
@@ -139,19 +155,20 @@ class TestPVCCreationDeletionScale(E2ETest):
             csv_obj = csv.writer(fd)
             for k, v in pvc_deletion_time.items():
                 csv_obj.writerow([k, v])
-        logging.info(
-            f"Delete data present in {log_path}-deletion-time.csv file"
-        )
+        logging.info(f"Delete data present in {log_path}-deletion-time.csv file")
+        end_time = default_timer()
+        logging.info(f"Elapsed time -- {end_time - self.start_time} seconds")
 
-    @polarion_id('OCS-1885')
+    @polarion_id("OCS-1885")
     @pytest.mark.usefixtures(namespace.__name__)
     def test_all_4_type_pvc_creation_deletion_scale(self, namespace, tmp_path):
         """
-        Measuring PVC creation time while scaling PVC of all 4 types, Total 1500 PVCs
+        Measuring PVC creation time while scaling PVC of all 4 types,
+        A total of 500 times the number of worker nodes
         will be created, i.e. 375 each pvc type
         Measure PVC deletion time in scale env
         """
-        scale_pvc_count = 1500
+        scale_pvc_count = scale_lib.get_max_pvc_count()
         log.info(f"Start creating {scale_pvc_count} PVC of all 4 types")
         cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
         rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
@@ -161,25 +178,31 @@ class TestPVCCreationDeletionScale(E2ETest):
         for mode in [constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]:
             rbd_pvc_dict_list.extend(
                 scale_lib.construct_pvc_creation_yaml_bulk_for_kube_job(
-                    no_of_pvc=int(scale_pvc_count / 4), access_mode=mode,
-                    sc_name=rbd_sc_obj
+                    no_of_pvc=int(scale_pvc_count / 4),
+                    access_mode=mode,
+                    sc_name=rbd_sc_obj,
                 )
             )
             cephfs_pvc_dict_list.extend(
                 scale_lib.construct_pvc_creation_yaml_bulk_for_kube_job(
-                    no_of_pvc=int(scale_pvc_count / 4), access_mode=mode,
-                    sc_name=cephfs_sc_obj
+                    no_of_pvc=int(scale_pvc_count / 4),
+                    access_mode=mode,
+                    sc_name=cephfs_sc_obj,
                 )
             )
 
         # There is 2 kube_job for cephfs and rbd PVCs
         job_file_rbd = ObjectConfFile(
-            name='rbd_pvc_job', obj_dict_list=rbd_pvc_dict_list,
-            project=self.namespace, tmp_path=tmp_path
+            name="rbd_pvc_job",
+            obj_dict_list=rbd_pvc_dict_list,
+            project=self.namespace,
+            tmp_path=tmp_path,
         )
         job_file_cephfs = ObjectConfFile(
-            name='cephfs_pvc_job', obj_dict_list=cephfs_pvc_dict_list,
-            project=self.namespace, tmp_path=tmp_path
+            name="cephfs_pvc_job",
+            obj_dict_list=cephfs_pvc_dict_list,
+            project=self.namespace,
+            tmp_path=tmp_path,
         )
 
         # Create kube_job
@@ -188,12 +211,14 @@ class TestPVCCreationDeletionScale(E2ETest):
 
         # Check all the PVC reached Bound state
         rbd_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
-            kube_job_obj=job_file_rbd, namespace=self.namespace,
-            no_of_pvc=int(scale_pvc_count / 2)
+            kube_job_obj=job_file_rbd,
+            namespace=self.namespace,
+            no_of_pvc=int(scale_pvc_count / 2),
         )
         fs_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
-            kube_job_obj=job_file_cephfs, namespace=self.namespace,
-            no_of_pvc=int(scale_pvc_count / 2)
+            kube_job_obj=job_file_cephfs,
+            namespace=self.namespace,
+            no_of_pvc=int(scale_pvc_count / 2),
         )
 
         # Get pvc objs from namespace, which is used to identify backend pv
@@ -221,26 +246,29 @@ class TestPVCCreationDeletionScale(E2ETest):
             csv_obj = csv.writer(fd)
             for k, v in fs_pvc_create_time.items():
                 csv_obj.writerow([k, v])
-        logging.info(
-            f"Create data present in {log_path}-creation-time.csv file"
-        )
+        logging.info(f"Create data present in {log_path}-creation-time.csv file")
 
         # Get pv_name, require pv_name to fetch deletion time data from log
         rbd_pv_list, fs_pv_list = ([] for i in range(2))
         get_rbd_kube_job = job_file_rbd.get(namespace=self.namespace)
         for i in range(int(scale_pvc_count / 2)):
-            rbd_pv_list.append(get_rbd_kube_job['items'][i]['spec']['volumeName'])
+            rbd_pv_list.append(get_rbd_kube_job["items"][i]["spec"]["volumeName"])
 
         get_fs_kube_job = job_file_cephfs.get(namespace=self.namespace)
         for i in range(int(scale_pvc_count / 2)):
-            fs_pv_list.append(get_fs_kube_job['items'][i]['spec']['volumeName'])
+            fs_pv_list.append(get_fs_kube_job["items"][i]["spec"]["volumeName"])
 
         # Delete kube_job
         job_file_rbd.delete(namespace=self.namespace)
         job_file_cephfs.delete(namespace=self.namespace)
 
+        # Adding 1min wait time for PVC deletion logs to be updated
+        # Observed failure when we immediately check the logs for pvc delete time
+        # https://github.com/red-hat-storage/ocs-ci/issues/3371
+        time.sleep(60)
+
         # Get PV deletion time
-        fs_pvc_deletion_time = helpers. measure_pv_deletion_time_bulk(
+        fs_pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
             interface=constants.CEPHFS_INTERFACE, pv_name_list=fs_pv_list
         )
         rbd_pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
@@ -254,6 +282,6 @@ class TestPVCCreationDeletionScale(E2ETest):
             csv_obj = csv.writer(fd)
             for k, v in fs_pvc_deletion_time.items():
                 csv_obj.writerow([k, v])
-        logging.info(
-            f"Delete data present in {log_path}-deletion-time.csv file"
-        )
+        logging.info(f"Delete data present in {log_path}-deletion-time.csv file")
+        end_time = default_timer()
+        logging.info(f"Elapsed time -- {end_time - self.start_time} seconds")

@@ -1,6 +1,8 @@
 """
 All the flexy related classes and functionality lives here
 """
+import base64
+import binascii
 import logging
 import os
 import yaml
@@ -16,10 +18,17 @@ import shutil
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
-    get_ocp_version, clone_repo, run_cmd, expose_ocp_version,
+    clone_repo,
+    exec_cmd,
+    expose_ocp_version,
+    get_ocp_version,
+    login_to_mirror_registry,
     wait_for_machineconfigpool_status,
 )
-from ocs_ci.ocs import exceptions
+from ocs_ci.utility.flexy import (
+    configure_allowed_domains_in_proxy,
+    load_cluster_info,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,25 +37,22 @@ class FlexyBase(object):
     """
     A base class for all types of flexy installs
     """
+
     def __init__(self):
-        self.cluster_name = config.ENV_DATA['cluster_name']
-        self.cluster_path = config.ENV_DATA['cluster_path']
+        self.cluster_name = config.ENV_DATA["cluster_name"]
+        self.cluster_path = config.ENV_DATA["cluster_path"]
+
         # Host dir path which will be mounted inside flexy container
         # This will be root for all flexy housekeeping
-        self.flexy_host_dir = os.path.expanduser(
-            constants.FLEXY_HOST_DIR_PATH
-        )
-        if not os.path.exists(self.flexy_host_dir):
-            os.mkdir(self.flexy_host_dir)
-            os.chmod(self.flexy_host_dir, mode=0o777)
+        self.flexy_host_dir = os.path.expanduser(constants.FLEXY_HOST_DIR_PATH)
+        self.flexy_prepare_work_dir()
 
         # Path inside container where flexy_host_dir will be mounted
         self.flexy_mnt_container_dir = config.ENV_DATA.get(
-            'flexy_mnt_container_dir', constants.FLEXY_MNT_CONTAINER_DIR
+            "flexy_mnt_container_dir", constants.FLEXY_MNT_CONTAINER_DIR
         )
         self.flexy_img_url = config.ENV_DATA.get(
-            'flexy_img_url',
-            constants.FLEXY_IMAGE_URL
+            "flexy_img_url", constants.FLEXY_IMAGE_URL
         )
         self.template_file = None
 
@@ -54,57 +60,51 @@ class FlexyBase(object):
         # then we don't clone private-conf repo else
         # we will look for 'flexy_private_conf_url' , if not specified
         # we will go ahead with default 'flexy-ocs-private' repo
-        if not config.ENV_DATA.get('flexy_env_file'):
+        if not config.ENV_DATA.get("flexy_env_file"):
             self.flexy_private_conf_url = config.ENV_DATA.get(
-                'flexy_private_conf_repo',
-                constants.FLEXY_DEFAULT_PRIVATE_CONF_REPO
+                "flexy_private_conf_repo", constants.FLEXY_DEFAULT_PRIVATE_CONF_REPO
             )
             self.flexy_private_conf_branch = config.ENV_DATA.get(
-                'flexy_private_conf_branch',
-                constants.FLEXY_DEFAULT_PRIVATE_CONF_BRANCH
+                "flexy_private_conf_branch", constants.FLEXY_DEFAULT_PRIVATE_CONF_BRANCH
             )
             # Host dir path for private_conf dir where private-conf will be
             # cloned
             self.flexy_host_private_conf_dir_path = os.path.join(
-                self.flexy_host_dir, 'flexy-ocs-private'
+                self.flexy_host_dir, "flexy-ocs-private"
             )
             self.flexy_env_file = os.path.join(
                 self.flexy_host_private_conf_dir_path, constants.FLEXY_DEFAULT_ENV_FILE
             )
         else:
-            self.flexy_env_file = config.ENV_DATA['flexy_env_file']
+            self.flexy_env_file = config.ENV_DATA["flexy_env_file"]
 
-        if not config.ENV_DATA.get('flexy_env_file'):
+        if not config.ENV_DATA.get("flexy_env_file"):
             self.template_file = config.FLEXY.get(
-                'VARIABLES_LOCATION',
+                "VARIABLES_LOCATION",
                 os.path.join(
                     constants.OPENSHIFT_MISC_BASE,
                     f"aos-{get_ocp_version('_')}",
-                    config.ENV_DATA.get(
-                        'flexy_template', self.default_flexy_template
-                    )
-                )
+                    config.ENV_DATA.get("flexy_template", self.default_flexy_template),
+                ),
             )
 
     def deploy_prereq(self):
         """
-          Common flexy prerequisites like cloning the private-conf
-          repo locally and updating the contents with user supplied
-          values
+        Common flexy prerequisites like cloning the private-conf
+        repo locally and updating the contents with user supplied
+        values
 
-          """
+        """
         # If user has provided absolute path for env file (through
         # '--flexy-env-file <path>' CLI option)
         # then no need of clone else continue with default
         # private-conf repo and branch
 
-        if not config.ENV_DATA.get('flexy_env_file'):
+        if not config.ENV_DATA.get("flexy_env_file"):
             self.clone_and_unlock_ocs_private_conf()
-            config.FLEXY['VARIABLES_LOCATION'] = self.template_file
-        config.FLEXY['INSTANCE_NAME_PREFIX'] = self.cluster_name
-        config.FLEXY['LAUNCHER_VARS'].update(
-            self.get_installer_payload()
-        )
+            config.FLEXY["VARIABLES_LOCATION"] = self.template_file
+        config.FLEXY["INSTANCE_NAME_PREFIX"] = self.cluster_name
+        config.FLEXY["LAUNCHER_VARS"].update(self.get_installer_payload())
         self.merge_flexy_env()
 
     def get_installer_payload(self, version=None):
@@ -117,10 +117,10 @@ class FlexyBase(object):
 
         """
         payload_img = {"installer_payload_image": None}
-        vers = version or config.DEPLOYMENT['installer_version']
+        vers = version or config.DEPLOYMENT["installer_version"]
         installer_version = expose_ocp_version(vers)
-        payload_img['installer_payload_image'] = (
-            ":".join([constants.REGISTRY_SVC, installer_version])
+        payload_img["installer_payload_image"] = ":".join(
+            [constants.REGISTRY_SVC, installer_version]
         )
         return payload_img
 
@@ -133,15 +133,13 @@ class FlexyBase(object):
             cmd_string (str): Podman command line along with options
 
         """
-        logger.info(
-            f"Starting Flexy container with options {cmd_string}"
-        )
+        logger.info(f"Starting Flexy container with options {cmd_string}")
         with subprocess.Popen(
             cmd_string,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             bufsize=1,
-            universal_newlines=True
+            universal_newlines=True,
         ) as p:
             for line in p.stdout:
                 logger.info(line.strip())
@@ -156,7 +154,7 @@ class FlexyBase(object):
         Build flexy command line for 'deploy' operation
 
         """
-        cmd = shlex.split("sudo podman run --rm=true")
+        cmd = shlex.split("podman run --rm=true")
         flexy_container_args = self.build_container_args()
         return cmd + flexy_container_args
 
@@ -165,23 +163,12 @@ class FlexyBase(object):
         Build flexy command line for 'destroy' operation
 
         """
-        # if ocs-ci/data were cleaned up (e.g. on Jenkins), copy
-        # Flexy env file from cluster dir to the data directory
-        if not os.path.exists(constants.FLEXY_ENV_FILE_UPDATED):
-            cluster_dir_flexy_env_file_updated = os.path.join(
-                constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
-                constants.FLEXY_HOST_DIR,
-                constants.FLEXY_ENV_FILE_UPDATED_NAME,
-            )
-            shutil.copyfile(
-                cluster_dir_flexy_env_file_updated,
-                constants.FLEXY_ENV_FILE_UPDATED
-            )
-        cmd = shlex.split("sudo podman run --rm=true")
-        flexy_container_args = self.build_container_args('destroy')
-        return cmd + flexy_container_args + ['destroy']
 
-    def build_container_args(self, purpose=''):
+        cmd = shlex.split("podman run --rm=true")
+        flexy_container_args = self.build_container_args("destroy")
+        return cmd + flexy_container_args + ["destroy"]
+
+    def build_container_args(self, purpose=""):
         """
         Builds most commonly used arguments for flexy container
 
@@ -195,29 +182,17 @@ class FlexyBase(object):
 
         """
         args = list()
-        args.append(f"--env-file={constants.FLEXY_ENV_FILE_UPDATED}")
+        args.append(f"--env-file={constants.FLEXY_ENV_FILE_UPDATED_PATH}")
         args.append(f"-w={self.flexy_mnt_container_dir}")
         # For destroy on NFS mount, relabel=shared will not work
         # with podman hence we will keep 'relabel=shared' only for
         # deploy which happens on Jenkins slave's local fs.
         # Also during destroy we assume that copying of flexy
         # would be done during deployment and we can rely on
-        if purpose == 'destroy':
-            if self.is_jenkins_mount():
-                flexy_dir = os.path.join(
-                    constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
-                    constants.FLEXY_HOST_DIR
-                )
-                if not os.path.exists(flexy_dir):
-                    raise exceptions.FlexyDataNotFound(
-                        "Failed to find flexy data"
-                    )
-            else:
-                flexy_dir = self.flexy_host_dir
+        if purpose == "destroy":
             args.append(
-                f"--mount=type=bind,source={flexy_dir},"
-                f"destination={self.flexy_mnt_container_dir}"
-                f'{[",relabel=shared", ""][self.is_jenkins_mount()]}'
+                f"--mount=type=bind,source={self.flexy_host_dir},"
+                f"destination={self.flexy_mnt_container_dir},relabel=shared"
             )
         else:
             args.append(
@@ -236,14 +211,26 @@ class FlexyBase(object):
         clone_repo(
             self.flexy_private_conf_url,
             self.flexy_host_private_conf_dir_path,
-            self.flexy_private_conf_branch
+            self.flexy_private_conf_branch,
         )
+        # prepare flexy private repo keyfile (if it is base64 encoded)
+        keyfile = os.path.expanduser(constants.FLEXY_GIT_CRYPT_KEYFILE)
+        try:
+            with open(keyfile, "rb") as fd:
+                keyfile_content = base64.b64decode(fd.read())
+            logger.info(
+                "Private flexy repository git crypt keyfile is base64 encoded. "
+                f"Decoding it and saving to the same place ({keyfile})"
+            )
+            with open(keyfile, "wb") as fd:
+                fd.write(keyfile_content)
+        except binascii.Error:
+            logger.info(
+                f"Private flexy repository git crypt keyfile is already prepared ({keyfile})."
+            )
         # git-crypt unlock /path/to/keyfile
-        cmd = (
-            f'git-crypt unlock '
-            f'{os.path.expanduser(constants.FLEXY_GIT_CRYPT_KEYFILE)}'
-        )
-        run_cmd(cmd, cwd=self.flexy_host_private_conf_dir_path)
+        cmd = f"git-crypt unlock {keyfile}"
+        exec_cmd(cmd, cwd=self.flexy_host_private_conf_dir_path)
         logger.info("Unlocked the git repo")
 
     def merge_flexy_env(self):
@@ -272,22 +259,22 @@ class FlexyBase(object):
             # For LAUNCHER_VARS we need to merge the
             # user provided dict with default obtained
             # from env file
-            if key == 'LAUNCHER_VARS':
+            if key == "LAUNCHER_VARS":
                 config_parser.set(
-                    'root',
+                    "root",
                     key,
                     str(
                         merge_dict(
-                            yaml.safe_load(config_parser['root'][key]),
-                            config.FLEXY[key]
+                            yaml.safe_load(config_parser["root"][key]),
+                            config.FLEXY[key],
                         )
-                    )
+                    ),
                 )
             else:
-                config_parser.set('root', key, f"{config.FLEXY[key]}")
+                config_parser.set("root", key, f"{config.FLEXY[key]}")
 
         # write the updated config_parser content to updated env file
-        with open(constants.FLEXY_ENV_FILE_UPDATED, "w") as fp:
+        with open(constants.FLEXY_ENV_FILE_UPDATED_PATH, "w") as fp:
             src = io.StringIO()
             dst = io.StringIO()
             config_parser.write(src)
@@ -295,100 +282,105 @@ class FlexyBase(object):
             # config_parser introduces spaces around '='
             # sign, we need to remove that else flexy podman fails
             for line in src.readlines():
-                dst.write(line.replace(' = ', '=', 1))
+                dst.write(line.replace(" = ", "=", 1))
             dst.seek(0)
             # eliminate first line which has section [root]
             # last line ll have a '\n' so that needs to be
             # removed
             fp.write("".join(dst.readlines()[1:-1]))
 
+    def flexy_prepare_work_dir(self):
+        """
+        Prepare Flexy working directory (flexy-dir):
+            - copy flexy-dir from cluster_path to data dir (if available)
+            - set proper ownership
+        """
+        logger.info(f"Prepare flexy working directory {self.flexy_host_dir}.")
+        if not os.path.exists(self.flexy_host_dir):
+            # if ocs-ci/data were cleaned up (e.g. on Jenkins) and flexy-dir
+            # exists in cluster dir, copy it to the data directory, othervise
+            # just create empty flexy-dir
+            cluster_path_flexy_dir = os.path.join(
+                self.cluster_path, constants.FLEXY_HOST_DIR
+            )
+            if os.path.exists(cluster_path_flexy_dir):
+                shutil.copytree(
+                    cluster_path_flexy_dir,
+                    self.flexy_host_dir,
+                    symlinks=True,
+                    ignore_dangling_symlinks=True,
+                )
+            else:
+                os.mkdir(self.flexy_host_dir)
+        # change the ownership to the uid of user in flexy container
+        chown_cmd = (
+            f"sudo chown -R {constants.FLEXY_USER_LOCAL_UID} {self.flexy_host_dir}"
+        )
+        exec_cmd(chown_cmd)
+
+    def flexy_backup_work_dir(self):
+        """
+        Perform copying of flexy-dir to cluster_path.
+        """
+        # change ownership of flexy-dir back to current user
+        chown_cmd = f"sudo chown -R {os.getuid()}:{os.getgid()} {self.flexy_host_dir}"
+        exec_cmd(chown_cmd)
+        chmod_cmd = f"sudo chmod -R a+rX {self.flexy_host_dir}"
+        exec_cmd(chmod_cmd)
+        # mirror flexy work dir to cluster path
+        rsync_cmd = f"rsync -av {self.flexy_host_dir} {self.cluster_path}/"
+        exec_cmd(rsync_cmd)
+
+        # mirror install-dir to cluster path (auth directory, metadata.json
+        # file and other files)
+        install_dir = os.path.join(self.flexy_host_dir, "flexy/workdir/install-dir/")
+        rsync_cmd = f"rsync -av {install_dir} {self.cluster_path}/"
+        exec_cmd(rsync_cmd)
+
     def flexy_post_processing(self):
         """
-        Perform copying of flexy-dir to nfs mount
-        and do this only if its jenkins run
-
+        Perform a few actions required after flexy execution:
+        - update global pull-secret
+        - login to mirror registry (disconected cluster)
+        - configure proxy server (disconnected cluster)
+        - configure ntp (if required)
         """
-        abs_cluster_path = os.path.abspath(self.cluster_path)
-        flexy_cluster_path = os.path.join(
-            self.flexy_host_dir, 'flexy/workdir/install-dir'
-        )
-        if os.path.exists(abs_cluster_path):
-            os.rmdir(abs_cluster_path)
-        # Check whether its a jenkins run
-        if self.is_jenkins_mount():
-            flexy_nfs_path = os.path.join(
-                constants.JENKINS_NFS_CURRENT_CLUSTER_DIR,
-                constants.FLEXY_HOST_DIR
-            )
-            if not os.path.exists(flexy_nfs_path):
-                shutil.copytree(
-                    self.flexy_host_dir,
-                    flexy_nfs_path,
-                    symlinks=True,
-                    ignore_dangling_symlinks=True
-                )
-                chmod = (
-                    f"chmod -R 777 {flexy_nfs_path}"
-                )
-                run_cmd(chmod)
-                logger.info(
-                    f"Symlinking {abs_cluster_path} to {flexy_nfs_path}"
-                )
-                os.symlink(
-                    os.path.join(
-                        flexy_nfs_path,
-                        constants.FLEXY_RELATIVE_CLUSTER_DIR
-                    ),
-                    abs_cluster_path
-                )
-        else:
-            # recursively change permissions
-            # for all the subdirs
-            chmod = f"sudo chmod -R 777 {constants.FLEXY_HOST_DIR_PATH}"
-            run_cmd(chmod)
-            logger.info(
-                f"Symlinking {flexy_cluster_path, abs_cluster_path}"
-            )
-            os.symlink(flexy_cluster_path, abs_cluster_path)
-
         # Apply pull secrets on ocp cluster
         kubeconfig = os.path.join(
-            self.cluster_path, config.RUN.get('kubeconfig_location')
+            self.cluster_path, config.RUN.get("kubeconfig_location")
         )
+        # load cluster info
+        load_cluster_info()
+
+        # if on disconnected cluster, perform required tasks
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        if config.DEPLOYMENT.get("disconnected"):
+            # login to mirror registry
+            login_to_mirror_registry(pull_secret_path)
+            # configure additional allowed domains in proxy
+            configure_allowed_domains_in_proxy()
+
+        # update pull-secret
         secret_cmd = (
             f"oc set data secret/pull-secret "
             f"--kubeconfig {kubeconfig} "
             f"-n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
-            f"--from-file=.dockerconfigjson={constants.DATA_DIR}/pull-secret"
+            f"--from-file=.dockerconfigjson={pull_secret_path}"
         )
-        run_cmd(secret_cmd)
+        exec_cmd(secret_cmd)
 
-        if not config.ENV_DATA.get('skip_ntp_configuration', False):
+        if not config.ENV_DATA.get("skip_ntp_configuration", False):
             ntp_cmd = (
                 f"oc --kubeconfig {kubeconfig} "
                 f"create -f {constants.NTP_CHRONY_CONF}"
             )
             logger.info("Creating NTP chrony")
-            run_cmd(ntp_cmd)
+            exec_cmd(ntp_cmd)
         # sleep here to start update machineconfigpool status
         time.sleep(60)
-        wait_for_machineconfigpool_status('all')
+        wait_for_machineconfigpool_status("all")
 
-    def is_jenkins_mount(self):
-        """
-        Find if this is jenkins run based on current-cluster-dir and
-        NFS mount
-
-        Returns:
-            bool: True if this is jenkins run else False
-
-        """
-        return (
-            os.path.exists(constants.JENKINS_NFS_CURRENT_CLUSTER_DIR)
-            and os.path.ismount(constants.JENKINS_NFS_CURRENT_CLUSTER_DIR)
-        )
-
-    def deploy(self, log_level=''):
+    def deploy(self, log_level=""):
         """
         build and invoke flexy deployer here
 
@@ -401,17 +393,17 @@ class FlexyBase(object):
         if log_level:
             pass
         cmd = self.build_install_cmd()
-        flexy_err = None
         # Ensure that flexy workdir will be copied to cluster dir even when
         # Flexy itself fails.
         try:
             self.run_container(cmd)
         except Exception as err:
             logger.error(err)
-            flexy_err = err
+            raise
+        finally:
+            self.flexy_backup_work_dir()
+
         self.flexy_post_processing()
-        if flexy_err:
-            raise flexy_err
 
     def destroy(self):
         """
@@ -419,13 +411,20 @@ class FlexyBase(object):
 
         """
         cmd = self.build_destroy_cmd()
-        self.run_container(cmd)
+        try:
+            self.run_container(cmd)
+        except Exception as err:
+            logger.error(err)
+            raise
+        finally:
+            self.flexy_backup_work_dir()
 
 
 class FlexyBaremetalPSI(FlexyBase):
     """
     A specific implementation of Baremetal with PSI using flexy
     """
+
     def __init__(self):
         self.default_flexy_template = constants.FLEXY_BAREMETAL_UPI_TEMPLATE
         super().__init__()
@@ -435,6 +434,7 @@ class FlexyAWSUPI(FlexyBase):
     """
     A specific implementation of AWS UPI installation using flexy
     """
+
     def __init__(self):
         self.default_flexy_template = constants.FLEXY_AWS_UPI_TEMPLATE
         super().__init__()

@@ -10,7 +10,7 @@ from subprocess import run, CalledProcessError
 from prettytable import PrettyTable
 from concurrent.futures import ThreadPoolExecutor
 
-from ocs_ci.ocs.exceptions import (ResourceWrongStatusException, CommandFailed)
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException, CommandFailed
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.ocs.resources.ocs import OCS
@@ -19,6 +19,8 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating, utils
 from ocs_ci.utility.utils import run_cmd, exec_cmd, TimeoutSampler
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
+from ocs_ci.helpers.helpers import storagecluster_independent_check, validate_pv_delete
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 
 log = logging.getLogger(__name__)
 URL = "https://get.helm.sh/helm-v2.16.1-linux-amd64.tar.gz"
@@ -42,12 +44,12 @@ class AMQ(object):
                 branch: branch to use from the repo
         """
         self.args = kwargs
-        self.repo = self.args.get('repo', constants.KAFKA_OPERATOR)
-        self.branch = self.args.get('branch', 'master')
+        self.repo = self.args.get("repo", constants.KAFKA_OPERATOR)
+        self.branch = self.args.get("branch", "master")
         self.ocp = OCP()
-        self.ns_obj = OCP(kind='namespace')
-        self.pod_obj = OCP(kind='pod')
-        self.kafka_obj = OCP(kind='Kafka')
+        self.ns_obj = OCP(kind="namespace")
+        self.pod_obj = OCP(kind="pod")
+        self.kafka_obj = OCP(kind="Kafka")
         self.kafka_connect_obj = OCP(kind="KafkaConnect")
         self.kafka_bridge_obj = OCP(kind="KafkaBridge")
         self.kafka_topic_obj = OCP(kind="KafkaTopic")
@@ -55,7 +57,7 @@ class AMQ(object):
         self.amq_is_setup = False
         self.messaging = False
         self.benchmark = False
-        self.dir = tempfile.mkdtemp(prefix='amq_')
+        self.dir = tempfile.mkdtemp(prefix="amq_")
         self._clone_amq()
 
     def _clone_amq(self):
@@ -63,25 +65,30 @@ class AMQ(object):
         clone the amq repo
         """
         try:
-            log.info(f'cloning amq in {self.dir}')
-            git_clone_cmd = f'git clone -b {self.branch} {self.repo} '
-            run(
-                git_clone_cmd,
-                shell=True,
-                cwd=self.dir,
-                check=True
-            )
+            log.info(f"cloning amq in {self.dir}")
+            git_clone_cmd = f"git clone -b {self.branch} {self.repo} "
+            run(git_clone_cmd, shell=True, cwd=self.dir, check=True)
             self.amq_dir = "strimzi-kafka-operator/install/cluster-operator/"
-            self.amq_kafka_pers_yaml = "strimzi-kafka-operator/examples/kafka/kafka-persistent.yaml"
-            self.amq_kafka_connect_yaml = "strimzi-kafka-operator/examples/connect/kafka-connect.yaml"
-            self.amq_kafka_bridge_yaml = "strimzi-kafka-operator/examples/bridge/kafka-bridge.yaml"
-            self.kafka_topic_yaml = "strimzi-kafka-operator/examples/topic/kafka-topic.yaml"
-            self.kafka_user_yaml = "strimzi-kafka-operator/examples/user/kafka-user.yaml"
+            self.amq_kafka_pers_yaml = (
+                "strimzi-kafka-operator/examples/kafka/kafka-persistent.yaml"
+            )
+            self.amq_kafka_connect_yaml = (
+                "strimzi-kafka-operator/examples/connect/kafka-connect.yaml"
+            )
+            self.amq_kafka_bridge_yaml = (
+                "strimzi-kafka-operator/examples/bridge/kafka-bridge.yaml"
+            )
+            self.kafka_topic_yaml = (
+                "strimzi-kafka-operator/examples/topic/kafka-topic.yaml"
+            )
+            self.kafka_user_yaml = (
+                "strimzi-kafka-operator/examples/user/kafka-user.yaml"
+            )
             self.hello_world_producer_yaml = constants.HELLO_WORLD_PRODUCER_YAML
             self.hello_world_consumer_yaml = constants.HELLO_WORLD_CONSUMER_YAML
 
-        except (CommandFailed, CalledProcessError)as cf:
-            log.error('Error during cloning of amq repository')
+        except (CommandFailed, CalledProcessError) as cf:
+            log.error("Error during cloning of amq repository")
             raise cf
 
     def create_namespace(self, namespace):
@@ -108,23 +115,38 @@ class AMQ(object):
         try:
             self.create_namespace(namespace)
         except CommandFailed as ef:
-            if f'project.project.openshift.io "{namespace}" already exists' not in str(ef):
+            if f'project.project.openshift.io "{namespace}" already exists' not in str(
+                ef
+            ):
                 raise ef
 
         # Create strimzi-cluster-operator pod
-        run(f"for i in `(ls strimzi-kafka-operator/install/cluster-operator/)`;"
+        run(
+            f"for i in `(ls strimzi-kafka-operator/install/cluster-operator/)`;"
             f"do sed 's/{namespace}/myproject/g' strimzi-kafka-operator/install/cluster-operator/$i;done",
-            shell=True, check=True, cwd=self.dir)
-        run(f'oc apply -f {self.amq_dir} -n {namespace}', shell=True, check=True, cwd=self.dir)
+            shell=True,
+            check=True,
+            cwd=self.dir,
+        )
+        run(
+            f"oc apply -f {self.amq_dir} -n {namespace}",
+            shell=True,
+            check=True,
+            cwd=self.dir,
+        )
         time.sleep(10)
 
         #  Check strimzi-cluster-operator pod created
         if self.is_amq_pod_running(pod_pattern="cluster-operator", expected_pods=1):
             log.info("strimzi-cluster-operator pod is in running state")
         else:
-            raise ResourceWrongStatusException("strimzi-cluster-operator pod is not getting to running state")
+            raise ResourceWrongStatusException(
+                "strimzi-cluster-operator pod is not getting to running state"
+            )
 
-    def is_amq_pod_running(self, pod_pattern, expected_pods, namespace=constants.AMQ_NAMESPACE):
+    def is_amq_pod_running(
+        self, pod_pattern, expected_pods, namespace=constants.AMQ_NAMESPACE
+    ):
         """
         The function checks if provided pod_pattern finds a pod and if the status is running or not
 
@@ -153,12 +175,11 @@ class AMQ(object):
 
         # checking pod status
         for pod in amq_pod:
-            if (self.pod_obj.wait_for_resource(
-                condition='Running',
+            if self.pod_obj.wait_for_resource(
+                condition="Running",
                 resource_name=pod,
                 timeout=1600,
                 sleep=30,
-            )
             ):
                 log.info(f"{pod} pod is up and running")
             else:
@@ -180,28 +201,40 @@ class AMQ(object):
         return : kafka_persistent
 
         """
+        if storagecluster_independent_check():
+            sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         try:
-            kafka_persistent = templating.load_yaml(os.path.join(self.dir, self.amq_kafka_pers_yaml))
-            kafka_persistent['spec']['kafka']['replicas'] = replicas
-            kafka_persistent['spec']['kafka']['storage']['volumes'][0]['class'] = sc_name
-            kafka_persistent['spec']['kafka']['storage']['volumes'][0]['size'] = f"{size}Gi"
+            kafka_persistent = templating.load_yaml(
+                os.path.join(self.dir, self.amq_kafka_pers_yaml)
+            )
+            kafka_persistent["spec"]["kafka"]["replicas"] = replicas
+            kafka_persistent["spec"]["kafka"]["storage"]["volumes"][0][
+                "class"
+            ] = sc_name
+            kafka_persistent["spec"]["kafka"]["storage"]["volumes"][0][
+                "size"
+            ] = f"{size}Gi"
 
-            kafka_persistent['spec']['zookeeper']['replicas'] = replicas
-            kafka_persistent['spec']['zookeeper']['storage']['class'] = sc_name
-            kafka_persistent['spec']['zookeeper']['storage']['size'] = f"{size}Gi"
+            kafka_persistent["spec"]["zookeeper"]["replicas"] = replicas
+            kafka_persistent["spec"]["zookeeper"]["storage"]["class"] = sc_name
+            kafka_persistent["spec"]["zookeeper"]["storage"]["size"] = f"{size}Gi"
             self.kafka_persistent = OCS(**kafka_persistent)
             self.kafka_persistent.create()
 
-        except(CommandFailed, CalledProcessError) as cf:
-            log.error('Failed during setup of AMQ Kafka-persistent')
+        except (CommandFailed, CalledProcessError) as cf:
+            log.error("Failed during setup of AMQ Kafka-persistent")
             raise cf
         time.sleep(40)
 
-        if self.is_amq_pod_running(pod_pattern="my-cluster", expected_pods=(replicas * 2) + 1):
+        if self.is_amq_pod_running(
+            pod_pattern="my-cluster", expected_pods=(replicas * 2) + 1
+        ):
             return self.kafka_persistent
         else:
-            raise ResourceWrongStatusException("my-cluster-kafka and my-cluster-zookeeper "
-                                               "Pod is not getting to running state")
+            raise ResourceWrongStatusException(
+                "my-cluster-kafka and my-cluster-zookeeper "
+                "Pod is not getting to running state"
+            )
 
     def setup_amq_kafka_connect(self):
         """
@@ -211,17 +244,23 @@ class AMQ(object):
         Returns: kafka_connect object
         """
         try:
-            kafka_connect = templating.load_yaml(os.path.join(self.dir, self.amq_kafka_connect_yaml))
+            kafka_connect = templating.load_yaml(
+                os.path.join(self.dir, self.amq_kafka_connect_yaml)
+            )
             self.kafka_connect = OCS(**kafka_connect)
             self.kafka_connect.create()
-        except(CommandFailed, CalledProcessError) as cf:
-            log.error('Failed during setup of AMQ KafkaConnect')
+        except (CommandFailed, CalledProcessError) as cf:
+            log.error("Failed during setup of AMQ KafkaConnect")
             raise cf
 
-        if self.is_amq_pod_running(pod_pattern="my-connect-cluster-connect", expected_pods=1):
+        if self.is_amq_pod_running(
+            pod_pattern="my-connect-cluster-connect", expected_pods=1
+        ):
             return self.kafka_connect
         else:
-            raise ResourceWrongStatusException("my-connect-cluster-connect pod is not getting to running state")
+            raise ResourceWrongStatusException(
+                "my-connect-cluster-connect pod is not getting to running state"
+            )
 
     def setup_amq_kafka_bridge(self):
         """
@@ -231,19 +270,23 @@ class AMQ(object):
         Return: kafka_bridge object
         """
         try:
-            kafka_bridge = templating.load_yaml(os.path.join(self.dir, self.amq_kafka_bridge_yaml))
+            kafka_bridge = templating.load_yaml(
+                os.path.join(self.dir, self.amq_kafka_bridge_yaml)
+            )
             self.kafka_bridge = OCS(**kafka_bridge)
             self.kafka_bridge.create()
-        except(CommandFailed, CalledProcessError) as cf:
-            log.error('Failed during setup of AMQ KafkaConnect')
+        except (CommandFailed, CalledProcessError) as cf:
+            log.error("Failed during setup of AMQ KafkaConnect")
             raise cf
         # Making sure the kafka_bridge is running
         if self.is_amq_pod_running(pod_pattern="my-bridge-bridge", expected_pods=1):
             return self.kafka_bridge
         else:
-            raise ResourceWrongStatusException("kafka_bridge_pod pod is not getting to running state")
+            raise ResourceWrongStatusException(
+                "kafka_bridge_pod pod is not getting to running state"
+            )
 
-    def create_kafka_topic(self, name='my-topic', partitions=1, replicas=1):
+    def create_kafka_topic(self, name="my-topic", partitions=1, replicas=1):
         """
         Creates kafka topic
 
@@ -255,14 +298,16 @@ class AMQ(object):
         Return: kafka_topic object
         """
         try:
-            kafka_topic = templating.load_yaml(os.path.join(self.dir, self.kafka_topic_yaml))
+            kafka_topic = templating.load_yaml(
+                os.path.join(self.dir, self.kafka_topic_yaml)
+            )
             kafka_topic["metadata"]["name"] = name
             kafka_topic["spec"]["partitions"] = partitions
             kafka_topic["spec"]["replicas"] = replicas
             self.kafka_topic = OCS(**kafka_topic)
             self.kafka_topic.create()
-        except(CommandFailed, CalledProcessError) as cf:
-            log.error('Failed during creating of Kafka topic')
+        except (CommandFailed, CalledProcessError) as cf:
+            log.error("Failed during creating of Kafka topic")
             raise cf
 
         # Making sure kafka topic created
@@ -282,12 +327,14 @@ class AMQ(object):
 
         """
         try:
-            kafka_user = templating.load_yaml(os.path.join(self.dir, self.kafka_user_yaml))
+            kafka_user = templating.load_yaml(
+                os.path.join(self.dir, self.kafka_user_yaml)
+            )
             kafka_user["metadata"]["name"] = name
             self.kafka_user = OCS(**kafka_user)
             self.kafka_user.create()
-        except(CommandFailed, CalledProcessError) as cf:
-            log.error('Failed during creating of Kafka user')
+        except (CommandFailed, CalledProcessError) as cf:
+            log.error("Failed during creating of Kafka user")
             raise cf
 
         # Making sure kafka user created
@@ -296,7 +343,7 @@ class AMQ(object):
         else:
             raise ResourceWrongStatusException("kafka user is not created")
 
-    def create_producer_pod(self, num_of_pods=1, value='10000'):
+    def create_producer_pod(self, num_of_pods=1, value="10000"):
         """
         Creates producer pods
 
@@ -310,20 +357,26 @@ class AMQ(object):
         try:
             producer_pod = templating.load_yaml(constants.HELLO_WORLD_PRODUCER_YAML)
             producer_pod["spec"]["replicas"] = num_of_pods
-            producer_pod["spec"]["template"]["spec"]["containers"][0]["env"][4]["value"] = value
+            producer_pod["spec"]["template"]["spec"]["containers"][0]["env"][4][
+                "value"
+            ] = value
             self.producer_pod = OCS(**producer_pod)
             self.producer_pod.create()
-        except(CommandFailed, CalledProcessError) as cf:
-            log.error('Failed during creation of producer pod')
+        except (CommandFailed, CalledProcessError) as cf:
+            log.error("Failed during creation of producer pod")
             raise cf
 
         # Making sure the producer pod is running
-        if self.is_amq_pod_running(pod_pattern="hello-world-producer", expected_pods=num_of_pods):
+        if self.is_amq_pod_running(
+            pod_pattern="hello-world-producer", expected_pods=num_of_pods
+        ):
             return self.producer_pod
         else:
-            raise ResourceWrongStatusException("producer pod is not getting to running state")
+            raise ResourceWrongStatusException(
+                "producer pod is not getting to running state"
+            )
 
-    def create_consumer_pod(self, num_of_pods=1, value='10000'):
+    def create_consumer_pod(self, num_of_pods=1, value="10000"):
         """
         Creates producer pods
 
@@ -337,20 +390,28 @@ class AMQ(object):
         try:
             consumer_pod = templating.load_yaml(constants.HELLO_WORLD_CONSUMER_YAML)
             consumer_pod["spec"]["replicas"] = num_of_pods
-            consumer_pod["spec"]["template"]["spec"]["containers"][0]["env"][4]["value"] = value
+            consumer_pod["spec"]["template"]["spec"]["containers"][0]["env"][4][
+                "value"
+            ] = value
             self.consumer_pod = OCS(**consumer_pod)
             self.consumer_pod.create()
-        except(CommandFailed, CalledProcessError) as cf:
-            log.error('Failed during creation of consumer pod')
+        except (CommandFailed, CalledProcessError) as cf:
+            log.error("Failed during creation of consumer pod")
             raise cf
 
         # Making sure the producer pod is running
-        if self.is_amq_pod_running(pod_pattern="hello-world-consumer", expected_pods=num_of_pods):
+        if self.is_amq_pod_running(
+            pod_pattern="hello-world-consumer", expected_pods=num_of_pods
+        ):
             return self.consumer_pod
         else:
-            raise ResourceWrongStatusException("consumer pod is not getting to running state")
+            raise ResourceWrongStatusException(
+                "consumer pod is not getting to running state"
+            )
 
-    def validate_msg(self, pod, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
+    def validate_msg(
+        self, pod, namespace=constants.AMQ_NAMESPACE, value="10000", since_time=1800
+    ):
         """
         Validate if messages are sent or received
 
@@ -372,7 +433,9 @@ class AMQ(object):
         else:
             return True
 
-    def validate_messages_are_produced(self, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
+    def validate_messages_are_produced(
+        self, namespace=constants.AMQ_NAMESPACE, value="10000", since_time=1800
+    ):
         """
         Validates if all messages are sent in producer pod
 
@@ -385,9 +448,9 @@ class AMQ(object):
 
         """
         # ToDo: Support multiple topics and users
-        producer_pod_objs = [get_pod_obj(
-            pod
-        )for pod in get_pod_name_by_pattern('hello-world-produce', namespace)
+        producer_pod_objs = [
+            get_pod_obj(pod)
+            for pod in get_pod_name_by_pattern("hello-world-produce", namespace)
         ]
         for pod in producer_pod_objs:
             for msg in TimeoutSampler(
@@ -398,7 +461,9 @@ class AMQ(object):
         assert msg, "Few messages are not sent by producer"
         log.info("Producer sent all messages")
 
-    def validate_messages_are_consumed(self, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
+    def validate_messages_are_consumed(
+        self, namespace=constants.AMQ_NAMESPACE, value="10000", since_time=1800
+    ):
         """
         Validates if all messages are received in consumer pod
 
@@ -411,9 +476,9 @@ class AMQ(object):
 
         """
         # ToDo: Support multiple topics and users
-        consumer_pod_objs = [get_pod_obj(
-            pod
-        )for pod in get_pod_name_by_pattern('hello-world-consumer', namespace)
+        consumer_pod_objs = [
+            get_pod_obj(pod)
+            for pod in get_pod_name_by_pattern("hello-world-consumer", namespace)
         ]
         for pod in consumer_pod_objs:
             for msg in TimeoutSampler(
@@ -424,7 +489,9 @@ class AMQ(object):
         assert msg, "Consumer didn't receive all messages"
         log.info("Consumer received all messages")
 
-    def run_in_bg(self, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
+    def run_in_bg(
+        self, namespace=constants.AMQ_NAMESPACE, value="10000", since_time=1800
+    ):
         """
         Validate messages are produced and consumed in bg
 
@@ -453,10 +520,15 @@ class AMQ(object):
         return threads
 
     def run_amq_benchmark(
-        self, benchmark_pod_name="benchmark", kafka_namespace=constants.AMQ_NAMESPACE,
+        self,
+        benchmark_pod_name="benchmark",
+        kafka_namespace=constants.AMQ_NAMESPACE,
         tiller_namespace=AMQ_BENCHMARK_NAMESPACE,
-        num_of_clients=8, worker=None, timeout=1800,
-        amq_workload_yaml=None, run_in_bg=False
+        num_of_clients=8,
+        worker=None,
+        timeout=1800,
+        amq_workload_yaml=None,
+        run_in_bg=False,
     ):
         """
         Run benchmark pod and get the results
@@ -494,20 +566,25 @@ class AMQ(object):
         try:
             self.create_namespace(tiller_namespace)
         except CommandFailed as ef:
-            if f'project.project.openshift.io "{tiller_namespace}" already exists' not in str(ef):
+            if (
+                f'project.project.openshift.io "{tiller_namespace}" already exists'
+                not in str(ef)
+            ):
                 raise ef
 
         # Create rbac file
         try:
-            sa_tiller = list(templating.load_yaml(constants.AMQ_RBAC_YAML, multi_document=True))
+            sa_tiller = list(
+                templating.load_yaml(constants.AMQ_RBAC_YAML, multi_document=True)
+            )
             sa_tiller[0]["metadata"]["namespace"] = tiller_namespace
             sa_tiller[1]["subjects"][0]["namespace"] = tiller_namespace
             self.sa_tiller = OCS(**sa_tiller[0])
             self.crb_tiller = OCS(**sa_tiller[1])
             self.sa_tiller.create()
             self.crb_tiller.create()
-        except(CommandFailed, CalledProcessError) as cf:
-            log.error('Failed during creation of service account tiller')
+        except (CommandFailed, CalledProcessError) as cf:
+            log.error("Failed during creation of service account tiller")
             raise cf
 
         # Install helm cli (version v2.16.0 as we need tiller component)
@@ -525,7 +602,9 @@ class AMQ(object):
         # Validate tiller pod is running
         log.info("Waiting for 30s for tiller pod to come up")
         time.sleep(30)
-        if self.is_amq_pod_running(pod_pattern="tiller", expected_pods=1, namespace=tiller_namespace):
+        if self.is_amq_pod_running(
+            pod_pattern="tiller", expected_pods=1, namespace=tiller_namespace
+        ):
             log.info("Tiller pod is running")
         else:
             raise ResourceWrongStatusException("Tiller pod is not in running state")
@@ -542,28 +621,32 @@ class AMQ(object):
 
         # Making sure the benchmark pod and clients are running
         if self.is_amq_pod_running(
-            pod_pattern="benchmark", expected_pods=(1 + num_of_clients), namespace=tiller_namespace
+            pod_pattern="benchmark",
+            expected_pods=(1 + num_of_clients),
+            namespace=tiller_namespace,
         ):
             log.info("All benchmark pod is up and running")
         else:
-            raise ResourceWrongStatusException("Benchmark pod is not getting to running state")
+            raise ResourceWrongStatusException(
+                "Benchmark pod is not getting to running state"
+            )
 
         # Update commonConfig with kafka-bootstrap server details
         driver_kafka = templating.load_yaml(constants.AMQ_DRIVER_KAFKA_YAML)
-        driver_kafka['commonConfig'] = (
-            f'bootstrap.servers=my-cluster-kafka-bootstrap.{kafka_namespace}.svc.cluster.local:9092'
-        )
-        json_file = f'{self.dir}/driver_kafka'
+        driver_kafka[
+            "commonConfig"
+        ] = f"bootstrap.servers=my-cluster-kafka-bootstrap.{kafka_namespace}.svc.cluster.local:9092"
+        json_file = f"{self.dir}/driver_kafka"
         templating.dump_data_to_json(driver_kafka, json_file)
-        cmd = f'cp {json_file} {benchmark_pod_name}-driver:/'
+        cmd = f"cp {json_file} {benchmark_pod_name}-driver:/"
         self.pod_obj.exec_oc_cmd(cmd)
 
         # Update the workload yaml
         if not amq_workload_yaml:
             amq_workload_yaml = templating.load_yaml(constants.AMQ_WORKLOAD_YAML)
-        yaml_file = f'{self.dir}/amq_workload.yaml'
+        yaml_file = f"{self.dir}/amq_workload.yaml"
         templating.dump_data_to_temp_yaml(amq_workload_yaml, yaml_file)
-        cmd = f'cp {yaml_file} {benchmark_pod_name}-driver:/'
+        cmd = f"cp {yaml_file} {benchmark_pod_name}-driver:/"
         self.pod_obj.exec_oc_cmd(cmd)
 
         self.benchmark = True
@@ -579,18 +662,23 @@ class AMQ(object):
             executor = ThreadPoolExecutor(1)
             result = executor.submit(
                 self.run_amq_workload,
-                cmd, benchmark_pod_name, tiller_namespace, timeout
+                cmd,
+                benchmark_pod_name,
+                tiller_namespace,
+                timeout,
             )
             return result
 
-        pod_obj = get_pod_obj(name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace)
-        result = pod_obj.exec_cmd_on_pod(command=cmd, out_yaml_format=False, timeout=timeout)
+        pod_obj = get_pod_obj(
+            name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace
+        )
+        result = pod_obj.exec_cmd_on_pod(
+            command=cmd, out_yaml_format=False, timeout=timeout
+        )
 
         return result
 
-    def run_amq_workload(
-        self, command, benchmark_pod_name, tiller_namespace, timeout
-    ):
+    def run_amq_workload(self, command, benchmark_pod_name, tiller_namespace, timeout):
         """
         Runs amq workload in bg
 
@@ -604,10 +692,16 @@ class AMQ(object):
             result (str): Returns benchmark run information
 
         """
-        pod_obj = get_pod_obj(name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace)
-        return pod_obj.exec_cmd_on_pod(command=command, out_yaml_format=False, timeout=timeout)
+        pod_obj = get_pod_obj(
+            name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace
+        )
+        return pod_obj.exec_cmd_on_pod(
+            command=command, out_yaml_format=False, timeout=timeout
+        )
 
-    def validate_amq_benchmark(self, result, amq_workload_yaml, benchmark_pod_name="benchmark"):
+    def validate_amq_benchmark(
+        self, result, amq_workload_yaml, benchmark_pod_name="benchmark"
+    ):
         """
         Validates amq benchmark run
 
@@ -621,54 +715,96 @@ class AMQ(object):
 
         """
         res_dict = {}
-        res_dict['topic'] = amq_workload_yaml['topics']
-        res_dict['partitionsPerTopic'] = amq_workload_yaml['partitionsPerTopic']
-        res_dict['messageSize'] = amq_workload_yaml['messageSize']
-        res_dict['payloadFile'] = amq_workload_yaml['payloadFile']
-        res_dict['subscriptionsPerTopic'] = amq_workload_yaml['subscriptionsPerTopic']
-        res_dict['producersPerTopic'] = amq_workload_yaml['producersPerTopic']
-        res_dict['consumerPerSubscription'] = amq_workload_yaml['consumerPerSubscription']
-        res_dict['producerRate'] = amq_workload_yaml['producerRate']
+        res_dict["topic"] = amq_workload_yaml["topics"]
+        res_dict["partitionsPerTopic"] = amq_workload_yaml["partitionsPerTopic"]
+        res_dict["messageSize"] = amq_workload_yaml["messageSize"]
+        res_dict["payloadFile"] = amq_workload_yaml["payloadFile"]
+        res_dict["subscriptionsPerTopic"] = amq_workload_yaml["subscriptionsPerTopic"]
+        res_dict["producersPerTopic"] = amq_workload_yaml["producersPerTopic"]
+        res_dict["consumerPerSubscription"] = amq_workload_yaml[
+            "consumerPerSubscription"
+        ]
+        res_dict["producerRate"] = amq_workload_yaml["producerRate"]
 
         # Validate amq benchmark is completed
         for part in result.split():
-            if '.json' in part:
+            if ".json" in part:
                 workload_json_file = part
 
         if workload_json_file:
-            cmd = f'rsync {benchmark_pod_name}-driver:{workload_json_file} {self.dir} -n {AMQ_BENCHMARK_NAMESPACE}'
+            cmd = f"rsync {benchmark_pod_name}-driver:{workload_json_file} {self.dir} -n {AMQ_BENCHMARK_NAMESPACE}"
             self.pod_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
             # Parse the json file
-            with open(f'{self.dir}/{workload_json_file}') as json_file:
+            with open(f"{self.dir}/{workload_json_file}") as json_file:
                 data = json.load(json_file)
-            res_dict['AvgpublishRate'] = sum(data.get('publishRate')) / len(data.get('publishRate'))
-            res_dict['AvgConsumerRate'] = sum(data.get('consumeRate')) / len(data.get('consumeRate'))
-            res_dict['AvgMsgBacklog'] = sum(data.get('backlog')) / len(data.get('backlog'))
-            res_dict['publishLatencyAvg'] = sum(data.get('publishLatencyAvg')) / len(data.get('publishLatencyAvg'))
-            res_dict['aggregatedPublishLatencyAvg'] = data.get('aggregatedPublishLatencyAvg')
-            res_dict['aggregatedPublishLatency50pct'] = data.get('aggregatedPublishLatency50pct')
-            res_dict['aggregatedPublishLatency75pct'] = data.get('aggregatedPublishLatency75pct')
-            res_dict['aggregatedPublishLatency95pct'] = data.get('aggregatedPublishLatency95pct')
-            res_dict['aggregatedPublishLatency99pct'] = data.get('aggregatedPublishLatency99pct')
-            res_dict['aggregatedPublishLatency999pct'] = data.get('aggregatedPublishLatency999pct')
-            res_dict['aggregatedPublishLatency9999pct'] = data.get('aggregatedPublishLatency9999pct')
-            res_dict['aggregatedPublishLatencyMax'] = data.get('aggregatedPublishLatencyMax')
-            res_dict['aggregatedEndToEndLatencyAvg'] = data.get('aggregatedEndToEndLatencyAvg')
-            res_dict['aggregatedEndToEndLatency50pct'] = data.get('aggregatedEndToEndLatency50pct')
-            res_dict['aggregatedEndToEndLatency75pct'] = data.get('aggregatedEndToEndLatency75pct')
-            res_dict['aggregatedEndToEndLatency95pct'] = data.get('aggregatedEndToEndLatency95pct')
-            res_dict['aggregatedEndToEndLatency99pct'] = data.get('aggregatedEndToEndLatency99pct')
-            res_dict['aggregatedEndToEndLatency999pct'] = data.get('aggregatedEndToEndLatency999pct')
-            res_dict['aggregatedEndToEndLatency9999pct'] = data.get('aggregatedEndToEndLatency9999pct')
-            res_dict['aggregatedEndToEndLatencyMax'] = data.get('aggregatedEndToEndLatencyMax')
+            res_dict["AvgpublishRate"] = sum(data.get("publishRate")) / len(
+                data.get("publishRate")
+            )
+            res_dict["AvgConsumerRate"] = sum(data.get("consumeRate")) / len(
+                data.get("consumeRate")
+            )
+            res_dict["AvgMsgBacklog"] = sum(data.get("backlog")) / len(
+                data.get("backlog")
+            )
+            res_dict["publishLatencyAvg"] = sum(data.get("publishLatencyAvg")) / len(
+                data.get("publishLatencyAvg")
+            )
+            res_dict["aggregatedPublishLatencyAvg"] = data.get(
+                "aggregatedPublishLatencyAvg"
+            )
+            res_dict["aggregatedPublishLatency50pct"] = data.get(
+                "aggregatedPublishLatency50pct"
+            )
+            res_dict["aggregatedPublishLatency75pct"] = data.get(
+                "aggregatedPublishLatency75pct"
+            )
+            res_dict["aggregatedPublishLatency95pct"] = data.get(
+                "aggregatedPublishLatency95pct"
+            )
+            res_dict["aggregatedPublishLatency99pct"] = data.get(
+                "aggregatedPublishLatency99pct"
+            )
+            res_dict["aggregatedPublishLatency999pct"] = data.get(
+                "aggregatedPublishLatency999pct"
+            )
+            res_dict["aggregatedPublishLatency9999pct"] = data.get(
+                "aggregatedPublishLatency9999pct"
+            )
+            res_dict["aggregatedPublishLatencyMax"] = data.get(
+                "aggregatedPublishLatencyMax"
+            )
+            res_dict["aggregatedEndToEndLatencyAvg"] = data.get(
+                "aggregatedEndToEndLatencyAvg"
+            )
+            res_dict["aggregatedEndToEndLatency50pct"] = data.get(
+                "aggregatedEndToEndLatency50pct"
+            )
+            res_dict["aggregatedEndToEndLatency75pct"] = data.get(
+                "aggregatedEndToEndLatency75pct"
+            )
+            res_dict["aggregatedEndToEndLatency95pct"] = data.get(
+                "aggregatedEndToEndLatency95pct"
+            )
+            res_dict["aggregatedEndToEndLatency99pct"] = data.get(
+                "aggregatedEndToEndLatency99pct"
+            )
+            res_dict["aggregatedEndToEndLatency999pct"] = data.get(
+                "aggregatedEndToEndLatency999pct"
+            )
+            res_dict["aggregatedEndToEndLatency9999pct"] = data.get(
+                "aggregatedEndToEndLatency9999pct"
+            )
+            res_dict["aggregatedEndToEndLatencyMax"] = data.get(
+                "aggregatedEndToEndLatencyMax"
+            )
         else:
             log.error("Benchmark didn't run completely")
             return None
 
-        amq_benchmark_pod_table = PrettyTable(['key', 'value'])
+        amq_benchmark_pod_table = PrettyTable(["key", "value"])
         for key, val in res_dict.items():
             amq_benchmark_pod_table.add_row([key, val])
-        log.info(f'\n{amq_benchmark_pod_table}\n')
+        log.info(f"\n{amq_benchmark_pod_table}\n")
 
         return res_dict
 
@@ -683,9 +819,7 @@ class AMQ(object):
 
         """
         # Collect data and export to Google doc spreadsheet
-        g_sheet = GoogleSpreadSheetAPI(
-            sheet_name=sheet_name, sheet_index=sheet_index
-        )
+        g_sheet = GoogleSpreadSheetAPI(sheet_name=sheet_name, sheet_index=sheet_index)
         log.info("Exporting amq data to google spreadsheet")
 
         headers_to_key = []
@@ -700,16 +834,25 @@ class AMQ(object):
 
         # Capturing versions(OCP, OCS and Ceph) and test run name
         g_sheet.insert_row(
-            [f"ocp_version:{utils.get_cluster_version()}",
-             f"ocs_build_number:{utils.get_ocs_build_number()}",
-             f"ceph_version:{utils.get_ceph_version()}",
-             f"test_run_name:{utils.get_testrun_name()}"], 2
+            [
+                f"ocp_version:{utils.get_cluster_version()}",
+                f"ocs_build_number:{utils.get_ocs_build_number()}",
+                f"ceph_version:{utils.get_ceph_version()}",
+                f"test_run_name:{utils.get_testrun_name()}",
+            ],
+            2,
         )
 
-    def create_messaging_on_amq(self, topic_name='my-topic', user_name="my-user", partitions=1,
-                                replicas=1, num_of_producer_pods=1, num_of_consumer_pods=1,
-                                value='10000'
-                                ):
+    def create_messaging_on_amq(
+        self,
+        topic_name="my-topic",
+        user_name="my-user",
+        partitions=1,
+        replicas=1,
+        num_of_producer_pods=1,
+        num_of_consumer_pods=1,
+        value="10000",
+    ):
         """
         Creates workload using Open Messaging tool on amq cluster
 
@@ -729,7 +872,9 @@ class AMQ(object):
         self.create_consumer_pod(num_of_consumer_pods, value)
         self.messaging = True
 
-    def setup_amq_cluster(self, sc_name, namespace=constants.AMQ_NAMESPACE, size=100, replicas=3):
+    def setup_amq_cluster(
+        self, sc_name, namespace=constants.AMQ_NAMESPACE, size=100, replicas=3
+    ):
         """
         Creates amq cluster with persistent storage.
 
@@ -740,6 +885,8 @@ class AMQ(object):
             replicas (int): Number of kafka and zookeeper pods to be created
 
         """
+        if storagecluster_independent_check():
+            sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         self.setup_amq_cluster_operator(namespace)
         self.setup_amq_kafka_persistent(sc_name, size, replicas)
         self.setup_amq_kafka_connect()
@@ -748,8 +895,9 @@ class AMQ(object):
         return self
 
     def cleanup(
-        self, kafka_namespace=constants.AMQ_NAMESPACE,
-        tiller_namespace=AMQ_BENCHMARK_NAMESPACE
+        self,
+        kafka_namespace=constants.AMQ_NAMESPACE,
+        tiller_namespace=AMQ_BENCHMARK_NAMESPACE,
     ):
         """
         Clean up function,
@@ -771,27 +919,31 @@ class AMQ(object):
                 # Delete the helm app
                 try:
                     purge_cmd = f"linux-amd64/helm delete benchmark --purge --tiller-namespace {tiller_namespace}"
-                    run(
-                        purge_cmd,
-                        shell=True,
-                        cwd=self.dir,
-                        check=True
-                    )
-                except (CommandFailed, CalledProcessError)as cf:
-                    log.error('Failed to delete help app')
+                    run(purge_cmd, shell=True, cwd=self.dir, check=True)
+                except (CommandFailed, CalledProcessError) as cf:
+                    log.error("Failed to delete help app")
                     raise cf
 
                 # Delete the pods and namespace created
                 self.sa_tiller.delete()
                 self.crb_tiller.delete()
-                run_cmd(f'oc delete project {tiller_namespace}')
+                run_cmd(f"oc delete project {tiller_namespace}")
                 self.ns_obj.wait_for_delete(resource_name=tiller_namespace)
+
             self.kafka_persistent.delete()
             self.kafka_connect.delete()
             self.kafka_bridge.delete()
-            run_cmd(f'oc delete -f {self.amq_dir}', shell=True, check=True, cwd=self.dir)
-        run_cmd(f'oc delete project {kafka_namespace}')
+            run_cmd(
+                f"oc delete -f {self.amq_dir}", shell=True, check=True, cwd=self.dir
+            )
 
+            ocs_pvc_obj = get_all_pvc_objs(namespace=kafka_namespace)
+
+        run_cmd(f"oc delete project {kafka_namespace}")
+
+        self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
+        for pvc in ocs_pvc_obj:
+            logging.info(pvc.name)
+            validate_pv_delete(pvc.backed_pv)
         # Reset namespace to default
         switch_to_default_rook_cluster_project()
-        self.ns_obj.wait_for_delete(resource_name=kafka_namespace)

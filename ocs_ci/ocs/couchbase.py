@@ -14,7 +14,10 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.pillowfight import PillowFight
 from ocs_ci.ocs.ocp import switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources.pod import get_pod_obj
-from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.helpers.helpers import (
+    wait_for_resource_state,
+    storagecluster_independent_check,
+)
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +26,7 @@ class CouchBase(PillowFight):
     """
     CouchBase workload operation
     """
+
     WAIT_FOR_TIME = 1800
     admission_parts = [
         constants.COUCHBASE_ADMISSION_SERVICE_ACCOUNT_YAML,
@@ -32,12 +36,12 @@ class CouchBase(PillowFight):
         constants.COUCHBASE_ADMISSION_DEPLOYMENT_YAML,
         constants.COUCHBASE_ADMISSION_SERVICE_YAML,
         constants.COUCHBASE_MUTATING_WEBHOOK_YAML,
-        constants.COUCHBASE_VALIDATING_WEBHOOK_YAML
+        constants.COUCHBASE_VALIDATING_WEBHOOK_YAML,
     ]
-    pod_obj = OCP(kind='pod')
-    ns_obj = OCP(kind='namespace')
-    couchbase_pod = OCP(kind='pod')
-    secretsadder = OCP(kind='pod')
+    pod_obj = OCP(kind="pod")
+    ns_obj = OCP(kind="namespace")
+    couchbase_pod = OCP(kind="pod")
+    secretsadder = OCP(kind="pod")
     admission_pod = []
     cb_worker = OCS()
     cb_examples = OCS()
@@ -64,8 +68,8 @@ class CouchBase(PillowFight):
         if not pod_name:
             return False
         pod_info = ocp_value.exec_oc_cmd(f"get pods {pod_name} -o json")
-        if pod_info['status']['containerStatuses'][0]['ready']:
-            if 'running' in pod_info['status']['containerStatuses'][0]['state']:
+        if pod_info["status"]["containerStatuses"][0]["ready"]:
+            if "running" in pod_info["status"]["containerStatuses"][0]["state"]:
                 return True
         return False
 
@@ -76,21 +80,23 @@ class CouchBase(PillowFight):
         """
         # Create admission controller
         log.info("Create admission controller process for Couchbase")
-        switch_to_project('default')
+        switch_to_project("default")
         self.up_adm_chk = OCP(namespace="default")
         self.up_check = OCP(namespace=constants.COUCHBASE_OPERATOR)
+        self.adm_objects = []
         for adm_yaml in self.admission_parts:
             adm_data = templating.load_yaml(adm_yaml)
             adm_obj = OCS(**adm_data)
             adm_obj.create()
+            self.adm_objects.append(adm_obj)
 
         # Wait for admission pod to be created
         for adm_pod in TimeoutSampler(
             self.WAIT_FOR_TIME,
             3,
             get_pod_name_by_pattern,
-            'couchbase-operator-admission',
-            'default'
+            "couchbase-operator-admission",
+            "default",
         ):
             try:
                 if self.is_up_and_running(adm_pod[0], self.up_adm_chk):
@@ -102,39 +108,37 @@ class CouchBase(PillowFight):
         # Wait for admission pod to be running
         log.info("Waiting for admission pod to be running")
         self.pod_obj.wait_for_resource(
-            condition='Running',
+            condition="Running",
             resource_name=self.admission_pod,
             timeout=self.WAIT_FOR_TIME,
             sleep=10,
         )
         self.ns_obj.new_project(constants.COUCHBASE_OPERATOR)
-        couchbase_data = templating.load_yaml(
-            constants.COUCHBASE_CRD_YAML
-        )
+        couchbase_data = templating.load_yaml(constants.COUCHBASE_CRD_YAML)
         self.couchbase_obj = OCS(**couchbase_data)
         self.couchbase_obj.create()
         op_data = templating.load_yaml(constants.COUCHBASE_OPERATOR_ROLE)
         self.operator_role = OCS(**op_data)
         self.operator_role.create()
         self.serviceaccount = OCP(namespace=constants.COUCHBASE_OPERATOR)
-        self.serviceaccount.exec_oc_cmd(
-            "create serviceaccount couchbase-operator"
-        )
+        self.serviceaccount.exec_oc_cmd("create serviceaccount couchbase-operator")
 
         dockercfgs = self.serviceaccount.exec_oc_cmd("get secrets")
-        startloc = dockercfgs.find('couchbase-operator-dockercfg')
+        startloc = dockercfgs.find("couchbase-operator-dockercfg")
         newdockerstr = dockercfgs[startloc:]
-        endloc = newdockerstr.find(' ')
+        endloc = newdockerstr.find(" ")
         dockerstr = newdockerstr[:endloc]
         self.secretsadder.exec_oc_cmd(
             f"secrets link serviceaccount/couchbase-operator secrets/{dockerstr}"
         )
         self.rolebinding = OCP(namespace=constants.COUCHBASE_OPERATOR)
-        rolebind_cmd = "".join([
-            "create rolebinding couchbase-operator-rolebinding ",
-            "--role couchbase-operator ",
-            "--serviceaccount couchbase-operator-namespace:couchbase-operator"
-        ])
+        rolebind_cmd = "".join(
+            [
+                "create rolebinding couchbase-operator-rolebinding ",
+                "--role couchbase-operator ",
+                "--serviceaccount couchbase-operator-namespace:couchbase-operator",
+            ]
+        )
         self.rolebinding.exec_oc_cmd(rolebind_cmd)
         dep_data = templating.load_yaml(constants.COUCHBASE_OPERATOR_DEPLOY)
         self.cb_deploy = OCS(**dep_data)
@@ -144,8 +148,8 @@ class CouchBase(PillowFight):
             self.WAIT_FOR_TIME,
             3,
             get_pod_name_by_pattern,
-            'couchbase-operator',
-            constants.COUCHBASE_OPERATOR
+            "couchbase-operator",
+            constants.COUCHBASE_OPERATOR,
         ):
             try:
                 if self.is_up_and_running(couchbase_pod[0], self.up_check):
@@ -157,7 +161,7 @@ class CouchBase(PillowFight):
         self.cb_worker = OCS(**cb_work)
         self.cb_worker.create()
 
-    def create_couchbase_worker(self, replicas=1):
+    def create_couchbase_worker(self, replicas=1, sc_name=None):
         """
         Deploy a Couchbase server and pillowfight workload using operator
 
@@ -178,21 +182,29 @@ class CouchBase(PillowFight):
                 per second)
 
         """
-        logging.info('Creating pods..')
+        logging.info("Creating pods..")
         cb_example = templating.load_yaml(constants.COUCHBASE_WORKER_EXAMPLE)
-        cb_example['spec']['servers'][0]['size'] = replicas
+        if storagecluster_independent_check():
+            cb_example["spec"]["volumeClaimTemplates"][0]["spec"][
+                "storageClassName"
+            ] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+        cb_example["spec"]["servers"][0]["size"] = replicas
+        if sc_name:
+            cb_example["spec"]["volumeClaimTemplates"][0]["spec"][
+                "storageClassName"
+            ] = sc_name
         self.cb_examples = OCS(**cb_example)
         self.cb_examples.create()
 
         # Wait for last of three workers to be running.
 
-        logging.info('Waiting for the pods to Running')
+        logging.info("Waiting for the pods to Running")
         for cb_wrk_pods in TimeoutSampler(
             self.WAIT_FOR_TIME,
             3,
             get_pod_name_by_pattern,
-            'cb-example',
-            constants.COUCHBASE_OPERATOR
+            "cb-example",
+            constants.COUCHBASE_OPERATOR,
         ):
             try:
                 if len(cb_wrk_pods) == replicas:
@@ -200,13 +212,13 @@ class CouchBase(PillowFight):
                     for cb_pod in cb_wrk_pods:
                         if self.is_up_and_running(cb_pod, self.up_check):
                             counter += 1
-                            logging.info(f'Couchbase worker {cb_pod} is up')
+                            logging.info(f"Couchbase worker {cb_pod} is up")
                     if counter == replicas:
                         break
             except IndexError:
                 logging.info(
-                    f'Expected number of couchbase pods are {replicas} '
-                    f'but only found {len(cb_wrk_pods)}'
+                    f"Expected number of couchbase pods are {replicas} "
+                    f"but only found {len(cb_wrk_pods)}"
                 )
 
     def run_workload(self, replicas, num_items=None, num_threads=None, run_in_bg=False):
@@ -220,14 +232,20 @@ class CouchBase(PillowFight):
 
         """
         self.result = None
-        logging.info('Running IOs...')
+        logging.info("Running IOs...")
         if run_in_bg:
             executor = ThreadPoolExecutor(1)
-            self.result = executor.submit(PillowFight.run_pillowfights, self, replicas=replicas,
-                                          num_items=num_items, num_threads=num_threads
-                                          )
+            self.result = executor.submit(
+                PillowFight.run_pillowfights,
+                self,
+                replicas=replicas,
+                num_items=num_items,
+                num_threads=num_threads,
+            )
             return self.result
-        PillowFight.run_pillowfights(self, replicas=replicas, num_items=num_items, num_threads=num_threads)
+        PillowFight.run_pillowfights(
+            self, replicas=replicas, num_items=num_items, num_threads=num_threads
+        )
 
     def analyze_run(self, skip_analyze=False):
         """
@@ -238,7 +256,7 @@ class CouchBase(PillowFight):
 
         """
         if not skip_analyze:
-            logging.info('Analyzing  workload run logs..')
+            logging.info("Analyzing  workload run logs..")
             PillowFight.analyze_all(self)
 
     def respin_couchbase_app_pod(self):
@@ -249,7 +267,9 @@ class CouchBase(PillowFight):
             pod status
 
         """
-        app_pod_list = get_pod_name_by_pattern('cb-example', constants.COUCHBASE_OPERATOR)
+        app_pod_list = get_pod_name_by_pattern(
+            "cb-example", constants.COUCHBASE_OPERATOR
+        )
         app_pod = app_pod_list[random.randint(0, len(app_pod_list) - 1)]
         logging.info(f"respin pod {app_pod}")
         app_pod_obj = get_pod_obj(app_pod, namespace=constants.COUCHBASE_OPERATOR)
@@ -266,10 +286,14 @@ class CouchBase(PillowFight):
             list: List of nodes
 
         """
-        app_pods_list = get_pod_name_by_pattern('cb-example', constants.COUCHBASE_OPERATOR)
+        app_pods_list = get_pod_name_by_pattern(
+            "cb-example", constants.COUCHBASE_OPERATOR
+        )
         app_pod_objs = list()
         for pod in app_pods_list:
-            app_pod_objs.append(get_pod_obj(pod, namespace=constants.COUCHBASE_OPERATOR))
+            app_pod_objs.append(
+                get_pod_obj(pod, namespace=constants.COUCHBASE_OPERATOR)
+            )
 
         log.info("Create a list of nodes that contain a couchbase app pod")
         nodes_set = set()
@@ -278,7 +302,7 @@ class CouchBase(PillowFight):
                 f"pod {pod.name} located on "
                 f"node {pod.get().get('spec').get('nodeName')}"
             )
-            nodes_set.add(pod.get().get('spec').get('nodeName'))
+            nodes_set.add(pod.get().get("spec").get("nodeName"))
         return list(nodes_set)
 
     def teardown(self):
@@ -290,29 +314,26 @@ class CouchBase(PillowFight):
         self.cb_worker.delete()
         self.cb_deploy.delete()
         self.pod_obj.exec_oc_cmd(
-            command="delete rolebinding couchbase-operator-rolebinding"
+            command="delete rolebinding couchbase-operator-rolebinding -n couchbase-operator-namespace"
         )
         self.pod_obj.exec_oc_cmd(
-            command="delete serviceaccount couchbase-operator"
+            command="delete serviceaccount couchbase-operator -n couchbase-operator-namespace"
         )
         self.operator_role.delete()
         self.couchbase_obj.delete()
-        switch_to_project('default')
+        switch_to_project("default")
         self.ns_obj.delete_project(constants.COUCHBASE_OPERATOR)
-        self.ns_obj.wait_for_delete(resource_name=constants.COUCHBASE_OPERATOR)
-        for adm_yaml in self.admission_parts:
-            adm_data = templating.load_yaml(adm_yaml)
-            adm_obj = OCS(**adm_data)
+        self.ns_obj.wait_for_delete(
+            resource_name=constants.COUCHBASE_OPERATOR, timeout=90
+        )
+        for adm_obj in self.adm_objects:
             adm_obj.delete()
+
         # Before the code below was added, the teardown task would sometimes
         # fail with the leftover objects because it would still see one of the
         # couchbase pods.
         for admin_pod in TimeoutSampler(
-            self.WAIT_FOR_TIME,
-            3,
-            get_pod_name_by_pattern,
-            'couchbase',
-            'default'
+            self.WAIT_FOR_TIME, 3, get_pod_name_by_pattern, "couchbase", "default"
         ):
             if admin_pod:
                 continue

@@ -19,7 +19,7 @@ RUN:
   cli_params: {}  # this will be filled with CLI parameters data
   # If the client version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version
-  client_version: '4.6.0-0.nightly'
+  client_version: '4.7.0-0.nightly'
   bin_dir: './bin'
   google_api_secret: '~/.ocs-ci/google_api_secret.json'
   # Following chrome params are for openshift console UI testing
@@ -42,17 +42,17 @@ DEPLOYMENT:
   # if the installer version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version. You can also use the
   # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
-  installer_version: "4.6.0-0.nightly"
+  installer_version: "4.7.0-0.nightly"
   force_download_installer: True
   force_download_client: True
-  default_latest_tag: 'latest-4.6'
+  default_latest_tag: 'latest-4.7'
   # define if ceph is setup as external mode, default is false
   external_mode: False
   # You can overwrite csv channel version by following parameter
-  ocs_csv_channel: "stable-4.6"
+  ocs_csv_channel: "stable-4.7"
   # you can overwrite the image for ocs operator catalog source by following parameter:
   # ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:4.2-32.9b6c93e.master"
-  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:latest-4.6"
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-4.7"
   ocs_operator_nodes_to_label: 3
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator
@@ -60,7 +60,9 @@ DEPLOYMENT:
   ssh_key: "~/.ssh/openshift-dev.pub"
   ssh_key_private: "~/.ssh/openshift-dev.pem"
   force_deploy_multiple_clusters: False
-  allow_lower_instance_requirements: true
+  # If you deploy for development purpose on cluster with lower then minimum
+  # requirements, the value of option below needs to be set to true.
+  allow_lower_instance_requirements: false
   # For manual subscription plan (for manual approve of upgrade set bellow)
   # subscription_plan_approval: "Manual"
   # For UI deployment you have to set following parameter ui_deployment to True
@@ -76,6 +78,10 @@ DEPLOYMENT:
   infra_nodes: False
   # How long should ocs-ci wait for `openshift-install create cluster` run?
   openshift_install_timeout: 3600
+  # redhat-operators CatalogSource image (used for disconnected installation)
+  cs_redhat_operators_image: "registry.redhat.io/redhat/redhat-operator-index"
+  # Deployment with KMS (vault etc)
+  kms_deployment: False
 
 # Section for reporting configuration
 REPORTING:
@@ -88,7 +94,7 @@ REPORTING:
   us_ds: 'DS'
   ocp_must_gather_image: "quay.io/openshift/origin-must-gather"
   ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
-  default_ocs_must_gather_latest_tag: 'latest-4.6'
+  default_ocs_must_gather_latest_tag: 'latest-4.7'
   gather_on_deploy_failure: true
   collect_logs_on_success_run: False
 
@@ -106,17 +112,17 @@ ENV_DATA:
   region: 'us-east-2'
   base_domain: 'qe.rh-ocs.com'
   master_instance_type: 'm4.xlarge'
-  worker_instance_type: 'm4.xlarge'
+  worker_instance_type: 'm5.4xlarge'
   master_replicas: 3
   worker_replicas: 3
   skip_ocp_deployment: false
   skip_ocs_deployment: false
-  ocs_version: '4.6'
+  ocs_version: '4.7'
   # uncomment to use custom directory for storing measurement data related to
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
   # Default RHCOS image to be used for VmWare deployment
-  vm_template: 'rhcos-46.82.202008260918-0-vmware.x86_64'
+  vm_template: 'rhcos-47.82.202010211043-0-vmware.x86_64'
   # minimal write speed of fio as used in workload_fio_storageutilization
   # fixtures, which is used to compute timeout of the write job (so that
   # when actual write speed of the operation is smaller than this value, the
@@ -137,14 +143,25 @@ ENV_DATA:
   # To enable rotational disk devices for LSO deployment we can set
   # local_storage_allow_rotational_disks to true
   local_storage_allow_rotational_disks: false
+  # Add node parameters
+  # The disk UUID on the VMs must be enabled, `disk.EnableUUID` value must be set to `True`.
+  # This step is necessary so that the VMDK always presents a consistent UUID
+  # to the VM, thus allowing the disk to be mounted properly.
+  disk_enable_uuid: 'TRUE'
+  # Encoding type for the ignition config
+  ignition_data_encoding: base64
+  # opm tool github owner and repository (used in api url for downloading opm tool)
+  opm_owner_repo: "operator-framework/operator-registry"
+  # opm tool release tag (particular version or "latest") to be downloaded
+  opm_release_tag: "latest"
 
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
-  ocp_channel: "candidate-4.6"
+  ocp_channel: "candidate-4.7"
   ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
   ocp_arch: "x86_64"
-  upgrade_logging_channel: "4.6"
+  upgrade_logging_channel: "4.7"
 
 # This section stores secret and uploaded from home dir or s3
 # for entry into this section, please email ecosystem team
@@ -160,3 +177,12 @@ FLEXY:
 EXTERNAL_MODE:
   admin_keyring:
     key: PLACE_HOLDER
+
+
+# This section is related to ui testing with selenium
+UI_SELENIUM:
+  browser_type: "chrome"
+  chrome_type: "google-chrome"
+  headless: True
+  screenshot: True
+  ignore_ssl: True

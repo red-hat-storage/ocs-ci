@@ -12,10 +12,11 @@ import yaml
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import clone_repo, get_ocp_version, run_cmd
 
@@ -56,11 +57,13 @@ def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
         list : List containing added device paths
 
     """
-    ocp_obj = OCP(kind='localvolume', namespace=config.ENV_DATA['local_storage_namespace'])
-    workers = get_typed_nodes(node_type="worker")
+    ocp_obj = OCP(
+        kind="localvolume", namespace=config.ENV_DATA["local_storage_namespace"]
+    )
+    workers = get_nodes(node_type="worker")
     worker_names = [worker.name for worker in workers]
-    config.ENV_DATA['worker_replicas'] = len(worker_names)
-    output = ocp_obj.get(resource_name='local-block')
+    config.ENV_DATA["worker_replicas"] = len(worker_names)
+    output = ocp_obj.get(resource_name="local-block")
     # Fetch device paths present in the current LVCR
     cur_device_list = output["spec"]["storageClassDevices"][0]["devicePaths"]
     # Clone repo and run playbook to fetch all device paths from each node
@@ -71,7 +74,7 @@ def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
     # Filter unused/unallocated device paths
     with open("local-storage-block.yaml", "r") as cloned_file:
         with open("local-block.yaml", "w") as our_file:
-            device_from_worker = [1] * config.ENV_DATA['worker_replicas']
+            device_from_worker = [1] * config.ENV_DATA["worker_replicas"]
             cur_line = cloned_file.readline()
             while "devicePaths:" not in cur_line:
                 our_file.write(cur_line)
@@ -92,9 +95,9 @@ def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
     new_dev_paths = lvcr["spec"]["storageClassDevices"][0]["devicePaths"]
     logger.info(f"Newly added devices are: {new_dev_paths}")
     if new_dev_paths:
-        assert len(new_dev_paths) == (len(worker_names) * device_sets_required), (
-            f"Current devices available = {len(new_dev_paths)}"
-        )
+        assert len(new_dev_paths) == (
+            len(worker_names) * device_sets_required
+        ), f"Current devices available = {len(new_dev_paths)}"
         os.chdir(constants.TOP_DIR)
         shutil.rmtree(path)
         # Return list of old device paths and newly added device paths
@@ -113,7 +116,7 @@ def check_local_volume():
 
     if csv.get_csvs_start_with_prefix(
         csv_prefix=defaults.LOCAL_STORAGE_OPERATOR_NAME,
-        namespace=config.ENV_DATA['local_storage_namespace']
+        namespace=config.ENV_DATA["local_storage_namespace"],
     ):
         ocp_obj = OCP()
         command = f"get localvolume local-block -n {config.ENV_DATA['local_storage_namespace']} "
@@ -141,15 +144,15 @@ def check_pvs_created(num_pvs_required):
     out = run_cmd("oc get pv -o json")
     pv_json = json.loads(out)
     current_count = 0
-    for pv in pv_json['items']:
-        pv_state = pv['status']['phase']
-        pv_name = pv['metadata']['name']
+    for pv in pv_json["items"]:
+        pv_state = pv["status"]["phase"]
+        pv_name = pv["metadata"]["name"]
         logger.info("%s is %s", pv_name, pv_state)
-        if pv_state == 'Available':
+        if pv_state == "Available":
             current_count = current_count + 1
-    assert current_count >= num_pvs_required, (
-        f"Current Available PV count is {current_count}"
-    )
+    assert (
+        current_count >= num_pvs_required
+    ), f"Current Available PV count is {current_count}"
 
 
 def get_local_volume_cr():
@@ -160,7 +163,10 @@ def get_local_volume_cr():
         local volume (obj): Local Volume object handler
 
     """
-    ocp_obj = OCP(kind=constants.LOCAL_VOLUME, namespace=config.ENV_DATA['local_storage_namespace'])
+    ocp_obj = OCP(
+        kind=constants.LOCAL_VOLUME,
+        namespace=config.ENV_DATA["local_storage_namespace"],
+    )
     return ocp_obj
 
 
@@ -174,12 +180,17 @@ def get_lso_channel():
 
     """
     ocp_version = get_ocp_version()
+    # If OCP version is not GA, we will be using the Optional Operators CatalogSource
+    # This means there are two PackageManifests with the name local-storage-operator
+    # so we need to also use a selector to ensure we retrieve the correct one
+    ocp_ga_version = get_ocp_ga_version(ocp_version)
+    selector = constants.OPTIONAL_OPERATORS_SELECTOR if not ocp_ga_version else None
     # Retrieve available channels for LSO
     package_manifest = PackageManifest(
-        resource_name=constants.LOCAL_STORAGE_CSV_PREFIX
+        resource_name=constants.LOCAL_STORAGE_CSV_PREFIX, selector=selector
     )
     channels = package_manifest.get_channels()
-    channel_names = [channel['name'] for channel in channels]
+    channel_names = [channel["name"] for channel in channels]
 
     # Ensure channel_names is sorted
     versions = [LooseVersion(name) for name in channel_names]

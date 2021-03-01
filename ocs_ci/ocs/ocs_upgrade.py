@@ -11,21 +11,27 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
 from ocs_ci.ocs.ocp import get_images, OCP
-from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.pod import verify_pods_upgraded
 from ocs_ci.ocs.resources.packagemanifest import (
-    get_selector_for_ocs_operator, PackageManifest,
+    get_selector_for_ocs_operator,
+    PackageManifest,
 )
 from ocs_ci.ocs.resources.storage_cluster import (
-    get_osd_count, ocs_install_verification,
+    get_osd_count,
+    ocs_install_verification,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox
+from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import (
-    get_latest_ds_olm_tag, get_next_version_available_for_upgrade,
-    get_ocs_version_from_image, load_config_file, TimeoutSampler,
+    get_latest_ds_olm_tag,
+    get_next_version_available_for_upgrade,
+    get_ocs_version_from_image,
+    load_config_file,
+    TimeoutSampler,
 )
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.ocs.exceptions import TimeoutException
@@ -57,15 +63,9 @@ def get_upgrade_image_info(old_csv_images, new_csv_images):
         f"{sorted(old_images_for_upgrade)}"
     )
     new_images_to_upgrade = new_csv_images - old_csv_images
-    log.info(
-        f"New images for upgrade: "
-        f"{sorted(new_images_to_upgrade)}"
-    )
+    log.info(f"New images for upgrade: " f"{sorted(new_images_to_upgrade)}")
     unchanged_images = old_csv_images.intersection(new_csv_images)
-    log.info(
-        f"Unchanged images after upgrade: "
-        f"{sorted(unchanged_images)}"
-    )
+    log.info(f"Unchanged images after upgrade: " f"{sorted(unchanged_images)}")
     return (
         old_images_for_upgrade,
         new_images_to_upgrade,
@@ -83,54 +83,55 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
         version_before_upgrade (float): version of OCS before upgrade
 
     """
-    number_of_worker_nodes = len(get_typed_nodes())
+    number_of_worker_nodes = len(get_nodes())
     osd_count = get_osd_count()
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
     # in 4.3 app selector nooba have those pods: noobaa-core-ID, noobaa-db-ID,
     # noobaa-operator-ID but in 4.2 only 2: noobaa-core-ID, noobaa-operator-ID
-    nooba_pods = 2 if upgrade_version < parse_version('4.3') else 3
+    nooba_pods = 2 if upgrade_version < parse_version("4.3") else 3
     verify_pods_upgraded(
         old_images, selector=constants.NOOBAA_APP_LABEL, count=nooba_pods
     )
     verify_pods_upgraded(
-        old_images, selector=constants.CSI_CEPHFSPLUGIN_LABEL,
+        old_images,
+        selector=constants.CSI_CEPHFSPLUGIN_LABEL,
         count=number_of_worker_nodes,
     )
     verify_pods_upgraded(
-        old_images, selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-        count=2
+        old_images, selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL, count=2
     )
     verify_pods_upgraded(
-        old_images, selector=constants.CSI_RBDPLUGIN_LABEL,
+        old_images,
+        selector=constants.CSI_RBDPLUGIN_LABEL,
         count=number_of_worker_nodes,
     )
     verify_pods_upgraded(
-        old_images, selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
-        count=2
+        old_images, selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL, count=2
     )
-    verify_pods_upgraded(old_images, selector=constants.MON_APP_LABEL, count=3)
+    verify_pods_upgraded(
+        old_images,
+        selector=constants.MON_APP_LABEL,
+        count=3,
+    )
     verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
-    osd_timeout = 600 if upgrade_version >= parse_version('4.5') else 750
+    osd_timeout = 600 if upgrade_version >= parse_version("4.5") else 750
     verify_pods_upgraded(
-        old_images, selector=constants.OSD_APP_LABEL, count=osd_count,
+        old_images,
+        selector=constants.OSD_APP_LABEL,
+        count=osd_count,
         timeout=osd_timeout * osd_count,
     )
     verify_pods_upgraded(old_images, selector=constants.MDS_APP_LABEL, count=2)
-    if config.ENV_DATA.get('platform') in constants.ON_PREM_PLATFORMS:
-        # RGW count is 1 if the cluster was upgraded from <= 4.4
-        # Related bug - https://bugzilla.redhat.com/show_bug.cgi?id=1857802
-        rgw_count = 2 if float(version_before_upgrade) >= 4.5 else 1
-        verify_pods_upgraded(old_images, selector=constants.RGW_APP_LABEL, count=rgw_count)
-
-    # With 4.4 OCS cluster deployed over Azure, RGW is the default backingstore
-    if config.ENV_DATA.get('platform') == constants.AZURE_PLATFORM:
-        if float(config.ENV_DATA['ocs_version']) == 4.4 or (
-            float(config.ENV_DATA['ocs_version']) == 4.5 and float(
-                version_before_upgrade) < 4.5
-        ):
-            rgw_count = 1
-            verify_pods_upgraded(old_images, selector=constants.RGW_APP_LABEL, count=rgw_count)
+    if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
+        rgw_count = get_rgw_count(
+            upgrade_version.base_version, True, version_before_upgrade
+        )
+        verify_pods_upgraded(
+            old_images,
+            selector=constants.RGW_APP_LABEL,
+            count=rgw_count,
+        )
 
 
 class OCSUpgrade(object):
@@ -138,13 +139,20 @@ class OCSUpgrade(object):
     OCS Upgrade helper class
 
     """
-    def __init__(self, namespace, version_before_upgrade, ocs_registry_image, upgrade_in_current_source):
+
+    def __init__(
+        self,
+        namespace,
+        version_before_upgrade,
+        ocs_registry_image,
+        upgrade_in_current_source,
+    ):
         self.namespace = namespace
         self._version_before_upgrade = version_before_upgrade
         self._ocs_registry_image = ocs_registry_image
         self.upgrade_in_current_source = upgrade_in_current_source
         self.subscription_plan_approval = config.DEPLOYMENT.get(
-            'subscription_plan_approval'
+            "subscription_plan_approval"
         )
 
     @property
@@ -167,9 +175,7 @@ class OCSUpgrade(object):
             "upgrade_ocs_version", self.version_before_upgrade
         )
         if self.ocs_registry_image:
-            upgrade_version = get_ocs_version_from_image(
-                self.ocs_registry_image
-            )
+            upgrade_version = get_ocs_version_from_image(self.ocs_registry_image)
 
         return upgrade_version
 
@@ -199,12 +205,14 @@ class OCSUpgrade(object):
         version_change = self.get_parsed_versions()[1] > self.get_parsed_versions()[0]
         if version_change:
             version_config_file = os.path.join(
-                constants.CONF_DIR, 'ocs_version', f'ocs-{upgrade_version}.yaml'
+                constants.OCS_VERSION_CONF_DIR, f"ocs-{upgrade_version}.yaml"
             )
             load_config_file(version_config_file)
         else:
-            log.info(f"Upgrade version {upgrade_version} is not higher than old version:"
-                     f" {self.version_before_upgrade}, config file will not be loaded")
+            log.info(
+                f"Upgrade version {upgrade_version} is not higher than old version:"
+                f" {self.version_before_upgrade}, config file will not be loaded"
+            )
 
     def get_csv_name_pre_upgrade(self):
         """
@@ -216,10 +224,11 @@ class OCSUpgrade(object):
         """
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
+            resource_name=OCS_OPERATOR_NAME,
+            selector=operator_selector,
             subscription_plan_approval=self.subscription_plan_approval,
         )
-        channel = config.DEPLOYMENT.get('ocs_csv_channel')
+        channel = config.DEPLOYMENT.get("ocs_csv_channel")
 
         return package_manifest.get_current_csv(channel)
 
@@ -239,8 +248,7 @@ class OCSUpgrade(object):
         csv_name_pre_upgrade = csv_name_pre_upgrade
         log.info(f"CSV name before upgrade is: {csv_name_pre_upgrade}")
         csv_pre_upgrade = CSV(
-            resource_name=csv_name_pre_upgrade,
-            namespace=self.namespace
+            resource_name=csv_name_pre_upgrade, namespace=self.namespace
         )
         return get_images(csv_pre_upgrade.get())
 
@@ -254,10 +262,11 @@ class OCSUpgrade(object):
         """
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
+            resource_name=OCS_OPERATOR_NAME,
+            selector=operator_selector,
         )
         package_manifest.wait_for_resource()
-        channel = config.DEPLOYMENT.get('ocs_csv_channel')
+        channel = config.DEPLOYMENT.get("ocs_csv_channel")
         if not channel:
             channel = package_manifest.get_default_channel()
 
@@ -273,27 +282,25 @@ class OCSUpgrade(object):
         """
         subscription = OCP(
             resource_name=constants.OCS_SUBSCRIPTION,
-            kind='subscription',
-            namespace=config.ENV_DATA['cluster_namespace'],
+            kind="subscription",
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
-        current_ocs_source = subscription.data['spec']['source']
-        log.info(
-            f"Current OCS subscription source: {current_ocs_source}"
-        )
-        ocs_source = current_ocs_source if self.upgrade_in_current_source else (
-            constants.OPERATOR_CATALOG_SOURCE_NAME
+        current_ocs_source = subscription.data["spec"]["source"]
+        log.info(f"Current OCS subscription source: {current_ocs_source}")
+        ocs_source = (
+            current_ocs_source
+            if self.upgrade_in_current_source
+            else constants.OPERATOR_CATALOG_SOURCE_NAME
         )
         patch_subscription_cmd = (
-            f'patch subscription {constants.OCS_SUBSCRIPTION} '
+            f"patch subscription {constants.OCS_SUBSCRIPTION} "
             f'-n {self.namespace} --type merge -p \'{{"spec":{{"channel": '
             f'"{channel}", "source": "{ocs_source}"}}}}\''
         )
         subscription.exec_oc_cmd(patch_subscription_cmd, out_yaml_format=False)
 
-        subscription_plan_approval = config.DEPLOYMENT.get(
-            'subscription_plan_approval'
-        )
-        if subscription_plan_approval == 'Manual':
+        subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
+        if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
 
     def check_if_upgrade_completed(self, channel, csv_name_pre_upgrade):
@@ -310,7 +317,8 @@ class OCSUpgrade(object):
         """
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
+            resource_name=OCS_OPERATOR_NAME,
+            selector=operator_selector,
             subscription_plan_approval=self.subscription_plan_approval,
         )
         csv_name_post_upgrade = package_manifest.get_current_csv(channel)
@@ -337,20 +345,18 @@ class OCSUpgrade(object):
         """
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
+            resource_name=OCS_OPERATOR_NAME,
+            selector=operator_selector,
             subscription_plan_approval=self.subscription_plan_approval,
         )
         csv_name_post_upgrade = package_manifest.get_current_csv(channel)
         csv_post_upgrade = CSV(
-            resource_name=csv_name_post_upgrade,
-            namespace=self.namespace
+            resource_name=csv_name_post_upgrade, namespace=self.namespace
         )
-        log.info(
-            f"Waiting for CSV {csv_name_post_upgrade} to be in succeeded state"
-        )
+        log.info(f"Waiting for CSV {csv_name_post_upgrade} to be in succeeded state")
 
         # Workaround for patching missing ceph-rook-tools pod after upgrade
-        if self.version_before_upgrade == '4.2' and upgrade_version == '4.3':
+        if self.version_before_upgrade == "4.2" and upgrade_version == "4.3":
             log.info("Force creating Ceph toolbox after upgrade 4.2 -> 4.3")
             setup_ceph_toolbox(force_setup=True)
         # End of workaround
@@ -381,21 +387,19 @@ class OCSUpgrade(object):
             image_url = ocs_catalog.get_image_url()
             image_tag = ocs_catalog.get_image_name()
             log.info(f"Current image is: {image_url}, tag: {image_tag}")
-            version_change = self.get_parsed_versions()[1] > self.get_parsed_versions()[0]
+            version_change = (
+                self.get_parsed_versions()[1] > self.get_parsed_versions()[0]
+            )
             if self.ocs_registry_image:
-                image_url, new_image_tag = self.ocs_registry_image.split(':')
-            elif (
-                config.UPGRADE.get('upgrade_to_latest', True) or version_change
-            ):
+                image_url, new_image_tag = self.ocs_registry_image.split(":")
+            elif config.UPGRADE.get("upgrade_to_latest", True) or version_change:
                 new_image_tag = get_latest_ds_olm_tag()
             else:
-                new_image_tag = get_next_version_available_for_upgrade(
-                    image_tag
-                )
+                new_image_tag = get_next_version_available_for_upgrade(image_tag)
             cs_data = deepcopy(ocs_catalog.data)
-            image_for_upgrade = ':'.join([image_url, new_image_tag])
+            image_for_upgrade = ":".join([image_url, new_image_tag])
             log.info(f"Image: {image_for_upgrade} will be used for upgrade.")
-            cs_data['spec']['image'] = image_for_upgrade
+            cs_data["spec"]["image"] = image_for_upgrade
 
             with NamedTemporaryFile() as cs_yaml:
                 dump_data_to_temp_yaml(cs_data, cs_yaml.name)
@@ -415,13 +419,17 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
 
     ceph_cluster = CephCluster()
     upgrade_ocs = OCSUpgrade(
-        namespace=config.ENV_DATA['cluster_namespace'],
+        namespace=config.ENV_DATA["cluster_namespace"],
         version_before_upgrade=config.ENV_DATA.get("ocs_version"),
-        ocs_registry_image=config.UPGRADE.get('upgrade_ocs_registry_image'),
-        upgrade_in_current_source=config.UPGRADE.get('upgrade_in_current_source', False)
+        ocs_registry_image=config.UPGRADE.get("upgrade_ocs_registry_image"),
+        upgrade_in_current_source=config.UPGRADE.get(
+            "upgrade_in_current_source", False
+        ),
     )
     upgrade_version = upgrade_ocs.get_upgrade_version()
-    assert upgrade_ocs.get_parsed_versions()[1] >= upgrade_ocs.get_parsed_versions()[0], (
+    assert (
+        upgrade_ocs.get_parsed_versions()[1] >= upgrade_ocs.get_parsed_versions()[0]
+    ), (
         f"Version you would like to upgrade to: {upgrade_version} "
         f"is not higher or equal to the version you currently running: "
         f"{upgrade_ocs.version_before_upgrade}"
@@ -456,9 +464,15 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         old_image = upgrade_ocs.get_images_post_upgrade(
             channel, pre_upgrade_images, upgrade_version
         )
-    verify_image_versions(old_image, upgrade_ocs.get_parsed_versions()[1], upgrade_ocs.version_before_upgrade)
+    verify_image_versions(
+        old_image,
+        upgrade_ocs.get_parsed_versions()[1],
+        upgrade_ocs.version_before_upgrade,
+    )
     ocs_install_verification(
-        timeout=600, skip_osd_distribution_check=True,
+        timeout=600,
+        skip_osd_distribution_check=True,
         ocs_registry_image=upgrade_ocs.ocs_registry_image,
-        post_upgrade_verification=True, version_before_upgrade=upgrade_ocs.version_before_upgrade
+        post_upgrade_verification=True,
+        version_before_upgrade=upgrade_ocs.version_before_upgrade,
     )

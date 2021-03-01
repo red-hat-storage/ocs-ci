@@ -67,7 +67,7 @@ def get_ceph_storage_stats(ceph_pool_name):
     #  - pool is missing (likely a product bug)
     # either way, the fixture can't continue ...
     assert ceph_pool is not None, f"Pool: {ceph_pool_name} doesn't exist!"
-    return ceph_total_stored, ceph_pool['stats']['max_avail']
+    return ceph_total_stored, ceph_pool["stats"]["max_avail"]
 
 
 def get_storageutilization_size(target_percentage, ceph_pool_name):
@@ -90,11 +90,11 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
     ceph_total_stored, max_avail = get_ceph_storage_stats(ceph_pool_name)
     # ... to compute PVC size (values in bytes)
     total = max_avail + ceph_total_stored  # Bytes
-    max_avail_gi = max_avail / 2**30  # GiB
+    max_avail_gi = max_avail / 2 ** 30  # GiB
     logger.info(f"MAX AVAIL of {ceph_pool_name} is {max_avail_gi} Gi")
     target = total * target_percentage
     to_utilize = target - ceph_total_stored
-    pvc_size = round(to_utilize / 2**30)  # GiB
+    pvc_size = round(to_utilize / 2 ** 30)  # GiB
     logger.info(
         f"to reach {target/2**30} Gi of total cluster utilization, "
         f"which is {target_percentage*100}% of the total capacity, "
@@ -104,7 +104,7 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
 
 
 def fio_to_dict(fio_output):
-    """"
+    """ "
     Parse fio output and provide parsed dict it as a result.
     """
     fio_output_lines = fio_output.splitlines()
@@ -137,10 +137,9 @@ def get_timeout(fio_min_mbps, pvc_size):
 
     """
     # based on min. fio write speed of the enviroment ...
-    logger.info(
-        "Assuming %.2f MB/s is a minimal write speed of fio.", fio_min_mbps)
+    logger.info("Assuming %.2f MB/s is a minimal write speed of fio.", fio_min_mbps)
     # ... we compute max. time we are going to wait for fio to write all data
-    min_time_to_write_gb = 1 / (fio_min_mbps / 2**10)
+    min_time_to_write_gb = 1 / (fio_min_mbps / 2 ** 10)
     write_timeout = pvc_size * min_time_to_write_gb  # seconds
     logger.info(
         f"fixture will wait {write_timeout} seconds for the Job "
@@ -168,7 +167,7 @@ def wait_for_job_completion(namespace, timeout, error_msg):
             condition=constants.STATUS_COMPLETED,
             error_condition=constants.STATUS_ERROR,
             timeout=timeout,
-            sleep=30
+            sleep=30,
         )
     except Exception as ex:
         # report some high level error as well in case of a timeout error
@@ -177,36 +176,32 @@ def wait_for_job_completion(namespace, timeout, error_msg):
             ex.message = error_msg
         # fetch log(s) of any fio pod(s) in the job namespace
         pod_data = ocp_pod.get()
-        for pod_dict in pod_data.get('items', []):
+        for pod_dict in pod_data.get("items", []):
             try:
-                pod_name = pod_dict['metadata']['name']
+                pod_name = pod_dict["metadata"]["name"]
                 output = ocp_pod.get_logs(pod_name)
                 if len(output) == 0:
-                    logger.error(
-                        "Container log from pod '%s' is empty.", pod_name)
+                    logger.error("Container log from pod '%s' is empty.", pod_name)
                 else:
                     logger.error(
-                        "Container log from pod '%s' follows:\n%s",
-                        pod_name,
-                        output
+                        "Container log from pod '%s' follows:\n%s", pod_name, output
                     )
             except Exception:
                 logger.exception(
-                    "Container log from pod '%s' failed to be fetched.",
-                    pod_name
+                    "Container log from pod '%s' failed to be fetched.", pod_name
                 )
         # reraise the exception
-        raise(ex)
+        raise (ex)
 
     # indentify pod of the completed job
     pod_data = ocp_pod.get()
     # explicit list of assumptions, if these assumptions are not met, the
     # code won't work and it either means that something went terrible
     # wrong or that the code needs to be changed
-    assert pod_data['kind'] == "List"
-    pod_dict = pod_data['items'][0]
-    assert pod_dict['kind'] == "Pod"
-    pod_name = pod_dict['metadata']['name']
+    assert pod_data["kind"] == "List"
+    pod_dict = pod_data["items"][0]
+    assert pod_dict["kind"] == "Pod"
+    pod_name = pod_dict["metadata"]["name"]
     logger.info(f"Identified pod name of the finished Job: {pod_name}")
 
     return pod_name
@@ -233,9 +228,11 @@ def write_data_via_fio(fio_job_file, write_timeout, pvc_size, target_percentage)
         " (see 'last actual status was' in some previous log message),"
         " this is caused either by"
         " severe product performance regression"
-        " or by a misconfiguration of the clusterr, ping infra team.")
+        " or by a misconfiguration of the clusterr, ping infra team."
+    )
     pod_name = wait_for_job_completion(
-        fio_job_file.project.namespace, write_timeout, error_msg)
+        fio_job_file.project.namespace, write_timeout, error_msg
+    )
 
     ocp_pod = ocp.OCP(kind="Pod", namespace=fio_job_file.project.namespace)
     fio_output = ocp_pod.get_logs(pod_name)
@@ -245,7 +242,7 @@ def write_data_via_fio(fio_job_file, write_timeout, pvc_size, target_percentage)
 
     logger.debug(fio_report)
     if fio_report is not None:
-        disk_util = fio_report.get('disk_util')
+        disk_util = fio_report.get("disk_util")
         logger.info("fio disk_util stats: %s", disk_util)
     else:
         logger.warning("fio report is empty")
@@ -253,11 +250,12 @@ def write_data_via_fio(fio_job_file, write_timeout, pvc_size, target_percentage)
     # data which will be available to the test via:
     # fixture_name['result']
     result = {
-        'fio_job_start': fio_job_start_ts,
-        'fio': fio_report,
-        'pvc_size': pvc_size,
-        'target_p': target_percentage,
-        'namespace': fio_job_file.project.namespace}
+        "fio_job_start": fio_job_start_ts,
+        "fio": fio_report,
+        "pvc_size": pvc_size,
+        "target_p": target_percentage,
+        "namespace": fio_job_file.project.namespace,
+    }
 
     return result
 
@@ -272,11 +270,13 @@ def delete_fio_data(fio_job_file, delete_check_func):
     fio_job_file.delete()
     logger.info(
         f"going to wait a bit to make sure that "
-        f"data written by {fio_job_file.name} Job are really deleted")
+        f"data written by {fio_job_file.name} Job are really deleted"
+    )
 
     check_timeout = 660  # seconds
     check_sampler = TimeoutSampler(
-        timeout=check_timeout, sleep=30, func=delete_check_func)
+        timeout=check_timeout, sleep=30, func=delete_check_func
+    )
     finished_in_time = check_sampler.wait_for_func_status(result=True)
     if not finished_in_time:
         error_msg = (
@@ -354,8 +354,7 @@ def workload_fio_storageutilization(
     val_err_msg = "Specify either target_size or target_percentage"
     if target_size is None and target_percentage is None:
         raise ValueError(
-            val_err_msg
-            + ", it's not clear how much storage space should be used."
+            val_err_msg + ", it's not clear how much storage space should be used."
         )
     if target_size is not None and target_percentage is not None:
         raise ValueError(val_err_msg + ", not both.")
@@ -368,23 +367,25 @@ def workload_fio_storageutilization(
         storage_class_name = "ocs-storagecluster-cephfs"
         ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
     else:
-        raise UnexpectedVolumeType(
-            "unexpected volume type, ocs-ci code is wrong")
+        raise UnexpectedVolumeType("unexpected volume type, ocs-ci code is wrong")
 
     # make sure we communicate what is going to happen
-    logger.info((
-        f"starting {fixture_name} fixture, "
-        f"using {storage_class_name} storage class "
-        f"backed by {ceph_pool_name} ceph pool"))
+    logger.info(
+        (
+            f"starting {fixture_name} fixture, "
+            f"using {storage_class_name} storage class "
+            f"backed by {ceph_pool_name} ceph pool"
+        )
+    )
 
     # log ceph mon_osd_*_ratio values for QE team to understand behaviour of
     # ceph cluster during high utilization levels (for expected values, consult
     # BZ 1775432 and check that there is no more recent BZ or JIRA in this
     # area)
     ceph_full_ratios = [
-        'full_ratio',
-        'backfillfull_ratio',
-        'nearfull_ratio',
+        "full_ratio",
+        "backfillfull_ratio",
+        "nearfull_ratio",
     ]
     ct_pod = pod.get_ceph_tools_pod()
     # As noted in ceph docs:
@@ -394,7 +395,7 @@ def workload_fio_storageutilization(
     # > to be changed in the OSDMap using ceph osd set-nearfull-ratio and ceph
     # > osd set-full-ratio
     logger.info("inspecting values of ceph *full ratios in osd map")
-    osd_dump_dict = ct_pod.exec_ceph_cmd('ceph osd dump')
+    osd_dump_dict = ct_pod.exec_ceph_cmd("ceph osd dump")
     for ceph_ratio in ceph_full_ratios:
         ratio_value = osd_dump_dict.get(ceph_ratio)
         if ratio_value is not None:
@@ -405,10 +406,7 @@ def workload_fio_storageutilization(
     if target_size is not None:
         pvc_size = target_size
     else:
-        pvc_size = get_storageutilization_size(
-            target_percentage,
-            ceph_pool_name
-        )
+        pvc_size = get_storageutilization_size(target_percentage, ceph_pool_name)
 
     # If we are trying to utilize particular percentage of total OCS capacity
     # and current usage is already higher, the test will be skipped, because
@@ -419,11 +417,13 @@ def workload_fio_storageutilization(
     if pvc_size <= 0 and target_percentage is not None:
         skip_msg = (
             "current total storage utilization is too high, "
-            f"the target utilization {target_percentage*100}% is already met")
+            f"the target utilization {target_percentage*100}% is already met"
+        )
         logger.warning(skip_msg)
         pytest.skip(skip_msg)
 
-    fio_conf = textwrap.dedent("""
+    fio_conf = textwrap.dedent(
+        """
         [simple-write]
         readwrite=write
         buffered=1
@@ -431,7 +431,8 @@ def workload_fio_storageutilization(
         ioengine=libaio
         directory=/mnt/target
         nrfiles=8
-        """)
+        """
+    )
 
     # When we ask for checksum to be generated for all files written in the
     # /mnt/target directory, we need to keep some space free so that the
@@ -444,7 +445,7 @@ def workload_fio_storageutilization(
         # assume 4% fs overhead, and double to it make it safe
         fs_overhead = 0.08
         # size of file created by fio in MiB
-        fio_size = int((pvc_size * (1 - fs_overhead)) * 2**10)
+        fio_size = int((pvc_size * (1 - fs_overhead)) * 2 ** 10)
         fio_conf += f"size={fio_size}M\n"
     # Otherwise, we are tryting to write as much data as possible and fill the
     # persistent volume entirely.
@@ -464,14 +465,15 @@ def workload_fio_storageutilization(
     # both fio and sha1 checksum tool in the target directory. To do that,
     # we use '/bin/sh -c' hack.
     if with_checksum:
-        container = fio_job_dict['spec']['template']['spec']['containers'][0]
-        fio_command = " ".join(container['command'])
+        container = fio_job_dict["spec"]["template"]["spec"]["containers"][0]
+        fio_command = " ".join(container["command"])
         sha_command = (
             "sha1sum /mnt/target/simple-write.*"
             " > /mnt/target/fio.sha1sum"
-            " 2> /mnt/target/fio.stderr")
+            " 2> /mnt/target/fio.stderr"
+        )
         shell_command = fio_command + " && " + sha_command
-        container['command'] = ["/bin/bash", "-c", shell_command]
+        container["command"] = ["/bin/bash", "-c", shell_command]
 
     # put the dicts together into yaml file of the Job
     fio_configmap_dict["data"]["workload.fio"] = fio_conf
@@ -480,21 +482,23 @@ def workload_fio_storageutilization(
     fio_objs = [fio_pvc_dict, fio_configmap_dict, fio_job_dict]
     fio_job_file = ObjectConfFile(fixture_name, fio_objs, project, tmp_path)
 
-    fio_min_mbps = config.ENV_DATA['fio_storageutilization_min_mbps']
+    fio_min_mbps = config.ENV_DATA["fio_storageutilization_min_mbps"]
     write_timeout = get_timeout(fio_min_mbps, pvc_size)
 
     test_file = os.path.join(measurement_dir, f"{fixture_name}.json")
 
     measured_op = measure_operation(
         lambda: write_data_via_fio(
-            fio_job_file, write_timeout, pvc_size, target_percentage),
+            fio_job_file, write_timeout, pvc_size, target_percentage
+        ),
         test_file,
         measure_after=True,
-        minimal_time=minimal_time)
+        minimal_time=minimal_time,
+    )
 
     # we don't need to delete anything if this fixture has been already
     # executed
-    if not measured_op['first_run']:
+    if not measured_op["first_run"]:
         return measured_op
 
     # measure MAX AVAIL value just before reclamaion of data written by fio
@@ -505,11 +509,11 @@ def workload_fio_storageutilization(
         Check whether data created by the Job were actually deleted.
         """
         _, max_avail = get_ceph_storage_stats(ceph_pool_name)
-        reclaimed_size = round((max_avail - max_avail_before_delete) / 2**30)
+        reclaimed_size = round((max_avail - max_avail_before_delete) / 2 ** 30)
         logger.info(
             "%d Gi of %d Gi (PVC size) seems already reclaimed",
             reclaimed_size,
-            pvc_size
+            pvc_size,
         )
         result = reclaimed_size >= pvc_size * 0.9
         if result:
@@ -525,11 +529,11 @@ def workload_fio_storageutilization(
         # Explicit list of assumptions, if these assumptions are not met, the
         # code won't work and it either means that something went terrible
         # wrong or that the code needs to be changed.
-        assert pvc_data['kind'] == "List"
-        assert len(pvc_data['items']) == 1
-        pvc_dict = pvc_data['items'][0]
-        assert pvc_dict['kind'] == constants.PVC
-        pv_name = pvc_dict['spec']['volumeName']
+        assert pvc_data["kind"] == "List"
+        assert len(pvc_data["items"]) == 1
+        pvc_dict = pvc_data["items"][0]
+        assert pvc_dict["kind"] == constants.PVC
+        pv_name = pvc_dict["spec"]["volumeName"]
         logger.info("Identified PV of the finished fio Job: %s", pv_name)
         # We change reclaim policy of the volume, so that we can reuse it
         # later, while everyting but the volume will be deleted during project
@@ -541,12 +545,13 @@ def workload_fio_storageutilization(
         ocp_pv = ocp.OCP(kind=constants.PV)
         patch_success = ocp_pv.patch(
             resource_name=pv_name,
-            params='{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}')
+            params='{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}',
+        )
         if patch_success:
-            logger.info('Reclaim policy of %s was changed.', pv_name)
+            logger.info("Reclaim policy of %s was changed.", pv_name)
         else:
-            logger.error('Reclaim policy of %s failed to be changed.', pv_name)
-        label = f'fixture={fixture_name}'
+            logger.error("Reclaim policy of %s failed to be changed.", pv_name)
+        label = f"fixture={fixture_name}"
         ocp_pv.add_label(pv_name, label)
     else:
         # Without checksum, we just need to make sure that data were deleted

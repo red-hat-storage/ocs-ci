@@ -19,12 +19,13 @@ def clusterdir(request, tmpdir):
     assert "cluster_path" not in config.ENV_DATA
 
     def finalizer():
-        del config.ENV_DATA['cluster_path']
+        del config.ENV_DATA["cluster_path"]
+
     request.addfinalizer(finalizer)
 
     # prepare minimal cluster dir
     metadata_file = tmpdir.join("metadata.json")
     metadata_dict = {"clusterName": "unit-test-cluster"}
     metadata_file.write(json.dumps(metadata_dict))
-    config.ENV_DATA['cluster_path'] = tmpdir
+    config.ENV_DATA["cluster_path"] = tmpdir
     return metadata_dict

@@ -19,7 +19,7 @@ def test_assumptions():
     """
     Check basic consistency in platform handling.
     """
-    assert config.ENV_DATA['platform'] == constants.AZURE_PLATFORM
+    assert config.ENV_DATA["platform"] == constants.AZURE_PLATFORM
 
 
 @libtest
@@ -56,3 +56,33 @@ def test_check_cluster_existence():
     assert not azure_depl.check_cluster_existence("an_invalid_clustername000")
     assert azure_depl.check_cluster_existence(azure_depl.cluster_name)
     assert azure_depl.check_cluster_existence(azure_depl.cluster_name[:5])
+
+
+@libtest
+@azure_platform_required
+def test_get_vm_names():
+    """
+    Test of Azure get_vm_names() method implementation.
+    OCS cluster must have at-least 3 worker and 3 master nodes.
+    """
+    azure_depl = AZUREIPI()
+    vm_name = azure_depl.azure_util.get_vm_names()
+    logger.info(f"vm names are: {vm_name}")
+    master_vms = [master_vm for master_vm in vm_name if "master" in master_vm]
+    assert len(master_vms) >= 3
+    worker_vms = [worker_vm for worker_vm in vm_name if "worker" in worker_vm]
+    assert len(worker_vms) >= 3
+
+
+@libtest
+@azure_platform_required
+def test_get_vm_power_status():
+    """
+    Test of Azure get_vm_power_status() method implementation.
+    VM  of healthy OCS Cluster has 'running' status by default.
+    """
+    azure_depl = AZUREIPI()
+    vm_names = azure_depl.azure_util.get_vm_names()
+    logger.info(f"vm names are: {vm_names}")
+    status = azure_depl.azure_util.get_vm_power_status(vm_names[0])
+    assert "running" == status, f"Status of {vm_names[0]} is {status}"

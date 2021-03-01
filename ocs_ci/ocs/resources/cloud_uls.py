@@ -1,5 +1,7 @@
 import logging
 
+import pytest
+
 from ocs_ci.helpers.helpers import create_unique_resource_name
 
 log = logging.getLogger(__name__)
@@ -20,18 +22,29 @@ def cloud_uls_factory(request, cld_mgr):
 
     """
     all_created_uls = {
-        'aws': set(),
-        'google': set(),
-        'azure': set(),
-        'ibmcos': set()
+        "aws": set(),
+        "gcp": set(),
+        "azure": set(),
+        "ibmcos": set(),
+        "rgw": set(),
     }
-
-    ulsMap = {
-        'aws': cld_mgr.aws_client,
-        'google': cld_mgr.google_client,
-        'azure': cld_mgr.azure_client,
-        # TODO: Implement - 'ibmcos': cld_mgr.ibmcos_client
-    }
+    try:
+        ulsMap = {
+            "aws": cld_mgr.aws_client,
+            "gcp": cld_mgr.gcp_client,
+            "azure": cld_mgr.azure_client,
+            "ibmcos": cld_mgr.ibmcos_client,
+        }
+    except AttributeError as e:
+        raise Exception(
+            "{} was not initialized, "
+            "please verify the needed credentials "
+            "were set in auth.yaml".format(str(e).split("'")[3])
+        )
+    try:
+        ulsMap["rgw"] = cld_mgr.rgw_client
+    except AttributeError:
+        log.info("RGW is not available and was not initialized")
 
     def _create_uls(uls_dict):
         """
@@ -50,26 +63,41 @@ def cloud_uls_factory(request, cld_mgr):
 
         """
         current_call_created_uls = {
-            'aws': set(),
-            'google': set(),
-            'azure': set(),
-            'ibmcos': set()
+            "aws": set(),
+            "gcp": set(),
+            "azure": set(),
+            "ibmcos": set(),
+            "rgw": set(),
         }
 
         for cloud, params in uls_dict.items():
             if cloud.lower() not in ulsMap:
                 raise RuntimeError(
-                    f'Invalid interface type received: {cloud}. '
+                    f"Invalid interface type received: {cloud}. "
                     f'available types: {", ".join(ulsMap.keys())}'
                 )
-            log.info(f'Creating uls for cloud {cloud.lower()}')
-            for tup in params:
-                amount, region = tup
-                for i in range(amount):
+            log.info(f"Creating uls for cloud {cloud.lower()}")
+            for amount, region in params:
+                for _ in range(amount):
                     uls_name = create_unique_resource_name(
-                        resource_description='uls', resource_type=cloud.lower()
+                        resource_description="uls", resource_type=cloud.lower()
                     )
-                    ulsMap[cloud.lower()].create_uls(uls_name, region)
+                    try:
+                        ulsMap[cloud.lower()].create_uls(uls_name, region)
+                    except AttributeError:
+                        log.warning(
+                            f"{cloud}_client was initialized as None.\n"
+                            "Please verify the needed credentials were set in auth.yaml, "
+                            "or refer to the OCS-CI documentation -\n"
+                            "( https://ocs-ci.readthedocs.io/en/latest/usecases/"
+                            "running_tests_on_cluster_not_deployed_by_ocsci.html"
+                            "#access-to-cloud-object-storage-mcg-only )\n"
+                            "The current test cannot proceed unless a valid "
+                            f"{cloud.upper()} account is provided via auth.yaml.\n"
+                            "The account is needed for performing tasks over the cloud service."
+                            "The test will be skipped."
+                        )
+                        pytest.skip("Missing credentials. See logs for more info.")
                     all_created_uls[cloud].add(uls_name)
                     current_call_created_uls[cloud.lower()].add(uls_name)
 
@@ -82,10 +110,10 @@ def cloud_uls_factory(request, cld_mgr):
                 all_existing_uls = client.get_all_uls_names()
                 for uls in uls_set:
                     if uls in all_existing_uls:
-                        log.info(f'Cleaning up uls {uls}')
+                        log.info(f"Cleaning up uls {uls}")
                         client.delete_uls(uls)
                     else:
-                        log.warning(f'Underlying Storage {uls} not found.')
+                        log.warning(f"Underlying Storage {uls} not found.")
 
     request.addfinalizer(uls_cleanup)
 

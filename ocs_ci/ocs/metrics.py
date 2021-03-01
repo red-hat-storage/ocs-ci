@@ -22,7 +22,8 @@ ceph_rbd_metrics = (
     "ceph_rbd_write_bytes",
     "ceph_rbd_read_bytes",
     "ceph_rbd_write_latency_sum",
-    "ceph_rbd_write_latency_count")
+    "ceph_rbd_write_latency_count",
+)
 
 
 # Ceph metrics available since OCS 4.2.
@@ -270,7 +271,14 @@ ceph_metrics = (
     "ceph_pool_num_objects_recovered",
     "ceph_pool_recovering_bytes_per_sec",
     "ceph_pool_recovering_keys_per_sec",
-    "ceph_pool_recovering_objects_per_sec")
+    "ceph_pool_recovering_objects_per_sec",
+)
+
+
+# List of RGW metrics.
+ceph_rgw_metrics = tuple(
+    metric for metric in ceph_metrics if metric.startswith("ceph_rgw")
+)
 
 
 # List of all ceph metrics.
@@ -300,13 +308,14 @@ def get_missing_metrics(prometheus, metrics, current_platform=None):
             # deployed on on-prem platforms only, so we are going to ignore
             # missing metrics from these components on such platforms.
             # See BZ 1763150
-            is_rgw_metric = (
-                metric.startswith("ceph_rgw")
-                or metric.startswith("ceph_objecter"))
+            is_rgw_metric = metric.startswith("ceph_rgw") or metric.startswith(
+                "ceph_objecter"
+            )
             if current_platform in constants.CLOUD_PLATFORMS and is_rgw_metric:
                 msg = (
                     f"failed to get results for {metric}, "
-                    f"but it is expected on {current_platform}")
+                    f"but it is expected on {current_platform}"
+                )
                 logger.info(msg)
             else:
                 logger.error(f"failed to get results for {metric}")

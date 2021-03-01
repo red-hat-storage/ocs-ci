@@ -12,18 +12,26 @@ import boto3
 from ocs_ci.cleanup.aws.defaults import CLUSTER_PREFIXES_SPECIAL_RULES
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, exceptions, ocp
+from ocs_ci.ocs import constants, exceptions, ocp, machine
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import (
-    AWS as AWSUtil, delete_cluster_buckets, destroy_volumes,
-    get_rhel_worker_instances, terminate_rhel_workers
+    AWS as AWSUtil,
+    delete_cluster_buckets,
+    destroy_volumes,
+    get_rhel_worker_instances,
+    terminate_rhel_workers,
 )
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
-    clone_repo, create_rhelpod, get_cluster_name, get_infra_id, run_cmd,
-    TimeoutSampler, get_ocp_version
+    clone_repo,
+    create_rhelpod,
+    get_cluster_name,
+    get_infra_id,
+    run_cmd,
+    TimeoutSampler,
+    get_ocp_version,
 )
 from semantic_version import Version
 from .cloud import CloudDeploymentBase
@@ -33,7 +41,7 @@ from .flexy import FlexyAWSUPI
 logger = logging.getLogger(__name__)
 
 
-__all__ = ['AWSIPI', 'AWSUPI']
+__all__ = ["AWSIPI", "AWSUPI"]
 
 
 class AWSBase(CloudDeploymentBase):
@@ -53,12 +61,10 @@ class AWSBase(CloudDeploymentBase):
         Update security group rules for HostNetwork
         """
         cluster_id = get_infra_id(self.cluster_path)
-        worker_pattern = f'{cluster_id}-worker*'
-        worker_instances = self.aws.get_instances_by_name_pattern(
-            worker_pattern
-        )
-        security_groups = worker_instances[0]['security_groups']
-        sg_id = security_groups[0]['GroupId']
+        worker_pattern = f"{cluster_id}-worker*"
+        worker_instances = self.aws.get_instances_by_name_pattern(worker_pattern)
+        security_groups = worker_instances[0]["security_groups"]
+        sg_id = security_groups[0]["GroupId"]
         security_group = self.aws.ec2_resource.SecurityGroup(sg_id)
         # The ports are not 100 % clear yet. Taken from doc:
         # https://docs.google.com/document/d/1c23ooTkW7cdbHNRbCTztprVU6leDqJxcvFZ1ZvK2qtU/edit#
@@ -66,61 +72,61 @@ class AWSBase(CloudDeploymentBase):
             DryRun=False,
             IpPermissions=[
                 {
-                    'FromPort': 6800,
-                    'ToPort': 7300,
-                    'IpProtocol': 'tcp',
-                    'UserIdGroupPairs': [
+                    "FromPort": 6800,
+                    "ToPort": 7300,
+                    "IpProtocol": "tcp",
+                    "UserIdGroupPairs": [
                         {
-                            'Description': 'Ceph OSDs',
-                            'GroupId': sg_id,
+                            "Description": "Ceph OSDs",
+                            "GroupId": sg_id,
                         },
                     ],
                 },
                 {
-                    'FromPort': 3300,
-                    'ToPort': 3300,
-                    'IpProtocol': 'tcp',
-                    'UserIdGroupPairs': [
+                    "FromPort": 3300,
+                    "ToPort": 3300,
+                    "IpProtocol": "tcp",
+                    "UserIdGroupPairs": [
                         {
-                            'Description': 'Ceph MONs rule1',
-                            'GroupId': sg_id,
+                            "Description": "Ceph MONs rule1",
+                            "GroupId": sg_id,
                         },
                     ],
                 },
                 {
-                    'FromPort': 6789,
-                    'ToPort': 6789,
-                    'IpProtocol': 'tcp',
-                    'UserIdGroupPairs': [
+                    "FromPort": 6789,
+                    "ToPort": 6789,
+                    "IpProtocol": "tcp",
+                    "UserIdGroupPairs": [
                         {
-                            'Description': 'Ceph MONs rule2',
-                            'GroupId': sg_id,
+                            "Description": "Ceph MONs rule2",
+                            "GroupId": sg_id,
                         },
                     ],
                 },
                 {
-                    'FromPort': 8443,
-                    'ToPort': 8443,
-                    'IpProtocol': 'tcp',
-                    'UserIdGroupPairs': [
+                    "FromPort": 8443,
+                    "ToPort": 8443,
+                    "IpProtocol": "tcp",
+                    "UserIdGroupPairs": [
                         {
-                            'Description': 'Ceph Dashboard rule1',
-                            'GroupId': sg_id,
+                            "Description": "Ceph Dashboard rule1",
+                            "GroupId": sg_id,
                         },
                     ],
                 },
                 {
-                    'FromPort': 8080,
-                    'ToPort': 8080,
-                    'IpProtocol': 'tcp',
-                    'UserIdGroupPairs': [
+                    "FromPort": 8080,
+                    "ToPort": 8080,
+                    "IpProtocol": "tcp",
+                    "UserIdGroupPairs": [
                         {
-                            'Description': 'Ceph Dashboard rule2',
-                            'GroupId': sg_id,
+                            "Description": "Ceph Dashboard rule2",
+                            "GroupId": sg_id,
                         },
                     ],
                 },
-            ]
+            ],
         )
 
     def add_node(self):
@@ -138,12 +144,11 @@ class AWSBase(CloudDeploymentBase):
         """
         cluster_name_pattern = cluster_name_prefix + "*"
         instances = self.aws.get_instances_by_name_pattern(cluster_name_pattern)
-        instance_objs = [
-            self.aws.get_ec2_instance(ins.get('id')) for ins in instances
-        ]
+        instance_objs = [self.aws.get_ec2_instance(ins.get("id")) for ins in instances]
         non_terminated_instances = [
-            ins for ins in instance_objs if ins.state
-            .get('Code') != constants.INSTANCE_TERMINATED
+            ins
+            for ins in instance_objs
+            if ins.state.get("Code") != constants.INSTANCE_TERMINATED
         ]
         if non_terminated_instances:
             logger.error(
@@ -168,7 +173,7 @@ class AWSIPI(AWSBase):
         # check or during a cluster cleanup)
         self.cluster_prefixes_special_rules = CLUSTER_PREFIXES_SPECIAL_RULES
 
-    def deploy_ocp(self, log_cli_level='DEBUG'):
+    def deploy_ocp(self, log_cli_level="DEBUG"):
         """
         Deployment specific to OCP cluster on this platform
 
@@ -177,7 +182,12 @@ class AWSIPI(AWSBase):
                 (default: "DEBUG")
         """
         super(AWSIPI, self).deploy_ocp(log_cli_level)
-        if config.DEPLOYMENT.get('host_network'):
+        if config.DEPLOYMENT.get("infra_nodes"):
+            num_nodes = config.ENV_DATA.get("infra_replicas", 3)
+            ms_list = machine.create_ocs_infra_nodes(num_nodes)
+            for node in ms_list:
+                machine.wait_for_new_node_to_be_ready(node)
+        if config.DEPLOYMENT.get("host_network"):
             self.host_network_update()
 
     def destroy_cluster(self, log_level="DEBUG"):
@@ -196,41 +206,39 @@ class AWSUPI(AWSBase):
     """
     A class to handle AWS UPI specific deployment
     """
+
     def __init__(self):
         self.name = self.__class__.__name__
         super(AWSUPI, self).__init__()
 
-        if config.ENV_DATA.get('rhel_workers'):
+        if config.ENV_DATA.get("rhel_workers"):
             self.worker_vpc = None
             self.worker_iam_role = None
             self.worker_subnet = None
             self.worker_security_group = None
             self.worker_tag = None
             self.cf = None
-            self.cluster_name = config.ENV_DATA['cluster_name']
+            self.cluster_name = config.ENV_DATA["cluster_name"]
             # A dict for holding instance Name to instance object mapping
             self.rhel_worker_list = {}
             self.rhel_worker_user = constants.EC2_USER
-            self.client = boto3.client(
-                'ec2', region_name=config.ENV_DATA['region']
-            )
-            self.cf = boto3.client('cloudformation', region_name=self.region)
+            self.client = boto3.client("ec2", region_name=config.ENV_DATA["region"])
+            self.cf = boto3.client("cloudformation", region_name=self.region)
 
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
             super(AWSUPI.OCPDeployment, self).__init__()
             upi_repo_name = f'openshift-misc-{config.RUN["run_id"]}'
 
-            self.upi_common_base = 'functionality-testing'
+            self.upi_common_base = "functionality-testing"
             self.upi_repo_path = os.path.join(
-                constants.EXTERNAL_DIR, upi_repo_name,
+                constants.EXTERNAL_DIR,
+                upi_repo_name,
             )
             self.upi_script_path = os.path.join(
                 self.upi_repo_path,
                 self.upi_common_base,
-                os.path.join(
-                    f"aos-{get_ocp_version('_')}", 'hosts/'
-                ),
+                os.path.join(f"aos-{get_ocp_version('_')}", "hosts/"),
             )
 
         def deploy_prereq(self):
@@ -242,23 +250,23 @@ class AWSUPI(AWSBase):
 
             # setup necessary env variables
             upi_env_vars = {
-                'INSTANCE_NAME_PREFIX': config.ENV_DATA['cluster_name'],
-                'AWS_REGION': config.ENV_DATA['region'],
-                'rhcos_ami': config.ENV_DATA.get('rhcos_ami'),
-                'route53_domain_name': config.ENV_DATA['base_domain'],
-                'vm_type_masters': config.ENV_DATA['master_instance_type'],
-                'vm_type_workers': config.ENV_DATA['worker_instance_type'],
-                'num_workers': str(config.ENV_DATA['worker_replicas']),
-                'AVAILABILITY_ZONE_COUNT': str(config.ENV_DATA.get(
-                    'availability_zone_count', ''
-                )),
-                'BASE_DOMAIN': config.ENV_DATA['base_domain'],
-                'remove_bootstrap': 'yes',
-                'IAAS_PLATFORM': 'aws'
+                "INSTANCE_NAME_PREFIX": config.ENV_DATA["cluster_name"],
+                "AWS_REGION": config.ENV_DATA["region"],
+                "rhcos_ami": config.ENV_DATA.get("rhcos_ami"),
+                "route53_domain_name": config.ENV_DATA["base_domain"],
+                "vm_type_masters": config.ENV_DATA["master_instance_type"],
+                "vm_type_workers": config.ENV_DATA["worker_instance_type"],
+                "num_workers": str(config.ENV_DATA["worker_replicas"]),
+                "AVAILABILITY_ZONE_COUNT": str(
+                    config.ENV_DATA.get("availability_zone_count", "")
+                ),
+                "BASE_DOMAIN": config.ENV_DATA["base_domain"],
+                "remove_bootstrap": "yes",
+                "IAAS_PLATFORM": "aws",
             }
-            if config.DEPLOYMENT['preserve_bootstrap_node']:
+            if config.DEPLOYMENT["preserve_bootstrap_node"]:
                 logger.info("Setting ENV VAR to preserve bootstrap node")
-                upi_env_vars['remove_bootstrap'] = 'No'
+                upi_env_vars["remove_bootstrap"] = "No"
 
             for key, value in upi_env_vars.items():
                 if value:
@@ -270,31 +278,25 @@ class AWSUPI(AWSBase):
                     assert os.getenv(key) == value
 
             # git clone repo from openshift-qe repo
-            clone_repo(
-                constants.OCP_QE_MISC_REPO, self.upi_repo_path
-            )
+            clone_repo(constants.OCP_QE_MISC_REPO, self.upi_repo_path)
 
             # Sym link install-dir to cluster_path
             install_dir = os.path.join(self.upi_script_path, "install-dir")
             absolute_cluster_path = os.path.abspath(self.cluster_path)
-            logger.info(
-                "Sym linking %s to %s", install_dir, absolute_cluster_path
-            )
+            logger.info("Sym linking %s to %s", install_dir, absolute_cluster_path)
             os.symlink(absolute_cluster_path, install_dir)
 
             # NOT A CLEAN APPROACH: copy openshift-install and oc binary to
             # script path because upi script expects it to be present in
             # script dir
-            bindir = os.path.abspath(os.path.expanduser(config.RUN['bin_dir']))
+            bindir = os.path.abspath(os.path.expanduser(config.RUN["bin_dir"]))
             shutil.copy2(
-                os.path.join(bindir, 'openshift-install'),
+                os.path.join(bindir, "openshift-install"),
                 self.upi_script_path,
             )
-            shutil.copy2(
-                os.path.join(bindir, 'oc'), self.upi_script_path
-            )
+            shutil.copy2(os.path.join(bindir, "oc"), self.upi_script_path)
 
-        def deploy(self, log_cli_level='DEBUG'):
+        def deploy(self, log_cli_level="DEBUG"):
             """
             Exact deployment will happen here
 
@@ -303,9 +305,7 @@ class AWSUPI(AWSBase):
                     (default: "DEBUG")
             """
             logger.info("Deploying OCP cluster")
-            logger.info(
-                f"Openshift-installer will be using loglevel:{log_cli_level}"
-            )
+            logger.info(f"Openshift-installer will be using loglevel:{log_cli_level}")
 
             # Invoke UPI on AWS install script
             cidir = os.getcwd()
@@ -313,16 +313,14 @@ class AWSUPI(AWSBase):
             try:
                 os.chdir(self.upi_script_path)
             except OSError:
-                logger.exception(
-                    f"Failed to change CWD to {self.upi_script_path} "
-                )
+                logger.exception(f"Failed to change CWD to {self.upi_script_path} ")
             logger.info(f"CWD changed to {self.upi_script_path}")
 
             with open(f"./{constants.UPI_INSTALL_SCRIPT}", "r") as fd:
                 buf = fd.read()
 
             ocp_version = get_ocp_version()
-            if Version.coerce(ocp_version) >= Version.coerce('4.3'):
+            if Version.coerce(ocp_version) >= Version.coerce("4.3"):
                 data = buf.replace("openshift-qe-upi", "ocs-qe-upi")
             else:
                 data = buf.replace("openshift-qe-upi-1", "ocs-qe-upi")
@@ -332,10 +330,10 @@ class AWSUPI(AWSBase):
 
             logger.info("Executing UPI install script")
             proc = Popen(
-                [os.path.join(
-                    self.upi_script_path, constants.UPI_INSTALL_SCRIPT
-                )],
-                stdout=PIPE, stderr=PIPE, encoding='utf-8'
+                [os.path.join(self.upi_script_path, constants.UPI_INSTALL_SCRIPT)],
+                stdout=PIPE,
+                stderr=PIPE,
+                encoding="utf-8",
             )
             stdout, stderr = proc.communicate()
 
@@ -356,12 +354,11 @@ class AWSUPI(AWSBase):
 
             # Delete openshift-misc repository
             logger.info(
-                "Removing openshift-misc directory located at %s",
-                self.upi_repo_path
+                "Removing openshift-misc directory located at %s", self.upi_repo_path
             )
             shutil.rmtree(self.upi_repo_path)
 
-    def deploy_ocp(self, log_cli_level='DEBUG'):
+    def deploy_ocp(self, log_cli_level="DEBUG"):
         """
         OCP deployment specific to AWS UPI
 
@@ -370,13 +367,13 @@ class AWSUPI(AWSBase):
                 (default: 'DEBUG')
         """
         super(AWSUPI, self).deploy_ocp(log_cli_level)
-        if config.DEPLOYMENT.get('host_network'):
+        if config.DEPLOYMENT.get("host_network"):
             self.host_network_update()
 
-        if config.ENV_DATA.get('rhel_workers'):
+        if config.ENV_DATA.get("rhel_workers"):
             self.add_rhel_workers()
 
-    def gather_worker_data(self, suffix='no0'):
+    def gather_worker_data(self, suffix="no0"):
         """
         Gather various info like vpc, iam role, subnet,security group,
         cluster tag from existing RHCOS workers
@@ -385,17 +382,17 @@ class AWSUPI(AWSBase):
             suffix (str): suffix to get resource of worker node, 'no0' by default
 
         """
-        stack_name = f'{self.cluster_name}-{suffix}'
+        stack_name = f"{self.cluster_name}-{suffix}"
         resource = self.cf.list_stack_resources(StackName=stack_name)
         worker_id = self.get_worker_resource_id(resource)
-        ec2 = boto3.resource('ec2', region_name=self.region)
+        ec2 = boto3.resource("ec2", region_name=self.region)
         worker_instance = ec2.Instance(worker_id)
         self.worker_vpc = worker_instance.vpc.id
         self.worker_subnet = worker_instance.subnet.id
         self.worker_security_group = worker_instance.security_groups
         self.worker_iam_role = worker_instance.iam_instance_profile
         self.worker_tag = self.get_kube_tag(worker_instance.tags)
-        del self.worker_iam_role['Id']
+        del self.worker_iam_role["Id"]
 
     def get_worker_resource_id(self, resource):
         """
@@ -408,7 +405,7 @@ class AWSUPI(AWSBase):
             str: ID of worker stack resource
 
         """
-        return resource['StackResourceSummaries'][0]['PhysicalResourceId']
+        return resource["StackResourceSummaries"][0]["PhysicalResourceId"]
 
     def get_kube_tag(self, tags):
         """
@@ -424,8 +421,8 @@ class AWSUPI(AWSBase):
 
         """
         for each in tags:
-            if 'kubernetes' in each['Key']:
-                return each['Key'], each['Value']
+            if "kubernetes" in each["Key"]:
+                return each["Key"], each["Value"]
 
     def create_rhel_instance(self):
         """
@@ -436,48 +433,45 @@ class AWSUPI(AWSBase):
 
         """
         cluster_id = get_infra_id(self.cluster_path)
-        num_workers = int(os.environ.get('num_workers', 3))
+        num_workers = int(os.environ.get("num_workers", 3))
         logging.info(f"Creating {num_workers} RHEL workers")
         for i in range(num_workers):
-            self.gather_worker_data(f'no{i}')
+            self.gather_worker_data(f"no{i}")
             logging.info(f"Creating {i + 1}/{num_workers} worker")
             response = self.client.run_instances(
                 BlockDeviceMappings=[
                     {
-                        'DeviceName': config.ENV_DATA['root_disk'],
-                        'Ebs': {
-                            'DeleteOnTermination': True,
-                            'VolumeSize': config.ENV_DATA['root_disk_size'],
-                            'VolumeType': 'gp2'
+                        "DeviceName": config.ENV_DATA["root_disk"],
+                        "Ebs": {
+                            "DeleteOnTermination": True,
+                            "VolumeSize": config.ENV_DATA["root_disk_size"],
+                            "VolumeType": "gp2",
                         },
                     },
                 ],
-                ImageId=config.ENV_DATA['rhel_worker_ami'],
+                ImageId=config.ENV_DATA["rhel_worker_ami"],
                 SubnetId=self.worker_subnet,
-                InstanceType=config.ENV_DATA['rhel_worker_instance_type'],
+                InstanceType=config.ENV_DATA["rhel_worker_instance_type"],
                 MaxCount=1,
                 MinCount=1,
-                Monitoring={
-                    'Enabled': False
-                },
+                Monitoring={"Enabled": False},
                 SecurityGroupIds=[
-                    self.worker_security_group[0]['GroupId'],
+                    self.worker_security_group[0]["GroupId"],
                 ],
-                KeyName='openshift-dev'
-
+                KeyName="openshift-dev",
             )
-            inst_id = response['Instances'][0]['InstanceId']
-            worker_ec2 = boto3.resource('ec2', region_name=self.region)
+            inst_id = response["Instances"][0]["InstanceId"]
+            worker_ec2 = boto3.resource("ec2", region_name=self.region)
             worker_instance = worker_ec2.Instance(inst_id)
             worker_instance.wait_until_running()
-            worker_name = f'{cluster_id}-rhel-worker-{i}'
+            worker_name = f"{cluster_id}-rhel-worker-{i}"
             self.rhel_worker_list[worker_name] = worker_instance
             worker_ec2.create_tags(
                 Resources=[inst_id],
                 Tags=[
-                    {'Key': 'Name', 'Value': f'{worker_name}'},
-                    {'Key': self.worker_tag[0], 'Value': self.worker_tag[1]}
-                ]
+                    {"Key": "Name", "Value": f"{worker_name}"},
+                    {"Key": self.worker_tag[0], "Value": self.worker_tag[1]},
+                ],
             )
             logging.info(self.worker_iam_role)
             self.client.associate_iam_instance_profile(
@@ -487,7 +481,7 @@ class AWSUPI(AWSBase):
 
     @retry(exceptions.CommandFailed, tries=15, delay=30, backoff=1)
     def check_connection(self, rhel_pod_obj, host, pem_dst_path):
-        cmd = 'ls'
+        cmd = "ls"
         rhel_pod_obj.exec_cmd_on_node(
             host, pem_dst_path, cmd, user=self.rhel_worker_user
         )
@@ -498,9 +492,7 @@ class AWSUPI(AWSBase):
         playbook
         """
         rhel_pod_name = "rhel-ansible"
-        rhel_pod_obj = create_rhelpod(
-            constants.DEFAULT_NAMESPACE, rhel_pod_name
-        )
+        rhel_pod_obj = create_rhelpod(constants.DEFAULT_NAMESPACE, rhel_pod_name)
         timeout = 4000  # For ansible-playbook
 
         # copy openshift-dev.pem to RHEL ansible pod
@@ -508,30 +500,22 @@ class AWSUPI(AWSBase):
         pem_dst_path = "/openshift-dev.pem"
         pod.upload(rhel_pod_obj.name, pem_src_path, pem_dst_path)
         repo_dst_path = "/etc/yum.repos.d/"
-        repo = os.path.join(
-            constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo"
-        )
+        repo = os.path.join(constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo")
         assert os.path.exists(repo), f"Required repo file {repo} doesn't exist!"
         repo_file = os.path.basename(repo)
-        pod.upload(
-            rhel_pod_obj.name, repo, repo_dst_path
-        )
+        pod.upload(rhel_pod_obj.name, repo, repo_dst_path)
         # copy the .pem file for our internal repo on all nodes
         # including ansible pod
         # get it from URL
         mirror_pem_file_path = os.path.join(
-            constants.DATA_DIR,
-            constants.INTERNAL_MIRROR_PEM_FILE
+            constants.DATA_DIR, constants.INTERNAL_MIRROR_PEM_FILE
         )
         dst = "/etc/pki/ca-trust/source/anchors/"
         pod.upload(rhel_pod_obj.name, mirror_pem_file_path, dst)
         # Install scp on pod
         rhel_pod_obj.install_packages("openssh-clients")
         # distribute repo file to all RHEL workers
-        hosts = [
-            inst.private_dns_name for node, inst in
-            self.rhel_worker_list.items()
-        ]
+        hosts = [inst.private_dns_name for node, inst in self.rhel_worker_list.items()]
         # Check whether every host is acceptin ssh connections
         for host in hosts:
             self.check_connection(rhel_pod_obj, host, pem_dst_path)
@@ -542,54 +526,52 @@ class AWSUPI(AWSBase):
                 host, pem_dst_path, disable, user=self.rhel_worker_user
             )
             rhel_pod_obj.copy_to_server(
-                host, pem_dst_path,
+                host,
+                pem_dst_path,
                 os.path.join(repo_dst_path, repo_file),
-                os.path.join('/tmp', repo_file),
-                user=self.rhel_worker_user
-            )
-            rhel_pod_obj.exec_cmd_on_node(
-                host, pem_dst_path,
-                f'sudo mv {os.path.join("/tmp", repo_file)} {repo_dst_path}',
-                user=self.rhel_worker_user
-            )
-            rhel_pod_obj.copy_to_server(
-                host, pem_dst_path,
-                os.path.join(dst, constants.INTERNAL_MIRROR_PEM_FILE),
-                os.path.join('/tmp', constants.INTERNAL_MIRROR_PEM_FILE),
+                os.path.join("/tmp", repo_file),
                 user=self.rhel_worker_user,
             )
             rhel_pod_obj.exec_cmd_on_node(
-                host, pem_dst_path,
-                f'sudo mv '
+                host,
+                pem_dst_path,
+                f'sudo mv {os.path.join("/tmp", repo_file)} {repo_dst_path}',
+                user=self.rhel_worker_user,
+            )
+            rhel_pod_obj.copy_to_server(
+                host,
+                pem_dst_path,
+                os.path.join(dst, constants.INTERNAL_MIRROR_PEM_FILE),
+                os.path.join("/tmp", constants.INTERNAL_MIRROR_PEM_FILE),
+                user=self.rhel_worker_user,
+            )
+            rhel_pod_obj.exec_cmd_on_node(
+                host,
+                pem_dst_path,
+                f"sudo mv "
                 f'{os.path.join("/tmp", constants.INTERNAL_MIRROR_PEM_FILE)} '
-                f'{dst}',
-                user=self.rhel_worker_user
+                f"{dst}",
+                user=self.rhel_worker_user,
             )
         # copy kubeconfig to pod
         kubeconfig = os.path.join(
-            self.cluster_path, config.RUN.get('kubeconfig_location')
+            self.cluster_path, config.RUN.get("kubeconfig_location")
         )
         pod.upload(rhel_pod_obj.name, kubeconfig, "/")
-        pull_secret_path = os.path.join(
-            constants.TOP_DIR,
-            "data",
-            "pull-secret"
-        )
+        pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
         pod.upload(rhel_pod_obj.name, pull_secret_path, "/tmp/")
         host_file = self.build_ansible_inventory(hosts)
         pod.upload(rhel_pod_obj.name, host_file, "/")
         # install pod packages
         rhel_pod_obj.install_packages(constants.RHEL_POD_PACKAGES)
         # run ansible
-        openshift_ansible_path = '/usr/share/ansible/openshift-ansible'
+        openshift_ansible_path = "/usr/share/ansible/openshift-ansible"
         cmd = (
             f"ansible-playbook -i /hosts --private-key={pem_dst_path} "
             f"{os.path.join(openshift_ansible_path, 'playbooks/scaleup.yml')}"
         )
 
-        rhel_pod_obj.exec_cmd_on_pod(
-            cmd, out_yaml_format=False, timeout=timeout
-        )
+        rhel_pod_obj.exec_cmd_on_pod(cmd, out_yaml_format=False, timeout=timeout)
         self.verify_nodes_added(hosts)
         # remove rhcos workers
         self.remove_rhcos_workers()
@@ -624,17 +606,17 @@ class AWSUPI(AWSBase):
 
         """
         rhcos_workers = []
-        ocp_obj = ocp.OCP(kind='node')
+        ocp_obj = ocp.OCP(kind="node")
         node_info = ocp_obj.get()
-        for each in node_info['items']:
-            labels = each['metadata']['labels']
+        for each in node_info["items"]:
+            labels = each["metadata"]["labels"]
             if (
-                labels['node.openshift.io/os_id'] == 'rhcos'
-                and 'node-role.kubernetes.io/worker' in labels
+                labels["node.openshift.io/os_id"] == "rhcos"
+                and "node-role.kubernetes.io/worker" in labels
             ):
-                for every in each['status']['addresses']:
-                    if every['type'] == 'Hostname':
-                        rhcos_workers.append(every['address'])
+                for every in each["status"]["addresses"]:
+                    if every["type"] == "Hostname":
+                        rhcos_workers.append(every["address"])
         return rhcos_workers
 
     def verify_nodes_added(self, hosts):
@@ -649,19 +631,16 @@ class AWSUPI(AWSBase):
 
         """
         timeout = 600
-        ocp_obj = ocp.OCP(kind='node')
+        ocp_obj = ocp.OCP(kind="node")
         node_info = ocp_obj.get()
         for i in range(len(hosts)):
-            for entry in node_info['items']:
-                for each in entry['status']['addresses']:
-                    if each['type'] == 'Hostname':
-                        if each['address'] in hosts:
-                            logging.info(
-                                f"Checking status for {each['address']}"
-                            )
+            for entry in node_info["items"]:
+                for each in entry["status"]["addresses"]:
+                    if each["type"] == "Hostname":
+                        if each["address"] in hosts:
+                            logging.info(f"Checking status for {each['address']}")
                             sample = TimeoutSampler(
-                                timeout, 3,
-                                self.get_ready_status, entry
+                                timeout, 3, self.get_ready_status, entry
                             )
                             try:
                                 assert sample.wait_for_func_status(result=True)
@@ -681,9 +660,9 @@ class AWSUPI(AWSBase):
             bool: True if node is Ready else False
 
         """
-        for cond in node_ent['status']['conditions']:
-            if cond['type'] == 'Ready':
-                if not cond['status'] == "True":
+        for cond in node_ent["status"]["conditions"]:
+            if cond["type"] == "Ready":
+                if not cond["status"] == "True":
                     return False
                 else:
                     return True
@@ -701,11 +680,11 @@ class AWSUPI(AWSBase):
         """
         _templating = templating.Templating()
         ansible_host_file = dict()
-        ansible_host_file['ansible_user'] = 'ec2-user'
-        ansible_host_file['ansible_become'] = 'True'
-        ansible_host_file['pod_kubeconfig'] = '/kubeconfig'
-        ansible_host_file['pod_pull_secret'] = '/tmp/pull-secret'
-        ansible_host_file['rhel_worker_nodes'] = hosts
+        ansible_host_file["ansible_user"] = "ec2-user"
+        ansible_host_file["ansible_become"] = "True"
+        ansible_host_file["pod_kubeconfig"] = "/kubeconfig"
+        ansible_host_file["pod_pull_secret"] = "/tmp/pull-secret"
+        ansible_host_file["rhel_worker_nodes"] = hosts
 
         logging.info(ansible_host_file)
         data = _templating.render_template(
@@ -714,7 +693,7 @@ class AWSUPI(AWSBase):
         )
         logging.debug("Ansible hosts file:%s", data)
         host_file_path = "/tmp/hosts"
-        with open(host_file_path, 'w') as f:
+        with open(host_file_path, "w") as f:
             f.write(data)
         return host_file_path
 
@@ -735,7 +714,7 @@ class AWSUPI(AWSBase):
 
         """
         cluster_name = get_cluster_name(self.cluster_path)
-        if config.ENV_DATA.get('rhel_workers'):
+        if config.ENV_DATA.get("rhel_workers"):
             terminate_rhel_workers(get_rhel_worker_instances(self.cluster_path))
 
         # Destroy extra volumes
@@ -747,12 +726,12 @@ class AWSUPI(AWSBase):
         self.aws.delete_apps_record_set()
 
         # Delete master, bootstrap, security group, and worker stacks
-        suffixes = ['ma', 'bs', 'sg']
+        suffixes = ["ma", "bs", "sg"]
 
         stack_names = self.aws.get_worker_stacks()
         stack_names.sort()
         stack_names.reverse()
-        stack_names.extend([f'{cluster_name}-{s}' for s in suffixes])
+        stack_names.extend([f"{cluster_name}-{s}" for s in suffixes])
         logger.info(f"Deleting stacks: {stack_names}")
         self.aws.delete_cloudformation_stacks(stack_names)
 
@@ -760,8 +739,8 @@ class AWSUPI(AWSBase):
         super(AWSUPI, self).destroy_cluster(log_level)
 
         # Delete inf and vpc stacks
-        suffixes = ['inf', 'vpc']
-        stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
+        suffixes = ["inf", "vpc"]
+        stack_names = [f"{cluster_name}-{suffix}" for suffix in suffixes]
         self.aws.delete_cloudformation_stacks(stack_names)
 
 
@@ -770,6 +749,7 @@ class AWSUPIFlexy(AWSBase):
     All the functionalities related to AWS UPI Flexy deployment
     lives here
     """
+
     def __init__(self):
         super().__init__()
 
@@ -787,11 +767,11 @@ class AWSUPIFlexy(AWSBase):
             super().deploy_prereq()
             self.flexy_instance.deploy_prereq()
 
-        def deploy(self, log_level=''):
+        def deploy(self, log_level=""):
             self.flexy_instance.deploy(log_level)
             self.test_cluster()
 
-        def destroy(self, log_level=''):
+        def destroy(self, log_level=""):
             """
             Destroy cluster using Flexy
             """
@@ -811,21 +791,36 @@ class AWSUPIFlexy(AWSBase):
         self.aws.delete_apps_record_set()
         self.aws.delete_apps_record_set(from_base_domain=True)
 
+        stack_names = self.aws.get_worker_stacks()
+        stack_names.sort()
+
+        # add additional worker nodes to the cf_stack_list2 (if there are any)
+        cf_stack_list2_file_path = os.path.join(
+            self.cluster_path,
+            constants.FLEXY_HOST_DIR,
+            constants.FLEXY_RELATIVE_CLUSTER_DIR,
+            "cf_stack_list2",
+        )
+        if os.path.exists(cf_stack_list2_file_path):
+            with open(cf_stack_list2_file_path, "r+") as f:
+                lines = f.readlines()
+                for stack_name in stack_names:
+                    if f"{stack_name}\n" not in lines:
+                        f.write(f"{stack_name}\n")
+        else:
+            logger.warning(f"File {cf_stack_list2_file_path} doesn't exists!")
+
         super(AWSUPIFlexy, self).destroy_cluster(log_level)
 
         # Delete master, bootstrap, security group, and worker stacks
-        suffixes = ['ma', 'bs', 'sg']
-        stack_names = self.aws.get_worker_stacks()
-        stack_names.sort()
+        suffixes = ["ma", "bs", "sg"]
         stack_names.reverse()
-        stack_names.extend([f'{self.cluster_name}-{s}' for s in suffixes])
+        stack_names.extend([f"{self.cluster_name}-{s}" for s in suffixes])
         logger.info(f"Deleting stacks: {stack_names}")
         self.aws.delete_cloudformation_stacks(stack_names)
 
         # WORKAROUND for Flexy issue:
         # https://issues.redhat.com/browse/OCPQE-1521
-        self.aws.delete_cf_stack_including_dependencies(
-            f"{self.cluster_name}-vpc"
-        )
+        self.aws.delete_cf_stack_including_dependencies(f"{self.cluster_name}-vpc")
         # cleanup related S3 buckets
         delete_cluster_buckets(self.cluster_name)

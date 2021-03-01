@@ -3,21 +3,20 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import scale_pgsql
 from ocs_ci.utility import utils
-from ocs_ci.framework.testlib import (
-    E2ETest, scale, ignore_leftovers
-)
+from ocs_ci.framework.testlib import E2ETest, scale, ignore_leftovers
 from ocs_ci.ocs.node import get_node_resource_utilization_from_adm_top
 
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def pgsql(request):
 
     pgsql = scale_pgsql.ScalePodPGSQL()
 
     def teardown():
         pgsql.cleanup()
+
     request.addfinalizer(teardown)
     return pgsql
 
@@ -38,7 +37,9 @@ class TestPgsqlPodScale(E2ETest):
           * Create pgsql to run on 200 pods on new added worker node
         """
         replicas = 200  # Number of postgres and pgbench pods to be deployed
-        timeout = replicas * 100  # Time in seconds to wait for pgbench pods to be created
+        timeout = (
+            replicas * 100
+        )  # Time in seconds to wait for pgbench pods to be created
 
         # Add workers node to cluster
         scale_pgsql.add_worker_node()
@@ -48,8 +49,7 @@ class TestPgsqlPodScale(E2ETest):
 
         # Deployment postgres
         pgsql.setup_postgresql(
-            replicas=replicas,
-            node_selector=constants.SCALE_NODE_SELECTOR
+            replicas=replicas, node_selector=constants.SCALE_NODE_SELECTOR
         )
 
         # Create pgbench benchmark
@@ -58,9 +58,7 @@ class TestPgsqlPodScale(E2ETest):
         )
 
         # Check worker node utilization (adm_top)
-        get_node_resource_utilization_from_adm_top(
-            node_type='worker', print_table=True
-        )
+        get_node_resource_utilization_from_adm_top(node_type="worker", print_table=True)
 
         # Wait for pg_bench pod to initialized and complete
         pgsql.wait_for_pgbench_status(

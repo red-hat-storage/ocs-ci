@@ -14,6 +14,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
 )
+from ocs_ci.ocs.exceptions import CSVNotFound
 from ocs_ci.utility import templating, utils
 
 log = logging.getLogger(__name__)
@@ -41,18 +42,17 @@ class OCS(object):
                     )
         """
         self.data = kwargs
-        self._api_version = self.data.get('api_version')
-        self._kind = self.data.get('kind')
+        self._api_version = self.data.get("api_version")
+        self._kind = self.data.get("kind")
         self._namespace = None
-        if 'metadata' in self.data:
-            self._namespace = self.data.get('metadata').get('namespace')
-            self._name = self.data.get('metadata').get('name')
+        if "metadata" in self.data:
+            self._namespace = self.data.get("metadata").get("namespace")
+            self._name = self.data.get("metadata").get("name")
         self.ocp = OCP(
-            api_version=self._api_version, kind=self.kind,
-            namespace=self._namespace
+            api_version=self._api_version, kind=self.kind, namespace=self._namespace
         )
         with tempfile.NamedTemporaryFile(
-            mode='w+', prefix=self._kind, delete=False
+            mode="w+", prefix=self._kind, delete=False
         ) as temp_file_info:
             self.temp_yaml = temp_file_info.name
         # This _is_delete flag is set to True if the delete method was called
@@ -90,12 +90,10 @@ class OCS(object):
         self.__init__(**self.data)
 
     def get(self, out_yaml_format=True):
-        return self.ocp.get(
-            resource_name=self.name, out_yaml_format=out_yaml_format
-        )
+        return self.ocp.get(resource_name=self.name, out_yaml_format=out_yaml_format)
 
     def status(self):
-        return self.ocp.get_resource(self.name, 'STATUS')
+        return self.ocp.get_resource(self.name, "STATUS")
 
     def describe(self):
         return self.ocp.describe(resource_name=self.name)
@@ -136,18 +134,16 @@ class OCS(object):
             )
             result = True
         else:
-            result = self.ocp.delete(
-                resource_name=self.name, wait=wait, force=force
-            )
+            result = self.ocp.delete(resource_name=self.name, wait=wait, force=force)
             self._is_deleted = True
         return result
 
     def apply(self, **data):
-        with open(self.temp_yaml, 'w') as yaml_file:
+        with open(self.temp_yaml, "w") as yaml_file:
             yaml.dump(data, yaml_file)
-        assert self.ocp.apply(yaml_file=self.temp_yaml), (
-            f"Failed to apply changes {data}"
-        )
+        assert self.ocp.apply(
+            yaml_file=self.temp_yaml
+        ), f"Failed to apply changes {data}"
         self.reload()
 
     def add_label(self, label):
@@ -183,19 +179,15 @@ class OCS(object):
 
 def get_version_info(namespace=None):
     operator_selector = get_selector_for_ocs_operator()
-    subscription_plan_approval = config.DEPLOYMENT.get(
-        'subscription_plan_approval'
-    )
+    subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
     package_manifest = PackageManifest(
-        resource_name=defaults.OCS_OPERATOR_NAME, selector=operator_selector,
+        resource_name=defaults.OCS_OPERATOR_NAME,
+        selector=operator_selector,
         subscription_plan_approval=subscription_plan_approval,
     )
-    channel = config.DEPLOYMENT.get('ocs_csv_channel')
+    channel = config.DEPLOYMENT.get("ocs_csv_channel")
     csv_name = package_manifest.get_current_csv(channel)
-    csv_pre = CSV(
-        resource_name=csv_name,
-        namespace=namespace
-    )
+    csv_pre = CSV(resource_name=csv_name, namespace=namespace)
     info = get_images(csv_pre.get())
     return info
 
@@ -223,21 +215,32 @@ def get_ocs_csv():
     Returns:
         CSV: OCS CSV object
 
+    Raises:
+        CSVNotFound: In case no CSV found.
+
     """
-    namespace = config.ENV_DATA['cluster_namespace']
+    namespace = config.ENV_DATA["cluster_namespace"]
     operator_selector = get_selector_for_ocs_operator()
-    subscription_plan_approval = config.DEPLOYMENT.get(
-        'subscription_plan_approval'
-    )
+    subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
     ocs_package_manifest = PackageManifest(
-        resource_name=defaults.OCS_OPERATOR_NAME, selector=operator_selector,
+        resource_name=defaults.OCS_OPERATOR_NAME,
+        selector=operator_selector,
         subscription_plan_approval=subscription_plan_approval,
     )
-    channel = config.DEPLOYMENT.get('ocs_csv_channel')
-    ocs_csv_name = ocs_package_manifest.get_current_csv(channel=channel)
-    ocs_csv = CSV(
-        resource_name=ocs_csv_name, namespace=namespace
-    )
+    channel = config.DEPLOYMENT.get("ocs_csv_channel")
+    ocs_csv_name = None
+    # OCS CSV is extracted from the available CSVs in cluster namespace
+    # for Openshift dedicated platform
+    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+        ocp_cluster = OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="csv")
+        for item in ocp_cluster.get()["items"]:
+            if item["metadata"]["name"].startswith(defaults.OCS_OPERATOR_NAME):
+                ocs_csv_name = item["metadata"]["name"]
+        if not ocs_csv_name:
+            raise CSVNotFound("No OCS CSV found for openshift dedicated")
+    else:
+        ocs_csv_name = ocs_package_manifest.get_current_csv(channel=channel)
+    ocs_csv = CSV(resource_name=ocs_csv_name, namespace=namespace)
     log.info(f"Check if OCS operator: {ocs_csv_name} is in Succeeded phase.")
     ocs_csv.wait_for_phase(phase="Succeeded", timeout=600)
     return ocs_csv
@@ -251,4 +254,4 @@ def check_if_cluster_was_upgraded():
         bool: True if the OCS cluster went through upgrade, False otherwise
 
     """
-    return True if 'replaces' in get_ocs_csv().get().get('spec') else False
+    return True if "replaces" in get_ocs_csv().get().get("spec") else False

@@ -2,21 +2,23 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import (
-    tier4, tier4b, ManageTest,
+    tier4,
+    tier4b,
+    ManageTest,
     aws_platform_required,
-    ipi_deployment_required, ignore_leftovers
+    ipi_deployment_required,
+    ignore_leftovers,
 )
 from ocs_ci.ocs import machine, constants
 from ocs_ci.ocs.resources import pod
-from ocs_ci.helpers.helpers import (
-    label_worker_node, remove_label_from_worker_node
-)
+from ocs_ci.helpers.helpers import label_worker_node, remove_label_from_worker_node
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import (
-    get_osd_running_nodes, get_app_pod_running_nodes,
+    get_osd_running_nodes,
+    get_app_pod_running_nodes,
     get_both_osd_and_app_pod_running_node,
     add_new_node_and_label_it,
-    get_worker_nodes
+    get_worker_nodes,
 )
 
 
@@ -32,9 +34,9 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     """
     Knip-678 Automated recovery from failed nodes
     """
+
     @pytest.fixture(autouse=True)
     def teardown(self, request):
-
         def finalizer():
             worker_nodes = get_worker_nodes()
             # Removing created label on all worker nodes
@@ -53,18 +55,18 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     @pytest.mark.parametrize(
         argnames=["interface"],
         argvalues=[
-            pytest.param(
-                *['rbd'],
-                marks=pytest.mark.polarion_id("OCS-2100")
-            ),
-            pytest.param(
-                *['cephfs'],
-                marks=pytest.mark.polarion_id("OCS-2101")
-            ),
-        ]
+            pytest.param(*["rbd"], marks=pytest.mark.polarion_id("OCS-2100")),
+            pytest.param(*["cephfs"], marks=pytest.mark.polarion_id("OCS-2101")),
+        ],
     )
     def test_automated_recovery_from_failed_nodes_IPI_proactive(
-        self, interface, pvc_factory, pod_factory, dc_pod_factory
+        self,
+        interface,
+        pvc_factory,
+        pod_factory,
+        dc_pod_factory,
+        bucket_factory,
+        rgw_bucket_factory,
     ):
         """
         Knip-678 Automated recovery from failed nodes
@@ -74,20 +76,16 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         osd_running_nodes = get_osd_running_nodes()
         log.info(f"OSDs are running on nodes {osd_running_nodes}")
         # Label osd nodes with fedora app
-        label_worker_node(
-            osd_running_nodes, label_key='dc', label_value='fedora'
-        )
+        label_worker_node(osd_running_nodes, label_key="dc", label_value="fedora")
 
         # Create DC app pods
         log.info("Creating DC based app pods")
         interface = (
-            constants.CEPHBLOCKPOOL if interface == 'rbd'
-            else constants.CEPHFILESYSTEM
+            constants.CEPHBLOCKPOOL if interface == "rbd" else constants.CEPHFILESYSTEM
         )
         dc_pod_obj = []
         for i in range(2):
-            dc_pod = dc_pod_factory(
-                interface=interface, node_selector={'dc': 'fedora'})
+            dc_pod = dc_pod_factory(interface=interface, node_selector={"dc": "fedora"})
             pod.run_io_in_bg(dc_pod, fedora_dc=True)
             dc_pod_obj.append(dc_pod)
 
@@ -100,7 +98,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             osd_running_nodes, dc_pod_node_name
         )
         msg = "Common OSD and app running node(s) NOT found"
-        assert (len(common_nodes) > 0), msg
+        assert len(common_nodes) > 0, msg
         log.info(f"Common OSD and app pod running nodes are {common_nodes}")
 
         # Get the machine name using the node name
@@ -108,12 +106,8 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         log.info(f"{common_nodes[0]} associated machine is {machine_name}")
 
         # Get the machineset name using machine name
-        machineset_name = machine.get_machineset_from_machine_name(
-            machine_name
-        )
-        log.info(
-            f"{common_nodes[0]} associated machineset is {machineset_name}"
-        )
+        machineset_name = machine.get_machineset_from_machine_name(machine_name)
+        log.info(f"{common_nodes[0]} associated machineset is {machineset_name}")
 
         # Add a new node and label it
         add_new_node_and_label_it(machineset_name)
@@ -133,7 +127,9 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
         # run IO and delete the resources
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
         self.sanity_helpers.delete_resources()
 
         # Perform cluster and Ceph health checks

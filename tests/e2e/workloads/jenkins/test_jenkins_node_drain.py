@@ -4,23 +4,20 @@ import pytest
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
-from ocs_ci.framework.testlib import (
-    E2ETest, workloads, ignore_leftovers
-)
-from ocs_ci.ocs.constants import (
-    STATUS_COMPLETED, MASTER_MACHINE, WORKER_MACHINE
-)
+from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
+from ocs_ci.ocs.constants import STATUS_COMPLETED, MASTER_MACHINE, WORKER_MACHINE
 
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def jenkins(request):
 
     jenkins = Jenkins()
 
     def teardown():
         jenkins.cleanup()
+
     request.addfinalizer(teardown)
     return jenkins
 
@@ -31,6 +28,7 @@ class TestJenkinsNodeDrain(E2ETest):
     """
     Test running Jenkins and Node Drain
     """
+
     @pytest.fixture()
     def jenkins_setup(self, jenkins):
         """
@@ -43,7 +41,7 @@ class TestJenkinsNodeDrain(E2ETest):
         jenkins.create_ocs_jenkins_template()
 
     @pytest.mark.parametrize(
-        argnames=['node_type', 'num_projects', 'num_of_builds'],
+        argnames=["node_type", "num_projects", "num_of_builds"],
         argvalues=[
             pytest.param(
                 *[WORKER_MACHINE, 4, 3], marks=pytest.mark.polarion_id("OCS-2252")
@@ -51,7 +49,7 @@ class TestJenkinsNodeDrain(E2ETest):
             pytest.param(
                 *[MASTER_MACHINE, 3, 6], marks=pytest.mark.polarion_id("OCS-2176")
             ),
-        ]
+        ],
     )
     @pytest.mark.usefixtures(jenkins_setup.__name__)
     def test_run_jenkins_drain_node(
@@ -100,4 +98,4 @@ class TestJenkinsNodeDrain(E2ETest):
         jenkins.print_completed_builds_results()
 
         # Perform cluster and Ceph health checks
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=40)

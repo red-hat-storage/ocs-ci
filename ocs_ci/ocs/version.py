@@ -57,37 +57,37 @@ def get_environment_info():
     results = {}
     # getting the name and email  of the user that running the test.
     try:
-        user = utils.run_cmd('git config --get user.name').strip()
-        email = utils.run_cmd('git config --get user.email').strip()
-        results['user'] = f'{user} <{email}>'
+        user = utils.run_cmd("git config --get user.name").strip()
+        email = utils.run_cmd("git config --get user.email").strip()
+        results["user"] = f"{user} <{email}>"
     except CommandFailed:
         # if no git user define, the default user is none
-        results['user'] = ''
+        results["user"] = ""
 
-    results['clustername'] = ocp.get_clustername()
-    results['platform'] = node.get_provider()
-    if results['platform'].lower() not in constants.ON_PREM_PLATFORMS:
-        results['platform'] = results['platform'].upper()
+    results["clustername"] = ocp.get_clustername()
+    results["platform"] = node.get_provider()
+    if results["platform"].lower() not in constants.ON_PREM_PLATFORMS:
+        results["platform"] = results["platform"].upper()
 
-    results['ocp_build'] = ocp.get_build()
-    results['ocp_channel'] = ocp.get_ocp_channel()
-    results['ocp_version'] = utils.get_ocp_version()
+    results["ocp_build"] = ocp.get_build()
+    results["ocp_channel"] = ocp.get_ocp_channel()
+    results["ocp_version"] = utils.get_ocp_version()
 
-    results['ceph_version'] = utils.get_ceph_version()
-    results['rook_version'] = utils.get_rook_version()
+    results["ceph_version"] = utils.get_ceph_version()
+    results["rook_version"] = utils.get_rook_version()
 
-    results['ocs_build'] = ocp.get_ocs_version()
+    results["ocs_build"] = ocp.get_ocs_version()
     # Extracting the version number x.y.z from full build name
-    m = re.match(r"(\d.\d).(\d)", results['ocs_build'])
+    m = re.match(r"(\d.\d).(\d)", results["ocs_build"])
     if m and m.group(1) is not None:
-        results['ocs_version'] = m.group(1)
+        results["ocs_version"] = m.group(1)
 
     # Getting the instance type for cloud or Arch type for None cloud
-    worker_lbl = node.get_typed_nodes(num_of_nodes=1)[0].data['metadata']['labels']
-    if 'beta.kubernetes.io/instance-type' in worker_lbl:
-        results['worker_type'] = worker_lbl['beta.kubernetes.io/instance-type']
+    worker_lbl = node.get_nodes(num_of_nodes=1)[0].data["metadata"]["labels"]
+    if "beta.kubernetes.io/instance-type" in worker_lbl:
+        results["worker_type"] = worker_lbl["beta.kubernetes.io/instance-type"]
     else:
-        results['worker_type'] = worker_lbl['kubernetes.io/arch']
+        results["worker_type"] = worker_lbl["kubernetes.io/arch"]
 
     return results
 
@@ -122,11 +122,11 @@ def get_ocs_version():
     # TODO: how to do this in upstream where namespace is rook-ceph?
     # TODO: should we use defaults.ROOK_CLUSTER_NAMESPACE somehow here?
     storage_namespaces = []
-    all_namespaces = OCP(kind="namespace").get()['items']
+    all_namespaces = OCP(kind="namespace").get()["items"]
     ns_re = re.compile("^openshift.*storage")
     for ns in all_namespaces:
-        if (ns_re.match(ns['metadata']['name'])):
-            storage_namespaces.append(ns['metadata']['name'])
+        if ns_re.match(ns["metadata"]["name"]):
+            storage_namespaces.append(ns["metadata"]["name"])
 
     logger.info("found storage namespaces %s", storage_namespaces)
 
@@ -137,20 +137,21 @@ def get_ocs_version():
         ocs = OCP(kind="pod", namespace=ns)
         ocs_pods = ocs.get()
         ns_dict = {}
-        for pod in ocs_pods['items']:
-            for container in pod['spec']['containers']:
+        for pod in ocs_pods["items"]:
+            for container in pod["spec"]["containers"]:
                 logger.debug(
-                    'container %s (in pod %s) uses image %s',
-                    container['name'],
-                    pod['metadata']['name'],
-                    container['image'])
-            cs_items = pod['status'].get('containerStatuses')
+                    "container %s (in pod %s) uses image %s",
+                    container["name"],
+                    pod["metadata"]["name"],
+                    container["image"],
+                )
+            cs_items = pod["status"].get("containerStatuses")
             if cs_items is None:
-                pod_name = pod['metadata']['name']
-                logger.warning(f'pod {pod_name} has no containerStatuses')
+                pod_name = pod["metadata"]["name"]
+                logger.warning(f"pod {pod_name} has no containerStatuses")
                 continue
             for cs in cs_items:
-                ns_dict.setdefault(cs['image'], set()).add(cs['imageID'])
+                ns_dict.setdefault(cs["image"], set()).add(cs["imageID"])
         image_dict.setdefault(ns, ns_dict)
 
     logger.debug("ocs version collected")
@@ -181,9 +182,9 @@ def report_ocs_version(cluster_version, image_dict, file_obj):
     logger.info("ClusterVersion .status.desired.image: %s", image)
 
     # write human readable version of the above
-    print(f'cluster channel: {channel}', file=file_obj)
-    print(f'cluster version: {version}', file=file_obj)
-    print(f'cluster image: {image}', file=file_obj)
+    print(f"cluster channel: {channel}", file=file_obj)
+    print(f"cluster version: {version}", file=file_obj)
+    print(f"cluster image: {image}", file=file_obj)
 
     for ns, ns_dict in image_dict.items():
         logger.info("storage namespace %s", ns)
@@ -193,7 +194,9 @@ def report_ocs_version(cluster_version, image_dict, file_obj):
             print(f"image {image}", file=file_obj)
             # TODO: should len(image_ids) == 1?
             if len(image_ids) > 1:
-                logging.warning("there are at least 2 different imageIDs for image %s", image)
+                logging.warning(
+                    "there are at least 2 different imageIDs for image %s", image
+                )
             for image_id in image_ids:
                 print(f" * {image_id}", file=file_obj)
 
@@ -205,24 +208,22 @@ def main():
     to invoke this function.
 
     """
-    ap = argparse.ArgumentParser(
-        description="report OCS version for QE purposes")
-    ap.add_argument(
-        "--cluster-path",
-        required=True,
-        help="Path to cluster directory")
+    ap = argparse.ArgumentParser(description="report OCS version for QE purposes")
+    ap.add_argument("--cluster-path", required=True, help="Path to cluster directory")
     ap.add_argument(
         "-l",
         "--loglevel",
         choices=["INFO", "DEBUG"],
         default=[],
         nargs=1,
-        help="show log messages using given log level")
+        help="show log messages using given log level",
+    )
     ap.add_argument(
         "-v",
         "--verbose",
         action="store_true",
-        help="show raw version data via pprint insteaf of plaintext")
+        help="show raw version data via pprint insteaf of plaintext",
+    )
     args = ap.parse_args()
 
     if "INFO" in args.loglevel:
@@ -231,13 +232,14 @@ def main():
         logging.basicConfig(level=logging.DEBUG)
 
     # make sure that bin dir is in PATH (for oc cli tool)
-    utils.add_path_to_env_path(os.path.expanduser(
-        framework.config.RUN['bin_dir']))
+    utils.add_path_to_env_path(os.path.expanduser(framework.config.RUN["bin_dir"]))
 
     # set cluster path (for KUBECONFIG required by oc cli tool)
     from ocs_ci.ocs.openshift_ops import OCP
+
     OCP.set_kubeconfig(
-        os.path.join(args.cluster_path, config.RUN['kubeconfig_location']))
+        os.path.join(args.cluster_path, config.RUN["kubeconfig_location"])
+    )
 
     cluster_version, image_dict = get_ocs_version()
 

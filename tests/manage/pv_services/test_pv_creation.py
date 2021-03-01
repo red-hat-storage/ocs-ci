@@ -16,16 +16,14 @@ from ocs_ci.utility import templating, utils
 log = logging.getLogger(__name__)
 
 PV_YAML = os.path.join(TEMPLATE_PV_PVC_DIR, "PersistentVolume.yaml")
-TEMP_YAML_FILE = 'test.yaml'
+TEMP_YAML_FILE = "test.yaml"
 VOLUME_DELETED = 'persistentvolume "{volume_name}" deleted'
 
 
-OCP = ocp.OCP(
-    kind='PersistentVolume', namespace=config.ENV_DATA['cluster_namespace']
-)
+OCP = ocp.OCP(kind="PersistentVolume", namespace=config.ENV_DATA["cluster_namespace"])
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture(scope="class")
 def test_fixture(request):
     """
     Create disks
@@ -34,6 +32,7 @@ def test_fixture(request):
 
     def finalizer():
         teardown(self)
+
     request.addfinalizer(finalizer)
 
 
@@ -50,15 +49,13 @@ def create_pv(pv_data):
     """
     Create a new Persistent Volume
     """
-    file_y = templating.generate_yaml_from_jinja2_template_with_data(
-        PV_YAML, **pv_data
-    )
-    with open(TEMP_YAML_FILE, 'w') as yaml_file:
+    file_y = templating.generate_yaml_from_jinja2_template_with_data(PV_YAML, **pv_data)
+    with open(TEMP_YAML_FILE, "w") as yaml_file:
         yaml.dump(file_y, yaml_file, default_flow_style=False)
         log.info("Creating new Persistent Volume")
     assert OCP.create(yaml_file=TEMP_YAML_FILE)
     return OCP.wait_for_resource(
-        resource_name=pv_data['pv_name'], condition='Available'
+        resource_name=pv_data["pv_name"], condition="Available"
     )
 
 
@@ -94,10 +91,11 @@ class TestPvCreation(ManageTest):
     """
     Testing PV creation
     """
+
     pv_data = {}
-    pv_name = 'my-pv1'
-    pv_data['pv_name'] = pv_name
-    pv_data['pv_size'] = '3Gi'
+    pv_name = "my-pv1"
+    pv_data["pv_name"] = pv_name
+    pv_data["pv_size"] = "3Gi"
 
     def test_pv_creation(self):
         """

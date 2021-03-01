@@ -7,28 +7,29 @@ import os
 
 from ocs_ci.ocs import constants
 
-STORAGE_API_VERSION = 'storage.k8s.io/v1'
-ROOK_API_VERSION = 'ceph.rook.io/v1'
-OCP_API_VERSION = 'project.openshift.io/v1'
-OPENSHIFT_REST_CLIENT_API_VERSION = 'v1'
+STORAGE_API_VERSION = "storage.k8s.io/v1"
+ROOK_API_VERSION = "ceph.rook.io/v1"
+OCP_API_VERSION = "project.openshift.io/v1"
+OPENSHIFT_REST_CLIENT_API_VERSION = "v1"
 
 # Be aware that variables defined above and below are not used anywhere in the
 # config files and their sections when we rendering config!
 
-INSTALLER_VERSION = '4.1.4'
+INSTALLER_VERSION = "4.1.4"
 CLIENT_VERSION = INSTALLER_VERSION
-ROOK_CLUSTER_NAMESPACE = 'openshift-storage'
-OCS_MONITORING_NAMESPACE = 'openshift-monitoring'
-KUBECONFIG_LOCATION = 'auth/kubeconfig'  # relative from cluster_dir
+SRE_BUILD_TEST_NAMESPACE = "openshift-build-test"
+ROOK_CLUSTER_NAMESPACE = "openshift-storage"
+OCS_MONITORING_NAMESPACE = "openshift-monitoring"
+KUBECONFIG_LOCATION = "auth/kubeconfig"  # relative from cluster_dir
 API_VERSION = "v1"
-CEPHFILESYSTEM_NAME = 'ocs-storagecluster-cephfilesystem'
-RBD_PROVISIONER = f'{ROOK_CLUSTER_NAMESPACE}.rbd.csi.ceph.com'
-CEPHFS_PROVISIONER = f'{ROOK_CLUSTER_NAMESPACE}.cephfs.csi.ceph.com'
+CEPHFILESYSTEM_NAME = "ocs-storagecluster-cephfilesystem"
+RBD_PROVISIONER = f"{ROOK_CLUSTER_NAMESPACE}.rbd.csi.ceph.com"
+CEPHFS_PROVISIONER = f"{ROOK_CLUSTER_NAMESPACE}.cephfs.csi.ceph.com"
 CSI_PROVISIONERS = {CEPHFS_PROVISIONER, RBD_PROVISIONER}
 
 TEMP_YAML = os.path.join(constants.TEMPLATE_DIR, "temp.yaml")
 
-PROMETHEUS_ROUTE = 'prometheus-k8s'
+PROMETHEUS_ROUTE = "prometheus-k8s"
 
 # Default device size in Gigs
 DEVICE_SIZE = 100
@@ -39,8 +40,8 @@ LIVE_CONTENT_SOURCE = "redhat-operators"
 
 # Noobaa S3 bucket website configurations
 website_config = {
-    'ErrorDocument': {'Key': 'error.html'},
-    'IndexDocument': {'Suffix': 'index.html'},
+    "ErrorDocument": {"Key": "error.html"},
+    "IndexDocument": {"Suffix": "index.html"},
 }
 index = "<html><body><h1>My Static Website on S3</h1></body></html>"
 error = "<html><body><h1>Oh. Something bad happened!</h1></body></html>"
@@ -52,3 +53,18 @@ IPMI_IPMB_ADDRESS = 0x20
 
 # Background load FIO pod name
 BG_LOAD_NAMESPACE = "bg-fio-load"
+
+# pool related data
+MAX_BYTES_IN_POOL_AFTER_DATA_DELETE = 250000
+
+# Elastic search parameters
+ELASTICSEARCH_DEV_IP = "10.0.144.152"
+ELASTICSEARCE_PORT = 9200
+
+# Local storage namespace
+LOCAL_STORAGE_NAMESPACE = "openshift-local-storage"
+
+# Vault related defaults
+VAULT_DEFAULT_CA_CERT = "ocs-kms-ca-secret"
+VAULT_DEFAULT_CLIENT_CERT = "ocs-kms-client-cert"
+VAULT_DEFAULT_CLIENT_KEY = "ocs-kms-client-key"

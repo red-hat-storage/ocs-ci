@@ -10,9 +10,12 @@ from ocs_ci.utility import templating, utils
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs import constants, cluster, machine, node
+from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.exceptions import (
-    UnavailableResourceException, UnexpectedBehaviour, CephHealthException,
-    UnsupportedPlatformError
+    UnavailableResourceException,
+    UnexpectedBehaviour,
+    CephHealthException,
+    UnsupportedPlatformError,
 )
 
 logger = logging.getLogger(__name__)
@@ -22,9 +25,12 @@ class FioPodScale(object):
     """
     FioPodScale Class with required scale library functions and params
     """
+
     def __init__(
-        self, kind='deploymentconfig', pod_dict_path=constants.FEDORA_DC_YAML,
-        node_selector=constants.SCALE_NODE_SELECTOR
+        self,
+        kind="deploymentconfig",
+        pod_dict_path=constants.FEDORA_DC_YAML,
+        node_selector=constants.SCALE_NODE_SELECTOR,
     ):
         """
         Initializer function
@@ -58,7 +64,7 @@ class FioPodScale(object):
         """
         Set dc_deployment True or False based on Kind
         """
-        self.dc_deployment = True if self.kind == 'deploymentconfig' else False
+        self.dc_deployment = True if self.kind == "deploymentconfig" else False
 
     def create_and_set_namespace(self):
         """
@@ -70,15 +76,12 @@ class FioPodScale(object):
         if self.dc_deployment:
             self.sa_name = helpers.create_serviceaccount(self.namespace)
             self.sa_name = self.sa_name.name
-            helpers.add_scc_policy(
-                sa_name=self.sa_name, namespace=self.namespace
-            )
+            helpers.add_scc_policy(sa_name=self.sa_name, namespace=self.namespace)
         else:
             self.sa_name = None
 
     def create_multi_pvc_pod(
-        self, pods_per_iter=5, io_runtime=3600, start_io=False,
-        pvc_size=None
+        self, pods_per_iter=5, io_runtime=3600, start_io=False, pvc_size=None
     ):
         """
         Function to create PVC of different type and attach them to PODs and start IO.
@@ -103,12 +106,18 @@ class FioPodScale(object):
         logging.info(f"Create {pods_per_iter * 4} PVCs and PODs")
         # Create PVCs
         cephfs_pvcs = helpers.create_multiple_pvc_parallel(
-            sc_obj=cephfs_sc, namespace=self.namespace, number_of_pvc=pods_per_iter,
-            size=pvc_size, access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
+            sc_obj=cephfs_sc,
+            namespace=self.namespace,
+            number_of_pvc=pods_per_iter,
+            size=pvc_size,
+            access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX],
         )
         rbd_pvcs = helpers.create_multiple_pvc_parallel(
-            sc_obj=rbd_sc, namespace=self.namespace, number_of_pvc=pods_per_iter,
-            size=pvc_size, access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
+            sc_obj=rbd_sc,
+            namespace=self.namespace,
+            number_of_pvc=pods_per_iter,
+            size=pvc_size,
+            access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX],
         )
 
         # Appending all the pvc_obj and pod_obj to list
@@ -117,9 +126,13 @@ class FioPodScale(object):
 
         # Create pods with above pvc list
         cephfs_pods = helpers.create_pods_parallel(
-            cephfs_pvcs, self.namespace, constants.CEPHFS_INTERFACE,
-            pod_dict_path=self.pod_dict_path, sa_name=self.sa_name,
-            dc_deployment=self.dc_deployment, node_selector=self.node_selector
+            cephfs_pvcs,
+            self.namespace,
+            constants.CEPHFS_INTERFACE,
+            pod_dict_path=self.pod_dict_path,
+            sa_name=self.sa_name,
+            dc_deployment=self.dc_deployment,
+            node_selector=self.node_selector,
         )
         rbd_rwo_pvc, rbd_rwx_pvc = ([] for i in range(2))
         for pvc_obj in rbd_pvcs:
@@ -128,15 +141,23 @@ class FioPodScale(object):
             else:
                 rbd_rwo_pvc.append(pvc_obj)
         rbd_rwo_pods = helpers.create_pods_parallel(
-            rbd_rwo_pvc, self.namespace, constants.CEPHBLOCKPOOL,
-            pod_dict_path=self.pod_dict_path, sa_name=self.sa_name,
-            dc_deployment=self.dc_deployment, node_selector=self.node_selector
+            rbd_rwo_pvc,
+            self.namespace,
+            constants.CEPHBLOCKPOOL,
+            pod_dict_path=self.pod_dict_path,
+            sa_name=self.sa_name,
+            dc_deployment=self.dc_deployment,
+            node_selector=self.node_selector,
         )
         rbd_rwx_pods = helpers.create_pods_parallel(
-            rbd_rwx_pvc, self.namespace, constants.CEPHBLOCKPOOL,
-            pod_dict_path=self.pod_dict_path, sa_name=self.sa_name,
-            dc_deployment=self.dc_deployment, raw_block_pv=True,
-            node_selector=self.node_selector
+            rbd_rwx_pvc,
+            self.namespace,
+            constants.CEPHBLOCKPOOL,
+            pod_dict_path=self.pod_dict_path,
+            sa_name=self.sa_name,
+            dc_deployment=self.dc_deployment,
+            raw_block_pv=True,
+            node_selector=self.node_selector,
         )
         temp_pod_objs = list()
         temp_pod_objs.extend(cephfs_pods + rbd_rwo_pods)
@@ -149,20 +170,26 @@ class FioPodScale(object):
             threads = list()
             for pod_obj in temp_pod_objs:
                 process = threading.Thread(
-                    target=pod_obj.run_io, kwargs={
-                        'storage_type': 'fs', 'size': fio_size,
-                        'runtime': io_runtime, 'rate': fio_rate
-                    }
+                    target=pod_obj.run_io,
+                    kwargs={
+                        "storage_type": "fs",
+                        "size": fio_size,
+                        "runtime": io_runtime,
+                        "rate": fio_rate,
+                    },
                 )
                 process.start()
                 threads.append(process)
                 time.sleep(30)
             for pod_obj in rbd_rwx_pods:
                 process = threading.Thread(
-                    target=pod_obj.run_io, kwargs={
-                        'storage_type': 'block', 'size': fio_size,
-                        'runtime': io_runtime, 'rate': fio_rate
-                    }
+                    target=pod_obj.run_io,
+                    kwargs={
+                        "storage_type": "block",
+                        "size": fio_size,
+                        "runtime": io_runtime,
+                        "rate": fio_rate,
+                    },
                 )
                 process.start()
                 threads.append(process)
@@ -173,8 +200,12 @@ class FioPodScale(object):
         return pod_objs, pvc_objs
 
     def create_scale_pods(
-        self, scale_count=1500, pods_per_iter=5, io_runtime=None,
-        pvc_size=None, start_io=None
+        self,
+        scale_count=1500,
+        pods_per_iter=5,
+        io_runtime=None,
+        pvc_size=None,
+        start_io=None,
     ):
         """
         Main Function with scale pod creation flow and checks to add nodes.
@@ -197,9 +228,12 @@ class FioPodScale(object):
         # Check for expected worker count
         expected_worker_count = get_expected_worker_count(scale_count)
         if check_and_add_enough_worker(expected_worker_count):
-            if config.ENV_DATA['deployment_type'] == 'ipi' and config.ENV_DATA['platform'].lower() == 'aws':
+            if (
+                config.ENV_DATA["deployment_type"] == "ipi"
+                and config.ENV_DATA["platform"].lower() == "aws"
+            ):
                 for obj in machine.get_machineset_objs():
-                    if 'app' in obj.name:
+                    if "app" in obj.name:
                         self.ms_name.append(obj.name)
             else:
                 self.ms_name = []
@@ -213,7 +247,9 @@ class FioPodScale(object):
                 logger.info(f"Scaled {scale_count} pvc and pods")
 
                 if cluster.validate_pg_balancer():
-                    logging.info("OSD consumption and PG distribution is good to continue")
+                    logging.info(
+                        "OSD consumption and PG distribution is good to continue"
+                    )
                 else:
                     raise UnexpectedBehaviour("Unequal PG distribution to OSDs")
 
@@ -226,7 +262,9 @@ class FioPodScale(object):
                 all_pod_obj.extend(self.pod_obj)
                 try:
                     # Check enough resources available in the dedicated app workers
-                    check_enough_resource_available_in_workers(self.ms_name, self.pod_dict_path)
+                    check_enough_resource_available_in_workers(
+                        self.ms_name, self.pod_dict_path
+                    )
 
                     # Check for ceph cluster OSD utilization
                     if not cluster.validate_osd_utilization(osd_used=75):
@@ -237,7 +275,9 @@ class FioPodScale(object):
                         raise CephHealthException("Cluster OSDs are near full")
 
                     # Check for 500 pods per namespace
-                    pod_objs = pod.get_all_pods(namespace=self.namespace_list[-1].namespace)
+                    pod_objs = pod.get_all_pods(
+                        namespace=self.namespace_list[-1].namespace
+                    )
                     if len(pod_objs) >= 500:
                         self.create_and_set_namespace()
 
@@ -266,11 +306,13 @@ class FioPodScale(object):
         for namespace in self.namespace_list:
             delete_objs_parallel(
                 obj_list=pod.get_all_pods(namespace=namespace.namespace),
-                namespace=namespace.namespace, kind=self.kind
+                namespace=namespace.namespace,
+                kind=self.kind,
             )
             delete_objs_parallel(
                 obj_list=pvc.get_all_pvc_objs(namespace=namespace.namespace),
-                namespace=namespace.namespace, kind=constants.PVC
+                namespace=namespace.namespace,
+                kind=constants.PVC,
             )
             ocp = OCP(kind=constants.NAMESPACE)
             ocp.delete(resource_name=namespace.namespace)
@@ -278,7 +320,7 @@ class FioPodScale(object):
         # Remove scale label from worker nodes in cleanup
         scale_workers = machine.get_labeled_nodes(constants.SCALE_LABEL)
         helpers.remove_label_from_worker_node(
-            node_list=scale_workers, label_key='scale-label'
+            node_list=scale_workers, label_key="scale-label"
         )
 
         # Delete machineset which will delete respective nodes too for aws-ipi platform
@@ -301,10 +343,10 @@ def delete_objs_parallel(obj_list, namespace, kind):
     threads = list()
     for obj in obj_list:
         process1 = threading.Thread(
-            target=ocp.delete, kwargs={'resource_name': f"{obj.name}"}
+            target=ocp.delete, kwargs={"resource_name": f"{obj.name}"}
         )
         process2 = threading.Thread(
-            target=ocp.wait_for_delete, kwargs={'resource_name': f"{obj.name}"}
+            target=ocp.wait_for_delete, kwargs={"resource_name": f"{obj.name}"}
         )
         process1.start()
         process2.start()
@@ -325,32 +367,48 @@ def check_enough_resource_available_in_workers(ms_name=None, pod_dict_path=None)
 
     """
     # Check for enough worker nodes
-    if config.ENV_DATA['deployment_type'] == 'ipi' and config.ENV_DATA['platform'].lower() == 'aws':
+    if (
+        config.ENV_DATA["deployment_type"] == "ipi"
+        and config.ENV_DATA["platform"].lower() == "aws"
+    ):
         if pod_dict_path == constants.NGINX_POD_YAML:
             # Below expected count value is kind of hardcoded based on the manual
             # execution result i.e. With m5.4xlarge instance and nginx pod
             # TODO: Revisit the expected_count value once there is support for
             # TODO: more pod creation in one worker node
             if add_worker_based_on_pods_count_per_node(
-                machineset_name=ms_name, node_count=1, expected_count=140,
-                role_type='app,worker'
+                machineset_name=ms_name,
+                node_count=1,
+                expected_count=140,
+                role_type="app,worker",
             ):
                 logging.info("Nodes added for app pod creation")
             else:
                 logging.info("Existing resource are enough to create more pods")
         else:
             if add_worker_based_on_cpu_utilization(
-                machineset_name=ms_name, node_count=1, expected_percent=59,
-                role_type='app,worker'
+                machineset_name=ms_name,
+                node_count=1,
+                expected_percent=59,
+                role_type="app,worker",
             ):
                 logging.info("Nodes added for app pod creation")
             else:
                 logging.info("Existing resource are enough to create more pods")
-    elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'vsphere':
+    elif (
+        config.ENV_DATA["deployment_type"] == "upi"
+        and config.ENV_DATA["platform"].lower() == "vsphere"
+    ):
         raise UnsupportedPlatformError("Unsupported Platform")
-    elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'baremetal':
+    elif (
+        config.ENV_DATA["deployment_type"] == "upi"
+        and config.ENV_DATA["platform"].lower() == "baremetal"
+    ):
         raise UnsupportedPlatformError("Unsupported Platform")
-    elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'azure':
+    elif (
+        config.ENV_DATA["deployment_type"] == "upi"
+        and config.ENV_DATA["platform"].lower() == "azure"
+    ):
         raise UnsupportedPlatformError("Unsupported Platform")
 
 
@@ -371,12 +429,17 @@ def add_worker_based_on_cpu_utilization(
 
     """
     # Check for CPU utilization on each nodes
-    if config.ENV_DATA['deployment_type'] == 'ipi' and config.ENV_DATA['platform'].lower() == 'aws':
-        app_nodes = node.get_typed_nodes(node_type=role_type)
-        uti_dict = node.get_node_resource_utilization_from_oc_describe(node_type=role_type)
+    if (
+        config.ENV_DATA["deployment_type"] == "ipi"
+        and config.ENV_DATA["platform"].lower() == "aws"
+    ):
+        app_nodes = node.get_nodes(node_type=role_type)
+        uti_dict = node.get_node_resource_utilization_from_oc_describe(
+            node_type=role_type
+        )
         uti_high_nodes, uti_less_nodes = ([] for i in range(2))
         for node_obj in app_nodes:
-            utilization_percent = uti_dict[f"{node_obj.name}"]['cpu']
+            utilization_percent = uti_dict[f"{node_obj.name}"]["cpu"]
             if utilization_percent > expected_percent:
                 uti_high_nodes.append(node_obj.name)
             else:
@@ -390,11 +453,20 @@ def add_worker_based_on_cpu_utilization(
         else:
             logging.info(f"Enough resource available for more pod creation {uti_dict}")
             return False
-    elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'vsphere':
+    elif (
+        config.ENV_DATA["deployment_type"] == "upi"
+        and config.ENV_DATA["platform"].lower() == "vsphere"
+    ):
         raise UnsupportedPlatformError("Unsupported Platform to add worker")
-    elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'baremetal':
+    elif (
+        config.ENV_DATA["deployment_type"] == "upi"
+        and config.ENV_DATA["platform"].lower() == "baremetal"
+    ):
         raise UnsupportedPlatformError("Unsupported Platform to add worker")
-    elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'azure':
+    elif (
+        config.ENV_DATA["deployment_type"] == "upi"
+        and config.ENV_DATA["platform"].lower() == "azure"
+    ):
         raise UnsupportedPlatformError("Unsupported Platform to add worker")
 
 
@@ -415,8 +487,11 @@ def add_worker_based_on_pods_count_per_node(
 
     """
     # Check for POD running count on each nodes
-    if config.ENV_DATA['deployment_type'] == 'ipi' and config.ENV_DATA['platform'].lower() == 'aws':
-        app_nodes = node.get_typed_nodes(node_type=role_type)
+    if (
+        config.ENV_DATA["deployment_type"] == "ipi"
+        and config.ENV_DATA["platform"].lower() == "aws"
+    ):
+        app_nodes = node.get_nodes(node_type=role_type)
         pod_count_dict = node.get_running_pod_count_from_node(node_type=role_type)
         high_count_nodes, less_count_nodes = ([] for i in range(2))
         for node_obj in app_nodes:
@@ -432,13 +507,24 @@ def add_worker_based_on_pods_count_per_node(
                 machine.wait_for_new_node_to_be_ready(name)
             return True
         else:
-            logging.info(f"Enough pods can be created with available nodes {pod_count_dict}")
+            logging.info(
+                f"Enough pods can be created with available nodes {pod_count_dict}"
+            )
             return False
-    elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'vsphere':
+    elif (
+        config.ENV_DATA["deployment_type"] == "upi"
+        and config.ENV_DATA["platform"].lower() == "vsphere"
+    ):
         raise UnsupportedPlatformError("Unsupported Platform to add worker")
-    elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'baremetal':
+    elif (
+        config.ENV_DATA["deployment_type"] == "upi"
+        and config.ENV_DATA["platform"].lower() == "baremetal"
+    ):
         raise UnsupportedPlatformError("Unsupported Platform to add worker")
-    elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'azure':
+    elif (
+        config.ENV_DATA["deployment_type"] == "upi"
+        and config.ENV_DATA["platform"].lower() == "azure"
+    ):
         raise UnsupportedPlatformError("Unsupported Platform to add worker")
 
 
@@ -462,25 +548,29 @@ def get_size_based_on_cls_usage(custom_size_dict=None):
         size_dict = custom_size_dict
     else:
         size_dict = {
-            'usage_below_40': '1G', 'usage_40_60': '128M', 'usage_60_70': '10M',
-            'usage_70_80': '5M', 'usage_80_85': '512K', 'usage_above_85': '10K'
+            "usage_below_40": "1G",
+            "usage_40_60": "128M",
+            "usage_60_70": "10M",
+            "usage_70_80": "5M",
+            "usage_80_85": "512K",
+            "usage_above_85": "10K",
         }
     temp = 0
     for k, v in osd_dict.items():
         if temp <= v:
             temp = v
     if temp <= 40:
-        size = size_dict['usage_below_40']
+        size = size_dict["usage_below_40"]
     elif 40 < temp <= 50:
-        size = size_dict['usage_40_50']
+        size = size_dict["usage_40_50"]
     elif 60 < temp <= 70:
-        size = size_dict['usage_60_70']
+        size = size_dict["usage_60_70"]
     elif 70 < temp <= 80:
-        size = size_dict['usage_70_80']
+        size = size_dict["usage_70_80"]
     elif 80 < temp <= 85:
-        size = size_dict['usage_80_85']
+        size = size_dict["usage_80_85"]
     else:
-        size = size_dict['usage_above_85']
+        size = size_dict["usage_above_85"]
         logging.warning(f"One of the OSD is near full {temp}% utilized")
     return size
 
@@ -508,20 +598,24 @@ def get_rate_based_on_cls_iops(custom_iops_dict=None, osd_size=2048):
         iops_dict = custom_iops_dict
     else:
         iops_dict = {
-            'usage_below_40%': '8k', 'usage_40%_60%': '8k',
-            'usage_60%_80%': '4k', 'usage_80%_95%': '2K'
+            "usage_below_40%": "8k",
+            "usage_40%_60%": "8k",
+            "usage_60%_80%": "4k",
+            "usage_80%_95%": "2K",
         }
     if (iops * 100) <= 40:
-        rate_param = iops_dict['usage_below_40%']
+        rate_param = iops_dict["usage_below_40%"]
     elif 40 < (iops * 100) <= 60:
-        rate_param = iops_dict['usage_40%_60%']
+        rate_param = iops_dict["usage_40%_60%"]
     elif 60 < (iops * 100) <= 80:
-        rate_param = iops_dict['usage_60%_80%']
+        rate_param = iops_dict["usage_60%_80%"]
     elif 80 < (iops * 100) <= 95:
-        rate_param = iops_dict['usage_80%_95%']
+        rate_param = iops_dict["usage_80%_95%"]
     else:
         logging.warning(f"Cluster iops utilization is more than {iops * 100} percent")
-        raise UnavailableResourceException("Overall Cluster utilization is more than 95%")
+        raise UnavailableResourceException(
+            "Overall Cluster utilization is more than 95%"
+        )
     return rate_param
 
 
@@ -539,14 +633,26 @@ def get_expected_worker_count(scale_count=1500):
     # Get expected worker count based on dict in constants.py
     worker_count_dict = constants.SCALE_WORKER_DICT
     if scale_count in worker_count_dict:
-        if config.ENV_DATA['deployment_type'] == 'ipi' and config.ENV_DATA['platform'].lower() == 'aws':
-            expected_worker_count = worker_count_dict[scale_count]['aws']
-        elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'vsphere':
-            expected_worker_count = worker_count_dict[scale_count]['vmware']
-        elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'baremetal':
-            expected_worker_count = worker_count_dict[scale_count]['bm']
-        elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'azure':
-            expected_worker_count = worker_count_dict[scale_count]['azure']
+        if (
+            config.ENV_DATA["deployment_type"] == "ipi"
+            and config.ENV_DATA["platform"].lower() == "aws"
+        ):
+            expected_worker_count = worker_count_dict[scale_count]["aws"]
+        elif (
+            config.ENV_DATA["deployment_type"] == "upi"
+            and config.ENV_DATA["platform"].lower() == "vsphere"
+        ):
+            expected_worker_count = worker_count_dict[scale_count]["vmware"]
+        elif (
+            config.ENV_DATA["deployment_type"] == "upi"
+            and config.ENV_DATA["platform"].lower() == "baremetal"
+        ):
+            expected_worker_count = worker_count_dict[scale_count]["bm"]
+        elif (
+            config.ENV_DATA["deployment_type"] == "upi"
+            and config.ENV_DATA["platform"].lower() == "azure"
+        ):
+            expected_worker_count = worker_count_dict[scale_count]["azure"]
         else:
             raise UnsupportedPlatformError("Unsupported Platform")
         return expected_worker_count
@@ -572,10 +678,10 @@ def check_and_add_enough_worker(worker_count):
     worker_list = node.get_worker_nodes()
     ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
     scale_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
-    if config.RUN.get('use_ocs_worker_for_scale'):
+    if config.RUN.get("use_ocs_worker_for_scale"):
         if not scale_worker:
             helpers.label_worker_node(
-                node_list=worker_list, label_key='scale-label', label_value='app-scale'
+                node_list=worker_list, label_key="scale-label", label_value="app-scale"
             )
     else:
         if not scale_worker:
@@ -583,7 +689,9 @@ def check_and_add_enough_worker(worker_count):
                 worker_list.remove(node_item)
             if worker_list:
                 helpers.label_worker_node(
-                    node_list=worker_list, label_key='scale-label', label_value='app-scale'
+                    node_list=worker_list,
+                    label_key="scale-label",
+                    label_value="app-scale",
                 )
     scale_worker_list = machine.get_labeled_nodes(constants.SCALE_LABEL)
     logging.info(f"Print existing scale worker {scale_worker_list}")
@@ -601,22 +709,34 @@ def check_and_add_enough_worker(worker_count):
             "for the automation supported platforms"
         )
         # Add enough worker for AWS
-        if config.ENV_DATA['deployment_type'] == 'ipi' and config.ENV_DATA['platform'].lower() == 'aws':
+        if (
+            config.ENV_DATA["deployment_type"] == "ipi"
+            and config.ENV_DATA["platform"].lower() == "aws"
+        ):
             # Create machineset for app worker nodes on each aws zone
             # Each zone will have one app worker node
             ms_name = list()
+            labels = [("node-role.kubernetes.io/app", "app-scale")]
             for obj in machine.get_machineset_objs():
-                if 'app' in obj.name:
+                if "app" in obj.name:
                     ms_name.append(obj.name)
             if not ms_name:
                 if len(machine.get_machineset_objs()) == 3:
-                    for zone in ['a', 'b', 'c']:
+                    for zone in ["a", "b", "c"]:
                         ms_name.append(
-                            machine.create_custom_machineset(instance_type='m5.4xlarge', zone=zone)
+                            machine.create_custom_machineset(
+                                instance_type="m5.4xlarge",
+                                labels=labels,
+                                zone=zone,
+                            )
                         )
                 else:
                     ms_name.append(
-                        machine.create_custom_machineset(instance_type='m5.4xlarge', zone='a')
+                        machine.create_custom_machineset(
+                            instance_type="m5.4xlarge",
+                            labels=labels,
+                            zone="a",
+                        )
                     )
                 for ms in ms_name:
                     machine.wait_for_new_node_to_be_ready(ms)
@@ -638,14 +758,25 @@ def check_and_add_enough_worker(worker_count):
                     worker_list.remove(node_item)
             if worker_list:
                 helpers.label_worker_node(
-                    node_list=worker_list, label_key='scale-label', label_value='app-scale'
+                    node_list=worker_list,
+                    label_key="scale-label",
+                    label_value="app-scale",
                 )
             return True
-        elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'vsphere':
+        elif (
+            config.ENV_DATA["deployment_type"] == "upi"
+            and config.ENV_DATA["platform"].lower() == "vsphere"
+        ):
             raise UnsupportedPlatformError("Unsupported Platform to add worker")
-        elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'baremetal':
+        elif (
+            config.ENV_DATA["deployment_type"] == "upi"
+            and config.ENV_DATA["platform"].lower() == "baremetal"
+        ):
             raise UnsupportedPlatformError("Unsupported Platform to add worker")
-        elif config.ENV_DATA['deployment_type'] == 'upi' and config.ENV_DATA['platform'].lower() == 'azure':
+        elif (
+            config.ENV_DATA["deployment_type"] == "upi"
+            and config.ENV_DATA["platform"].lower() == "azure"
+        ):
             raise UnsupportedPlatformError("Unsupported Platform to add worker")
         else:
             raise UnavailableResourceException(
@@ -675,8 +806,8 @@ def increase_pods_per_worker_node_count(pods_per_node=500, pods_per_core=10):
 
     """
     max_pods_template = templating.load_yaml(constants.PODS_PER_NODE_COUNT_YAML)
-    max_pods_template['spec']['kubeletConfig']['podsPerCore'] = pods_per_core
-    max_pods_template['spec']['kubeletConfig']['maxPods'] = pods_per_node
+    max_pods_template["spec"]["kubeletConfig"]["podsPerCore"] = pods_per_core
+    max_pods_template["spec"]["kubeletConfig"]["maxPods"] = pods_per_node
 
     # Create new max-pods label
     max_pods_obj = OCS(**max_pods_template)
@@ -693,11 +824,15 @@ def increase_pods_per_worker_node_count(pods_per_node=500, pods_per_core=10):
     timout_counter = 0
     while True:
         output = ocp.exec_oc_cmd(command=get_cmd)
-        update_status = output.get('items')[1].get('status').get('conditions')[4].get('status')
-        if update_status == 'True':
+        update_status = (
+            output.get("items")[1].get("status").get("conditions")[4].get("status")
+        )
+        if update_status == "True":
             break
         elif timout_counter >= 8:
-            raise UnexpectedBehaviour("After 40sec machineconfigpool not in Updating state")
+            raise UnexpectedBehaviour(
+                "After 40sec machineconfigpool not in Updating state"
+            )
         else:
             logging.info("Sleep 5secs for updating status change")
             timout_counter += 1
@@ -705,13 +840,17 @@ def increase_pods_per_worker_node_count(pods_per_node=500, pods_per_core=10):
 
     # Validate either change is successful
     output = ocp.exec_oc_cmd(command=get_cmd)
-    machine_count = output.get('items')[1].get('status').get('machineCount')
+    machine_count = output.get("items")[1].get("status").get("machineCount")
     # During manual execution observed each node took 240+ sec for update
     timeout = machine_count * 300
-    utils.wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE, timeout=timeout)
+    utils.wait_for_machineconfigpool_status(
+        node_type=constants.WORKER_MACHINE, timeout=timeout
+    )
 
 
-def construct_pvc_creation_yaml_bulk_for_kube_job(no_of_pvc, access_mode, sc_name):
+def construct_pvc_creation_yaml_bulk_for_kube_job(
+    no_of_pvc, access_mode, sc_name, pvc_size=None
+):
     """
     Function to construct pvc.yaml to create bulk of pvc's using kube_job
 
@@ -719,6 +858,8 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(no_of_pvc, access_mode, sc_nam
         no_of_pvc(int): Bulk PVC count
         access_mode (str): PVC access_mode
         sc_name (str): SC name for pvc creation
+        pvc_size (str): size of all pvcs to be created with Gi suffix (e.g. 10Gi).
+                If None, random size pvc will be created
 
     Returns:
          pvc_dict_list (list): List of all PVC.yaml dicts
@@ -729,25 +870,62 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(no_of_pvc, access_mode, sc_nam
     # append all the pvc.yaml dict to pvc_dict_list and return the list
     pvc_dict_list = list()
     for i in range(no_of_pvc):
-        pvc_name = helpers.create_unique_resource_name('test', 'pvc')
-        size = f"{random.randrange(5, 105, 5)}Gi"
+        pvc_name = helpers.create_unique_resource_name("test", "pvc")
+        size = f"{random.randrange(5, 105, 5)}Gi" if pvc_size is None else pvc_size
         pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
-        pvc_data['metadata']['name'] = pvc_name
-        del pvc_data['metadata']['namespace']
-        pvc_data['spec']['accessModes'] = [access_mode]
-        pvc_data['spec']['storageClassName'] = sc_name
-        pvc_data['spec']['resources']['requests']['storage'] = size
+        pvc_data["metadata"]["name"] = pvc_name
+        del pvc_data["metadata"]["namespace"]
+        pvc_data["spec"]["accessModes"] = [access_mode]
+        pvc_data["spec"]["storageClassName"] = sc_name
+        pvc_data["spec"]["resources"]["requests"]["storage"] = size
         # Check to identify RBD_RWX PVC and add VolumeMode
-        if access_mode == 'ReadWriteMany' and 'rbd' in sc_name:
-            pvc_data['spec']['volumeMode'] = 'Block'
+        if access_mode == "ReadWriteMany" and "rbd" in sc_name:
+            pvc_data["spec"]["volumeMode"] = "Block"
         else:
-            pvc_data['spec']['volumeMode'] = None
+            pvc_data["spec"]["volumeMode"] = None
         pvc_dict_list.append(pvc_data)
 
     return pvc_dict_list
 
 
-def check_all_pvc_reached_bound_state_in_kube_job(kube_job_obj, namespace, no_of_pvc):
+def construct_pvc_clone_yaml_bulk_for_kube_job(pvc_dict_list, clone_yaml, sc_name):
+    """
+    Function to construct pvc.yaml to create bulk of pvc clones using kube_job
+
+    Args:
+        pvc_dict_list(list): List of PVCs for each of them one clone is to be created
+        clone_yaml (str): Clone yaml which is the template for building clones
+        sc_name (str): SC name for pvc creation
+
+    Returns:
+         pvc_dict_list (list): List of all PVC.yaml dicts
+
+    """
+
+    # Construct PVC.yaml for the no_of_required_pvc count
+    # append all the pvc.yaml dict to pvc_dict_list and return the list
+    pvc_clone_dict_list = list()
+    for pvc_yaml in pvc_dict_list:
+        parent_pvc_name = pvc_yaml["metadata"]["name"]
+        clone_data_yaml = templating.load_yaml(clone_yaml)
+        clone_data_yaml["metadata"]["name"] = helpers.create_unique_resource_name(
+            parent_pvc_name, "clone"
+        )
+
+        clone_data_yaml["spec"]["storageClassName"] = sc_name
+        clone_data_yaml["spec"]["dataSource"]["name"] = parent_pvc_name
+        clone_data_yaml["spec"]["resources"]["requests"]["storage"] = pvc_yaml["spec"][
+            "resources"
+        ]["requests"]["storage"]
+
+        pvc_clone_dict_list.append(clone_data_yaml)
+
+    return pvc_clone_dict_list
+
+
+def check_all_pvc_reached_bound_state_in_kube_job(
+    kube_job_obj, namespace, no_of_pvc, timeout=30
+):
     """
     Function to check either bulk created PVCs reached Bound state using kube_job
 
@@ -755,6 +933,7 @@ def check_all_pvc_reached_bound_state_in_kube_job(kube_job_obj, namespace, no_of
         kube_job_obj (obj): Kube Job Object
         namespace (str): Namespace of PVC's created
         no_of_pvc (int): Bulk PVC count
+        timeout: a timeout for all the pvc in kube job to reach bound status
 
     Returns:
         pvc_bound_list (list): List of all PVCs which is in Bound state.
@@ -771,28 +950,51 @@ def check_all_pvc_reached_bound_state_in_kube_job(kube_job_obj, namespace, no_of
         # If not bound adding those PVCs to pvc_not_bound_list
         job_get_output = kube_job_obj.get(namespace=namespace)
         for i in range(no_of_pvc):
-            status = job_get_output['items'][i]['status']['phase']
-            logging.info(f"pvc {job_get_output['items'][i]['metadata']['name']} status {status}")
-            if status != 'Bound':
-                pvc_not_bound_list.append(job_get_output['items'][i]['metadata']['name'])
+            status = job_get_output["items"][i]["status"]["phase"]
+            logging.info(
+                f"pvc {job_get_output['items'][i]['metadata']['name']} status {status}"
+            )
+            if status != "Bound":
+                pvc_not_bound_list.append(
+                    job_get_output["items"][i]["metadata"]["name"]
+                )
 
         # Check the length of pvc_not_bound_list to decide either all PVCs reached Bound state
-        # If not then wait for 30secs and re-iterate while loop
+        # If not then wait for timeout secs and re-iterate while loop
         if len(pvc_not_bound_list):
-            time.sleep(30)
+            time.sleep(timeout)
             while_iteration_count += 1
-            # Breaking while loop after 10 Iteration i.e. after 30*10 secs of wait_time
+            # Breaking while loop after 10 Iteration i.e. after timeout*10 secs of wait_time
             # And if PVCs still not in bound state then there will be assert.
             if while_iteration_count >= 10:
                 assert logging.error(
-                    f" Listed PVCs took more than 300secs to bound {pvc_not_bound_list}"
+                    f" Listed PVCs took more than {timeout*10} secs to bound {pvc_not_bound_list}"
                 )
                 break
             pvc_not_bound_list.clear()
             continue
         elif not len(pvc_not_bound_list):
             for i in range(no_of_pvc):
-                pvc_bound_list.append(job_get_output['items'][i]['metadata']['name'])
+                pvc_bound_list.append(job_get_output["items"][i]["metadata"]["name"])
             logging.info("All PVCs in Bound state")
             break
     return pvc_bound_list
+
+
+def get_max_pvc_count():
+    """
+    Return the maximum number of pvcs to test for.
+    This value is 500 times the number of worker nodes.
+    """
+    worker_nodes = get_nodes(node_type="worker")
+    count = 0
+    for wnode in worker_nodes:
+        wdata = wnode.data
+        labellist = wdata["metadata"]["labels"].keys()
+        if "node-role.kubernetes.io/worker" not in labellist:
+            continue
+        if "cluster.ocs.openshift.io/openshift-storage" not in labellist:
+            continue
+        count += 1
+    pvc_count = count * constants.SCALE_MAX_PVCS_PER_NODE
+    return pvc_count

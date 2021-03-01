@@ -14,6 +14,7 @@ from libcloud.common.exceptions import BaseHTTPError
 from libcloud.common.types import LibcloudError
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
+from paramiko.ssh_exception import SSHException
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs import constants, defaults
@@ -34,34 +35,36 @@ log = logging.getLogger(__name__)
 
 
 def create_ceph_nodes(cluster_conf, inventory, osp_cred, run_id, instances_name=None):
-    osp_glbs = osp_cred.get('globals')
-    os_cred = osp_glbs.get('openstack-credentials')
+    osp_glbs = osp_cred.get("globals")
+    os_cred = osp_glbs.get("openstack-credentials")
     params = dict()
-    ceph_cluster = cluster_conf.get('ceph-cluster')
-    if ceph_cluster.get('inventory'):
-        inventory_path = os.path.abspath(ceph_cluster.get('inventory'))
-        with open(inventory_path, 'r') as inventory_stream:
+    ceph_cluster = cluster_conf.get("ceph-cluster")
+    if ceph_cluster.get("inventory"):
+        inventory_path = os.path.abspath(ceph_cluster.get("inventory"))
+        with open(inventory_path, "r") as inventory_stream:
             inventory = yaml.safe_load(inventory_stream)
-    params['cloud-data'] = inventory.get('instance').get('setup')
-    params['username'] = os_cred['username']
-    params['password'] = os_cred['password']
-    params['auth-url'] = os_cred['auth-url']
-    params['auth-version'] = os_cred['auth-version']
-    params['tenant-name'] = os_cred['tenant-name']
-    params['service-region'] = os_cred['service-region']
-    params['keypair'] = os_cred.get('keypair', None)
+    params["cloud-data"] = inventory.get("instance").get("setup")
+    params["username"] = os_cred["username"]
+    params["password"] = os_cred["password"]
+    params["auth-url"] = os_cred["auth-url"]
+    params["auth-version"] = os_cred["auth-version"]
+    params["tenant-name"] = os_cred["tenant-name"]
+    params["service-region"] = os_cred["service-region"]
+    params["keypair"] = os_cred.get("keypair", None)
     ceph_nodes = dict()
-    if inventory.get('instance').get('create'):
-        if ceph_cluster.get('image-name'):
-            params['image-name'] = ceph_cluster.get('image-name')
+    if inventory.get("instance").get("create"):
+        if ceph_cluster.get("image-name"):
+            params["image-name"] = ceph_cluster.get("image-name")
         else:
-            params['image-name'] = inventory.get('instance').get('create').get('image-name')
-        params['cluster-name'] = ceph_cluster.get('name')
-        params['vm-size'] = inventory.get('instance').get('create').get('vm-size')
-        if params.get('root-login') is False:
-            params['root-login'] = False
+            params["image-name"] = (
+                inventory.get("instance").get("create").get("image-name")
+            )
+        params["cluster-name"] = ceph_cluster.get("name")
+        params["vm-size"] = inventory.get("instance").get("create").get("vm-size")
+        if params.get("root-login") is False:
+            params["root-login"] = False
         else:
-            params['root-login'] = True
+            params["root-login"] = True
         with parallel() as p:
             for node in range(1, 100):
                 node = "node" + str(node)
@@ -69,22 +72,32 @@ def create_ceph_nodes(cluster_conf, inventory, osp_cred, run_id, instances_name=
                     break
                 node_dict = ceph_cluster.get(node)
                 node_params = params.copy()
-                node_params['role'] = RolesContainer(node_dict.get('role'))
-                role = node_params['role']
+                node_params["role"] = RolesContainer(node_dict.get("role"))
+                role = node_params["role"]
                 user = os.getlogin()
                 if instances_name:
-                    node_params['node-name'] = "{}-{}-{}-{}-{}".format(
-                        node_params.get('cluster-name', 'ceph'), instances_name, run_id, node, '+'.join(role))
+                    node_params["node-name"] = "{}-{}-{}-{}-{}".format(
+                        node_params.get("cluster-name", "ceph"),
+                        instances_name,
+                        run_id,
+                        node,
+                        "+".join(role),
+                    )
                 else:
-                    node_params['node-name'] = "{}-{}-{}-{}-{}".format(
-                        node_params.get('cluster-name', 'ceph'), user, run_id, node, '+'.join(role))
-                if node_dict.get('no-of-volumes'):
-                    node_params['no-of-volumes'] = node_dict.get('no-of-volumes')
-                    node_params['size-of-disks'] = node_dict.get('disk-size')
-                if node_dict.get('image-name'):
-                    node_params['image-name'] = node_dict.get('image-name')
-                if node_dict.get('cloud-data'):
-                    node_params['cloud-data'] = node_dict.get('cloud-data')
+                    node_params["node-name"] = "{}-{}-{}-{}-{}".format(
+                        node_params.get("cluster-name", "ceph"),
+                        user,
+                        run_id,
+                        node,
+                        "+".join(role),
+                    )
+                if node_dict.get("no-of-volumes"):
+                    node_params["no-of-volumes"] = node_dict.get("no-of-volumes")
+                    node_params["size-of-disks"] = node_dict.get("disk-size")
+                if node_dict.get("image-name"):
+                    node_params["image-name"] = node_dict.get("image-name")
+                if node_dict.get("cloud-data"):
+                    node_params["cloud-data"] = node_dict.get("cloud-data")
                 p.spawn(setup_vm_node, node, ceph_nodes, **node_params)
     log.info("Done creating nodes")
     return ceph_nodes
@@ -96,14 +109,14 @@ def setup_vm_node(node, ceph_nodes, **params):
 
 def get_openstack_driver(yaml):
     OpenStack = get_driver(Provider.OPENSTACK)
-    glbs = yaml.get('globals')
-    os_cred = glbs.get('openstack-credentials')
-    username = os_cred['username']
-    password = os_cred['password']
-    auth_url = os_cred['auth-url']
-    auth_version = os_cred['auth-version']
-    tenant_name = os_cred['tenant-name']
-    service_region = os_cred['service-region']
+    glbs = yaml.get("globals")
+    os_cred = glbs.get("openstack-credentials")
+    username = os_cred["username"]
+    password = os_cred["password"]
+    auth_url = os_cred["auth-url"]
+    auth_version = os_cred["auth-version"]
+    tenant_name = os_cred["tenant-name"]
+    service_region = os_cred["service-region"]
     driver = OpenStack(
         username,
         password,
@@ -111,14 +124,14 @@ def get_openstack_driver(yaml):
         ex_force_auth_version=auth_version,
         ex_tenant_name=tenant_name,
         ex_force_service_region=service_region,
-        ex_domain_name='redhat.com'
+        ex_domain_name="redhat.com",
     )
     return driver
 
 
 def cleanup_ceph_nodes(osp_cred, pattern=None, timeout=300):
     user = os.getlogin()
-    name = pattern if pattern else '-{user}-'.format(user=user)
+    name = pattern if pattern else "-{user}-".format(user=user)
     driver = get_openstack_driver(osp_cred)
     timeout = datetime.timedelta(seconds=timeout)
     with parallel() as p:
@@ -129,7 +142,10 @@ def cleanup_ceph_nodes(osp_cred, pattern=None, timeout=300):
                     driver.ex_detach_floating_ip_from_node(node, ip)
                 starttime = datetime.datetime.now()
                 log.info(
-                    "Destroying node {node_name} with {timeout} timeout".format(node_name=node.name, timeout=timeout))
+                    "Destroying node {node_name} with {timeout} timeout".format(
+                        node_name=node.name, timeout=timeout
+                    )
+                )
                 while True:
                     try:
                         p.spawn(node.destroy)
@@ -139,7 +155,10 @@ def cleanup_ceph_nodes(osp_cred, pattern=None, timeout=300):
                             raise RuntimeError(
                                 "Failed to destroy node {node_name} with {timeout} timeout:\n{stack_trace}".format(
                                     node_name=node.name,
-                                    timeout=timeout, stack_trace=traceback.format_exc()))
+                                    timeout=timeout,
+                                    stack_trace=traceback.format_exc(),
+                                )
+                            )
                         else:
                             sleep(1)
                 sleep(5)
@@ -164,31 +183,31 @@ def cleanup_ceph_nodes(osp_cred, pattern=None, timeout=300):
         if errors:
             for vol, err in errors.items():
                 log.error("Error destroying {vol}: {err}".format(vol=vol, err=err))
-            raise RuntimeError("Encountered errors during volume deletion. Volume names and messages have been logged.")
+            raise RuntimeError(
+                "Encountered errors during volume deletion. Volume names and messages have been logged."
+            )
 
 
 def keep_alive(ceph_nodes):
     for node in ceph_nodes:
-        node.exec_command(cmd='uptime', check_ec=False)
+        node.exec_command(cmd="uptime", check_ec=False)
 
 
 def setup_repos(ceph, base_url, installer_url=None):
-    repos = ['MON', 'OSD', 'Tools', 'Calamari', 'Installer']
+    repos = ["MON", "OSD", "Tools", "Calamari", "Installer"]
     base_repo = generate_repo_file(base_url, repos)
     base_file = ceph.write_file(
-        sudo=True,
-        file_name='/etc/yum.repos.d/rh_ceph.repo',
-        file_mode='w')
+        sudo=True, file_name="/etc/yum.repos.d/rh_ceph.repo", file_mode="w"
+    )
     base_file.write(base_repo)
     base_file.flush()
     if installer_url is not None:
-        installer_repos = ['Agent', 'Main', 'Installer']
+        installer_repos = ["Agent", "Main", "Installer"]
         inst_repo = generate_repo_file(installer_url, installer_repos)
         log.info("Setting up repo on %s", ceph.hostname)
         inst_file = ceph.write_file(
-            sudo=True,
-            file_name='/etc/yum.repos.d/rh_ceph_inst.repo',
-            file_mode='w')
+            sudo=True, file_name="/etc/yum.repos.d/rh_ceph_inst.repo", file_mode="w"
+        )
         inst_file.write(inst_repo)
         inst_file.flush()
 
@@ -214,14 +233,18 @@ def check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container=None, timeou
     timeout = datetime.timedelta(seconds=timeout)
     starttime = datetime.datetime.now()
     lines = None
-    pending_states = ['peering', 'activating', 'creating']
-    valid_states = ['active+clean']
+    pending_states = ["peering", "activating", "creating"]
+    valid_states = ["active+clean"]
 
     while datetime.datetime.now() - starttime <= timeout:
         if mon_container:
-            out, err = ceph_mon.exec_command(cmd='sudo docker exec {container} ceph -s'.format(container=mon_container))
+            out, err = ceph_mon.exec_command(
+                cmd="sudo docker exec {container} ceph -s".format(
+                    container=mon_container
+                )
+            )
         else:
-            out, err = ceph_mon.exec_command(cmd='sudo ceph -s')
+            out, err = ceph_mon.exec_command(cmd="sudo ceph -s")
         lines = out.read().decode()
 
         if not any(state in lines for state in pending_states):
@@ -265,86 +288,125 @@ def get_iso_file_url(base_url):
     return Ceph.get_iso_file_url(base_url)
 
 
-def create_ceph_conf(fsid, mon_hosts, pg_num='128', pgp_num='128', size='2',
-                     auth='cephx', pnetwork='172.16.0.0/12',
-                     jsize='1024'):
-    fsid = 'fsid = ' + fsid + '\n'
-    mon_init_memb = 'mon initial members = '
-    mon_host = 'mon host = '
-    public_network = 'public network = ' + pnetwork + '\n'
-    auth = 'auth cluster required = cephx\nauth service \
-            required = cephx\nauth client required = cephx\n'
-    jsize = 'osd journal size = ' + jsize + '\n'
-    size = 'osd pool default size = ' + size + '\n'
-    pgnum = 'osd pool default pg num = ' + pg_num + '\n'
-    pgpnum = 'osd pool default pgp num = ' + pgp_num + '\n'
+def create_ceph_conf(
+    fsid,
+    mon_hosts,
+    pg_num="128",
+    pgp_num="128",
+    size="2",
+    auth="cephx",
+    pnetwork="172.16.0.0/12",
+    jsize="1024",
+):
+    fsid = "fsid = " + fsid + "\n"
+    mon_init_memb = "mon initial members = "
+    mon_host = "mon host = "
+    public_network = "public network = " + pnetwork + "\n"
+    auth = "auth cluster required = cephx\nauth service \
+            required = cephx\nauth client required = cephx\n"
+    jsize = "osd journal size = " + jsize + "\n"
+    size = "osd pool default size = " + size + "\n"
+    pgnum = "osd pool default pg num = " + pg_num + "\n"
+    pgpnum = "osd pool default pgp num = " + pgp_num + "\n"
     for mhost in mon_hosts:
-        mon_init_memb = mon_init_memb + mhost.shortname + ','
-        mon_host = mon_host + mhost.internal_ip + ','
-    mon_init_memb = mon_init_memb[:-1] + '\n'
-    mon_host = mon_host[:-1] + '\n'
-    conf = '[global]\n'
-    conf = conf + fsid + mon_init_memb + mon_host + public_network + auth + size + jsize + pgnum + pgpnum
+        mon_init_memb = mon_init_memb + mhost.shortname + ","
+        mon_host = mon_host + mhost.internal_ip + ","
+    mon_init_memb = mon_init_memb[:-1] + "\n"
+    mon_host = mon_host[:-1] + "\n"
+    conf = "[global]\n"
+    conf = (
+        conf
+        + fsid
+        + mon_init_memb
+        + mon_host
+        + public_network
+        + auth
+        + size
+        + jsize
+        + pgnum
+        + pgpnum
+    )
     return conf
 
 
 def setup_deb_repos(node, ubuntu_repo):
-    node.exec_command(cmd='sudo rm -f /etc/apt/sources.list.d/*')
-    repos = ['MON', 'OSD', 'Tools']
+    node.exec_command(cmd="sudo rm -f /etc/apt/sources.list.d/*")
+    repos = ["MON", "OSD", "Tools"]
     for repo in repos:
-        cmd = 'sudo echo deb ' + ubuntu_repo + '/{0}'.format(repo) + \
-              ' $(lsb_release -sc) main'
-        node.exec_command(cmd=cmd + ' > ' + "/tmp/{0}.list".format(repo))
-        node.exec_command(cmd='sudo cp /tmp/{0}.list /etc/apt/sources.list.d/'.format(repo))
-    ds_keys = ['https://www.redhat.com/security/897da07a.txt',
-               'https://www.redhat.com/security/f21541eb.txt',
-               # 'https://prodsec.redhat.com/keys/00da75f2.txt',
-               # TODO: replace file file.rdu.redhat.com/~kdreyer with prodsec.redhat.com when it's back
-               'http://file.rdu.redhat.com/~kdreyer/keys/00da75f2.txt',
-               'https://www.redhat.com/security/data/fd431d51.txt']
+        cmd = (
+            "sudo echo deb "
+            + ubuntu_repo
+            + "/{0}".format(repo)
+            + " $(lsb_release -sc) main"
+        )
+        node.exec_command(cmd=cmd + " > " + "/tmp/{0}.list".format(repo))
+        node.exec_command(
+            cmd="sudo cp /tmp/{0}.list /etc/apt/sources.list.d/".format(repo)
+        )
+    ds_keys = [
+        "https://www.redhat.com/security/897da07a.txt",
+        "https://www.redhat.com/security/f21541eb.txt",
+        # 'https://prodsec.redhat.com/keys/00da75f2.txt',
+        # TODO: replace file file.rdu.redhat.com/~kdreyer with prodsec.redhat.com when it's back
+        "http://file.rdu.redhat.com/~kdreyer/keys/00da75f2.txt",
+        "https://www.redhat.com/security/data/fd431d51.txt",
+    ]
 
     for key in ds_keys:
-        wget_cmd = 'sudo wget -O - ' + key + ' | sudo apt-key add -'
+        wget_cmd = "sudo wget -O - " + key + " | sudo apt-key add -"
         node.exec_command(cmd=wget_cmd)
-    node.exec_command(cmd='sudo apt-get update')
+    node.exec_command(cmd="sudo apt-get update")
 
 
 def setup_deb_cdn_repo(node, build=None):
-    user = 'redhat'
-    passwd = 'OgYZNpkj6jZAIF20XFZW0gnnwYBjYcmt7PeY76bLHec9'
-    num = build.split('.')[0]
-    cmd = 'umask 0077; echo deb https://{user}:{passwd}@rhcs.download.redhat.com/{num}-updates/Tools ' \
-          '$(lsb_release -sc) main | tee /etc/apt/sources.list.d/Tools.list'.format(user=user, passwd=passwd, num=num)
+    user = "redhat"
+    passwd = "OgYZNpkj6jZAIF20XFZW0gnnwYBjYcmt7PeY76bLHec9"
+    num = build.split(".")[0]
+    cmd = (
+        "umask 0077; echo deb https://{user}:{passwd}@rhcs.download.redhat.com/{num}-updates/Tools "
+        "$(lsb_release -sc) main | tee /etc/apt/sources.list.d/Tools.list".format(
+            user=user, passwd=passwd, num=num
+        )
+    )
     node.exec_command(sudo=True, cmd=cmd)
-    node.exec_command(sudo=True, cmd='wget -O - https://www.redhat.com/security/fd431d51.txt | apt-key add -')
-    node.exec_command(sudo=True, cmd='apt-get update')
+    node.exec_command(
+        sudo=True,
+        cmd="wget -O - https://www.redhat.com/security/fd431d51.txt | apt-key add -",
+    )
+    node.exec_command(sudo=True, cmd="apt-get update")
 
 
 def setup_cdn_repos(ceph_nodes, build=None):
-    repos_13x = ['rhel-7-server-rhceph-1.3-mon-rpms',
-                 'rhel-7-server-rhceph-1.3-osd-rpms',
-                 'rhel-7-server-rhceph-1.3-calamari-rpms',
-                 'rhel-7-server-rhceph-1.3-installer-rpms',
-                 'rhel-7-server-rhceph-1.3-tools-rpms']
+    repos_13x = [
+        "rhel-7-server-rhceph-1.3-mon-rpms",
+        "rhel-7-server-rhceph-1.3-osd-rpms",
+        "rhel-7-server-rhceph-1.3-calamari-rpms",
+        "rhel-7-server-rhceph-1.3-installer-rpms",
+        "rhel-7-server-rhceph-1.3-tools-rpms",
+    ]
 
-    repos_20 = ['rhel-7-server-rhceph-2-mon-rpms',
-                'rhel-7-server-rhceph-2-osd-rpms',
-                'rhel-7-server-rhceph-2-tools-rpms',
-                'rhel-7-server-rhscon-2-agent-rpms',
-                'rhel-7-server-rhscon-2-installer-rpms',
-                'rhel-7-server-rhscon-2-main-rpms']
+    repos_20 = [
+        "rhel-7-server-rhceph-2-mon-rpms",
+        "rhel-7-server-rhceph-2-osd-rpms",
+        "rhel-7-server-rhceph-2-tools-rpms",
+        "rhel-7-server-rhscon-2-agent-rpms",
+        "rhel-7-server-rhscon-2-installer-rpms",
+        "rhel-7-server-rhscon-2-main-rpms",
+    ]
 
-    repos_30 = ['rhel-7-server-rhceph-3-mon-rpms',
-                'rhel-7-server-rhceph-3-osd-rpms',
-                'rhel-7-server-rhceph-3-tools-rpms',
-                'rhel-7-server-extras-rpms']
+    repos_30 = [
+        "rhel-7-server-rhceph-3-mon-rpms",
+        "rhel-7-server-rhceph-3-osd-rpms",
+        "rhel-7-server-rhceph-3-tools-rpms",
+        "rhel-7-server-extras-rpms",
+    ]
 
     repos = None
-    if build.startswith('1'):
+    if build.startswith("1"):
         repos = repos_13x
-    elif build.startswith('2'):
+    elif build.startswith("2"):
         repos = repos_20
-    elif build.startswith('3'):
+    elif build.startswith("3"):
         repos = repos_30
     with parallel() as p:
         for node in ceph_nodes:
@@ -354,19 +416,24 @@ def setup_cdn_repos(ceph_nodes, build=None):
 def set_cdn_repo(node, repos):
     for repo in repos:
         node.exec_command(
-            sudo=True, cmd='subscription-manager repos --enable={r}'.format(r=repo))
+            sudo=True, cmd="subscription-manager repos --enable={r}".format(r=repo)
+        )
     # node.exec_command(sudo=True, cmd='subscription-manager refresh')
 
 
 def update_ca_cert(node, cert_url, timeout=120):
-    if node.pkg_type == 'deb':
-        cmd = 'cd /usr/local/share/ca-certificates/ && {{ sudo curl -O {url} ; cd -; }}'.format(url=cert_url)
+    if node.pkg_type == "deb":
+        cmd = "cd /usr/local/share/ca-certificates/ && {{ sudo curl -O {url} ; cd -; }}".format(
+            url=cert_url
+        )
         node.exec_command(cmd=cmd, timeout=timeout)
-        node.exec_command(cmd='sudo update-ca-certificates', timeout=timeout)
+        node.exec_command(cmd="sudo update-ca-certificates", timeout=timeout)
     else:
-        cmd = 'cd /etc/pki/ca-trust/source/anchors && {{ sudo curl -O {url} ; cd -; }}'.format(url=cert_url)
+        cmd = "cd /etc/pki/ca-trust/source/anchors && {{ sudo curl -O {url} ; cd -; }}".format(
+            url=cert_url
+        )
         node.exec_command(cmd=cmd, timeout=timeout)
-        node.exec_command(cmd='sudo update-ca-trust extract', timeout=timeout)
+        node.exec_command(cmd="sudo update-ca-trust extract", timeout=timeout)
 
 
 def write_docker_daemon_json(json_text, node):
@@ -403,11 +470,12 @@ def open_firewall_port(ceph_node, port, protocol):
 
 def config_ntp(ceph_node):
     ceph_node.exec_command(
-        cmd="sudo sed -i '/server*/d' /etc/ntp.conf",
-        long_running=True)
+        cmd="sudo sed -i '/server*/d' /etc/ntp.conf", long_running=True
+    )
     ceph_node.exec_command(
         cmd="echo 'server clock.corp.redhat.com iburst' | sudo tee -a /etc/ntp.conf",
-        long_running=True)
+        long_running=True,
+    )
     ceph_node.exec_command(cmd="sudo ntpd -gq", long_running=True)
     ceph_node.exec_command(cmd="sudo systemctl enable ntpd", long_running=True)
     ceph_node.exec_command(cmd="sudo systemctl start ntpd", long_running=True)
@@ -428,11 +496,11 @@ def get_ceph_versions(ceph_nodes, containerized=False):
 
     for node in ceph_nodes:
         try:
-            if node.role == 'installer':
-                if node.pkg_type == 'rpm':
-                    out, rc = node.exec_command(cmd='rpm -qa | grep ceph-ansible')
+            if node.role == "installer":
+                if node.pkg_type == "rpm":
+                    out, rc = node.exec_command(cmd="rpm -qa | grep ceph-ansible")
                 else:
-                    out, rc = node.exec_command(cmd='dpkg -s ceph-ansible')
+                    out, rc = node.exec_command(cmd="dpkg -s ceph-ansible")
                 output = out.read().decode().rstrip()
                 log.info(output)
                 versions_dict.update({node.shortname: output})
@@ -440,24 +508,33 @@ def get_ceph_versions(ceph_nodes, containerized=False):
             else:
                 if containerized:
                     containers = []
-                    if node.role == 'client':
+                    if node.role == "client":
                         pass
                     else:
-                        out, rc = node.exec_command(sudo=True, cmd='docker ps --format "{{.Names}}"')
+                        out, rc = node.exec_command(
+                            sudo=True, cmd='docker ps --format "{{.Names}}"'
+                        )
                         output = out.read().decode()
-                        containers = [container for container in output.split('\n') if container != '']
+                        containers = [
+                            container
+                            for container in output.split("\n")
+                            if container != ""
+                        ]
                         log.info("Containers: {}".format(containers))
 
                     for container_name in containers:
                         out, rc = node.exec_command(
-                            sudo=True, cmd='sudo docker exec {container} ceph --version'.format(
-                                container=container_name))
+                            sudo=True,
+                            cmd="sudo docker exec {container} ceph --version".format(
+                                container=container_name
+                            ),
+                        )
                         output = out.read().decode().rstrip()
                         log.info(output)
                         versions_dict.update({container_name: output})
 
                 else:
-                    out, rc = node.exec_command(cmd='ceph --version')
+                    out, rc = node.exec_command(cmd="ceph --version")
                     output = out.read().decode().rstrip()
                     log.info(output)
                     versions_dict.update({node.shortname: output})
@@ -471,11 +548,11 @@ def get_ceph_versions(ceph_nodes, containerized=False):
 def hard_reboot(gyaml, name=None):
     user = os.getlogin()
     if name is None:
-        name = 'ceph-' + user
+        name = "ceph-" + user
     driver = get_openstack_driver(gyaml)
     for node in driver.list_nodes():
         if node.name.startswith(name):
-            log.info('Hard-rebooting %s' % node.name)
+            log.info("Hard-rebooting %s" % node.name)
             driver.ex_hard_reboot_node(node)
 
     return 0
@@ -484,23 +561,23 @@ def hard_reboot(gyaml, name=None):
 def node_power_failure(gyaml, sleep_time=300, name=None):
     user = os.getlogin()
     if name is None:
-        name = 'ceph-' + user
+        name = "ceph-" + user
     driver = get_openstack_driver(gyaml)
     for node in driver.list_nodes():
         if node.name.startswith(name):
-            log.info('Doing power-off on %s' % node.name)
+            log.info("Doing power-off on %s" % node.name)
             driver.ex_stop_node(node)
             time.sleep(20)
             op = driver.ex_get_node_details(node)
-            if op.state == 'stopped':
-                log.info('Node stopped successfully')
+            if op.state == "stopped":
+                log.info("Node stopped successfully")
             time.sleep(sleep_time)
-            log.info('Doing power-on on %s' % node.name)
+            log.info("Doing power-on on %s" % node.name)
             driver.ex_start_node(node)
             time.sleep(20)
             op = driver.ex_get_node_details(node)
-            if op.state == 'running':
-                log.info('Node restarted successfully')
+            if op.state == "running":
+                log.info("Node restarted successfully")
             time.sleep(20)
     return 0
 
@@ -530,31 +607,38 @@ def create_nodes(conf, inventory, osp_cred, run_id, instances_name=None):
     log.info("Destroying existing osp instances")
     cleanup_ceph_nodes(osp_cred, instances_name)
     ceph_cluster_dict = {}
-    log.info('Creating osp instances')
-    for cluster in conf.get('globals'):
-        ceph_vmnodes = create_ceph_nodes(cluster, inventory, osp_cred, run_id, instances_name)
+    log.info("Creating osp instances")
+    for cluster in conf.get("globals"):
+        ceph_vmnodes = create_ceph_nodes(
+            cluster, inventory, osp_cred, run_id, instances_name
+        )
         ceph_nodes = []
         clients = []
         for node in ceph_vmnodes.values():
-            if node.role == 'win-iscsi-clients':
-                clients.append(WinNode(ip_address=node.ip_address,
-                                       private_ip=node.get_private_ip()))
+            if node.role == "win-iscsi-clients":
+                clients.append(
+                    WinNode(
+                        ip_address=node.ip_address, private_ip=node.get_private_ip()
+                    )
+                )
             else:
-                ceph = CephNode(username='cephuser',
-                                password='cephuser',
-                                root_password='passwd',
-                                root_login=node.root_login,
-                                role=node.role,
-                                no_of_volumes=node.no_of_volumes,
-                                ip_address=node.ip_address,
-                                private_ip=node.get_private_ip(),
-                                hostname=node.hostname,
-                                ceph_vmnode=node)
+                ceph = CephNode(
+                    username="cephuser",
+                    password="cephuser",
+                    root_password="passwd",
+                    root_login=node.root_login,
+                    role=node.role,
+                    no_of_volumes=node.no_of_volumes,
+                    ip_address=node.ip_address,
+                    private_ip=node.get_private_ip(),
+                    hostname=node.hostname,
+                    ceph_vmnode=node,
+                )
                 ceph_nodes.append(ceph)
-        cluster_name = cluster.get('ceph-cluster').get('name', 'ceph')
+        cluster_name = cluster.get("ceph-cluster").get("name", "ceph")
         ceph_cluster_dict[cluster_name] = Ceph(cluster_name, ceph_nodes)
     # TODO: refactor cluster dict to cluster list
-    log.info('Done creating osp instances')
+    log.info("Done creating osp instances")
     log.info("Waiting for Floating IPs to be available")
     log.info("Sleeping 15 Seconds")
     time.sleep(15)
@@ -565,7 +649,7 @@ def create_nodes(conf, inventory, osp_cred, run_id, instances_name=None):
 
 
 def store_cluster_state(ceph_cluster_object, ceph_clusters_file_name):
-    cn = open(ceph_clusters_file_name, 'w+b')
+    cn = open(ceph_clusters_file_name, "w+b")
     pickle.dump(ceph_cluster_object, cn)
     cn.close()
     log.info("ceph_clusters_file %s", ceph_clusters_file_name)
@@ -605,7 +689,7 @@ def create_oc_resource(
 
 
 def get_pod_name_by_pattern(
-    pattern='client',
+    pattern="client",
     namespace=None,
     filter=None,
 ):
@@ -622,17 +706,17 @@ def get_pod_name_by_pattern(
         pod_list (list): List of pod names matching the pattern
 
     """
-    namespace = namespace if namespace else ocsci_config.ENV_DATA['cluster_namespace']
-    ocp_obj = OCP(kind='pod', namespace=namespace)
-    pod_names = ocp_obj.exec_oc_cmd('get pods -o name', out_yaml_format=False)
-    pod_names = pod_names.split('\n')
+    namespace = namespace if namespace else ocsci_config.ENV_DATA["cluster_namespace"]
+    ocp_obj = OCP(kind="pod", namespace=namespace)
+    pod_names = ocp_obj.exec_oc_cmd("get pods -o name", out_yaml_format=False)
+    pod_names = pod_names.split("\n")
     pod_list = []
     for name in pod_names:
         if filter is not None and re.search(filter, name):
-            log.info(f'Pod name filtered {name}')
+            log.info(f"Pod name filtered {name}")
         elif re.search(pattern, name):
-            (_, name) = name.split('/')
-            log.info(f'pod name match found appending {name}')
+            (_, name) = name.split("/")
+            log.info(f"pod name match found appending {name}")
             pod_list.append(name)
     return pod_list
 
@@ -646,8 +730,8 @@ def setup_ceph_toolbox(force_setup=False):
         force_setup (bool): force setup toolbox pod
 
     """
-    namespace = ocsci_config.ENV_DATA['cluster_namespace']
-    ceph_toolbox = get_pod_name_by_pattern('rook-ceph-tools', namespace)
+    namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+    ceph_toolbox = get_pod_name_by_pattern("rook-ceph-tools", namespace)
     # setup toolbox for external mode
     # Refer bz: 1856982 - invalid admin secret
     if len(ceph_toolbox) == 1:
@@ -658,18 +742,16 @@ def setup_ceph_toolbox(force_setup=False):
             return
     external_mode = ocsci_config.DEPLOYMENT.get("external_mode")
 
-    if ocsci_config.ENV_DATA.get("ocs_version") == '4.2':
-        rook_operator = get_pod_name_by_pattern(
-            'rook-ceph-operator', namespace
-        )
+    if ocsci_config.ENV_DATA.get("ocs_version") == "4.2":
+        rook_operator = get_pod_name_by_pattern("rook-ceph-operator", namespace)
         out = run_cmd(
-            f'oc -n {namespace} get pods {rook_operator[0]} -o yaml',
+            f"oc -n {namespace} get pods {rook_operator[0]} -o yaml",
         )
         version = yaml.safe_load(out)
-        rook_version = version['spec']['containers'][0]['image']
+        rook_version = version["spec"]["containers"][0]["image"]
         tool_box_data = templating.load_yaml(constants.TOOL_POD_YAML)
-        tool_box_data['spec']['template']['spec']['containers'][0][
-            'image'
+        tool_box_data["spec"]["template"]["spec"]["containers"][0][
+            "image"
         ] = rook_version
         rook_toolbox = OCS(**tool_box_data)
         rook_toolbox.create()
@@ -677,15 +759,23 @@ def setup_ceph_toolbox(force_setup=False):
         if external_mode:
             toolbox = templating.load_yaml(constants.TOOL_POD_YAML)
             keyring_dict = ocsci_config.EXTERNAL_MODE.get("admin_keyring")
-            env = [{'name': 'ROOK_ADMIN_SECRET', 'value': keyring_dict['key']}]
-            toolbox['spec']['template']['spec']['containers'][0]['env'] = env
+            env = [{"name": "ROOK_ADMIN_SECRET", "value": keyring_dict["key"]}]
+            toolbox["spec"]["template"]["spec"]["containers"][0]["env"] = env
+            # add ceph volumeMounts
+            ceph_volume_mount_path = {"mountPath": "/etc/ceph", "name": "ceph-config"}
+            ceph_volume = {"name": "ceph-config", "emptyDir": {}}
+            toolbox["spec"]["template"]["spec"]["containers"][0]["volumeMounts"].append(
+                ceph_volume_mount_path
+            )
+            toolbox["spec"]["template"]["spec"]["volumes"].append(ceph_volume)
             rook_toolbox = OCS(**toolbox)
             rook_toolbox.create()
+            return
         # for OCS >= 4.3 there is new toolbox pod deployment done here:
         # https://github.com/openshift/ocs-operator/pull/207/
         log.info("starting ceph toolbox pod")
         run_cmd(
-            'oc patch ocsinitialization ocsinit -n openshift-storage --type '
+            "oc patch ocsinitialization ocsinit -n openshift-storage --type "
             'json --patch  \'[{ "op": "replace", "path": '
             '"/spec/enableCephTools", "value": true }]\''
         )
@@ -733,9 +823,11 @@ def run_must_gather(log_dir_path, image, command=None):
         image (str): must-gather image registry path
         command (str): optional command to execute within the must-gather image
     """
-    must_gather_timeout = ocsci_config.REPORTING.get(
-        'must_gather_timeout', 600
-    )
+    # Must-gather has many changes on 4.6 which add more time to the collection.
+    # https://github.com/red-hat-storage/ocs-ci/issues/3240
+    ocs_version = float(ocsci_config.ENV_DATA["ocs_version"])
+    timeout = 1500 if ocs_version >= 4.6 else 600
+    must_gather_timeout = ocsci_config.REPORTING.get("must_gather_timeout", timeout)
 
     log.info(f"Must gather image: {image} will be used.")
     create_directory_path(log_dir_path)
@@ -746,9 +838,7 @@ def run_must_gather(log_dir_path, image, command=None):
     log.info(f"OCS logs will be placed in location {log_dir_path}")
     occli = OCP()
     try:
-        occli.exec_oc_cmd(
-            cmd, out_yaml_format=False, timeout=must_gather_timeout
-        )
+        occli.exec_oc_cmd(cmd, out_yaml_format=False, timeout=must_gather_timeout)
     except CommandFailed as ex:
         log.error(f"Failed during must gather logs! Error: {ex}")
     except TimeoutExpired as ex:
@@ -766,20 +856,36 @@ def collect_noobaa_db_dump(log_dir_path):
         log_dir_path (str): directory for dumped Noobaa DB
 
     """
-    from ocs_ci.ocs.resources.pod import get_pods_having_label, download_file_from_pod, Pod
+    from ocs_ci.ocs.resources.pod import (
+        get_pods_having_label,
+        download_file_from_pod,
+        Pod,
+    )
+
+    nb_db_label = (
+        constants.NOOBAA_DB_LABEL_46_AND_UNDER
+        if float(ocsci_config.ENV_DATA["ocs_version"]) < 4.7
+        else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
+    )
     nb_db_pod = Pod(
         **get_pods_having_label(
-            label=constants.NOOBAA_DB_LABEL,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            label=nb_db_label, namespace=defaults.ROOK_CLUSTER_NAMESPACE
         )[0]
     )
-    ocs_log_dir_path = os.path.join(log_dir_path, 'noobaa_db_dump')
+    ocs_log_dir_path = os.path.join(log_dir_path, "noobaa_db_dump")
     create_directory_path(ocs_log_dir_path)
-    ocs_log_dir_path = os.path.join(ocs_log_dir_path, 'nbcore.gz')
-    nb_db_pod.exec_cmd_on_pod("mongodump --archive=nbcore.gz --gzip --db=nbcore")
+    ocs_log_dir_path = os.path.join(ocs_log_dir_path, "nbcore.gz")
+    if float(ocsci_config.ENV_DATA["ocs_version"]) < 4.7:
+        cmd = "mongodump --archive=nbcore.gz --gzip --db=nbcore"
+    else:
+        cmd = 'bash -c "pg_dump nbcore | gzip > nbcore.gz"'
+
+    nb_db_pod.exec_cmd_on_pod(cmd)
     download_file_from_pod(
-        pod_name=nb_db_pod.name, remotepath="/opt/app-root/src/nbcore.gz",
-        localpath=ocs_log_dir_path, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        pod_name=nb_db_pod.name,
+        remotepath="/opt/app-root/src/nbcore.gz",
+        localpath=ocs_log_dir_path,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     )
 
 
@@ -798,55 +904,50 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
 
     """
     if not (
-        'KUBECONFIG' in os.environ
-        or os.path.exists(os.path.expanduser('~/.kube/config'))
+        "KUBECONFIG" in os.environ
+        or os.path.exists(os.path.expanduser("~/.kube/config"))
     ):
         log.warning(
-            "Cannot find $KUBECONFIG or ~/.kube/config; "
-            "skipping log collection"
+            "Cannot find $KUBECONFIG or ~/.kube/config; " "skipping log collection"
         )
         return
     if status_failure:
         log_dir_path = os.path.join(
-            os.path.expanduser(ocsci_config.RUN['log_dir']),
+            os.path.expanduser(ocsci_config.RUN["log_dir"]),
             f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
-            f"{dir_name}_ocs_logs"
+            f"{dir_name}_ocs_logs",
         )
     else:
         log_dir_path = os.path.join(
-            os.path.expanduser(ocsci_config.RUN['log_dir']),
-            f"{dir_name}_{ocsci_config.RUN['run_id']}"
+            os.path.expanduser(ocsci_config.RUN["log_dir"]),
+            f"{dir_name}_{ocsci_config.RUN['run_id']}",
         )
 
     if ocs:
         latest_tag = ocsci_config.REPORTING.get(
-            'ocs_must_gather_latest_tag',
+            "ocs_must_gather_latest_tag",
             ocsci_config.REPORTING.get(
-                'default_ocs_must_gather_latest_tag', ocsci_config.DEPLOYMENT[
-                    'default_latest_tag'
-                ]
-            )
+                "default_ocs_must_gather_latest_tag",
+                ocsci_config.DEPLOYMENT["default_latest_tag"],
+            ),
         )
-        ocs_log_dir_path = os.path.join(log_dir_path, 'ocs_must_gather')
-        ocs_must_gather_image = ocsci_config.REPORTING['ocs_must_gather_image']
+        ocs_log_dir_path = os.path.join(log_dir_path, "ocs_must_gather")
+        ocs_must_gather_image = ocsci_config.REPORTING["ocs_must_gather_image"]
         ocs_must_gather_image_and_tag = f"{ocs_must_gather_image}:{latest_tag}"
-        if ocsci_config.DEPLOYMENT.get('disconnected'):
-            ocs_must_gather_image_and_tag = (
-                mirror_image(ocs_must_gather_image_and_tag)
-            )
+        if ocsci_config.DEPLOYMENT.get("disconnected"):
+            ocs_must_gather_image_and_tag = mirror_image(ocs_must_gather_image_and_tag)
         run_must_gather(ocs_log_dir_path, ocs_must_gather_image_and_tag)
 
     if ocp:
-        ocp_log_dir_path = os.path.join(log_dir_path, 'ocp_must_gather')
-        ocp_must_gather_image = ocsci_config.REPORTING['ocp_must_gather_image']
-        if ocsci_config.DEPLOYMENT.get('disconnected'):
-            ocp_must_gather_image = (
-                mirror_image(ocp_must_gather_image)
-            )
+        ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
+        ocp_must_gather_image = ocsci_config.REPORTING["ocp_must_gather_image"]
+        if ocsci_config.DEPLOYMENT.get("disconnected"):
+            ocp_must_gather_image = mirror_image(ocp_must_gather_image)
         run_must_gather(ocp_log_dir_path, ocp_must_gather_image)
         run_must_gather(
-            ocp_log_dir_path, ocp_must_gather_image,
-            '/usr/bin/gather_service_logs worker'
+            ocp_log_dir_path,
+            ocp_must_gather_image,
+            "/usr/bin/gather_service_logs worker",
         )
     if mcg:
         counter = 0
@@ -883,27 +984,21 @@ def collect_prometheus_metrics(
     """
     api = PrometheusAPI()
     log_dir_path = os.path.join(
-        os.path.expanduser(ocsci_config.RUN['log_dir']),
+        os.path.expanduser(ocsci_config.RUN["log_dir"]),
         f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
-        f"{dir_name}_ocs_metrics"
+        f"{dir_name}_ocs_metrics",
     )
     if not os.path.exists(log_dir_path):
-        log.info(f'Creating directory {log_dir_path}')
+        log.info(f"Creating directory {log_dir_path}")
         os.makedirs(log_dir_path)
 
     for metric in metrics:
         datapoints = api.get(
-            'query_range',
-            {
-                'query': metric,
-                'start': start,
-                'end': stop,
-                'step': step
-            }
+            "query_range", {"query": metric, "start": start, "end": stop, "step": step}
         )
-        file_name = os.path.join(log_dir_path, f'{metric}.json')
-        log.info(f'Saving {metric} data into {file_name}')
-        with open(file_name, 'w') as outfile:
+        file_name = os.path.join(log_dir_path, f"{metric}.json")
+        log.info(f"Saving {metric} data into {file_name}")
+        with open(file_name, "w") as outfile:
             json.dump(datapoints.json(), outfile)
 
 
@@ -913,12 +1008,12 @@ def oc_get_all_obc_names():
         set: A set of all OBC names
 
     """
-    all_obcs_in_namespace = OCP(
-        namespace=ocsci_config.ENV_DATA['cluster_namespace'], kind='obc'
-    ).get().get('items')
-    return {
-        obc.get('spec').get('bucketName') for obc in all_obcs_in_namespace
-    }
+    all_obcs_in_namespace = (
+        OCP(namespace=ocsci_config.ENV_DATA["cluster_namespace"], kind="obc")
+        .get()
+        .get("items")
+    )
+    return {obc.get("spec").get("bucketName") for obc in all_obcs_in_namespace}
 
 
 def get_external_mode_rhcs():
@@ -932,7 +1027,7 @@ def get_external_mode_rhcs():
 
     """
     external_rhcs_info = ocsci_config.EXTERNAL_MODE.get(
-        'external_cluster_node_roles', ''
+        "external_cluster_node_roles", ""
     )
     if not external_rhcs_info:
         log.error("No external RHCS cluster info found")
@@ -956,9 +1051,9 @@ def get_cluster_object(external_rhcs_info):
     # List of CephNode objects
     node_list = []
     for node, node_info in external_rhcs_info.items():
-        node_info['username'] = ocsci_config.EXTERNAL_MODE['login']['username']
-        node_info['password'] = ocsci_config.EXTERNAL_MODE['login']['password']
-        node_info['no_of_volumes'] = ''
+        node_info["username"] = ocsci_config.EXTERNAL_MODE["login"]["username"]
+        node_info["password"] = ocsci_config.EXTERNAL_MODE["login"]["password"]
+        node_info["no_of_volumes"] = ""
 
         log.info(node_info)
         node_list.append(CephNode(**node_info))
@@ -966,7 +1061,7 @@ def get_cluster_object(external_rhcs_info):
     return Ceph(node_list=node_list)
 
 
-def kill_osd_external(ceph_cluster, osd_id, sig_type='SIGTERM'):
+def kill_osd_external(ceph_cluster, osd_id, sig_type="SIGTERM"):
     """
     Kill an osd with given signal
 
@@ -981,7 +1076,7 @@ def kill_osd_external(ceph_cluster, osd_id, sig_type='SIGTERM'):
     """
     log.info(f"OSDID={osd_id}")
     kill_cmd = f"systemctl kill -s {sig_type} ceph-osd@{osd_id}"
-    osd_obj = ceph_cluster.get_nodes(role=f'osd.{osd_id}')
+    osd_obj = ceph_cluster.get_nodes(role=f"osd.{osd_id}")
     for osd in osd_obj:
         log.info(f"OSD node = {osd.vmname}")
         try:
@@ -1005,10 +1100,34 @@ def revive_osd_external(ceph_cluster, osd_id):
     """
     log.info(f"Reviving osd ={osd_id}")
     revive_cmd = f"systemctl start ceph-osd@{osd_id}"
-    osd_obj = ceph_cluster.get_nodes(role=f'osd.{osd_id}')
+    osd_obj = ceph_cluster.get_nodes(role=f"osd.{osd_id}")
     for osd in osd_obj:
         try:
             osd.exec_command(cmd=revive_cmd)
         except CommandFailed:
             log.error("Failed to revive osd")
             raise
+
+
+def reboot_node(ceph_node, timeout=300):
+    """
+    Reboot a node with given ceph_node object
+
+    Args:
+        ceph_node (CephNode): Ceph node object representing the node.
+        timeout (int): Wait time in seconds for the node to comeback.
+
+    Raises:
+        SSHException: if not able to connect through ssh
+    """
+    ceph_node.exec_command(
+        cmd="reboot",
+        check_ec=False,
+        long_running=True,
+    )
+
+    try:
+        ceph_node.connect(timeout)
+    except SSHException:
+        log.exception(f"Failed to connect to node {ceph_node.hostname}")
+        raise

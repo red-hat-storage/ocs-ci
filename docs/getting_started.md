@@ -88,6 +88,31 @@ and place in the `data` directory at the root level of the project.
 If there is no `data` directory, create one.
 The name of the file should be `pull-secret`.
 
+#### Brew registry access for non-GA LSO testing
+
+If you intend to test non-GA versions of the local storage operator you will need access
+to provided authentication for `brew.registry.redhat.io` in your pull secret. In order
+to obtain credentials for this brew registry you will need to do the following:
+
+1. Send a request to `operator-pipeline-wg@redhat.com` for `brew.registry.redhat.io`
+   credentials for you or your team. You will want to provide an email address to
+   associate the account with. You may be required to provide a gpg public key in order
+   to receive the credentials.
+2. Once you have received credentials for the brew registry you will need to log in to
+   the registry in order to obtain the data you will add to your pull secret. You can
+   log in to the registry using `docker` and the provided credentials:
+   * `docker login brew.registry.redhat.io`
+3. Once you have successfully logged in, you can retrieve the auth data from
+   `~/.docker/config.json`. Grab the auth section for `brew.registry.redhat.com`, it
+   will look something like this
+
+
+    "brew.registry.redhat.io" : {
+      "auth" : "TOKEN"
+    },
+
+4. Add that auth section to your existing pull secret.
+
 ##### Nightly Builds
 
 In addition you will need to add a registry auth to your pull-secret to
@@ -155,6 +180,20 @@ To enable ocs-ci to use this token, add the following to your `auth.yaml`:
 ```yaml
 quay:
   access_token: 'YOUR_TOKEN'
+```
+#### GitHub
+
+For disconnected cluster installation, we need to access github api (during
+downloading opm tool) which have very strict rate limit for unauthenticated
+requests ([60 requests per hour](https://docs.github.com/en/rest/overview/resources-in-the-rest-api#rate-limiting)).
+To avoid API rate limit exceeded errors, you can provide github authentication
+credentials (username and token) obtained on [Personal access tokens](https://github.com/settings/tokens)
+page (Settings -> Developer settings -> Personal access tokens).
+
+```yaml
+github:
+  username: "GITHUB_USERNAME"
+  token: "GITHUB_TOKEN"
 ```
 
 ## Tests

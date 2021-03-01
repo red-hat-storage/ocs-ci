@@ -17,7 +17,7 @@ import logging
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
-from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.version import get_ocs_version
 
 log = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ data_template = {
     "executable": None,
     "benchmark": None,
     "environment": None,
-    "result_value": None
+    "result_value": None,
 }
 
 
@@ -42,30 +42,30 @@ def initialize_data():
     """
 
     # worker type is relevant only for cloud instances.
-    log.info('Initializing the dashboard data')
-    worker_lbl = get_typed_nodes(num_of_nodes=1)[0].data['metadata']['labels']
-    if 'beta.kubernetes.io/instance-type' in worker_lbl:
-        worker_type = worker_lbl['beta.kubernetes.io/instance-type']
+    log.info("Initializing the dashboard data")
+    worker_lbl = get_nodes(num_of_nodes=1)[0].data["metadata"]["labels"]
+    if "beta.kubernetes.io/instance-type" in worker_lbl:
+        worker_type = worker_lbl["beta.kubernetes.io/instance-type"]
     else:
         # TODO: Maybe for None cloud we can add the Arch ?
         #   worker_type = worker_lbl['kubernetes.io/arch']
         worker_type = ""
-    log.info(f'The worker type is {worker_type}')
+    log.info(f"The worker type is {worker_type}")
 
     (ocs_ver_info, _) = get_ocs_version()
-    ocs_ver_full = ocs_ver_info['status']['desired']['version']
+    ocs_ver_full = ocs_ver_info["status"]["desired"]["version"]
     m = re.match(r"(\d.\d).(\d)", ocs_ver_full)
     if m and m.group(1) is not None:
         ocs_ver = m.group(1)
-    log.info(f'ocs_ver is {ocs_ver_full}')
-    platform = config.ENV_DATA['platform'].upper()
-    if platform.lower() not in ['vsphere', 'baremetal']:
-        platform = f'{platform.upper()} {worker_type}'
-    data_template['commitid'] = ocs_ver_full
-    data_template['project'] = f"OCS{ocs_ver}"
-    data_template['branch'] = ocs_ver_info['spec']['channel']
-    data_template['executable'] = ocs_ver
-    data_template['environment'] = platform
+    log.info(f"ocs_ver is {ocs_ver_full}")
+    platform = config.ENV_DATA["platform"].upper()
+    if platform.lower() not in ["vsphere", "baremetal"]:
+        platform = f"{platform.upper()} {worker_type}"
+    data_template["commitid"] = ocs_ver_full
+    data_template["project"] = f"OCS{ocs_ver}"
+    data_template["branch"] = ocs_ver_info["spec"]["channel"]
+    data_template["executable"] = ocs_ver
+    data_template["environment"] = platform
 
     return data_template
 
@@ -79,18 +79,23 @@ def push_results(json_data):
 
     """
 
-    log.info(f'Trying to push {json_data} to codespeed server:  {constants.CODESPEED_URL}result/add/json/')
+    log.info(
+        f"Trying to push {json_data} to codespeed server:  {constants.CODESPEED_URL}result/add/json/"
+    )
     try:
-        request = requests.post(constants.CODESPEED_URL + 'result/add/json/', data=json_data)
-        log.info(f'POST request output is {request.text}')
+        request = requests.post(
+            constants.CODESPEED_URL + "result/add/json/", data=json_data
+        )
+        log.info(f"POST request output is {request.text}")
     except Exception:
         # Catching any exception just to prevent the test from failed
-        log.error('Failed to push data to codespeed, make sure the server is up')
+        log.warning(
+            "Failed to push data to codespeed, make sure the server is"
+            "up, and that you are in RH network"
+        )
 
 
-def push_perf_dashboard(
-    interface, read_iops, write_iops, bw_read, bw_write
-):
+def push_perf_dashboard(interface, read_iops, write_iops, bw_read, bw_write):
     """
     Push JSON data to performance dashboard
 
@@ -104,34 +109,32 @@ def push_perf_dashboard(
     """
     data = initialize_data()
     interface = (
-        constants.RBD_INTERFACE if interface == constants.CEPHBLOCKPOOL else (
-            constants.CEPHFS_INTERFACE
-        )
+        constants.RBD_INTERFACE
+        if interface == constants.CEPHBLOCKPOOL
+        else (constants.CEPHFS_INTERFACE)
     )
     sample_data = []
-    data['benchmark'] = f"{interface}-iops-Read"
-    data['result_value'] = read_iops
+    data["benchmark"] = f"{interface}-iops-Read"
+    data["result_value"] = read_iops
     sample_data.append(data.copy())
 
-    data['benchmark'] = f"{interface}-iops-Write"
-    data['result_value'] = write_iops
+    data["benchmark"] = f"{interface}-iops-Write"
+    data["result_value"] = write_iops
     sample_data.append(data.copy())
 
-    data['benchmark'] = f"{interface}-BW-Write"
-    data['result_value'] = bw_write
+    data["benchmark"] = f"{interface}-BW-Write"
+    data["result_value"] = bw_write
     sample_data.append(data.copy())
 
-    data['benchmark'] = f"{interface}-BW-Read"
-    data['result_value'] = bw_read
+    data["benchmark"] = f"{interface}-BW-Read"
+    data["result_value"] = bw_read
     sample_data.append(data.copy())
 
-    json_data = {'json': json.dumps(sample_data)}
+    json_data = {"json": json.dumps(sample_data)}
     push_results(json_data)
 
 
-def push_to_pvc_time_dashboard(
-    interface, action, duration
-):
+def push_to_pvc_time_dashboard(interface, action, duration):
     """
     Push JSON data to time pvc dashboard
 
@@ -142,14 +145,14 @@ def push_to_pvc_time_dashboard(
     """
     data = initialize_data()
     interface = (
-        constants.RBD_INTERFACE if interface == constants.CEPHBLOCKPOOL else (
-            constants.CEPHFS_INTERFACE
-        )
+        constants.RBD_INTERFACE
+        if interface == constants.CEPHBLOCKPOOL
+        else (constants.CEPHFS_INTERFACE)
     )
     sample_data = []
-    data['benchmark'] = f"{interface}-pvc-{action}-time"
-    data['result_value'] = duration
+    data["benchmark"] = f"{interface}-pvc-{action}-time"
+    data["result_value"] = duration
     sample_data.append(data.copy())
 
-    json_data = {'json': json.dumps(sample_data)}
+    json_data = {"json": json.dumps(sample_data)}
     push_results(json_data)

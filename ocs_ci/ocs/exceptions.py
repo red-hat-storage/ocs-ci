@@ -27,7 +27,7 @@ class ResourceLeftoversException(Exception):
 
 
 class TimeoutExpiredError(Exception):
-    message = 'Timed Out'
+    message = "Timed Out"
 
     def __init__(self, *value):
         self.value = value
@@ -61,7 +61,6 @@ class PerformanceException(Exception):
 
 
 class ResourceWrongStatusException(Exception):
-
     def __init__(self, resource_name, describe_out):
         self.resource_name = resource_name
         self.describe_out = describe_out
@@ -154,6 +153,10 @@ class UnsupportedPlatformError(Exception):
     pass
 
 
+class UnsupportedPlatformVersionError(Exception):
+    pass
+
+
 class UnsupportedFeatureError(Exception):
     pass
 
@@ -222,9 +225,65 @@ class StorageNotSufficientException(Exception):
     pass
 
 
+class PoolNotFound(Exception):
+    pass
+
+
+class PoolDataNotErased(Exception):
+    pass
+
+
+class PvcNotDeleted(Exception):
+    pass
+
+
 class MemoryNotSufficientException(Exception):
     pass
 
 
 class CPUNotSufficientException(Exception):
+    pass
+
+
+class PoolNotCompressedAsExpected(Exception):
+    pass
+
+
+class PoolNotReplicatedAsNeeded(Exception):
+    pass
+
+
+class ImageIsNotDeletedOrNotFound(Exception):
+    pass
+
+
+class VaultDeploymentError(Exception):
+    pass
+
+
+class VaultOperationError(Exception):
+    pass
+
+
+class KMSNotSupported(Exception):
+    pass
+
+
+class KMSConnectionDetailsError(Exception):
+    pass
+
+
+class KMSTokenError(Exception):
+    pass
+
+
+class KMSResourceCleaneupError(Exception):
+    pass
+
+
+class UnhealthyBucket(Exception):
+    pass
+
+
+class NotFoundError(Exception):
     pass

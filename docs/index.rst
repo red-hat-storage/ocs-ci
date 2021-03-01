@@ -19,6 +19,7 @@ and functionality using AWS and other supported platforms.
    code_review.md
    coding_guidelines.md
    getting_started.md
+   supported_platforms.md
    usage.md
    upgrade.md
    results.md
@@ -28,6 +29,7 @@ and functionality using AWS and other supported platforms.
    debugging.md
    unit_tests.md
    workarounds.md
+   release_guidelines.md
    usecases/index.rst
 
 

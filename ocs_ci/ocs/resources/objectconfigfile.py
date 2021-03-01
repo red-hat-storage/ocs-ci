@@ -27,7 +27,7 @@ from ocs_ci.utility.utils import run_cmd
 logger = logging.getLogger(name=__file__)
 
 
-class ObjectConfFile():
+class ObjectConfFile:
     """
     This class represents particular k8s object config file which describes
     multiple k8s resources.
@@ -67,20 +67,24 @@ class ObjectConfFile():
         """
         if namespace is None:
             namespace = self.project.namespace
-        logger.info((
-            f"going to run oc {command} "
-            f"on {self.name} object config yaml file "
-            f"in namespace {namespace}"))
+        logger.info(
+            (
+                f"going to run oc {command} "
+                f"on {self.name} object config yaml file "
+                f"in namespace {namespace}"
+            )
+        )
         logger.debug(self.yaml_file.read_text())
         oc_cmd = [
             "oc",
             "--kubeconfig",
-            os.getenv('KUBECONFIG'),
+            os.getenv("KUBECONFIG"),
             command,
             "-f",
             os.path.join(self._tmp_path, self.yaml_file.name),
             "-n",
-            namespace]
+            namespace,
+        ]
         if out_yaml_format:
             oc_cmd.extend(["-o", "yaml"])
         # assuming run_cmd is logging everything

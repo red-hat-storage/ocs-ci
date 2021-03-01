@@ -9,14 +9,14 @@ from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.node import get_ocs_nodes
+from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 
 
 @pytest.mark.parametrize(
     argnames=["num_of_nodes", "workload_storageutilization_rbd"],
     argvalues=[
         pytest.param(
-            *[1, (0.11, True, 120)],
-            marks=pytest.mark.polarion_id("OCS-1313")
+            *[1, (0.11, True, 120)], marks=pytest.mark.polarion_id("OCS-1313")
         ),
     ],
     indirect=["workload_storageutilization_rbd"],
@@ -30,13 +30,19 @@ class TestAddCapacityNodeRestart(ManageTest):
     """
 
     def test_add_capacity_node_restart(
-        self, nodes, multi_pvc_factory, pod_factory,
-        workload_storageutilization_rbd, num_of_nodes,
+        self,
+        nodes,
+        multi_pvc_factory,
+        pod_factory,
+        workload_storageutilization_rbd,
+        num_of_nodes,
     ):
         """
         test add capacity when one of the worker nodes got restart in the middle of the process
         """
-        logging.info("Condition 1 to start the test is met: storageutilization is completed")
+        logging.info(
+            "Condition 1 to start the test is met: storageutilization is completed"
+        )
         # Please notice: When the branch 'wip-add-capacity-e_e' will be merged into master
         # the test will include more much data both before, and after calling 'add_capacity'function.
 
@@ -45,8 +51,9 @@ class TestAddCapacityNodeRestart(ManageTest):
 
         max_osds = 15
         osd_pods_before = pod_helpers.get_osd_pods()
-        assert len(osd_pods_before) < max_osds, (
-            "Condition 3 to start test failed: We have maximum of osd's in the cluster")
+        assert (
+            len(osd_pods_before) < max_osds
+        ), "Condition 3 to start test failed: We have maximum of osd's in the cluster"
         logging.info("All start conditions are met!")
 
         osd_size = storage_cluster.get_osd_size()
@@ -60,24 +67,24 @@ class TestAddCapacityNodeRestart(ManageTest):
         # Restart nodes while additional storage is being added
         logging.info("Restart nodes:")
         logging.info([n.name for n in node_list])
-        nodes.restart_nodes(nodes=node_list, wait=True, timeout=420)
+        nodes.restart_nodes(nodes=node_list, wait=True)
         logging.info("Finished restarting the node list")
 
         # The exit criteria verification conditions here are not complete. When the branch
         # 'wip-add-capacity-e_e' will be merged into master I will use the functions from this branch.
 
-        pod = OCP(
-            kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
-        )
+        pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
         pod.wait_for_resource(
             timeout=600,
             condition=constants.STATUS_RUNNING,
-            selector='app=rook-ceph-osd',
-            resource_count=result * 3
+            selector="app=rook-ceph-osd",
+            resource_count=result * 3,
         )
+
+        # Verify OSDs are encrypted
+        if config.ENV_DATA.get("encryption_at_rest"):
+            osd_encryption_verification()
 
         logging.info("Finished verifying add capacity osd storage with node restart")
         logging.info("Waiting for ceph health check to finished...")
-        ceph_health_check(
-            namespace=config.ENV_DATA['cluster_namespace'], tries=90
-        )
+        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=180)

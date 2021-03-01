@@ -5,9 +5,7 @@ import logging
 import pytest
 import ocs_ci.ocs.exceptions as ex
 import threading
-from ocs_ci.framework.testlib import (
-    performance, E2ETest
-)
+from ocs_ci.framework.testlib import performance, E2ETest
 
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.helpers import helpers
@@ -24,9 +22,7 @@ class TestPVCDeletionPerformance(E2ETest):
     """
 
     @pytest.fixture()
-    def base_setup(
-        self, request, interface_iterate, storageclass_factory
-    ):
+    def base_setup(self, request, interface_iterate, storageclass_factory):
         """
         A setup phase for the test
 
@@ -41,46 +37,32 @@ class TestPVCDeletionPerformance(E2ETest):
     @pytest.mark.parametrize(
         argnames=["pvc_size"],
         argvalues=[
-            pytest.param(
-                *['1Gi'], marks=pytest.mark.polarion_id("OCS-2005")
-            ),
-            pytest.param(
-                *['10Gi'], marks=pytest.mark.polarion_id("OCS-2006")
-            ),
-            pytest.param(
-                *['100Gi'], marks=pytest.mark.polarion_id("OCS-2007")
-            ),
-            pytest.param(
-                *['1Ti'], marks=pytest.mark.polarion_id("OCS-2003")
-            ),
-            pytest.param(
-                *['2Ti'], marks=pytest.mark.polarion_id("OCS-2004")
-            ),
-        ]
+            pytest.param(*["1Gi"], marks=pytest.mark.polarion_id("OCS-2005")),
+            pytest.param(*["10Gi"], marks=pytest.mark.polarion_id("OCS-2006")),
+            pytest.param(*["100Gi"], marks=pytest.mark.polarion_id("OCS-2007")),
+            pytest.param(*["1Ti"], marks=pytest.mark.polarion_id("OCS-2003")),
+            pytest.param(*["2Ti"], marks=pytest.mark.polarion_id("OCS-2004")),
+        ],
     )
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_pvc_deletion_measurement_performance(self, teardown_factory, pvc_size):
         """
         Measuring PVC deletion time is within supported limits
         """
-        logging.info('Start creating new PVC')
+        logging.info("Start creating new PVC")
 
-        pvc_obj = helpers.create_pvc(
-            sc_name=self.sc_obj.name, size=pvc_size
-        )
+        pvc_obj = helpers.create_pvc(sc_name=self.sc_obj.name, size=pvc_size)
         helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
         pvc_obj.reload()
         pv_name = pvc_obj.backed_pv
         pvc_reclaim_policy = pvc_obj.reclaim_policy
         teardown_factory(pvc_obj)
         pvc_obj.delete()
-        logging.info('Start deletion of PVC')
+        logging.info("Start deletion of PVC")
         pvc_obj.ocp.wait_for_delete(pvc_obj.name)
         if pvc_reclaim_policy == constants.RECLAIM_POLICY_DELETE:
             helpers.validate_pv_delete(pvc_obj.backed_pv)
-        delete_time = helpers.measure_pvc_deletion_time(
-            self.interface, pv_name
-        )
+        delete_time = helpers.measure_pvc_deletion_time(self.interface, pv_name)
         # Deletion time for CephFS PVC is a little over 3 seconds
         deletion_time = 4 if self.interface == constants.CEPHFILESYSTEM else 3
         logging.info(f"PVC deleted in {delete_time} seconds")
@@ -88,7 +70,7 @@ class TestPVCDeletionPerformance(E2ETest):
             raise ex.PerformanceException(
                 f"PVC deletion time is {delete_time} and greater than {deletion_time} second"
             )
-        push_to_pvc_time_dashboard(self.interface, "deletion", delete_time)
+        push_to_pvc_time_dashboard(self.interface, "1-pvc-deletion", delete_time)
 
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_multiple_pvc_deletion_measurement_performance(self, teardown_factory):
@@ -102,8 +84,8 @@ class TestPVCDeletionPerformance(E2ETest):
 
         """
         number_of_pvcs = 120
-        pvc_size = '1Gi'
-        log.info('Start creating new 120 PVCs')
+        pvc_size = "1Gi"
+        log.info("Start creating new 120 PVCs")
 
         pvc_objs = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
@@ -118,8 +100,7 @@ class TestPVCDeletionPerformance(E2ETest):
         with ThreadPoolExecutor(max_workers=5) as executor:
             for pvc_obj in pvc_objs:
                 executor.submit(
-                    helpers.wait_for_resource_state, pvc_obj,
-                    constants.STATUS_BOUND
+                    helpers.wait_for_resource_state, pvc_obj, constants.STATUS_BOUND
                 )
 
                 executor.submit(pvc_obj.reload)
@@ -155,6 +136,4 @@ class TestPVCDeletionPerformance(E2ETest):
         pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
             interface=self.interface, pv_name_list=pv_name_list
         )
-        logging.info(
-            f"{number_of_pvcs} PVCs deletion time took {pvc_deletion_time}"
-        )
+        logging.info(f"{number_of_pvcs} PVCs deletion time took {pvc_deletion_time}")

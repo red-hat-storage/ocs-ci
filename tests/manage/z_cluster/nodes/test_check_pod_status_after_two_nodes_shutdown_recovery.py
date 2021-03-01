@@ -2,18 +2,12 @@ import logging
 import pytest
 import time
 
-from ocs_ci.framework.testlib import (
-    ManageTest, tier4c, ignore_leftovers
-)
+from ocs_ci.framework.testlib import ManageTest, tier4c, ignore_leftovers
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.ocs.node import (
-    wait_for_nodes_status, get_typed_nodes
-)
+from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
-from ocs_ci.ocs.resources.pod import (
-    wait_for_storage_pods, list_of_nodes_running_pods
-)
+from ocs_ci.ocs.resources.pod import wait_for_storage_pods, list_of_nodes_running_pods
 
 log = logging.getLogger(__name__)
 
@@ -50,16 +44,14 @@ class TestOCSWorkerNodeShutdown(ManageTest):
         # before shutdown
 
         log.info("Check pod nodes before nodes shutdown")
-        list_of_nodes_running_pods(selector='rook-ceph-mds')
+        list_of_nodes_running_pods(selector="rook-ceph-mds")
 
-        list_of_nodes_running_pods(selector='csi-rbdplugin-provisioner')
+        list_of_nodes_running_pods(selector="csi-rbdplugin-provisioner")
 
-        list_of_nodes_running_pods(
-            selector='csi-cephfsplugin-provisioner'
-        )
+        list_of_nodes_running_pods(selector="csi-cephfsplugin-provisioner")
 
         # Get the node list
-        node = get_typed_nodes(node_type='worker', num_of_nodes=2)
+        node = get_nodes(node_type="worker", num_of_nodes=2)
 
         # Shutdown 2 worker nodes for 10 mins
         nodes.stop_nodes(nodes=node)
@@ -74,9 +66,8 @@ class TestOCSWorkerNodeShutdown(ManageTest):
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
             tries=30,
-            delay=15)(
-            wait_for_nodes_status(timeout=1800)
-        )
+            delay=15,
+        )(wait_for_nodes_status(timeout=1800))
 
         # Check the node are Ready state and check cluster is health ok
         self.sanity_helpers.health_check()
@@ -85,15 +76,15 @@ class TestOCSWorkerNodeShutdown(ManageTest):
         # Get MDS, rbd & cephfs plugin provisioner pods running
         # nodes post-recovery
         mds_running_nodes_after_recovery = list_of_nodes_running_pods(
-            selector='rook-ceph-mds'
+            selector="rook-ceph-mds"
         )
 
         rbd_provisioner_running_nodes_after_recovery = list_of_nodes_running_pods(
-            selector='csi-rbdplugin-provisioner'
+            selector="csi-rbdplugin-provisioner"
         )
 
         cephfs_provisioner_running_nodes_after_recovery = list_of_nodes_running_pods(
-            selector='csi-cephfsplugin-provisioner'
+            selector="csi-cephfsplugin-provisioner"
         )
 
         assert len(set(mds_running_nodes_after_recovery)) == len(

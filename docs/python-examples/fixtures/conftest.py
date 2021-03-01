@@ -6,7 +6,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture(scope="class")
 def storage_class(request):
     """
     Storage class fixture
@@ -14,19 +14,20 @@ def storage_class(request):
     Returns:
         StorageClass: object of storage class
     """
+
     def fin():
         sc.delete()
 
     request.addfinalizer(fin)
 
     logger.info("Creating storage class")
-    data = {'api_version': 'v1', 'kind': 'namespace'}
+    data = {"api_version": "v1", "kind": "namespace"}
     # data is ususally loaded from yaml template
     sc = OCS(**data)
     return sc
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture(scope="class")
 def cls_pvc(request, storage_class):
     """
     PVC fixture
@@ -34,17 +35,18 @@ def cls_pvc(request, storage_class):
     Returns:
         PVC: object of PVC class
     """
+
     def fin():
         pvc.delete()
 
     request.addfinalizer(fin)
-    data = {'api_version': 'v1', 'kind': 'namespace'}
+    data = {"api_version": "v1", "kind": "namespace"}
     # data is ususally loaded from yaml template
     pvc = OCS(**data)
     return pvc
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture(scope="class")
 def pvc_factory(request, storage_class):
     """
     Fixture factory for creating pvcs.
@@ -88,11 +90,11 @@ def pvc_factory(request, storage_class):
     return wrapper_create_pvc
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture(scope="class")
 def precreate_pvcs(pvc_factory, storage_class):
     """
     This fixture returns the precreated PVC
     objects using pvc_factory
     Same concept can be applied to other similar objects (aka OCS's)
     """
-    return [pvc_factory(storage_class) for x in range('some_number')]
+    return [pvc_factory(storage_class) for x in range("some_number")]

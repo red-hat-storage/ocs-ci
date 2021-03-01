@@ -16,7 +16,7 @@ def create_rbd_secret(request):
         """
         Delete the RBD secret
         """
-        if hasattr(class_instance, 'rbd_secret_obj'):
+        if hasattr(class_instance, "rbd_secret_obj"):
             class_instance.rbd_secret_obj.delete()
             class_instance.rbd_secret_obj.ocp.wait_for_delete(
                 class_instance.rbd_secret_obj.name
@@ -41,7 +41,7 @@ def create_cephfs_secret(request):
         """
         Delete the FS secret
         """
-        if hasattr(class_instance, 'cephfs_secret_obj'):
+        if hasattr(class_instance, "cephfs_secret_obj"):
             class_instance.cephfs_secret_obj.delete()
             class_instance.cephfs_secret_obj.ocp.wait_for_delete(
                 class_instance.cephfs_secret_obj.name
@@ -66,7 +66,7 @@ def create_ceph_block_pool(request):
         """
         Delete the Ceph block pool
         """
-        if hasattr(class_instance, 'cbp_obj'):
+        if hasattr(class_instance, "cbp_obj"):
             class_instance.cbp_obj.delete()
 
     request.addfinalizer(finalizer)
@@ -88,20 +88,18 @@ def create_rbd_storageclass(request):
         """
         if class_instance.sc_obj.get():
             class_instance.sc_obj.delete()
-            class_instance.sc_obj.ocp.wait_for_delete(
-                class_instance.sc_obj.name
-            )
+            class_instance.sc_obj.ocp.wait_for_delete(class_instance.sc_obj.name)
 
     request.addfinalizer(finalizer)
 
-    if not hasattr(class_instance, 'reclaim_policy'):
+    if not hasattr(class_instance, "reclaim_policy"):
         class_instance.reclaim_policy = constants.RECLAIM_POLICY_DELETE
 
     class_instance.sc_obj = helpers.create_storage_class(
         interface_type=constants.CEPHBLOCKPOOL,
         interface_name=class_instance.cbp_obj.name,
         secret_name=class_instance.rbd_secret_obj.name,
-        reclaim_policy=class_instance.reclaim_policy
+        reclaim_policy=class_instance.reclaim_policy,
     )
     assert class_instance.sc_obj, "Failed to create storage class"
 
@@ -119,16 +117,14 @@ def create_cephfs_storageclass(request):
         """
         if class_instance.sc_obj.get():
             class_instance.sc_obj.delete()
-            class_instance.sc_obj.ocp.wait_for_delete(
-                class_instance.sc_obj.name
-            )
+            class_instance.sc_obj.ocp.wait_for_delete(class_instance.sc_obj.name)
 
     request.addfinalizer(finalizer)
 
     class_instance.sc_obj = helpers.create_storage_class(
         interface_type=constants.CEPHFILESYSTEM,
         interface_name=helpers.get_cephfs_data_pool_name(),
-        secret_name=class_instance.cephfs_secret_obj.name
+        secret_name=class_instance.cephfs_secret_obj.name,
     )
     assert class_instance.sc_obj, "Failed to create storage class"
 
@@ -145,9 +141,7 @@ def create_project(request):
         Delete the project
         """
         ocp.switch_to_default_rook_cluster_project()
-        class_instance.project_obj.delete(
-            resource_name=class_instance.namespace
-        )
+        class_instance.project_obj.delete(resource_name=class_instance.namespace)
         class_instance.project_obj.wait_for_delete(class_instance.namespace)
 
     request.addfinalizer(finalizer)
@@ -181,7 +175,7 @@ def delete_pvc(request):
         """
         Delete the PVC
         """
-        if hasattr(class_instance, 'pvc_obj'):
+        if hasattr(class_instance, "pvc_obj"):
             class_instance.pvc_obj.delete()
 
     request.addfinalizer(finalizer)
@@ -196,11 +190,9 @@ def create_rbd_pod(request):
     class_instance.pod_obj = helpers.create_pod(
         interface_type=constants.CEPHBLOCKPOOL,
         pvc_name=class_instance.pvc_obj.name,
-        namespace=class_instance.namespace
+        namespace=class_instance.namespace,
     )
-    helpers.wait_for_resource_state(
-        class_instance.pod_obj, constants.STATUS_RUNNING
-    )
+    helpers.wait_for_resource_state(class_instance.pod_obj, constants.STATUS_RUNNING)
     class_instance.pod_obj.reload()
 
 
@@ -215,7 +207,7 @@ def delete_pod(request):
         """
         Delete the pod
         """
-        if hasattr(class_instance, 'pod_obj'):
+        if hasattr(class_instance, "pod_obj"):
             class_instance.pod_obj.delete()
 
     request.addfinalizer(finalizer)
@@ -232,7 +224,7 @@ def create_pvcs(request):
         """
         Delete multiple PVCs
         """
-        if hasattr(class_instance, 'pvc_objs'):
+        if hasattr(class_instance, "pvc_objs"):
             for pvc_obj in class_instance.pvc_objs:
                 pvc_obj.reload()
                 backed_pv_name = pvc_obj.backed_pv
@@ -244,8 +236,10 @@ def create_pvcs(request):
     request.addfinalizer(finalizer)
 
     class_instance.pvc_objs = helpers.create_multiple_pvcs(
-        sc_name=class_instance.sc_obj.name, number_of_pvc=class_instance.num_of_pvcs,
-        size=class_instance.pvc_size, namespace=class_instance.namespace
+        sc_name=class_instance.sc_obj.name,
+        number_of_pvc=class_instance.num_of_pvcs,
+        size=class_instance.pvc_size,
+        namespace=class_instance.namespace,
     )
     for pvc_obj in class_instance.pvc_objs:
         helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
@@ -263,7 +257,7 @@ def create_pods(request):
         """
         Delete multiple pods
         """
-        if hasattr(class_instance, 'pod_objs'):
+        if hasattr(class_instance, "pod_objs"):
             for pod in class_instance.pod_objs:
                 pod.delete()
 
@@ -273,15 +267,15 @@ def create_pods(request):
     for pvc_obj in class_instance.pvc_objs:
         class_instance.pod_objs.append(
             helpers.create_pod(
-                interface_type=class_instance.interface, pvc_name=pvc_obj.name,
-                do_reload=False, namespace=class_instance.namespace
+                interface_type=class_instance.interface,
+                pvc_name=pvc_obj.name,
+                do_reload=False,
+                namespace=class_instance.namespace,
             )
         )
 
     for pod in class_instance.pod_objs:
-        helpers.wait_for_resource_state(
-            pod, constants.STATUS_RUNNING
-        )
+        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
 
 
 @pytest.fixture()
@@ -295,7 +289,7 @@ def create_dc_pods(request):
         """
         Delete multiple dc pods
         """
-        if hasattr(class_instance, 'dc_pod_objs'):
+        if hasattr(class_instance, "dc_pod_objs"):
             for pod in class_instance.dc_pod_objs:
                 delete_deploymentconfig_pods(pod_obj=pod)
 
@@ -303,16 +297,19 @@ def create_dc_pods(request):
 
     class_instance.dc_pod_objs = [
         helpers.create_pod(
-            interface_type=class_instance.interface, pvc_name=pvc_obj.name, do_reload=False,
-            namespace=class_instance.namespace, sa_name=class_instance.sa_obj.name, dc_deployment=True,
-            replica_count=class_instance.replica_count
-        ) for pvc_obj in class_instance.pvc_objs
+            interface_type=class_instance.interface,
+            pvc_name=pvc_obj.name,
+            do_reload=False,
+            namespace=class_instance.namespace,
+            sa_name=class_instance.sa_obj.name,
+            dc_deployment=True,
+            replica_count=class_instance.replica_count,
+        )
+        for pvc_obj in class_instance.pvc_objs
     ]
 
     for pod in class_instance.dc_pod_objs:
-        helpers.wait_for_resource_state(
-            pod, constants.STATUS_RUNNING, timeout=180
-        )
+        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING, timeout=180)
 
 
 @pytest.fixture()
@@ -328,7 +325,7 @@ def create_serviceaccount(request):
         """
         helpers.remove_scc_policy(
             sa_name=class_instance.sa_obj.name,
-            namespace=class_instance.project_obj.namespace
+            namespace=class_instance.project_obj.namespace,
         )
         class_instance.sa_obj.delete()
 
@@ -337,5 +334,8 @@ def create_serviceaccount(request):
     class_instance.sa_obj = helpers.create_serviceaccount(
         namespace=class_instance.project_obj.namespace,
     )
-    helpers.add_scc_policy(sa_name=class_instance.sa_obj.name, namespace=class_instance.project_obj.namespace)
+    helpers.add_scc_policy(
+        sa_name=class_instance.sa_obj.name,
+        namespace=class_instance.project_obj.namespace,
+    )
     assert class_instance.sa_obj, "Failed to create serviceaccount"
