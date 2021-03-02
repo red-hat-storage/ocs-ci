@@ -40,10 +40,11 @@ weekly and automatically promote changes that pass testing. Automation is done v
 [jenkins pipeline](https://ocs4-jenkins-csb-ocsqe.apps.ocp4.prod.psi.redhat.com/job/qe-ocs-ci-stable-branch-pipeline/).
 
 If all tests pass, a fast-forward merge is performed to update the stable branch with
-the latest changes to master. An email is also sent out stating that the promotion was
-successful and listing the commits that have been merged to the stable branch. If any
-tests fail, an email is sent out describing the failed tests and notifying the team that
-action is required to resolve the failures.
+the latest changes to master and a new [tag](https://github.com/red-hat-storage/ocs-ci/tags)
+is created which includes the OCS version and a timestamp (e.g. `stable-ocs-4.7-202103021622`).
+An email is also sent out stating that the promotion was successful and listing the commits
+that have been merged to the stable branch. If any tests fail, an email is sent out describing
+the failed tests and notifying the team that action is required to resolve the failures.
 
 ## Resolving failed tests
 When our automation does not pass, manual intervention is required to troubleshoot the
