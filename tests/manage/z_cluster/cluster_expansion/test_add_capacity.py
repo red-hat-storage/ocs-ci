@@ -15,6 +15,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     tier1,
     acceptance,
+    cloud_platform_required,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -85,6 +86,7 @@ class TestAddCapacity(ManageTest):
 @skipif_aws_i3
 @skipif_bm
 @skipif_external_mode
+@cloud_platform_required
 class TestAddCapacityPreUpgrade(ManageTest):
     """
     Automates adding variable capacity to the cluster pre upgrade
