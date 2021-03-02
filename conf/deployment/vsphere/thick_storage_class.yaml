@@ -1,4 +1,0 @@
----
-# This config is for vSphere deployment with thick provisioning
-DEPLOYMENT:
-  thick_sc_ocs_deploy: True

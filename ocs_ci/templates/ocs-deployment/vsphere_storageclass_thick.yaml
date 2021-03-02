@@ -5,7 +5,7 @@ metadata:
   name: thick
 parameters:
   datastore: vsanDatastore
-  diskformat: thick
+  diskformat: zeroedthick
 provisioner: kubernetes.io/vsphere-volume
 reclaimPolicy: Delete
 volumeBindingMode: Immediate

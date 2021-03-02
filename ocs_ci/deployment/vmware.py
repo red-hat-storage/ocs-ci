@@ -620,11 +620,15 @@ class VSPHEREUPI(VSPHEREBASE):
             configure_chrony_and_wait_for_machineconfig_status(
                 node_type="all", timeout=1800
             )
-        if config.DEPLOYMENT["thick_sc_ocs_deploy"]:
+        if config.DEPLOYMENT["thick_sc"]:
             sc_data = templating.load_yaml(constants.VSPHERE_THICK_STORAGECLASS_YAML)
             sc_data_yaml = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="storageclass", delete=False
             )
+            if config.DEPLOYMENT["eager_zeroed_thick_sc"]:
+                sc_data["parameters"]["diskformat"] = "eagerzeroedthick"
+            else:
+                sc_data["parameters"]["diskformat"] = "zeroedthick"
             templating.dump_data_to_temp_yaml(sc_data, sc_data_yaml.name)
             run_cmd(f"oc create -f {sc_data_yaml.name}")
             self.DEFAULT_STORAGECLASS = "thick"
