@@ -1739,6 +1739,9 @@ def rgw_endpoint(request):
         string: external RGW endpoint
 
     """
+    if float(config.ENV_DATA["ocs_version"]) > 4.6:
+        log.info("RGW service should be exposed by default. Skipping exposure.")
+        return
     log.info("Looking for RGW service to expose")
     oc = ocp.OCP(kind=constants.SERVICE, namespace=config.ENV_DATA["cluster_namespace"])
     rgw_service = oc.get(selector=constants.RGW_APP_LABEL)["items"]

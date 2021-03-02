@@ -36,8 +36,8 @@ class RGW(object):
     def get_credentials(self, secret_name=constants.NOOBAA_OBJECTSTOREUSER_SECRET):
         """
         Get Endpoint, Access key and Secret key from OCS secret. Endpoint is
-        taken from rgw exposed service. Use rgw_endpoint fixture in test to get
-        it exposed.
+        taken from rgw exposed service. On 4.7 and above, the service is exposed by default.
+        Below 4.7, use the rgw_endpoint fixture in a test to expose it.
 
         Args:
             secret_name (str): Name of secret to be used
