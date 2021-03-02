@@ -1764,7 +1764,11 @@ def rgw_endpoint(request):
         route = oc.get(resource_name="noobaa-mgmt")
         router_hostname = route["status"]["ingress"][0]["routerCanonicalHostname"]
         rgw_hostname = f"rgw.{router_hostname}"
-        oc.exec_oc_cmd(f"expose service/{rgw_service} --hostname {rgw_hostname}")
+        try:
+            oc.exec_oc_cmd(f"expose service/{rgw_service} --hostname {rgw_hostname}")
+        except CommandFailed as cmdfailed:
+            if "AlreadyExists" in str(cmdfailed):
+                log.warning("RGW route already exists.")
         # new route is named after service
         rgw_endpoint = oc.get(resource_name=rgw_service)
         endpoint_obj = OCS(**rgw_endpoint)
