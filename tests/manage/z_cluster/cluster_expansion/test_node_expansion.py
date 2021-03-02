@@ -1,5 +1,4 @@
 import logging
-import pytest
 
 from ocs_ci.framework.testlib import tier1, ignore_leftovers, ManageTest
 from ocs_ci.ocs import machine as machine_utils
@@ -54,17 +53,19 @@ class TestAddNode(ManageTest):
                 )
 
         elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-            pytest.skip(
-                "Skipping add node in Vmware platform due to "
-                "https://bugzilla.redhat.com/show_bug.cgi?id=1844521"
+            logger.info(
+                f"The worker nodes number before expansion {len(node.get_worker_nodes())}"
             )
-            # Issue to remove skip code https://github.com/red-hat-storage/ocs-ci/issues/2403
-            # logger.info(f'The worker nodes number before expansion {len(node.get_worker_nodes())}')
-            # if config.ENV_DATA.get('rhel_user'):
-            #     pytest.skip("Skipping add RHEL node, code unavailable")
-            # node_type = constants.RHCOS
-            # assert add_new_node_and_label_upi(node_type, new_nodes), "Add node failed"
-            # logger.info(f'The worker nodes number after expansion {len(node.get_worker_nodes())}')
+            if config.ENV_DATA.get("rhel_user"):
+                node_type = constants.RHEL_OS
+            else:
+                node_type = constants.RHCOS
+
+            assert add_new_node_and_label_upi(node_type, new_nodes), "Add node failed"
+            logger.info(
+                f"The worker nodes number after expansion {len(node.get_worker_nodes())}"
+            )
+
         ceph_cluster_obj = CephCluster()
         assert ceph_cluster_obj.wait_for_rebalance(
             timeout=3600
