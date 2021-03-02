@@ -21,6 +21,7 @@ from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
     verify_new_pv_available_in_sc,
     delete_released_pvs_in_sc,
+    get_pv_size,
 )
 
 
@@ -973,9 +974,6 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
         str: The new node name
 
     """
-    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
-    from ocs_ci.ocs.resources.storage_cluster import get_osd_size
-
     sc_name = constants.LOCAL_BLOCK_RESOURCE
     old_pv_objs = get_pv_objs_in_sc(sc_name)
 
@@ -998,13 +996,7 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
 
     # If we use LSO, we need to create and attach a new disk manually
     new_node = get_node_objs(node_names=[new_node_name])[0]
-    plt = PlatformNodesFactory()
-    node_util = plt.get_nodes_platform()
-    osd_size = get_osd_size()
-    log.info(
-        f"Create a new disk with size {osd_size}, and attach to node {new_node_name}"
-    )
-    node_util.create_and_attach_volume(node=new_node, size=osd_size)
+    add_disk_to_node(new_node)
 
     new_node_hostname_label = get_node_hostname_label(new_node)
     log.info(
@@ -1471,3 +1463,25 @@ def wait_for_new_osd_node(old_osd_node_names, timeout=180):
     except TimeoutExpiredError:
         log.warning(f"New osd node didn't appear after {timeout} seconds")
         return None
+
+
+def add_disk_to_node(node_obj, disk_size=None):
+    """
+    Add a new disk to a node
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+        disk_size (int): The size of the new disk to attach. If not specified,
+            the disk size will be equal to the size of the previous disk.
+
+    """
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
+
+    if not disk_size:
+        pv_objs = get_pv_objs_in_sc(sc_name=constants.LOCAL_BLOCK_RESOURCE)
+        disk_size = get_pv_size(pv_objs[-1])
+
+    node_util.create_and_attach_volume(node=node_obj, size=disk_size)
