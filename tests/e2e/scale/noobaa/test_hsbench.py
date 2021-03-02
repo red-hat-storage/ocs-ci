@@ -3,6 +3,7 @@ import pytest
 from ocs_ci.ocs import hsbench
 from ocs_ci.utility import utils
 from ocs_ci.framework.testlib import E2ETest, scale
+from ocs_ci.framework.pytest_customization.marks import vsphere_platform_required
 
 log = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ def hsbenchs3(request):
 
 
 @scale
+@vsphere_platform_required
 @pytest.mark.polarion_id("OCS-2321")
 class TestHsBench(E2ETest):
     """
