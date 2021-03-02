@@ -60,7 +60,7 @@ def get_csv_from_image(bundle_image):
         raise
 
 
-def prepare_disconnected_ocs_deployment():
+def prepare_disconnected_ocs_deployment(upgrade=False):
     """
     Prepare disconnected ocs deployment:
     - get related images from OCS operator bundle csv
@@ -68,13 +68,19 @@ def prepare_disconnected_ocs_deployment():
     - create imageContentSourcePolicy for the mirrored images
     - disable the default OperatorSources
 
+    Args:
+        upgrade (bool): is this fresh installation or upgrade process
+            (default: False)
+
     Returns:
-        str: OCS registry image prepared for disconnected installation (with
-            sha256 digest) or None (for live deployment)
+        str: mirrored OCS registry image prepared for disconnected installation
+            or None (for live deployment)
 
     """
 
-    logger.info("Prepare for disconnected OCS installation")
+    logger.info(
+        f"Prepare for disconnected OCS {'upgrade' if upgrade else 'installation'}"
+    )
     if config.DEPLOYMENT.get("live_deployment"):
         get_opm_tool()
 
@@ -95,7 +101,7 @@ def prepare_disconnected_ocs_deployment():
             f"-p {','.join(constants.DISCON_CL_REQUIRED_PACKAGES)} "
             f"-t {mirrored_index_image}"
         )
-        # opm tool doesn't have --atuhfile parameter, we have to suply auth
+        # opm tool doesn't have --authfile parameter, we have to supply auth
         # file through env variable
         os.environ["REGISTRY_AUTH_FILE"] = pull_secret_path
         exec_cmd(cmd)
@@ -169,16 +175,19 @@ def prepare_disconnected_ocs_deployment():
             "Disconnected installation from stage is not implemented!"
         )
 
-    ocs_registry_image = config.DEPLOYMENT.get("ocs_registry_image", "")
+    if upgrade:
+        ocs_registry_image = config.UPGRADE.get("upgrade_ocs_registry_image", "")
+    else:
+        ocs_registry_image = config.DEPLOYMENT.get("ocs_registry_image", "")
     logger.debug(f"ocs-registry-image: {ocs_registry_image}")
-    ocs_registry_image_and_tag = ocs_registry_image.split(":")
+    ocs_registry_image_and_tag = ocs_registry_image.rsplit(":", 1)
     ocs_registry_image = ocs_registry_image_and_tag[0]
     image_tag = (
         ocs_registry_image_and_tag[1] if len(ocs_registry_image_and_tag) == 2 else None
     )
     if not image_tag and config.REPORTING.get("us_ds") == "DS":
         image_tag = get_latest_ds_olm_tag(
-            upgrade=False,
+            upgrade=False if upgrade else config.UPGRADE.get("upgrade", False),
             latest_tag=config.DEPLOYMENT.get("default_latest_tag", "latest"),
         )
         ocs_registry_image = f"{config.DEPLOYMENT['default_ocs_registry_image'].split(':')[0]}:{image_tag}"
@@ -260,6 +269,16 @@ def prepare_disconnected_ocs_deployment():
             timeout=3600,
         )
 
+        # mirror also OCS registry image with the original version tag (it will
+        # be used for creating CatalogSource)
+        mirrored_ocs_registry_image = (
+            f"{mirror_registry}{ocs_registry_image[ocs_registry_image.index('/'):]}"
+        )
+        exec_cmd(
+            f"podman push --tls-verify=false --authfile {authfile_fo.name} "
+            f"{ocs_registry_image} {mirrored_ocs_registry_image}"
+        )
+
     # Disable the default OperatorSources
     exec_cmd(
         """oc patch OperatorHub cluster --type json """
@@ -269,4 +288,4 @@ def prepare_disconnected_ocs_deployment():
     # wait for newly created imageContentSourcePolicy is applied on all nodes
     wait_for_machineconfigpool_status("all")
 
-    return ocs_registry_image_with_digest
+    return mirrored_ocs_registry_image

@@ -1004,7 +1004,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         upgrade = config.UPGRADE.get("upgrade", False)
     else:
         upgrade = False
-    image_and_tag = image.split(":")
+    image_and_tag = image.rsplit(":", 1)
     image = image_and_tag[0]
     image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
     if not image_tag and config.REPORTING.get("us_ds") == "DS":
@@ -1021,7 +1021,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     )
     if change_cs_condition:
         default_image = config.DEPLOYMENT["default_ocs_registry_image"]
-        image = image if image else default_image.split(":")[0]
+        image = image if image else default_image.rsplit(":", 1)[0]
         catalog_source_data["spec"][
             "image"
         ] = f"{image}:{image_tag if image_tag else 'latest'}"
