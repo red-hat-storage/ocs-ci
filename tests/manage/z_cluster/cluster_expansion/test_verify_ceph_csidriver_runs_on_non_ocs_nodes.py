@@ -1,0 +1,53 @@
+import logging
+import pytest
+
+from ocs_ci.ocs import constants
+from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.ocs.node import get_worker_nodes_not_in_ocs
+from ocs_ci.ocs.resources.pod import get_pod_node, get_plugin_pods
+
+logger = logging.getLogger(__name__)
+
+
+@tier1
+@pytest.mark.polarion_id("OCS-2490")
+@pytest.mark.bugzilla("1794389")
+class TestCheckTolerationForCephCsiDriverDs(ManageTest):
+    """
+    Check toleration for Ceph CSI driver DS on non ocs node
+    """
+
+    def test_ceph_csidriver_runs_on_non_ocs_nodes(
+        self, pvc_factory, pod_factory, add_nodes
+    ):
+        """
+        1. Add non ocs nodes
+        2. Taint new nodes with app label
+        3. Check if plugin pods running on new nodes
+        4. Create app-pods on app_nodes
+        """
+
+        # Add worker nodes and tainting it as app_nodes
+        add_nodes(ocs_nodes=False, taint_label="nodetype=app:NoSchedule")
+
+        # Checks for new plugin pod respinning on new app-nodes
+        app_nodes = [node.name for node in get_worker_nodes_not_in_ocs()]
+        interfaces = [constants.CEPHFILESYSTEM, constants.CEPHBLOCKPOOL]
+        logger.info("Checking for plugin pods on non-ocs worker nodes")
+        for interface in interfaces:
+            pod_objs = get_plugin_pods(interface)
+            for pod_obj in pod_objs:
+                node_obj = get_pod_node(pod_obj)
+                try:
+                    if node_obj.name in app_nodes:
+                        logger.info(
+                            f"The plugin pod {pod_obj.name} is running on app_node {node_obj.name}"
+                        )
+                        continue
+                except Exception as e:
+                    logging.info(f"Plugin pod was not found on {node_obj.name} - {e}")
+
+        # Creates app-pods on app-nodes
+        for node in app_nodes:
+            pvc_obj = pvc_factory()
+            pod_factory(pvc=pvc_obj, node_name=node)
