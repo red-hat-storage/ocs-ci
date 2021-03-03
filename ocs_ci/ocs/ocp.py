@@ -1407,3 +1407,19 @@ def wait_for_cluster_connectivity(tries=200, delay=3):
     service = OCP()
     log.info("Waiting for cluster connectivity")
     return retry(CommandFailed, tries=tries, delay=delay, backoff=1)(service.get)()
+
+
+def get_services_having_label(label, namespace):
+    """
+    Fetches deployment resources with given label in given namespace
+
+    Args:
+        label (str): label which deployments might have
+        namespace (str): Namespace in which to be looked up
+
+    Return:
+        list: deployment OCP instances
+    """
+    ocp_svc = OCP(kind=constants.SERVICE, namespace=namespace)
+    svc = ocp_svc.get(selector=label).get("items")
+    return svc
