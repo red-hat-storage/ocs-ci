@@ -20,21 +20,6 @@ class TestAddNode(ManageTest):
         Test to add ocs nodes and wait till rebalance is completed
 
         """
-
-        elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-            logger.info(
-                f"The worker nodes number before expansion {len(node.get_worker_nodes())}"
-            )
-            if config.ENV_DATA.get("rhel_user"):
-                node_type = constants.RHEL_OS
-            else:
-                node_type = constants.RHCOS
-
-            assert add_new_node_and_label_upi(node_type, new_nodes), "Add node failed"
-            logger.info(
-                f"The worker nodes number after expansion {len(node.get_worker_nodes())}"
-            )
-
         add_nodes(ocs_nodes=True)
         ceph_cluster_obj = CephCluster()
         assert ceph_cluster_obj.wait_for_rebalance(
