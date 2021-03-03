@@ -2924,7 +2924,7 @@ def run_cmd_verify_cli_output(
     cmd=None, expected_output_lst=(), cephtool_cmd=False, debug_node=None
 ):
     """
-    Verify cli command output
+    Run command and verify its output
 
     Args:
         cmd(str): cli command

@@ -6,6 +6,7 @@ from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
+from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.resources.pod import (
     get_pod_node,
     get_mon_pods,
@@ -35,8 +36,13 @@ class TestKillCephDaemon(ManageTest):
         """
 
         def finalizer():
+            logging.info("Silence the ceph warnings by “archiving” the crash")
             tool_pod = get_ceph_tools_pod()
             tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all", format=None)
+            logging.info(
+                "Perform Ceph and cluster health checks after silencing the ceph warnings"
+            )
+            ceph_health_check()
 
         request.addfinalizer(finalizer)
 
@@ -66,7 +72,8 @@ class TestKillCephDaemon(ManageTest):
         node_name = node_obj.name
 
         log.info(
-            "Delete 'posted' directory /var/lib/rook/openshift-storage/crash/posted/"
+            "Delete the contents of 'posted' directory "
+            "`/var/lib/rook/openshift-storage/crash/posted/`"
         )
         cmd_bash = f"oc debug nodes/{node_name} -- chroot /host /bin/bash -c "
         cmd_delete_files = '"rm -rf /var/lib/rook/openshift-storage/crash/posted/*"'
@@ -131,7 +138,3 @@ class TestKillCephDaemon(ManageTest):
             raise Exception(
                 f"coredump not getting generated for ceph-{daemon_type} daemon crash"
             )
-
-        logging.info("Silence the ceph warnings by “archiving” the crash")
-        tool_pod = get_ceph_tools_pod()
-        tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all", format=None)
