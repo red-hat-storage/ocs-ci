@@ -770,15 +770,13 @@ def measure_noobaa_ns_target_bucket_deleted(
     ns_stores = namespace_store_factory(*nss_tup)
 
     logger.info("Create the namespace bucket on top of the namespace resource")
-    bucketclass_dict = (
-        {
+    bucketclass_dict = {
             "interface": "OC",
             "namespace_policy_dict": {
                 "type": "Multi",
                 "namespacestores": ns_stores,
             },
-        },
-    )
+    }
     bucket_factory(
         amount=1,
         interface=bucketclass_dict["interface"],

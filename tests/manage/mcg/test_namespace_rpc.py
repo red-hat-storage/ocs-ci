@@ -8,8 +8,8 @@ import pytest
 
 from ocs_ci.framework.testlib import (
     MCGTest,
-    on_prem_platform_required,
     skipif_ocs_version,
+    skipif_openshift_dedicated,
     tier1,
     tier2,
     tier3,

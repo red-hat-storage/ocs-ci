@@ -101,18 +101,18 @@ def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted):
     """
     api = prometheus.PrometheusAPI()
 
-    alerts = measure_noobaa_exceed_bucket_quota.get("prometheus_alerts")
+    alerts = measure_noobaa_ns_target_bucket_deleted.get("prometheus_alerts")
 
     expected_alerts = [
         (
             constants.ALERT_NAMESPACEBUCKETERRORSTATE,
-            "",
+            "A NooBaa Namespace Bucket Is In Error State",
             ["pending", "firing"],
             "warning",
         ),
         (
             constants.ALERT_NAMESPACERESOURCEERRORSTATE,
-            "",
+            "A NooBaa Namespace Resource Is In Error State",
             ["pending", "firing"],
             "warning",
         ),
@@ -131,7 +131,7 @@ def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted):
         pg_wait = 480
         api.check_alert_cleared(
             label=target_label,
-            measure_end_time=measure_noobaa_exceed_bucket_quota.get("stop"),
+            measure_end_time=measure_noobaa_ns_target_bucket_deleted.get("stop"),
             time_min=pg_wait,
         )
 

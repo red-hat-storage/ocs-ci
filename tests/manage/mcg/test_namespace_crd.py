@@ -45,7 +45,7 @@ class TestNamespace(MCGTest):
     @pytest.mark.parametrize(
         argnames="nss_tup",
         argvalues=[
-            pytest.param(("oc", {"aws": [(1, self.DEFAULT_REGION)]})),
+            pytest.param(("oc", {"aws": [(1, DEFAULT_REGION)]})),
             pytest.param(("oc", {"azure": [(1, None)]})),
             pytest.param(("oc", {"rgw": [(1, None)]}), marks=on_prem_platform_required),
         ],
@@ -108,7 +108,7 @@ class TestNamespace(MCGTest):
                     "namespace_policy_dict": {
                         "type": "Multi",
                         "namespacestore_dict": {
-                            "aws": [(1, self.DEFAULT_REGION)],
+                            "aws": [(1, DEFAULT_REGION)],
                             "azure": [(1, None)],
                         },
                     },
@@ -121,7 +121,7 @@ class TestNamespace(MCGTest):
                     "namespace_policy_dict": {
                         "type": "Multi",
                         "namespacestore_dict": {
-                            "aws": [(2, self.DEFAULT_REGION)],
+                            "aws": [(2, DEFAULT_REGION)],
                         },
                     },
                 },
@@ -187,7 +187,7 @@ class TestNamespace(MCGTest):
                     "interface": "OC",
                     "namespace_policy_dict": {
                         "type": "Single",
-                        "namespacestore_dict": {"aws": [(1, self.DEFAULT_REGION)]},
+                        "namespacestore_dict": {"aws": [(1, DEFAULT_REGION)]},
                     },
                 },
                 marks=pytest.mark.polarion_id("OCS-2257"),
@@ -243,7 +243,7 @@ class TestNamespace(MCGTest):
                     "interface": "OC",
                     "namespace_policy_dict": {
                         "type": "Single",
-                        "namespacestore_dict": {"aws": [(1, self.DEFAULT_REGION)]},
+                        "namespacestore_dict": {"aws": [(1, DEFAULT_REGION)]},
                     },
                 },
                 marks=pytest.mark.polarion_id("OCS-2258"),
@@ -259,7 +259,7 @@ class TestNamespace(MCGTest):
         bucketclass_dict,
     ):
         """
-        Test Write to ns bucket using MCG RPC and read directly from AWS.
+        Test Write to ns bucket using OpenShift CRDs and read directly from AWS.
         """
 
         ns_bucket = bucket_factory(
@@ -290,6 +290,7 @@ class TestNamespace(MCGTest):
 
     @tier1
     @pytest.mark.polarion_id("OCS-2258")
+    @on_prem_platform_required
     def test_distribution_of_objects_in_ns_bucket_crd(
         self,
         mcg_obj,
@@ -303,35 +304,33 @@ class TestNamespace(MCGTest):
         when some file is the same and downloaded after that.
         """
         logger.info("Create the namespace resources and verify health")
-        nss_tup = ("oc", {"azure": [(1, None)]})
+        nss_tup = ("oc", {"rgw": [(1, None)]})
         ns_store1 = namespace_store_factory(*nss_tup)[0]
         nss_tup = ("oc", {"aws": [(1, self.DEFAULT_REGION)]})
         ns_store2 = namespace_store_factory(*nss_tup)[0]
 
         logger.info("Upload files directly to first target bucket")
-        azure_creds = {
-            "access_key_id": cld_mgr.azure_client.access_key,
-            "access_key": cld_mgr.azure_client.secret_key,
-            "endpoint": cld_mgr.azure_client.endpoint,
+        rgw_creds = {
+            "access_key_id": cld_mgr.rgw_client.access_key,
+            "access_key": cld_mgr.rgw_client.secret_key,
+            "endpoint": cld_mgr.rgw_client.endpoint,
         }
         self.write_files_to_pod_and_upload(
             mcg_obj,
             awscli_pod,
             bucket_to_write=ns_store1.uls_name,
             amount=4,
-            s3_creds=azure_creds,
+            s3_creds=rgw_creds,
         )
 
         logger.info("Create the namespace bucket on top of the namespace resource")
-        bucketclass_dict = (
-            {
+        bucketclass_dict = {
                 "interface": "OC",
                 "namespace_policy_dict": {
                     "type": "Multi",
                     "namespacestores": [ns_store1, ns_store2],
                 },
-            },
-        )
+        }
 
         ns_bucket = bucket_factory(
             amount=1,
@@ -362,7 +361,8 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2290")
     @tier2
-    def test_create_ns_bucket_from_utilized_resources_rpc(
+    @on_prem_platform_required
+    def test_create_ns_bucket_from_utilized_resources_crd(
         self,
         mcg_obj,
         cld_mgr,
@@ -375,15 +375,15 @@ class TestNamespace(MCGTest):
         Test Write to 2 resources, create bucket from them and read from the NS bucket.
         """
         logger.info("Create the namespace resources and verify health")
-        nss_tup = ("oc", {"azure": [(1, None)]})
+        nss_tup = ("oc", {"rgw": [(1, None)]})
         ns_store1 = namespace_store_factory(*nss_tup)[0]
         nss_tup = ("oc", {"aws": [(1, self.DEFAULT_REGION)]})
         ns_store2 = namespace_store_factory(*nss_tup)[0]
         logger.info("Upload files directly to cloud target buckets")
-        azure_creds = {
-            "access_key_id": cld_mgr.azure_client.access_key,
-            "access_key": cld_mgr.azure_client.secret_key,
-            "endpoint": cld_mgr.azure_client.endpoint,
+        rgw_creds = {
+            "access_key_id": cld_mgr.rgw_client.access_key,
+            "access_key": cld_mgr.rgw_client.secret_key,
+            "endpoint": cld_mgr.rgw_client.endpoint,
         }
         aws_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
@@ -396,7 +396,7 @@ class TestNamespace(MCGTest):
             awscli_pod,
             bucket_to_write=ns_store1.uls_name,
             amount=3,
-            s3_creds=azure_creds,
+            s3_creds=rgw_creds,
         )
         self.write_files_to_pod_and_upload(
             mcg_obj,
@@ -406,15 +406,13 @@ class TestNamespace(MCGTest):
             s3_creds=aws_creds,
         )
         logger.info("Create the namespace bucket on top of the namespace resource")
-        bucketclass_dict = (
-            {
+        bucketclass_dict = {
                 "interface": "OC",
                 "namespace_policy_dict": {
                     "type": "Multi",
                     "namespacestores": [ns_store1, ns_store2],
                 },
-            },
-        )
+        }
         ns_bucket = bucket_factory(
             amount=1,
             interface=bucketclass_dict["interface"],
@@ -441,15 +439,13 @@ class TestNamespace(MCGTest):
         ns_store2 = namespace_store_factory(*nss_tup)[0]
 
         logger.info("Create the namespace bucket on top of the namespace stores")
-        bucketclass_dict = (
-            {
+        bucketclass_dict = {
                 "interface": "OC",
                 "namespace_policy_dict": {
                     "type": "Multi",
                     "namespacestores": [ns_store1, ns_store2],
                 },
-            },
-        )
+        }
         ns_bucket = bucket_factory(
             amount=1,
             interface=bucketclass_dict["interface"],
@@ -485,18 +481,16 @@ class TestNamespace(MCGTest):
 
         logger.info("Create the namespace resources and verify health")
         nss_tup = ("oc", {"aws": [(1, self.DEFAULT_REGION)]})
-        ns_store1 = namespace_store_factory(*nss_tup)[0]
+        ns_store = namespace_store_factory(*nss_tup)[0]
 
         logger.info("Create the namespace bucket on top of the namespace stores")
-        bucketclass_dict = (
-            {
+        bucketclass_dict = {
                 "interface": "OC",
                 "namespace_policy_dict": {
                     "type": "Single",
-                    "namespacestores": [ns_store1],
+                    "namespacestores": [ns_store],
                 },
-            },
-        )
+        }
         logger.info("Create the namespace bucket on top of the namespace resource")
         ns_bucket = bucket_factory(
             amount=1,
@@ -532,7 +526,7 @@ class TestNamespace(MCGTest):
 
         logger.info("Read files directly from AWS")
         self.download_files(
-            mcg_obj, awscli_pod, bucket_to_read=ns_bucket.uls_name, s3_creds=s3_creds
+            mcg_obj, awscli_pod, bucket_to_read=ns_store.uls_name, s3_creds=s3_creds
         )
 
         logger.info("Compare between uploaded files and downloaded files")
@@ -554,15 +548,13 @@ class TestNamespace(MCGTest):
         ns_resources = namespace_store_factory(*nss_tup)[0]
 
         logger.info("Create the namespace bucket with many namespace resources")
-        bucketclass_dict = (
-            {
+        bucketclass_dict = {
                 "interface": "OC",
                 "namespace_policy_dict": {
                     "type": "Mulsti",
                     "namespacestores": ns_resources,
                 },
-            },
-        )
+        }
         logger.info("Create the namespace bucket on top of the namespace resource")
         bucket_factory(
             amount=1,
@@ -590,7 +582,7 @@ class TestNamespace(MCGTest):
 
         logger.info("Create namespace resources and verify health")
         nss_tup = ("oc", {"aws": [(2, self.DEFAULT_REGION)]})
-        ns_store1, ns_store2 = namespace_store_factory()
+        ns_store1, ns_store2 = namespace_store_factory(*nss_tup)
 
         logger.info("Upload files to NS resources")
         self.write_files_to_pod_and_upload(
@@ -609,15 +601,13 @@ class TestNamespace(MCGTest):
         )
 
         logger.info("Create the namespace bucket")
-        bucketclass_dict = (
-            {
+        bucketclass_dict = {
                 "interface": "OC",
                 "namespace_policy_dict": {
                     "type": "Multi",
                     "namespacestores": [ns_store1, ns_store2],
                 },
-            },
-        )
+        }
 
         ns_bucket = bucket_factory(
             amount=1,
