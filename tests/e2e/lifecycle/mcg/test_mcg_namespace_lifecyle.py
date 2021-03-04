@@ -5,7 +5,10 @@ import uuid
 import pytest
 import botocore.exceptions as boto3exception
 
-from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_aws_creds_are_missing,
+    skipif_openshift_dedicated,
+)
 from ocs_ci.framework.testlib import E2ETest, tier2, skipif_ocs_version
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
@@ -52,6 +55,7 @@ def setup_base_objects(awscli_pod, amount=2):
         )
 
 
+@skipif_openshift_dedicated
 @skipif_aws_creds_are_missing
 @skipif_ocs_version("<4.6")
 class TestMcgNamespaceLifecycle(E2ETest):
@@ -107,12 +111,17 @@ class TestMcgNamespaceLifecycle(E2ETest):
         user = NoobaaAccount(mcg_obj, name=user_name, email=email, buckets=[ns_bucket])
         logger.info(f"Noobaa account: {user.email_id} with S3 access created")
 
+        actions = (
+            ["PutObject", "GetObject"]
+            if float(config.ENV_DATA["ocs_version"]) <= 4.6
+            else ["DeleteObject"]
+        )
+        effect = "Allow" if float(config.ENV_DATA["ocs_version"]) <= 4.6 else "Deny"
+
         bucket_policy_generated = gen_bucket_policy(
             user_list=[user.email_id],
-            actions_list=["PutObject", "GetObject"]
-            if float(config.ENV_DATA["ocs_version"]) <= 4.6
-            else ["DeleteObject"],
-            effect="Allow" if float(config.ENV_DATA["ocs_version"]) <= 4.6 else "Deny",
+            actions_list=actions,
+            effect=effect,
             resources_list=[f'{ns_bucket}/{"*"}'],
         )
         bucket_policy = json.dumps(bucket_policy_generated)
