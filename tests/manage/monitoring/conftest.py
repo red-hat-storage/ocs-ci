@@ -771,11 +771,11 @@ def measure_noobaa_ns_target_bucket_deleted(
 
     logger.info("Create the namespace bucket on top of the namespace resource")
     bucketclass_dict = {
-            "interface": "OC",
-            "namespace_policy_dict": {
-                "type": "Multi",
-                "namespacestores": ns_stores,
-            },
+        "interface": "OC",
+        "namespace_policy_dict": {
+            "type": "Multi",
+            "namespacestores": ns_stores,
+        },
     }
     bucket_factory(
         amount=1,
@@ -785,21 +785,21 @@ def measure_noobaa_ns_target_bucket_deleted(
 
     def delete_target_bucket():
         """
-        Downscale RGW interface deployments for 5 minutes.
+        Delete target bucket from NS store.
 
         Returns:
-            str: Name of downscaled deployment
+            str: Name of deleted target bucket
 
         """
         # run_time of operation
-        run_time = 60 * 5
+        run_time = 60 * 7
         nonlocal ns_stores
         nonlocal cld_mgr
 
-        cld_mgr.delete_uls(ns_stores[0].uls_name)
+        cld_mgr.aws_client.delete_uls(ns_stores[0].uls_name)
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
-        return ns_stores
+        return ns_stores[0].uls_name
 
     test_file = os.path.join(measurement_dir, "measure_delete_target_bucket.json")
     measured_op = measure_operation(delete_target_bucket, test_file)

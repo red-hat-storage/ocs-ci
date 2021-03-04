@@ -325,11 +325,11 @@ class TestNamespace(MCGTest):
 
         logger.info("Create the namespace bucket on top of the namespace resource")
         bucketclass_dict = {
-                "interface": "OC",
-                "namespace_policy_dict": {
-                    "type": "Multi",
-                    "namespacestores": [ns_store1, ns_store2],
-                },
+            "interface": "OC",
+            "namespace_policy_dict": {
+                "type": "Multi",
+                "namespacestores": [ns_store1, ns_store2],
+            },
         }
 
         ns_bucket = bucket_factory(
@@ -407,11 +407,11 @@ class TestNamespace(MCGTest):
         )
         logger.info("Create the namespace bucket on top of the namespace resource")
         bucketclass_dict = {
-                "interface": "OC",
-                "namespace_policy_dict": {
-                    "type": "Multi",
-                    "namespacestores": [ns_store1, ns_store2],
-                },
+            "interface": "OC",
+            "namespace_policy_dict": {
+                "type": "Multi",
+                "namespacestores": [ns_store1, ns_store2],
+            },
         }
         ns_bucket = bucket_factory(
             amount=1,
@@ -422,36 +422,6 @@ class TestNamespace(MCGTest):
         self.download_files(mcg_obj, awscli_pod, bucket_to_read=ns_bucket)
         logger.info("Compare between uploaded files and downloaded files")
         assert self.compare_dirs(awscli_pod, amount=3)
-
-    @pytest.mark.polarion_id("OCS-2282")
-    @tier3
-    def test_delete_resource_used_in_ns_bucket_crd(
-        self, namespace_store_factory, bucket_factory
-    ):
-        """
-        Test that a proper error message is reported when invalid target
-        bucket is provided during namespace resource creation.
-        """
-        logger.info("Create the namespace resources and verify health")
-        nss_tup = ("oc", {"azure": [(1, None)]})
-        ns_store1 = namespace_store_factory(*nss_tup)[0]
-        nss_tup = ("oc", {"aws": [(1, self.DEFAULT_REGION)]})
-        ns_store2 = namespace_store_factory(*nss_tup)[0]
-
-        logger.info("Create the namespace bucket on top of the namespace stores")
-        bucketclass_dict = {
-                "interface": "OC",
-                "namespace_policy_dict": {
-                    "type": "Multi",
-                    "namespacestores": [ns_store1, ns_store2],
-                },
-        }
-        ns_bucket = bucket_factory(
-            amount=1,
-            interface=bucketclass_dict["interface"],
-            bucketclass=bucketclass_dict,
-        )[0].name
-        assert 0
 
     @tier4
     @tier4a
@@ -485,11 +455,11 @@ class TestNamespace(MCGTest):
 
         logger.info("Create the namespace bucket on top of the namespace stores")
         bucketclass_dict = {
-                "interface": "OC",
-                "namespace_policy_dict": {
-                    "type": "Single",
-                    "namespacestores": [ns_store],
-                },
+            "interface": "OC",
+            "namespace_policy_dict": {
+                "type": "Single",
+                "namespacestores": [ns_store],
+            },
         }
         logger.info("Create the namespace bucket on top of the namespace resource")
         ns_bucket = bucket_factory(
@@ -549,11 +519,11 @@ class TestNamespace(MCGTest):
 
         logger.info("Create the namespace bucket with many namespace resources")
         bucketclass_dict = {
-                "interface": "OC",
-                "namespace_policy_dict": {
-                    "type": "Mulsti",
-                    "namespacestores": ns_resources,
-                },
+            "interface": "OC",
+            "namespace_policy_dict": {
+                "type": "Mulsti",
+                "namespacestores": ns_resources,
+            },
         }
         logger.info("Create the namespace bucket on top of the namespace resource")
         bucket_factory(
@@ -602,11 +572,11 @@ class TestNamespace(MCGTest):
 
         logger.info("Create the namespace bucket")
         bucketclass_dict = {
-                "interface": "OC",
-                "namespace_policy_dict": {
-                    "type": "Multi",
-                    "namespacestores": [ns_store1, ns_store2],
-                },
+            "interface": "OC",
+            "namespace_policy_dict": {
+                "type": "Multi",
+                "namespacestores": [ns_store1, ns_store2],
+            },
         }
 
         ns_bucket = bucket_factory(
