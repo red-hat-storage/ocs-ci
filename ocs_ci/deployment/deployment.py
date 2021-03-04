@@ -434,21 +434,20 @@ class Deployment(object):
         csv.wait_for_phase("Succeeded", timeout=720)
         ocp_version = float(get_ocp_version())
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
-            if ocp_version < 4.6:
-                config_map = ocp.OCP(
-                    kind="configmap",
-                    namespace=self.namespace,
-                    resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
-                )
-                config_map.get(retry=10, wait=5)
-                config_map_patch = (
-                    '\'{"data": {"ROOK_CSI_KUBELET_DIR_PATH": "/var/data/kubelet"}}\''
-                )
-                logger.info("Patching config map to change KUBLET DIR PATH")
-                exec_cmd(
-                    f"oc patch configmap -n {self.namespace} "
-                    f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
-                )
+            config_map = ocp.OCP(
+                kind="configmap",
+                namespace=self.namespace,
+                resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+            )
+            config_map.get(retry=10, wait=5)
+            config_map_patch = (
+                '\'{"data": {"ROOK_CSI_KUBELET_DIR_PATH": "/var/data/kubelet"}}\''
+            )
+            logger.info("Patching config map to change KUBLET DIR PATH")
+            exec_cmd(
+                f"oc patch configmap -n {self.namespace} "
+                f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
+            )
             logger.info("Creating secret for IBM Cloud Object Storage")
             with open(constants.IBM_COS_SECRET_YAML, "r") as cos_secret_fd:
                 cos_secret_data = yaml.load(cos_secret_fd, Loader=yaml.SafeLoader)
