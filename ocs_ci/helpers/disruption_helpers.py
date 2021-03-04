@@ -107,7 +107,7 @@ class Disruptions:
 
         self.daemon_pid = pid
 
-    def kill_daemon(self, node_name=None, check_new_pid=True):
+    def kill_daemon(self, node_name=None, check_new_pid=True, kill_signal="9"):
         """
         Kill self.resource daemon
 
@@ -116,6 +116,7 @@ class Disruptions:
                 to be killed
             check_new_pid (bool): True to check for new pid after killing the
                 daemon. False to skip the check.
+            kill_signal (str): kill signal type
         """
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
@@ -125,7 +126,8 @@ class Disruptions:
 
         # Command to kill the daemon
         kill_cmd = (
-            f"oc debug node/{node_name} -- chroot /host  " f"kill -9 {self.daemon_pid}"
+            f"oc debug node/{node_name} -- chroot /host  "
+            f"kill -{kill_signal} {self.daemon_pid}"
         )
         daemon_kill = run_cmd(kill_cmd)
 
