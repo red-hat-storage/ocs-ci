@@ -322,12 +322,12 @@ class BAREMETALUPI(Deployment):
                     self.mgmt_details[machine].get("cluster_name")
                     == constants.BM_DEFAULT_CLUSTER_NAME
                 ):
-                    if self.mgmt_details[machine]["role"] == "bootstrap":
+                    if self.mgmt_details[machine]["role"] == constants.BOOTSTRAP_MACHINE:
                         self.set_pxe_boot_and_reboot(machine)
 
                     elif (
                         self.mgmt_details[machine]["role"] == constants.MASTER_MACHINE
-                        and master_count <= config.ENV_DATA["master_replicas"]
+                        and master_count < config.ENV_DATA["master_replicas"]
                     ):
                         self.set_pxe_boot_and_reboot(machine)
                         master_count += 1
