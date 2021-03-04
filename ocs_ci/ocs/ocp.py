@@ -1409,7 +1409,7 @@ def wait_for_cluster_connectivity(tries=200, delay=3):
     return retry(CommandFailed, tries=tries, delay=delay, backoff=1)(service.get)()
 
 
-def get_services_having_label(label, namespace):
+def get_services_by_label(label, namespace):
     """
     Fetches deployment resources with given label in given namespace
 

@@ -9,12 +9,11 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
 )
 from ocs_ci.helpers.disruption_helpers import Disruptions
-from ocs_ci.ocs import constants, cluster
-from ocs_ci.ocs.ocp import OCP, get_services_having_label
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import OCP, get_services_by_label
 from ocs_ci.ocs.resources.pod import get_mon_pods
 
 log = logging.getLogger(__name__)
-ROOK_CEPH_MON_ENDPOINTS = "rook-ceph-mon-endpoints"
 
 
 @tier4a
@@ -37,7 +36,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
     mon services manually
     """
 
-    def creation_pvc_and_pod(self, interface, pvc_factory, pod_factory):
+    def create_pvc_and_pod(self, interface, pvc_factory, pod_factory):
         """
         create resources for the test
 
@@ -71,7 +70,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         """
 
         # Get all mon services
-        mon_svc = get_services_having_label(
+        mon_svc = get_services_by_label(
             label=constants.MON_APP_LABEL,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
@@ -97,12 +96,14 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             svc_obj.delete(resource_name=name)
 
             # Edit the cm
-            log.info(f"Edit the comfigmap {ROOK_CEPH_MON_ENDPOINTS}")
+            log.info(f"Edit the configmap {constants.ROOK_CEPH_MON_ENDPOINTS}")
             configmap_obj = OCP(
                 kind=constants.CONFIGMAP,
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             )
-            output_get = configmap_obj.get(resource_name=ROOK_CEPH_MON_ENDPOINTS)
+            output_get = configmap_obj.get(
+                resource_name=constants.ROOK_CEPH_MON_ENDPOINTS
+            )
             new_data = output_get["data"]
             new_data["csi-cluster-config-json"] = (
                 new_data["csi-cluster-config-json"].replace(f'"{mon_endpoint}",', "")
@@ -126,11 +127,13 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             params = f'{{"data": {json.dumps(new_data)}}}'
             log.info(f"Removing {mon_id} entries from configmap")
             configmap_obj.patch(
-                resource_name=ROOK_CEPH_MON_ENDPOINTS,
+                resource_name=constants.ROOK_CEPH_MON_ENDPOINTS,
                 params=params,
                 format_type="strategic",
             )
-            log.info(f"Configmap {ROOK_CEPH_MON_ENDPOINTS} edited successfully")
+            log.info(
+                f"Configmap {constants.ROOK_CEPH_MON_ENDPOINTS} edited successfully"
+            )
 
             # Delete deployment
             log.info("Delete mon deployments")
@@ -155,13 +158,19 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             disruption.delete_resource()
 
             # Validate all mons are running
-            ceph_cluster_obj = cluster.CephCluster()
-            ceph_cluster_obj.mon_health_check(count=mon_count)
+            pod_obj = OCP(
+                kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+            pod_obj.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector=constants.MON_APP_LABEL,
+                resource_count=mon_count,
+            )
             log.info("All mons are up and running")
 
         # Check the endpoints are different
         log.info("Validate the mon endpoints are changed")
-        new_mon_svc = get_services_having_label(
+        new_mon_svc = get_services_by_label(
             label=constants.MON_APP_LABEL,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
@@ -178,6 +187,6 @@ class TestPvcCreationAfterDelMonService(E2ETest):
 
         # Create PVC and pods
         log.info(f"Create {interface} PVC")
-        self.creation_pvc_and_pod(
+        self.create_pvc_and_pod(
             interface=interface, pvc_factory=pvc_factory, pod_factory=pod_factory
         )
