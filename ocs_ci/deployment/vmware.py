@@ -844,7 +844,6 @@ class VSPHEREIPI(VSPHEREBASE):
             Args:
                 log_cli_level (str): openshift installer's log level
                     (default: "DEBUG")
-                    
             """
 
             logger.info("Deploying OCP cluster")
