@@ -181,7 +181,6 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         ocs_registry_image = config.DEPLOYMENT.get("ocs_registry_image", "")
     logger.debug(f"ocs-registry-image: {ocs_registry_image}")
     ocs_registry_image_and_tag = ocs_registry_image.rsplit(":", 1)
-    ocs_registry_image = ocs_registry_image_and_tag[0]
     image_tag = (
         ocs_registry_image_and_tag[1] if len(ocs_registry_image_and_tag) == 2 else None
     )
