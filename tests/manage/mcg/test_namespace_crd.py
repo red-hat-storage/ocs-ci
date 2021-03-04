@@ -12,7 +12,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     tier1,
     tier2,
-    tier3,
     tier4,
     tier4a,
 )
