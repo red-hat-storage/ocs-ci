@@ -448,20 +448,21 @@ class Deployment(object):
                 f"oc patch configmap -n {self.namespace} "
                 f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
             )
-            logger.info("Creating secret for IBM Cloud Object Storage")
-            with open(constants.IBM_COS_SECRET_YAML, "r") as cos_secret_fd:
-                cos_secret_data = yaml.load(cos_secret_fd, Loader=yaml.SafeLoader)
-            key_id = config.AUTH["ibmcloud"]["ibm_cos_access_key_id"]
-            key_secret = config.AUTH["ibmcloud"]["ibm_cos_secret_access_key"]
-            cos_secret_data["data"]["IBM_COS_ACCESS_KEY_ID"] = key_id
-            cos_secret_data["data"]["IBM_COS_SECRET_ACCESS_KEY"] = key_secret
-            cos_secret_data_yaml = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="cos_secret", delete=False
-            )
-            templating.dump_data_to_temp_yaml(
-                cos_secret_data, cos_secret_data_yaml.name
-            )
-            exec_cmd(f"oc create -f {cos_secret_data_yaml.name}")
+            if config.DEPLOYMENT.get("create_ibm_cos_secret", True):
+                logger.info("Creating secret for IBM Cloud Object Storage")
+                with open(constants.IBM_COS_SECRET_YAML, "r") as cos_secret_fd:
+                    cos_secret_data = yaml.load(cos_secret_fd, Loader=yaml.SafeLoader)
+                key_id = config.AUTH["ibmcloud"]["ibm_cos_access_key_id"]
+                key_secret = config.AUTH["ibmcloud"]["ibm_cos_secret_access_key"]
+                cos_secret_data["data"]["IBM_COS_ACCESS_KEY_ID"] = key_id
+                cos_secret_data["data"]["IBM_COS_SECRET_ACCESS_KEY"] = key_secret
+                cos_secret_data_yaml = tempfile.NamedTemporaryFile(
+                    mode="w+", prefix="cos_secret", delete=False
+                )
+                templating.dump_data_to_temp_yaml(
+                    cos_secret_data, cos_secret_data_yaml.name
+                )
+                exec_cmd(f"oc create -f {cos_secret_data_yaml.name}")
 
         # Modify the CSV with custom values if required
         if all(
