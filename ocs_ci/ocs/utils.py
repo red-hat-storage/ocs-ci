@@ -770,7 +770,7 @@ def setup_ceph_toolbox(force_setup=False):
             toolbox["spec"]["template"]["spec"]["volumes"].append(ceph_volume)
             rook_toolbox = OCS(**toolbox)
             rook_toolbox.create()
-            return
+
         # for OCS >= 4.3 there is new toolbox pod deployment done here:
         # https://github.com/openshift/ocs-operator/pull/207/
         log.info("starting ceph toolbox pod")
