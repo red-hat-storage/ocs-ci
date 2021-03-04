@@ -322,7 +322,10 @@ class BAREMETALUPI(Deployment):
                     self.mgmt_details[machine].get("cluster_name")
                     == constants.BM_DEFAULT_CLUSTER_NAME
                 ):
-                    if self.mgmt_details[machine]["role"] == constants.BOOTSTRAP_MACHINE:
+                    if (
+                        self.mgmt_details[machine]["role"]
+                        == constants.BOOTSTRAP_MACHINE
+                    ):
                         self.set_pxe_boot_and_reboot(machine)
 
                     elif (
