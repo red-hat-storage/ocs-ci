@@ -795,7 +795,6 @@ class VSPHEREIPI(VSPHEREBASE):
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
             super(VSPHEREIPI.OCPDeployment, self).__init__()
-            self.helper_node_details = load_auth_config()["baremetal"]
             self.ipi_details = load_auth_config()["vmware_ipi"]
 
         def deploy_prereq(self):
@@ -807,7 +806,7 @@ class VSPHEREIPI(VSPHEREBASE):
 
         def create_config(self):
             """
-            Creates the OCP deploy config for the Bare Metal
+            Creates the OCP deploy config for the vSphere
             """
             # Generate install-config from template
             _templating = Templating()
@@ -838,12 +837,8 @@ class VSPHEREIPI(VSPHEREBASE):
             )
             install_config_str = yaml.safe_dump(install_config_obj)
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
-            install_config_backup = os.path.join(
-                self.cluster_path, "install-config.yaml.backup"
-            )
+
             with open(install_config, "w") as f:
-                f.write(install_config_str)
-            with open(install_config_backup, "w") as f:
                 f.write(install_config_str)
 
         def deploy(self, log_cli_level="DEBUG"):
@@ -876,6 +871,7 @@ class VSPHEREIPI(VSPHEREBASE):
         def deploy_ocp(self, log_cli_level="DEBUG"):
             """
             Deployment specific to OCP cluster on this platform
+
             Args:
                 log_cli_level (str): openshift installer's log level
                     (default: "DEBUG")
@@ -885,6 +881,7 @@ class VSPHEREIPI(VSPHEREBASE):
         def destroy_cluster(self, log_level="DEBUG"):
             """
             Destroy OCP cluster specific to vSphere IPI
+
             Args:
                 log_level (str): log level openshift-installer (default: DEBUG)
             """
