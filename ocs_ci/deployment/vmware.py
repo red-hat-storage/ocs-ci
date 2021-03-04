@@ -824,10 +824,18 @@ class VSPHEREIPI(VSPHEREBASE):
             install_config_obj = yaml.safe_load(install_config_str)
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
-            install_config_obj["platform"]["vsphere"]["apiVIP"] = self.ipi_details.get("vmware_ipi_api_vip")
-            install_config_obj["platform"]["vsphere"]["ingressVIP"] = self.ipi_details.get("vmware_ipi_ingress_vip")
-            install_config_obj["metadata"]["name"] = self.ipi_details.get("vmware_ipi_default_cluster_name")
-            install_config_obj["baseDomain"] = self.ipi_details.get("vmware_ipi_default_base_domain")
+            install_config_obj["platform"]["vsphere"]["apiVIP"] = self.ipi_details.get(
+                "vmware_ipi_api_vip"
+            )
+            install_config_obj["platform"]["vsphere"][
+                "ingressVIP"
+            ] = self.ipi_details.get("vmware_ipi_ingress_vip")
+            install_config_obj["metadata"]["name"] = self.ipi_details.get(
+                "vmware_ipi_default_cluster_name"
+            )
+            install_config_obj["baseDomain"] = self.ipi_details.get(
+                "vmware_ipi_default_base_domain"
+            )
             install_config_str = yaml.safe_dump(install_config_obj)
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
             install_config_backup = os.path.join(
