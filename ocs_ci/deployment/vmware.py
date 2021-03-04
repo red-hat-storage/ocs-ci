@@ -963,8 +963,13 @@ def update_machine_conf(folder_structure=True):
         change_mem_and_cpu()
 
     else:
-        gw_string = "${cidrhost(machine_cidr, 1)}"
-        gw_conf_file = constants.VM_IFCFG
+        if Version.coerce(get_ocp_version()) >= Version.coerce("4.8"):
+            gw_string = "${cidrhost(var.machine_cidr, 1)}"
+            gw_conf_file = constants.VM_MAIN
+        else:
+            gw_string = "${cidrhost(machine_cidr, 1)}"
+            gw_conf_file = constants.VM_IFCFG
+
         disk_size_conf_file = constants.VM_MAIN
 
         # change cluster ID to folder
