@@ -2032,6 +2032,9 @@ def bucket_factory_fixture(
                 buckets
 
         """
+        if bucketclass:
+            interface = bucketclass["interface"]
+
         if interface.lower() not in BUCKET_MAP:
             raise RuntimeError(
                 f"Invalid interface type received: {interface}. "
@@ -2042,10 +2045,7 @@ def bucket_factory_fixture(
             bucketclass if bucketclass is None else bucket_class_factory(bucketclass)
         )
 
-        if bucketclass:
-            interface = bucketclass["interface"]
-
-        for i in range(amount):
+        for _ in range(amount):
             bucket_name = helpers.create_unique_resource_name(
                 resource_description="bucket", resource_type=interface.lower()
             )
