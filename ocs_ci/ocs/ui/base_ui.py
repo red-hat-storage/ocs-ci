@@ -330,6 +330,15 @@ class PageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Monitoring"])
         self.do_click(locator=self.page_nav["dashboards_page"])
 
+    def navigate_pods_page(self):
+        """
+        Navigate to Pods Page
+
+        """
+        logger.info("Navigate to Pods Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Workloads"])
+        self.do_click(locator=self.page_nav["Pods"])
+
 
 def login_ui():
     """

@@ -38,3 +38,22 @@ class InfraUI(PageNavigator):
         self.do_click(self.infra_loc["select_sc_add_capacity"])
         self.do_click(self.infra_loc[self.storage_class])
         self.do_click(self.infra_loc["confirm_add_capacity"])
+
+    def verify_pod_status(self, pod_names, pod_state="Running"):
+        """
+        Verify pod status
+
+        Args:
+            pod_names (list): list of pod names
+            pod_state (string): the desired pod state
+
+        """
+        for pod_name in pod_names:
+            self.navigate_pods_page()
+            self.do_send_keys(locator=self.infra_loc["filter_pods"], text=pod_name)
+            logger.info(f"Verify {pod_name} move to {pod_state} state")
+            assert self.check_element_text(
+                pod_state
+            ), f"{pod_name} does not on {pod_state} state"
+            # WA clear item-filter line
+            self.navigate_installed_operators_page()

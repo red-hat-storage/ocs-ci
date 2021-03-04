@@ -121,6 +121,8 @@ page_nav = {
     "alerting_page": ("Alerting", By.LINK_TEXT),
     "metrics_page": ("Metrics", By.LINK_TEXT),
     "dashboards_page": ("Dashboards", By.LINK_TEXT),
+    "Workloads": ("//button[text()='Workloads']", By.XPATH),
+    "Pods": ("Pods", By.LINK_TEXT),
 }
 
 infra = {
@@ -141,6 +143,7 @@ infra = {
     "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
     "confirm_add_capacity": ('button[data-test="confirm-action"', By.CSS_SELECTOR),
+    "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
 }
 
 locators = {
