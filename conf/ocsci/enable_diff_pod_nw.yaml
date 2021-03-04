@@ -1,4 +1,0 @@
----
-ENV_DATA:
-  cluster_network_cidr: "10.132.0.0/14"
-  service_network_cidr: "172.31.0.0/16"
