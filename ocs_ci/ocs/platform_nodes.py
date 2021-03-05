@@ -1779,7 +1779,7 @@ class IBMPowerNodes(NodesBase):
 
     def __init__(self):
         super(IBMPowerNodes, self).__init__()
-        self.powernodes = powernodes.POWERNodes()
+        self.powernodes = powernodes.PowerNodes()
 
     def stop_nodes(self, nodes, force=True):
         """
@@ -1795,8 +1795,8 @@ class IBMPowerNodes(NodesBase):
                 nodes, timeout=900, wait=True, force=force
             )
         else:
-            raise NotImplementedError(
-                "This is not libvirt environment. Stop nodes not implemented"
+            self.powernodes.stop_powernodes_machines_powervs(
+                nodes, timeout=900, wait=True
             )
 
     def start_nodes(self, nodes, force=True):
@@ -1813,8 +1813,8 @@ class IBMPowerNodes(NodesBase):
                 nodes, timeout=900, wait=True, force=force
             )
         else:
-            raise NotImplementedError(
-                "This is not libvirt environment. Start nodes not implemented"
+            self.powernodes.start_powernodes_machines_powervs(
+                nodes, timeout=900, wait=True
             )
 
     def restart_nodes(self, nodes, timeout=540, wait=True, force=True):
@@ -1834,8 +1834,8 @@ class IBMPowerNodes(NodesBase):
                 nodes, timeout=900, wait=True, force=force
             )
         else:
-            raise NotImplementedError(
-                "This is not libvirt environment. Restart nodes not implemented"
+            self.powernodes.restart_powernodes_machines_powervs(
+                nodes, timeout=900, wait=True
             )
 
     def restart_nodes_by_stop_and_start(self, nodes, force=True):
@@ -1852,31 +1852,37 @@ class IBMPowerNodes(NodesBase):
                 nodes, timeout=900, wait=True, force=force
             )
         else:
-            raise NotImplementedError(
-                "This is not libvirt environment. Restart nodes by stop and start not implemented"
+            self.powernodes.restart_powernodes_machines_powervs(
+                nodes, timeout=900, wait=True
             )
 
     def restart_nodes_by_stop_and_start_teardown(self):
         """
         Make sure all PowerNodes are up by the end of the test
         """
-        if not self.powernodes.iskvm():
-            raise NotImplementedError(
-                "This is not libvirt environment. Restart nodes by stop and start teardown not implemented"
-            )
-
         self.cluster_nodes = get_node_objs()
-        stopped_powernodes = [
-            powernode
-            for powernode in self.cluster_nodes
-            if self.powernodes.verify_machine_is_down(powernode) is True
-        ]
+        if self.powernodes.iskvm():
+            stopped_powernodes = [
+                powernode
+                for powernode in self.cluster_nodes
+                if self.powernodes.verify_machine_is_down(powernode) is True
+            ]
+        else:
+            stopped_powernodes = [
+                powernode
+                for powernode in self.cluster_nodes
+                if powernode.ocp.get_resource_status(powernode.name)
+                == constants.NODE_NOT_READY
+            ]
 
         if stopped_powernodes:
             logger.info(
                 f"The following PowerNodes are powered off: {stopped_powernodes}"
             )
-            self.powernodes.start_powernodes_machines(stopped_powernodes)
+            if self.powernodes.iskvm():
+                self.powernodes.start_powernodes_machines(stopped_powernodes)
+            else:
+                self.powernodes.start_powernodes_machines_powervs(stopped_powernodes)
 
 
 class AZURENodes(NodesBase):
