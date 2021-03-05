@@ -777,7 +777,7 @@ def measure_noobaa_ns_target_bucket_deleted(
             "namespacestores": ns_stores,
         },
     }
-    bucket_factory(
+    ns_bucket = bucket_factory(
         amount=1,
         interface=bucketclass_dict["interface"],
         bucketclass=bucketclass_dict,
@@ -792,7 +792,7 @@ def measure_noobaa_ns_target_bucket_deleted(
 
         """
         # run_time of operation
-        run_time = 60 * 7
+        run_time = 60 * 12
         nonlocal ns_stores
         nonlocal cld_mgr
 
@@ -801,6 +801,10 @@ def measure_noobaa_ns_target_bucket_deleted(
         time.sleep(run_time)
         return ns_stores[0].uls_name
 
+    logger.info("Delete NS bucket and NS stores so that alert is cleared")
+    ns_bucket.delete()
+    for ns_store in ns_stores:
+        ns_store.delete()
     test_file = os.path.join(measurement_dir, "measure_delete_target_bucket.json")
     measured_op = measure_operation(delete_target_bucket, test_file)
     return measured_op

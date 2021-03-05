@@ -353,7 +353,7 @@ class TestNamespace(MCGTest):
         )
 
         logger.info("Read files from ns bucket")
-        self.download_files(mcg_obj, awscli_pod, bucket_to_read=ns_bucket)
+        self.download_files(mcg_obj, awscli_pod, bucket_to_read=ns_bucket.name)
 
         logger.info("Compare between uploaded files and downloaded files")
         assert self.compare_dirs(awscli_pod, amount=4)
@@ -550,21 +550,22 @@ class TestNamespace(MCGTest):
         }
 
         logger.info("Create namespace resources and verify health")
-        nss_tup = ("oc", {"aws": [(2, self.DEFAULT_REGION)]})
-        ns_store1, ns_store2 = namespace_store_factory(*nss_tup)
+        nss_tup = ("oc", {"aws": [(1, self.DEFAULT_REGION)]})
+        ns_store1 = namespace_store_factory(*nss_tup)[0]
+        ns_store2 = namespace_store_factory(*nss_tup)[0]
 
         logger.info("Upload files to NS resources")
         self.write_files_to_pod_and_upload(
             mcg_obj,
             awscli_pod,
-            bucket_to_write=ns_store1[0],
+            bucket_to_write=ns_store1.uls_name,
             amount=3,
             s3_creds=s3_creds,
         )
         self.write_files_to_pod_and_upload(
             mcg_obj,
             awscli_pod,
-            bucket_to_write=ns_store2[0],
+            bucket_to_write=ns_store2.uls_name,
             amount=2,
             s3_creds=s3_creds,
         )
