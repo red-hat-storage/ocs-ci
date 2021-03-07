@@ -440,23 +440,27 @@ class Pod(OCS):
         cmd = f'ssh -i {authkey} -o "StrictHostKeyChecking no" {user}@{server} {cmd}'
         self.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
-    def get_memory(self):
+    def get_memory(self, container_name):
         """
         Get the pod memory size
 
+        Args:
+            container_name (str): The name of the container to look for
+
         Returns:
-            dict: The names of the pod's containers (str) as keys and their memory
-                size (str) as values
+            str: The container memory size (e.g. '5Gi')
 
         """
-        containers = self.pod_data.get("spec").get("containers")
-        container_names_and_memory = {
-            container.get("name"): container.get("resources")
-            .get("limits")
-            .get("memory")
-            for container in containers
-        }
-        return container_names_and_memory
+        pod_containers = self.pod_data.get("spec").get("containers")
+        matched_containers = [
+            c for c in pod_containers if c.get("name") == container_name
+        ]
+        if len(matched_containers) > 1:
+            logger.error(
+                f"Multiple containers, of the same name, were found: {[c.get('name') for c in matched_containers]}"
+            )
+        container = matched_containers[0]
+        return container.get("resources").get("limits").get("memory")
 
     def get_node(self):
         """
