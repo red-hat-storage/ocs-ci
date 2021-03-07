@@ -1196,11 +1196,10 @@ BACKINGSTORE_TYPE_GOOGLE = "google-cloud-storage"
 # the pattern "/registry/" match the test path and so the test belongs to
 # Magenta squad.
 SQUADS = {
-    "Brown": ["/nodes/"],
+    "Brown": ["/z_cluster/"],
     "Green": ["/pv_services/", "/storageclass/"],
     "Blue": ["/monitoring/"],
     "Red": ["/mcg/", "/rgw/"],
-    "Yellow": ["/cluster_expansion/"],
     "Purple": ["/test_must_gather", "/upgrade/"],
     "Magenta": ["/workloads/", "/registry/", "/logging/", "/flowtest/", "/lifecycle/"],
     "Grey": ["/performance/"],
