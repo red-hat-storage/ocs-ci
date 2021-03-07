@@ -62,14 +62,15 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
         noobaa_pod_obj = get_noobaa_pods()
 
         # Get the node where noobaa-db hosted
+        noobaa_pod_node = None
         for noobaa_pod in noobaa_pod_obj:
             if noobaa_pod.name in [
                 constants.NB_DB_NAME_46_AND_BELOW,
                 constants.NB_DB_NAME_47_AND_ABOVE,
             ]:
                 noobaa_pod_node = get_pod_node(noobaa_pod)
-            else:
-                assert False, "Could not find the NooBaa DB pod"
+        if noobaa_pod_node is None:
+            assert False, "Could not find the NooBaa DB pod"
 
         for rgw_pod in rgw_pod_obj:
             pod_node = rgw_pod.get().get("spec").get("nodeName")
