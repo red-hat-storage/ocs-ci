@@ -104,25 +104,14 @@ def delete_and_create_osd_node(osd_node_name):
             log.error(msg_invalid)
             pytest.fail(msg_invalid)
     elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-        wnodes_not_in_ocs = node.get_worker_nodes_not_in_ocs()
-        # We use for vSphere an existing worker node, due to issue
-        # https://github.com/red-hat-storage/ocs-ci/issues/3894
-        # Issue for tracking is https://github.com/red-hat-storage/ocs-ci/issues/3945
-        if wnodes_not_in_ocs:
-            if is_lso_cluster():
-                new_node_name = node.delete_and_create_osd_node_vsphere_upi_lso(
-                    osd_node_name, use_existing_node=True
-                )
+        if is_lso_cluster():
+            new_node_name = node.delete_and_create_osd_node_vsphere_upi_lso(
+                osd_node_name, use_existing_node=False
+            )
 
-            else:
-                new_node_name = node.delete_and_create_osd_node_vsphere_upi(
-                    osd_node_name, use_existing_node=True
-                )
         else:
-            pytest.skip(
-                "We don't have an extra worker node not in OCS. "
-                "Skip node replacement test with vSphere due to issue "
-                "https://github.com/red-hat-storage/ocs-ci/issues/3945"
+            new_node_name = node.delete_and_create_osd_node_vsphere_upi(
+                osd_node_name, use_existing_node=False
             )
 
     log.info("Start node replacement verification steps...")
