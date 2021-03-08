@@ -1414,7 +1414,18 @@ class VSPHEREUPINode(VMWareNodes):
         self.node_type = node_type
         self.compute_count = compute_count
         self.current_compute_count = len(get_nodes())
-        self.target_compute_count = self.current_compute_count + self.compute_count
+        self.terraform_var = os.path.join(
+            self.cluster_path, constants.TERRAFORM_DATA_DIR, "terraform.tfvars"
+        )
+        with open(self.terraform_var, "r") as fd:
+            compute_count_line = [
+                line.rstrip("\n") for line in fd.readlines() if "compute_count" in line
+            ][0]
+        self.current_count_in_tfvars = int(
+            compute_count_line.split("=")[1].strip().strip('"')
+        )
+
+        self.target_compute_count = self.current_count_in_tfvars + self.compute_count
 
         # update the terraform installer path in ENV_DATA
         # DON'T download terraform again since we need to use the same
@@ -1449,11 +1460,7 @@ class VSPHEREUPINode(VMWareNodes):
         Update terraform variables
         """
         logger.debug("Updating terraform variables")
-        self.terraform_var = os.path.join(
-            self.cluster_path, constants.TERRAFORM_DATA_DIR, "terraform.tfvars"
-        )
         compute_str = "compute_count ="
-        to_change = f'{compute_str} "{self.current_compute_count}"'
         updated_compute_str = f'{compute_str} "{self.target_compute_count}"'
         logging.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
 
@@ -1462,7 +1469,12 @@ class VSPHEREUPINode(VMWareNodes):
         shutil.copyfile(self.terraform_var, original_file)
         logging.info(f"original terraform file: {original_file}")
 
-        replace_content_in_file(self.terraform_var, to_change, updated_compute_str)
+        replace_content_in_file(
+            self.terraform_var,
+            compute_str,
+            updated_compute_str,
+            match_and_replace_line=True,
+        )
 
     def _update_machine_conf(self):
         """
