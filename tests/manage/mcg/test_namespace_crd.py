@@ -1,6 +1,6 @@
 """
 Tests for Namespace resources and buckets by using OpenShift CRDs only.
-These tests are valid only for OCS version lesser than 4.6 because in later
+These tests are valid only for OCS version 4.7 and above because in later
 versions are for Namespace bucket creation used CRDs instead of NooBaa RPC calls.
 """
 import logging
