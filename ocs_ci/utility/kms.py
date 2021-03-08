@@ -98,6 +98,8 @@ class Vault(KMS):
         self.update_vault_env_vars()
         get_vault_cli()
         self.vault_unseal()
+        if config.ENV_DATA.get("use_vault_namespace"):
+            self.vault_create_namespace()
         self.vault_create_backend_path()
         self.create_ocs_vault_resources()
 
@@ -117,6 +119,66 @@ class Vault(KMS):
             self.client_key_base64 = self.vault_conf["VAULT_CLIENT_KEY_BASE64"]
             self.vault_tls_server = self.vault_conf["VAULT_TLS_SERVER_NAME"]
         self.vault_root_token = self.vault_conf["VAULT_ROOT_TOKEN"]
+
+    def vault_create_namespace(self):
+        """
+        Create a vault namespace if it doesn't exists
+
+        """
+
+        self.vault_namespace = get_default_if_keyval_empty(
+            config.ENV_DATA, "VAULT_NAMESPACE", constants.VAULT_DEFAULT_NAMESPACE
+        )
+
+        if not self.vault_namespace_exists(self.vault_namespace):
+            self.create_namespace(self.vault_namespace)
+        os.environ["VAULT_NAMESPACE"] = self.vault_namespace
+
+    def vault_namespace_exists(self, vault_namespace):
+        """
+        Check if vault namespace already exists
+
+        Args:
+            vault_namespace (str): name of the vault namespace
+
+        Returns:
+            bool: True if exists else False
+
+        """
+        cmd = f"vault namespace lookup {vault_namespace}"
+        proc = subprocess.Popen(
+            shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        out, err = proc.communicate()
+        if proc.returncode:
+            if "Namespace not found" in err:
+                return False
+        return True
+
+    def create_namespace(self, vault_namespace):
+        """
+        Create a vault namespace
+
+        Args:
+            vault_namespace (str): name of the vault namespace
+
+        Raises:
+            VaultOperationError exception
+
+        """
+        cmd = f"vault namespace create {vault_namespace}"
+        proc = subprocess.Popen(
+            shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        out, err = proc.communicate()
+        if proc.returncode:
+            raise VaultOperationError("Namespace creation failed", err)
+        # Check if namespace gets listed
+        if self.vault_namespace_exists(vault_namespace):
+            logger.info(f"Namespace {vault_namespace} successfully created")
+        else:
+            logger.error(f"Namespace {vault_namespace} not found in the list")
+            raise VaultOperationError()
 
     def update_vault_env_vars(self):
         """
@@ -204,9 +266,6 @@ class Vault(KMS):
         connection_data["data"]["VAULT_CACERT"] = self.ca_cert_name
         connection_data["data"]["VAULT_CLIENT_CERT"] = self.client_cert_name
         connection_data["data"]["VAULT_CLIENT_KEY"] = self.client_key_name
-        self.vault_namespace = config.ENV_DATA.get(
-            "VAULT_NAMESPACE", constants.VAULT_DEFAULT_NAMESPACE
-        )
         connection_data["data"]["VAULT_NAMESPACE"] = self.vault_namespace
         connection_data["data"]["VAULT_TLS_SERVER_NAME"] = self.vault_tls_server
         self.create_resource(connection_data, prefix="kmsconnection")
@@ -363,6 +422,21 @@ class Vault(KMS):
             vault_conf = load_auth_config()["vault"]
             return vault_conf
 
+    def get_vault_connection_info(self, resource_name=None):
+        """
+        Get resource info from ocs-kms-connection-defatils
+
+        Args:
+            resource_name (str): name of the resource
+
+        """
+        connection_details = ocp.OCP(
+            kind="ConfigMap",
+            resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+        return connection_details.get().get("data")[resource_name]
+
     def get_vault_backend_path(self):
         """
         Fetch the vault backend path used for this deployment
@@ -380,15 +454,10 @@ class Vault(KMS):
 
         """
         if not self.vault_backend_path:
-            connection_details = ocp.OCP(
-                kind="ConfigMap",
-                resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-            )
             try:
-                self.vault_backend_path = connection_details.get().get("data")[
+                self.vault_backend_path = self.get_vault_connection_info(
                     "VAULT_BACKEND_PATH"
-                ]
+                )
             except IndexError:
                 raise KMSConnectionDetailsError("KMS connection details not available")
 
@@ -470,6 +539,40 @@ class Vault(KMS):
             )
         logger.info(f"Vault policy {self.vault_policy_name} deleted")
 
+    def remove_vault_namespace(self):
+        """
+        Cleanup the namespace
+
+        Raises:
+            KMSResourceCleanupError exception
+
+        """
+        # Unset namespace from environment
+        # else delete will look for namespace within namespace
+        os.environ.pop("VAULT_NAMESPACE")
+        cmd = f"vault namespace delete {self.vault_namespace}/"
+        subprocess.check_output(shlex.split(cmd))
+        if self.vault_namespace_exists(self.vault_namespace):
+            raise KMSResourceCleaneupError(
+                f"Namespace {self.vault_namespace} deletion failed"
+            )
+        logger.info(f"Vault namespace {self.vault_namespace} deleted")
+
+    def get_vault_namespace(self):
+        """
+        From kms connection details resource obtain
+        namespace
+
+        Raises:
+            KMSConnectionDetailsError exception
+
+        """
+        if not self.vault_namespace:
+            try:
+                self.vault_namespace = self.get_vault_connection_info("VAULT_NAMESPACE")
+            except IndexError:
+                raise KMSConnectionDetailsError("KMS connection details not available")
+
     def cleanup(self):
         """
         Cleanup the backend resources in case of external
@@ -479,6 +582,11 @@ class Vault(KMS):
             self.gather_init_vault_conf()
 
         self.update_vault_env_vars()
+        # We need to set vault namespace in the env
+        # so that path, policy and token are accessed
+        # within the namespace context
+        if config.ENV_DATA.get("user_vault_namespace"):
+            os.environ["VAULT_NAMESPACE"] = self.get_vault_namespace()
         # get vault path
         self.get_vault_backend_path()
         # from token secret get token
@@ -491,6 +599,8 @@ class Vault(KMS):
         # we need root token of vault in the env
         self.remove_vault_backend_path()
         self.remove_vault_policy()
+        if self.vault_namespace:
+            self.remove_vault_namespace()
 
 
 kms_map = {"vault": Vault}
