@@ -1,4 +1,5 @@
 import pytest
+import logging
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -19,6 +20,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.cluster import CephCluster
@@ -26,9 +28,28 @@ from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 
+logger = logging.getLogger(__name__)
+
+
 def add_capacity_test():
     osd_size = storage_cluster.get_osd_size()
+    existing_osd_pods = get_osd_pods()
+    existing_osd_pod_names = [pod.name for pod in existing_osd_pods]
     result = storage_cluster.add_capacity(osd_size)
+    osd_pods_post_expansion = get_osd_pods()
+    osd_pod_names_post_expansion = [pod.name for pod in osd_pods_post_expansion]
+    restarted_osds = list()
+    logger.info(
+        "Checking if existing OSD pods were restarted (deleted) post add capacity (bug 1931601)"
+    )
+
+    for pod in existing_osd_pod_names:
+        if pod not in osd_pod_names_post_expansion:
+            restarted_osds.append(pod)
+    assert (
+        len(restarted_osds) == 0
+    ), f"The following OSD pods were restarted (deleted) post add capacity: {restarted_osds}"
+
     pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
     pod.wait_for_resource(
         timeout=300,
