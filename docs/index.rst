@@ -24,6 +24,7 @@ and functionality using AWS and other supported platforms.
    upgrade.md
    results.md
    writing_tests.md
+   stable_branch.md
    readmefiles/conf.README.md
    fixture_usage.md
    debugging.md
