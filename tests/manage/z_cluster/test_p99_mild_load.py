@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 
 @ignore_leftovers
-class TestGoldmanWorkload(ManageTest):
+class TestP99UnderMildLoad(ManageTest):
     @pytest.fixture()
     def setup(
         self,
@@ -54,7 +54,7 @@ class TestGoldmanWorkload(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def test_goldman_workload(self, pvc_factory, pod_factory):
+    def test_p99_under_mild_load(self, pvc_factory, pod_factory):
         """"""
         self.pvc_objs = list()
         self.pod_objs = list()
