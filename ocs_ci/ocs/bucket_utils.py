@@ -11,7 +11,7 @@ from botocore.handlers import disable_signing
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.helpers.helpers import create_resource
@@ -1037,6 +1037,20 @@ def setup_base_objects(awscli_pod, original_dir, result_dir, amount=2):
         awscli_pod.exec_cmd_on_pod(
             f"dd if=/dev/urandom of={original_dir}/{object_key} bs=1M count=1 status=none"
         )
+
+
+def check_cache(mcg_obj, bucket_obj, expected_cache):
+    res = mcg_obj.send_rpc_query(
+        "object_api",
+        "list_objects",
+        {
+            "bucket": bucket_obj.name,
+        },
+    ).json()
+    list_objects_res = res["reply"]["objects"]
+    if len(list_objects_res) != expected_cache:
+        return False
+    return True
 
 
 def compare_directory(awscli_pod, original_dir, result_dir, amount=2):
