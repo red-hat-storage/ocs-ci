@@ -62,10 +62,14 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
-from ocs_ci.utility import aws
-from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
-from ocs_ci.utility import templating
-from ocs_ci.utility import users, kms as KMS
+from ocs_ci.utility import (
+    aws,
+    deployment_openshift_logging as ocp_logging_obj,
+    ibmcloud,
+    kms as KMS,
+    templating,
+    users,
+)
 from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
@@ -1127,6 +1131,9 @@ def cluster(request, log_cli_level):
     if deploy:
         # Deploy cluster
         deployer.deploy_cluster(log_cli_level)
+    else:
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+            ibmcloud.login()
 
 
 @pytest.fixture(scope="class")
