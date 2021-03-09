@@ -1937,7 +1937,9 @@ def load_auth_config():
 
 def get_ocs_olm_operator_tags(limit=100):
     """
-    Query the OCS OLM Operator repo and retrieve a list of tags.
+    Query the OCS OLM Operator repo and retrieve a list of tags. Since we are limited
+    to 100 tags per page, we end up making several API calls and combining the results
+    into a single list of tags.
 
     Args:
         limit: the number of tags to limit the request to
@@ -1950,7 +1952,6 @@ def get_ocs_olm_operator_tags(limit=100):
         list: OCS OLM Operator tags
 
     """
-    log.info(f"Retrieving OCS OLM Operator tags (limit {limit})")
     try:
         quay_access_token = load_auth_config()["quay"]["access_token"]
     except (KeyError, TypeError):
@@ -1969,17 +1970,28 @@ def get_ocs_olm_operator_tags(limit=100):
     except (ValueError, TypeError):
         log.warning("Invalid ocs_version given, defaulting to ocs-registry image")
         pass
-    resp = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(
-            tag_limit=limit,
-            image=image,
-        ),
-        headers=headers,
-    )
-    if not resp.ok:
-        raise requests.RequestException(resp.json())
-    log.debug(resp.json()["tags"])
-    return resp.json()["tags"]
+    all_tags = []
+    page = 1
+    while True:
+        log.info(f"Retrieving OCS OLM Operator tags (limit {limit}, page {page})")
+        resp = requests.get(
+            constants.OPERATOR_CS_QUAY_API_QUERY.format(
+                tag_limit=limit,
+                image=image,
+                page=page,
+            ),
+            headers=headers,
+        )
+        if not resp.ok:
+            raise requests.RequestException(resp.json())
+        tags = resp.json()["tags"]
+        if len(tags) == 0:
+            log.info("No more tags to retrieve")
+            break
+        log.debug(tags)
+        all_tags.extend(tags)
+        page += 1
+    return all_tags
 
 
 def check_if_executable_in_path(exec_name):
