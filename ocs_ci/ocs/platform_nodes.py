@@ -1573,8 +1573,12 @@ class VSPHEREUPINode(VMWareNodes):
         # initialize terraform and apply
         os.chdir(self.terraform_data_dir)
         self.terraform.initialize()
-        self.terraform.apply(self.terraform_var, module=constants.COMPUTE_MODULE)
-        self.terraform.apply(self.terraform_var, module=constants.COMPUTE_MODULE_VM)
+        self.terraform.apply(
+            self.terraform_var, module=constants.COMPUTE_MODULE, refresh=False
+        )
+        self.terraform.apply(
+            self.terraform_var, module=constants.COMPUTE_MODULE_VM, refresh=False
+        )
         os.chdir(self.previous_dir)
 
         # get the newly added compute IPs
