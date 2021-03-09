@@ -56,6 +56,9 @@ class TestGoldmanWorkload(ManageTest):
 
     def test_goldman_workload(self, pvc_factory, pod_factory):
         """"""
+        self.pvc_objs = list()
+        self.pod_objs = list()
+
         self.accepted_latency = 10
         self.accepted_pvc_creation_time = 10
         self.accepted_pvc_deletion_time = 30
@@ -87,12 +90,19 @@ class TestGoldmanWorkload(ManageTest):
             for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
                 pvc_obj = pvc_factory(interface)
                 self.pvc_objs.append(pvc_obj)
+                pod_obj = pod_factory(pvc=pvc_obj, interface=interface)
+                self.pod_objs.append(pod_obj)
 
                 pvc_create_time = helpers.measure_pvc_creation_time(
                     interface, pvc_obj.name
                 )
                 logging.info(f"PVC {pvc_obj.name} created in {pvc_create_time} seconds")
                 self.pvc_creation_time_list.append(pvc_create_time)
+
+                pod_obj.run_io(
+                    storage_type="fs", size="1G", runtime=30, verify="sha1", do_verify=1
+                )
+                pod_obj.get_fio_results()
 
             for pvc_obj in self.pvc_objs:
                 pvc_name = pvc_obj.name
@@ -126,4 +136,4 @@ class TestGoldmanWorkload(ManageTest):
         ), f"The p99 PVC creation time is too high: {p99_pvc_creation_time}"
         assert (
             p99_pvc_deletion_time > self.accepted_pvc_deletion_time
-        ), f"The p99 PVC creation time is too high: {p99_pvc_deletion_time}"
+        ), f"The p99 PVC deletion time is too high: {p99_pvc_deletion_time}"

@@ -298,6 +298,8 @@ class Pod(OCS):
         fio_filename=None,
         bs="4K",
         end_fsync=0,
+        verify=None,
+        do_verify=0,
     ):
         """
         Execute FIO on a pod
@@ -326,6 +328,9 @@ class Pod(OCS):
             bs (str): Block size, e.g. 4K
             end_fsync (int): If 1, fio will sync file contents when a write
                 stage has completed. Fio default is 0
+            verify (str): data verification type
+            do_verify (int): If 1, data verification is done, 0 otherwise
+
         """
         if not self.wl_setup_done:
             self.workload_setup(storage_type=storage_type, jobs=jobs)
@@ -346,6 +351,8 @@ class Pod(OCS):
         self.io_params["bs"] = bs
         if end_fsync:
             self.io_params["end_fsync"] = end_fsync
+        self.io_params["verify"] = verify
+        self.io_params["do_verify"] = do_verify
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
     def fillup_fs(self, size, fio_filename=None):
