@@ -251,7 +251,7 @@ def uninstall_ocs():
     label_nodes(nodes=node_objs, label=constants.TOPOLOGY_ROOK_LABEL + "-")
 
     log.info("Removing taints from storage nodes")
-    taint_nodes(nodes=nodes, taint_label=constants.OCS_TAINT + "-")
+    taint_nodes(nodes=nodes, taint_label=constants.OPERATOR_NODE_TAINT + "-")
 
     log.info("Deleting remaining OCS PVs (if there are any)")
     try:

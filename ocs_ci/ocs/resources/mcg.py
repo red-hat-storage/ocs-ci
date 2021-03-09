@@ -752,18 +752,22 @@ class MCG:
 
         return create_resource(**bc_data)
 
-    def cli_create_bucketclass(self, name, backingstores, placement):
+    def cli_create_bucketclass(
+        self, name, backingstores, placement=None, namespace_policy=None
+    ):
         """
         Creates a new NooBaa bucket class using the noobaa cli
         Args:
             name (str): The name to be given to the bucket class
             backingstores (list): The backing stores to use as part of the policy
             placement (str): The placement policy to be used - Mirror | Spread
+            namespace_policy (dict): The namespace policy to be used
 
         Returns:
             OCS: The bucket class resource
 
         """
+        # TODO: Implement CLI namespace bucketclass support
         backingstore_name_list = [backingstore.name for backingstore in backingstores]
         bc = f" --backingstores={','.join(backingstore_name_list)} --placement={placement}"
         placement_parameter = (

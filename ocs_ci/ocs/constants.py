@@ -235,6 +235,10 @@ ACCESS_MODE_RWO = "ReadWriteOnce"
 ACCESS_MODE_ROX = "ReadOnlyMany"
 ACCESS_MODE_RWX = "ReadWriteMany"
 
+# Pod names
+NB_DB_NAME_46_AND_BELOW = "noobaa-db-0"
+NB_DB_NAME_47_AND_ABOVE = "noobaa-db-pg-0"
+
 # Pod label
 MON_APP_LABEL = "app=rook-ceph-mon"
 MDS_APP_LABEL = "app=rook-ceph-mds"
@@ -524,6 +528,23 @@ PODS_PER_NODE_COUNT_YAML = os.path.join(
 )
 
 ANSIBLE_INVENTORY_YAML = os.path.join("ocp-deployment", "inventory.yaml.j2")
+
+# External vault kms yamls
+EXTERNAL_VAULT_TEMPLATES = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "vault")
+EXTERNAL_VAULT_CA_CERT = os.path.join(
+    EXTERNAL_VAULT_TEMPLATES, "ocs-kms-ca-secret.yaml"
+)
+EXTERNAL_VAULT_CLIENT_CERT = os.path.join(
+    EXTERNAL_VAULT_TEMPLATES, "ocs-kms-client-cert.yaml"
+)
+EXTERNAL_VAULT_CLIENT_KEY = os.path.join(
+    EXTERNAL_VAULT_TEMPLATES, "ocs-kms-client-key.yaml"
+)
+EXTERNAL_VAULT_KMS_TOKEN = os.path.join(EXTERNAL_VAULT_TEMPLATES, "ocs-kms-token.yaml")
+EXTERNAL_VAULT_KMS_CONNECTION_DETAILS = os.path.join(
+    EXTERNAL_VAULT_TEMPLATES, "ocs-kms-connection-details.yaml"
+)
+
 # constants
 RBD_INTERFACE = "rbd"
 CEPHFS_INTERFACE = "cephfs"
@@ -1179,11 +1200,10 @@ BACKINGSTORE_TYPE_GOOGLE = "google-cloud-storage"
 # the pattern "/registry/" match the test path and so the test belongs to
 # Magenta squad.
 SQUADS = {
-    "Brown": ["/nodes/"],
+    "Brown": ["/z_cluster/"],
     "Green": ["/pv_services/", "/storageclass/"],
     "Blue": ["/monitoring/"],
     "Red": ["/mcg/", "/rgw/"],
-    "Yellow": ["/cluster_expansion/"],
     "Purple": ["/test_must_gather", "/upgrade/"],
     "Magenta": ["/workloads/", "/registry/", "/logging/", "/flowtest/", "/lifecycle/"],
     "Grey": ["/performance/"],
@@ -1195,10 +1215,23 @@ PRODUCTION_JOBS_PREFIX = ["jnk"]
 # Cloud Manager available platforms
 CLOUD_MNGR_PLATFORMS = ["AWS", "GCP", "AZURE", "IBMCOS"]
 
+# Vault related configurations
+VAULT_VERSION_INFO_URL = "https://github.com/hashicorp/vault/releases/latest"
+VAULT_DOWNLOAD_BASE_URL = "https://releases.hashicorp.com/vault"
+
+# Vault related constants
+
+VAULT_DEFAULT_NAMESPACE = ""
+VAULT_DEFAULT_PATH_PREFIX = "ocs"
+VAULT_DEFAULT_POLICY_PREFIX = "rook"
+VAULT_DEFAULT_TLS_SERVER = ""
+VAULT_KMS_CONNECTION_DETAILS_RESOURCE = "ocs-kms-connection-details"
+VAULT_KMS_TOKEN_RESOURCE = "ocs-kms-token"
+VAULT_CLIENT_CERT_PATH = os.path.join(DATA_DIR, "vault-client.crt")
+
 # min and max Noobaa endpoints
 MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
 MCG_TESTS_MIN_NB_ENDPOINT_COUNT = 2
 MAX_NB_ENDPOINT_COUNT = 2
 
-OCS_TAINT = "node.ocs.openshift.io/storage"
 VOLUMESNAPSHOT = "volumesnapshot"

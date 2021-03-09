@@ -6,7 +6,7 @@ from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
@@ -20,11 +20,6 @@ class HsBench(object):
     def __init__(self):
         """
         Initializer to create pvc and rgw pod to running hsbench benchmark
-
-        Args:
-            kind (str): Kind of service POD or DeploymentConfig
-            pod_dict_path (yaml): Pod yaml
-            node_selector (dict): Pods will be created in this node_selector
 
         """
         self.pod_dic_path = constants.GOLANG_YAML
@@ -47,39 +42,33 @@ class HsBench(object):
             Create golang pod
 
         """
-        # Check for existing rgw pods on cluster
-        self.rgw_pod = pod.get_rgw_pods()
-        if self.rgw_pod:
-            # Create service account
-            self.sa_name = helpers.create_serviceaccount(self.namespace)
-            self.sa_name = self.sa_name.name
-            helpers.add_scc_policy(sa_name=self.sa_name, namespace=self.namespace)
 
-            # Create test pvc+pod
-            log.info(f"Create Golang pod to generate S3 workload... {self.namespace}")
-            pvc_size = "50Gi"
-            node_name = "compute-0"
-            self.pod_name = "hsbench-pod"
-            self.pvc_obj = helpers.create_pvc(
-                sc_name=constants.DEFAULT_STORAGECLASS_RBD,
-                namespace=self.namespace,
-                size=pvc_size,
-            )
-            self.pod_obj = helpers.create_pod(
-                constants.CEPHBLOCKPOOL,
-                namespace=self.namespace,
-                pod_name=self.pod_name,
-                pvc_name=self.pvc_obj.name,
-                node_name=node_name,
-                sa_name=self.sa_name,
-                pod_dict_path=self.pod_dic_path,
-                dc_deployment=True,
-                deploy_pod_status=constants.STATUS_COMPLETED,
-            )
-        else:
-            raise UnexpectedBehaviour(
-                "This cluster doesn't have RGW pod(s) to perform hsbench"
-            )
+        # Create service account
+        self.sa_name = helpers.create_serviceaccount(self.namespace)
+        self.sa_name = self.sa_name.name
+        helpers.add_scc_policy(sa_name=self.sa_name, namespace=self.namespace)
+
+        # Create test pvc+pod
+        log.info(f"Create Golang pod to generate S3 workload... {self.namespace}")
+        pvc_size = "50Gi"
+        node_name = "compute-0"
+        self.pod_name = "hsbench-pod"
+        self.pvc_obj = helpers.create_pvc(
+            sc_name=constants.DEFAULT_STORAGECLASS_RBD,
+            namespace=self.namespace,
+            size=pvc_size,
+        )
+        self.pod_obj = helpers.create_pod(
+            constants.CEPHBLOCKPOOL,
+            namespace=self.namespace,
+            pod_name=self.pod_name,
+            pvc_name=self.pvc_obj.name,
+            node_name=node_name,
+            sa_name=self.sa_name,
+            pod_dict_path=self.pod_dic_path,
+            dc_deployment=True,
+            deploy_pod_status=constants.STATUS_COMPLETED,
+        )
 
     def install_hsbench(self, timeout=2400):
         """
@@ -203,7 +192,7 @@ class HsBench(object):
 
         """
         log.info("Deleting pods and deployment config")
-        run_cmd(f"oc delete deploymentconfig/{self.pod_name}")
+        run_cmd(f"oc delete deploymentconfig/{self.pod_name} -n {self.namespace}")
         self.pod_obj.delete()
         self.pvc_obj.delete()
         self.delete_test_user()

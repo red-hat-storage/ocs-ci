@@ -48,8 +48,12 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
-from ocs_ci.utility import templating, ibmcloud
 from ocs_ci.utility.flexy import load_cluster_info
+from ocs_ci.utility import (
+    templating,
+    ibmcloud,
+    kms as KMS,
+)
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -482,6 +486,9 @@ class Deployment(object):
         if self.platform == constants.IBM_POWER_PLATFORM:
             cluster_data = templating.load_yaml(constants.IBM_STORAGE_CLUSTER_YAML)
         else:
+            if config.DEPLOYMENT.get("kms_deployment"):
+                kms = KMS.get_kms_deployment()
+                kms.deploy()
             cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
 
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
@@ -648,6 +655,10 @@ class Deployment(object):
             cluster_data["spec"]["encryption"] = {
                 "enable": True,
             }
+            if config.DEPLOYMENT.get("kms_deployment"):
+                cluster_data["spec"]["encryption"]["kms"] = {
+                    "enable": True,
+                }
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
@@ -993,7 +1004,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         upgrade = config.UPGRADE.get("upgrade", False)
     else:
         upgrade = False
-    image_and_tag = image.split(":")
+    image_and_tag = image.rsplit(":", 1)
     image = image_and_tag[0]
     image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
     if not image_tag and config.REPORTING.get("us_ds") == "DS":
@@ -1010,7 +1021,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     )
     if change_cs_condition:
         default_image = config.DEPLOYMENT["default_ocs_registry_image"]
-        image = image if image else default_image.split(":")[0]
+        image = image if image else default_image.rsplit(":", 1)[0]
         catalog_source_data["spec"][
             "image"
         ] = f"{image}:{image_tag if image_tag else 'latest'}"

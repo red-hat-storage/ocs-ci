@@ -62,10 +62,14 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
-from ocs_ci.utility import aws
-from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
-from ocs_ci.utility import templating
-from ocs_ci.utility import users
+from ocs_ci.utility import (
+    aws,
+    deployment_openshift_logging as ocp_logging_obj,
+    ibmcloud,
+    kms as KMS,
+    templating,
+    users,
+)
 from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
@@ -1100,6 +1104,11 @@ def cluster(request, log_cli_level):
     if teardown:
 
         def cluster_teardown_finalizer():
+            # If KMS is configured, clean up the backend resources
+            # we are doing it before OCP cleanup
+            if config.DEPLOYMENT.get("kms_deployment"):
+                kms = KMS.get_kms_deployment()
+                kms.cleanup()
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)
@@ -1112,9 +1121,19 @@ def cluster(request, log_cli_level):
     )
     get_openshift_client(force_download=force_download)
 
+    # set environment variable for early testing of RHCOS
+    if config.ENV_DATA.get("early_testing"):
+        release_img = config.ENV_DATA["RELEASE_IMG"]
+        log.info(f"Running early testing of RHCOS with release image: {release_img}")
+        os.environ["RELEASE_IMG"] = release_img
+        os.environ["OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE"] = release_img
+
     if deploy:
         # Deploy cluster
         deployer.deploy_cluster(log_cli_level)
+    else:
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+            ibmcloud.login()
 
 
 @pytest.fixture(scope="class")
@@ -2036,6 +2055,9 @@ def bucket_factory_fixture(
                 buckets
 
         """
+        if bucketclass:
+            interface = bucketclass["interface"]
+
         if interface.lower() not in BUCKET_MAP:
             raise RuntimeError(
                 f"Invalid interface type received: {interface}. "
@@ -2046,7 +2068,7 @@ def bucket_factory_fixture(
             bucketclass if bucketclass is None else bucket_class_factory(bucketclass)
         )
 
-        for i in range(amount):
+        for _ in range(amount):
             bucket_name = helpers.create_unique_resource_name(
                 resource_description="bucket", resource_type=interface.lower()
             )

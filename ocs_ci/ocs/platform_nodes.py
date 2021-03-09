@@ -1414,7 +1414,18 @@ class VSPHEREUPINode(VMWareNodes):
         self.node_type = node_type
         self.compute_count = compute_count
         self.current_compute_count = len(get_nodes())
-        self.target_compute_count = self.current_compute_count + self.compute_count
+        self.terraform_var = os.path.join(
+            self.cluster_path, constants.TERRAFORM_DATA_DIR, "terraform.tfvars"
+        )
+        with open(self.terraform_var, "r") as fd:
+            compute_count_line = [
+                line.rstrip("\n") for line in fd.readlines() if "compute_count" in line
+            ][0]
+        self.current_count_in_tfvars = int(
+            compute_count_line.split("=")[1].strip().strip('"')
+        )
+
+        self.target_compute_count = self.current_count_in_tfvars + self.compute_count
 
         # update the terraform installer path in ENV_DATA
         # DON'T download terraform again since we need to use the same
@@ -1449,11 +1460,7 @@ class VSPHEREUPINode(VMWareNodes):
         Update terraform variables
         """
         logger.debug("Updating terraform variables")
-        self.terraform_var = os.path.join(
-            self.cluster_path, constants.TERRAFORM_DATA_DIR, "terraform.tfvars"
-        )
         compute_str = "compute_count ="
-        to_change = f'{compute_str} "{self.current_compute_count}"'
         updated_compute_str = f'{compute_str} "{self.target_compute_count}"'
         logging.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
 
@@ -1462,7 +1469,12 @@ class VSPHEREUPINode(VMWareNodes):
         shutil.copyfile(self.terraform_var, original_file)
         logging.info(f"original terraform file: {original_file}")
 
-        replace_content_in_file(self.terraform_var, to_change, updated_compute_str)
+        replace_content_in_file(
+            self.terraform_var,
+            compute_str,
+            updated_compute_str,
+            match_and_replace_line=True,
+        )
 
     def _update_machine_conf(self):
         """
@@ -1561,8 +1573,12 @@ class VSPHEREUPINode(VMWareNodes):
         # initialize terraform and apply
         os.chdir(self.terraform_data_dir)
         self.terraform.initialize()
-        self.terraform.apply(self.terraform_var, module=constants.COMPUTE_MODULE)
-        self.terraform.apply(self.terraform_var, module=constants.COMPUTE_MODULE_VM)
+        self.terraform.apply(
+            self.terraform_var, module=constants.COMPUTE_MODULE, refresh=False
+        )
+        self.terraform.apply(
+            self.terraform_var, module=constants.COMPUTE_MODULE_VM, refresh=False
+        )
         os.chdir(self.previous_dir)
 
         # get the newly added compute IPs
@@ -1779,7 +1795,7 @@ class IBMPowerNodes(NodesBase):
 
     def __init__(self):
         super(IBMPowerNodes, self).__init__()
-        self.powernodes = powernodes.POWERNodes()
+        self.powernodes = powernodes.PowerNodes()
 
     def stop_nodes(self, nodes, force=True):
         """
@@ -1795,8 +1811,8 @@ class IBMPowerNodes(NodesBase):
                 nodes, timeout=900, wait=True, force=force
             )
         else:
-            raise NotImplementedError(
-                "This is not libvirt environment. Stop nodes not implemented"
+            self.powernodes.stop_powernodes_machines_powervs(
+                nodes, timeout=900, wait=True
             )
 
     def start_nodes(self, nodes, force=True):
@@ -1813,8 +1829,8 @@ class IBMPowerNodes(NodesBase):
                 nodes, timeout=900, wait=True, force=force
             )
         else:
-            raise NotImplementedError(
-                "This is not libvirt environment. Start nodes not implemented"
+            self.powernodes.start_powernodes_machines_powervs(
+                nodes, timeout=900, wait=True
             )
 
     def restart_nodes(self, nodes, timeout=540, wait=True, force=True):
@@ -1834,8 +1850,8 @@ class IBMPowerNodes(NodesBase):
                 nodes, timeout=900, wait=True, force=force
             )
         else:
-            raise NotImplementedError(
-                "This is not libvirt environment. Restart nodes not implemented"
+            self.powernodes.restart_powernodes_machines_powervs(
+                nodes, timeout=900, wait=True
             )
 
     def restart_nodes_by_stop_and_start(self, nodes, force=True):
@@ -1852,31 +1868,37 @@ class IBMPowerNodes(NodesBase):
                 nodes, timeout=900, wait=True, force=force
             )
         else:
-            raise NotImplementedError(
-                "This is not libvirt environment. Restart nodes by stop and start not implemented"
+            self.powernodes.restart_powernodes_machines_powervs(
+                nodes, timeout=900, wait=True
             )
 
     def restart_nodes_by_stop_and_start_teardown(self):
         """
         Make sure all PowerNodes are up by the end of the test
         """
-        if not self.powernodes.iskvm():
-            raise NotImplementedError(
-                "This is not libvirt environment. Restart nodes by stop and start teardown not implemented"
-            )
-
         self.cluster_nodes = get_node_objs()
-        stopped_powernodes = [
-            powernode
-            for powernode in self.cluster_nodes
-            if self.powernodes.verify_machine_is_down(powernode) is True
-        ]
+        if self.powernodes.iskvm():
+            stopped_powernodes = [
+                powernode
+                for powernode in self.cluster_nodes
+                if self.powernodes.verify_machine_is_down(powernode) is True
+            ]
+        else:
+            stopped_powernodes = [
+                powernode
+                for powernode in self.cluster_nodes
+                if powernode.ocp.get_resource_status(powernode.name)
+                == constants.NODE_NOT_READY
+            ]
 
         if stopped_powernodes:
             logger.info(
                 f"The following PowerNodes are powered off: {stopped_powernodes}"
             )
-            self.powernodes.start_powernodes_machines(stopped_powernodes)
+            if self.powernodes.iskvm():
+                self.powernodes.start_powernodes_machines(stopped_powernodes)
+            else:
+                self.powernodes.start_powernodes_machines_powervs(stopped_powernodes)
 
 
 class AZURENodes(NodesBase):

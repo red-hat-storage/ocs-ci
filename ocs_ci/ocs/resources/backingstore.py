@@ -60,7 +60,9 @@ class BackingStore:
         # If the backingstore utilizes a PV, save its PV name for deletion verification
         if self.type == "pv":
             backingstore_pvc = OCP(
-                kind=constants.PVC, selector=f"pool={self.name}"
+                kind=constants.PVC,
+                selector=f"pool={self.name}",
+                namespace=config.ENV_DATA["cluster_namespace"],
             ).get()["items"][0]
             pv_name = backingstore_pvc["spec"]["volumeName"]
 

@@ -2918,3 +2918,35 @@ def get_mon_pdb():
     disruptions_allowed = pdb_obj.get().get("status").get("disruptionsAllowed")
     min_available_mon = pdb_obj.get().get("spec").get("minAvailable")
     return disruptions_allowed, min_available_mon
+
+
+def run_cmd_verify_cli_output(
+    cmd=None, expected_output_lst=(), cephtool_cmd=False, debug_node=None
+):
+    """
+    Run command and verify its output
+
+    Args:
+        cmd(str): cli command
+        expected_output_lst(set): A set of strings that need to be included in the command output.
+        cephtool_cmd(bool): command on ceph-tool pod
+        debug_node(str): name of node
+
+    Returns:
+        bool: True of all strings are included in the command output, False otherwise
+
+    """
+    if cephtool_cmd is True:
+        tool_pod = pod.get_ceph_tools_pod()
+        cmd_start = f"oc rsh -n openshift-storage {tool_pod.name} "
+        cmd = f"{cmd_start} {cmd}"
+    elif debug_node is not None:
+        cmd_start = f"oc debug nodes/{debug_node} -- chroot /host /bin/bash -c "
+        cmd = f'{cmd_start} "{cmd}"'
+
+    out = run_cmd(cmd=cmd)
+    logger.info(out)
+    for expected_output in expected_output_lst:
+        if expected_output not in out:
+            return False
+    return True
