@@ -497,7 +497,7 @@ def create_storage_class(
         reclaim_policy (str): Type of reclaim policy. Defaults to 'Delete'
             (eg., 'Delete', 'Retain')
         rbd_thick_provision (bool): True to enable RBD thick provisioning.
-                Applicable if interface is CephBlockPool
+                Applicable if interface_type is CephBlockPool
 
     Returns:
         OCS: An OCS instance for the storage class

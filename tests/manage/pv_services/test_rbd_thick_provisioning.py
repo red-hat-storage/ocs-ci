@@ -86,9 +86,9 @@ class TestRbdThickProvisioning(ManageTest):
                 runtime=20,
             )
             log.info(f"IO started on pod {pod_obj.name}.")
-        log.info(f"IO started on pods.")
+        log.info("IO started on pods.")
 
-        log.info(f"Verifying IO on pods.")
+        log.info("Verifying IO on pods.")
         for pod_obj in pods:
             pod_obj.get_fio_results()
             log.info(f"IO completed on pod {pod_obj.name}.")
