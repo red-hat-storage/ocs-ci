@@ -375,12 +375,12 @@ class Pod(OCS):
             self.io_params["filename"] = fio_filename
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
-    def run_git_clone(self, skip_install=False):
+    def run_git_clone(self, skip_install=True):
         """
         Execute git clone on a pod to simulate a Jenkins user
 
         Args:
-            skip_install (bool): By default False, skips git package
+            skip_install (bool): By default True, skips git package
                 installation in pod
 
         """
@@ -390,7 +390,7 @@ class Pod(OCS):
         wl = workload.WorkLoad(
             name=name, work_load=work_load, pod=self, path=self.get_storage_path()
         )
-        if skip_install:
+        if not skip_install:
             assert wl.setup(), "Setup for git failed"
         wl.run()
 
