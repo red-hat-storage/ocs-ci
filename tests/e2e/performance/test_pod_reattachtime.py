@@ -112,6 +112,8 @@ class TestPVCCreationPerformance(E2ETest):
             _ocp.exec_oc_cmd(rsh_cmd)
             rsh_cmd = f"exec {pod_name} -- cp -r {pod_path}/tmp {pod_path}/folder{x}"
             _ocp.exec_oc_cmd(rsh_cmd)
+            rsh_cmd = f"exec {pod_name} -- sync"
+            _ocp.exec_oc_cmd(rsh_cmd)
 
         rsh_cmd = f"delete pod {pod_name}"
         _ocp.exec_oc_cmd(rsh_cmd)
