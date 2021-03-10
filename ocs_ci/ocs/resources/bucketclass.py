@@ -111,8 +111,8 @@ def bucket_class_factory(
                     namespace_policy["cache"] = {
                         "hubResource": namespacestores[0].name,
                         "caching": {
-                            "ttl":  bucket_class_dict["namespace_policy_dict"]["ttl"]
-                        }
+                            "ttl": bucket_class_dict["namespace_policy_dict"]["ttl"]
+                        },
                     }
                 else:
                     # TODO: this scenario is not accurate and need to be changed

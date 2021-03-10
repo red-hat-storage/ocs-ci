@@ -65,9 +65,9 @@ class TestObjectIntegrity(MCGTest):
                         },
                     },
                     "placement_policy": {
-                        "tiers": [{
-                            "backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]
-                        }]
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
                     },
                 }
             ),

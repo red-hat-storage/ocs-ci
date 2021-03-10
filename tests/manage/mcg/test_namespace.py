@@ -123,9 +123,9 @@ class TestNamespace(MCGTest):
                         },
                     },
                     "placement_policy": {
-                        "tiers": [{
-                            "backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]
-                        }]
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
                     },
                 }
             ),
@@ -413,9 +413,9 @@ class TestNamespace(MCGTest):
                         },
                     },
                     "placement_policy": {
-                        "tiers": [{
-                            "backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]
-                        }]
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
                     },
                 }
             ),
@@ -424,8 +424,9 @@ class TestNamespace(MCGTest):
             "AWS-OC-Cache",
         ],
     )
-    def test_read_non_cached_object(self, bucket_factory, mcg_obj, cld_mgr, awscli_pod,
-                                    bucketclass_dict):
+    def test_read_non_cached_object(
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+    ):
         """
         Test read an object that is not present in the cached namespace bucket.
         """
@@ -476,9 +477,9 @@ class TestNamespace(MCGTest):
                         },
                     },
                     "placement_policy": {
-                        "tiers": [{
-                            "backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]
-                        }]
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
                     },
                 }
             ),
@@ -487,8 +488,9 @@ class TestNamespace(MCGTest):
             "AWS-OC-Cache",
         ],
     )
-    def test_read_cached_object(self, bucket_factory, mcg_obj, cld_mgr, awscli_pod,
-                                bucketclass_dict):
+    def test_read_cached_object(
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+    ):
         """
         Test read an object that is not present in the cached namespace bucket.
         """
@@ -542,9 +544,9 @@ class TestNamespace(MCGTest):
                         },
                     },
                     "placement_policy": {
-                        "tiers": [{
-                            "backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]
-                        }]
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
                     },
                 }
             ),
@@ -553,8 +555,9 @@ class TestNamespace(MCGTest):
             "AWS-OC-Cache",
         ],
     )
-    def test_read_stale_object(self, bucket_factory, mcg_obj, cld_mgr, awscli_pod,
-                               bucketclass_dict):
+    def test_read_stale_object(
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+    ):
         """
         Test read an object that is stale from cached namespace bucket.
         """
@@ -594,7 +597,9 @@ class TestNamespace(MCGTest):
         self.download_files(mcg_obj, awscli_pod, bucket_to_read=bucket_obj.name)
 
         if self.compare_dirs(awscli_pod):
-            raise UnexpectedBehaviour("Updated file was not fetched after ttl was exceeded")
+            raise UnexpectedBehaviour(
+                "Updated file was not fetched after ttl was exceeded"
+            )
 
     @tier1
     @pytest.mark.parametrize(
@@ -611,9 +616,9 @@ class TestNamespace(MCGTest):
                         },
                     },
                     "placement_policy": {
-                        "tiers": [{
-                            "backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]
-                        }]
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
                     },
                 }
             ),
@@ -622,8 +627,9 @@ class TestNamespace(MCGTest):
             "AWS-OC-Cache",
         ],
     )
-    def test_write_object_to_cache(self, bucket_factory, mcg_obj, cld_mgr, awscli_pod,
-                                   bucketclass_dict):
+    def test_write_object_to_cache(
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+    ):
         """
         Test write an object to the cached namespace bucket.
         """
@@ -656,9 +662,9 @@ class TestNamespace(MCGTest):
                         },
                     },
                     "placement_policy": {
-                        "tiers": [{
-                            "backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]
-                        }]
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
                     },
                 }
             ),
@@ -667,8 +673,9 @@ class TestNamespace(MCGTest):
             "AWS-OC-Cache",
         ],
     )
-    def test_list_cached_objects(self, bucket_factory, mcg_obj, cld_mgr, awscli_pod,
-                                 bucketclass_dict):
+    def test_list_cached_objects(
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+    ):
         """
         Test list all cached objects in cached namespace bucket.
         """
@@ -701,9 +708,9 @@ class TestNamespace(MCGTest):
                         },
                     },
                     "placement_policy": {
-                        "tiers": [{
-                            "backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]
-                        }]
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
                     },
                 }
             ),
@@ -712,8 +719,9 @@ class TestNamespace(MCGTest):
             "AWS-OC-Cache",
         ],
     )
-    def test_delete_cached_object(self, bucket_factory, mcg_obj, cld_mgr, awscli_pod,
-                                  bucketclass_dict):
+    def test_delete_cached_object(
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+    ):
         """
         Test list all cached objects in cached namespace bucket.
         """
@@ -738,7 +746,9 @@ class TestNamespace(MCGTest):
 
         # Check deletion in the cloud provider
         aws_target_bucket = bucket_obj.bucketclass.namespacestores[0].uls_name
-        aws_obj_list = len(s3_list_objects_v1(cld_mgr.aws_client.client, aws_target_bucket)["Contents"])
+        aws_obj_list = len(
+            s3_list_objects_v1(cld_mgr.aws_client.client, aws_target_bucket)["Contents"]
+        )
         if aws_obj_list != 0:
             raise UnexpectedBehaviour("Object was not deleted from cache properly")
 
