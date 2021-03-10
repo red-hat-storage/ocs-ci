@@ -21,12 +21,12 @@ get information on various image version deployed by ocs-ci
 ## vSphere
   This should be used only when your cluster-dir is accidentally deleted
   ```bash
-  vsphere-cleanup [-h] --cluster_name CLUSTER_NAME --vsphere_conf VSPHERE_CONF
+  vsphere-cleanup [-h] --cluster-name CLUSTER_NAME --ocsci-conf VSPHERE_CONF
   ```
   e.g:
 
-  `vsphere-cleanup --cluster_name mycluster-oct12
-                   --vsphere_conf ~/vSphere-DC-CP_VC1.yaml`
+  `vsphere-cleanup --cluster-name mycluster-oct12
+                   --ocsci-conf ~/vSphere-DC-CP_VC1.yaml`
 
 # usage to shutdown AWS nodes when nodes are not in use
   Following cli can be used when you want to shutdown the cluster
