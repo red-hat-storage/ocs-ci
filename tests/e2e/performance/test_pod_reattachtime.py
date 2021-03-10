@@ -31,9 +31,10 @@ class TestPVCCreationPerformance(E2ETest):
 
         if self.interface.lower() == "cephfs":
             self.interface = constants.CEPHFILESYSTEM
+            self.sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
         if self.interface.lower() == "rbd":
             self.interface = constants.CEPHBLOCKPOOL
-        self.sc_obj = storageclass_factory(self.interface)
+            self.sc_obj = constants.DEFAULT_STORAGECLASS_RBD
 
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_pvc_reattach_time_performance(self, pvc_factory, teardown_factory):
