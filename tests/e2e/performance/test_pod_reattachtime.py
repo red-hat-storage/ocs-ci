@@ -19,13 +19,12 @@ class TestPVCCreationPerformance(E2ETest):
     """
 
     @pytest.fixture()
-    def base_setup(self, request, interface_iterate, storageclass_factory):
+    def base_setup(self, request, interface_iterate):
         """
         A setup phase for the test
         Args:
             interface_iterate: A fixture to iterate over ceph interfaces
-            storageclass_factory: A fixture to create everything needed for a
-                storageclass
+
         """
         self.interface = interface_iterate
 
