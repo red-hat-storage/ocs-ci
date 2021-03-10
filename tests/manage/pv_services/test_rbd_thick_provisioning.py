@@ -30,7 +30,9 @@ class TestRbdThickProvisioning(ManageTest):
         """
 
         self.sc_obj = storageclass_factory(
-            interface=constants.CEPHBLOCKPOOL, new_rbd_pool=True, rbd_thick_provision=True
+            interface=constants.CEPHBLOCKPOOL,
+            new_rbd_pool=True,
+            rbd_thick_provision=True,
         )
 
     @acceptance
