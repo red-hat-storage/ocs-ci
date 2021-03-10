@@ -7,6 +7,11 @@ DEPLOYMENT:
   type: 'EBS'
   local_storage: true
   ocs_operator_nodes_to_label: 4
+  arbiter_zone: 'us-east-2c'
+  worker_zones:
+    - 'us-east-2a'
+    - 'us-east-2b'
+  arbiter_autodetect: false
 ENV_DATA:
   platform: 'aws'
   deployment_type: 'ipi'
