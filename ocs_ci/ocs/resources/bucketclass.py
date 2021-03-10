@@ -115,6 +115,8 @@ def bucket_class_factory(
                         }
                     }
                 else:
+                    # TODO: this scenario is not accurate and need to be changed
+                    # to support both single and multi namespace buckets
                     namespace_policy["read_resources"] = [
                         nss.name for nss in namespacestores
                     ]
