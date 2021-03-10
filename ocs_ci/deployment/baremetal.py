@@ -544,8 +544,6 @@ LABEL disk0
             Args:
                 machine (str): Machine Name
 
-            Returns:
-
             """
             secrets = [
                 self.mgmt_details[machine]["mgmt_username"],
