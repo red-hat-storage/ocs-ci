@@ -129,7 +129,7 @@ class AMQ(object):
             cwd=self.dir,
         )
         run(
-            f"oc apply -f {self.amq_dir} -n {namespace}",
+            f"oc create -f {self.amq_dir} -n {namespace}",
             shell=True,
             check=True,
             cwd=self.dir,
