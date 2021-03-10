@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 @skipif_openshift_dedicated
 @skipif_aws_creds_are_missing
-@skipif_ocs_version("<4.6")
+@skipif_ocs_version("!=4.6")
 class TestNamespace(MCGTest):
     """
     Test creation of a namespace resources and buckets via RPC calls.
@@ -42,7 +42,6 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2255")
     @tier1
-    @skipif_ocs_version(">4.6")
     def test_namespace_resource_creation_rpc(self, ns_resource_factory):
         """
         Test namespace resource creation using the MCG RPC.
@@ -62,7 +61,6 @@ class TestNamespace(MCGTest):
             ),
         ],
     )
-    @skipif_ocs_version(">4.6")
     def test_namespace_bucket_creation_rpc(
         self, ns_resource_factory, bucket_factory, platform
     ):
@@ -82,7 +80,6 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2407")
     @tier1
-    @skipif_ocs_version(">4.6")
     def test_namespace_bucket_creation_with_rgw_rpc(
         self, ns_resource_factory, bucket_factory, rgw_deployments
     ):
@@ -102,7 +99,6 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2257")
     @tier1
-    @skipif_ocs_version(">4.6")
     def test_write_to_aws_read_from_ns_rpc(
         self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory
     ):
@@ -144,7 +140,6 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2258")
     @tier1
-    @skipif_ocs_version(">4.6")
     def test_write_to_ns_read_from_aws_rpc(
         self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory
     ):
@@ -185,7 +180,6 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2292")
     @tier2
-    @skipif_ocs_version(">4.6")
     def test_distribution_of_objects_in_ns_bucket_rpc(
         self,
         rgw_deployments,
@@ -248,7 +242,6 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2290")
     @tier2
-    @skipif_ocs_version(">4.6")
     def test_create_ns_bucket_from_utilized_resources_rpc(
         self,
         rgw_deployments,
@@ -324,7 +317,6 @@ class TestNamespace(MCGTest):
             ),
         ],
     )
-    @skipif_ocs_version(">4.6")
     def test_resource_combinations_rpc(
         self, ns_resource_factory, bucket_factory, platform1, platform2
     ):
@@ -345,7 +337,6 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2417")
     @tier2
-    @skipif_ocs_version(">4.6")
     def test_resource_combinations_with_rgw_rpc(
         self, ns_resource_factory, rgw_deployments, bucket_factory
     ):
@@ -366,7 +357,6 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2280")
     @pytest.mark.bugzilla("1900760")
-    @skipif_ocs_version("<4.7")
     @tier3
     def test_create_resource_with_invalid_target_bucket_rpc(
         self, mcg_obj, mcg_connection_factory
@@ -390,7 +380,6 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2282")
     @tier3
-    @skipif_ocs_version(">4.6")
     def test_delete_resource_used_in_ns_bucket_rpc(
         self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory
     ):
@@ -428,7 +417,6 @@ class TestNamespace(MCGTest):
 
     @tier4
     @tier4a
-    @skipif_ocs_version(">4.6")
     @pytest.mark.parametrize(
         argnames=["mcg_pod"],
         argvalues=[
@@ -497,7 +485,6 @@ class TestNamespace(MCGTest):
     @pytest.mark.polarion_id("OCS-2293")
     @tier4
     @tier4a
-    @skipif_ocs_version(">4.6")
     def test_namespace_bucket_creation_with_many_resources_rpc(
         self, ns_resource_factory, bucket_factory
     ):
@@ -519,7 +506,6 @@ class TestNamespace(MCGTest):
     @pytest.mark.polarion_id("OCS-2325")
     @tier4
     @tier4a
-    @skipif_ocs_version(">4.6")
     def test_block_read_resource_in_namespace_bucket_rpc(
         self, mcg_obj, awscli_pod, ns_resource_factory, bucket_factory, cld_mgr
     ):

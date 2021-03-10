@@ -504,7 +504,6 @@ class TestNamespace(MCGTest):
     @pytest.mark.polarion_id("OCS-2293")
     @tier4
     @tier4a
-    @skipif_ocs_version(">4.6")
     def test_namespace_bucket_creation_with_many_resources_crd(
         self, namespace_store_factory, bucket_factory
     ):
