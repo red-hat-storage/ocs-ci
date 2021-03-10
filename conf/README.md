@@ -94,6 +94,9 @@ anywhere else.
 * `stage_index_image_tag` - Image tag to use for rh-osbs-operator deployment
 * `type` - Type of VMWare LSO deployment
 * `kms_deployment` - Deploy OCS with KMS (Default: false)
+* `create_ibm_cos_secret`: If this value is set to True (by default), the COS
+  secret is created. If False, it will not be created. Relevant only for IBM
+  Cloud deployment.
 
 #### REPORTING
 
