@@ -17,6 +17,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import (
     AWS as AWSUtil,
+    create_and_attach_volume_for_all_workers,
     delete_cluster_buckets,
     destroy_volumes,
     get_rhel_worker_instances,
@@ -189,6 +190,9 @@ class AWSIPI(AWSBase):
                 machine.wait_for_new_node_to_be_ready(node)
         if config.DEPLOYMENT.get("host_network"):
             self.host_network_update()
+        lso_type = config.DEPLOYMENT.get("type")
+        if lso_type == constants.AWS_EBS:
+            create_and_attach_volume_for_all_workers()
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -372,6 +376,10 @@ class AWSUPI(AWSBase):
 
         if config.ENV_DATA.get("rhel_workers"):
             self.add_rhel_workers()
+
+        lso_type = config.DEPLOYMENT.get("type")
+        if lso_type == constants.AWS_EBS:
+            create_and_attach_volume_for_all_workers()
 
     def gather_worker_data(self, suffix="no0"):
         """
