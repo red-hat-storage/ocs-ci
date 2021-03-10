@@ -46,6 +46,7 @@ from ocs_ci.utility.utils import (
 )
 
 logger = logging.getLogger(__name__)
+DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
 
 
 def create_unique_resource_name(resource_description, resource_type):
@@ -1194,7 +1195,6 @@ def get_snapshot_time(interface, snap_name, status):
         return None
 
     logs = ""
-    format = "%Y I%m%d %H:%M:%S.%f"
 
     # the starting and ending time are taken from different logs,
     # the start creation time is taken from the snapshot controller, while
@@ -1233,7 +1233,7 @@ def get_snapshot_time(interface, snap_name, status):
         elif status.lower() == "start":
             stat = all_stats[0]  # return the lowest time
     if stat:
-        return datetime.datetime.strptime(stat, format)
+        return datetime.datetime.strptime(stat, DATE_TIME_FORMAT)
     else:
         return None
 
@@ -1277,7 +1277,6 @@ def get_provision_time(interface, pvc_name, status="start"):
     if status.lower() == "end":
         operation = "succeeded"
 
-    format = "%Y I%m%d %H:%M:%S.%f"
     this_year = str(datetime.datetime.now().year)
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
@@ -1305,7 +1304,7 @@ def get_provision_time(interface, pvc_name, status="start"):
             stat = all_stats[-1]  # return the highest time
         elif status.lower() == "start":
             stat = all_stats[0]  # return the lowest time
-    return datetime.datetime.strptime(stat, format)
+    return datetime.datetime.strptime(stat, DATE_TIME_FORMAT)
 
 
 def get_start_creation_time(interface, pvc_name):
@@ -1320,7 +1319,6 @@ def get_start_creation_time(interface, pvc_name):
         datetime object: Start time of PVC creation
 
     """
-    format = "%Y I%m%d %H:%M:%S.%f"
     this_year = str(datetime.datetime.now().year)
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
@@ -1333,7 +1331,7 @@ def get_start_creation_time(interface, pvc_name):
     start = [i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)]
     mon_day = " ".join(start[0].split(" ")[0:2])
     start = f"{this_year} {mon_day}"
-    return datetime.datetime.strptime(start, format)
+    return datetime.datetime.strptime(start, DATE_TIME_FORMAT)
 
 
 def get_end_creation_time(interface, pvc_name):
@@ -1348,7 +1346,6 @@ def get_end_creation_time(interface, pvc_name):
         datetime object: End time of PVC creation
 
     """
-    format = "%Y I%m%d %H:%M:%S.%f"
     this_year = str(datetime.datetime.now().year)
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
@@ -1362,7 +1359,7 @@ def get_end_creation_time(interface, pvc_name):
     # End provisioning string may appear in logs several times, take here the latest one
     mon_day = " ".join(end[-1].split(" ")[0:2])
     end = f"{this_year} {mon_day}"
-    return datetime.datetime.strptime(end, format)
+    return datetime.datetime.strptime(end, DATE_TIME_FORMAT)
 
 
 def measure_pvc_creation_time(interface, pvc_name):
@@ -1432,19 +1429,18 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
             break
 
     pvc_dict = dict()
-    format = "%Y I%m%d %H:%M:%S.%f"
     this_year = str(datetime.datetime.now().year)
     for pvc_name in pvc_name_list:
         # Extract the starting time for the PVC provisioning
         start = [i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)]
         mon_day = " ".join(start[0].split(" ")[0:2])
         start = f"{this_year} {mon_day}"
-        start_time = datetime.datetime.strptime(start, format)
+        start_time = datetime.datetime.strptime(start, DATE_TIME_FORMAT)
         # Extract the end time for the PVC provisioning
         end = [i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)]
         mon_day = " ".join(end[0].split(" ")[0:2])
         end = f"{this_year} {mon_day}"
-        end_time = datetime.datetime.strptime(end, format)
+        end_time = datetime.datetime.strptime(end, DATE_TIME_FORMAT)
         total = end_time - start_time
         pvc_dict[pvc_name] = total.total_seconds()
 
@@ -1502,19 +1498,18 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
             break
 
     pv_dict = dict()
-    format = "%Y I%m%d %H:%M:%S.%f"
     this_year = str(datetime.datetime.now().year)
     for pv_name in pv_name_list:
         # Extract the deletion start time for the PV
         start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
         mon_day = " ".join(start[0].split(" ")[0:2])
         start = f"{this_year} {mon_day}"
-        start_time = datetime.datetime.strptime(start, format)
+        start_time = datetime.datetime.strptime(start, DATE_TIME_FORMAT)
         # Extract the deletion end time for the PV
         end = [i for i in logs if re.search(f'delete "{pv_name}": succeeded', i)]
         mon_day = " ".join(end[0].split(" ")[0:2])
         end_tm = f"{this_year} {mon_day}"
-        end_time = datetime.datetime.strptime(end_tm, format)
+        end_time = datetime.datetime.strptime(end_tm, DATE_TIME_FORMAT)
         total = end_time - start_time
         pv_dict[pv_name] = total.total_seconds()
 
@@ -1533,7 +1528,6 @@ def get_start_deletion_time(interface, pv_name):
         datetime object: Start time of PVC deletion
 
     """
-    format = "%Y I%m%d %H:%M:%S.%f"
     this_year = str(datetime.datetime.now().year)
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
@@ -1546,7 +1540,7 @@ def get_start_deletion_time(interface, pv_name):
     start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
     mon_day = " ".join(start[0].split(" ")[0:2])
     start = f"{this_year} {mon_day}"
-    return datetime.datetime.strptime(start, format)
+    return datetime.datetime.strptime(start, DATE_TIME_FORMAT)
 
 
 def get_end_deletion_time(interface, pv_name):
@@ -1561,7 +1555,6 @@ def get_end_deletion_time(interface, pv_name):
         datetime object: End time of PVC deletion
 
     """
-    format = "%Y I%m%d %H:%M:%S.%f"
     this_year = str(datetime.datetime.now().year)
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
@@ -1574,7 +1567,7 @@ def get_end_deletion_time(interface, pv_name):
     end = [i for i in logs if re.search(f'delete "{pv_name}": succeeded', i)]
     mon_day = " ".join(end[0].split(" ")[0:2])
     end = f"{this_year} {mon_day}"
-    return datetime.datetime.strptime(end, format)
+    return datetime.datetime.strptime(end, DATE_TIME_FORMAT)
 
 
 def measure_pvc_deletion_time(interface, pv_name):
