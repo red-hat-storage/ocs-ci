@@ -556,6 +556,7 @@ LABEL disk0
                 f"-H {self.mgmt_details[machine]['mgmt_console']} chassis bootdev pxe"
             )
             run_cmd(cmd=cmd, secrets=secrets)
+            logger.info("Sleeping for 2 Sec to make sure bootdev pxe is set properly using ipmitool cmd")
             sleep(2)
             # Power On Machine
             cmd = (
