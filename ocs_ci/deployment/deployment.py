@@ -183,41 +183,68 @@ class Deployment(object):
         Label and taint worker nodes to be used by OCS operator
         """
 
+        arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
+
         nodes = ocp.OCP(kind="node").get().get("items", [])
+        zone_label = self.get_zone_label()
+
         worker_nodes = [
             node
             for node in nodes
-            if "node-role.kubernetes.io/worker" in node["metadata"]["labels"]
+            if constants.WORKER_LABEL in node["metadata"]["labels"]
         ]
         if not worker_nodes:
             raise UnavailableResourceException("No worker node found!")
         az_worker_nodes = {}
         for node in worker_nodes:
-            az = node["metadata"]["labels"].get(
-                "failure-domain.beta.kubernetes.io/zone"
-            )
+            az = node["metadata"]["labels"].get(zone_label)
             az_node_list = az_worker_nodes.get(az, [])
-            az_node_list.append(node)
+            az_node_list.append(node["metadata"]["name"])
             az_worker_nodes[az] = az_node_list
         logger.debug(f"Found the worker nodes in AZ: {az_worker_nodes}")
+
         distributed_worker_nodes = []
-        while az_worker_nodes:
+        if arbiter_deployment and config.DEPLOYMENT.get("arbiter_autodetect"):
             for az in list(az_worker_nodes.keys()):
                 az_node_list = az_worker_nodes.get(az)
-                if az_node_list:
-                    node_name = az_node_list.pop(0)["metadata"]["name"]
-                    distributed_worker_nodes.append(node_name)
+                if az_node_list and len(az_node_list) > 1:
+                    node_names = az_node_list[:2]
+                    distributed_worker_nodes += node_names
+        elif arbiter_deployment and not config.DEPLOYMENT.get("arbiter_autodetect"):
+            for az in list(config.DEPLOYMENT.get("worker_zones")):
+                az_node_list = az_worker_nodes.get(az)
+                if az_node_list and len(az_node_list) > 1:
+                    node_names = az_node_list[:2]
+                    distributed_worker_nodes += node_names
                 else:
-                    del az_worker_nodes[az]
+                    raise UnavailableResourceException(
+                        "Atleast 2 worker nodes required for arbiter cluster in zone %s",
+                        az,
+                    )
+        else:
+            while az_worker_nodes:
+                for az in list(az_worker_nodes.keys()):
+                    az_node_list = az_worker_nodes.get(az)
+                    if az_node_list:
+                        node_name = az_node_list.pop(0)
+                        distributed_worker_nodes.append(node_name)
+                    else:
+                        del az_worker_nodes[az]
         logger.info(f"Distributed worker nodes for AZ: {distributed_worker_nodes}")
-        to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 3)
+
+        if arbiter_deployment:
+            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
+        else:
+            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 3)
+
         to_taint = config.DEPLOYMENT.get("ocs_operator_nodes_to_taint", 0)
-        worker_count = len(worker_nodes)
-        if worker_count < to_label or worker_count < to_taint:
+
+        distributed_worker_count = len(distributed_worker_nodes)
+        if distributed_worker_count < to_label or distributed_worker_count < to_taint:
             logger.info(f"All nodes: {nodes}")
-            logger.info(f"Worker nodes: {worker_nodes}")
+            logger.info(f"Distributed worker nodes: {distributed_worker_nodes}")
             raise UnavailableResourceException(
-                f"Not enough worker nodes: {worker_count} to label: "
+                f"Not enough distributed worker nodes: {distributed_worker_count} to label: "
                 f"{to_label} or taint: {to_taint}!"
             )
 
@@ -378,6 +405,52 @@ class Deployment(object):
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
 
+    def get_zone_label(self):
+        nodes = ocp.OCP(kind="node").get().get("items", [])
+
+        # Check which zone label is present
+        return (
+            constants.ZONE_LABEL
+            if nodes[0]["metadata"]["labels"].get(constants.ZONE_LABEL, False)
+            else constants.ZONE_LABEL_NEW
+        )
+
+    def get_arbiter_location(self):
+        """
+        Get arbiter mon location for storage cluster
+        """
+        if config.DEPLOYMENT.get("arbiter_deployment") and not config.DEPLOYMENT.get(
+            "arbiter_autodetect"
+        ):
+            return config.DEPLOYMENT.get("arbiter_zone")
+
+        # below logic will autodetect arbiter_zone
+        nodes = ocp.OCP(kind="node").get().get("items", [])
+
+        zone_label = self.get_zone_label()
+
+        worker_nodes_zones = {
+            node["metadata"]["labels"].get(zone_label)
+            for node in nodes
+            if constants.WORKER_LABEL in node["metadata"]["labels"]
+            and str(constants.OPERATOR_NODE_LABEL)[:-3] in node["metadata"]["labels"]
+        }
+
+        master_nodes_zones = {
+            node["metadata"]["labels"].get(zone_label)
+            for node in nodes
+            if constants.MASTER_LABEL in node["metadata"]["labels"]
+        }
+
+        arbiter_locations = list(master_nodes_zones - worker_nodes_zones)
+
+        if len(arbiter_locations) < 1:
+            raise UnavailableResourceException(
+                "Atleast 1 different zone required than storage nodes in master nodes to host arbiter mon"
+            )
+
+        return arbiter_locations[0]
+
     def deploy_ocs_via_operator(self, image=None):
         """
         Method for deploy OCS via OCS operator
@@ -388,6 +461,7 @@ class Deployment(object):
         """
         ui_deployment = config.DEPLOYMENT.get("ui_deployment")
         live_deployment = config.DEPLOYMENT.get("live_deployment")
+        arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 
         if ui_deployment:
             self.deployment_with_ui()
@@ -492,6 +566,17 @@ class Deployment(object):
             cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
 
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
+
+        if arbiter_deployment:
+            cluster_data["spec"]["arbiter"] = {}
+            cluster_data["spec"]["nodeTopologies"] = {}
+            cluster_data["spec"]["arbiter"]["enable"] = True
+            cluster_data["spec"]["nodeTopologies"][
+                "arbiterLocation"
+            ] = self.get_arbiter_location()
+            cluster_data["spec"]["storageDeviceSets"][0][
+                "replica"
+            ] = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
 
         if self.platform == constants.IBM_POWER_PLATFORM:
             numberofstoragenodes = config.ENV_DATA["number_of_storage_nodes"]
