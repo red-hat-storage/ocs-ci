@@ -76,13 +76,13 @@ class TestPVCCreationPerformance(E2ETest):
         # Create a pod on one node
         logging.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_one}")
 
-        helpers.pull_images("nginx")
+        helpers.pull_images("quay.io/ocsci/perf:latest")
         pod_obj1 = helpers.create_pod(
             interface_type=self.interface,
             pvc_name=pvc_obj.name,
             namespace=pvc_obj.namespace,
             node_name=node_one,
-            pod_dict_path=constants.NGINX_POD_YAML,
+            pod_dict_path=constants.PERF_POD_YAML,
         )
 
         # Confirm that pod is running on the selected_nodes
@@ -92,19 +92,14 @@ class TestPVCCreationPerformance(E2ETest):
         )
 
         pod_name = pod_obj1.name
-        pod_path = "/var/lib/www/html"
+        pod_path = "/mnt"
 
         _ocp = OCP(namespace=pvc_obj.namespace)
-
-        rsh_cmd = f"exec {pod_name} -- apt-get update"
-        _ocp.exec_oc_cmd(rsh_cmd)
-        rsh_cmd = f"exec {pod_name} -- apt-get install -y rsync"
-        _ocp.exec_oc_cmd(rsh_cmd, ignore_error=True, out_yaml_format=False)
 
         rsh_cmd = f"rsync {dir_path} {pod_name}:{pod_path}"
         _ocp.exec_oc_cmd(rsh_cmd)
 
-        rsh_cmd = f"exec {pod_name} -- tar xvf {pod_path}/tmp/file.gz -C /var/lib/www/html/tmp"
+        rsh_cmd = f"exec {pod_name} -- tar xvf {pod_path}/tmp/file.gz -C {pod_path}/tmp"
         _ocp.exec_oc_cmd(rsh_cmd)
 
         for x in range(copies):
@@ -115,6 +110,10 @@ class TestPVCCreationPerformance(E2ETest):
             rsh_cmd = f"exec {pod_name} -- sync"
             _ocp.exec_oc_cmd(rsh_cmd)
 
+        log.info("Getting the amount of data written to the PVC")
+        rsh_cmd = f"exec {pod_name} -- df -h {pod_path}"
+        data_written = _ocp.exec_oc_cmd(rsh_cmd).split()[-4]
+        log.info(f"The Amount of data that was written to the pod is {data_written}")
         rsh_cmd = f"delete pod {pod_name}"
         _ocp.exec_oc_cmd(rsh_cmd)
 
@@ -125,7 +124,7 @@ class TestPVCCreationPerformance(E2ETest):
             pvc_name=pvc_obj.name,
             namespace=pvc_obj.namespace,
             node_name=node_two,
-            pod_dict_path=constants.NGINX_POD_YAML,
+            pod_dict_path=constants.PERF_POD_YAML,
         )
 
         start_time = time.time()
@@ -138,7 +137,7 @@ class TestPVCCreationPerformance(E2ETest):
         total_time = end_time - start_time
         if total_time > 60:
             raise ex.PerformanceException(
-                f"Pod creation time is {total_time} and " f"greater than 60 seconds"
+                f"Pod creation time is {total_time} and greater than 60 seconds"
             )
         logging.info(f"Pod {pod_name} creation time took {total_time} seconds")
 
