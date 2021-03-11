@@ -262,6 +262,8 @@ def ocs_install_verification(
     )
     log.info("Verified node and provisioner secret names in storage class.")
 
+    ct_pod = get_ceph_tools_pod()
+
     # https://github.com/red-hat-storage/ocs-ci/issues/3820
     # Verify ceph osd tree output
     if not (
@@ -282,7 +284,6 @@ def ocs_install_verification(
         else:
             deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
 
-        ct_pod = get_ceph_tools_pod()
         osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree", format="json")
         schemas = {
             "root": constants.OSD_TREE_ROOT,
