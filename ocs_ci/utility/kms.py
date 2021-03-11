@@ -18,9 +18,8 @@ from ocs_ci.ocs.exceptions import (
     VaultDeploymentError,
     VaultOperationError,
     KMSNotSupported,
-    KMSConnectionDetailsError,
-    KMSTokenError,
     KMSResourceCleaneupError,
+    CommandFailed,
 )
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
@@ -130,7 +129,14 @@ class Vault(KMS):
             config.ENV_DATA, "VAULT_NAMESPACE", constants.VAULT_DEFAULT_NAMESPACE
         )
 
-        if not self.vault_namespace_exists(self.vault_namespace):
+        if (
+            not self.vault_namespace_exists(self.vault_namespace)
+            or self.vault_namespace == ""
+        ):
+            self.vault_namespace = (
+                f"{constants.VAULT_DEFAULT_NAMESPACE_PREFIX}-"
+                f"{get_running_cluster_id()}"
+            )
             self.create_namespace(self.vault_namespace)
         os.environ["VAULT_NAMESPACE"] = self.vault_namespace
 
@@ -147,7 +153,7 @@ class Vault(KMS):
         """
         cmd = f"vault namespace lookup {vault_namespace}"
         proc = subprocess.Popen(
-            shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
         out, err = proc.communicate()
         if proc.returncode:
@@ -163,7 +169,7 @@ class Vault(KMS):
             vault_namespace (str): name of the vault namespace
 
         Raises:
-            VaultOperationError exception
+            VaultOperationError: If namespace is not created successfully
 
         """
         cmd = f"vault namespace create {vault_namespace}"
@@ -375,7 +381,7 @@ class Vault(KMS):
         with open(vault_hcl.name, "w") as hcl:
             hcl.write(policy)
 
-        if not config.ENV_DATA.get("VAULT_POLICY"):
+        if not get_default_if_keyval_empty(config.ENV_DATA, "VAULT_POLICY", None):
             self.vault_policy_name = (
                 f"{constants.VAULT_DEFAULT_POLICY_PREFIX}-" f"{self.cluster_id}"
             )
@@ -454,12 +460,10 @@ class Vault(KMS):
 
         """
         if not self.vault_backend_path:
-            try:
-                self.vault_backend_path = self.get_vault_connection_info(
-                    "VAULT_BACKEND_PATH"
-                )
-            except IndexError:
-                raise KMSConnectionDetailsError("KMS connection details not available")
+            self.vault_backend_path = self.get_vault_connection_info(
+                "VAULT_BACKEND_PATH"
+            )
+            logger.info(f"setting vault_backend_path = {self.vault_backend_path}")
 
     def get_vault_path_token(self):
         """
@@ -485,24 +489,25 @@ class Vault(KMS):
                 resource_name=constants.VAULT_KMS_TOKEN_RESOURCE,
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             )
-            try:
-                token = vault_token.get().get("data")["token"]
-                self.vault_path_token = base64.b64decode(token).decode()
-            except IndexError:
-                raise KMSTokenError("Couldn't find KMS token")
+            token = vault_token.get().get("data")["token"]
+            self.vault_path_token = base64.b64decode(token).decode()
+            logger.info(f"Setting vault_path_token = {self.vault_path_token}")
 
     def get_vault_policy(self):
         """
         Get the policy name based on token from vault
 
         """
+        self.vault_policy_name = config.ENV_DATA.get("VAULT_POLICY", None)
         if not self.vault_policy_name:
             cmd = f"vault token lookup {self.vault_path_token}"
             out = subprocess.check_output(shlex.split(cmd))
             json_out = json.loads(out)
+            logger.info(json_out)
             for policy in json_out["data"]["policies"]:
                 if self.cluster_id in policy:
                     self.vault_policy_name = policy
+                    logger.info(f"setting vault_policy_name = {self.vault_policy_name}")
 
     def remove_vault_backend_path(self):
         """
@@ -544,7 +549,7 @@ class Vault(KMS):
         Cleanup the namespace
 
         Raises:
-            KMSResourceCleanupError exception
+            KMSResourceCleanupError: If namespace deletion fails
 
         """
         # Unset namespace from environment
@@ -563,15 +568,10 @@ class Vault(KMS):
         From kms connection details resource obtain
         namespace
 
-        Raises:
-            KMSConnectionDetailsError exception
-
         """
         if not self.vault_namespace:
-            try:
-                self.vault_namespace = self.get_vault_connection_info("VAULT_NAMESPACE")
-            except IndexError:
-                raise KMSConnectionDetailsError("KMS connection details not available")
+            self.vault_namespace = self.get_vault_connection_info("VAULT_NAMESPACE")
+            logger.info(f"Setting vault_namespace={self.vault_namespace}")
 
     def cleanup(self):
         """
@@ -582,19 +582,28 @@ class Vault(KMS):
             self.gather_init_vault_conf()
 
         self.update_vault_env_vars()
-        # We need to set vault namespace in the env
-        # so that path, policy and token are accessed
-        # within the namespace context
-        if config.ENV_DATA.get("user_vault_namespace"):
-            os.environ["VAULT_NAMESPACE"] = self.get_vault_namespace()
-        # get vault path
-        self.get_vault_backend_path()
-        # from token secret get token
-        self.get_vault_path_token()
-        # from token get policy
-        if not self.cluster_id:
-            self.cluster_id = get_running_cluster_id()
-        self.get_vault_policy()
+        try:
+            # We need to set vault namespace in the env
+            # so that path, policy and token are accessed
+            # within the namespace context
+            if config.ENV_DATA.get("use_vault_namespace"):
+                self.get_vault_namespace()
+                os.environ["VAULT_NAMESPACE"] = self.vault_namespace
+            # get vault path
+            self.get_vault_backend_path()
+            # from token secret get token
+            self.get_vault_path_token()
+            # from token get policy
+            if not self.cluster_id:
+                self.cluster_id = get_running_cluster_id()
+            self.get_vault_policy()
+        except (CommandFailed, IndexError):
+            logger.error(
+                "Error occured during kms resource info gathering,"
+                "skipping vault cleanup"
+            )
+            return
+
         # Delete the policy and backend path from vault
         # we need root token of vault in the env
         self.remove_vault_backend_path()
