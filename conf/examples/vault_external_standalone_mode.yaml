@@ -5,6 +5,7 @@ ENV_DATA:
   encryption_at_rest: true
   vault_deploy_mode: external
   # whether to use vault namespace or not
+  # applicable only for enterprise vault
   use_vault_namespace: false
   KMS_PROVIDER: vault
   KMS_SERVICE_NAME: vault
