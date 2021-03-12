@@ -1,5 +1,6 @@
 import logging
 import pytest
+from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
@@ -10,6 +11,7 @@ from ocs_ci.framework.testlib import (
     acceptance,
 )
 from ocs_ci.helpers import helpers
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -40,11 +42,11 @@ class TestRbdThickProvisioning(ManageTest):
     @pytest.mark.polarion_id("")
     def test_rbd_thick_provisioning(self, multi_pvc_factory, pod_factory):
         """
-        Tests to verify PVC creation and consumption using RBD thick provisioning enabled storage class
+        Test to verify PVC creation and consumption using RBD thick provisioning enabled storage class
 
         """
-        # Size will be added to the list once the bug https://bugzilla.redhat.com/show_bug.cgi?id=1936388 is fixed
-        pvc_sizes = [1]
+        # Dict represents the PVC size and size of the file used to consume the volume
+        pvc_and_file_sizes = {1: "900M", 5: "4G"}
 
         access_modes_rbd = [
             constants.ACCESS_MODE_RWO,
@@ -55,18 +57,19 @@ class TestRbdThickProvisioning(ManageTest):
         pvcs = []
 
         # Create PVCs
-        for pvc_size in pvc_sizes:
-            pvcs.extend(
-                multi_pvc_factory(
-                    interface=constants.CEPHBLOCKPOOL,
-                    storageclass=self.sc_obj,
-                    size=pvc_size,
-                    access_modes=access_modes_rbd,
-                    status=constants.STATUS_BOUND,
-                    num_of_pvc=3,
-                    timeout=120,
-                )
+        for pvc_size in pvc_and_file_sizes.keys():
+            pvc_objs = multi_pvc_factory(
+                interface=constants.CEPHBLOCKPOOL,
+                storageclass=self.sc_obj,
+                size=pvc_size,
+                access_modes=access_modes_rbd,
+                status=constants.STATUS_BOUND,
+                num_of_pvc=3,
+                timeout=120,
             )
+            for pvc_obj in pvc_objs:
+                pvc_obj.io_file_size = pvc_and_file_sizes[pvc_size]
+            pvcs.extend(pvc_objs)
 
         # Create pods
         pods = helpers.create_pods(
@@ -76,6 +79,28 @@ class TestRbdThickProvisioning(ManageTest):
             status=constants.STATUS_RUNNING,
         )
 
+        executor = ThreadPoolExecutor(max_workers=len(pods))
+
+        # Do setup for running IO on pods
+        log.info("Setting up pods to running IO")
+        for pod_obj in pods:
+            if pod_obj.pvc.volume_mode == "Block":
+                storage_type = "block"
+            else:
+                storage_type = "fs"
+            executor.submit(pod_obj.workload_setup, storage_type=storage_type)
+
+        # Wait for setup on pods to complete
+        for pod_obj in pods:
+            log.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
+            for sample in TimeoutSampler(180, 2, getattr, pod_obj, "wl_setup_done"):
+                if sample:
+                    log.info(
+                        f"Setup for running IO is completed on pod " f"{pod_obj.name}."
+                    )
+                    break
+        log.info("Setup for running IO is completed on pods")
+
         # Start IO
         for pod_obj in pods:
             storage_type = (
@@ -84,8 +109,8 @@ class TestRbdThickProvisioning(ManageTest):
             log.info(f"Starting IO on pod {pod_obj.name}.")
             pod_obj.run_io(
                 storage_type=storage_type,
-                size="500M",
-                runtime=20,
+                size=pod_obj.pvc.io_file_size,
+                runtime=30,
             )
             log.info(f"IO started on pod {pod_obj.name}.")
         log.info("IO started on pods.")
