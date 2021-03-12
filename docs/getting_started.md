@@ -181,6 +181,7 @@ To enable ocs-ci to use this token, add the following to your `auth.yaml`:
 quay:
   access_token: 'YOUR_TOKEN'
 ```
+
 #### GitHub
 
 For disconnected cluster installation, we need to access github api (during
