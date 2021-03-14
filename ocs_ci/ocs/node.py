@@ -1019,11 +1019,13 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
     log.info("ocs-osd-removal-job completed successfully")
 
-    expected_num_of_deleted_pvs = 1
+    expected_num_of_deleted_pvs = [0, 1]
     num_of_deleted_pvs = delete_released_pvs_in_sc(sc_name)
-    assert (
-        num_of_deleted_pvs == expected_num_of_deleted_pvs
-    ), f"num of deleted PVs is {num_of_deleted_pvs} instead of {expected_num_of_deleted_pvs}"
+    assert num_of_deleted_pvs in expected_num_of_deleted_pvs, (
+        f"num of deleted PVs is {num_of_deleted_pvs} "
+        f"instead of the expected values {expected_num_of_deleted_pvs}"
+    )
+    log.info(f"num of deleted PVs is {num_of_deleted_pvs}")
     log.info("Successfully deleted old pv")
 
     is_deleted = pod.delete_osd_removal_job(osd_id)
