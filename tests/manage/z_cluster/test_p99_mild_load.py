@@ -8,15 +8,13 @@ import pytest
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import (
-    ignore_leftovers,
-    ManageTest,
-)
+from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier2
 from ocs_ci.ocs.cluster_load import ClusterLoad
 
 log = logging.getLogger(__name__)
 
 
+@tier2
 @ignore_leftovers
 class TestP99UnderMildLoad(ManageTest):
     @pytest.fixture()
