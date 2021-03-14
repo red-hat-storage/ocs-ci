@@ -24,7 +24,6 @@ GATHER_COMMANDS_CEPH = [
     "ceph_config_dump",
     "ceph_crash_stat",
     "ceph_device_ls",
-    "ceph_df",
     "ceph_fs_dump",
     "ceph_fs_ls",
     "ceph_fs_status",
@@ -75,7 +74,6 @@ GATHER_COMMANDS_JSON = [
     "ceph_crash_ls_--format_json-pretty",
     "ceph_crash_stat_--format_json-pretty",
     "ceph_device_ls_--format_json-pretty",
-    "ceph_df_--format_json-pretty",
     "ceph_fs_dump_--format_json-pretty",
     "ceph_fs_ls_--format_json-pretty",
     "ceph_fs_status_--format_json-pretty",
@@ -191,9 +189,12 @@ GATHER_COMMANDS_OPENSHIFT_DEDICATED_EXCLUDE_4_6 = [
 
 GATHER_COMMANDS_CEPH_4_5 = [
     "ceph_osd_blacklist_ls",
+    "ceph_df",
 ]
 
-GATHER_COMMANDS_JSON_4_5 = []
+GATHER_COMMANDS_JSON_4_5 = [
+    "ceph_df_--format_json-pretty",
+]
 
 GATHER_COMMANDS_OTHERS_4_5 = [
     "describe_nodes",
@@ -211,9 +212,13 @@ GATHER_COMMANDS_OTHERS_4_5 = [
     "get_subscription_-n_openshift-storage",
 ]
 
-GATHER_COMMANDS_CEPH_4_6 = []
+GATHER_COMMANDS_CEPH_4_6 = [
+    "ceph_df",
+]
 
-GATHER_COMMANDS_JSON_4_6 = []
+GATHER_COMMANDS_JSON_4_6 = [
+    "ceph_df_--format_json-pretty",
+]
 
 GATHER_COMMANDS_OTHERS_4_6 = [
     "volumesnapshotclass",
@@ -666,6 +671,15 @@ GATHER_COMMANDS_OTHERS_4_6 = [
     "whereabouts-cni.yaml",
 ]
 
+GATHER_COMMANDS_CEPH_4_7 = [
+    "ceph_df_detail",
+]
+
+GATHER_COMMANDS_JSON_4_7 = [
+    "ceph_df_detail--format_json-pretty",
+]
+
+
 GATHER_COMMANDS_OTHERS_EXTERNAL = GATHER_COMMANDS_OTHERS + [
     "ocs-external-storagecluster-ceph-rbd.yaml",
     "ocs-external-storagecluster-ceph-rgw.yaml",
@@ -732,8 +746,8 @@ GATHER_COMMANDS_VERSION = {
         "OTHERS_EXTERNAL": GATHER_COMMANDS_OTHERS_EXTERNAL_4_6,
     },
     4.7: {
-        "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_6,
-        "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_6,
+        "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
+        "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
         "OTHERS": GATHER_COMMANDS_OTHERS + GATHER_COMMANDS_OTHERS_4_6,
         "OTHERS_EXTERNAL": GATHER_COMMANDS_OTHERS_EXTERNAL_4_6,
     },
