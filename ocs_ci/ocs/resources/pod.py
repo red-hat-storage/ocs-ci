@@ -1692,7 +1692,7 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
                 return osd_removal_pod_name
 
     except TimeoutExpiredError:
-        logger.warning(f"Failed to get pod ocs-osd-removal-{osd_id}")
+        logger.warning(f"Failed to get pod by the pattern {pattern}")
         return None
 
 
