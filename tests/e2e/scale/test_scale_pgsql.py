@@ -24,6 +24,9 @@ def pgsql(request):
 @scale
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2239")
+@pytest.mark.skip(
+    reason="Skipped because of https://github.com/red-hat-storage/ocs-ci/issues/3983"
+)
 class TestPgsqlPodScale(E2ETest):
     """
     Scale test case using PGSQL Pods
