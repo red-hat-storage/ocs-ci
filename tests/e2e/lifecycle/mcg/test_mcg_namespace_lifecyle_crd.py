@@ -57,8 +57,8 @@ def setup_base_objects(awscli_pod, amount=2):
 
 @skipif_openshift_dedicated
 @skipif_aws_creds_are_missing
-@skipif_ocs_version("<4.6")
-class TestMcgNamespaceLifecycle(E2ETest):
+@skipif_ocs_version("<4.7")
+class TestMcgNamespaceLifecycleCrd(E2ETest):
     """
     Test MCG namespace resource/bucket lifecycle
 
@@ -66,14 +66,28 @@ class TestMcgNamespaceLifecycle(E2ETest):
 
     @pytest.mark.polarion_id("OCS-2298")
     @tier2
-    def test_mcg_namespace_lifecycle(
-        self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory
+    @pytest.mark.parametrize(
+        argnames=["bucketclass_dict"],
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                }
+            ),
+        ],
+    )
+    def test_mcg_namespace_lifecycle_crd(
+        self, mcg_obj, cld_mgr, awscli_pod, bucket_factory, bucketclass_dict
     ):
         """
-        Test MCG namespace resource/bucket lifecycle
+        Test MCG namespace resource/bucket lifecycle using CRDs
 
-        1. Create namespace resources.
-        2. Create namespace bucket
+        1. Create namespace resources with CRDs
+        2. Create namespace bucket with CRDs
         3. Set bucket policy on namespace bucket with a S3 user principal
         4. Verify bucket policy.
         5. Read/write directly on namespace resource target.
@@ -81,6 +95,7 @@ class TestMcgNamespaceLifecycle(E2ETest):
         7. Delete namespace resource and bucket
 
         """
+        logger.info(bucketclass_dict)
         data = "Sample string content to write to a S3 object"
         object_key = "ObjKey-" + str(uuid.uuid4().hex)
 
@@ -95,63 +110,58 @@ class TestMcgNamespaceLifecycle(E2ETest):
         user_name = "noobaa-user" + str(uuid.uuid4().hex)
         email = user_name + "@mail.com"
 
-        # Create the namespace resource and verify health
-        aws_res = ns_resource_factory()
-
-        # Create the namespace bucket on top of the namespace resources
+        # Create the namespace resource and bucket
         ns_bucket = bucket_factory(
             amount=1,
-            interface="mcg-namespace",
-            write_ns_resource=aws_res[1],
-            read_ns_resources=[aws_res[1]],
-        )[0].name
-        logger.info(f"Namespace bucket: {ns_bucket} created")
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0]
+        aws_target_bucket = ns_bucket.bucketclass.namespacestores[0].uls_name
+        logger.info(f"Namespace bucket: {ns_bucket.name} created")
 
         # Noobaa S3 account
-        user = NoobaaAccount(mcg_obj, name=user_name, email=email, buckets=[ns_bucket])
-        logger.info(f"Noobaa account: {user.email_id} with S3 access created")
-
-        actions = (
-            ["PutObject", "GetObject"]
-            if float(config.ENV_DATA["ocs_version"]) <= 4.6
-            else ["DeleteObject"]
+        user = NoobaaAccount(
+            mcg_obj, name=user_name, email=email, buckets=[ns_bucket.name]
         )
-        effect = "Allow" if float(config.ENV_DATA["ocs_version"]) <= 4.6 else "Deny"
+        logger.info(f"Noobaa account: {user.email_id} with S3 access created")
 
         bucket_policy_generated = gen_bucket_policy(
             user_list=[user.email_id],
-            actions_list=actions,
-            effect=effect,
-            resources_list=[f'{ns_bucket}/{"*"}'],
+            actions_list=["DeleteObject"],
+            effect="Deny",
+            resources_list=[f'{ns_bucket.name}/{"*"}'],
         )
         bucket_policy = json.dumps(bucket_policy_generated)
-
         logger.info(
-            f"Creating bucket policy on bucket: {ns_bucket} with wildcard (*) Principal"
+            f"Creating bucket policy on bucket: {ns_bucket.name} with wildcard (*) Principal"
         )
-        put_policy = put_bucket_policy(mcg_obj, ns_bucket, bucket_policy)
+        put_policy = put_bucket_policy(mcg_obj, ns_bucket.name, bucket_policy)
         logger.info(f"Put bucket policy response from Admin: {put_policy}")
 
         # Getting Policy
-        logger.info(f"Getting bucket policy on bucket: {ns_bucket}")
-        get_policy = get_bucket_policy(mcg_obj, ns_bucket)
+        logger.info(f"Getting bucket policy on bucket: {ns_bucket.name}")
+        get_policy = get_bucket_policy(mcg_obj, ns_bucket.name)
         logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # MCG admin writes an object to bucket
-        logger.info(f"Writing object on bucket: {ns_bucket} by admin")
-        assert s3_put_object(mcg_obj, ns_bucket, object_key, data), "Failed: PutObject"
+        logger.info(f"Writing object on bucket: {ns_bucket.name} by admin")
+        assert s3_put_object(
+            mcg_obj, ns_bucket.name, object_key, data
+        ), "Failed: PutObject"
 
         # Verifying whether Get & Put object is allowed to S3 user
         logger.info(
-            f"Get object action on namespace bucket: {ns_bucket}"
+            f"Get object action on namespace bucket: {ns_bucket.name}"
             f" with user: {user.email_id}"
         )
-        assert s3_get_object(user, ns_bucket, object_key), "Failed: GetObject"
+        assert s3_get_object(user, ns_bucket.name, object_key), "Failed: GetObject"
         logger.info(
-            f"Put object action on namespace bucket: {ns_bucket}"
+            f"Put object action on namespace bucket: {ns_bucket.name}"
             f" with user: {user.email_id}"
         )
-        assert s3_put_object(user, ns_bucket, object_key, data), "Failed: PutObject"
+        assert s3_put_object(
+            user, ns_bucket.name, object_key, data
+        ), "Failed: PutObject"
 
         # Verifying whether Delete object action is denied
         logger.info(
@@ -159,7 +169,7 @@ class TestMcgNamespaceLifecycle(E2ETest):
             f"is denied to Delete object after updating policy"
         )
         try:
-            s3_delete_object(user, ns_bucket, object_key)
+            s3_delete_object(user, ns_bucket.name, object_key)
         except boto3exception.ClientError as e:
             logger.info(e.response)
             response = HttpResponseParser(e.response)
@@ -179,49 +189,53 @@ class TestMcgNamespaceLifecycle(E2ETest):
         setup_base_objects(awscli_pod, amount=3)
 
         # Upload files directly to NS resources
-        logger.info(f"Uploading objects directly to ns resource target: {aws_res[0]}")
+        logger.info(
+            f"Uploading objects directly to ns resource target: {aws_target_bucket}"
+        )
         sync_object_directory(
             awscli_pod,
             src=MCG_NS_ORIGINAL_DIR,
-            target=f"s3://{aws_res[0]}",
+            target=f"s3://{aws_target_bucket}",
             signed_request_creds=aws_s3_creds,
         )
 
         # Read files directly from NS resources
         logger.info(
-            f"Downloading objects directly from ns resource target: {aws_res[0]}"
+            f"Downloading objects directly from ns resource target: {aws_target_bucket}"
         )
         sync_object_directory(
             awscli_pod,
-            src=f"s3://{aws_res[0]}",
+            src=f"s3://{aws_target_bucket}",
             target=MCG_NS_RESULT_DIR,
             signed_request_creds=aws_s3_creds,
         )
 
         # Edit namespace bucket
-        logger.info(f"Editing the namespace resource bucket: {ns_bucket}")
+        logger.info(f"Editing the namespace resource bucket: {ns_bucket.name}")
         namespace_bucket_update(
             mcg_obj,
-            bucket_name=ns_bucket,
-            read_resource=[aws_res[1]],
-            write_resource=aws_res[1],
+            bucket_name=ns_bucket.name,
+            read_resource=[aws_target_bucket],
+            write_resource=aws_target_bucket,
         )
 
         # Verify Download after editing bucket
-        logger.info(f"Downloading objects directly from ns bucket target: {ns_bucket}")
+        logger.info(
+            f"Downloading objects directly from ns bucket target: {ns_bucket.name}"
+        )
         sync_object_directory(
             awscli_pod,
-            src=f"s3://{ns_bucket}",
+            src=f"s3://{ns_bucket.name}",
             target=MCG_NS_RESULT_DIR,
             s3_obj=mcg_obj,
         )
 
         # MCG namespace bucket delete
-        logger.info(f"Deleting all objects on namespace resource bucket: {ns_bucket}")
-        rm_object_recursive(awscli_pod, ns_bucket, mcg_obj)
+        logger.info(
+            f"Deleting all objects on namespace resource bucket: {ns_bucket.name}"
+        )
+        rm_object_recursive(awscli_pod, ns_bucket.name, mcg_obj)
 
         # Namespace resource delete
-        logger.info(f"Deleting the resource: {aws_res[1]}")
-        mcg_obj.delete_ns_resource(ns_resource_name=aws_res[1])
-
-        # TODO: Add support for RGW, Azure & COS res. Currently all ops(create/edit) are done on AWS res only.
+        logger.info(f"Deleting the resource: {aws_target_bucket}")
+        mcg_obj.delete_ns_resource(ns_resource_name=aws_target_bucket)

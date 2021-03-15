@@ -41,8 +41,8 @@ MCG_NS_ORIGINAL_DIR = "/original"
 
 
 @skipif_aws_creds_are_missing
-@skipif_ocs_version("<4.6")
-class TestMcgNamespaceDisruptions(E2ETest):
+@skipif_ocs_version("<4.7")
+class TestMcgNamespaceDisruptionsCrd(E2ETest):
     """
     Test MCG namespace disruption flow
 
@@ -54,22 +54,36 @@ class TestMcgNamespaceDisruptions(E2ETest):
         "noobaa_operator": constants.NOOBAA_OPERATOR_POD_LABEL,
     }
 
+    @pytest.mark.parametrize(
+        argnames=["bucketclass_dict"],
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                }
+            ),
+        ],
+    )
     @pytest.mark.polarion_id("OCS-2297")
     @flowtests
-    def test_mcg_namespace_disruptions(
+    def test_mcg_namespace_disruptions_crd(
         self,
         mcg_obj,
         cld_mgr,
         awscli_pod,
-        ns_resource_factory,
+        bucketclass_dict,
         bucket_factory,
         node_drain_teardown,
     ):
         """
         Test MCG namespace disruption flow
 
-        1. Create NS resources
-        2. Create NS bucket
+        1. Create NS resources with CRDs
+        2. Create NS bucket with CRDs
         3. Upload to NS bucket
         4. Delete noobaa related pods and verify integrity of objects
         5. Create public access policy on NS bucket and verify Get op
@@ -97,15 +111,15 @@ class TestMcgNamespaceDisruptions(E2ETest):
         setup_base_objects(awscli_pod, MCG_NS_ORIGINAL_DIR, MCG_NS_RESULT_DIR, amount=3)
 
         # Create the namespace resource and verify health
-        aws_res = ns_resource_factory()
-
-        # Create the namespace bucket on top of the namespace resources
-        ns_bucket = bucket_factory(
+        ns_buc = bucket_factory(
             amount=1,
-            interface="mcg-namespace",
-            write_ns_resource=aws_res[1],
-            read_ns_resources=[aws_res[1]],
-        )[0].name
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0]
+        ns_bucket = ns_buc.name
+
+        aws_target_bucket = ns_buc.bucketclass.namespacestores[0].uls_name
+
         logger.info(f"Namespace bucket: {ns_bucket} created")
 
         logger.info(f"Uploading objects to ns bucket: {ns_bucket}")
@@ -187,11 +201,13 @@ class TestMcgNamespaceDisruptions(E2ETest):
         assert s3_get_object(user, ns_bucket, object_key), "Failed: GetObject"
 
         # Upload files to NS target
-        logger.info(f"Uploading objects directly to ns resource target: {aws_res[0]}")
+        logger.info(
+            f"Uploading objects directly to ns resource target: {aws_target_bucket}"
+        )
         sync_object_directory(
             awscli_pod,
             src=MCG_NS_ORIGINAL_DIR,
-            target=f"s3://{aws_res[0]}",
+            target=f"s3://{aws_target_bucket}",
             signed_request_creds=aws_s3_creds,
         )
 
@@ -256,8 +272,8 @@ class TestMcgNamespaceDisruptions(E2ETest):
         namespace_bucket_update(
             mcg_obj,
             bucket_name=ns_bucket,
-            read_resource=[aws_res[1]],
-            write_resource=aws_res[1],
+            read_resource=[aws_target_bucket],
+            write_resource=aws_target_bucket,
         )
 
         logger.info(f"Verifying object download after edit on ns bucket: {ns_bucket}")
