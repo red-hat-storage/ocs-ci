@@ -3121,7 +3121,9 @@ def skipif_no_kms():
     log.info("Checking if StorageCluster has configured KMS encryption")
     try:
         resource = cluster.get()["items"][0]
-        encryption = resource.get("spec").get("encryption").get("kms").get("enable")
+        encryption = (
+            resource.get("spec").get("encryption", {}).get("kms", {}).get("enable")
+        )
     except KeyError:
         log.warning("Cluster is not yet installed. Skipping skipif_no_kms check.")
         # Set encryption to True so that the test is not skipped
