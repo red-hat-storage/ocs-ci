@@ -88,6 +88,7 @@ from ocs_ci.utility.utils import (
     ocsci_log_path,
     skipif_ocp_version,
     skipif_ocs_version,
+    skipif_no_kms,
     TimeoutSampler,
     skipif_upgraded_from,
     update_container_with_mirrored_image,
@@ -126,7 +127,7 @@ def pytest_logger_config(logger_config):
 def pytest_collection_modifyitems(session, items):
     """
     A pytest hook to filter out skipped tests satisfying
-    skipif_ocs_version or skipif_upgraded_from
+    skipif_ocs_version, skipif_upgraded_from or skipif_no_kms
 
     Args:
         session: pytest session
@@ -143,6 +144,7 @@ def pytest_collection_modifyitems(session, items):
             skipif_upgraded_from_marker = item.get_closest_marker(
                 "skipif_upgraded_from"
             )
+            skipif_no_kms_marker = item.get_closest_marker("skipif_no_kms")
             if skipif_ocp_version_marker:
                 skip_condition = skipif_ocp_version_marker.args
                 # skip_condition will be a tuple
@@ -167,6 +169,13 @@ def pytest_collection_modifyitems(session, items):
                     log.info(
                         f"Test: {item} will be skipped because the OCS cluster is"
                         f" upgraded from one of these versions: {skip_args[0]}"
+                    )
+                    items.remove(item)
+            if skipif_no_kms_marker:
+                if skipif_no_kms():
+                    log.info(
+                        f"Test: {item} will be skipped because the OCS cluster"
+                        f" has not configured cluster-wide encryption with KMS"
                     )
                     items.remove(item)
 
