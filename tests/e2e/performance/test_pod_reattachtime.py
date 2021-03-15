@@ -76,7 +76,7 @@ class TestPVCCreationPerformance(E2ETest):
         # Create a pod on one node
         logging.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_one}")
 
-        helpers.pull_images("quay.io/ocsci/perf:latest")
+        helpers.pull_images(constants.PERF_IMAGE)
         pod_obj1 = helpers.create_pod(
             interface_type=self.interface,
             pvc_name=pvc_obj.name,

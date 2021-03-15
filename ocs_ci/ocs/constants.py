@@ -1235,3 +1235,5 @@ MAX_NB_ENDPOINT_COUNT = 2
 
 OCS_TAINT = "node.ocs.openshift.io/storage"
 VOLUMESNAPSHOT = "volumesnapshot"
+
+PERF_IMAGE = "quay.io/ocsci/perf:latest"
