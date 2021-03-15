@@ -439,6 +439,8 @@ AMQ_SIMPLE_WORKLOAD_YAML = os.path.join(TEMPLATE_AMQ_DIR, "amq_simple_workload.y
 
 NGINX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "nginx.yaml")
 
+PERF_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance.yaml")
+
 HSBENCH_OBJ_YAML = os.path.join(TEMPLATE_HSBENCH_DIR, "hsbench_obj.yaml")
 
 AWSCLI_SERVICE_CA_YAML = os.path.join(
@@ -1242,3 +1244,5 @@ MCG_TESTS_MIN_NB_ENDPOINT_COUNT = 2
 MAX_NB_ENDPOINT_COUNT = 2
 
 VOLUMESNAPSHOT = "volumesnapshot"
+
+PERF_IMAGE = "quay.io/ocsci/perf:latest"
