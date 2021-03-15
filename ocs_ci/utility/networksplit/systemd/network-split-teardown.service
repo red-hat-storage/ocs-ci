@@ -1,0 +1,6 @@
+[Unit]
+Conflicts=network-split@ab-bc.service network-split@ab-ac.service network-split@ab.service network-split@bc.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/true

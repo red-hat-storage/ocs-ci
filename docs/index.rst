@@ -31,6 +31,7 @@ and functionality using AWS and other supported platforms.
    unit_tests.md
    workarounds.md
    release_guidelines.md
+   readmefiles/networksplit.README.rst
    usecases/index.rst
 
 

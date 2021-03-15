@@ -1,0 +1,16 @@
+[Unit]
+Description=Firewall configuration for a network split
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Restart=no
+ExecStart=/usr/bin/bash -c "/etc/network-split.sh setup %i"
+ExecStop=/usr/bin/bash -c "/etc/network-split.sh teardown %i"
+EnvironmentFile=/etc/network-split.env
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

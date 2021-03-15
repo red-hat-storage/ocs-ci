@@ -75,6 +75,8 @@ setup(
             "ci-pause=ocs_ci.pause.pause:cluster_pause",
             "aws-cleanup=ocs_ci.cleanup.aws.cleanup:aws_cleanup",
             "vsphere-cleanup=ocs_ci.cleanup.vsphere.cleanup:vsphere_cleanup",
+            "ocs-network-split-setup=ocs_ci.utility.networksplit.main:main_setup",
+            "ocs-network-split-sched=ocs_ci.utility.networksplit.main:main_schedule",
         ],
     },
     zip_safe=True,

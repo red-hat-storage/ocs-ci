@@ -1,0 +1,9 @@
+[Unit]
+Description=Network split teardown timer
+
+[Timer]
+OnCalendar=@%i
+Unit=network-split-teardown.service
+
+[Install]
+WantedBy=timers.target
