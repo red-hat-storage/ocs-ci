@@ -156,6 +156,8 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         catalog_source_data["spec"]["image"] = f"{mirrored_index_image}"
         catalog_source_data["metadata"]["name"] = "redhat-operators"
         catalog_source_data["spec"]["displayName"] = "Red Hat Operators - Mirrored"
+        # remove ocs-operator-internal label
+        catalog_source_data["metadata"]["labels"].pop("ocs-operator-internal", None)
 
         templating.dump_data_to_temp_yaml(
             catalog_source_data, catalog_source_manifest.name
@@ -181,7 +183,6 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         ocs_registry_image = config.DEPLOYMENT.get("ocs_registry_image", "")
     logger.debug(f"ocs-registry-image: {ocs_registry_image}")
     ocs_registry_image_and_tag = ocs_registry_image.rsplit(":", 1)
-    ocs_registry_image = ocs_registry_image_and_tag[0]
     image_tag = (
         ocs_registry_image_and_tag[1] if len(ocs_registry_image_and_tag) == 2 else None
     )
