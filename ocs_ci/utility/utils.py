@@ -3118,8 +3118,15 @@ def skipif_no_kms():
     from ocs_ci.ocs.resources import storage_cluster
 
     cluster = storage_cluster.get_storage_cluster()
-    resource = cluster.get()["items"][0]
-    encryption = resource.get("spec").get("encryption").get("kms").get("enable")
+    log.info("Checking if StorageCluster has configured KMS encryption")
+    try:
+        resource = cluster.get()["items"][0]
+        encryption = resource.get("spec").get("encryption").get("kms").get("enable")
+    except KeyError:
+        log.warning("Cluster is not yet installed. Skipping skipif_no_kms check.")
+        # Set encryption to True so that the test is not skipped
+        # and can be debugged if this is not expected state
+        encryption = True
     if not encryption:
         return True
     else:
