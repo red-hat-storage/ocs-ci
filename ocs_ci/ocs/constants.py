@@ -157,6 +157,7 @@ OPENSHIFT_INGRESS_NAMESPACE = "openshift-ingress"
 OPENSHIFT_MONITORING_NAMESPACE = "openshift-monitoring"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
+BOOTSTRAP_MACHINE = "bootstrap"
 INFRA_MACHINE = "infra"
 MOUNT_POINT = "/var/lib/www/html"
 TOLERATION_KEY = "node.ocs.openshift.io/storage"
@@ -287,6 +288,10 @@ TOOL_POD_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "toolbox_pod.yaml")
 CEPHFILESYSTEM_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "CephFileSystem.yaml")
 
 CEPHBLOCKPOOL_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "cephblockpool.yaml")
+
+VSPHERE_THICK_STORAGECLASS_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "vsphere_storageclass_thick.yaml"
+)
 
 CSI_RBD_STORAGECLASS_YAML = os.path.join(TEMPLATE_CSI_RBD_DIR, "storageclass.yaml")
 
@@ -434,6 +439,8 @@ AMQ_WORKLOAD_YAML = os.path.join(TEMPLATE_AMQ_DIR, "amq_workload.yaml")
 AMQ_SIMPLE_WORKLOAD_YAML = os.path.join(TEMPLATE_AMQ_DIR, "amq_simple_workload.yaml")
 
 NGINX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "nginx.yaml")
+
+PERF_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance.yaml")
 
 HSBENCH_OBJ_YAML = os.path.join(TEMPLATE_HSBENCH_DIR, "hsbench_obj.yaml")
 
@@ -779,6 +786,8 @@ SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scale
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
 APP_LABEL = "node-role.kubernetes.io/app"
+ZONE_LABEL = "failure-domain.beta.kubernetes.io/zone"
+ZONE_LABEL_NEW = "topology.kubernetes.io/zone"
 
 # Cluster name limits
 CLUSTER_NAME_MIN_CHARACTERS = 5
@@ -1081,6 +1090,7 @@ ROOT_DISK_NAME = "sda"
 RDM = "RDM"
 VMDK = "VMDK"
 DIRECTPATH = "VMDirectPath"
+AWS_EBS = "EBS"
 DISK_MODE = "independent_persistent"
 COMPATABILITY_MODE = "physicalMode"
 DISK_PATH_PREFIX = "/vmfs/devices/disks/"
@@ -1235,3 +1245,5 @@ MCG_TESTS_MIN_NB_ENDPOINT_COUNT = 2
 MAX_NB_ENDPOINT_COUNT = 2
 
 VOLUMESNAPSHOT = "volumesnapshot"
+
+PERF_IMAGE = "quay.io/ocsci/perf:latest"

@@ -136,6 +136,7 @@ def setup_local_storage(storageclass):
             raise NotImplementedError(
                 "LSO Deployment for VMDirectPath is not implemented"
             )
+
     if (ocp_version >= "4.6") and (ocs_version >= "4.6"):
         # Pull local volume discovery yaml data
         logger.info("Pulling LocalVolumeDiscovery CR data from yaml")
@@ -230,8 +231,11 @@ def setup_local_storage(storageclass):
         run_cmd(f"oc create -f {lv_data_yaml.name}")
     logger.info("Waiting 30 seconds for PVs to create")
     storage_class_device_count = 1
-    if platform == constants.AWS_PLATFORM:
+    if platform == constants.AWS_PLATFORM and not lso_type == constants.AWS_EBS:
         storage_class_device_count = 2
+    if platform == constants.IBM_POWER_PLATFORM:
+        numberofstoragedisks = config.ENV_DATA.get("number_of_storage_disks", 1)
+        storage_class_device_count = numberofstoragedisks
     verify_pvs_created(len(worker_names) * storage_class_device_count)
 
 

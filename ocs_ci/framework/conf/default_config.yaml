@@ -82,6 +82,8 @@ DEPLOYMENT:
   cs_redhat_operators_image: "registry.redhat.io/redhat/redhat-operator-index"
   # Deployment with KMS (vault etc)
   kms_deployment: False
+  # define if ceph is setup as arbiter/stretch cluster, default is false
+  arbiter_deployment: False
 
 # Section for reporting configuration
 REPORTING:
