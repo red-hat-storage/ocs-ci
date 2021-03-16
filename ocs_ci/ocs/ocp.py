@@ -628,6 +628,12 @@ class OCP(object):
                     )
         except TimeoutExpiredError as ex:
             log.error(f"timeout expired: {ex}")
+            # run `oc describe` on the resources we were waiting for to provide
+            # evidence so that we can understand what was wrong
+            output = self.describe(resource_name, selector=selector)
+            log.warning(
+                "Description of the resource(s) we were waiting for:\n%s", output
+            )
             log.error(
                 (
                     f"Wait for {self._kind} resource {resource_name} at column {column}"
@@ -635,14 +641,12 @@ class OCP(object):
                     f" last actual status was {actual_status}"
                 )
             )
-            # run `oc describe` on the resources we were waiting for to provide
-            # evidence so that we can understand what was wrong
+            raise (ex)
+        except ResourceInUnexpectedState:
             output = self.describe(resource_name, selector=selector)
             log.warning(
                 "Description of the resource(s) we were waiting for:\n%s", output
             )
-            raise (ex)
-        except ResourceInUnexpectedState:
             log.error(
                 (
                     "Waiting for %s resource %s at column %s"
@@ -654,10 +658,6 @@ class OCP(object):
                 column,
                 condition,
                 error_condition,
-            )
-            output = self.describe(resource_name, selector=selector)
-            log.warning(
-                "Description of the resource(s) we were waiting for:\n%s", output
             )
             raise
 
