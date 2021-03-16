@@ -1613,13 +1613,16 @@ def get_running_state_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     return running_pods_object
 
 
-def wait_for_pods_to_be_running(timeout=200, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def wait_for_pods_to_be_running(
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE, timeout=200, sleep=10
+):
     """
     Wait for all the pods in a specific namespace to be running.
 
     Args:
-        timeout (int): time to wait for pods to be running
         namespace (str): the namespace ot the pods
+        timeout (int): time to wait for pods to be running
+        sleep (int): Time in seconds to sleep between attempts
 
     Returns:
          bool: True, if all pods in Running state. False, otherwise
@@ -1628,7 +1631,7 @@ def wait_for_pods_to_be_running(timeout=200, namespace=defaults.ROOK_CLUSTER_NAM
     try:
         for pods_running in TimeoutSampler(
             timeout=timeout,
-            sleep=10,
+            sleep=sleep,
             func=check_pods_in_running_state,
             namespace=namespace,
         ):
@@ -1770,7 +1773,10 @@ def verify_osd_removal_job_completed_successfully(osd_id):
         osd_removal_pod_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
     is_completed = osd_removal_pod_obj.ocp.wait_for_resource(
-        condition=constants.STATUS_COMPLETED, resource_name=osd_removal_pod_name
+        condition=constants.STATUS_COMPLETED,
+        resource_name=osd_removal_pod_name,
+        sleep=10,
+        timeout=180,
     )
     if not is_completed:
         logger.info("ocs-osd-removal pod job failed to complete")
@@ -1844,3 +1850,95 @@ def get_osd_pod_id(osd_pod):
 
     """
     return osd_pod.get().get("metadata").get("labels").get("ceph-osd-id")
+
+
+def get_pods_in_statuses(status_options, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Get all the pods in specific statuses
+
+    Args:
+        status_options (list): The list of the status options.
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list: All the pods that their status in the 'status_options' list.
+
+    """
+    pods = get_all_pods(namespace)
+    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    pods_in_status_options = list()
+    for p in pods:
+        pod_status = ocp_pod_obj.get_resource_status(p.name)
+        if pod_status in status_options:
+            pods_in_status_options.append(p)
+
+    return pods_in_status_options
+
+
+def get_pod_ceph_daemon_type(pod_obj):
+    """
+    Get the ceph daemon type of the pod object
+
+    Args:
+        pod_obj (Pod): the pod object
+
+    Returns:
+        str: The pod's ceph daemon type
+
+    """
+    return pod_obj.get_labels().get("ceph_daemon_type")
+
+
+def check_pods_after_node_replacement():
+    """
+    Check the pods status after the node replacement process.
+
+    Returns:
+        bool: True if all the pods are running after a specific time. False otherwise.
+
+    """
+    are_pods_running = wait_for_pods_to_be_running(timeout=180)
+    if are_pods_running:
+        return True
+
+    not_ready_statuses = [
+        constants.STATUS_ERROR,
+        constants.STATUS_PENDING,
+        constants.STATUS_CLBO,
+        constants.STATUS_TERMINATING,
+    ]
+
+    pods_not_ready = get_pods_in_statuses(status_options=not_ready_statuses)
+    if len(pods_not_ready) == 0:
+        logger.info("All the pods are running")
+        return True
+
+    if len(pods_not_ready) > 1:
+        logger.warning("More than one pod is not running")
+        return False
+
+    # if len(pods_not_ready) == 1
+    pod_not_ready = pods_not_ready[0]
+    pod_daemon_type = get_pod_ceph_daemon_type(pod_not_ready)
+    if pod_daemon_type == constants.MON_DAEMON:
+        logger.info(
+            f"One of the '{pod_daemon_type}' pods is not running, "
+            f"but all the other pods are running"
+        )
+        timeout = 1200
+        logger.info(
+            f"waiting another {timeout} seconds for all the pods to be running..."
+        )
+        are_pods_running = wait_for_pods_to_be_running(timeout=timeout, sleep=30)
+        if are_pods_running:
+            logger.info("All the pods are running")
+            return True
+        else:
+            logger.warning(
+                f"Not all the pods are in a running state after {timeout} seconds"
+            )
+            return False
+
+    else:
+        logger.warning(f"One of the '{pod_daemon_type}' pods is not running")
+        return False
