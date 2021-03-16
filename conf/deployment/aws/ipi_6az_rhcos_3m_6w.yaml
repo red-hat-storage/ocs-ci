@@ -1,0 +1,21 @@
+---
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+ENV_DATA:
+  platform: 'aws'
+  deployment_type: 'ipi'
+  region: 'us-east-1'
+  worker_availability_zones:
+    - 'us-east-1a'
+    - 'us-east-1b'
+    - 'us-east-1c'
+    - 'us-east-1d'
+    - 'us-east-1e'
+    - 'us-east-1f'
+  master_availability_zones:
+    - 'us-east-1a'
+    - 'us-east-1b'
+    - 'us-east-1c'
+  worker_replicas: 6
+  master_replicas: 3
+  worker_instance_type: 'm5.4xlarge'
