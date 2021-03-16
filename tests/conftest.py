@@ -2343,7 +2343,7 @@ def install_logging(request):
 
     # Checks OCP version
     ocp_version = get_running_ocp_version()
-    ocp_version = ["stable" if ocp_version >= "4.7" else ocp_version]
+    ocp_version = "stable" if ocp_version >= "4.7" else ocp_version
 
     # Creates namespace openshift-operators-redhat
     ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
@@ -2360,7 +2360,7 @@ def install_logging(request):
 
     # Creates subscription for elastic-search operator
     subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
-    subscription_yaml["spec"]["channel"] = ocp_version[0]
+    subscription_yaml["spec"]["channel"] = ocp_version
     helpers.create_resource(**subscription_yaml)
     assert ocp_logging_obj.get_elasticsearch_subscription()
 
@@ -2374,7 +2374,7 @@ def install_logging(request):
 
     # Creates subscription for cluster-logging
     cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
-    cl_subscription["spec"]["channel"] = ocp_version[0]
+    cl_subscription["spec"]["channel"] = ocp_version
     helpers.create_resource(**cl_subscription)
     assert ocp_logging_obj.get_clusterlogging_subscription()
 
