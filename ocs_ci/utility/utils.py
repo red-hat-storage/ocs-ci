@@ -882,33 +882,34 @@ class TimeoutSampler(object):
     Yielding the output allows you to handle every value as you wish.
 
     Feel free to set the instance variables.
+
+
+    Args:
+        timeout (int): Timeout in seconds
+        sleep (int): Sleep interval in seconds
+        func (function): The function to sample
+        func_args: Arguments for the function
+        func_kwargs: Keyword arguments for the function
     """
 
     def __init__(self, timeout, sleep, func, *func_args, **func_kwargs):
         self.timeout = timeout
-        """ Timeout in seconds. """
         self.sleep = sleep
-        """ Sleep interval seconds. """
         # check that given timeout and sleep values makes sense
         if self.timeout < self.sleep:
             raise ValueError("timeout should be larger than sleep time")
 
         self.func = func
-        """ A function to sample. """
         self.func_args = func_args
-        """ Args for func. """
         self.func_kwargs = func_kwargs
-        """ Kwargs for func. """
 
+        # Timestamps of the first and most recent samples
         self.start_time = None
-        """ Time of starting the sampling. """
         self.last_sample_time = None
-        """ Time of last sample. """
-
+        # The exception to raise
         self.timeout_exc_cls = TimeoutExpiredError
-        """ Class of exception to be raised.  """
+        # Arguments that will be passed to the exception
         self.timeout_exc_args = (self.timeout,)
-        """ An args for __init__ of the timeout exception. """
 
     def __iter__(self):
         if self.start_time is None:
