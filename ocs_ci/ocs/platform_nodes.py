@@ -14,6 +14,7 @@ from ocs_ci.deployment.vmware import (
     clone_openshift_installer,
     update_machine_conf,
 )
+from ocs_ci.utility.nodemgmt import NodeManagement
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils, powernodes
@@ -1796,6 +1797,19 @@ class IBMPowerNodes(NodesBase):
     def __init__(self):
         super(IBMPowerNodes, self).__init__()
         self.powernodes = powernodes.PowerNodes()
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        """
+        Create and Attach nodes to cluster
+
+        Args:
+            node_conf: Node configuration
+            node_type: Node type RHCOS or RHEL. For Power platform, this will be
+                       ignored, as the type will always be RHCOS
+            num_nodes: Number of nodes to be added to the cluster
+        """
+        node = NodeManagement.get_nodemanagement_platform()
+        node.addNodes(num_nodes)
 
     def stop_nodes(self, nodes, force=True):
         """

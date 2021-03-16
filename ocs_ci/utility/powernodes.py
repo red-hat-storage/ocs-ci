@@ -42,6 +42,40 @@ class PowerNodes(object):
         """
         return self.isKVM
 
+    def addNodes(self, num_nodes):
+        """
+        Add nodes to the powervs cluster
+        An utility called ocpdr will be used to perform the node addition. This
+        utility ocpdr should already be present in the PATH.
+
+        Args:
+            num_nodes: Number of nodes to be added to the cluster
+
+        Returns: None
+        """
+
+        if self.iskvm():
+            logger.info("Adding nodes to cluster is not implemented on Libvirt.")
+        else:
+            result = exec_cmd("sudo ocpdr " + "addnode " + num_nodes)
+            logger.info(f"Result of add node: {result}")
+
+    def deleteNodes(self, num_nodes):
+        """
+        Delete nodes from powervs cluster
+        An utility called ocpdr will be used to perform the node addition. This
+        utility ocpdr should already be present in the PATH.
+
+        Args:
+            num_nodes: Number of nodes to be deleted from the cluster
+        """
+
+        if self.iskvm():
+            logger.info("Deleting nodes to cluster is not implemented on Libvirt.")
+        else:
+            result = exec_cmd("sudo ocpdr " + "deletenode " + num_nodes)
+            logger.info(f"Result of delete node: {result}")
+
     def verify_machine_is_down(self, node):
         """
         Verify if PowerNode is completely powered off
