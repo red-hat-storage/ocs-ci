@@ -1745,6 +1745,8 @@ def run_osd_removal_job(osd_id):
     logger.info(f"Executing OSD removal job on OSD-{osd_id}")
     ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     osd_removal_job_yaml = ocp_obj.exec_oc_cmd(cmd)
+    # Add the namespace param, so that the ocs-osd-removal job will be created in the correct namespace
+    osd_removal_job_yaml["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
     osd_removal_job = OCS(**osd_removal_job_yaml)
     osd_removal_job.create(do_reload=False)
 
