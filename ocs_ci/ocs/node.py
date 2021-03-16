@@ -1187,8 +1187,7 @@ def node_replacement_verification_steps_ceph_side(
     wait_for_nodes_status([new_node_name, new_osd_node_name])
     # It can take some time until all the ocs pods are up and running
     # after the process of node replacement
-    if not pod.wait_for_pods_to_be_running():
-        log.warning("Not all the pods in running state")
+    if not pod.check_pods_after_node_replacement():
         return False
 
     ct_pod = pod.get_ceph_tools_pod()
@@ -1436,7 +1435,7 @@ def get_node_hostname_label(node_obj):
     return node_obj.get().get("metadata").get("labels").get(constants.HOSTNAME_LABEL)
 
 
-def wait_for_new_osd_node(old_osd_node_names, timeout=180):
+def wait_for_new_osd_node(old_osd_node_names, timeout=600):
     """
     Wait for the new osd node to appear.
 
@@ -1451,7 +1450,7 @@ def wait_for_new_osd_node(old_osd_node_names, timeout=180):
     """
     try:
         for current_osd_node_names in TimeoutSampler(
-            timeout=timeout, sleep=10, func=get_osd_running_nodes
+            timeout=timeout, sleep=30, func=get_osd_running_nodes
         ):
             new_osd_node_names = [
                 node_name
