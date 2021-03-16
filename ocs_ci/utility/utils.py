@@ -909,7 +909,26 @@ class TimeoutSampler(object):
         # The exception to raise
         self.timeout_exc_cls = TimeoutExpiredError
         # Arguments that will be passed to the exception
-        self.timeout_exc_args = (self.timeout,)
+        self.timeout_exc_args = [self.timeout]
+        try:
+            self.timeout_exc_args.append(
+                f"Timed out after {timeout}s running {self._build_call_string()}"
+            )
+        except Exception:
+            log.exception(
+                "Failed to assemble call string. Not necessarily a test failure."
+            )
+
+    def _build_call_string(self):
+        def stringify(value):
+            if isinstance(value, str):
+                return f'"{value}"'
+            return str(value)
+
+        args = list(map(stringify, self.func_args))
+        kwargs = [f"{stringify(k)}={stringify(v)}" for k, v in self.func_kwargs.items()]
+        all_args_string = ", ".join(args + kwargs)
+        return f"{self.func.__name__}({all_args_string})"
 
     def __iter__(self):
         if self.start_time is None:
