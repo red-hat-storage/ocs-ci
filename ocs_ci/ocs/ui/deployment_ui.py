@@ -8,6 +8,7 @@ from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler, run_cmd
 from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
+from ocs_ci.ocs.ocp import get_ocs_version
 from ocs_ci.ocs import constants
 
 
@@ -321,3 +322,43 @@ class DeploymentUI(PageNavigator):
         self.install_ocs_operator()
         self.verify_ocs_operator_succeeded()
         self.install_storage_cluster()
+
+    def verify_channel(self, timeout_upgrade=600, channel="4.7"):
+        """
+        Verify Channel
+
+        timeout_install (int): Time in seconds to wait
+        channel (str): ocs y version
+
+        """
+        self.navigate_installed_operators_page()
+        self.do_click(self.dep_loc["ocs_operator_installed"])
+        self.do_click(self.dep_loc["subscription"])
+        sample = TimeoutSampler(
+            timeout=timeout_upgrade,
+            sleep=20,
+            func=self.check_element_text,
+            expected_text=f"stable-{channel}",
+        )
+        if not sample.wait_for_func_status(result=True):
+            logger.error(
+                f"OCS upgrade status is not Succeeded after {timeout_upgrade} seconds"
+            )
+            raise TimeoutExpiredError
+
+    def upgrade_ocs_ui(self, channel=None):
+        """
+        Upgrade OCS version via UI
+
+        channel (str): ocs y version
+        """
+        self.navigate_installed_operators_page()
+        self.do_click(self.dep_loc["ocs_operator_installed"])
+        self.do_click(self.dep_loc["subscription"])
+        ocs_version = get_ocs_version()
+        if ocs_version == "4.6" and channel == "4.7":
+            self.do_click(self.dep_loc["channel_4_6"])
+            self.do_click(self.dep_loc["stable-4.7"])
+        self.do_click(self.dep_loc["save"])
+        self.verify_channel(channel=channel)
+        self.verify_ocs_operator_succeeded()

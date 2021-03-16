@@ -36,6 +36,8 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.ocs.exceptions import TimeoutException
+from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
+from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
 
 
 log = logging.getLogger(__name__)
@@ -450,7 +452,14 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     with CephHealthMonitor(ceph_cluster):
         channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()
-        upgrade_ocs.update_subscription(channel)
+        upgrade_ui = config.UPGRADE.get("upgrade_ui", False)
+        if upgrade_ui:
+            driver = login_ui()
+            upgrade_obj = DeploymentUI(driver)
+            upgrade_obj.upgrade_ocs_ui(channel)
+            close_browser(driver)
+        else:
+            upgrade_ocs.update_subscription(channel)
         if operation:
             log.info(f"Calling test function: {operation}")
             _ = operation(*operation_args, **operation_kwargs)

@@ -52,6 +52,13 @@ deployment_4_7 = {
     "next_on_configure": ("//*[contains(text(), 'Next')]", By.XPATH),
     "create_on_review": ("//button[text()='Create']", By.XPATH),
     "search_ocs_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
+    "subscription": (
+        'a[data-test-id="horizontal-link-olm~Subscription"]',
+        By.CSS_SELECTOR,
+    ),
+    "channel_4_6": ('//button[text()="stable-4.6"]', By.XPATH),
+    "stable-4.7": ('input[data-test="stable-4.7-radio-input"]', By.CSS_SELECTOR),
+    "save": ('button[data-test="confirm-action"]', By.CSS_SELECTOR),
 }
 
 pvc = {
