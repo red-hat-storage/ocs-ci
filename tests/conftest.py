@@ -180,7 +180,9 @@ def pytest_collection_modifyitems(session, items):
                         )
                         items.remove(item)
                 except KeyError:
-                    log.warning("Cluster is not yet installed. Skipping skipif_no_kms check.")
+                    log.warning(
+                        "Cluster is not yet installed. Skipping skipif_no_kms check."
+                    )
 
 
 @pytest.fixture()
