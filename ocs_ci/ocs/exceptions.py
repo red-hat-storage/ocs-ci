@@ -66,12 +66,15 @@ class PerformanceException(Exception):
 
 
 class ResourceWrongStatusException(Exception):
-    def __init__(self, resource_name, describe_out):
+    def __init__(self, resource_name, describe_out=None):
         self.resource_name = resource_name
         self.describe_out = describe_out
 
     def __str__(self):
-        return f"Resource {self.resource_name} describe output: {self.describe_out}"
+        msg = f"Resource {self.resource_name}"
+        if self.describe_out:
+            msg += f" describe output: {self.describe_out}"
+        return msg
 
 
 class UnavailableResourceException(Exception):
