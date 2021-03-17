@@ -69,6 +69,9 @@ class TestRbdThickProvisioning(ManageTest):
             )
             for pvc_obj in pvc_objs:
                 pvc_obj.io_file_size = pvc_and_file_sizes[pvc_size]
+                pvc_obj.storage_type = (
+                    "block" if pvc_obj.get()["spec"]["volumeMode"] == "Block" else "fs"
+                )
             pvcs.extend(pvc_objs)
 
         # Create pods
@@ -84,11 +87,9 @@ class TestRbdThickProvisioning(ManageTest):
         # Do setup for running IO on pods
         log.info("Setting up pods to running IO")
         for pod_obj in pods:
-            if pod_obj.pvc.volume_mode == "Block":
-                storage_type = "block"
-            else:
-                storage_type = "fs"
-            executor.submit(pod_obj.workload_setup, storage_type=storage_type)
+            executor.submit(
+                pod_obj.workload_setup, storage_type=pod_obj.pvc.storage_type
+            )
 
         # Wait for setup on pods to complete
         for pod_obj in pods:
@@ -103,12 +104,9 @@ class TestRbdThickProvisioning(ManageTest):
 
         # Start IO
         for pod_obj in pods:
-            storage_type = (
-                "block" if pod_obj.pvc.get()["spec"]["volumeMode"] == "Block" else "fs"
-            )
             log.info(f"Starting IO on pod {pod_obj.name}.")
             pod_obj.run_io(
-                storage_type=storage_type,
+                storage_type=pod_obj.pvc.storage_type,
                 size=pod_obj.pvc.io_file_size,
                 runtime=30,
             )
