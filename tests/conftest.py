@@ -1732,6 +1732,12 @@ def rgw_deployments(request):
         label=constants.RGW_APP_LABEL, namespace=config.ENV_DATA["cluster_namespace"]
     )
     if rgw_deployments:
+        # Force-skipping in case of IBM Cloud -
+        # https://github.com/red-hat-storage/ocs-ci/issues/3863
+        if config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
+            pytest.skip(
+                "RGW deployments were found, but test will be skipped because of BZ1926831"
+            )
         return rgw_deployments
     else:
         pytest.skip("There is no RGW deployment available for this test.")
