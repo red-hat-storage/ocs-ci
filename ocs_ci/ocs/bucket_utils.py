@@ -703,7 +703,7 @@ def put_bucket_policy(s3_obj, bucketname, policy):
     Args:
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
-        policy (json): Bucket policy in Json format
+        policy (str): Bucket policy in Json format
 
     Returns:
         dict : Bucket policy response
