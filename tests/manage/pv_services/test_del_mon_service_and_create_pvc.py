@@ -151,6 +151,8 @@ class TestPvcCreationAfterDelMonService(E2ETest):
                 condition=constants.STATUS_RUNNING,
                 selector=constants.MON_APP_LABEL,
                 resource_count=mon_count,
+                timeout=1200,
+                sleep=5,
             )
             log.info("All mons are up and running")
 
