@@ -66,12 +66,28 @@ class PerformanceException(Exception):
 
 
 class ResourceWrongStatusException(Exception):
-    def __init__(self, resource_name, describe_out=None):
-        self.resource_name = resource_name
+    def __init__(
+        self, resource_or_name, describe_out=None, column=None, expected=None, got=None
+    ):
+        if isinstance(resource_or_name, str):
+            self.resource = None
+            self.resource_name = resource_or_name
+        else:
+            self.resource = resource_or_name
+            self.resource_name = self.resource.name
         self.describe_out = describe_out
 
     def __str__(self):
-        msg = f"Resource {self.resource_name}"
+        if self.resource:
+            msg = f"{self.resource.kind} resource {self.resource_name}"
+        else:
+            msg = f"Resource {self.resource_name}"
+        if self.column:
+            msg += f" in column {self.column}"
+        if self.got:
+            msg += f" was in state {self.got}"
+        if self.expected:
+            msg += f" but expected {self.expected}"
         if self.describe_out:
             msg += f" describe output: {self.describe_out}"
         return msg
