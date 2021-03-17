@@ -563,8 +563,10 @@ class OCP(object):
                     actual_status = status
                     if error_condition is not None and status == error_condition:
                         raise ResourceInUnexpectedState(
-                            f"Status of '{resource_name}' at column {column}"
-                            f" is {status}."
+                            resource_name,
+                            column=column,
+                            expected=condition,
+                            got=status,
                         )
                 # More than 1 resources returned
                 elif sample.get("kind") == "List":
@@ -586,8 +588,10 @@ class OCP(object):
                                 and status == error_condition
                             ):
                                 raise ResourceInUnexpectedState(
-                                    f"Status of '{item_name}' "
-                                    f" at column {column} is {status}."
+                                    item_name,
+                                    column=column,
+                                    expected=condition,
+                                    got=status,
                                 )
                         except CommandFailed as ex:
                             log.info(
