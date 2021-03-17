@@ -7,7 +7,7 @@ from ocs_ci.deployment.ibmcloud import IBMCloud
 from .aws import AWSIPI, AWSUPI, AWSUPIFlexy
 from .azure import AZUREIPI
 from .gcp import GCPIPI
-from .vmware import VSPHEREUPI
+from .vmware import VSPHEREUPI, VSPHEREIPI
 from .baremetal import BAREMETALUPI, BaremetalPSIUPI
 from .openshift_dedicated import OpenshiftDedicated
 
@@ -28,6 +28,7 @@ class DeploymentFactory(object):
             "aws_upi_flexy": AWSUPIFlexy,
             "azure_ipi": AZUREIPI,
             "vsphere_upi": VSPHEREUPI,
+            "vsphere_ipi": VSPHEREIPI,
             "baremetalpsi_upi_flexy": BaremetalPSIUPI,
             "baremetal_upi": BAREMETALUPI,
             "gcp_ipi": GCPIPI,

@@ -44,7 +44,12 @@ def compare_dicts(before, after):
 
     Returns:
         list: List of 2 lists - ('added' and 'removed' are lists)
+        None: If both parameters are None
     """
+    if not before and not after:
+        log.debug("compare_dicts: both before and after are None")
+        return None
+
     added = []
     removed = []
     uid_before = [
@@ -186,6 +191,8 @@ def get_status_after_execution(exclude_labels=None):
 
     leftovers = {"Leftovers added": [], "Leftovers removed": []}
     for kind, kind_diff in diffs_dict.items():
+        if not kind_diff:
+            continue
         if kind_diff[0]:
             leftovers["Leftovers added"].append({f"***{kind}***": kind_diff[0]})
             leftover_detected = True

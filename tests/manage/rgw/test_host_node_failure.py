@@ -51,8 +51,8 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
         self, nodes, node_restart_teardown, mcg_obj, bucket_factory
     ):
         """
-        Test case to fail node where RGW and Noobaa-db-0 hosting
-        and verify new pod spuns on healthy node
+        Test case to fail node where RGW and the NooBaa DB are hosted
+        and verify the new pods spin on a healthy node
 
         """
         # Get rgw pods
@@ -62,9 +62,15 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
         noobaa_pod_obj = get_noobaa_pods()
 
         # Get the node where noobaa-db hosted
+        noobaa_pod_node = None
         for noobaa_pod in noobaa_pod_obj:
-            if noobaa_pod.name == "noobaa-db-0":
+            if noobaa_pod.name in [
+                constants.NB_DB_NAME_46_AND_BELOW,
+                constants.NB_DB_NAME_47_AND_ABOVE,
+            ]:
                 noobaa_pod_node = get_pod_node(noobaa_pod)
+        if noobaa_pod_node is None:
+            assert False, "Could not find the NooBaa DB pod"
 
         for rgw_pod in rgw_pod_obj:
             pod_node = rgw_pod.get().get("spec").get("nodeName")
@@ -72,7 +78,7 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
                 # Stop the node
                 log.info(
                     f"Stopping node {pod_node} where"
-                    f" rgw pod {rgw_pod.name} and noobaa-db-0 hosted"
+                    f" rgw pod {rgw_pod.name} and NooBaa DB are hosted"
                 )
                 node_obj = get_node_objs(node_names=[pod_node])
                 nodes.stop_nodes(node_obj)

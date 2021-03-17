@@ -89,7 +89,7 @@ def ocs_install_verification(
         "ocs_registry_image"
     )
     if ocs_registry_image and ocs_registry_image.endswith(".ci"):
-        ocs_registry_image = ocs_registry_image.split(":")[1]
+        ocs_registry_image = ocs_registry_image.rsplit(":", 1)[1]
         log.info(
             f"Check if OCS registry image: {ocs_registry_image} matches with "
             f"CSV: {csv_version}"
@@ -262,6 +262,8 @@ def ocs_install_verification(
     )
     log.info("Verified node and provisioner secret names in storage class.")
 
+    ct_pod = get_ceph_tools_pod()
+
     # https://github.com/red-hat-storage/ocs-ci/issues/3820
     # Verify ceph osd tree output
     if not (
@@ -282,7 +284,6 @@ def ocs_install_verification(
         else:
             deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
 
-        ct_pod = get_ceph_tools_pod()
         osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree", format="json")
         schemas = {
             "root": constants.OSD_TREE_ROOT,

@@ -93,6 +93,10 @@ anywhere else.
 * `stage_rh_osbs` - Deploy rh-osbs-operator (Default: false)
 * `stage_index_image_tag` - Image tag to use for rh-osbs-operator deployment
 * `type` - Type of VMWare LSO deployment
+* `kms_deployment` - Deploy OCS with KMS (Default: false)
+* `create_ibm_cos_secret`: If this value is set to True (by default), the COS
+  secret is created. If False, it will not be created. Relevant only for IBM
+  Cloud deployment.
 
 #### REPORTING
 
@@ -169,6 +173,16 @@ higher priority).
 * `rhel_num_cpus` - Number of CPUs for each RHEL node
 * `rhel_memory` - The amount of memory RHEL nodes will have
 * `mixed_cluster` - Whether or not a cluster has a mix of RHEL and RHCOS nodes (Default: false)
+* `vault_deploy_mode` - The mode in which vault service is deployed (external OR internal)
+* `KMS_PROVIDER` - KMS provider name
+* `KMS_SERVICE_NAME` - KMS service name
+* `VAULT_ADDR` - Address of vault server
+* `VAULT_CACERT` - Name of the ca certificate ocp resource for vault
+* `VAULT_CLIENT_CERT` - Name of the client certificate ocp resource for vault
+* `VAULT_CLIENT_KEY` - Client key for vault
+* `VAULT_SKIP_VERIFY` - Skip SSL check (Default: false)
+* `VAULT_BACKEND_PATH` - Vault path name used in ocs cluster
+* `VAULT_POLICY` - Vault policy name used in ocs cluster
 
 #### UPGRADE
 

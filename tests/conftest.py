@@ -38,6 +38,9 @@ from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
 )
+from ocs_ci.ocs.resources.namespacestore import (
+    namespace_store_factory as namespacestore_factory_implementation,
+)
 from ocs_ci.ocs.resources.bucketclass import (
     bucket_class_factory as bucketclass_factory_implementation,
 )
@@ -59,10 +62,14 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
-from ocs_ci.utility import aws
-from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
-from ocs_ci.utility import templating
-from ocs_ci.utility import users
+from ocs_ci.utility import (
+    aws,
+    deployment_openshift_logging as ocp_logging_obj,
+    ibmcloud,
+    kms as KMS,
+    templating,
+    users,
+)
 from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
@@ -95,6 +102,7 @@ from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
+from ocs_ci.ocs.ripsaw import RipSaw
 
 log = logging.getLogger(__name__)
 
@@ -1096,6 +1104,11 @@ def cluster(request, log_cli_level):
     if teardown:
 
         def cluster_teardown_finalizer():
+            # If KMS is configured, clean up the backend resources
+            # we are doing it before OCP cleanup
+            if config.DEPLOYMENT.get("kms_deployment"):
+                kms = KMS.get_kms_deployment()
+                kms.cleanup()
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)
@@ -1108,9 +1121,19 @@ def cluster(request, log_cli_level):
     )
     get_openshift_client(force_download=force_download)
 
+    # set environment variable for early testing of RHCOS
+    if config.ENV_DATA.get("early_testing"):
+        release_img = config.ENV_DATA["RELEASE_IMG"]
+        log.info(f"Running early testing of RHCOS with release image: {release_img}")
+        os.environ["RELEASE_IMG"] = release_img
+        os.environ["OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE"] = release_img
+
     if deploy:
         # Deploy cluster
         deployer.deploy_cluster(log_cli_level)
+    else:
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+            ibmcloud.login()
 
 
 @pytest.fixture(scope="class")
@@ -2032,6 +2055,10 @@ def bucket_factory_fixture(
                 buckets
 
         """
+        if bucketclass:
+            interface = bucketclass["interface"]
+
+        current_call_created_buckets = []
         if interface.lower() not in BUCKET_MAP:
             raise RuntimeError(
                 f"Invalid interface type received: {interface}. "
@@ -2042,7 +2069,7 @@ def bucket_factory_fixture(
             bucketclass if bucketclass is None else bucket_class_factory(bucketclass)
         )
 
-        for i in range(amount):
+        for _ in range(amount):
             bucket_name = helpers.create_unique_resource_name(
                 resource_description="bucket", resource_type=interface.lower()
             )
@@ -2054,11 +2081,12 @@ def bucket_factory_fixture(
                 *args,
                 **kwargs,
             )
+            current_call_created_buckets.append(created_bucket)
             created_buckets.append(created_bucket)
             if verify_health:
                 created_bucket.verify_health()
 
-        return created_buckets
+        return current_call_created_buckets
 
     def bucket_cleanup():
         for bucket in created_buckets:
@@ -2185,7 +2213,9 @@ def backingstore_factory_session(
 
 
 @pytest.fixture()
-def bucket_class_factory(request, mcg_obj, backingstore_factory):
+def bucket_class_factory(
+    request, mcg_obj, backingstore_factory, namespace_store_factory
+):
     """
     Create a Bucket Class factory.
     Calling this fixture creates a new Bucket Class.
@@ -2198,7 +2228,7 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
     """
     if mcg_obj:
         return bucketclass_factory_implementation(
-            request, mcg_obj, backingstore_factory
+            request, mcg_obj, backingstore_factory, namespace_store_factory
         )
     else:
         return None
@@ -2206,7 +2236,10 @@ def bucket_class_factory(request, mcg_obj, backingstore_factory):
 
 @pytest.fixture(scope="session")
 def bucket_class_factory_session(
-    request, mcg_obj_session, backingstore_factory_session
+    request,
+    mcg_obj_session,
+    backingstore_factory_session,
+    namespace_store_factory_session,
 ):
     """
     Create a Bucket Class factory.
@@ -2220,7 +2253,10 @@ def bucket_class_factory_session(
     """
     if mcg_obj_session:
         return bucketclass_factory_implementation(
-            request, mcg_obj_session, backingstore_factory_session
+            request,
+            mcg_obj_session,
+            backingstore_factory_session,
+            namespace_store_factory_session,
         )
     else:
         return None
@@ -2309,8 +2345,9 @@ def install_logging(request):
 
     # Checks OCP version
     ocp_version = get_running_ocp_version()
+    logging_channel = "stable" if ocp_version >= "4.7" else ocp_version
 
-    # Creates namespace opensift-operators-redhat
+    # Creates namespace openshift-operators-redhat
     ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
 
     # Creates an operator-group for elasticsearch
@@ -2325,7 +2362,7 @@ def install_logging(request):
 
     # Creates subscription for elastic-search operator
     subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
-    subscription_yaml["spec"]["channel"] = ocp_version
+    subscription_yaml["spec"]["channel"] = logging_channel
     helpers.create_resource(**subscription_yaml)
     assert ocp_logging_obj.get_elasticsearch_subscription()
 
@@ -2339,7 +2376,7 @@ def install_logging(request):
 
     # Creates subscription for cluster-logging
     cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
-    cl_subscription["spec"]["channel"] = ocp_version
+    cl_subscription["spec"]["channel"] = logging_channel
     helpers.create_resource(**cl_subscription)
     assert ocp_logging_obj.get_clusterlogging_subscription()
 
@@ -3024,6 +3061,40 @@ def ns_resource_factory(
 
 
 @pytest.fixture()
+def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
+    """
+    Create a Namespace Store factory.
+    Calling this fixture creates a new Namespace Store(s).
+
+    Returns:
+        func: Factory method - each call to this function creates
+            a namespacestore
+
+    """
+    return namespacestore_factory_implementation(
+        request, cld_mgr, mcg_obj, cloud_uls_factory
+    )
+
+
+@pytest.fixture(scope="session")
+def namespace_store_factory_session(
+    request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
+):
+    """
+    Create a Namespace Store factory.
+    Calling this fixture creates a new Namespace Store(s).
+
+    Returns:
+        func: Factory method - each call to this function creates
+            a namespacestore
+
+    """
+    return namespacestore_factory_implementation(
+        request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
+    )
+
+
+@pytest.fixture()
 def snapshot_factory(request):
     """
     Snapshot factory. Calling this fixture creates a volume snapshot from the
@@ -3697,3 +3768,17 @@ def load_cluster_info_file(request):
     example related to disconnected cluster)
     """
     load_cluster_info()
+
+
+@pytest.fixture(scope="function")
+def ripsaw(request):
+
+    # Create benchmark Operator (formerly ripsaw)
+    ripsaw = RipSaw()
+
+    def teardown():
+        ripsaw.cleanup()
+        time.sleep(10)
+
+    request.addfinalizer(teardown)
+    return ripsaw

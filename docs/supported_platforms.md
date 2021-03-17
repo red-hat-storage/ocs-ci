@@ -20,7 +20,26 @@ TODO document this platform
 
 ## Azure
 
-TODO document this platform
+File `osServicePrincipal.json` in `~/.azure/` directory with proper credentials
+is required. The file looks like this:
+
+```json
+{
+  "subscriptionId": "...",
+  "clientId": "...",
+  "clientSecret": "...",
+  "tenantId": "..."
+}
+```
+
+To deploy ocs-ci cluster on Azure platform using one of OCS QE subscriptions,
+you need to specify one deployment config file from `conf/deployment/azure/`
+directory (which one to use depends on the type of deployment one needs to
+use) and also one config file with azure `base_domain` value (either
+`conf/ocsci/azure_qe_rh_ocs_com_domain.yaml` or
+`conf/ocsci/azure2_qe_rh_ocs_com_domain.yaml` or similar newly created with
+proper `base_domain` configuration), because each azure subscription has it's
+own domain name.
 
 ### Deployment types
 
@@ -48,7 +67,10 @@ This platform supports deployment of OCP cluster + OCS cluster on top of it.
 ### Configuration files
 
 * `conf/deployment/ibmcloud/ibm_cloud_vpc_cluster.yaml` - this file can be used for deployment
-    on IBM Cloud - this config is for VPC gen 2 provider.
+  on IBM Cloud - this config is for VPC gen 2 provider.
+
+* `conf/deployment/ibmcloud/ibm_cloud_vpc_cluster_without_cos.yaml` - this file can be used for deployment
+  on IBM Cloud - this config is for VPC gen 2 provider without COS secret created.
 
 You will need to create also credential file with secret data which should
 never be shared publicly in this repository.

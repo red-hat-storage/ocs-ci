@@ -467,7 +467,7 @@ def process_cluster_cli_params(config):
         load_config_file(version_config_file_path)
     upgrade_ocp_image = get_cli_param(config, "--upgrade-ocp-image")
     if upgrade_ocp_image:
-        ocp_image = upgrade_ocp_image.split(":")
+        ocp_image = upgrade_ocp_image.rsplit(":", 1)
         ocsci_config.UPGRADE["ocp_upgrade_path"] = ocp_image[0]
         ocsci_config.UPGRADE["ocp_upgrade_version"] = ocp_image[1]
     ocp_installer_version = get_cli_param(config, "--ocp-installer-version")

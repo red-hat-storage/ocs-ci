@@ -1,0 +1,3 @@
+---
+ENV_DATA:
+  base_domain: 'azure.qe.rh-ocs.com'

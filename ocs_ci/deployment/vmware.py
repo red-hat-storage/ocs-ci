@@ -9,6 +9,7 @@ import os
 from shutil import rmtree
 import time
 
+import tempfile
 import hcl
 import yaml
 
@@ -26,6 +27,7 @@ from ocs_ci.ocs.node import (
     remove_nodes,
     wait_for_nodes_status,
 )
+from ocs_ci.utility import templating
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.csr import approve_pending_csr, wait_for_all_nodes_csr_and_approve
@@ -51,6 +53,7 @@ from ocs_ci.utility.utils import (
     configure_chrony_and_wait_for_machineconfig_status,
     get_terraform_ignition_provider,
     get_ocp_upgrade_history,
+    load_auth_config,
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from semantic_version import Version
@@ -60,7 +63,7 @@ logger = logging.getLogger(__name__)
 
 
 # As of now only UPI
-__all__ = ["VSPHEREUPI"]
+__all__ = ["VSPHEREUPI", "VSPHEREIPI"]
 
 
 class VSPHEREBASE(Deployment):
@@ -618,6 +621,18 @@ class VSPHEREUPI(VSPHEREBASE):
             configure_chrony_and_wait_for_machineconfig_status(
                 node_type="all", timeout=1800
             )
+        if config.DEPLOYMENT.get("thick_sc"):
+            sc_data = templating.load_yaml(constants.VSPHERE_THICK_STORAGECLASS_YAML)
+            sc_data_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="storageclass", delete=False
+            )
+            if config.DEPLOYMENT.get("eager_zeroed_thick_sc"):
+                sc_data["parameters"]["diskformat"] = "eagerzeroedthick"
+            else:
+                sc_data["parameters"]["diskformat"] = "zeroedthick"
+            templating.dump_data_to_temp_yaml(sc_data, sc_data_yaml.name)
+            run_cmd(f"oc create -f {sc_data_yaml.name}")
+            self.DEFAULT_STORAGECLASS = "thick"
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -781,6 +796,118 @@ class VSPHEREUPI(VSPHEREBASE):
         os.chdir(scale_up_terraform_data_dir)
         terraform_scale_up.initialize(upgrade=True)
         terraform_scale_up.destroy(scale_up_terraform_var)
+
+
+class VSPHEREIPI(VSPHEREBASE):
+    """
+    A class to handle vSphere IPI specific deployment
+    """
+
+    def __init__(self):
+        super(VSPHEREIPI, self).__init__()
+
+    class OCPDeployment(BaseOCPDeployment):
+        def __init__(self):
+            super(VSPHEREIPI.OCPDeployment, self).__init__()
+            self.ipi_details = load_auth_config()["vmware_ipi"]
+
+        def deploy_prereq(self):
+            """
+            Overriding deploy_prereq from parent. Perform all necessary
+            prerequisites for VSPHEREIPI here.
+            """
+            super(VSPHEREIPI.OCPDeployment, self).deploy_prereq()
+
+        def create_config(self):
+            """
+            Creates the OCP deploy config for the vSphere
+            """
+            # Generate install-config from template
+            _templating = Templating()
+            ocp_install_template = (
+                f"install-config-{self.deployment_platform}-"
+                f"{self.deployment_type}.yaml.j2"
+            )
+            ocp_install_template_path = os.path.join(
+                "ocp-deployment", ocp_install_template
+            )
+            install_config_str = _templating.render_template(
+                ocp_install_template_path, config.ENV_DATA
+            )
+            install_config_obj = yaml.safe_load(install_config_str)
+            install_config_obj["pullSecret"] = self.get_pull_secret()
+            install_config_obj["sshKey"] = self.get_ssh_key()
+            install_config_obj["platform"]["vsphere"]["apiVIP"] = self.ipi_details.get(
+                "vmware_ipi_api_vip"
+            )
+            install_config_obj["platform"]["vsphere"][
+                "ingressVIP"
+            ] = self.ipi_details.get("vmware_ipi_ingress_vip")
+            install_config_obj["metadata"]["name"] = self.ipi_details.get(
+                "vmware_ipi_default_cluster_name"
+            )
+            install_config_obj["baseDomain"] = self.ipi_details.get(
+                "vmware_ipi_default_base_domain"
+            )
+            install_config_str = yaml.safe_dump(install_config_obj)
+            install_config = os.path.join(self.cluster_path, "install-config.yaml")
+
+            with open(install_config, "w") as f:
+                f.write(install_config_str)
+
+        def deploy(self, log_cli_level="DEBUG"):
+            """
+            Deployment specific to OCP cluster on this platform
+
+            Args:
+                log_cli_level (str): openshift installer's log level
+                    (default: "DEBUG")
+            """
+
+            logger.info("Deploying OCP cluster")
+            logger.info(f"Openshift-installer will be using loglevel:{log_cli_level}")
+            try:
+                run_cmd(
+                    f"{self.installer} create cluster "
+                    f"--dir {self.cluster_path} "
+                    f"--log-level {log_cli_level}",
+                    timeout=3600,
+                )
+            except CommandFailed as e:
+                if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
+                    try:
+                        gather_bootstrap()
+                    except Exception as ex:
+                        logger.error(ex)
+                raise e
+            self.test_cluster()
+
+        def deploy_ocp(self, log_cli_level="DEBUG"):
+            """
+            Deployment specific to OCP cluster on this platform
+
+            Args:
+                log_cli_level (str): openshift installer's log level
+                    (default: "DEBUG")
+            """
+            super(VSPHEREIPI, self).deploy_ocp(log_cli_level)
+
+        def destroy_cluster(self, log_level="DEBUG"):
+            """
+            Destroy OCP cluster specific to vSphere IPI
+
+            Args:
+                log_level (str): log level openshift-installer (default: DEBUG)
+            """
+            try:
+                run_cmd(
+                    f"{self.installer} destroy cluster "
+                    f"--dir {self.cluster_path} "
+                    f"--log-level {log_level}",
+                    timeout=3600,
+                )
+            except CommandFailed as e:
+                logger.error(e)
 
 
 def change_vm_root_disk_size(machine_file):
@@ -963,8 +1090,13 @@ def update_machine_conf(folder_structure=True):
         change_mem_and_cpu()
 
     else:
-        gw_string = "${cidrhost(machine_cidr, 1)}"
-        gw_conf_file = constants.VM_IFCFG
+        if Version.coerce(get_ocp_version()) >= Version.coerce("4.8"):
+            gw_string = "${cidrhost(var.machine_cidr, 1)}"
+            gw_conf_file = constants.VM_MAIN
+        else:
+            gw_string = "${cidrhost(machine_cidr, 1)}"
+            gw_conf_file = constants.VM_IFCFG
+
         disk_size_conf_file = constants.VM_MAIN
 
         # change cluster ID to folder
@@ -1047,6 +1179,11 @@ def generate_terraform_vars_with_folder():
     # expand ssh_public_key_path and update in ENV_DATA
     ssh_public_key_path = os.path.expanduser(config.DEPLOYMENT["ssh_key"])
     config.ENV_DATA["ssh_public_key_path"] = ssh_public_key_path
+
+    # overwrite RHCOS template
+    # This use-case is mainly used for early RHCOS testing
+    if config.ENV_DATA.get("vm_template_overwrite"):
+        config.ENV_DATA["vm_template"] = config.ENV_DATA["vm_template_overwrite"]
 
     create_terraform_var_file("terraform_4_5.tfvars.j2")
 
