@@ -111,17 +111,9 @@ class TestMcgNamespaceLifecycleRpc(E2ETest):
         user = NoobaaAccount(mcg_obj, name=user_name, email=email, buckets=[ns_bucket])
         logger.info(f"Noobaa account: {user.email_id} with S3 access created")
 
-        actions = (
-            ["PutObject", "GetObject"]
-            if float(config.ENV_DATA["ocs_version"]) <= 4.6
-            else ["DeleteObject"]
-        )
-        effect = "Allow" if float(config.ENV_DATA["ocs_version"]) <= 4.6 else "Deny"
-
         bucket_policy_generated = gen_bucket_policy(
             user_list=[user.email_id],
-            actions_list=actions,
-            effect=effect,
+            actions_list=["PutObject", "GetObject"],
             resources_list=[f'{ns_bucket}/{"*"}'],
         )
         bucket_policy = json.dumps(bucket_policy_generated)

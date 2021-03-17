@@ -3,11 +3,11 @@ import logging
 import uuid
 
 import pytest
-import botocore.exceptions as boto3exception
 
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     flowtests,
+    skipif_openshift_dedicated,
 )
 from ocs_ci.framework.testlib import E2ETest, skipif_ocs_version
 from ocs_ci.ocs.bucket_utils import (
@@ -23,13 +23,8 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status, schedule_nodes
-from ocs_ci.ocs.resources.bucket_policy import (
-    NoobaaAccount,
-    gen_bucket_policy,
-    HttpResponseParser,
-)
+from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount, gen_bucket_policy
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs.resources.pod import wait_for_storage_pods
@@ -40,6 +35,7 @@ MCG_NS_RESULT_DIR = "/result"
 MCG_NS_ORIGINAL_DIR = "/original"
 
 
+@skipif_openshift_dedicated
 @skipif_aws_creds_are_missing
 @skipif_ocs_version("<4.7")
 class TestMcgNamespaceDisruptionsCrd(E2ETest):
@@ -236,6 +232,7 @@ class TestMcgNamespaceDisruptionsCrd(E2ETest):
                 [node_name], status=constants.NODE_READY_SCHEDULING_DISABLED
             )
             schedule_nodes([node_name])
+            wait_for_nodes_status(timeout=300)
 
             # Retrieve the new pod
             pod_obj = pod.Pod(
@@ -288,24 +285,6 @@ class TestMcgNamespaceDisruptionsCrd(E2ETest):
         logger.info(
             f"Verifying whether user: {user.email_id} has only public read access"
         )
-        try:
-            s3_put_object(
-                s3_obj=user, bucketname=ns_bucket, object_key=object_key, data=data
-            )
-        except boto3exception.ClientError as e:
-            logger.info(e.response)
-            response = HttpResponseParser(e.response)
-            if response.error["Code"] == "AccessDenied":
-                logger.info("Put object action has been denied access")
-            else:
-                raise UnexpectedBehaviour(
-                    f"{e.response} received invalid error code "
-                    f"{response.error['Code']}"
-                )
-        else:
-            assert (
-                False
-            ), "Put object operation was granted access, when it should have denied"
 
         logger.info(f"Removing objects from ns bucket: {ns_bucket}")
         rm_object_recursive(awscli_pod, target=ns_bucket, mcg_obj=mcg_obj)

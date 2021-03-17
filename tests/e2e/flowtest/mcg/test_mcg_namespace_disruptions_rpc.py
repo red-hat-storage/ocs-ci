@@ -8,6 +8,7 @@ import botocore.exceptions as boto3exception
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     flowtests,
+    skipif_openshift_dedicated,
 )
 from ocs_ci.framework.testlib import E2ETest, skipif_ocs_version
 from ocs_ci.ocs.bucket_utils import (
@@ -40,6 +41,7 @@ MCG_NS_RESULT_DIR = "/result"
 MCG_NS_ORIGINAL_DIR = "/original"
 
 
+@skipif_openshift_dedicated
 @skipif_aws_creds_are_missing
 @skipif_ocs_version("!=4.6")
 class TestMcgNamespaceDisruptionsRpc(E2ETest):
@@ -220,6 +222,7 @@ class TestMcgNamespaceDisruptionsRpc(E2ETest):
                 [node_name], status=constants.NODE_READY_SCHEDULING_DISABLED
             )
             schedule_nodes([node_name])
+            wait_for_nodes_status(timeout=300)
 
             # Retrieve the new pod
             pod_obj = pod.Pod(

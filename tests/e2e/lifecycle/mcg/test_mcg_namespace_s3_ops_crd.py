@@ -7,6 +7,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     tier2,
+    skipif_openshift_dedicated,
 )
 from ocs_ci.framework.testlib import E2ETest, skipif_ocs_version
 from ocs_ci.ocs import bucket_utils
@@ -106,6 +107,7 @@ def multipart_setup(pod_obj):
 
 
 @pytest.mark.polarion_id("OCS-2296")
+@skipif_openshift_dedicated
 @skipif_aws_creds_are_missing
 @skipif_ocs_version("<4.7")
 @tier2
@@ -146,7 +148,7 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
         ],
     )
     def test_mcg_namespace_basic_s3_ops_crd(
-        self, mcg_obj, cld_mgr, awscli_pod, bucket_factory, bucketclass_dict
+        self, mcg_obj, cld_mgr, bucket_factory, bucketclass_dict
     ):
         """
         Test basic S3 operations on namespace buckets.
@@ -247,23 +249,12 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
         last_key = get_list_and_verify(
             first_page_res, obj_keys[:mid_index], "Contents", version="v1"
         )
-        if (
-            constants.AZURE_PLATFORM
-            not in bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"]
-        ):
-            next_page_res = bucket_utils.s3_list_objects_v1(
-                s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys, marker=last_key
-            )
-            get_list_and_verify(
-                next_page_res, obj_keys[mid_index:], "Contents", version="v1"
-            )
-        else:
-            logger.warning(
-                "Skipping next page entries for ListObjectV1(plain list) - not supported on Azure"
-            )
-            logger.warning(
-                "For more info: https://bugzilla.redhat.com/show_bug.cgi?id=1918188"
-            )
+        next_page_res = bucket_utils.s3_list_objects_v1(
+            s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys, marker=last_key
+        )
+        get_list_and_verify(
+            next_page_res, obj_keys[mid_index:], "Contents", version="v1"
+        )
 
         # List v1 with prefix and page entries
         logger.info(f"ListObjectsV1 operation on {ns_bucket} with prefix")
@@ -280,27 +271,16 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
         last_key = get_list_and_verify(
             first_page_res, obj_keys[:mid_index], "Contents", "Drive/", version="v1"
         )
-        if (
-            constants.AZURE_PLATFORM
-            not in bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"]
-        ):
-            next_page_res = bucket_utils.s3_list_objects_v1(
-                s3_obj=mcg_obj,
-                bucketname=ns_bucket,
-                prefix="Drive/",
-                max_keys=max_keys,
-                marker=last_key,
-            )
-            get_list_and_verify(
-                next_page_res, obj_keys[mid_index:], "Contents", "Drive/", version="v1"
-            )
-        else:
-            logger.warning(
-                "Skipping next page entries for ListObjectV1(with prefix) - not supported on Azure"
-            )
-            logger.warning(
-                "For more info: https://bugzilla.redhat.com/show_bug.cgi?id=1918188"
-            )
+        next_page_res = bucket_utils.s3_list_objects_v1(
+            s3_obj=mcg_obj,
+            bucketname=ns_bucket,
+            prefix="Drive/",
+            max_keys=max_keys,
+            marker=last_key,
+        )
+        get_list_and_verify(
+            next_page_res, obj_keys[mid_index:], "Contents", "Drive/", version="v1"
+        )
 
         # List v1 with prefix, delimiter and page entries
         logger.info(f"ListObjectsV1 operation on {ns_bucket} with prefix and delimiter")
@@ -472,9 +452,7 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
             interface=bucketclass_dict["interface"],
             bucketclass=bucketclass_dict,
         )[0]
-
         ns_bucket = ns_buc.name
-
         namespace_res = ns_buc.bucketclass.namespacestores[0].uls_name
         aws_s3_client = aws_s3_resource.meta.client
 

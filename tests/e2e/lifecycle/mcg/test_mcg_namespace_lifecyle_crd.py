@@ -95,7 +95,6 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         7. Delete namespace resource and bucket
 
         """
-        logger.info(bucketclass_dict)
         data = "Sample string content to write to a S3 object"
         object_key = "ObjKey-" + str(uuid.uuid4().hex)
 
