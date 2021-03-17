@@ -75,6 +75,7 @@ from ocs_ci.utility.environment_check import (
     get_status_after_execution,
 )
 from ocs_ci.utility.flexy import load_cluster_info
+from ocs_ci.utility.kms import is_kms_enabled
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
@@ -88,7 +89,6 @@ from ocs_ci.utility.utils import (
     ocsci_log_path,
     skipif_ocp_version,
     skipif_ocs_version,
-    skipif_no_kms,
     TimeoutSampler,
     skipif_upgraded_from,
     update_container_with_mirrored_image,
@@ -172,12 +172,15 @@ def pytest_collection_modifyitems(session, items):
                     )
                     items.remove(item)
             if skipif_no_kms_marker:
-                if skipif_no_kms():
-                    log.info(
-                        f"Test: {item} will be skipped because the OCS cluster"
-                        f" has not configured cluster-wide encryption with KMS"
-                    )
-                    items.remove(item)
+                try:
+                    if not is_kms_enabled():
+                        log.info(
+                            f"Test: {item} will be skipped because the OCS cluster"
+                            f" has not configured cluster-wide encryption with KMS"
+                        )
+                        items.remove(item)
+                except KeyError:
+                    log.warning("Cluster is not yet installed. Skipping skipif_no_kms check.")
 
 
 @pytest.fixture()

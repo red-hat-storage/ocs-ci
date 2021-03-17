@@ -22,6 +22,7 @@ from ocs_ci.ocs.exceptions import (
     KMSTokenError,
     KMSResourceCleaneupError,
 )
+from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     load_auth_config,
@@ -502,3 +503,20 @@ def get_kms_deployment():
         return kms_map[provider]()
     except KeyError:
         raise KMSNotSupported("Not a supported KMS deployment")
+
+
+def is_kms_enabled():
+    """
+    Checks StorageCluster yaml if kms is configured.
+
+    Return:
+        (bool): True if KMS is configured else False
+
+    """
+    cluster = storage_cluster.get_storage_cluster()
+    logger.info("Checking if StorageCluster has configured KMS encryption")
+    resource = cluster.get()["items"][0]
+    encryption = (
+        resource.get("spec").get("encryption", {}).get("kms", {}).get("enable")
+    )
+    return bool(encryption)

@@ -3106,35 +3106,6 @@ def skipif_upgraded_from(version_list):
         return False
 
 
-def skipif_no_kms():
-    """
-    This function evaluates the condition to skip a test if the cluster
-    doesn't have configured KMS encryption.
-
-    Return:
-        (bool): True if test needs to be skipped else False
-
-    """
-    from ocs_ci.ocs.resources import storage_cluster
-
-    cluster = storage_cluster.get_storage_cluster()
-    log.info("Checking if StorageCluster has configured KMS encryption")
-    try:
-        resource = cluster.get()["items"][0]
-        encryption = (
-            resource.get("spec").get("encryption", {}).get("kms", {}).get("enable")
-        )
-    except KeyError:
-        log.warning("Cluster is not yet installed. Skipping skipif_no_kms check.")
-        # Set encryption to True so that the test is not skipped
-        # and can be debugged if this is not expected state
-        encryption = True
-    if not encryption:
-        return True
-    else:
-        return False
-
-
 def get_cluster_id(cluster_path):
     """
     Get ClusterID from metadata.json in given cluster_path
