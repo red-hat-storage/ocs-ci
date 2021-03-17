@@ -43,9 +43,7 @@ class TestAMQBasics(E2ETest):
         test_fixture_amq.setup_amq_cluster(sc.name)
 
         # Run open messages
-        test_fixture_amq.create_messaging_on_amq(
-            num_of_producer_pods=3, num_of_consumer_pods=3
-        )
+        test_fixture_amq.create_messaging_on_amq()
 
         # Wait for some time to generate msg
         waiting_time = 60
