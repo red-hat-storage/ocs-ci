@@ -1419,6 +1419,7 @@ def get_services_by_label(label, namespace):
 
     Return:
         list: deployment OCP instances
+
     """
     ocp_svc = OCP(kind=constants.SERVICE, namespace=namespace)
     svc = ocp_svc.get(selector=label).get("items")

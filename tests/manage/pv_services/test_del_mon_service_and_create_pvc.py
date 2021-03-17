@@ -4,6 +4,7 @@ import pytest
 
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
+    skipif_external_mode,
     E2ETest,
     tier4a,
     ignore_leftovers,
@@ -11,14 +12,15 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP, get_services_by_label
-from ocs_ci.ocs.resources.pod import get_mon_pods
+from ocs_ci.ocs.resources.pod import get_mon_pods, run_io_in_bg
 
 log = logging.getLogger(__name__)
 
 
 @tier4a
 @ignore_leftovers
-@skipif_ocs_version("<4.6")
+@skipif_external_mode
+@skipif_ocs_version("<4.7")
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[
@@ -36,26 +38,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
     mon services manually
     """
 
-    def create_pvc_and_pod(self, interface, pvc_factory, pod_factory):
-        """
-        create resources for the test
-
-        Args:
-            interface(str): The type of the interface
-                (e.g. CephBlockPool, CephFileSystem)
-            pvc_factory: A fixture to create new pvc
-            pod_factory: A fixture to create new pod
-        """
-        self.pvc_obj = pvc_factory(
-            interface=interface, size=5, status=constants.STATUS_BOUND
-        )
-        self.pod_obj = pod_factory(
-            interface=interface, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
-        )
-
-    def test_pvc_creation_after_del_mon_services(
-        self, interface, pvc_factory, pod_factory
-    ):
+    def test_pvc_creation_after_del_mon_services(self, interface, pod_factory):
         """
         1. Delete one mon service
         2. Edit the configmap rook-ceph-endpoints
@@ -68,6 +51,9 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         7. Create PVC, should succeeded.
 
         """
+
+        pod_obj = pod_factory(interface=interface)
+        run_io_in_bg(pod_obj)
 
         # Get all mon services
         mon_svc = get_services_by_label(
@@ -88,6 +74,21 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             mon_endpoint = f"{cluster_ip}:{port}"
             mon_id = svc["spec"]["selector"]["mon"]
             list_old_svc.append(cluster_ip)
+
+            # Delete deployment
+            log.info("Delete mon deployments")
+            del_obj = OCP(
+                kind=constants.DEPLOYMENT,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+            del_obj.delete(resource_name=name)
+
+            # Delete pvc
+            log.info("Delete mon PVC")
+            pvc_obj = OCP(
+                kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+            pvc_obj.delete(resource_name=name)
 
             # Delete the mon service
             svc_obj = OCP(
@@ -135,21 +136,6 @@ class TestPvcCreationAfterDelMonService(E2ETest):
                 f"Configmap {constants.ROOK_CEPH_MON_ENDPOINTS} edited successfully"
             )
 
-            # Delete deployment
-            log.info("Delete mon deployments")
-            del_obj = OCP(
-                kind=constants.DEPLOYMENT,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-            )
-            del_obj.delete(resource_name=name)
-
-            # Delete pvc
-            log.info("Delete mon PVC")
-            pvc_obj = OCP(
-                kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-            )
-            pvc_obj.delete(resource_name=name)
-
             # Restart the operator pod
             pod_name = "operator"
             log.info(f"Respin {pod_name} pod")
@@ -187,6 +173,5 @@ class TestPvcCreationAfterDelMonService(E2ETest):
 
         # Create PVC and pods
         log.info(f"Create {interface} PVC")
-        self.create_pvc_and_pod(
-            interface=interface, pvc_factory=pvc_factory, pod_factory=pod_factory
-        )
+        pod_obj = pod_factory(interface=interface)
+        pod_obj.run_io(storage_type="fs", size="500M")
