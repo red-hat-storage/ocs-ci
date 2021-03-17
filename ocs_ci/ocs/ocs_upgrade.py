@@ -7,6 +7,7 @@ import time
 
 from ocs_ci.framework import config
 from ocs_ci.deployment.deployment import create_catalog_source
+from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
@@ -162,6 +163,10 @@ class OCSUpgrade(object):
     @property
     def ocs_registry_image(self):
         return self._ocs_registry_image
+
+    @ocs_registry_image.setter
+    def ocs_registry_image(self, value):
+        self._ocs_registry_image = value
 
     def get_upgrade_version(self):
         """
@@ -391,7 +396,7 @@ class OCSUpgrade(object):
                 self.get_parsed_versions()[1] > self.get_parsed_versions()[0]
             )
             if self.ocs_registry_image:
-                image_url, new_image_tag = self.ocs_registry_image.split(":")
+                image_url, new_image_tag = self.ocs_registry_image.rsplit(":", 1)
             elif config.UPGRADE.get("upgrade_to_latest", True) or version_change:
                 new_image_tag = get_latest_ds_olm_tag()
             else:
@@ -437,6 +442,11 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
     pre_upgrade_images = upgrade_ocs.get_pre_upgrade_image(csv_name_pre_upgrade)
     upgrade_ocs.load_version_config_file(upgrade_version)
+    if config.DEPLOYMENT.get("disconnected"):
+        upgrade_ocs.ocs_registry_image = prepare_disconnected_ocs_deployment(
+            upgrade=True
+        )
+        log.info(f"Disconnected upgrade - new image: {upgrade_ocs.ocs_registry_image}")
     with CephHealthMonitor(ceph_cluster):
         channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()

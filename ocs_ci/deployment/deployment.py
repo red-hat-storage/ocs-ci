@@ -48,8 +48,12 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
-from ocs_ci.utility import templating, ibmcloud
 from ocs_ci.utility.flexy import load_cluster_info
+from ocs_ci.utility import (
+    templating,
+    ibmcloud,
+    kms as KMS,
+)
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -179,41 +183,68 @@ class Deployment(object):
         Label and taint worker nodes to be used by OCS operator
         """
 
+        arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
+
         nodes = ocp.OCP(kind="node").get().get("items", [])
+        zone_label = self.get_zone_label()
+
         worker_nodes = [
             node
             for node in nodes
-            if "node-role.kubernetes.io/worker" in node["metadata"]["labels"]
+            if constants.WORKER_LABEL in node["metadata"]["labels"]
         ]
         if not worker_nodes:
             raise UnavailableResourceException("No worker node found!")
         az_worker_nodes = {}
         for node in worker_nodes:
-            az = node["metadata"]["labels"].get(
-                "failure-domain.beta.kubernetes.io/zone"
-            )
+            az = node["metadata"]["labels"].get(zone_label)
             az_node_list = az_worker_nodes.get(az, [])
-            az_node_list.append(node)
+            az_node_list.append(node["metadata"]["name"])
             az_worker_nodes[az] = az_node_list
         logger.debug(f"Found the worker nodes in AZ: {az_worker_nodes}")
+
         distributed_worker_nodes = []
-        while az_worker_nodes:
+        if arbiter_deployment and config.DEPLOYMENT.get("arbiter_autodetect"):
             for az in list(az_worker_nodes.keys()):
                 az_node_list = az_worker_nodes.get(az)
-                if az_node_list:
-                    node_name = az_node_list.pop(0)["metadata"]["name"]
-                    distributed_worker_nodes.append(node_name)
+                if az_node_list and len(az_node_list) > 1:
+                    node_names = az_node_list[:2]
+                    distributed_worker_nodes += node_names
+        elif arbiter_deployment and not config.DEPLOYMENT.get("arbiter_autodetect"):
+            for az in list(config.DEPLOYMENT.get("worker_zones")):
+                az_node_list = az_worker_nodes.get(az)
+                if az_node_list and len(az_node_list) > 1:
+                    node_names = az_node_list[:2]
+                    distributed_worker_nodes += node_names
                 else:
-                    del az_worker_nodes[az]
+                    raise UnavailableResourceException(
+                        "Atleast 2 worker nodes required for arbiter cluster in zone %s",
+                        az,
+                    )
+        else:
+            while az_worker_nodes:
+                for az in list(az_worker_nodes.keys()):
+                    az_node_list = az_worker_nodes.get(az)
+                    if az_node_list:
+                        node_name = az_node_list.pop(0)
+                        distributed_worker_nodes.append(node_name)
+                    else:
+                        del az_worker_nodes[az]
         logger.info(f"Distributed worker nodes for AZ: {distributed_worker_nodes}")
-        to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 3)
+
+        if arbiter_deployment:
+            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
+        else:
+            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 3)
+
         to_taint = config.DEPLOYMENT.get("ocs_operator_nodes_to_taint", 0)
-        worker_count = len(worker_nodes)
-        if worker_count < to_label or worker_count < to_taint:
+
+        distributed_worker_count = len(distributed_worker_nodes)
+        if distributed_worker_count < to_label or distributed_worker_count < to_taint:
             logger.info(f"All nodes: {nodes}")
-            logger.info(f"Worker nodes: {worker_nodes}")
+            logger.info(f"Distributed worker nodes: {distributed_worker_nodes}")
             raise UnavailableResourceException(
-                f"Not enough worker nodes: {worker_count} to label: "
+                f"Not enough distributed worker nodes: {distributed_worker_count} to label: "
                 f"{to_label} or taint: {to_taint}!"
             )
 
@@ -374,6 +405,52 @@ class Deployment(object):
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
 
+    def get_zone_label(self):
+        nodes = ocp.OCP(kind="node").get().get("items", [])
+
+        # Check which zone label is present
+        return (
+            constants.ZONE_LABEL
+            if nodes[0]["metadata"]["labels"].get(constants.ZONE_LABEL, False)
+            else constants.ZONE_LABEL_NEW
+        )
+
+    def get_arbiter_location(self):
+        """
+        Get arbiter mon location for storage cluster
+        """
+        if config.DEPLOYMENT.get("arbiter_deployment") and not config.DEPLOYMENT.get(
+            "arbiter_autodetect"
+        ):
+            return config.DEPLOYMENT.get("arbiter_zone")
+
+        # below logic will autodetect arbiter_zone
+        nodes = ocp.OCP(kind="node").get().get("items", [])
+
+        zone_label = self.get_zone_label()
+
+        worker_nodes_zones = {
+            node["metadata"]["labels"].get(zone_label)
+            for node in nodes
+            if constants.WORKER_LABEL in node["metadata"]["labels"]
+            and str(constants.OPERATOR_NODE_LABEL)[:-3] in node["metadata"]["labels"]
+        }
+
+        master_nodes_zones = {
+            node["metadata"]["labels"].get(zone_label)
+            for node in nodes
+            if constants.MASTER_LABEL in node["metadata"]["labels"]
+        }
+
+        arbiter_locations = list(master_nodes_zones - worker_nodes_zones)
+
+        if len(arbiter_locations) < 1:
+            raise UnavailableResourceException(
+                "Atleast 1 different zone required than storage nodes in master nodes to host arbiter mon"
+            )
+
+        return arbiter_locations[0]
+
     def deploy_ocs_via_operator(self, image=None):
         """
         Method for deploy OCS via OCS operator
@@ -384,6 +461,7 @@ class Deployment(object):
         """
         ui_deployment = config.DEPLOYMENT.get("ui_deployment")
         live_deployment = config.DEPLOYMENT.get("live_deployment")
+        arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 
         if ui_deployment:
             self.deployment_with_ui()
@@ -428,6 +506,7 @@ class Deployment(object):
             logger.info("Deleting all pods in openshift-storage namespace")
             exec_cmd(f"oc delete pod --all -n {self.namespace}")
         csv.wait_for_phase("Succeeded", timeout=720)
+        ocp_version = float(get_ocp_version())
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             config_map = ocp.OCP(
                 kind="configmap",
@@ -443,20 +522,21 @@ class Deployment(object):
                 f"oc patch configmap -n {self.namespace} "
                 f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
             )
-            logger.info("Creating secret for IBM Cloud Object Storage")
-            with open(constants.IBM_COS_SECRET_YAML, "r") as cos_secret_fd:
-                cos_secret_data = yaml.load(cos_secret_fd, Loader=yaml.SafeLoader)
-            key_id = config.AUTH["ibmcloud"]["ibm_cos_access_key_id"]
-            key_secret = config.AUTH["ibmcloud"]["ibm_cos_secret_access_key"]
-            cos_secret_data["data"]["IBM_COS_ACCESS_KEY_ID"] = key_id
-            cos_secret_data["data"]["IBM_COS_SECRET_ACCESS_KEY"] = key_secret
-            cos_secret_data_yaml = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="cos_secret", delete=False
-            )
-            templating.dump_data_to_temp_yaml(
-                cos_secret_data, cos_secret_data_yaml.name
-            )
-            exec_cmd(f"oc create -f {cos_secret_data_yaml.name}")
+            if config.DEPLOYMENT.get("create_ibm_cos_secret", True):
+                logger.info("Creating secret for IBM Cloud Object Storage")
+                with open(constants.IBM_COS_SECRET_YAML, "r") as cos_secret_fd:
+                    cos_secret_data = yaml.load(cos_secret_fd, Loader=yaml.SafeLoader)
+                key_id = config.AUTH["ibmcloud"]["ibm_cos_access_key_id"]
+                key_secret = config.AUTH["ibmcloud"]["ibm_cos_secret_access_key"]
+                cos_secret_data["data"]["IBM_COS_ACCESS_KEY_ID"] = key_id
+                cos_secret_data["data"]["IBM_COS_SECRET_ACCESS_KEY"] = key_secret
+                cos_secret_data_yaml = tempfile.NamedTemporaryFile(
+                    mode="w+", prefix="cos_secret", delete=False
+                )
+                templating.dump_data_to_temp_yaml(
+                    cos_secret_data, cos_secret_data_yaml.name
+                )
+                exec_cmd(f"oc create -f {cos_secret_data_yaml.name}")
 
         # Modify the CSV with custom values if required
         if all(
@@ -480,9 +560,23 @@ class Deployment(object):
         if self.platform == constants.IBM_POWER_PLATFORM:
             cluster_data = templating.load_yaml(constants.IBM_STORAGE_CLUSTER_YAML)
         else:
+            if config.DEPLOYMENT.get("kms_deployment"):
+                kms = KMS.get_kms_deployment()
+                kms.deploy()
             cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
 
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
+
+        if arbiter_deployment:
+            cluster_data["spec"]["arbiter"] = {}
+            cluster_data["spec"]["nodeTopologies"] = {}
+            cluster_data["spec"]["arbiter"]["enable"] = True
+            cluster_data["spec"]["nodeTopologies"][
+                "arbiterLocation"
+            ] = self.get_arbiter_location()
+            cluster_data["spec"]["storageDeviceSets"][0][
+                "replica"
+            ] = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
 
         if self.platform == constants.IBM_POWER_PLATFORM:
             numberofstoragenodes = config.ENV_DATA["number_of_storage_nodes"]
@@ -549,7 +643,6 @@ class Deployment(object):
                 ] = self.DEFAULT_STORAGECLASS
 
             ocs_version = float(config.ENV_DATA["ocs_version"])
-            ocp_version = float(get_ocp_version())
 
             # StorageCluster tweaks for LSO
             if config.DEPLOYMENT.get("local_storage"):
@@ -559,7 +652,11 @@ class Deployment(object):
                 deviceset_data["dataPVCTemplate"]["spec"][
                     "storageClassName"
                 ] = self.DEFAULT_STORAGECLASS_LSO
-                if self.platform.lower() == constants.AWS_PLATFORM:
+                lso_type = config.DEPLOYMENT.get("type")
+                if (
+                    self.platform.lower() == constants.AWS_PLATFORM
+                    and not lso_type == constants.AWS_EBS
+                ):
                     deviceset_data["count"] = 2
                 if ocs_version >= 4.5:
                     deviceset_data["resources"] = {
@@ -647,6 +744,10 @@ class Deployment(object):
             cluster_data["spec"]["encryption"] = {
                 "enable": True,
             }
+            if config.DEPLOYMENT.get("kms_deployment"):
+                cluster_data["spec"]["encryption"]["kms"] = {
+                    "enable": True,
+                }
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
@@ -992,7 +1093,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         upgrade = config.UPGRADE.get("upgrade", False)
     else:
         upgrade = False
-    image_and_tag = image.split(":")
+    image_and_tag = image.rsplit(":", 1)
     image = image_and_tag[0]
     image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
     if not image_tag and config.REPORTING.get("us_ds") == "DS":
@@ -1009,7 +1110,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     )
     if change_cs_condition:
         default_image = config.DEPLOYMENT["default_ocs_registry_image"]
-        image = image if image else default_image.split(":")[0]
+        image = image if image else default_image.rsplit(":", 1)[0]
         catalog_source_data["spec"][
             "image"
         ] = f"{image}:{image_tag if image_tag else 'latest'}"

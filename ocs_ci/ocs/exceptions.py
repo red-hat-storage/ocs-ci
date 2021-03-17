@@ -257,6 +257,30 @@ class ImageIsNotDeletedOrNotFound(Exception):
     pass
 
 
+class VaultDeploymentError(Exception):
+    pass
+
+
+class VaultOperationError(Exception):
+    pass
+
+
+class KMSNotSupported(Exception):
+    pass
+
+
+class KMSConnectionDetailsError(Exception):
+    pass
+
+
+class KMSTokenError(Exception):
+    pass
+
+
+class KMSResourceCleaneupError(Exception):
+    pass
+
+
 class UnhealthyBucket(Exception):
     pass
 

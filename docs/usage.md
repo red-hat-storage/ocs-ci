@@ -21,12 +21,12 @@ get information on various image version deployed by ocs-ci
 ## vSphere
   This should be used only when your cluster-dir is accidentally deleted
   ```bash
-  vsphere-cleanup [-h] --cluster_name CLUSTER_NAME --vsphere_conf VSPHERE_CONF
+  vsphere-cleanup [-h] --cluster-name CLUSTER_NAME --ocsci-conf VSPHERE_CONF
   ```
   e.g:
 
-  `vsphere-cleanup --cluster_name mycluster-oct12
-                   --vsphere_conf ~/vSphere-DC-CP_VC1.yaml`
+  `vsphere-cleanup --cluster-name mycluster-oct12
+                   --ocsci-conf ~/vSphere-DC-CP_VC1.yaml`
 
 # usage to shutdown AWS nodes when nodes are not in use
   Following cli can be used when you want to shutdown the cluster
@@ -79,6 +79,9 @@ to the pytest.
   * `4.2`: for nightly 4.2 OCP build
   * `4.2-ga`: for latest GAed 4.2 OCP build from stable channel
   * `4.2-ga-minus1`: for latest GAed 4.2 build (stable channel) - 1
+* `--ocp-installer-version` - Specific OCP installer version to be used for deployment.
+  This option will generally be used for non-GA or nightly builds. (e.g. 4.5.5).
+  This option will overwrite any values set via --ocp-version
 * `--ocs-registry-image` - ocs registry image to be used for deployment
     (e.g quay.io/rhceph-dev/ocs-olm-operator:latest-4.2). In case this parameter
     is passed, the version is parsed from the registry image name but only

@@ -1186,7 +1186,7 @@ def get_osd_pods_memory_sum():
     """
     osd_pods = pod.get_osd_pods()
     num_of_osd_pods = len(osd_pods)
-    osd_pod_mem_size_str = osd_pods[0].get_memory().get("osd")
+    osd_pod_mem_size_str = osd_pods[0].get_memory(container_name=constants.OSD)
     osd_pod_mem_size = convert_device_size(
         unformatted_size=osd_pod_mem_size_str, units_to_covert_to="GB"
     )

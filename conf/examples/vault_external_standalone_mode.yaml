@@ -1,0 +1,31 @@
+"""
+Example yaml for an external vault standalone OCS deployment
+"""
+ENV_DATA:
+  encryption_at_rest: true
+  vault_deploy_mode: external
+  # whether to use vault namespace or not
+  # applicable only for enterprise vault
+  use_vault_namespace: false
+  KMS_PROVIDER: vault
+  KMS_SERVICE_NAME: vault
+  # IP address of vault server
+  VAULT_ADDR: 'IP_ADDR'
+  # vault port
+  PORT: '8200'
+  # Namespace which OCS will use
+  VAULT_NAMESPACE: 'TESTNAMESPACE'
+  # CA CERT ocp resource name
+  VAULT_CACERT: 'TEST_CACERT'
+  # Client cert ocp resource name
+  VAULT_CLIENT_CERT: 'TEST_CLIENT_CERT'
+  # Cleint key ocp resource name
+  VAULT_CLIENT_KEY: 'TEST_CLIENT_KEY'
+  # Skip SSL check
+  VAULT_SKIP_VERIFY: false
+  # TLS server name
+  VAULT_TLS_SERVER_NAME: 'TEST_SERVER'
+  # Backend vault path used by OCS
+  VAULT_BACKEND_PATH: 'TEST_BACKEND_PATH'
+  # Vault policy used by OCS
+  VAULT_POLICY: 'TEST_POLICY'
