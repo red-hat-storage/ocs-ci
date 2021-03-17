@@ -379,6 +379,9 @@ def ocs_install_verification(
         check_fips_enabled()
     if config.ENV_DATA.get("encryption_at_rest"):
         osd_encryption_verification()
+        if config.DEPLOYMENT.get("kms_deployment"):
+            if config.ENV_DATA.get("KMS_PROVIDER") == constants.VAULT_KMS_PROVIDER:
+                kms.post_deploy_vault_verification()
 
 
 def osd_encryption_verification():
