@@ -2967,7 +2967,7 @@ def get_attr_chain(obj, attr_chain):
         The requested attribute if found, otherwise None
     """
     return reduce(
-        lambda _attr, _obj: getattr(_attr, _obj, None), attr_chain.split("."), obj
+        lambda _obj, _attr: getattr(_obj, _attr, None), attr_chain.split("."), obj
     )
 
 
