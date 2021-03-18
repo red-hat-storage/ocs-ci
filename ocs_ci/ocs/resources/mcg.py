@@ -30,13 +30,12 @@ from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
 from ocs_ci.utility import templating
 from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
+from ocs_ci.utility.utils import TimeoutSampler, exec_cmd, get_attr_chain
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_resource,
     calc_local_file_md5_sum,
     retrieve_default_ingress_crt,
-    get_attr_chain,
     storagecluster_independent_check,
 )
 import subprocess

@@ -3,7 +3,6 @@ Helper functions file for OCS QE
 """
 import base64
 import datetime
-from functools import reduce
 import hashlib
 import json
 import logging
@@ -2941,34 +2940,6 @@ def get_mon_pdb():
     disruptions_allowed = pdb_obj.get().get("status").get("disruptionsAllowed")
     min_available_mon = pdb_obj.get().get("spec").get("minAvailable")
     return disruptions_allowed, min_available_mon
-
-
-def get_attr_chain(obj, attr_chain):
-    """
-    Attempt to retrieve object attributes when uncertain about the existence of the attribute
-    or a different attribute in a given attribute chain. If the retrieval fails, None is returned.
-    The function can be used to retrieve a direct attribute, or a chain of attributes.
-    i.e. - obj.attr_a, obj_attr_a.sub_attr
-
-    Another example - trying to access "sub_attr_b" in object.attr.sub_attr_a.sub_attr_b -
-    get_attr_chain(object, "attr.sub_attr_a.sub_attr_b")
-
-    The function can be used to try and retrieve "sub_attribute_b" without an exception,
-    even in cases where "attr" or "sub_attr_a" might not exist.
-    In those cases, the function will return None.
-
-    Args:
-        obj: An object
-        attr_chain (str): A string containing one attribute or several sub-attributes
-                          separated by dots
-                          (i.e. - "attr.sub_attr_a.sub_attr_b")
-
-    Returns:
-        The requested attribute if found, otherwise None
-    """
-    return reduce(
-        lambda _obj, _attr: getattr(_obj, _attr, None), attr_chain.split("."), obj
-    )
 
 
 def run_cmd_verify_cli_output(
