@@ -36,6 +36,7 @@ from ocs_ci.helpers.helpers import (
     create_resource,
     calc_local_file_md5_sum,
     retrieve_default_ingress_crt,
+    get_attr_chain,
     storagecluster_independent_check,
 )
 import subprocess
@@ -506,26 +507,26 @@ class MCG:
                 "auth_method": "AWS_V4",
                 "endpoint": constants.MCG_NS_AWS_ENDPOINT,
                 "endpoint_type": "AWS",
-                "identity": cld_mgr.aws_client.access_key,
+                "identity": get_attr_chain(cld_mgr, "aws_client.access_key"),
                 "name": conn_name,
-                "secret": cld_mgr.aws_client.secret_key,
+                "secret": get_attr_chain(cld_mgr, "aws_client.secret_key"),
             }
         elif platform == constants.AZURE_PLATFORM:
             params = {
                 "endpoint": constants.MCG_NS_AZURE_ENDPOINT,
                 "endpoint_type": "AZURE",
-                "identity": cld_mgr.azure_client.account_name,
+                "identity": get_attr_chain(cld_mgr, "azure_client.account_name"),
                 "name": conn_name,
-                "secret": cld_mgr.azure_client.credential,
+                "secret": get_attr_chain(cld_mgr, "azure_client.credential"),
             }
         elif platform == constants.RGW_PLATFORM:
             params = {
                 "auth_method": "AWS_V4",
-                "endpoint": cld_mgr.rgw_client.endpoint,
+                "endpoint": get_attr_chain(cld_mgr, "rgw_client.endpoint"),
                 "endpoint_type": "S3_COMPATIBLE",
-                "identity": cld_mgr.rgw_client.access_key,
+                "identity": get_attr_chain(cld_mgr, "rgw_client.access_key"),
                 "name": conn_name,
-                "secret": cld_mgr.rgw_client.secret_key,
+                "secret": get_attr_chain(cld_mgr, "rgw_client.secret_key"),
             }
         else:
             raise UnsupportedPlatformError(f"Unsupported Platform: {platform}")
@@ -608,35 +609,36 @@ class MCG:
         nss_data["metadata"]["name"] = nss_name
         nss_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
 
-        try:
-            rgw_map = {
-                "type": "s3-compatible",
-                "s3Compatible": {
-                    "targetBucket": target_bucket_name,
-                    "endpoint": cld_mgr.rgw_client.endpoint,
-                    "signatureVersion": "v4",
-                    "secret": {"name": cld_mgr.rgw_client.secret.name},
-                },
-            }
-        except AttributeError:
-            rgw_map = None
-
         NSS_MAPPING = {
             constants.AWS_PLATFORM: {
                 "type": "aws-s3",
                 "awsS3": {
                     "targetBucket": target_bucket_name,
-                    "secret": {"name": cld_mgr.aws_client.secret.name},
+                    "secret": {
+                        "name": get_attr_chain(cld_mgr.aws_client, "secret.name")
+                    },
                 },
             },
             constants.AZURE_PLATFORM: {
                 "type": "azure-blob",
                 "azureBlob": {
                     "targetBlobContainer": target_bucket_name,
-                    "secret": {"name": cld_mgr.azure_client.secret.name},
+                    "secret": {
+                        "name": get_attr_chain(cld_mgr.azure_client, "secret.name")
+                    },
                 },
             },
-            constants.RGW_PLATFORM: rgw_map,
+            constants.RGW_PLATFORM: {
+                "type": "s3-compatible",
+                "s3Compatible": {
+                    "targetBucket": target_bucket_name,
+                    "endpoint": get_attr_chain(cld_mgr.rgw_client, "endpoint"),
+                    "signatureVersion": "v4",
+                    "secret": {
+                        "name": get_attr_chain(cld_mgr.rgw_client, "secret.name")
+                    },
+                },
+            },
         }
 
         nss_data["spec"] = NSS_MAPPING[platform]
