@@ -75,6 +75,7 @@ from ocs_ci.utility.environment_check import (
     get_status_after_execution,
 )
 from ocs_ci.utility.flexy import load_cluster_info
+from ocs_ci.utility.kms import is_kms_enabled
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
@@ -126,7 +127,7 @@ def pytest_logger_config(logger_config):
 def pytest_collection_modifyitems(session, items):
     """
     A pytest hook to filter out skipped tests satisfying
-    skipif_ocs_version or skipif_upgraded_from
+    skipif_ocs_version, skipif_upgraded_from or skipif_no_kms
 
     Args:
         session: pytest session
@@ -143,6 +144,7 @@ def pytest_collection_modifyitems(session, items):
             skipif_upgraded_from_marker = item.get_closest_marker(
                 "skipif_upgraded_from"
             )
+            skipif_no_kms_marker = item.get_closest_marker("skipif_no_kms")
             if skipif_ocp_version_marker:
                 skip_condition = skipif_ocp_version_marker.args
                 # skip_condition will be a tuple
@@ -169,6 +171,18 @@ def pytest_collection_modifyitems(session, items):
                         f" upgraded from one of these versions: {skip_args[0]}"
                     )
                     items.remove(item)
+            if skipif_no_kms_marker:
+                try:
+                    if not is_kms_enabled():
+                        log.info(
+                            f"Test: {item} will be skipped because the OCS cluster"
+                            f" has not configured cluster-wide encryption with KMS"
+                        )
+                        items.remove(item)
+                except KeyError:
+                    log.warning(
+                        "Cluster is not yet installed. Skipping skipif_no_kms check."
+                    )
 
 
 @pytest.fixture()
