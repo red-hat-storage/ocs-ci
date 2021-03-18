@@ -1,9 +1,14 @@
+import collections
 import logging
 import pytest
 
 from ocs_ci.framework.testlib import ManageTest, tier1, skipif_external_mode
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.cluster import get_pg_balancer_status
+from ocs_ci.framework import config
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs import constants, defaults
+
 
 log = logging.getLogger(__name__)
 
@@ -65,3 +70,35 @@ class TestCephDefaultValuesCheck(ManageTest):
 
         # Check if PG balancer is active
         assert get_pg_balancer_status(), "PG balancer is not active"
+
+    @tier1
+    @pytest.mark.skipif(
+        config.DEPLOYMENT.get("ceph_debug"),
+        reason="Ceph was configured with customized values by ocs-ci so there is point in validating its config values",
+    )
+    def test_validate_ceph_config_values_in_rook_config_override(self):
+        """
+        Test case for comparing the cluster's config values of
+        Ceph, set by ceph-config-override configMap, with the static set of configuration saved in ocs-ci
+
+        """
+        cm_obj = OCP(
+            kind="configmap",
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            resource_name=constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP,
+        )
+        config_data = cm_obj.get()["data"]["config"]
+        config_data = config_data.split("\n")[1:-1]
+        log.info(
+            "Validating that the Ceph values, configured by ceph-config-override "
+            "confiMap, match the ones stored in ocs-ci"
+        )
+
+        assert collections.Counter(config_data) == collections.Counter(
+            constants.ROOK_CEPH_CONFIG_VALUES
+        ), (
+            f"The Ceph config, set by {constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP} "
+            f"is different than the expected. Please inform OCS-QE about this discrepancy. "
+            f"The expected values are:\n{constants.ROOK_CEPH_CONFIG_VALUES}\n"
+            f"The cluster's Ceph values are:{config_data}"
+        )
