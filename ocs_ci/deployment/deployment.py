@@ -557,15 +557,10 @@ class Deployment(object):
             run_cmd(f"oc create -f {self.CUSTOM_STORAGE_CLASS_PATH}")
 
         # creating StorageCluster
-        if self.platform == constants.IBM_POWER_PLATFORM:
-            cluster_data = templating.load_yaml(constants.IBM_STORAGE_CLUSTER_YAML)
-        else:
-            if config.DEPLOYMENT.get("kms_deployment"):
-                kms = KMS.get_kms_deployment()
-                kms.deploy()
-            cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
-
-        cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
+        if config.DEPLOYMENT.get("kms_deployment"):
+            kms = KMS.get_kms_deployment()
+            kms.deploy()
+        cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
 
         if arbiter_deployment:
             cluster_data["spec"]["arbiter"] = {}
@@ -578,149 +573,104 @@ class Deployment(object):
                 "replica"
             ] = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
 
-        if self.platform == constants.IBM_POWER_PLATFORM:
-            numberofstoragenodes = config.ENV_DATA["number_of_storage_nodes"]
-            deviceset = [None] * numberofstoragenodes
+        cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
 
-            for i in range(numberofstoragenodes):
-                deviceset_data = cluster_data["spec"]["storageDeviceSets"][i]
-                device_size = int(
-                    config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
-                )
+        deviceset_data = cluster_data["spec"]["storageDeviceSets"][0]
+        device_size = int(config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE))
 
-                # set size of request for storage
-                if self.platform.lower() == "powervs":
-                    pv_size_list = helpers.get_pv_size(
-                        storageclass=self.DEFAULT_STORAGECLASS_LSO
-                    )
-                    pv_size_list.sort()
-                    deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
-                        "storage"
-                    ] = f"{pv_size_list[0]}"
-                else:
-                    deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
-                        "storage"
-                    ] = f"{device_size}Gi"
-
-                # set storage class to OCS default on current platform
-                if self.DEFAULT_STORAGECLASS_LSO:
-                    deviceset_data["dataPVCTemplate"]["spec"][
-                        "storageClassName"
-                    ] = self.DEFAULT_STORAGECLASS_LSO
-
-                # StorageCluster tweaks for LSO
-                if config.DEPLOYMENT.get("local_storage"):
-                    cluster_data["spec"]["manageNodes"] = False
-                    cluster_data["spec"]["monDataDirHostPath"] = "/var/lib/rook"
-                    deviceset_data["portable"] = False
-                    deviceset_data["dataPVCTemplate"]["spec"][
-                        "storageClassName"
-                    ] = self.DEFAULT_STORAGECLASS_LSO
-
-                deviceset[i] = deviceset_data
+        # set size of request for storage
+        if self.platform.lower() == constants.BAREMETAL_PLATFORM:
+            pv_size_list = helpers.get_pv_size(
+                storageclass=self.DEFAULT_STORAGECLASS_LSO
+            )
+            pv_size_list.sort()
+            deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
+                "storage"
+            ] = f"{pv_size_list[0]}"
         else:
-            deviceset_data = cluster_data["spec"]["storageDeviceSets"][0]
-            device_size = int(config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE))
+            deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
+                "storage"
+            ] = f"{device_size}Gi"
 
-            # set size of request for storage
-            if self.platform.lower() == constants.BAREMETAL_PLATFORM:
-                pv_size_list = helpers.get_pv_size(
-                    storageclass=self.DEFAULT_STORAGECLASS_LSO
-                )
-                pv_size_list.sort()
-                deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
-                    "storage"
-                ] = f"{pv_size_list[0]}"
-            else:
-                deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
-                    "storage"
-                ] = f"{device_size}Gi"
+        # set storage class to OCS default on current platform
+        if self.DEFAULT_STORAGECLASS:
+            deviceset_data["dataPVCTemplate"]["spec"][
+                "storageClassName"
+            ] = self.DEFAULT_STORAGECLASS
 
-            # set storage class to OCS default on current platform
-            if self.DEFAULT_STORAGECLASS:
-                deviceset_data["dataPVCTemplate"]["spec"][
-                    "storageClassName"
-                ] = self.DEFAULT_STORAGECLASS
+        ocs_version = float(config.ENV_DATA["ocs_version"])
 
-            ocs_version = float(config.ENV_DATA["ocs_version"])
-
-            # StorageCluster tweaks for LSO
-            if config.DEPLOYMENT.get("local_storage"):
-                cluster_data["spec"]["manageNodes"] = False
-                cluster_data["spec"]["monDataDirHostPath"] = "/var/lib/rook"
-                deviceset_data["portable"] = False
-                deviceset_data["dataPVCTemplate"]["spec"][
-                    "storageClassName"
-                ] = self.DEFAULT_STORAGECLASS_LSO
-                lso_type = config.DEPLOYMENT.get("type")
-                if (
-                    self.platform.lower() == constants.AWS_PLATFORM
-                    and not lso_type == constants.AWS_EBS
-                ):
-                    deviceset_data["count"] = 2
-                if ocs_version >= 4.5:
-                    deviceset_data["resources"] = {
-                        "limits": {"cpu": 2, "memory": "5Gi"},
-                        "requests": {"cpu": 1, "memory": "5Gi"},
-                    }
-                if (ocp_version >= 4.6) and (ocs_version >= 4.6):
-                    cluster_data["metadata"]["annotations"] = {
-                        "cluster.ocs.openshift.io/local-devices": "true"
-                    }
-
-            # Allow lower instance requests and limits for OCS deployment
-            # The resources we need to change can be found here:
-            # https://github.com/openshift/ocs-operator/blob/release-4.5/pkg/deploy-manager/storagecluster.go#L88-L116
-            if config.DEPLOYMENT.get("allow_lower_instance_requirements"):
-                none_resources = {"Requests": None, "Limits": None}
-                deviceset_data["resources"] = deepcopy(none_resources)
-                resources = [
-                    "mon",
-                    "mds",
-                    "rgw",
-                    "mgr",
-                    "noobaa-core",
-                    "noobaa-db",
-                ]
-                if ocs_version >= 4.5:
-                    resources.append("noobaa-endpoint")
-                cluster_data["spec"]["resources"] = {
-                    resource: deepcopy(none_resources) for resource in resources
+        # StorageCluster tweaks for LSO
+        if config.DEPLOYMENT.get("local_storage"):
+            cluster_data["spec"]["manageNodes"] = False
+            cluster_data["spec"]["monDataDirHostPath"] = "/var/lib/rook"
+            deviceset_data["portable"] = False
+            deviceset_data["dataPVCTemplate"]["spec"][
+                "storageClassName"
+            ] = self.DEFAULT_STORAGECLASS_LSO
+            if self.platform.lower() == constants.AWS_PLATFORM:
+                deviceset_data["count"] = 2
+            if ocs_version >= 4.5:
+                deviceset_data["resources"] = {
+                    "limits": {"cpu": 2, "memory": "5Gi"},
+                    "requests": {"cpu": 1, "memory": "5Gi"},
                 }
-                if ocs_version >= 4.5:
-                    cluster_data["spec"]["resources"]["noobaa-endpoint"] = {
-                        "limits": {"cpu": 1, "memory": "500Mi"},
-                        "requests": {"cpu": 1, "memory": "500Mi"},
+            if (ocp_version >= 4.6) and (ocs_version >= 4.6):
+                cluster_data["metadata"]["annotations"] = {
+                    "cluster.ocs.openshift.io/local-devices": "true"
+                }
+
+        # Allow lower instance requests and limits for OCS deployment
+        # The resources we need to change can be found here:
+        # https://github.com/openshift/ocs-operator/blob/release-4.5/pkg/deploy-manager/storagecluster.go#L88-L116
+        if config.DEPLOYMENT.get("allow_lower_instance_requirements"):
+            none_resources = {"Requests": None, "Limits": None}
+            deviceset_data["resources"] = deepcopy(none_resources)
+            resources = [
+                "mon",
+                "mds",
+                "rgw",
+                "mgr",
+                "noobaa-core",
+                "noobaa-db",
+            ]
+            if ocs_version >= 4.5:
+                resources.append("noobaa-endpoint")
+            cluster_data["spec"]["resources"] = {
+                resource: deepcopy(none_resources) for resource in resources
+            }
+            if ocs_version >= 4.5:
+                cluster_data["spec"]["resources"]["noobaa-endpoint"] = {
+                    "limits": {"cpu": 1, "memory": "500Mi"},
+                    "requests": {"cpu": 1, "memory": "500Mi"},
+                }
+        else:
+            local_storage = config.DEPLOYMENT.get("local_storage")
+            platform = config.ENV_DATA.get("platform", "").lower()
+            if local_storage and platform == "aws":
+                resources = {
+                    "mds": {
+                        "limits": {"cpu": 3, "memory": "8Gi"},
+                        "requests": {"cpu": 1, "memory": "8Gi"},
                     }
-            else:
-                local_storage = config.DEPLOYMENT.get("local_storage")
-                platform = config.ENV_DATA.get("platform", "").lower()
-                if local_storage and platform == "aws":
-                    resources = {
-                        "mds": {
-                            "limits": {"cpu": 3, "memory": "8Gi"},
-                            "requests": {"cpu": 1, "memory": "8Gi"},
-                        }
+                }
+                if ocs_version < 4.5:
+                    resources["noobaa-core"] = {
+                        "limits": {"cpu": 2, "memory": "8Gi"},
+                        "requests": {"cpu": 1, "memory": "8Gi"},
                     }
-                    if ocs_version < 4.5:
-                        resources["noobaa-core"] = {
-                            "limits": {"cpu": 2, "memory": "8Gi"},
-                            "requests": {"cpu": 1, "memory": "8Gi"},
-                        }
-                        resources["noobaa-db"] = {
-                            "limits": {"cpu": 2, "memory": "8Gi"},
-                            "requests": {"cpu": 1, "memory": "8Gi"},
-                        }
-                    cluster_data["spec"]["resources"] = resources
+                    resources["noobaa-db"] = {
+                        "limits": {"cpu": 2, "memory": "8Gi"},
+                        "requests": {"cpu": 1, "memory": "8Gi"},
+                    }
+                cluster_data["spec"]["resources"] = resources
+
         # Enable host network if enabled in config (this require all the
         # rules to be enabled on underlaying platform).
         if config.DEPLOYMENT.get("host_network"):
             cluster_data["spec"]["hostNetwork"] = True
 
-        if self.platform == constants.IBM_POWER_PLATFORM:
-            cluster_data["spec"]["storageDeviceSets"] = deviceset
-        else:
-            cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
+        cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
 
         if self.platform == constants.IBMCLOUD_PLATFORM:
             mon_pvc_template = {
