@@ -287,3 +287,7 @@ class UnhealthyBucket(Exception):
 
 class NotFoundError(Exception):
     pass
+
+
+class ResourcePoolNotException(Exception):
+    pass
