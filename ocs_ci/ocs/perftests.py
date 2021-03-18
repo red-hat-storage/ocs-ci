@@ -6,15 +6,16 @@ from elasticsearch import Elasticsearch
 
 from ocs_ci.framework.testlib import BaseTest
 
-from ocs_ci.ocs import defaults, constants
+from ocs_ci.ocs import defaults, constants, node
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import *  # noqa: F403
 from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id
 from ocs_ci.ocs.elasticsearch import elasticsearch_load
+from ocs_ci.ocs.resources import pod
 
 log = logging.getLogger(__name__)
 
@@ -41,8 +42,45 @@ class PASTest(BaseTest):
         self.benchmark_obj = None  # place holder for the benchmark object
         self.client_pod = None  # Place holder for the client pod object
         self.dev_mode = config.RUN["cli_params"].get("dev_mode")
-        self.environment = get_environment_info()
         self.pod_obj = OCP(kind="pod")
+
+        # Collecting all Environment configuration Software & Hardware
+        # for the performance report.
+        self.environment = get_environment_info()
+        self.environment["clusterID"] = get_running_cluster_id()
+
+        ct_pod = pod.get_ceph_tools_pod()
+        osd_info = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd df")
+        self.environment["osd_size"] = osd_info.get("nodes")[0].get("crush_weight")
+        self.environment["osd_num"] = len(osd_info.get("nodes"))
+        self.environment["total_capacity"] = osd_info.get("summary").get(
+            "total_kb_avail"
+        )
+        self.environment["ocs_nodes_num"] = len(node.get_ocs_nodes())
+
+        oc_cmd = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+
+        # Getting worker nodes information
+        worker_nodes = node.get_worker_nodes()
+        self.environment["worker_nodes_num"] = len(worker_nodes)
+        self.environment["worker_nodes_cpu_num"] = oc_cmd.exec_oc_debug_cmd(
+            node=worker_nodes[0],
+            cmd_list=["lscpu | grep '^CPU(s):' | awk '{print $NF}'"],
+        ).rstrip()
+        self.environment["worker_nodes_memory"] = oc_cmd.exec_oc_debug_cmd(
+            node=worker_nodes[0], cmd_list=["free | grep Mem | awk '{print $2}'"]
+        ).rstrip()
+
+        # Getting master nodes information
+        master_nodes = node.get_master_nodes()
+        self.environment["master_nodes_num"] = len(master_nodes)
+        self.environment["master_nodes_cpu_num"] = oc_cmd.exec_oc_debug_cmd(
+            node=master_nodes[0],
+            cmd_list=["lscpu | grep '^CPU(s):' | awk '{print $NF}'"],
+        ).rstrip()
+        self.environment["master_nodes_memory"] = oc_cmd.exec_oc_debug_cmd(
+            node=master_nodes[0], cmd_list=["free | grep Mem | awk '{print $2}'"]
+        ).rstrip()
 
     def ripsaw_deploy(self, ripsaw):
         """
