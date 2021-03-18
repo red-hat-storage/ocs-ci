@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.ocs.ui.infra_ui import InfraUI
+from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import ui, ignore_leftovers, skipif_lso
 from ocs_ci.ocs.resources.pod import get_osd_pods
@@ -50,7 +50,7 @@ class TestAddCapacityUI(object):
         osd_count = len(osd_pods_before_add_capacity)
 
         logger.info("Add capacity via UI")
-        infra_ui_obj = InfraUI(setup_ui)
+        infra_ui_obj = AddReplaceDeviceUI(setup_ui)
         infra_ui_obj.add_capacity_ui()
 
         logging.info("Wait for osd pods to be in Running state")

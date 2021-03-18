@@ -8,7 +8,7 @@ from ocs_ci.utility.utils import get_ocp_version
 logger = logging.getLogger(__name__)
 
 
-class InfraUI(PageNavigator):
+class AddReplaceDeviceUI(PageNavigator):
     """
     InfraUI class for add capacity, device replacement, node replacement
 
