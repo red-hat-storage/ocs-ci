@@ -1,6 +1,6 @@
 ---
 DEPLOYMENT:
-  allow_lower_instance_requirements: false
+  allow_lower_instance_requirements: true
   ocs_operator_nodes_to_label: 6
 ENV_DATA:
   platform: 'aws'
@@ -19,4 +19,4 @@ ENV_DATA:
     - 'us-east-1c'
   worker_replicas: 6
   master_replicas: 3
-  worker_instance_type: 'm5.4xlarge'
+  worker_instance_type: 'm4.2xlarge'
