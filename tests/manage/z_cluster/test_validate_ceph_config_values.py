@@ -33,7 +33,7 @@ class TestValidateCephConfigValues(ManageTest):
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             resource_name=constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP,
         )
-        config_data = cm_obj.get().get("data").get("config")
+        config_data = cm_obj.get()["data"]["config"]
         config_data = config_data.split("\n")[1:-1]
         log.info(
             "Validating that the Ceph values, configured by ceph-config-override "
