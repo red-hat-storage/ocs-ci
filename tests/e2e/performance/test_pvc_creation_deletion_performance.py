@@ -58,10 +58,10 @@ class TestPVCCreationDeletionPerformance(E2ETest):
         num_of_samples = 5
         accepted_creation_time = 1
         accepted_deletion_time = 2 if self.interface == constants.CEPHFILESYSTEM else 1
-
         creation_time_measures = []
         deletion_time_measures = []
         msg_prefix = f"Interface: {self.interface}, PVC size: {pvc_size}."
+
         for i in range(num_of_samples):
             logging.info(f"{msg_prefix} Start creating PVC number {i + 1}.")
             pvc_obj = helpers.create_pvc(sc_name=self.sc_obj.name, size=pvc_size)
@@ -85,7 +85,8 @@ class TestPVCCreationDeletionPerformance(E2ETest):
             pod_obj.delete(wait=True)
             teardown_factory(pvc_obj)
             logging.info(f"{msg_prefix} Start deleting PVC number {i + 1}")
-            pvc_obj.delete(force=True)
+            #pvc_obj.delete(force=True)
+            pvc_obj.delete()
             pvc_obj.ocp.wait_for_delete(pvc_obj.name)
             if pvc_reclaim_policy == constants.RECLAIM_POLICY_DELETE:
                 helpers.validate_pv_delete(pvc_obj.backed_pv)
@@ -122,6 +123,12 @@ class TestPVCCreationDeletionPerformance(E2ETest):
             f"PVCs is {creation_average} seconds."
         )
 
+        deletion_average = statistics.mean(deletion_time_measures)
+        log.info(
+            f"{msg_prefix}The average deletion time for the sampled {len(deletion_time_measures)} PVCs "
+            f"is {deletion_average} seconds."
+        )
+
         creation_st_deviation = statistics.stdev(creation_time_measures)
         creation_st_deviation_percent = creation_st_deviation / creation_average * 100.0
         if creation_st_deviation_percent > accepted_creation_deviation_percent:
@@ -135,15 +142,8 @@ class TestPVCCreationDeletionPerformance(E2ETest):
             f"PVCs is {creation_st_deviation_percent}%."
         )
 
-        deletion_average = statistics.mean(deletion_time_measures)
-        log.info(
-            f"{msg_prefix}The average deletion time for the sampled {len(deletion_time_measures)} PVCs "
-            f"is {deletion_average} seconds."
-        )
-
         deletion_st_deviation = statistics.stdev(deletion_time_measures)
         deletion_st_deviation_percent = deletion_st_deviation / deletion_average * 100.0
-
         if deletion_st_deviation_percent > accepted_deletion_deviation_percent:
             raise ex.PerformanceException(
                 f"{msg_prefix} PVC deletion time deviation is {deletion_st_deviation_percent}%"
@@ -156,8 +156,8 @@ class TestPVCCreationDeletionPerformance(E2ETest):
         )
 
         # all the results are OK, the test passes, push the results to the codespeed
-        #push_to_pvc_time_dashboard(self.interface, "1-pvc-creation", creation_average)
-        #push_to_pvc_time_dashboard(self.interface, "1-pvc-deletion", deletion_average)
+        push_to_pvc_time_dashboard(self.interface, "1-pvc-creation", creation_average)
+        push_to_pvc_time_dashboard(self.interface, "1-pvc-deletion", deletion_average)
 
 
     def write_file_on_pvc(self, pvc_obj):
@@ -261,10 +261,12 @@ class TestPVCCreationDeletionPerformance(E2ETest):
 
         # accepted deletion time is 2 secs for each PVC
         accepted_pvc_deletion_time = number_of_pvcs * 2
-        if pvc_deletion_time > accepted_pvc_deletion_time:
-            raise ex.PerformanceException(
-                f"{msg_prefix} {number_of_pvcs} PVCs deletion time is {pvc_deletion_time} and is "
-                f"greater than {accepted_pvc_deletion_time} seconds"
-            )
+
+        for del_time in pvc_deletion_time.values():
+            if del_time > accepted_pvc_deletion_time:
+                raise ex.PerformanceException(
+                    f"{msg_prefix} {number_of_pvcs} PVCs deletion time is {pvc_deletion_time.values()} and is "
+                    f"greater than {accepted_pvc_deletion_time} seconds"
+                )
 
         logging.info(f"{msg_prefix} {number_of_pvcs} PVCs deletion time is {pvc_deletion_time} seconds.")
