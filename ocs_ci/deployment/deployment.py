@@ -700,7 +700,7 @@ class Deployment(object):
                     "enable": True,
                 }
 
-        if config.DEPLOYMENT["ceph_debug"]:
+        if config.DEPLOYMENT.get("ceph_debug"):
             setup_ceph_debug()
             cluster_data["spec"]["managedResources"] = {
                 "cephConfig": {"reconcileStrategy": "ignore"}

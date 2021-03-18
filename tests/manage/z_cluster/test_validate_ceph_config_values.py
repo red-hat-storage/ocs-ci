@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 @tier1
 @pytest.mark.skipif(
-    config.DEPLOYMENT["ceph_debug"],
+    config.DEPLOYMENT.get("ceph_debug"),
     reason="Ceph was configured with customized values by ocs-ci so there is point in validating its config values",
 )
 class TestValidateCephConfigValues(ManageTest):
