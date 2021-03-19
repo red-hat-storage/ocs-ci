@@ -30,6 +30,36 @@ from ocs_ci.framework import config
 log = logging.getLogger(__name__)
 
 
+def exec_oc_debug_cmd(node, cmd, timeout=None):
+    """
+    Execute single shell command on given OCP node via ``oc debug``, with
+    extra logging.
+
+    Args:
+        node (str): Node name where the command will be executed
+        cmd (str): commands to be executed, eg: 'cmd1 -f foo'
+        timeout (int): timeout for the exec_oc_cmd(), default value from OCP
+            class is used if timeout is not specified here
+
+    Returns:
+        str: output of the executed command/commands
+
+    Raises:
+        CommandFailed: When failure occures during command execution.
+
+    """
+    ocp = OCP()
+    log.debug("Going to execute '%s' on node %s", cmd, node)
+    try:
+        out = ocp.exec_oc_debug_cmd(node, [cmd], timeout)
+    except Exception:
+        log.exception(
+            "command '%s' executed via 'oc debug' on node '%s' failed", cmd, node
+        )
+        raise
+    return out
+
+
 class OCP(object):
     """
     A basic OCP object to run basic 'oc' commands
@@ -161,7 +191,7 @@ class OCP(object):
         Args:
             node (str): Node name where the command to be executed
             cmd_list (list): List of commands eg: ['cmd1', 'cmd2']
-            timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
+            timeout (int): timeout for the exec_oc_cmd, defaults to 300 seconds
 
         Returns:
             out (str): Returns output of the executed command/commands
