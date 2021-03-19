@@ -289,5 +289,5 @@ class NotFoundError(Exception):
     pass
 
 
-class ResourcePoolNotException(Exception):
+class ResourcePoolNotFound(Exception):
     pass
