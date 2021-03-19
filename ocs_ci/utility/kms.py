@@ -47,7 +47,10 @@ class KMS(object):
         self.kms_provider = provider
 
     def deploy(self):
-        raise NotImplementedError()
+        raise NotImplementedError("Child class should implement this method")
+
+    def post_deploy_verification(self):
+        raise NotImplementedError("Child class should implement this method")
 
 
 class Vault(KMS):
@@ -643,8 +646,7 @@ class Vault(KMS):
         if config.ENV_DATA.get("use_vault_namespace"):
             self.get_vault_namespace()
             os.environ["VAULT_NAMESPACE"] = self.vault_namespace
-            self.get_vault_backend_path()
-
+        self.get_vault_backend_path()
         kvlist = vault_kv_list(self.vault_backend_path)
 
         # Check osd keys are present
