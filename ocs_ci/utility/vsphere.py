@@ -242,9 +242,7 @@ class VSPHERE(object):
 
         """
         rp = self.get_pool(name, dc, cluster)
-        if not self.vsphere.is_resource_pool_exist(
-            self.cluster_name, self.datacenter, self.cluster
-        ):
+        if not self.is_resource_pool_exist(name, dc, cluster):
             raise ResourcePoolNotFound
         return [vm for vm in rp.vm]
 
