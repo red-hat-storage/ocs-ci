@@ -27,7 +27,6 @@ GATHER_COMMANDS_CEPH = [
     "ceph_fs_dump",
     "ceph_fs_ls",
     "ceph_fs_status",
-    "ceph_fs_subvolume_ls_ocs-storagecluster-cephfilesystem_csi",
     "ceph_fs_subvolumegroup_ls_ocs-storagecluster-cephfilesystem",
     "ceph_health_detail",
     "ceph_mds_stat",
@@ -56,7 +55,6 @@ GATHER_COMMANDS_CEPH = [
     "ceph_osd_utilization",
     "ceph_pg_dump",
     "ceph_pg_stat",
-    "ceph_progress",
     "ceph_quorum_status",
     "ceph_report",
     "ceph_service_dump",
@@ -77,7 +75,6 @@ GATHER_COMMANDS_JSON = [
     "ceph_fs_dump_--format_json-pretty",
     "ceph_fs_ls_--format_json-pretty",
     "ceph_fs_status_--format_json-pretty",
-    "ceph_fs_subvolume_ls_ocs-storagecluster-cephfilesystem_csi_--format_json-pretty",
     "ceph_fs_subvolumegroup_ls_ocs-storagecluster-cephfilesystem_--format_json-pretty",
     "ceph_health_detail_--format_json-pretty",
     "ceph_mds_stat_--format_json-pretty",
@@ -125,7 +122,6 @@ GATHER_COMMANDS_OTHERS = [
     "configmaps.yaml",
     "cronjobs.yaml",
     "daemonsets.yaml",
-    "db-noobaa-db-0.yaml",
     "deploymentconfigs.yaml",
     "deployments.yaml",
     "endpoints.yaml",
@@ -133,15 +129,8 @@ GATHER_COMMANDS_OTHERS = [
     "horizontalpodautoscalers.yaml",
     "imagestreams.yaml",
     "jobs.yaml",
-    "my-alertmanager-claim-alertmanager-main-0.yaml",
-    "my-alertmanager-claim-alertmanager-main-1.yaml",
-    "my-alertmanager-claim-alertmanager-main-2.yaml",
-    "my-prometheus-claim-prometheus-k8s-0.yaml",
-    "my-prometheus-claim-prometheus-k8s-1.yaml",
     "noobaa-core-0.log",
     "noobaa-core-0.yaml",
-    "noobaa-db-0.log",
-    "noobaa-db-0.yaml",
     "noobaa-default-backing-store.yaml",
     "noobaa-default-bucket-class.yaml",
     "noobaa.yaml",
@@ -190,10 +179,13 @@ GATHER_COMMANDS_OPENSHIFT_DEDICATED_EXCLUDE_4_6 = [
 GATHER_COMMANDS_CEPH_4_5 = [
     "ceph_osd_blacklist_ls",
     "ceph_df",
+    "ceph_fs_subvolume_ls_ocs-storagecluster-cephfilesystem_csi",
+    "ceph_progress",
 ]
 
 GATHER_COMMANDS_JSON_4_5 = [
     "ceph_df_--format_json-pretty",
+    "ceph_fs_subvolume_ls_ocs-storagecluster-cephfilesystem_csi_--format_json-pretty",
 ]
 
 GATHER_COMMANDS_OTHERS_4_5 = [
@@ -210,14 +202,26 @@ GATHER_COMMANDS_OTHERS_4_5 = [
     "get_pvc_--all-namespaces",
     "get_sc",
     "get_subscription_-n_openshift-storage",
+    "db-noobaa-db-0.yaml",
+    "my-alertmanager-claim-alertmanager-main-0.yaml",
+    "my-alertmanager-claim-alertmanager-main-1.yaml",
+    "my-alertmanager-claim-alertmanager-main-2.yaml",
+    "my-prometheus-claim-prometheus-k8s-0.yaml",
+    "my-prometheus-claim-prometheus-k8s-1.yaml",
+    "noobaa-db-0.log",
+    "noobaa-db-0.yaml",
+    "registry-cephfs-rwx-pvc.yaml",
 ]
 
 GATHER_COMMANDS_CEPH_4_6 = [
     "ceph_df",
+    "ceph_fs_subvolume_ls_ocs-storagecluster-cephfilesystem_csi",
 ]
 
 GATHER_COMMANDS_JSON_4_6 = [
     "ceph_df_--format_json-pretty",
+    "ceph_fs_subvolume_ls_ocs-storagecluster-cephfilesystem_csi_--format_json-pretty",
+    "ceph_progress",
 ]
 
 GATHER_COMMANDS_OTHERS_4_6 = [
@@ -395,7 +399,6 @@ GATHER_COMMANDS_OTHERS_4_6 = [
     "pods",
     "pods_-owide",
     "prometheus-adapter-view.yaml",
-    "prometheus-adapter.yaml",
     "prometheus-adapter.yaml",
     "prometheus-k8s.yaml",
     "prometheus-k8s.yaml",
@@ -669,6 +672,15 @@ GATHER_COMMANDS_OTHERS_4_6 = [
     "view.yaml",
     "volumesnapshotclass",
     "whereabouts-cni.yaml",
+    "db-noobaa-db-0.yaml",
+    "my-alertmanager-claim-alertmanager-main-0.yaml",
+    "my-alertmanager-claim-alertmanager-main-1.yaml",
+    "my-alertmanager-claim-alertmanager-main-2.yaml",
+    "my-prometheus-claim-prometheus-k8s-0.yaml",
+    "my-prometheus-claim-prometheus-k8s-1.yaml",
+    "noobaa-db-0.log",
+    "noobaa-db-0.yaml",
+    "registry-cephfs-rwx-pvc.yaml",
 ]
 
 GATHER_COMMANDS_CEPH_4_7 = [
@@ -676,9 +688,29 @@ GATHER_COMMANDS_CEPH_4_7 = [
 ]
 
 GATHER_COMMANDS_JSON_4_7 = [
-    "ceph_df_detail--format_json-pretty",
+    "ceph_df_detail_--format_json-pretty",
 ]
 
+GATHER_COMMANDS_OTHERS_4_7 = [
+    "noobaa-db-pg-0.yaml",
+    "db-noobaa-db-pg-0.yaml",
+    "noobaa-db-pg-0.log",
+    "noobaa-ceph-objectstore-user.yaml",
+    "namespacestores.noobaa.io-v1alpha1-view.yaml",
+    "namespacestores.noobaa.io-v1alpha1-edit.yaml",
+    "namespacestores.noobaa.io-v1alpha1-crdview.yaml",
+    "namespacestores.noobaa.io-v1alpha1-admin.yaml",
+    "alertmanager-main.yaml",
+    "prometheus-operator.yaml",
+    "prometheus-k8s.yaml",
+    "prometheus-k8s-scheduler-resources.yaml",
+    "prometheus-adapter.yaml",
+    "prometheus-operator.yaml",
+    "prometheus-k8s.yaml",
+    "prometheus-k8s-scheduler-resources.yaml",
+    "prometheus-adapter.yaml",
+    "prometheus-adapter-view.yaml",
+]
 
 GATHER_COMMANDS_OTHERS_EXTERNAL = GATHER_COMMANDS_OTHERS + [
     "ocs-external-storagecluster-ceph-rbd.yaml",
@@ -748,7 +780,7 @@ GATHER_COMMANDS_VERSION = {
     4.7: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
-        "OTHERS": GATHER_COMMANDS_OTHERS + GATHER_COMMANDS_OTHERS_4_6,
+        "OTHERS": GATHER_COMMANDS_OTHERS + GATHER_COMMANDS_OTHERS_4_7,
         "OTHERS_EXTERNAL": GATHER_COMMANDS_OTHERS_EXTERNAL_4_6,
     },
 }
