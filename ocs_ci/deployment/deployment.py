@@ -578,6 +578,14 @@ class Deployment(object):
         deviceset_data = cluster_data["spec"]["storageDeviceSets"][0]
         device_size = int(config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE))
 
+        # Flexible scaling is available from version 4.7
+        ocs_version = float(config.ENV_DATA["ocs_version"])
+        if config.DEPLOYMENT.get("local_storage") and ocs_version >= 4.7:
+            cluster_data["spec"]["flexibleScaling"] = True
+            # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
+            cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
+            cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
+
         # set size of request for storage
         if self.platform.lower() == constants.BAREMETAL_PLATFORM:
             pv_size_list = helpers.get_pv_size(
