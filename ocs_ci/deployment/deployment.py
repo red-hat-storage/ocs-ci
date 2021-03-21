@@ -72,6 +72,7 @@ from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
+from ocs_ci.utility.utils import get_az_count
 
 logger = logging.getLogger(__name__)
 
@@ -580,7 +581,12 @@ class Deployment(object):
 
         # Flexible scaling is available from version 4.7
         ocs_version = float(config.ENV_DATA["ocs_version"])
-        if config.DEPLOYMENT.get("local_storage") and ocs_version >= 4.7:
+        zone_num = get_az_count()
+        if (
+            config.DEPLOYMENT.get("local_storage")
+            and ocs_version >= 4.7
+            and zone_num < 3
+        ):
             cluster_data["spec"]["flexibleScaling"] = True
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
             cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
