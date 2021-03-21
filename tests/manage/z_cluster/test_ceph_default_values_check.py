@@ -88,15 +88,13 @@ class TestCephDefaultValuesCheck(ManageTest):
             resource_name=constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP,
         )
         config_data = cm_obj.get()["data"]["config"]
-        config_data = config_data.split("\n")[1:-1]
+        config_data = config_data.split("\n")
         log.info(
             "Validating that the Ceph values, configured by ceph-config-override "
             "confiMap, match the ones stored in ocs-ci"
         )
-
-        assert collections.Counter(config_data) == collections.Counter(
-            constants.ROOK_CEPH_CONFIG_VALUES
-        ), (
+        stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
+        assert collections.Counter(config_data) == collections.Counter(stored_values), (
             f"The Ceph config, set by {constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP} "
             f"is different than the expected. Please inform OCS-QE about this discrepancy. "
             f"The expected values are:\n{constants.ROOK_CEPH_CONFIG_VALUES}\n"

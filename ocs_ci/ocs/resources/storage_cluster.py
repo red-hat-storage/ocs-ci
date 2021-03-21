@@ -604,10 +604,7 @@ def setup_ceph_debug():
         constants.CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP
     )
     ceph_debug_log_configmap_data["data"]["config"] = (
-        "\n"
-        + "\n".join(constants.ROOK_CEPH_CONFIG_VALUES)
-        + "\n"
-        + "\n".join(constants.CEPH_DEBUG_CONFIG_VALUES)
+        constants.ROOK_CEPH_CONFIG_VALUES + constants.CEPH_DEBUG_CONFIG_VALUES
     )
 
     ceph_configmap_yaml = tempfile.NamedTemporaryFile(
