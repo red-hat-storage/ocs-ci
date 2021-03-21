@@ -97,6 +97,6 @@ class TestCephDefaultValuesCheck(ManageTest):
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
             f"The Ceph config, set by {constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP} "
             f"is different than the expected. Please inform OCS-QE about this discrepancy. "
-            f"The expected values are:\n{constants.ROOK_CEPH_CONFIG_VALUES}\n"
+            f"The expected values are:\n{stored_values}\n"
             f"The cluster's Ceph values are:{config_data}"
         )
