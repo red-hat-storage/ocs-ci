@@ -13,7 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket, BUCKET_MAP
+from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
 from ocs_ci.ocs.bucket_utils import (
     retrieve_test_objects_to_pod,
     sync_object_directory,
@@ -176,25 +176,15 @@ class TestBucketDeletion(MCGTest):
         ids=["S3", "CLI", "OC", "OC-AWS", "OC-AZURE", "OC-GCP"],
     )
     def test_bucket_delete_with_objects(
-        self, mcg_obj, awscli_pod, bucket_class_factory, interface, bucketclass_dict
+        self, mcg_obj, awscli_pod, bucket_factory, interface, bucketclass_dict
     ):
         """
         Negative test with deletion of bucket has objects stored in.
 
         """
-        bucketname = create_unique_resource_name(
-            resource_description="bucket", resource_type=interface.lower()
-        )
-        bucket = BUCKET_MAP[interface.lower()](
-            bucketname,
-            mcg=mcg_obj,
-            bucketclass=bucket_class_factory(bucketclass_dict)
-            if bucketclass_dict
-            else None,
-        )
+        bucket = bucket_factory(interface=interface, bucketclass=bucketclass_dict)[0]
+        bucketname = bucket.name
 
-        logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
-        logger.info(f"aws region is {mcg_obj.region}")
         data_dir = "/data"
         full_object_path = f"s3://{bucketname}"
         retrieve_test_objects_to_pod(awscli_pod, data_dir)
@@ -210,6 +200,7 @@ class TestBucketDeletion(MCGTest):
                     err
                 ), "Couldn't verify delete non-empty OBC with s3"
                 logger.info(f"Delete non-empty OBC {bucketname} failed as expected")
+        # Deletion verification is performed internally as part of delete()
         bucket.delete()
         if bucketclass_dict:
             bucket.bucketclass.delete()
