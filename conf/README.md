@@ -97,6 +97,8 @@ anywhere else.
 * `create_ibm_cos_secret`: If this value is set to True (by default), the COS
   secret is created. If False, it will not be created. Relevant only for IBM
   Cloud deployment.
+* `ceph_dubg` - Deploy OCS with Ceph in debug log level. Available starting OCS 4.7 (Default: false)
+
 
 #### REPORTING
 

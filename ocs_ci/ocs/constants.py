@@ -547,6 +547,9 @@ EXTERNAL_VAULT_KMS_TOKEN = os.path.join(EXTERNAL_VAULT_TEMPLATES, "ocs-kms-token
 EXTERNAL_VAULT_KMS_CONNECTION_DETAILS = os.path.join(
     EXTERNAL_VAULT_TEMPLATES, "ocs-kms-connection-details.yaml"
 )
+CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "ceph-debug-log-level-configmap.yaml"
+)
 
 # constants
 RBD_INTERFACE = "rbd"
@@ -754,6 +757,7 @@ INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
 OCS_SUBSCRIPTION = "ocs-operator"
 ROOK_OPERATOR_CONFIGMAP = "rook-ceph-operator-config"
+ROOK_CONFIG_OVERRIDE_CONFIGMAP = "rook-config-override"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
@@ -1244,3 +1248,20 @@ MAX_NB_ENDPOINT_COUNT = 2
 VOLUMESNAPSHOT = "volumesnapshot"
 
 PERF_IMAGE = "quay.io/ocsci/perf:latest"
+
+ROOK_CEPH_CONFIG_VALUES = """
+[global]
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_max_pg_per_osd = 600
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.5
+"""
+CEPH_DEBUG_CONFIG_VALUES = """
+[mon]
+debug_mon = 20
+debug_ms = 1
+debug_paxos = 20
+debug_crush = 20
+"""

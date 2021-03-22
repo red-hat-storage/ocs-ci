@@ -232,6 +232,15 @@ def pytest_addoption(parser):
             "versions, collecting logs, etc"
         ),
     )
+    parser.addoption(
+        "--ceph-debug",
+        dest="ceph_debug",
+        action="store_true",
+        default=False,
+        help=(
+            "For OCS cluster deployment with Ceph configured in debug mode. Available for OCS 4.7 and above"
+        ),
+    )
 
 
 def pytest_configure(config):
@@ -483,6 +492,9 @@ def process_cluster_cli_params(config):
     if collect_logs_on_success_run:
         ocsci_config.REPORTING["collect_logs_on_success_run"] = True
     get_cli_param(config, "dev_mode")
+    ceph_debug = get_cli_param(config, "ceph_debug")
+    if ceph_debug:
+        ocsci_config.DEPLOYMENT["ceph_debug"] = True
 
 
 def pytest_collection_modifyitems(session, config, items):
