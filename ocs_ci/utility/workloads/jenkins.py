@@ -39,7 +39,10 @@ def setup(**kwargs):
         cmd = f"{pkg_mgr} update"
         io_pod.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
-    cmd = f"{pkg_mgr} -y install git"
+    if distro == "Alpine":
+        cmd = "{pkg_mgr} add git"
+    else:
+        cmd = f"{pkg_mgr} -y install git"
     return io_pod.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
 
