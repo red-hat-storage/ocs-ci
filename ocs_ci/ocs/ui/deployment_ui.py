@@ -206,7 +206,7 @@ class DeploymentUI(PageNavigator):
             expected_text="Memory",
         )
         if not sample.wait_for_func_status(result=True):
-            logger.error(f"Nodes not found after 600 seconds")
+            logger.error("Nodes not found after 600 seconds")
             raise TimeoutExpiredError
 
         logger.info(f"Select {constants.LOCAL_BLOCK_RESOURCE} storage class")
