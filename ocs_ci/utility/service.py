@@ -48,7 +48,8 @@ class Service(object):
         """
         nodeip = self.nodes[node.name]
         result = exec_cmd(
-            f"ssh core@{nodeip} sudo systemctl is-active {self.service_name}.service"
+            f"ssh core@{nodeip} sudo systemctl is-active {self.service_name}.service",
+            ignore_error=True,
         )
         if result.stdout.lower().rstrip() == action:
             logger.info("Action succeeded.")
