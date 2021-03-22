@@ -31,29 +31,30 @@ class DeploymentUI(PageNavigator):
         Add Disks Vmware LSO
 
         """
-        logger.info("Add RDM disk for vSphere platform")
-        platform = config.ENV_DATA.get("platform").lower()
-        lso_type = config.DEPLOYMENT.get("type")
-        if platform == constants.VSPHERE_PLATFORM:
-            from ocs_ci.deployment.vmware import VSPHEREBASE
+        if config.DEPLOYMENT.get("local_storage"):
+            logger.info("Add RDM disk for vSphere platform")
+            platform = config.ENV_DATA.get("platform").lower()
+            lso_type = config.DEPLOYMENT.get("type")
+            if platform == constants.VSPHERE_PLATFORM:
+                from ocs_ci.deployment.vmware import VSPHEREBASE
 
-            vsphere_base = VSPHEREBASE()
+                vsphere_base = VSPHEREBASE()
 
-            if lso_type == constants.RDM:
-                logger.info(f"LSO Deployment type: {constants.RDM}")
-                vsphere_base.add_rdm_disks()
+                if lso_type == constants.RDM:
+                    logger.info(f"LSO Deployment type: {constants.RDM}")
+                    vsphere_base.add_rdm_disks()
 
-            if lso_type == constants.VMDK:
-                logger.info(f"LSO Deployment type: {constants.VMDK}")
-                vsphere_base.attach_disk(
-                    config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
-                    config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE),
-                )
+                if lso_type == constants.VMDK:
+                    logger.info(f"LSO Deployment type: {constants.VMDK}")
+                    vsphere_base.attach_disk(
+                        config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
+                        config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE),
+                    )
 
-            if lso_type == constants.DIRECTPATH:
-                raise NotImplementedError(
-                    "LSO Deployment for VMDirectPath is not implemented"
-                )
+                if lso_type == constants.DIRECTPATH:
+                    raise NotImplementedError(
+                        "LSO Deployment for VMDirectPath is not implemented"
+                    )
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
         """
@@ -198,6 +199,16 @@ class DeploymentUI(PageNavigator):
         logger.info("Confirm new storage class")
         self.do_click(self.dep_loc["yes"])
 
+        sample = TimeoutSampler(
+            timeout=600,
+            sleep=10,
+            func=self.check_element_text,
+            expected_text="Memory",
+        )
+        if not sample.wait_for_func_status(result=True):
+            logger.error(f"Nodes not found after 600 seconds")
+            raise TimeoutExpiredError
+
         logger.info(f"Select {constants.LOCAL_BLOCK_RESOURCE} storage class")
         self.choose_expanded_mode(
             mode=True, locator=self.dep_loc["storage_class_dropdown_lso"]
@@ -290,7 +301,7 @@ class DeploymentUI(PageNavigator):
         )
         if not sample.wait_for_func_status(result=True):
             logger.error(
-                f"OCS Installation status is not Succeeded after {timeout_install} seconds"
+                f"{operator} Installation status is not Succeeded after {timeout_install} seconds"
             )
             raise TimeoutExpiredError
 

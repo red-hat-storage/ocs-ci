@@ -783,6 +783,10 @@ def validate_ocs_pods_on_pvc(pods, pvc_names):
          AssertionError: If no PVC found for one of the pod
 
     """
+    if config.DEPLOYMENT.get("ui_deployment") and config.DEPLOYMENT.get(
+        "local_storage"
+    ):
+        return
     logger.info(f"Validating if each pod from: {pods} has PVC from {pvc_names}.")
     for pod_name in pods:
         found_pvc = ""

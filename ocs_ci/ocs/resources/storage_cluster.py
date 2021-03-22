@@ -540,6 +540,10 @@ def get_osd_size():
         int: osd size
 
     """
+    if config.DEPLOYMENT.get("ui_deployment") and config.DEPLOYMENT.get(
+        "local_storage"
+    ):
+        return int(config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE))
     sc = get_storage_cluster()
     return int(
         sc.get()
