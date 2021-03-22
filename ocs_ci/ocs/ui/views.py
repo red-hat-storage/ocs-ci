@@ -1,5 +1,7 @@
 from selenium.webdriver.common.by import By
 
+osd_sizes = ("512", "2048", "4096")
+
 login = {
     "ocp_page": "Overview · Red Hat OpenShift Container Platform",
     "username": ("inputUsername", By.ID),
@@ -26,7 +28,7 @@ deployment_4_7 = {
         'a[data-test-operator-row="OpenShift Container Storage"]',
         By.CSS_SELECTOR,
     ),
-    "search_ocs_install": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
+    "search_operator_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "create_storage_cluster": ('button[data-test="item-create"]', By.CSS_SELECTOR),
     "internal_mode": ('input[data-test="Internal-radio-input"]', By.CSS_SELECTOR),
     "storage_class_dropdown": (
@@ -40,7 +42,6 @@ deployment_4_7 = {
     "2048": ('button[data-test-dropdown-menu="2Ti"]', By.CSS_SELECTOR),
     "4096": ('button[data-test-dropdown-menu="4Ti"]', By.CSS_SELECTOR),
     "all_nodes": ('input[aria-label="Select all rows"]', By.CSS_SELECTOR),
-    "next_capacity": ("//*[contains(text(), 'Next')]", By.XPATH),
     "enable_encryption": ('input[data-test="encryption-checkbox"]', By.CSS_SELECTOR),
     "wide_encryption": ('//*[@id="cluster-wide-encryption"]', By.XPATH),
     "class_encryption": ('//*[@id="storage-class-encryption"]', By.XPATH),
@@ -49,9 +50,33 @@ deployment_4_7 = {
     "kms_address": ('//*[@id="kms-address"]', By.XPATH),
     "kms_address_port": ('//*[@id="kms-address-port"]', By.XPATH),
     "kms_token": ('//*[@id="kms-token"]', By.XPATH),
-    "next_on_configure": ("//*[contains(text(), 'Next')]", By.XPATH),
     "create_on_review": ("//button[text()='Create']", By.XPATH),
     "search_ocs_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
+    "internal-attached_devices": (
+        'input[data-test="Internal - Attached Devices-radio-input"]',
+        By.CSS_SELECTOR,
+    ),
+    "discover_disks": ("//*[contains(text(), 'Discover Disks')]", By.XPATH),
+    "all_nodes_discover_disks": (
+        'input[id="auto-detect-volume-radio-all-nodes"]',
+        By.CSS_SELECTOR,
+    ),
+    "lv_name": ('input[id="create-lvs-volume-set-name"]', By.CSS_SELECTOR),
+    "sc_name": ('input[id="create-lvs-storage-class-name"]', By.CSS_SELECTOR),
+    "all_nodes_create_sc": ('input[id="create-lvs-radio-all-nodes"]', By.CSS_SELECTOR),
+    "storage_class_dropdown_lso": (
+        'button[id="storage-class-dropdown"]',
+        By.CSS_SELECTOR,
+    ),
+    "localblock_sc": ('a[id="localblock-link"]', By.CSS_SELECTOR),
+    "choose_local_storage_version": (
+        'a[data-test="local-storage-operator-redhat-operators-openshift-marketplace"]',
+        By.CSS_SELECTOR,
+    ),
+    "click_install_lso": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
+    "click_install_lso_page": ('button[data-test="install-operator"]', By.CSS_SELECTOR),
+    "yes": ("//*[contains(text(), 'Yes')]", By.XPATH),
+    "next": ("//*[contains(text(), 'Next')]", By.XPATH),
 }
 
 pvc = {
