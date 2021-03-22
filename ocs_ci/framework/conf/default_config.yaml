@@ -84,6 +84,8 @@ DEPLOYMENT:
   kms_deployment: False
   # define if ceph is setup as arbiter/stretch cluster, default is false
   arbiter_deployment: False
+  # Ceph in debug log level
+  ceph_debug: False
 
 # Section for reporting configuration
 REPORTING:
