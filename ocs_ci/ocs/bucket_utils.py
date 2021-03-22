@@ -5,9 +5,11 @@ import logging
 import os
 import shlex
 from uuid import uuid4
+import json
 
 import boto3
 from botocore.handlers import disable_signing
+import botocore.exceptions as boto3exception
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -15,6 +17,12 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.helpers.helpers import create_resource
+from ocs_ci.ocs.exceptions import (
+    NoBucketPolicyResponse,
+    InvalidStatusCode,
+    UnexpectedBehaviour,
+)
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -1307,3 +1315,199 @@ def get_bucket_available_size(mcg_obj, bucket_name):
     resp = bucket_read_api(mcg_obj, bucket_name)
     bucket_size = resp["storage"]["values"]["free"]
     return bucket_size
+
+
+class BucketPolicyOps:
+    """
+    Class for bucket policy operations
+    """
+
+    def __init__(self, bucket_factory, mcg_obj, interface="OC"):
+        """
+        Initializer function
+
+        bucket_factory: Calling this fixture creates a new bucket(s)
+        mcg_obj (obj): An MCG object containing the MCG S3 connection credentials
+        interface (str): The interface to use for creation of buckets.
+                S3 | OC | CLI | NAMESPACE
+        """
+        from ocs_ci.ocs.resources.objectbucket import OBC
+
+        self.obc_name = bucket_factory(amount=1, interface=interface)[0].name
+        self.mcg_obj = mcg_obj
+        self.obc_obj = OBC(self.obc_name)
+
+    def bucket_policy_put(self):
+        """
+        Method for bucket policy put op
+        """
+        logger.info("Bucket policy: put")
+        from ocs_ci.ocs.resources.bucket_policy import (
+            HttpResponseParser,
+            gen_bucket_policy,
+        )
+
+        bucket_policy_generated = gen_bucket_policy(
+            user_list=self.obc_obj.obc_account,
+            actions_list=["GetObject"],
+            resources_list=[self.obc_obj.bucket_name],
+        )
+        bucket_policy = json.dumps(bucket_policy_generated)
+
+        # Add Bucket Policy
+        logger.info(f"Creating bucket policy on bucket: {self.obc_obj.bucket_name}")
+        put_policy = put_bucket_policy(
+            self.mcg_obj, self.obc_obj.bucket_name, bucket_policy
+        )
+
+        if put_policy is not None:
+            response = HttpResponseParser(put_policy)
+            if response.status_code == 200:
+                logger.info("Bucket policy has been created successfully")
+            else:
+                raise InvalidStatusCode(f"Invalid Status code: {response.status_code}")
+        else:
+            raise NoBucketPolicyResponse("Put policy response is none")
+
+    def bucket_policy_modify(self):
+        """
+        Method for bucket policy modify op
+        """
+        from ocs_ci.ocs.resources.bucket_policy import (
+            HttpResponseParser,
+            gen_bucket_policy,
+        )
+
+        logger.info("Bucket policy: Modify")
+        # Get bucket policy
+        logger.info(f"Getting Bucket policy on bucket: {self.obc_obj.bucket_name}")
+        get_policy = get_bucket_policy(self.mcg_obj, self.obc_obj.bucket_name)
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
+
+        # Modifying bucket policy to take new policy
+        logger.info("Modifying bucket policy")
+        actions_list = ["ListBucket", "CreateBucket"]
+        actions = list(map(lambda action: "s3:%s" % action, actions_list))
+
+        modified_policy_generated = gen_bucket_policy(
+            user_list=self.obc_obj.obc_account,
+            actions_list=actions_list,
+            resources_list=[self.obc_obj.bucket_name],
+        )
+        bucket_policy_modified = json.dumps(modified_policy_generated)
+
+        put_modified_policy = put_bucket_policy(
+            self.mcg_obj, self.obc_obj.bucket_name, bucket_policy_modified
+        )
+
+        if put_modified_policy is not None:
+            response = HttpResponseParser(put_modified_policy)
+            if response.status_code == 200:
+                logger.info("Bucket policy has been modified successfully")
+            else:
+                raise InvalidStatusCode(f"Invalid Status code: {response.status_code}")
+        else:
+            raise NoBucketPolicyResponse("Put modified policy response is none")
+
+        # Get Modified Policy
+        get_modified_policy = get_bucket_policy(self.mcg_obj, self.obc_obj.bucket_name)
+        modified_policy = json.loads(get_modified_policy["Policy"])
+        logger.info(f"Got modified bucket policy: {modified_policy}")
+
+        actions_from_modified_policy = modified_policy["statement"][0]["action"]
+        modified_actions = list(map(str, actions_from_modified_policy))
+        initial_actions = list(map(str.lower, actions))
+        logger.info(f"Actions from modified_policy: {modified_actions}")
+        logger.info(f"User provided actions actions: {initial_actions}")
+        if modified_actions == initial_actions:
+            logger.info("Modified actions and initial actions are same")
+        else:
+            raise UnexpectedBehaviour(
+                "Modification Failed: Action lists are not identical"
+            )
+
+    def bucket_policy_delete(self):
+        """
+        Method for bucket policy delete op
+        """
+        from ocs_ci.ocs.resources.bucket_policy import HttpResponseParser
+
+        logger.info("Bucket policy: Delete")
+        logger.info(
+            f"Delete bucket policy by admin on bucket: {self.obc_obj.bucket_name}"
+        )
+        delete_policy = delete_bucket_policy(self.mcg_obj, self.obc_obj.bucket_name)
+        logger.info(f"Delete policy response: {delete_policy}")
+
+        if delete_policy is not None:
+            response = HttpResponseParser(delete_policy)
+            if response.status_code == 204:
+                logger.info("Bucket policy is deleted successfully")
+            else:
+                raise InvalidStatusCode(f"Invalid Status code: {response.status_code}")
+        else:
+            raise NoBucketPolicyResponse("Delete policy response is none")
+        #  Confirming again by calling get_bucket_policy
+        try:
+            get_bucket_policy(self.mcg_obj, self.obc_obj.bucket_name)
+        except boto3exception.ClientError as e:
+            logger.info(e.response)
+            response = HttpResponseParser(e.response)
+            if response.error["Code"] == "NoSuchBucketPolicy":
+                logger.info("Bucket policy has been deleted successfully")
+            else:
+                raise UnexpectedBehaviour(
+                    f"{e.response} received invalid error code {response.error['Code']}"
+                )
+
+
+class ObcIOs:
+    """
+    Class for running OBC IOs with retries ,
+    needed in the case of disruptive ops like nooba core pod delete
+    """
+
+    def __init__(self, mcg_obj, bucket_name):
+        """
+        Initializer function
+        mcg_obj (obj): An MCG object containing the MCG S3 connection credentials
+        bucket_name (str): Name of the bucket to run IOs
+        """
+        self.bucket_name = bucket_name
+        self.mcg_obj = mcg_obj
+        logger.info(f"bucket name is {self.bucket_name}")
+
+    def obc_ios(self):
+        """
+        Creates bucket then writes, reads and deletes objects
+        """
+        obj_data = "A string data"
+        from uuid import uuid4
+
+        logger.info(f"working on bucket name {self.bucket_name}")
+        for _ in range(0, 50):
+            key = "Object-key-" + f"{uuid4().hex}"
+            logger.info(
+                f"Write, read and delete object with key: {key} {self.bucket_name}"
+            )
+            s3_ops(self.mcg_obj, self.bucket_name, key, obj_data)
+
+
+@retry(boto3exception.ClientError, tries=20, delay=10, backoff=1)
+def s3_ops(mcg_obj, bucket_name, key, obj_data):
+    """
+    S3 operations such as put object, get object and delete objects with retries
+
+    Args:
+        mcg_obj: An MCG object containing the MCG S3 connection credentials
+        bucket_name: The name of the bucket where objects will be uploading
+        key: Object key name
+        obj_data: Object data
+
+    """
+    assert s3_put_object(
+        mcg_obj, bucket_name, key, obj_data
+    ), f"Failed: Put object, {key}"
+
+    assert s3_get_object(mcg_obj, bucket_name, key), f"Failed: Get object, {key}"
+    assert s3_delete_object(mcg_obj, bucket_name, key), f"Failed: Delete object, {key}"
