@@ -1,4 +1,6 @@
 ---
+# This config is used to create 6 worker nodes across 6 availabilty zones.
+# us-east-1 region supports 6 AZ's
 DEPLOYMENT:
   allow_lower_instance_requirements: true
   ocs_operator_nodes_to_label: 6
@@ -19,4 +21,5 @@ ENV_DATA:
     - 'us-east-1c'
   worker_replicas: 6
   master_replicas: 3
+  # since us-east-1e doesn't support m5.4xlarge, we are using m4.2xlarge as worker_instance_type
   worker_instance_type: 'm4.2xlarge'
