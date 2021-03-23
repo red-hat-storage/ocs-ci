@@ -9,7 +9,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     skipif_openshift_dedicated,
 )
-from ocs_ci.framework.testlib import E2ETest, tier2, skipif_ocs_version
+from ocs_ci.framework.testlib import (
+    E2ETest,
+    tier2,
+    skipif_ocs_version,
+    on_prem_platform_required,
+)
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     put_bucket_policy,
@@ -76,8 +81,22 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
                         "type": "Single",
                         "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
                     },
-                }
+                },
             ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"rgw": [(1, None)]},
+                    },
+                },
+                marks=on_prem_platform_required,
+            ),
+        ],
+        ids=[
+            "AWS-OC-Single",
+            "RGW-OC-Single",
         ],
     )
     def test_mcg_namespace_lifecycle_crd(
@@ -98,12 +117,23 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         data = "Sample string content to write to a S3 object"
         object_key = "ObjKey-" + str(uuid.uuid4().hex)
 
-        aws_s3_creds = {
+        rgw_creds = {
+            "access_key_id": cld_mgr.rgw_client.access_key,
+            "access_key": cld_mgr.rgw_client.secret_key,
+            "endpoint": cld_mgr.rgw_client.endpoint,
+        }
+        aws_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
             "endpoint": constants.MCG_NS_AWS_ENDPOINT,
             "region": config.ENV_DATA["region"],
         }
+        s3_creds = (
+            rgw_creds
+            if constants.RGW_PLATFORM
+            in bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"]
+            else aws_creds
+        )
 
         # Noobaa s3 account details
         user_name = "noobaa-user" + str(uuid.uuid4().hex)
@@ -195,7 +225,7 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
             awscli_pod,
             src=MCG_NS_ORIGINAL_DIR,
             target=f"s3://{aws_target_bucket}",
-            signed_request_creds=aws_s3_creds,
+            signed_request_creds=s3_creds,
         )
 
         # Read files directly from NS resources
@@ -206,7 +236,7 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
             awscli_pod,
             src=f"s3://{aws_target_bucket}",
             target=MCG_NS_RESULT_DIR,
-            signed_request_creds=aws_s3_creds,
+            signed_request_creds=s3_creds,
         )
 
         # Edit namespace bucket
