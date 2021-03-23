@@ -19,6 +19,7 @@ from ocs_ci.ocs.constants import (
     ORDER_AFTER_UPGRADE,
     CLOUD_PLATFORMS,
     ON_PREM_PLATFORMS,
+    IBM_POWER_PLATFORM,
 )
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
@@ -195,6 +196,11 @@ skipif_openshift_dedicated = pytest.mark.skipif(
 skipif_ibm_cloud = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == "ibm_cloud",
     reason="Test will not run on IBM cloud",
+)
+
+skipif_ibm_power = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == IBM_POWER_PLATFORM,
+    reason="Test will not run on IBM Power",
 )
 
 skipif_external_mode = pytest.mark.skipif(
