@@ -16,7 +16,13 @@ def pod(request, pvc_factory, pod_factory, interface_iterate):
     """
     pvc_obj = pvc_factory(interface=interface_iterate, status=constants.STATUS_BOUND)
     pod_dict = templating.load_yaml(constants.CSI_CEPHFS_POD_YAML)
-    pod_dict["spec"]["containers"][0]["image"] = "quay.io/ocsci/git-alpine-image"
+    # The image below is a mirror of hub.docker.com/library/alpine mirrored by Google
+    pod_dict["spec"]["containers"][0]["image"] = "mirror.gcr.io/library/alpine"
+    pod_dict["spec"]["containers"][0]["command"] = [
+        "sh",
+        "-c",
+        "mkdir -p /var/www/html && tail -f /dev/null",
+    ]
     pod_dict["spec"]["volumes"][0]["persistentVolumeClaim"]["claimName"] = pvc_obj.name
     ocs_obj = pod_factory(
         custom_data=pod_dict, interface=interface_iterate, pvc=pvc_obj
