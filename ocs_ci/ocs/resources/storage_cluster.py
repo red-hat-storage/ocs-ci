@@ -9,14 +9,14 @@ from jsonschema import validate
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.exceptions import ResourceNotFoundError
+from ocs_ci.ocs.exceptions import ResourceNotFoundError, UnsupportedFeatureError
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
-from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, get_deviceset_pvcs
 from ocs_ci.utility import localstorage, utils, templating, kms as KMS
 from ocs_ci.ocs.node import get_osds_per_node
-from ocs_ci.ocs.exceptions import UnsupportedFeatureError
+from ocs_ci.utility import localstorage, utils, templating
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd
 
@@ -557,7 +557,7 @@ def get_osd_size():
                 return int(pvc_obj.data["status"]["capacity"]["storage"][:-2])
 
     sc = get_storage_cluster()
-    return int(
+    size = (
         sc.get()
         .get("items")[0]
         .get("spec")
@@ -566,8 +566,13 @@ def get_osd_size():
         .get("spec")
         .get("resources")
         .get("requests")
-        .get("storage")[:-2]
+        .get("storage")
     )
+    if not size.isdigit():
+        return size[:-2]
+    else:
+        pvc = get_deviceset_pvcs()[0]
+        return pvc.get().get("status").get("capacity").get("storage")[:-2]
 
 
 def get_deviceset_count():
