@@ -614,7 +614,7 @@ class MCG:
                 "s3Compatible": {
                     "targetBucket": target_bucket_name,
                     "endpoint": cld_mgr.rgw_client.endpoint,
-                    "signatureVersion": "v4",
+                    "signatureVersion": "v2",
                     "secret": {"name": cld_mgr.rgw_client.secret.name},
                 },
             }

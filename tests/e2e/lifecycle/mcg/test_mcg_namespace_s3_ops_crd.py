@@ -9,7 +9,11 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     skipif_openshift_dedicated,
 )
-from ocs_ci.framework.testlib import E2ETest, skipif_ocs_version
+from ocs_ci.framework.testlib import (
+    E2ETest,
+    skipif_ocs_version,
+    on_prem_platform_required,
+)
 from ocs_ci.ocs import bucket_utils
 from ocs_ci.ocs import constants
 
@@ -141,10 +145,21 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
                     },
                 },
             ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"rgw": [(1, None)]},
+                    },
+                },
+                marks=on_prem_platform_required,
+            ),
         ],
         ids=[
             "AWS-OC-Single",
             "Azure-OC-Single",
+            "rgw-OC-Single",
         ],
     )
     def test_mcg_namespace_basic_s3_ops_crd(
@@ -536,10 +551,21 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
                     },
                 },
             ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"rgw": [(1, None)]},
+                    },
+                },
+                marks=on_prem_platform_required,
+            ),
         ],
         ids=[
             "AWS-OC-Single",
             "Azure-OC-Single",
+            "RGW-OC-Single",
         ],
     )
     def test_mcg_namespace_mpu_crd(
