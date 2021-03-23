@@ -696,15 +696,25 @@ def get_openshift_client(
 
     """
     version = version or config.RUN["client_version"]
+    version = expose_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     client_binary_path = os.path.join(bin_dir, "oc")
     if os.path.isfile(client_binary_path) and force_download:
         delete_file(client_binary_path)
     if os.path.isfile(client_binary_path):
-        log.debug(f"Client exists ({client_binary_path}), skipping download.")
-        # TODO: check client version
+        current_client_version = get_client_version()
+        if current_client_version != version:
+            log.info(
+                f"Existing client version ({current_client_version}) does not match "
+                f"configured version ({version}), removing file: {client_binary_path}"
+            )
+            delete_file(client_binary_path)
+    if os.path.isfile(client_binary_path):
+        log.debug(
+            f"Client exists ({client_binary_path}) and matches configured version, "
+            f"skipping download."
+        )
     else:
-        version = expose_ocp_version(version)
         log.info(f"Downloading openshift client ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
@@ -3197,3 +3207,18 @@ def get_default_if_keyval_empty(dictionary, key, default_val):
     if not dictionary.get(key):
         return default_val
     return dictionary.get(key)
+
+
+def get_client_version():
+    """
+    Get version reported by `oc version`.
+
+    Returns:
+        str: version reported by `oc version`. None if oc is not on the path.
+
+    """
+    if which("oc"):
+        cmd = "oc version -o json"
+        resp = exec_cmd(cmd, ignore_error=True)
+        output = json.loads(resp.stdout.decode())
+        return output["releaseClientVersion"]
