@@ -14,12 +14,14 @@ import base64
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.exceptions import (
     VaultDeploymentError,
     VaultOperationError,
     KMSNotSupported,
     KMSResourceCleaneupError,
     CommandFailed,
+    NotFoundError,
 )
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility import templating
@@ -30,6 +32,7 @@ from ocs_ci.utility.utils import (
     get_running_cluster_id,
     get_default_if_keyval_empty,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +47,10 @@ class KMS(object):
         self.kms_provider = provider
 
     def deploy(self):
-        raise NotImplementedError()
+        raise NotImplementedError("Child class should implement this method")
+
+    def post_deploy_verification(self):
+        raise NotImplementedError("Child class should implement this method")
 
 
 class Vault(KMS):
@@ -612,6 +618,64 @@ class Vault(KMS):
         if self.vault_namespace:
             self.remove_vault_namespace()
 
+    def post_deploy_verification(self):
+        """
+        Validating the OCS deployment from vault perspective
+
+        """
+        if config.ENV_DATA.get("vault_deploy_mode") == "external":
+            self.validate_external_vault()
+
+    def validate_external_vault(self):
+        """
+        This function is for post OCS deployment vault
+        verification
+
+        Following checks will be done
+        1. check osd encryption keys in the vault path
+        2. check noobaa keys in the vault path
+        3. check storagecluster CR for 'kms' enabled
+
+        Raises:
+            NotFoundError : if key not found in vault OR in the resource CR
+
+        """
+
+        self.gather_init_vault_conf()
+        self.update_vault_env_vars()
+        if config.ENV_DATA.get("use_vault_namespace"):
+            self.get_vault_namespace()
+            os.environ["VAULT_NAMESPACE"] = self.vault_namespace
+        self.get_vault_backend_path()
+        kvlist = vault_kv_list(self.vault_backend_path)
+
+        # Check osd keys are present
+        osds = pod.get_osd_pods()
+        for osd in osds:
+            pvc = (
+                osd.get()
+                .get("metadata")
+                .get("labels")
+                .get(constants.CEPH_ROOK_IO_PVC_LABEL)
+            )
+            if any(pvc in k for k in kvlist):
+                logger.info(f"Vault: Found key for {pvc}")
+            else:
+                logger.error(f"Vault: Key not found for {pvc}")
+                raise NotFoundError("Vault key not found")
+
+        # Check for NOOBAA key
+        if any(constants.VAULT_NOOBAA_ROOT_SECRET_PATH in k for k in kvlist):
+            logger.info("Found Noobaa root secret path")
+        else:
+            logger.error("Noobaa root secret path not found")
+            raise NotFoundError("Vault key for noobaa not found")
+
+        # Check kms enabled
+        if not is_kms_enabled():
+            logger.error("KMS not enabled on storage cluster")
+            raise NotFoundError("KMS flag not found")
+
 
 kms_map = {"vault": Vault}
 
@@ -637,3 +701,20 @@ def is_kms_enabled():
     resource = cluster.get()["items"][0]
     encryption = resource.get("spec").get("encryption", {}).get("kms", {}).get("enable")
     return bool(encryption)
+
+
+def vault_kv_list(path):
+    """
+    List kv from a given path
+
+    Args:
+        path (str): Vault backend path name
+
+    Returns:
+        list: of kv present in the path
+
+    """
+    cmd = f"vault kv list {path}"
+    out = subprocess.check_output(shlex.split(cmd))
+    json_out = json.loads(out)
+    return json_out

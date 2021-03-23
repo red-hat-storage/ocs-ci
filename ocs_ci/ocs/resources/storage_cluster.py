@@ -13,7 +13,7 @@ from ocs_ci.ocs.exceptions import ResourceNotFoundError
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
-from ocs_ci.utility import localstorage, utils, templating
+from ocs_ci.utility import localstorage, utils, templating, kms as KMS
 from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.ocs.exceptions import UnsupportedFeatureError
 from ocs_ci.utility.rgwutils import get_rgw_count
@@ -379,6 +379,9 @@ def ocs_install_verification(
         check_fips_enabled()
     if config.ENV_DATA.get("encryption_at_rest"):
         osd_encryption_verification()
+        if config.DEPLOYMENT.get("kms_deployment"):
+            kms = KMS.get_kms_deployment()
+            kms.post_deploy_verification()
 
 
 def osd_encryption_verification():
