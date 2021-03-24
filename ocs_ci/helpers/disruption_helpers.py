@@ -63,7 +63,9 @@ class Disruptions:
         if self.resource == "operator":
             self.resource_obj = pod.get_operator_pods()
             self.selector = constants.OPERATOR_LABEL
-
+        if self.resource == "nooba_core":
+            self.resource_obj = pod.get_noobaa_pods(constants.NOOBAA_CORE_POD_LABEL)
+            self.selector = constants.NOOBAA_CORE_POD_LABEL
         self.resource_count = resource_count or len(self.resource_obj)
 
     def delete_resource(self, resource_id=0):
