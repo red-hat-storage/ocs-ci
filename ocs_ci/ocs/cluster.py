@@ -770,7 +770,7 @@ class CephHealthMonitor(threading.Thread):
         )
 
 
-def validate_ocs_pods_on_pvc(pods, pvc_names, pvc_label):
+def validate_ocs_pods_on_pvc(pods, pvc_names):
     """
     Validate if ocs pod has PVC. This validation checking if there is the pvc
     like: rook-ceph-mon-a for the pod rook-ceph-mon-a-56f67f5968-6j4px.
@@ -778,7 +778,6 @@ def validate_ocs_pods_on_pvc(pods, pvc_names, pvc_label):
     Args:
         pods (list): OCS pod names
         pvc_names (list): names of all PVCs
-        pvc_label (str): label of PVC name for the pod
 
     Raises:
          AssertionError: If no PVC found for one of the pod
@@ -786,17 +785,14 @@ def validate_ocs_pods_on_pvc(pods, pvc_names, pvc_label):
     """
     logger.info(f"Validating if each pod from: {pods} has PVC from {pvc_names}.")
     for pod_name in pods:
-        pod_obj = ocp.OCP(
-            kind="Pod",
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=pod_name,
-        )
-        pod_data = pod_obj.get()
-        pod_labels = pod_data["metadata"].get("labels", {})
-        pvc_name = pod_labels[pvc_label]
-        assert (
-            pvc_name in pvc_names
-        ), f"No PVC {pvc_name} found for pod: {pod_name} in PVCs: {pvc_names}!"
+        found_pvc = ""
+        for pvc in pvc_names:
+            if pvc in pod_name:
+                found_pvc = pvc
+        if found_pvc:
+            logger.info(f"PVC {found_pvc} found for pod {pod_name}")
+            continue
+        assert found_pvc, f"No PVC found for pod: {pod_name}!"
 
 
 def validate_cluster_on_pvc():
@@ -828,11 +824,7 @@ def validate_cluster_on_pvc():
     mon_pods = get_pod_name_by_pattern("rook-ceph-mon", ns)
     if not config.DEPLOYMENT.get("local_storage"):
         logger.info("Validating all mon pods have PVC")
-        validate_ocs_pods_on_pvc(
-            mon_pods,
-            pvc_names,
-            constants.ROOK_CEPH_MON_PVC_LABEL,
-        )
+        validate_ocs_pods_on_pvc(mon_pods, pvc_names)
     else:
         logger.debug(
             "Skipping validation if all mon pods have PVC because in LSO "
@@ -842,11 +834,7 @@ def validate_cluster_on_pvc():
     osd_deviceset_pods = get_pod_name_by_pattern(
         "rook-ceph-osd-prepare-ocs-deviceset", ns
     )
-    validate_ocs_pods_on_pvc(
-        osd_deviceset_pods,
-        pvc_names,
-        constants.CEPH_ROOK_IO_PVC_LABEL,
-    )
+    validate_ocs_pods_on_pvc(osd_deviceset_pods, pvc_names)
     osd_pods = get_pod_name_by_pattern("rook-ceph-osd", ns, filter="prepare")
     for ceph_pod in mon_pods + osd_pods:
         out = run_cmd(f"oc -n {ns} get pods {ceph_pod} -o yaml")
