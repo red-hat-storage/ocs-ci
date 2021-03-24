@@ -17,7 +17,6 @@ log = logging.getLogger(__name__)
 
 
 @skipif_ocs_version("<4.8")
-@polarion_id("OCS-2500")
 class TestRbdThickProvisioning(ManageTest):
     """
     Tests to verify PVC creation and consumption using RBD thick provisioning enabled storage class
@@ -39,7 +38,7 @@ class TestRbdThickProvisioning(ManageTest):
 
     @acceptance
     @tier1
-    @pytest.mark.polarion_id("")
+    @pytest.mark.polarion_id("OCS-2500")
     def test_rbd_thick_provisioning(self, multi_pvc_factory, pod_factory):
         """
         Test to verify PVC creation and consumption using RBD thick provisioning enabled storage class
