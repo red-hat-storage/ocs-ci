@@ -174,8 +174,10 @@ class DeploymentUI(PageNavigator):
         Install LSO cluster via UI
 
         """
+        time.sleep(10)
         logger.info("Click Internal - Attached Devices")
         self.do_click(self.dep_loc["internal-attached_devices"])
+        time.sleep(10)
 
         logger.info("Click on Discover Disks and choose All Nodes")
         self.do_click(self.dep_loc["discover_disks"])
