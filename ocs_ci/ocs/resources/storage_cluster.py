@@ -1,8 +1,8 @@
 """
 StorageCluster related functionalities
 """
-import re
 import logging
+import re
 
 from jsonschema import validate
 
