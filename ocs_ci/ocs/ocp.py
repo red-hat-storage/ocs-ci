@@ -15,7 +15,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     NotSupportedFunctionError,
     NonUpgradedImagesFoundError,
-    ResourceInUnexpectedState,
+    ResourceWrongStatusException,
     ResourceNameNotSpecifiedException,
     TimeoutExpiredError,
 )
@@ -562,7 +562,7 @@ class OCP(object):
                     )
                     actual_status = status
                     if error_condition is not None and status == error_condition:
-                        raise ResourceInUnexpectedState(
+                        raise ResourceWrongStatusException(
                             resource_name,
                             column=column,
                             expected=condition,
@@ -587,7 +587,7 @@ class OCP(object):
                                 error_condition is not None
                                 and status == error_condition
                             ):
-                                raise ResourceInUnexpectedState(
+                                raise ResourceWrongStatusException(
                                     item_name,
                                     column=column,
                                     expected=condition,
@@ -646,7 +646,7 @@ class OCP(object):
                 )
             )
             raise (ex)
-        except ResourceInUnexpectedState:
+        except ResourceWrongStatusException:
             output = self.describe(resource_name, selector=selector)
             log.warning(
                 "Description of the resource(s) we were waiting for:\n%s", output
@@ -844,7 +844,7 @@ class OCP(object):
             )
         return False
 
-    @retry(ResourceInUnexpectedState, tries=4, delay=5, backoff=1)
+    @retry(ResourceWrongStatusException, tries=4, delay=5, backoff=1)
     def wait_for_phase(self, phase, timeout=300, sleep=5):
         """
         Wait till phase of resource is the same as required one passed in
@@ -856,7 +856,7 @@ class OCP(object):
             sleep (int): Time in seconds to sleep between attempts
 
         Raises:
-            ResourceInUnexpectedState: In case the resource is not in expected
+            ResourceWrongStatusException: In case the resource is not in expected
                 phase.
             NotSupportedFunctionError: If resource doesn't have phase!
             ResourceNameNotSpecifiedException: in case the name is not
@@ -867,7 +867,7 @@ class OCP(object):
         self.check_name_is_specified()
         sampler = TimeoutSampler(timeout, sleep, func=self.check_phase, phase=phase)
         if not sampler.wait_for_func_status(True):
-            raise ResourceInUnexpectedState(
+            raise ResourceWrongStatusException(
                 f"Resource: {self.resource_name} is not in expected phase: " f"{phase}"
             )
 
