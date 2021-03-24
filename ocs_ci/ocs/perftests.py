@@ -49,6 +49,17 @@ class PASTest(BaseTest):
         self.environment = get_environment_info()
         self.environment["clusterID"] = get_running_cluster_id()
 
+        self.get_osd_info()
+
+        self.get_node_info(node_type="master")
+        self.get_node_info(node_type="worker")
+
+    def get_osd_info(self):
+        """
+        Getting the OSD's information and update the main environment
+        dictionary.
+
+        """
         ct_pod = pod.get_ceph_tools_pod()
         osd_info = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd df")
         self.environment["osd_size"] = osd_info.get("nodes")[0].get("crush_weight")
@@ -58,28 +69,32 @@ class PASTest(BaseTest):
         )
         self.environment["ocs_nodes_num"] = len(node.get_ocs_nodes())
 
+    def get_node_info(self, node_type="master"):
+        """
+        Getting node type hardware information and update the main environment
+        dictionary.
+
+        Args:
+            node_type (str): the node type to collect data about,
+              can be : master / worker - the default is master
+
+        """
+        if node_type == "master":
+            nodes = node.get_master_nodes()
+        elif node_type == "worker":
+            nodes = node.get_worker_nodes()
+        else:
+            log.warning(f"Node type ({node_type}) is invalid")
+            return
+
         oc_cmd = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-
-        # Getting worker nodes information
-        worker_nodes = node.get_worker_nodes()
-        self.environment["worker_nodes_num"] = len(worker_nodes)
-        self.environment["worker_nodes_cpu_num"] = oc_cmd.exec_oc_debug_cmd(
-            node=worker_nodes[0],
+        self.environment[f"{node_type}_nodes_num"] = len(nodes)
+        self.environment[f"{node_type}_nodes_cpu_num"] = oc_cmd.exec_oc_debug_cmd(
+            node=nodes[0],
             cmd_list=["lscpu | grep '^CPU(s):' | awk '{print $NF}'"],
         ).rstrip()
-        self.environment["worker_nodes_memory"] = oc_cmd.exec_oc_debug_cmd(
-            node=worker_nodes[0], cmd_list=["free | grep Mem | awk '{print $2}'"]
-        ).rstrip()
-
-        # Getting master nodes information
-        master_nodes = node.get_master_nodes()
-        self.environment["master_nodes_num"] = len(master_nodes)
-        self.environment["master_nodes_cpu_num"] = oc_cmd.exec_oc_debug_cmd(
-            node=master_nodes[0],
-            cmd_list=["lscpu | grep '^CPU(s):' | awk '{print $NF}'"],
-        ).rstrip()
-        self.environment["master_nodes_memory"] = oc_cmd.exec_oc_debug_cmd(
-            node=master_nodes[0], cmd_list=["free | grep Mem | awk '{print $2}'"]
+        self.environment[f"{node_type}_nodes_memory"] = oc_cmd.exec_oc_debug_cmd(
+            node=nodes[0], cmd_list=["free | grep Mem | awk '{print $2}'"]
         ).rstrip()
 
     def ripsaw_deploy(self, ripsaw):
