@@ -11,7 +11,7 @@ from copy import deepcopy
 from pyVmomi import vim, vmodl
 from pyVim.task import WaitForTask, WaitForTasks
 from pyVim.connect import Disconnect, SmartStubAdapter, VimSessionOrientedStub
-from ocs_ci.ocs.exceptions import VMMaxDisksReachedException
+from ocs_ci.ocs.exceptions import VMMaxDisksReachedException, ResourcePoolNotFound
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import (
     GB2KB,
@@ -237,8 +237,13 @@ class VSPHERE(object):
         Returns:
             list: VM instances (vim.VirtualMachine)
 
+        Raises:
+            ResourcePoolNotFound: when Resource pool doesn't exist
+
         """
         rp = self.get_pool(name, dc, cluster)
+        if not self.is_resource_pool_exist(name, dc, cluster):
+            raise ResourcePoolNotFound
         return [vm for vm in rp.vm]
 
     def get_vm_in_pool_by_name(self, name, dc, cluster, pool):

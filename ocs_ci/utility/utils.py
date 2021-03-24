@@ -3177,8 +3177,7 @@ def get_attr_chain(obj, attr_chain):
     Args:
         obj: An object
         attr_chain (str): A string containing one attribute or several sub-attributes
-                          separated by dots
-                          (i.e. - "attr.sub_attr_a.sub_attr_b")
+            separated by dots (i.e. - "attr.sub_attr_a.sub_attr_b")
 
     Returns:
         The requested attribute if found, otherwise None

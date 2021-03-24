@@ -24,6 +24,7 @@ def test_fixture_amq(request):
 
 @google_api_required
 @workloads
+@pytest.mark.skip(reason="Skip due to helm permission issue")
 class TestAMQBasics(E2ETest):
     @pytest.mark.parametrize(
         argnames=["interface"],

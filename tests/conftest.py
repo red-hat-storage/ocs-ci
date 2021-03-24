@@ -75,6 +75,7 @@ from ocs_ci.utility.environment_check import (
     get_status_after_execution,
 )
 from ocs_ci.utility.flexy import load_cluster_info
+from ocs_ci.utility.kms import is_kms_enabled
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
@@ -126,7 +127,7 @@ def pytest_logger_config(logger_config):
 def pytest_collection_modifyitems(session, items):
     """
     A pytest hook to filter out skipped tests satisfying
-    skipif_ocs_version or skipif_upgraded_from
+    skipif_ocs_version, skipif_upgraded_from or skipif_no_kms
 
     Args:
         session: pytest session
@@ -143,6 +144,7 @@ def pytest_collection_modifyitems(session, items):
             skipif_upgraded_from_marker = item.get_closest_marker(
                 "skipif_upgraded_from"
             )
+            skipif_no_kms_marker = item.get_closest_marker("skipif_no_kms")
             if skipif_ocp_version_marker:
                 skip_condition = skipif_ocp_version_marker.args
                 # skip_condition will be a tuple
@@ -169,6 +171,18 @@ def pytest_collection_modifyitems(session, items):
                         f" upgraded from one of these versions: {skip_args[0]}"
                     )
                     items.remove(item)
+            if skipif_no_kms_marker:
+                try:
+                    if not is_kms_enabled():
+                        log.info(
+                            f"Test: {item} will be skipped because the OCS cluster"
+                            f" has not configured cluster-wide encryption with KMS"
+                        )
+                        items.remove(item)
+                except KeyError:
+                    log.warning(
+                        "Cluster is not yet installed. Skipping skipif_no_kms check."
+                    )
 
 
 @pytest.fixture()
@@ -1732,6 +1746,12 @@ def rgw_deployments(request):
         label=constants.RGW_APP_LABEL, namespace=config.ENV_DATA["cluster_namespace"]
     )
     if rgw_deployments:
+        # Force-skipping in case of IBM Cloud -
+        # https://github.com/red-hat-storage/ocs-ci/issues/3863
+        if config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
+            pytest.skip(
+                "RGW deployments were found, but test will be skipped because of BZ1926831"
+            )
         return rgw_deployments
     else:
         pytest.skip("There is no RGW deployment available for this test.")
@@ -2058,6 +2078,7 @@ def bucket_factory_fixture(
         if bucketclass:
             interface = bucketclass["interface"]
 
+        current_call_created_buckets = []
         if interface.lower() not in BUCKET_MAP:
             raise RuntimeError(
                 f"Invalid interface type received: {interface}. "
@@ -2080,11 +2101,12 @@ def bucket_factory_fixture(
                 *args,
                 **kwargs,
             )
+            current_call_created_buckets.append(created_bucket)
             created_buckets.append(created_bucket)
             if verify_health:
                 created_bucket.verify_health()
 
-        return created_buckets
+        return current_call_created_buckets
 
     def bucket_cleanup():
         for bucket in created_buckets:
@@ -2343,8 +2365,9 @@ def install_logging(request):
 
     # Checks OCP version
     ocp_version = get_running_ocp_version()
+    logging_channel = "stable" if ocp_version >= "4.7" else ocp_version
 
-    # Creates namespace opensift-operators-redhat
+    # Creates namespace openshift-operators-redhat
     ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
 
     # Creates an operator-group for elasticsearch
@@ -2359,7 +2382,7 @@ def install_logging(request):
 
     # Creates subscription for elastic-search operator
     subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
-    subscription_yaml["spec"]["channel"] = ocp_version
+    subscription_yaml["spec"]["channel"] = logging_channel
     helpers.create_resource(**subscription_yaml)
     assert ocp_logging_obj.get_elasticsearch_subscription()
 
@@ -2373,7 +2396,7 @@ def install_logging(request):
 
     # Creates subscription for cluster-logging
     cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
-    cl_subscription["spec"]["channel"] = ocp_version
+    cl_subscription["spec"]["channel"] = logging_channel
     helpers.create_resource(**cl_subscription)
     assert ocp_logging_obj.get_clusterlogging_subscription()
 

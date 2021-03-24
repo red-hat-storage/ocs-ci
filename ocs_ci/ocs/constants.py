@@ -481,10 +481,6 @@ SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml")
 
 STORAGE_CLUSTER_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml")
 
-IBM_STORAGE_CLUSTER_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "ibm-storage-cluster.yaml"
-)
-
 EXTERNAL_STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "external-storage-cluster.yaml"
 )
@@ -550,6 +546,9 @@ EXTERNAL_VAULT_CLIENT_KEY = os.path.join(
 EXTERNAL_VAULT_KMS_TOKEN = os.path.join(EXTERNAL_VAULT_TEMPLATES, "ocs-kms-token.yaml")
 EXTERNAL_VAULT_KMS_CONNECTION_DETAILS = os.path.join(
     EXTERNAL_VAULT_TEMPLATES, "ocs-kms-connection-details.yaml"
+)
+CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "ceph-debug-log-level-configmap.yaml"
 )
 
 # constants
@@ -758,6 +757,7 @@ INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
 OCS_SUBSCRIPTION = "ocs-operator"
 ROOK_OPERATOR_CONFIGMAP = "rook-ceph-operator-config"
+ROOK_CONFIG_OVERRIDE_CONFIGMAP = "rook-config-override"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
@@ -1234,10 +1234,13 @@ VAULT_DOWNLOAD_BASE_URL = "https://releases.hashicorp.com/vault"
 VAULT_DEFAULT_NAMESPACE = ""
 VAULT_DEFAULT_PATH_PREFIX = "ocs"
 VAULT_DEFAULT_POLICY_PREFIX = "rook"
+VAULT_DEFAULT_NAMESPACE_PREFIX = "ocs-namespace"
 VAULT_DEFAULT_TLS_SERVER = ""
 VAULT_KMS_CONNECTION_DETAILS_RESOURCE = "ocs-kms-connection-details"
 VAULT_KMS_TOKEN_RESOURCE = "ocs-kms-token"
 VAULT_CLIENT_CERT_PATH = os.path.join(DATA_DIR, "vault-client.crt")
+VAULT_KMS_PROVIDER = "vault"
+VAULT_NOOBAA_ROOT_SECRET_PATH = "NOOBAA_ROOT_SECRET_PATH"
 
 # min and max Noobaa endpoints
 MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
@@ -1247,3 +1250,20 @@ MAX_NB_ENDPOINT_COUNT = 2
 VOLUMESNAPSHOT = "volumesnapshot"
 
 PERF_IMAGE = "quay.io/ocsci/perf:latest"
+
+ROOK_CEPH_CONFIG_VALUES = """
+[global]
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_max_pg_per_osd = 600
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.5
+"""
+CEPH_DEBUG_CONFIG_VALUES = """
+[mon]
+debug_mon = 20
+debug_ms = 1
+debug_paxos = 20
+debug_crush = 20
+"""

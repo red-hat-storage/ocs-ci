@@ -12,6 +12,8 @@ from webdriver_manager.chrome import ChromeDriverManager
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.utility.utils import run_cmd, get_kubeadmin_password, get_ocp_version
 from ocs_ci.ocs.ui.views import locators
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,10 @@ class BaseUI:
         )
         os.mkdir(self.screenshots_folder)
         logger.info(f"screenshots pictures:{self.screenshots_folder}")
+        if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            self.storage_class = "thin_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+            self.storage_class = "gp2_sc"
 
     def do_click(self, locator, timeout=30):
         """
@@ -329,6 +335,15 @@ class PageNavigator(BaseUI):
         logger.info("Navigate to Dashboards Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Monitoring"])
         self.do_click(locator=self.page_nav["dashboards_page"])
+
+    def navigate_pods_page(self):
+        """
+        Navigate to Pods Page
+
+        """
+        logger.info("Navigate to Pods Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Workloads"])
+        self.do_click(locator=self.page_nav["Pods"])
 
 
 def login_ui():

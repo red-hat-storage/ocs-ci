@@ -19,6 +19,7 @@ from ocs_ci.ocs.constants import (
     ORDER_AFTER_UPGRADE,
     CLOUD_PLATFORMS,
     ON_PREM_PLATFORMS,
+    IBM_POWER_PLATFORM,
 )
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
@@ -197,6 +198,11 @@ skipif_ibm_cloud = pytest.mark.skipif(
     reason="Test will not run on IBM cloud",
 )
 
+skipif_ibm_power = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == IBM_POWER_PLATFORM,
+    reason="Test will not run on IBM Power",
+)
+
 skipif_external_mode = pytest.mark.skipif(
     config.DEPLOYMENT.get("external_mode") is True,
     reason="Test will not run on External Mode cluster",
@@ -239,3 +245,7 @@ skipif_ocs_version = pytest.mark.skipif_ocs_version
 # Marker for skipping tests if the cluster is upgraded from a particular
 # OCS version
 skipif_upgraded_from = pytest.mark.skipif_upgraded_from
+
+# Marker for skipping tests if the cluster doesn't have configured cluster-wide
+# encryption with KMS properly
+skipif_no_kms = pytest.mark.skipif_no_kms

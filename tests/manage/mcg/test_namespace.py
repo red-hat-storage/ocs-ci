@@ -271,7 +271,7 @@ class TestNamespace(MCGTest):
     @pytest.mark.polarion_id("OCS-2407")
     @tier1
     def test_namespace_bucket_creation_with_rgw(
-        self, ns_resource_factory, bucket_factory, rgw_deployments
+        self, rgw_deployments, ns_resource_factory, bucket_factory
     ):
         """
         Test namespace bucket creation using the MCG RPC.
@@ -372,12 +372,12 @@ class TestNamespace(MCGTest):
     @tier2
     def test_distribution_of_objects_in_ns_bucket(
         self,
+        rgw_deployments,
         mcg_obj,
         cld_mgr,
         awscli_pod,
         ns_resource_factory,
         bucket_factory,
-        rgw_deployments,
     ):
         """
         Test that uploaded objects into resources were correctly uploaded even
@@ -435,12 +435,12 @@ class TestNamespace(MCGTest):
     @tier2
     def test_create_ns_bucket_from_utilized_resources(
         self,
+        rgw_deployments,
         mcg_obj,
         cld_mgr,
         awscli_pod,
         ns_resource_factory,
         bucket_factory,
-        rgw_deployments,
     ):
         """
         Test Write to 2 resources, create bucket from them and read from the NS bucket.
@@ -531,7 +531,7 @@ class TestNamespace(MCGTest):
     @pytest.mark.polarion_id("OCS-2417")
     @tier2
     def test_resource_combinations_with_rgw(
-        self, ns_resource_factory, rgw_deployments, bucket_factory
+        self, rgw_deployments, ns_resource_factory, bucket_factory
     ):
         """
         Test namespace bucket creation using the MCG RPC. Use 2 resources.
