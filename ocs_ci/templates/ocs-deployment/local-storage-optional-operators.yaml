@@ -5,6 +5,11 @@ metadata:
   name: olmcontentsourcepolicy
 spec:
   repositoryDigestMirrors:
+  # WA for issue: https://github.com/red-hat-storage/ocs-ci/issues/4038
+  - mirrors:
+    - brew.registry.redhat.io/rh-osbs/openshift/ose-local-storage-operator
+    source: registry.redhat.io/openshift4/ose-local-storage-operator
+  # End of WA
   - mirrors:
     - brew.registry.redhat.io
     source: registry.redhat.io
@@ -14,7 +19,6 @@ spec:
   - mirrors:
     - brew.registry.redhat.io
     source: registry-proxy.engineering.redhat.com
-
 
 ---
 apiVersion: operators.coreos.com/v1alpha1
