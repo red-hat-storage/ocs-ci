@@ -1,0 +1,13 @@
+---
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+ENV_DATA:
+  platform: 'baremetal'
+  deployment_type: 'upi'
+  worker_replicas: 0
+  master_replicas: 3
+  mon_type: 'hostpath'
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-2505'
