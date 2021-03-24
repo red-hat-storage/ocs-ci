@@ -105,10 +105,6 @@ class ResourceNameNotSpecifiedException(Exception):
     pass
 
 
-class ResourceInUnexpectedState(Exception):
-    pass
-
-
 class VMMaxDisksReachedException(Exception):
     pass
 

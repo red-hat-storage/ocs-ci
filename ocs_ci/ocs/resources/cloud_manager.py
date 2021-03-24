@@ -20,7 +20,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
-    ResourceInUnexpectedState,
+    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.utility import templating
@@ -148,7 +148,7 @@ class CloudClient(ABC):
             )
         else:
             if is_available:
-                raise ResourceInUnexpectedState(
+                raise ResourceWrongStatusException(
                     f"{check_type[:-1]}ion of Underlying Storage {uls_name} timed out. "
                     f"Unable to {check_type.lower()} {uls_name}"
                 )

@@ -27,7 +27,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceNotFoundError,
     ChannelNotFound,
-    ResourceInUnexpectedState,
+    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.resources.ocs import get_ocs_csv, get_version_info
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
@@ -302,7 +302,7 @@ def pytest_configure(config):
             config.addinivalue_line(
                 "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
             )
-        except (ResourceNotFoundError, ChannelNotFound, ResourceInUnexpectedState):
+        except (ResourceNotFoundError, ChannelNotFound, ResourceWrongStatusException):
             # might be using exisitng cluster path using GUI installation
             log.warning("Unable to get CSV version for Reporting")
 
