@@ -38,7 +38,7 @@ class TestRbdThickProvisioning(ManageTest):
 
     @acceptance
     @tier1
-    @pytest.mark.polarion_id("OCS-2500")
+    @polarion_id("OCS-2500")
     def test_rbd_thick_provisioning(self, multi_pvc_factory, pod_factory):
         """
         Test to verify PVC creation and consumption using RBD thick provisioning enabled storage class
