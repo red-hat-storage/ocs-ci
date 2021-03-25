@@ -1,11 +1,12 @@
 import logging
 import pytest
 
-from ocs_ci.ocs.node import get_node_objs
-from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.ocs.jenkins import Jenkins
+from ocs_ci.framework.pytest_customization.marks import skipif_vsphere_ipi
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
+from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.constants import STATUS_COMPLETED, MASTER_MACHINE, WORKER_MACHINE
+from ocs_ci.ocs.jenkins import Jenkins
+from ocs_ci.ocs.node import get_node_objs
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ def jenkins(request, nodes):
 
 @workloads
 @ignore_leftovers
+@skipif_vsphere_ipi
 class TestJenkinsNodeReboot(E2ETest):
     """
     Test running Jenkins and Node Reboot

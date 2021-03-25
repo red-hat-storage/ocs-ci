@@ -218,6 +218,14 @@ skipif_no_lso = pytest.mark.skipif(
     reason="Test run only on LSO deployed cluster",
 )
 
+skipif_vsphere_ipi = pytest.mark.skipif(
+    (
+        config.ENV_DATA["platform"].lower() == "vsphere"
+        and config.ENV_DATA["deployment_type"].lower() == "ipi"
+    ),
+    reason="Test will not run on vSphere IPI cluster",
+)
+
 metrics_for_external_mode_required = pytest.mark.skipif(
     float(config.ENV_DATA["ocs_version"]) < 4.6
     and config.DEPLOYMENT.get("external_mode") is True,
