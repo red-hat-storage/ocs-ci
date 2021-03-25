@@ -31,6 +31,7 @@ from ocs_ci.utility.utils import (
     get_vault_cli,
     get_running_cluster_id,
     get_default_if_keyval_empty,
+    get_cluster_name,
 )
 
 
@@ -142,7 +143,8 @@ class Vault(KMS):
         ):
             self.vault_namespace = (
                 f"{constants.VAULT_DEFAULT_NAMESPACE_PREFIX}-"
-                f"{get_running_cluster_id()}"
+                f"{get_running_cluster_id()}-"
+                f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
             )
             self.create_namespace(self.vault_namespace)
         os.environ["VAULT_NAMESPACE"] = self.vault_namespace
@@ -356,7 +358,8 @@ class Vault(KMS):
             # "ocs-<cluster-id>"
             self.cluster_id = get_running_cluster_id()
             self.vault_backend_path = (
-                f"{constants.VAULT_DEFAULT_PATH_PREFIX}-{self.cluster_id}"
+                f"{constants.VAULT_DEFAULT_PATH_PREFIX}-{self.cluster_id}-"
+                f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
             )
         cmd = f"vault secrets enable -path={self.vault_backend_path} kv"
         out = subprocess.check_output(shlex.split(cmd))
@@ -390,7 +393,9 @@ class Vault(KMS):
 
         if not get_default_if_keyval_empty(config.ENV_DATA, "VAULT_POLICY", None):
             self.vault_policy_name = (
-                f"{constants.VAULT_DEFAULT_POLICY_PREFIX}-" f"{self.cluster_id}"
+                f"{constants.VAULT_DEFAULT_POLICY_PREFIX}-"
+                f"{self.cluster_id}-"
+                f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
             )
         else:
             self.vault_policy_name = config.ENV_DATA.get("VAULT_POLICY")
