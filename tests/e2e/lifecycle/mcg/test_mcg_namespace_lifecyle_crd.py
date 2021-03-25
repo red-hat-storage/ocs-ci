@@ -116,24 +116,22 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         """
         data = "Sample string content to write to a S3 object"
         object_key = "ObjKey-" + str(uuid.uuid4().hex)
-
-        rgw_creds = {
-            "access_key_id": cld_mgr.rgw_client.access_key,
-            "access_key": cld_mgr.rgw_client.secret_key,
-            "endpoint": cld_mgr.rgw_client.endpoint,
-        }
-        aws_creds = {
-            "access_key_id": cld_mgr.aws_client.access_key,
-            "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
-            "region": config.ENV_DATA["region"],
-        }
-        s3_creds = (
-            rgw_creds
-            if constants.RGW_PLATFORM
+        if (
+            constants.RGW_PLATFORM
             in bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"]
-            else aws_creds
-        )
+        ):
+            s3_creds = {
+                "access_key_id": cld_mgr.rgw_client.access_key,
+                "access_key": cld_mgr.rgw_client.secret_key,
+                "endpoint": cld_mgr.rgw_client.endpoint,
+            }
+        else:
+            s3_creds = {
+                "access_key_id": cld_mgr.aws_client.access_key,
+                "access_key": cld_mgr.aws_client.secret_key,
+                "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+                "region": config.ENV_DATA["region"],
+            }
 
         # Noobaa s3 account details
         user_name = "noobaa-user" + str(uuid.uuid4().hex)
