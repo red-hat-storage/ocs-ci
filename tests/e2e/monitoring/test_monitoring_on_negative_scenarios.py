@@ -31,7 +31,10 @@ from ocs_ci.ocs.node import (
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
-from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_aws_i3,
+    skipif_vsphere_ipi,
+)
 from ocs_ci.ocs.defaults import ROOK_CLUSTER_NAMESPACE
 
 log = logging.getLogger(__name__)
@@ -93,6 +96,7 @@ def wait_for_nodes_status_and_prometheus_health_check(pods):
 
 @ignore_leftovers
 @workloads
+@skipif_vsphere_ipi
 class TestMonitoringBackedByOCS(E2ETest):
     """
     Test cases to validate monitoring backed by OCS
