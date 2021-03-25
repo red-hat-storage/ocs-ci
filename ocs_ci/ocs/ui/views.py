@@ -56,8 +56,7 @@ deployment_4_7 = {
         'input[data-test="Internal - Attached Devices-radio-input"]',
         By.CSS_SELECTOR,
     ),
-    "discover_disks": ("//*[contains(text(), 'Discover Disks')]", By.XPATH),
-    "all_nodes_discover_disks": (
+    "all_nodes_lso": (
         'input[id="auto-detect-volume-radio-all-nodes"]',
         By.CSS_SELECTOR,
     ),

@@ -174,14 +174,11 @@ class DeploymentUI(PageNavigator):
         Install LSO cluster via UI
 
         """
-        time.sleep(10)
         logger.info("Click Internal - Attached Devices")
         self.do_click(self.dep_loc["internal-attached_devices"])
-        time.sleep(10)
 
-        logger.info("Click on Discover Disks and choose All Nodes")
-        self.do_click(self.dep_loc["discover_disks"])
-        self.do_click(self.dep_loc["all_nodes_discover_disks"])
+        logger.info("Click on All nodes")
+        self.do_click(self.dep_loc["all_nodes_lso"])
         self.do_click(self.dep_loc["next"])
 
         logger.info(
@@ -281,7 +278,7 @@ class DeploymentUI(PageNavigator):
         self, operator="OpenShift Container Storage", timeout_install=300, sleep=20
     ):
         """
-        Verify OCS Installation
+        Verify Operator Installation
 
         operator (str): type of operator
         timeout_install (int): Time in seconds to wait
