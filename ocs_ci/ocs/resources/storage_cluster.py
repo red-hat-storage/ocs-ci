@@ -14,9 +14,8 @@ from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, get_deviceset_pvcs
-from ocs_ci.utility import localstorage, utils, templating, kms as KMS
 from ocs_ci.ocs.node import get_osds_per_node
-from ocs_ci.utility import localstorage, utils, templating
+from ocs_ci.utility import localstorage, utils, templating, kms as KMS
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd
 
