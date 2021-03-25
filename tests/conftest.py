@@ -2860,7 +2860,11 @@ def log_alerts(request):
 
     """
     teardown = config.RUN["cli_params"].get("teardown")
+    dev_mode = config.RUN["cli_params"].get("dev_mode")
     if teardown:
+        return
+    elif dev_mode:
+        log.info("Skipping alert check for development mode")
         return
 
     alerts_before = []
