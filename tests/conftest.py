@@ -137,7 +137,9 @@ def pytest_collection_modifyitems(session, items):
     """
     teardown = config.RUN["cli_params"].get("teardown")
     deploy = config.RUN["cli_params"].get("deploy")
-    if not (teardown or deploy):
+    skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
+
+    if not (teardown or deploy or skip_ocs_deployment):
         for item in items[:]:
             skipif_ocp_version_marker = item.get_closest_marker("skipif_ocp_version")
             skipif_ocs_version_marker = item.get_closest_marker("skipif_ocs_version")
