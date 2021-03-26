@@ -801,10 +801,10 @@ def measure_noobaa_ns_target_bucket_deleted(
         time.sleep(run_time)
         return ns_stores[0].uls_name
 
-    logger.info("Delete NS bucket and NS stores so that alert is cleared")
-    ns_bucket.delete()
-    for ns_store in ns_stores:
-        ns_store.delete()
     test_file = os.path.join(measurement_dir, "measure_delete_target_bucket.json")
     measured_op = measure_operation(delete_target_bucket, test_file)
+    logger.info("Delete NS bucket, bucketclass and NS store so that alert is cleared")
+    ns_bucket[0].delete()
+    ns_bucket[0].bucketclass.delete()
+    ns_stores[0].delete()
     return measured_op

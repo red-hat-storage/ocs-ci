@@ -126,9 +126,9 @@ def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted):
             states=target_states,
             severity=target_severity,
         )
-        # the time to wait is increased because it takes more time for OCS
-        # cluster to resolve its issues
-        pg_wait = 480
+        # the time to wait is increased because it takes more time for NooBaa
+        # to clear the alert
+        pg_wait = 600
         api.check_alert_cleared(
             label=target_label,
             measure_end_time=measure_noobaa_ns_target_bucket_deleted.get("stop"),
