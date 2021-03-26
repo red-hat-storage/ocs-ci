@@ -844,10 +844,11 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     log.info("Waiting for new worker node to be in ready state")
     machine.wait_for_new_node_to_be_ready(machineset_name)
     new_node_name = get_node_from_machine_name(new_machine_name)
-    log.info("Adding ocs label to newly created worker node")
-    node_obj = ocp.OCP(kind="node")
-    node_obj.add_label(resource_name=new_node_name, label=constants.OPERATOR_NODE_LABEL)
-    log.info(f"Successfully labeled {new_node_name} with OCS storage label")
+    if not is_node_labeled(new_node_name):
+        log.info("Adding ocs label to newly created worker node")
+        node_obj = ocp.OCP(kind="node")
+        node_obj.add_label(resource_name=new_node_name, label=constants.OPERATOR_NODE_LABEL)
+        log.info(f"Successfully labeled {new_node_name} with OCS storage label")
 
     return new_node_name
 
