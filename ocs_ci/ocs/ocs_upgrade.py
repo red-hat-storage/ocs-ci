@@ -90,9 +90,13 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
     # in 4.3 app selector nooba have those pods: noobaa-core-ID, noobaa-db-ID,
     # noobaa-operator-ID but in 4.2 only 2: noobaa-core-ID, noobaa-operator-ID
+    nooba_timeout = 1200 if upgrade_version == parse_version("4.7") else 720
     nooba_pods = 2 if upgrade_version < parse_version("4.3") else 3
     verify_pods_upgraded(
-        old_images, selector=constants.NOOBAA_APP_LABEL, count=nooba_pods
+        old_images,
+        selector=constants.NOOBAA_APP_LABEL,
+        count=nooba_pods,
+        timeout=nooba_timeout,
     )
     verify_pods_upgraded(
         old_images,
