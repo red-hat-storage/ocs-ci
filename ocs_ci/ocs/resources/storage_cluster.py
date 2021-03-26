@@ -13,7 +13,7 @@ from ocs_ci.ocs.exceptions import ResourceNotFoundError, UnsupportedFeatureError
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
-from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, get_deviceset_pvcs
+from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.utility import localstorage, utils, templating, kms as KMS
 from ocs_ci.utility.rgwutils import get_rgw_count
@@ -544,17 +544,6 @@ def get_osd_size():
         int: osd size
 
     """
-    # In the case of UI deployment of LSO cluster, the value in StorageCluster CR
-    # is set to 1, so we can not take OSD size from there. For LSO we will return
-    # the size from PVC.
-    if config.DEPLOYMENT.get("local_storage"):
-        ocs_pvc_objects = get_all_pvc_objs(
-            namespace=config.ENV_DATA["cluster_namespace"]
-        )
-        for pvc_obj in ocs_pvc_objects:
-            if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME):
-                return int(pvc_obj.data["status"]["capacity"]["storage"][:-2])
-
     sc = get_storage_cluster()
     size = (
         sc.get()
@@ -567,11 +556,14 @@ def get_osd_size():
         .get("requests")
         .get("storage")
     )
-    if not size.isdigit():
-        return size[:-2]
-    else:
+    if size.isdigit or config.DEPLOYMENT.get("local_storage"):
+        # In the case of UI deployment of LSO cluster, the value in StorageCluster CR
+        # is set to 1, so we can not take OSD size from there. For LSO we will return
+        # the size from PVC.
         pvc = get_deviceset_pvcs()[0]
-        return pvc.get().get("status").get("capacity").get("storage")[:-2]
+        return int(pvc.get()["status"]["capacity"]["storage"][:-2])
+    else:
+        return int(size[:-2])
 
 
 def get_deviceset_count():
