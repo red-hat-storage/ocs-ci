@@ -66,7 +66,7 @@ class AMQ(object):
         """
         try:
             log.info(f"cloning amq in {self.dir}")
-            git_clone_cmd = f"git clone -b {self.branch} {self.repo} "
+            git_clone_cmd = f"git clone {self.repo} "
             run(git_clone_cmd, shell=True, cwd=self.dir, check=True)
             self.amq_dir = "strimzi-kafka-operator/packaging/install/cluster-operator/"
             self.amq_kafka_pers_yaml = (
@@ -130,16 +130,17 @@ class AMQ(object):
             cwd=self.dir,
         )
         self.strimzi_kafka_operator = os.path.join(self.dir, self.amq_dir)
-        cmd = f"oc create -f {self.strimzi_kafka_operator}"
-        log.info(f"Executing cmd: {cmd}")
-        run(
-            cmd,
-            shell=True,
-            check=True,
-            cwd=self.dir,
-        )
-        time.sleep(10)
-
+        pf_files = os.listdir(self.strimzi_kafka_operator)
+        crds = []
+        for crd in pf_files:
+            crds.append(crd)
+        self.crd_objects = []
+        for adm_yaml in crds:
+            adm_data = templating.load_yaml(self.strimzi_kafka_operator + adm_yaml)
+            adm_obj = OCS(**adm_data)
+            adm_obj.create()
+            self.crd_objects.append(adm_obj)
+        time.sleep(30)
         #  Check strimzi-cluster-operator pod created
         if self.is_amq_pod_running(pod_pattern="cluster-operator", expected_pods=1):
             log.info("strimzi-cluster-operator pod is in running state")
@@ -939,10 +940,9 @@ class AMQ(object):
             self.kafka_bridge.delete()
             self.kafka_persistent.delete()
             delete_pvcs(pvc_objs=ocs_pvc_obj)
-            cmd = f"oc delete -f {self.strimzi_kafka_operator}"
-            log.info(f"Executing cmd: {cmd}")
-            run(cmd, shell=True, check=True, cwd=self.dir)
-
+            for adm_obj in self.crd_objects:
+                adm_obj.delete()
+            time.sleep(20)
         for pvc in ocs_pvc_obj:
             logging.info(pvc.name)
             validate_pv_delete(pvc.backed_pv)
