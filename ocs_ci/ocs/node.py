@@ -847,7 +847,9 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     if not is_node_labeled(new_node_name):
         log.info("Adding ocs label to newly created worker node")
         node_obj = ocp.OCP(kind="node")
-        node_obj.add_label(resource_name=new_node_name, label=constants.OPERATOR_NODE_LABEL)
+        node_obj.add_label(
+            resource_name=new_node_name, label=constants.OPERATOR_NODE_LABEL
+        )
         log.info(f"Successfully labeled {new_node_name} with OCS storage label")
 
     return new_node_name
