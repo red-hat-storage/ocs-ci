@@ -6,15 +6,16 @@ from elasticsearch import Elasticsearch
 
 from ocs_ci.framework.testlib import BaseTest
 
-from ocs_ci.ocs import defaults, constants
+from ocs_ci.ocs import defaults, constants, node
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import *  # noqa: F403
 from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id
 from ocs_ci.ocs.elasticsearch import elasticsearch_load
+from ocs_ci.ocs.resources import pod
 
 log = logging.getLogger(__name__)
 
@@ -41,8 +42,60 @@ class PASTest(BaseTest):
         self.benchmark_obj = None  # place holder for the benchmark object
         self.client_pod = None  # Place holder for the client pod object
         self.dev_mode = config.RUN["cli_params"].get("dev_mode")
-        self.environment = get_environment_info()
         self.pod_obj = OCP(kind="pod")
+
+        # Collecting all Environment configuration Software & Hardware
+        # for the performance report.
+        self.environment = get_environment_info()
+        self.environment["clusterID"] = get_running_cluster_id()
+
+        self.get_osd_info()
+
+        self.get_node_info(node_type="master")
+        self.get_node_info(node_type="worker")
+
+    def get_osd_info(self):
+        """
+        Getting the OSD's information and update the main environment
+        dictionary.
+
+        """
+        ct_pod = pod.get_ceph_tools_pod()
+        osd_info = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd df")
+        self.environment["osd_size"] = osd_info.get("nodes")[0].get("crush_weight")
+        self.environment["osd_num"] = len(osd_info.get("nodes"))
+        self.environment["total_capacity"] = osd_info.get("summary").get(
+            "total_kb_avail"
+        )
+        self.environment["ocs_nodes_num"] = len(node.get_ocs_nodes())
+
+    def get_node_info(self, node_type="master"):
+        """
+        Getting node type hardware information and update the main environment
+        dictionary.
+
+        Args:
+            node_type (str): the node type to collect data about,
+              can be : master / worker - the default is master
+
+        """
+        if node_type == "master":
+            nodes = node.get_master_nodes()
+        elif node_type == "worker":
+            nodes = node.get_worker_nodes()
+        else:
+            log.warning(f"Node type ({node_type}) is invalid")
+            return
+
+        oc_cmd = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        self.environment[f"{node_type}_nodes_num"] = len(nodes)
+        self.environment[f"{node_type}_nodes_cpu_num"] = oc_cmd.exec_oc_debug_cmd(
+            node=nodes[0],
+            cmd_list=["lscpu | grep '^CPU(s):' | awk '{print $NF}'"],
+        ).rstrip()
+        self.environment[f"{node_type}_nodes_memory"] = oc_cmd.exec_oc_debug_cmd(
+            node=nodes[0], cmd_list=["free | grep Mem | awk '{print $2}'"]
+        ).rstrip()
 
     def ripsaw_deploy(self, ripsaw):
         """

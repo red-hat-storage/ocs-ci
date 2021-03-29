@@ -1,5 +1,6 @@
 import logging
 import pytest
+from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest, tier2, ignore_leftovers
@@ -43,15 +44,40 @@ class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
             replica=replica,
             compression=compression,
         )
+        bg_handler = flowtest.BackgroundOps()
+        executor_run_bg_ios_ops = ThreadPoolExecutor(max_workers=5)
         self.amq, self.threads = amq_factory_fixture(sc_name=sc_obj.name)
-        self.cb = couchbase_factory_fixture(sc_name=sc_obj.name, run_in_bg=True)
-        self.pgsql = pgsql_factory_fixture(
-            replicas=3, clients=3, transactions=600, sc_name=sc_obj.name
+
+        cb_workload = executor_run_bg_ios_ops.submit(
+            bg_handler.handler,
+            couchbase_factory_fixture,
+            sc_name=sc_obj.name,
+            replicas=3,
+            skip_analyze=True,
+            run_in_bg=False,
+            num_items="1000",
+            num_threads="1",
+            iterations=1,
         )
 
+        pgsql_workload = executor_run_bg_ios_ops.submit(
+            bg_handler.handler,
+            pgsql_factory_fixture,
+            replicas=1,
+            clients=1,
+            transactions=100,
+            timeout=100,
+            sc_name=sc_obj.name,
+            iterations=1,
+        )
         bg_handler = flowtest.BackgroundOps()
-        bg_ops = [self.cb.result]
+        bg_ops = [pgsql_workload, cb_workload]
         bg_handler.wait_for_bg_operations(bg_ops, timeout=3600)
+        # AMQ Validate the results
+        log.info("Validate message run completely")
+        for thread in self.threads:
+            thread.result(timeout=1800)
+
         cluster_used_space = get_percent_used_capacity()
         log.info(
             f" Cluster used percentage space with replica size {replica}, "

@@ -1,4 +1,5 @@
 import logging
+import time
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -6,11 +7,12 @@ from ocs_ci.ocs.node import wait_for_nodes_status, get_worker_nodes, get_master_
 from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.utility.service import KubeletService
 
 logger = logging.getLogger(__name__)
 
 
-class POWERNodes(object):
+class PowerNodes(object):
     """
     Wrapper for PowerNodes
     """
@@ -19,6 +21,7 @@ class POWERNodes(object):
         """
         Class Initialization.
         Run lsmod command to prepare isKVM variable.
+        Also, get a reference for KubeletService object.
         """
         cmd = "sudo /usr/sbin/lsmod"
         result = exec_cmd(cmd)
@@ -27,6 +30,8 @@ class POWERNodes(object):
         else:
             self.isKVM = False
         logger.info(f"iskvm check: {self.isKVM}")
+
+        self.service = KubeletService()
 
     def iskvm(self):
         """
@@ -56,6 +61,27 @@ class POWERNodes(object):
         else:
             return True
 
+    def stop_powernodes_machines_powervs(
+        self, powernode_machines, timeout=900, wait=True
+    ):
+        """
+        Stop PowerNode Machines - PowerVS
+
+        Args:
+            powernode_machines (list): PowerNodes objects
+            timeout (int): time in seconds to wait for node to reach 'not ready' state
+            wait (bool): True if need to wait till the restarted node reaches timeout
+                - for future use
+
+        """
+        for pnode in powernode_machines:
+            self.service.stop(pnode, timeout)
+
+        # Wait for an additional 300+60 seconds (for pods to drain)
+        waiting_time = 360
+        logger.info(f"Waiting for {waiting_time} seconds")
+        time.sleep(waiting_time)
+
     def stop_powernodes_machines(
         self, powernode_machines, timeout=900, wait=True, force=True
     ):
@@ -66,7 +92,7 @@ class POWERNodes(object):
             powernode_machines (list): PowerNode objects
             timeout (int): time in seconds to wait for node to reach 'not ready' state
             wait (bool): True if need to wait till the restarted node reaches timeout
-                         - for future use
+                - for future use
             force (bool): True for PowerNode ungraceful power off, False for
                 graceful PowerNode shutdown - for future use
 
@@ -89,6 +115,21 @@ class POWERNodes(object):
             logger.info(ret)
             if not ret.wait_for_func_status(result=True):
                 raise UnexpectedBehaviour("Node {node.name} is still Running")
+
+    def start_powernodes_machines_powervs(
+        self, powernode_machines, timeout=900, wait=True
+    ):
+        """
+        Start PowerNode Machines
+
+        Args:
+            powernode_machines (list): List of PowerNode machines
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+            wait (bool): Wait for PowerNodes to start - for future use
+        """
+        for pnode in powernode_machines:
+            self.service.start(pnode, timeout)
 
     def start_powernodes_machines(
         self, powernode_machines, timeout=900, wait=True, force=True
@@ -116,6 +157,19 @@ class POWERNodes(object):
         wait_for_nodes_status(
             node_names=get_worker_nodes(), status=constants.NODE_READY, timeout=timeout
         )
+
+    def restart_powernodes_machines_powervs(self, powernode_machines, timeout, wait):
+        """
+        Restart PowerNode Machines
+
+        Args:
+            powernode_machines (list): PowerNode objects
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+            wait (bool): True if need to wait till the restarted node reaches timeout
+        """
+        self.stop_powernodes_machines_powervs(powernode_machines, timeout, wait)
+        self.start_powernodes_machines_powervs(powernode_machines, timeout, wait)
 
     def restart_powernodes_machines(
         self, powernode_machines, timeout, wait, force=True

@@ -758,6 +758,7 @@ def setup_ceph_toolbox(force_setup=False):
     else:
         if external_mode:
             toolbox = templating.load_yaml(constants.TOOL_POD_YAML)
+            toolbox["metadata"]["name"] += "-external"
             keyring_dict = ocsci_config.EXTERNAL_MODE.get("admin_keyring")
             env = [{"name": "ROOK_ADMIN_SECRET", "value": keyring_dict["key"]}]
             toolbox["spec"]["template"]["spec"]["containers"][0]["env"] = env

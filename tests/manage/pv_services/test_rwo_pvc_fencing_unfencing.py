@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_bm,
     skipif_ibm_cloud,
     skipif_lso,
+    skipif_vsphere_ipi,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 @tier4
 @ignore_leftovers
+@skipif_vsphere_ipi
 class TestRwoPVCFencingUnfencing(ManageTest):
     """
     KNIP-677 OCS support for Automated fencing/unfencing RWO PV

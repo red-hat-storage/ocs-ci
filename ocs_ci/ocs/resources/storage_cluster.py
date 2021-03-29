@@ -1,20 +1,21 @@
 """
 StorageCluster related functionalities
 """
-import logging
 import re
+import logging
+import tempfile
 
 from jsonschema import validate
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.exceptions import ResourceNotFoundError
+from ocs_ci.ocs.exceptions import ResourceNotFoundError, UnsupportedFeatureError
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
-from ocs_ci.utility import localstorage, utils
+from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.node import get_osds_per_node
-from ocs_ci.ocs.exceptions import UnsupportedFeatureError
+from ocs_ci.utility import localstorage, utils, templating, kms as KMS
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd
 
@@ -89,7 +90,7 @@ def ocs_install_verification(
         "ocs_registry_image"
     )
     if ocs_registry_image and ocs_registry_image.endswith(".ci"):
-        ocs_registry_image = ocs_registry_image.split(":")[1]
+        ocs_registry_image = ocs_registry_image.rsplit(":", 1)[1]
         log.info(
             f"Check if OCS registry image: {ocs_registry_image} matches with "
             f"CSV: {csv_version}"
@@ -262,6 +263,8 @@ def ocs_install_verification(
     )
     log.info("Verified node and provisioner secret names in storage class.")
 
+    ct_pod = get_ceph_tools_pod()
+
     # https://github.com/red-hat-storage/ocs-ci/issues/3820
     # Verify ceph osd tree output
     if not (
@@ -282,7 +285,6 @@ def ocs_install_verification(
         else:
             deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
 
-        ct_pod = get_ceph_tools_pod()
         osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree", format="json")
         schemas = {
             "root": constants.OSD_TREE_ROOT,
@@ -377,6 +379,9 @@ def ocs_install_verification(
         check_fips_enabled()
     if config.ENV_DATA.get("encryption_at_rest"):
         osd_encryption_verification()
+        if config.DEPLOYMENT.get("kms_deployment"):
+            kms = KMS.get_kms_deployment()
+            kms.post_deploy_verification()
 
 
 def osd_encryption_verification():
@@ -540,7 +545,7 @@ def get_osd_size():
 
     """
     sc = get_storage_cluster()
-    return int(
+    size = (
         sc.get()
         .get("items")[0]
         .get("spec")
@@ -549,8 +554,16 @@ def get_osd_size():
         .get("spec")
         .get("resources")
         .get("requests")
-        .get("storage")[:-2]
+        .get("storage")
     )
+    if size.isdigit or config.DEPLOYMENT.get("local_storage"):
+        # In the case of UI deployment of LSO cluster, the value in StorageCluster CR
+        # is set to 1, so we can not take OSD size from there. For LSO we will return
+        # the size from PVC.
+        pvc = get_deviceset_pvcs()[0]
+        return int(pvc.get()["status"]["capacity"]["storage"][:-2])
+    else:
+        return int(size[:-2])
 
 
 def get_deviceset_count():
@@ -590,3 +603,26 @@ def get_all_storageclass():
         )
     ]
     return storageclass
+
+
+def setup_ceph_debug():
+    """
+    Set Ceph to run in debug log level using a ConfigMap.
+    This functionality is available starting OCS 4.7.
+
+    """
+    ceph_debug_log_configmap_data = templating.load_yaml(
+        constants.CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP
+    )
+    ceph_debug_log_configmap_data["data"]["config"] = (
+        constants.ROOK_CEPH_CONFIG_VALUES + constants.CEPH_DEBUG_CONFIG_VALUES
+    )
+
+    ceph_configmap_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="config_map", delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        ceph_debug_log_configmap_data, ceph_configmap_yaml.name
+    )
+    log.info("Setting Ceph to work in debug log level using a new ConfigMap resource")
+    run_cmd(f"oc create -f {ceph_configmap_yaml.name}")

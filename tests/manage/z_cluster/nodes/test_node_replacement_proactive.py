@@ -8,7 +8,6 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
     tier4,
     tier4a,
-    acceptance,
     ManageTest,
     ignore_leftovers,
     aws_platform_required,
@@ -20,8 +19,6 @@ from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_openshift_dedicated,
     skipif_bmpsi,
-    cloud_platform_required,
-    vsphere_platform_required,
 )
 
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -198,10 +195,7 @@ class TestNodeReplacementWithIO(ManageTest):
 
 @tier4
 @tier4a
-@acceptance
 @ignore_leftovers
-@cloud_platform_required
-@vsphere_platform_required
 @skipif_openshift_dedicated
 @skipif_bmpsi
 class TestNodeReplacement(ManageTest):

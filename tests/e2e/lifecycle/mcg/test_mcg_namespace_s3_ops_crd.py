@@ -7,8 +7,13 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     tier2,
+    skipif_openshift_dedicated,
 )
-from ocs_ci.framework.testlib import E2ETest, skipif_ocs_version
+from ocs_ci.framework.testlib import (
+    E2ETest,
+    skipif_ocs_version,
+    on_prem_platform_required,
+)
 from ocs_ci.ocs import bucket_utils
 from ocs_ci.ocs import constants
 
@@ -17,6 +22,7 @@ logger = logging.getLogger(__name__)
 OBJ_DATA = "Sample string content to write to a S3 object"
 ROOT_OBJ = "RootKey-" + str(uuid.uuid4().hex)
 COPY_OBJ = "CopyKey-" + str(uuid.uuid4().hex)
+DEFAULT_REGION = "us-east-2"
 
 
 def setup_objects_to_list(mcg_obj, bucket_name, amount=100, prefix=""):
@@ -62,16 +68,14 @@ def get_list_and_verify(
 
     """
     if verify == "Contents":
-        logger.info(
-            f"ListObjects({version}) with prefix '{prefix}': {response[verify]}"
-        )
+        logger.info(f"ListObjects{version} with prefix '{prefix}': {response[verify]}")
         page_keys = [item["Key"] for item in response[verify]]
         assert page_keys.sort() == keys.sort(), "List mismatch"
         return page_keys[-1]
 
     elif verify == "CommonPrefixes":
         logger.info(
-            f"ListObjects({version}) with prefix '{prefix}', delimiter '{delimiter}': {response[verify]}"
+            f"ListObjects{version} with prefix '{prefix}', delimiter '{delimiter}': {response[verify]}"
         )
         page_keys = [item["Prefix"] for item in response[verify]]
         assert page_keys.sort() == keys.sort(), "List mismatch"
@@ -107,24 +111,59 @@ def multipart_setup(pod_obj):
 
 
 @pytest.mark.polarion_id("OCS-2296")
+@skipif_openshift_dedicated
 @skipif_aws_creds_are_missing
-@skipif_ocs_version("<4.6")
+@skipif_ocs_version("<4.7")
 @tier2
-class TestMcgNamespaceS3Operations(E2ETest):
+class TestMcgNamespaceS3OperationsCrd(E2ETest):
     """
     Test various supported S3 operations on namespace buckets
 
     """
 
+    MCG_NS_RESULT_DIR = "/result"
+    MCG_NS_ORIGINAL_DIR = "/original"
+
     @pytest.mark.parametrize(
-        argnames=["platform"],
+        argnames=["bucketclass_dict"],
         argvalues=[
-            pytest.param(constants.AWS_PLATFORM),
-            pytest.param(constants.AZURE_PLATFORM),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, None)]},
+                    },
+                },
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"azure": [(1, None)]},
+                    },
+                },
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"rgw": [(1, None)]},
+                    },
+                },
+                marks=on_prem_platform_required,
+            ),
+        ],
+        ids=[
+            "AWS-OC-Single",
+            "Azure-OC-Single",
+            "rgw-OC-Single",
         ],
     )
-    def test_mcg_namespace_basic_s3_ops(
-        self, mcg_obj, ns_resource_factory, bucket_factory, platform
+    def test_mcg_namespace_basic_s3_ops_crd(
+        self, mcg_obj, cld_mgr, bucket_factory, bucketclass_dict
     ):
         """
         Test basic S3 operations on namespace buckets.
@@ -135,14 +174,13 @@ class TestMcgNamespaceS3Operations(E2ETest):
         """
         max_keys = 50
 
-        namespace_res = ns_resource_factory(platform=platform)
-
-        ns_bucket = bucket_factory(
+        ns_buc = bucket_factory(
             amount=1,
-            interface="mcg-namespace",
-            write_ns_resource=namespace_res[1],
-            read_ns_resources=[namespace_res[1]],
-        )[0].name
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0]
+        ns_bucket = ns_buc.name
+        namespace_res = ns_buc.bucketclass.namespacestores[0].uls_name
 
         # Put, Get, Copy, Head, Get Acl and Delete object operations
         logger.info(f"Put and Get object operation on {ns_bucket}")
@@ -173,17 +211,17 @@ class TestMcgNamespaceS3Operations(E2ETest):
         head_res = bucket_utils.s3_head_object(
             s3_obj=mcg_obj, bucketname=ns_bucket, object_key=ROOT_OBJ
         )
-        logger.info(
-            f"Verifying metadata from head_object operation: {head_res['Metadata']}"
-        )
-        if platform == constants.AZURE_PLATFORM:
+        logger.info(f"Metadata from head_object operation: {head_res['Metadata']}")
+        if (
+            constants.AZURE_PLATFORM
+            in bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"]
+        ):
             assert (
-                head_res["Metadata"]["noobaa-namespace-blob-container"]
-                == namespace_res[0]
+                head_res["Metadata"]["noobaa-namespace-blob-container"] == namespace_res
             ), "Invalid object metadata"
         else:
             assert (
-                head_res["Metadata"]["noobaa-namespace-s3-bucket"] == namespace_res[0]
+                head_res["Metadata"]["noobaa-namespace-s3-bucket"] == namespace_res
             ), "Invalid object metadata"
 
         get_acl_res = bucket_utils.s3_get_object_acl(
@@ -226,20 +264,12 @@ class TestMcgNamespaceS3Operations(E2ETest):
         last_key = get_list_and_verify(
             first_page_res, obj_keys[:mid_index], "Contents", version="v1"
         )
-        if not platform == constants.AZURE_PLATFORM:
-            next_page_res = bucket_utils.s3_list_objects_v1(
-                s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys, marker=last_key
-            )
-            get_list_and_verify(
-                next_page_res, obj_keys[mid_index:], "Contents", version="v1"
-            )
-        else:
-            logger.warning(
-                "Skipping next page entries for ListObjectV1(plain list) - not supported on Azure"
-            )
-            logger.warning(
-                "For more info: https://bugzilla.redhat.com/show_bug.cgi?id=1918188"
-            )
+        next_page_res = bucket_utils.s3_list_objects_v1(
+            s3_obj=mcg_obj, bucketname=ns_bucket, max_keys=max_keys, marker=last_key
+        )
+        get_list_and_verify(
+            next_page_res, obj_keys[mid_index:], "Contents", version="v1"
+        )
 
         # List v1 with prefix and page entries
         logger.info(f"ListObjectsV1 operation on {ns_bucket} with prefix")
@@ -256,24 +286,16 @@ class TestMcgNamespaceS3Operations(E2ETest):
         last_key = get_list_and_verify(
             first_page_res, obj_keys[:mid_index], "Contents", "Drive/", version="v1"
         )
-        if not platform == constants.AZURE_PLATFORM:
-            next_page_res = bucket_utils.s3_list_objects_v1(
-                s3_obj=mcg_obj,
-                bucketname=ns_bucket,
-                prefix="Drive/",
-                max_keys=max_keys,
-                marker=last_key,
-            )
-            get_list_and_verify(
-                next_page_res, obj_keys[mid_index:], "Contents", "Drive/", version="v1"
-            )
-        else:
-            logger.warning(
-                "Skipping next page entries for ListObjectV1(with prefix) - not supported on Azure"
-            )
-            logger.warning(
-                "For more info: https://bugzilla.redhat.com/show_bug.cgi?id=1918188"
-            )
+        next_page_res = bucket_utils.s3_list_objects_v1(
+            s3_obj=mcg_obj,
+            bucketname=ns_bucket,
+            prefix="Drive/",
+            max_keys=max_keys,
+            marker=last_key,
+        )
+        get_list_and_verify(
+            next_page_res, obj_keys[mid_index:], "Contents", "Drive/", version="v1"
+        )
 
         # List v1 with prefix, delimiter and page entries
         logger.info(f"ListObjectsV1 operation on {ns_bucket} with prefix and delimiter")
@@ -409,14 +431,24 @@ class TestMcgNamespaceS3Operations(E2ETest):
         )
 
     @pytest.mark.parametrize(
-        argnames=["platform"],
-        argvalues=[pytest.param(constants.AWS_PLATFORM)],
+        argnames=["bucketclass_dict"],
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                }
+            ),
+        ],
     )
-    def test_mcg_namespace_object_versions(
-        self, mcg_obj, cld_mgr, ns_resource_factory, bucket_factory, platform
+    def test_mcg_namespace_object_versions_crd(
+        self, mcg_obj, cld_mgr, bucket_factory, bucketclass_dict
     ):
         """
-        Test object versioning S3 operations on namespace buckets/resources.
+        Test object versioning S3 operations on namespace buckets/resources(CRDs).
         Validates put, get, delete object version operations
 
         """
@@ -430,30 +462,27 @@ class TestMcgNamespaceS3Operations(E2ETest):
             aws_secret_access_key=cld_mgr.aws_client.secret_key,
         )
 
-        namespace_res = ns_resource_factory(platform=platform)
-
-        ns_bucket = bucket_factory(
+        ns_buc = bucket_factory(
             amount=1,
-            interface="mcg-namespace",
-            write_ns_resource=namespace_res[1],
-            read_ns_resources=[namespace_res[1]],
-        )[0].name
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0]
+        ns_bucket = ns_buc.name
+        namespace_res = ns_buc.bucketclass.namespacestores[0].uls_name
         aws_s3_client = aws_s3_resource.meta.client
 
         # Put, Get bucket versioning and verify
-        logger.info(
-            f"Enabling bucket versioning on resource bucket: {namespace_res[0]}"
-        )
+        logger.info(f"Enabling bucket versioning on resource bucket: {namespace_res}")
         assert bucket_utils.s3_put_bucket_versioning(
             s3_obj=mcg_obj,
-            bucketname=namespace_res[0],
+            bucketname=namespace_res,
             status="Enabled",
             s3_client=aws_s3_client,
         ), "Failed: PutBucketVersioning"
         get_ver_res = bucket_utils.s3_get_bucket_versioning(
-            s3_obj=mcg_obj, bucketname=namespace_res[0], s3_client=aws_s3_client
+            s3_obj=mcg_obj, bucketname=namespace_res, s3_client=aws_s3_client
         )
-        logger.info(f"Get and verify versioning on resource bucket: {namespace_res[0]}")
+        logger.info(f"Get and verify versioning on resource bucket: {namespace_res}")
         assert get_ver_res["Status"] == "Enabled", "Versioning is not enabled on bucket"
 
         # Put, List, Get, Delete object version operations
@@ -486,44 +515,75 @@ class TestMcgNamespaceS3Operations(E2ETest):
             ), f"Failed to Delete object with {ver}"
             logger.info(f"Get and delete version: {ver} of {namespace_res}")
 
-        logger.info(f"Suspending versioning on: {namespace_res[0]}")
+        logger.info(f"Suspending versioning on: {namespace_res}")
         assert bucket_utils.s3_put_bucket_versioning(
             s3_obj=mcg_obj,
-            bucketname=namespace_res[0],
+            bucketname=namespace_res,
             status="Suspended",
             s3_client=aws_s3_client,
         ), "Failed: PutBucketVersioning"
-        logger.info(f"Verifying versioning is suspended on: {namespace_res[0]}")
+        logger.info(f"Verifying versioning is suspended on: {namespace_res}")
         get_version_response = bucket_utils.s3_get_bucket_versioning(
-            s3_obj=mcg_obj, bucketname=namespace_res[0], s3_client=aws_s3_client
+            s3_obj=mcg_obj, bucketname=namespace_res, s3_client=aws_s3_client
         )
         assert (
             get_version_response["Status"] == "Suspended"
         ), "Versioning is not suspended on bucket"
 
     @pytest.mark.parametrize(
-        argnames=["platform"],
+        argnames=["bucketclass_dict"],
         argvalues=[
-            pytest.param(constants.AWS_PLATFORM),
-            pytest.param(constants.AZURE_PLATFORM),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, None)]},
+                    },
+                },
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"azure": [(1, None)]},
+                    },
+                },
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"rgw": [(1, None)]},
+                    },
+                },
+                marks=on_prem_platform_required,
+            ),
+        ],
+        ids=[
+            "AWS-OC-Single",
+            "Azure-OC-Single",
+            "RGW-OC-Single",
         ],
     )
-    def test_mcg_namespace_mpu(
-        self, mcg_obj, awscli_pod, ns_resource_factory, bucket_factory, platform
+    def test_mcg_namespace_mpu_crd(
+        self, mcg_obj, awscli_pod, bucket_factory, bucketclass_dict
     ):
         """
-        Test multipart upload S3 operations on namespace buckets
+        Test multipart upload S3 operations on namespace buckets(created by CRDs)
         Validates create, upload, upload copy and list parts operations
 
         """
-        namespace_res = ns_resource_factory(platform=platform)
-
-        ns_bucket = bucket_factory(
+        ns_buc = bucket_factory(
             amount=1,
-            interface="mcg-namespace",
-            write_ns_resource=namespace_res[1],
-            read_ns_resources=[namespace_res[1]],
-        )[0].name
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0]
+
+        ns_bucket = ns_buc.name
+
         object_path = f"s3://{ns_bucket}"
 
         logger.info(
@@ -544,7 +604,10 @@ class TestMcgNamespaceS3Operations(E2ETest):
         list_mpu_res = bucket_utils.list_multipart_upload(
             s3_obj=mcg_obj, bucketname=ns_bucket
         )
-        if not platform == constants.AZURE_PLATFORM:
+        if (
+            constants.AZURE_PLATFORM
+            not in bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"]
+        ):
             logger.info(f"Listing in-progress mpu: {list_mpu_res}")
             assert (
                 part_copy_id == list_mpu_res["Uploads"][0]["UploadId"]
@@ -574,7 +637,10 @@ class TestMcgNamespaceS3Operations(E2ETest):
         list_mpu_res = bucket_utils.list_multipart_upload(
             s3_obj=mcg_obj, bucketname=ns_bucket
         )
-        if not platform == constants.AZURE_PLATFORM:
+        if (
+            constants.AZURE_PLATFORM
+            not in bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"]
+        ):
             logger.info(f"Listing multipart upload: {list_mpu_res}")
             assert (
                 mp_upload_id == list_mpu_res["Uploads"][0]["UploadId"]

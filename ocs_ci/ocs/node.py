@@ -278,6 +278,30 @@ def get_node_ips(node_type="worker"):
         raise NotImplementedError
 
 
+def get_node_ip_addresses(ipkind):
+    """
+    Gets a dictionary of required IP addresses for all nodes
+
+    Args:
+        ipkind: ExternalIP or InternalIP or Hostname
+
+    Returns:
+        dict: Internal or Exteranl IP addresses keyed off of node name
+
+    """
+    ocp = OCP(kind=constants.NODE)
+    masternodes = ocp.get(selector=constants.MASTER_LABEL).get("items")
+    workernodes = ocp.get(selector=constants.WORKER_LABEL).get("items")
+    nodes = masternodes + workernodes
+
+    return {
+        node["metadata"]["name"]: each["address"]
+        for node in nodes
+        for each in node["status"]["addresses"]
+        if each["type"] == ipkind
+    }
+
+
 def add_new_node_and_label_it(machineset_name, num_nodes=1, mark_for_ocs_label=True):
     """
     Add a new node for ipi and label it
@@ -805,10 +829,11 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     drain_nodes([osd_node_name])
     log.info("Getting machine name from specified node name")
     machine_name = machine.get_machine_from_node_name(osd_node_name)
+    machine_type = machine.get_machine_type(machine_name)
     log.info(f"Node {osd_node_name} associated machine is {machine_name}")
     log.info(f"Deleting machine {machine_name} and waiting for new machine to come up")
     machine.delete_machine_and_check_state_of_new_spinned_machine(machine_name)
-    new_machine_list = machine.get_machines()
+    new_machine_list = machine.get_machines(machine_type=machine_type)
     for machines in new_machine_list:
         # Trimming is done to get just machine name
         # eg:- machine_name:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b-nlgkr
@@ -819,10 +844,13 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     log.info("Waiting for new worker node to be in ready state")
     machine.wait_for_new_node_to_be_ready(machineset_name)
     new_node_name = get_node_from_machine_name(new_machine_name)
-    log.info("Adding ocs label to newly created worker node")
-    node_obj = ocp.OCP(kind="node")
-    node_obj.add_label(resource_name=new_node_name, label=constants.OPERATOR_NODE_LABEL)
-    log.info(f"Successfully labeled {new_node_name} with OCS storage label")
+    if not is_node_labeled(new_node_name):
+        log.info("Adding ocs label to newly created worker node")
+        node_obj = ocp.OCP(kind="node")
+        node_obj.add_label(
+            resource_name=new_node_name, label=constants.OPERATOR_NODE_LABEL
+        )
+        log.info(f"Successfully labeled {new_node_name} with OCS storage label")
 
     return new_node_name
 
@@ -1211,27 +1239,28 @@ def is_node_labeled(node_name, label=constants.OPERATOR_NODE_LABEL):
     return node_name in node_names_with_label
 
 
-def taint_nodes(nodes, taint_label=constants.OCS_TAINT):
+def taint_nodes(nodes, taint_label=None):
     """
     Taint nodes
 
     Args:
         nodes (list): list of node names need to taint
-        taint_label (str): New taint label to be assigned for these nodes.
-            Default value is the OCS taint
+        taint_label (str): Taint label to be used,
+            If None the constants.OPERATOR_NODE_TAINT will be used.
 
     """
     ocp_obj = ocp.OCP()
+    taint_label = taint_label if taint_label else constants.OPERATOR_NODE_TAINT
     for node in nodes:
         command = f"adm taint node {node} {taint_label}"
         try:
             ocp_obj.exec_oc_cmd(command)
-            logging.info(f"Successfully tainted {node} with OCS storage taint")
+            logging.info(f"Successfully tainted {node} with taint {taint_label}")
         except Exception as e:
             logging.info(f"{node} was not tainted - {e}")
 
 
-def check_taint_on_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT):
+def check_taint_on_nodes(taint=None):
     """
     Function to check for particular taint on nodes
 
@@ -1242,10 +1271,10 @@ def check_taint_on_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT):
         bool: True if taint is present on node. False otherwise
 
     """
-
-    ocs_nodes = get_ocs_nodes()
+    taint = taint if taint else constants.OPERATOR_NODE_TAINT
+    nodes = get_nodes()
     flag = -1
-    for node_obj in ocs_nodes:
+    for node_obj in nodes:
         if node_obj.get().get("spec").get("taints"):
             if taint in node_obj.get().get("spec").get("taints")[0].get("key"):
                 log.info(f"Node {node_obj.name} has taint {taint}")
@@ -1253,28 +1282,6 @@ def check_taint_on_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT):
         else:
             flag = 0
         return bool(flag)
-
-
-def taint_ocs_nodes(nodes_to_taint=None):
-    """
-    Function to taint nodes with "node.ocs.openshift.io/storage=true:NoSchedule"
-
-    Args:
-        nodes_to_taint (list): Nodes to taint
-
-    """
-    if not check_taint_on_ocs_nodes():
-        ocp = OCP()
-        ocs_nodes = get_ocs_nodes()
-        nodes_to_taint = nodes_to_taint if nodes_to_taint else ocs_nodes
-        log.info(f"Taint nodes with taint: " f"{constants.OPERATOR_NODE_TAINT}")
-        for node in nodes_to_taint:
-            taint_cmd = f"adm taint nodes {node.name} {constants.OPERATOR_NODE_TAINT}"
-            ocp.exec_oc_cmd(command=taint_cmd)
-    else:
-        log.info(
-            f"One or more nodes already have taint {constants.OPERATOR_NODE_TAINT} "
-        )
 
 
 def untaint_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT, nodes_to_untaint=None):
@@ -1289,7 +1296,7 @@ def untaint_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT, nodes_to_untaint=None
         bool: True if untainted, false otherwise
 
     """
-    if check_taint_on_ocs_nodes():
+    if check_taint_on_nodes():
         ocp = OCP()
         ocs_nodes = get_ocs_nodes()
         nodes_to_taint = nodes_to_untaint if nodes_to_untaint else ocs_nodes

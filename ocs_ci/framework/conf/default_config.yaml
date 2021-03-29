@@ -80,6 +80,12 @@ DEPLOYMENT:
   openshift_install_timeout: 3600
   # redhat-operators CatalogSource image (used for disconnected installation)
   cs_redhat_operators_image: "registry.redhat.io/redhat/redhat-operator-index"
+  # Deployment with KMS (vault etc)
+  kms_deployment: False
+  # define if ceph is setup as arbiter/stretch cluster, default is false
+  arbiter_deployment: False
+  # Ceph in debug log level
+  ceph_debug: False
 
 # Section for reporting configuration
 REPORTING:
@@ -120,7 +126,7 @@ ENV_DATA:
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
   # Default RHCOS image to be used for VmWare deployment
-  vm_template: 'rhcos-47.82.202010211043-0-vmware.x86_64'
+  vm_template: 'rhcos-47.83.202102090044-0-vmware.x86_64'
   # minimal write speed of fio as used in workload_fio_storageutilization
   # fixtures, which is used to compute timeout of the write job (so that
   # when actual write speed of the operation is smaller than this value, the

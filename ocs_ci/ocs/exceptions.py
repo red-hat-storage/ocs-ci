@@ -29,11 +29,16 @@ class ResourceLeftoversException(Exception):
 class TimeoutExpiredError(Exception):
     message = "Timed Out"
 
-    def __init__(self, *value):
+    def __init__(self, value, custom_message=None):
         self.value = value
+        self.custom_message = custom_message
 
     def __str__(self):
-        return f"{self.message}: {self.value}"
+        if self.custom_message is None:
+            self.message = f"{self.__class__.message}: {self.value}"
+        else:
+            self.message = self.custom_message
+        return self.message
 
 
 class TimeoutException(Exception):
@@ -61,12 +66,31 @@ class PerformanceException(Exception):
 
 
 class ResourceWrongStatusException(Exception):
-    def __init__(self, resource_name, describe_out):
-        self.resource_name = resource_name
+    def __init__(
+        self, resource_or_name, describe_out=None, column=None, expected=None, got=None
+    ):
+        if isinstance(resource_or_name, str):
+            self.resource = None
+            self.resource_name = resource_or_name
+        else:
+            self.resource = resource_or_name
+            self.resource_name = self.resource.name
         self.describe_out = describe_out
 
     def __str__(self):
-        return f"Resource {self.resource_name} describe output: {self.describe_out}"
+        if self.resource:
+            msg = f"{self.resource.kind} resource {self.resource_name}"
+        else:
+            msg = f"Resource {self.resource_name}"
+        if self.column:
+            msg += f" in column {self.column}"
+        if self.got:
+            msg += f" was in state {self.got}"
+        if self.expected:
+            msg += f" but expected {self.expected}"
+        if self.describe_out:
+            msg += f" describe output: {self.describe_out}"
+        return msg
 
 
 class UnavailableResourceException(Exception):
@@ -78,10 +102,6 @@ class TagNotFoundException(Exception):
 
 
 class ResourceNameNotSpecifiedException(Exception):
-    pass
-
-
-class ResourceInUnexpectedState(Exception):
     pass
 
 
@@ -257,9 +277,37 @@ class ImageIsNotDeletedOrNotFound(Exception):
     pass
 
 
+class VaultDeploymentError(Exception):
+    pass
+
+
+class VaultOperationError(Exception):
+    pass
+
+
+class KMSNotSupported(Exception):
+    pass
+
+
+class KMSConnectionDetailsError(Exception):
+    pass
+
+
+class KMSTokenError(Exception):
+    pass
+
+
+class KMSResourceCleaneupError(Exception):
+    pass
+
+
 class UnhealthyBucket(Exception):
     pass
 
 
 class NotFoundError(Exception):
+    pass
+
+
+class ResourcePoolNotFound(Exception):
     pass

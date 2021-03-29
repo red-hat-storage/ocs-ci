@@ -724,6 +724,48 @@ def get_openshift_client(
     return client_binary_path
 
 
+def get_vault_cli(bind_dir=None, force_download=False):
+    """
+    Download vault based on platform
+    basically for CLI purpose. Binary will be directly
+    put into ocs_ci/bin/ directory
+
+    Args:
+        bind_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+        force_download (bool): Force vault cli download even if already present
+
+    """
+    res = requests.get(constants.VAULT_VERSION_INFO_URL)
+    version = res.url.split("/")[-1].lstrip("v")
+    bin_dir = os.path.expanduser(bind_dir or config.RUN["bin_dir"])
+    system = platform.system()
+    if "Darwin" not in system and "Linux" not in system:
+        raise UnsupportedOSType("Not a supported platform for vault")
+
+    system = system.lower()
+    zip_file = f"vault_{version}_{system}_amd64.zip"
+    vault_cli_filename = "vault"
+    vault_binary_path = os.path.join(bin_dir, vault_cli_filename)
+    if os.path.isfile(vault_binary_path) and force_download:
+        delete_file(vault_binary_path)
+    if os.path.isfile(vault_binary_path):
+        log.debug(
+            f"Vault CLI binary already exists {vault_binary_path}, skipping download."
+        )
+    else:
+        log.info(f"Downloading vault cli {version}")
+        prepare_bin_dir()
+        previous_dir = os.getcwd()
+        os.chdir(bin_dir)
+        url = f"{constants.VAULT_DOWNLOAD_BASE_URL}/{version}/{zip_file}"
+        download_file(url, zip_file)
+        run_cmd(f"unzip {zip_file}")
+        delete_file(zip_file)
+        os.chdir(previous_dir)
+    vault_ver = run_cmd(f"{vault_binary_path} version")
+    log.info(f"Vault cli version:{vault_ver}")
+
+
 def ensure_nightly_build_availability(build_url):
     base_build_url = build_url.rsplit("/", 1)[0]
     r = requests.get(base_build_url)
@@ -840,33 +882,53 @@ class TimeoutSampler(object):
     Yielding the output allows you to handle every value as you wish.
 
     Feel free to set the instance variables.
+
+
+    Args:
+        timeout (int): Timeout in seconds
+        sleep (int): Sleep interval in seconds
+        func (function): The function to sample
+        func_args: Arguments for the function
+        func_kwargs: Keyword arguments for the function
     """
 
     def __init__(self, timeout, sleep, func, *func_args, **func_kwargs):
         self.timeout = timeout
-        """ Timeout in seconds. """
         self.sleep = sleep
-        """ Sleep interval seconds. """
         # check that given timeout and sleep values makes sense
         if self.timeout < self.sleep:
             raise ValueError("timeout should be larger than sleep time")
 
         self.func = func
-        """ A function to sample. """
         self.func_args = func_args
-        """ Args for func. """
         self.func_kwargs = func_kwargs
-        """ Kwargs for func. """
 
+        # Timestamps of the first and most recent samples
         self.start_time = None
-        """ Time of starting the sampling. """
         self.last_sample_time = None
-        """ Time of last sample. """
-
+        # The exception to raise
         self.timeout_exc_cls = TimeoutExpiredError
-        """ Class of exception to be raised.  """
-        self.timeout_exc_args = (self.timeout,)
-        """ An args for __init__ of the timeout exception. """
+        # Arguments that will be passed to the exception
+        self.timeout_exc_args = [self.timeout]
+        try:
+            self.timeout_exc_args.append(
+                f"Timed out after {timeout}s running {self._build_call_string()}"
+            )
+        except Exception:
+            log.exception(
+                "Failed to assemble call string. Not necessarily a test failure."
+            )
+
+    def _build_call_string(self):
+        def stringify(value):
+            if isinstance(value, str):
+                return f'"{value}"'
+            return str(value)
+
+        args = list(map(stringify, self.func_args))
+        kwargs = [f"{stringify(k)}={stringify(v)}" for k, v in self.func_kwargs.items()]
+        all_args_string = ", ".join(args + kwargs)
+        return f"{self.func.__name__}({all_args_string})"
 
     def __iter__(self):
         if self.start_time is None:
@@ -1895,7 +1957,9 @@ def load_auth_config():
 
 def get_ocs_olm_operator_tags(limit=100):
     """
-    Query the OCS OLM Operator repo and retrieve a list of tags.
+    Query the OCS OLM Operator repo and retrieve a list of tags. Since we are limited
+    to 100 tags per page, we end up making several API calls and combining the results
+    into a single list of tags.
 
     Args:
         limit: the number of tags to limit the request to
@@ -1908,7 +1972,6 @@ def get_ocs_olm_operator_tags(limit=100):
         list: OCS OLM Operator tags
 
     """
-    log.info(f"Retrieving OCS OLM Operator tags (limit {limit})")
     try:
         quay_access_token = load_auth_config()["quay"]["access_token"]
     except (KeyError, TypeError):
@@ -1927,17 +1990,28 @@ def get_ocs_olm_operator_tags(limit=100):
     except (ValueError, TypeError):
         log.warning("Invalid ocs_version given, defaulting to ocs-registry image")
         pass
-    resp = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(
-            tag_limit=limit,
-            image=image,
-        ),
-        headers=headers,
-    )
-    if not resp.ok:
-        raise requests.RequestException(resp.json())
-    log.debug(resp.json()["tags"])
-    return resp.json()["tags"]
+    all_tags = []
+    page = 1
+    while True:
+        log.info(f"Retrieving OCS OLM Operator tags (limit {limit}, page {page})")
+        resp = requests.get(
+            constants.OPERATOR_CS_QUAY_API_QUERY.format(
+                tag_limit=limit,
+                image=image,
+                page=page,
+            ),
+            headers=headers,
+        )
+        if not resp.ok:
+            raise requests.RequestException(resp.json())
+        tags = resp.json()["tags"]
+        if len(tags) == 0:
+            log.info("No more tags to retrieve")
+            break
+        log.debug(tags)
+        all_tags.extend(tags)
+        page += 1
+    return all_tags
 
 
 def check_if_executable_in_path(exec_name):
@@ -2004,7 +2078,7 @@ def read_file_as_str(filepath):
     return content
 
 
-def replace_content_in_file(file, old, new):
+def replace_content_in_file(file, old, new, match_and_replace_line=False):
     """
     Replaces contents in file, if old value is not found, it adds
     new value to the file
@@ -2013,21 +2087,34 @@ def replace_content_in_file(file, old, new):
         file (str): Name of the file in which contents will be replaced
         old (str): Data to search for
         new (str): Data to replace the old value
+        match_and_replace_line (bool): If True, it will match a line if
+            `old` pattern is found in the line. The whole line will be replaced
+            with `new` content.
+            Otherwise it will replace only `old` string with `new` string but
+            the rest of the line will be intact. This is the default option.
 
     """
     # Read the file
     with open(rf"{file}", "r") as fd:
-        file_data = fd.read()
+        file_data = [line.rstrip("\n") for line in fd.readlines()]
 
-    # Replace/add the new data
-    if old in file_data:
-        file_data = file_data.replace(old, new)
+    if match_and_replace_line:
+        # Replace the whole line with `new` string if the line contains `old`
+        # string pattern.
+        file_data = [new if old in line else line for line in file_data]
     else:
-        file_data = new + file_data
-
+        # Replace the old string by new
+        file_data = [
+            line.replace(old, new) if old in line else line for line in file_data
+        ]
+    updated_data = [line for line in file_data if new in line]
+    # In case the old pattern wasn't found it will be added as first line
+    if not updated_data:
+        file_data.insert(0, new)
+    file_data = [f"{line}\n" for line in file_data]
     # Write the file out again
     with open(rf"{file}", "w") as fd:
-        fd.write(file_data)
+        fd.writelines(file_data)
 
 
 @retry((CommandFailed), tries=100, delay=10, backoff=1)
@@ -2297,7 +2384,7 @@ def get_ocs_version_from_image(image):
 
     """
     try:
-        version = image.split(":")[1].lstrip("latest-").lstrip("stable-")
+        version = image.rsplit(":", 1)[1].lstrip("latest-").lstrip("stable-")
         version = Version.coerce(version)
         return "{major}.{minor}".format(major=version.major, minor=version.minor)
     except ValueError:
@@ -3056,6 +3143,23 @@ def get_cluster_id(cluster_path):
     return metadata["clusterID"]
 
 
+def get_running_cluster_id():
+    """
+    Get cluster UUID
+    Not relying on metadata.json as user sometimes want to run
+    only with kubeconfig for some tests. For this function to work
+    cluster has to be in running state
+
+    Returns:
+        str: cluster UUID
+
+    """
+    cluster_id = run_cmd(
+        "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
+    )
+    return cluster_id
+
+
 def get_ocp_upgrade_history():
     """
     Gets the OCP upgrade history for the cluster
@@ -3073,3 +3177,23 @@ def get_ocp_upgrade_history():
     upgrade_history_info = cluster_version_info["status"]["history"]
     upgrade_history = [each_upgrade["version"] for each_upgrade in upgrade_history_info]
     return upgrade_history
+
+
+def get_default_if_keyval_empty(dictionary, key, default_val):
+    """
+    if Key has an empty value OR key doesn't exist
+    then return default value
+
+    Args:
+        dictionary (dict): Dictionary where we have to lookup
+        key (str): key to lookup
+        default_val (str): If key doesn't have value then return
+            this default_val
+
+    Returns:
+        dictionary[key] if value is present else default_val
+
+    """
+    if not dictionary.get(key):
+        return default_val
+    return dictionary.get(key)
