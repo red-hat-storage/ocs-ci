@@ -80,7 +80,6 @@ class CouchBase(PillowFight):
         """
         # Create admission controller
         log.info("Create admission controller process for Couchbase")
-        switch_to_project("default")
         self.up_adm_chk = OCP(namespace="default")
         self.up_check = OCP(namespace=constants.COUCHBASE_OPERATOR)
         self.adm_objects = []
@@ -107,12 +106,13 @@ class CouchBase(PillowFight):
 
         # Wait for admission pod to be running
         log.info("Waiting for admission pod to be running")
-        self.pod_obj.wait_for_resource(
-            condition="Running",
-            resource_name=self.admission_pod,
+        admission_pod_obj = get_pod_obj(self.admission_pod, namespace="default")
+        wait_for_resource_state(
+            resource=admission_pod_obj,
+            state=constants.STATUS_RUNNING,
             timeout=self.WAIT_FOR_TIME,
-            sleep=10,
         )
+
         self.ns_obj.new_project(constants.COUCHBASE_OPERATOR)
         couchbase_data = templating.load_yaml(constants.COUCHBASE_CRD_YAML)
         self.couchbase_obj = OCS(**couchbase_data)
