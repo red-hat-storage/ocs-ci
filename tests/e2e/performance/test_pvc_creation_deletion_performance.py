@@ -2,6 +2,7 @@
 Test to verify PVC deletion performance
 """
 import logging
+import datetime
 import pytest
 import ocs_ci.ocs.exceptions as ex
 import threading
@@ -10,11 +11,11 @@ import statistics
 from ocs_ci.framework.testlib import performance, E2ETest
 
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.helpers import helpers
+from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import defaults, constants
 from ocs_ci.utility.performance_dashboard import push_to_pvc_time_dashboard
 
-from ocs_ci.framework import config
+
 
 log = logging.getLogger(__name__)
 
@@ -64,12 +65,17 @@ class TestPVCCreationDeletionPerformance(E2ETest):
 
         for i in range(num_of_samples):
             logging.info(f"{msg_prefix} Start creating PVC number {i + 1}.")
+            start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             pvc_obj = helpers.create_pvc(sc_name=self.sc_obj.name, size=pvc_size)
             helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
             pvc_obj.reload()
-            creation_time = helpers.measure_pvc_creation_time(
-                self.interface, pvc_obj.name
+            #creation_time = helpers.measure_pvc_creation_time(
+            #    self.interface, pvc_obj.name
+            #)
+            creation_time = performance_lib.measure_pvc_creation_time(
+                self.interface, pvc_obj.name, start_time
             )
+
             logging.info(f"{msg_prefix} PVC number {i + 1} was created in {creation_time} seconds.")
             if creation_time > accepted_creation_time:
                 raise ex.PerformanceException(
@@ -114,8 +120,8 @@ class TestPVCCreationDeletionPerformance(E2ETest):
             msg_prefix: A string for comprehensive logging
 
         """
-        accepted_creation_deviation_percent = 20
-        accepted_deletion_deviation_percent = 20
+        accepted_creation_deviation_percent = 50
+        accepted_deletion_deviation_percent = 50
 
         creation_average = statistics.mean(creation_time_measures)
         log.info(
@@ -160,11 +166,12 @@ class TestPVCCreationDeletionPerformance(E2ETest):
         push_to_pvc_time_dashboard(self.interface, "1-pvc-deletion", deletion_average)
 
 
-    def write_file_on_pvc(self, pvc_obj):
+    def write_file_on_pvc(self, pvc_obj, filesize = 10):
         """
         Writes a file on given PVC
         Args:
             pvc_obj: PVC object to write a file on
+            filesize: size of file to write (in GB)
 
         Returns:
             Pod on this pvc on which the file was written
@@ -174,7 +181,7 @@ class TestPVCCreationDeletionPerformance(E2ETest):
         )
 
         # filesize to be written is always 10 GB
-        filesize = 10
+
         file_size = f"{int(filesize * 1024)}M"
 
         log.info(f"Starting IO on the POD {pod_obj.name}")
@@ -225,6 +232,11 @@ class TestPVCCreationDeletionPerformance(E2ETest):
 
                 executor.submit(pvc_obj.reload)
 
+        pod_objs = []
+        for pvc_obj in pvc_objs:
+            pod_obj = self.write_file_on_pvc(pvc_obj, 0.3)
+            pod_objs.append(pod_obj)
+
         # Get pvc_name, require pvc_name to fetch deletion time data from log
         threads = list()
         for pvc_obj in pvc_objs:
@@ -248,10 +260,10 @@ class TestPVCCreationDeletionPerformance(E2ETest):
         log.info(f"{msg_prefix} Preparing to delete 120 PVC")
 
         # Delete PVC
-        for obj in pvc_objs:
-            obj.delete()
-        for obj in pvc_objs:
-            obj.ocp.wait_for_delete(obj.name)
+        for pvc_obj, pod_obj in zip(pvc_objs, pod_objs):
+            pod_obj.delete(wait=True)
+            pvc_obj.delete()
+            pvc_obj.ocp.wait_for_delete(pvc_obj.name)
 
         # Get PVC deletion time
         pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
@@ -269,4 +281,6 @@ class TestPVCCreationDeletionPerformance(E2ETest):
                     f"greater than {accepted_pvc_deletion_time} seconds"
                 )
 
-        logging.info(f"{msg_prefix} {number_of_pvcs} PVCs deletion time is {pvc_deletion_time} seconds.")
+        logging.info(f"{msg_prefix} {number_of_pvcs} PVCs deletion times are:")
+        for name, time in pvc_deletion_time.items():
+            logging.info(f"{name} deletion time is: {time} seconds")

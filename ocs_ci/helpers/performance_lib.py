@@ -1,8 +1,11 @@
+import os
 import logging
 import subprocess
 from datetime import datetime
 
 from ocs_ci.ocs.resources import pod
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 
@@ -86,3 +89,107 @@ def run_command(cmd, timeout=600, out_format="string", **kwargs):
         output = output.split("\n")  # convert output to list
         output.pop()  # remove last empty element from the list
     return output
+
+
+def run_oc_command(cmd, namespace):
+    """
+    Running an 'oc' command
+
+    Args:
+        cmd (str): the command to run
+        namespace (str): the namespace where to run the command
+
+    Returns:
+        list : the results of the command as list of lines
+
+    """
+
+    cluster_dir_kubeconfig = os.path.join(
+        config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
+    )
+    if os.getenv("KUBECONFIG"):
+        kubeconfig = os.getenv("KUBECONFIG")
+    elif os.path.exists(cluster_dir_kubeconfig):
+        kubeconfig = cluster_dir_kubeconfig
+    else:
+        kubeconfig = None
+
+    command = f"oc --kubeconfig {kubeconfig} -n {namespace} {cmd}"
+    return run_command(command, out_format = "list")
+
+def get_log_names(interface):
+    """
+    Finds names for log files pods in which logs for clone creation are located
+    For CephFS: 2 pods that start with "csi-cephfsplugin-provisioner" prefix
+    For RBD: 2 pods that start with "csi-rbdplugin-provisioner" prefix
+
+    """
+    log_names = []
+
+    pods = run_oc_command(cmd="get pod", namespace="openshift-storage")
+
+    if "Error in command" in pods:
+        raise Exception("Can not get csi controller pod")
+
+    provisioning_name = "csi-cephfsplugin-provisioner"
+    if interface == constants.CEPHBLOCKPOOL:
+        provisioning_name = "csi-rbdplugin-provisioner"
+
+    for line in pods:
+        if provisioning_name in line:
+            log_names.append(line.split()[0])
+
+    logger.info(f'The logs pods are : {log_names}')
+    return log_names
+
+def measure_pvc_creation_time(interface, pvc_name, start_time):
+    """
+    Args:
+        pvc_name: Name of the pvc for which we measure the time
+        start_time: Time from which and on to search the relevant logs
+
+    Returns:
+        creation time for pvc
+
+    """
+    log_names = get_log_names(interface)
+    logs = []
+    for l in log_names:
+        logs.append(
+            run_oc_command(
+                f"logs {l} -c csi-provisioner --since-time={start_time}",
+                "openshift-storage",
+            )
+        )
+
+    format = "%H:%M:%S.%f"
+
+    st = None
+    et = None
+    # look for start time and end time of clone creation. The start/end line may appear in log several times
+    # in order to be on the safe side and measure the longest time difference (which is the actual clone creation
+    # time), the earliest start time and the latest end time are taken
+    for sublog in logs:
+        for line in sublog:
+            if (
+                st is None
+                and "provision" in line
+                and pvc_name in line
+                and "started" in line
+            ):
+                st = line.split(" ")[1]
+                st = datetime.strptime(st, format)
+            elif "provision" in line and pvc_name in line and "succeeded" in line:
+                et = line.split(" ")[1]
+                et = datetime.strptime(et, format)
+
+    if st is None:
+        logger.error(f"Can not find start time of {pvc_name}")
+        raise Exception(f"Can not find start time of {pvc_name}")
+
+    if et is None:
+        logger.error(f"Can not find end time of {pvc_name}")
+        raise Exception(f"Can not find end time of {pvc_name}")
+
+    logger.info(f'Creation time (in seconds) for pvc {pvc_name} is {(et - st).total_seconds()}')
+    return (et - st).total_seconds()
