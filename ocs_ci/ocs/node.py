@@ -829,10 +829,11 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     drain_nodes([osd_node_name])
     log.info("Getting machine name from specified node name")
     machine_name = machine.get_machine_from_node_name(osd_node_name)
+    machine_type = machine.get_machine_type(machine_name)
     log.info(f"Node {osd_node_name} associated machine is {machine_name}")
     log.info(f"Deleting machine {machine_name} and waiting for new machine to come up")
     machine.delete_machine_and_check_state_of_new_spinned_machine(machine_name)
-    new_machine_list = machine.get_machines()
+    new_machine_list = machine.get_machines(machine_type=machine_type)
     for machines in new_machine_list:
         # Trimming is done to get just machine name
         # eg:- machine_name:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b-nlgkr
@@ -843,10 +844,13 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     log.info("Waiting for new worker node to be in ready state")
     machine.wait_for_new_node_to_be_ready(machineset_name)
     new_node_name = get_node_from_machine_name(new_machine_name)
-    log.info("Adding ocs label to newly created worker node")
-    node_obj = ocp.OCP(kind="node")
-    node_obj.add_label(resource_name=new_node_name, label=constants.OPERATOR_NODE_LABEL)
-    log.info(f"Successfully labeled {new_node_name} with OCS storage label")
+    if not is_node_labeled(new_node_name):
+        log.info("Adding ocs label to newly created worker node")
+        node_obj = ocp.OCP(kind="node")
+        node_obj.add_label(
+            resource_name=new_node_name, label=constants.OPERATOR_NODE_LABEL
+        )
+        log.info(f"Successfully labeled {new_node_name} with OCS storage label")
 
     return new_node_name
 
