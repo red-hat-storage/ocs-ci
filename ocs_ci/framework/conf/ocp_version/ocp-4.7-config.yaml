@@ -6,4 +6,4 @@ DEPLOYMENT:
   installer_version: "4.7.0-0.nightly"
   terraform_version: "0.12.26"
 ENV_DATA:
-  vm_template: "rhcos-47.82.202010211043-0-vmware.x86_64"
+  vm_template: "rhcos-47.83.202102090044-0-vmware.x86_64"
