@@ -699,22 +699,28 @@ def get_openshift_client(
     version = expose_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     client_binary_path = os.path.join(bin_dir, "oc")
-    if os.path.isfile(client_binary_path) and force_download:
-        delete_file(client_binary_path)
-    if os.path.isfile(client_binary_path):
+    download_client = True
+
+    if force_download:
+        log.info("Forcing client download.")
+    elif os.path.isfile(client_binary_path):
         current_client_version = get_client_version()
         if current_client_version != version:
             log.info(
                 f"Existing client version ({current_client_version}) does not match "
-                f"configured version ({version}), removing file: {client_binary_path}"
+                f"configured version ({version})."
             )
+        else:
+            log.debug(
+                f"Client exists ({client_binary_path}) and matches configured version, "
+                f"skipping download."
+            )
+            download_client = False
+
+    if download_client:
+        if os.path.isfile(client_binary_path):
+            log.info(f"Deleting client that exists at {client_binary_path}")
             delete_file(client_binary_path)
-    if os.path.isfile(client_binary_path):
-        log.debug(
-            f"Client exists ({client_binary_path}) and matches configured version, "
-            f"skipping download."
-        )
-    else:
         log.info(f"Downloading openshift client ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
