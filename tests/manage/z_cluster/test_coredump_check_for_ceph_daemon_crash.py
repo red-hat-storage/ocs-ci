@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla
+from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla, skipif_ocs_version
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.disruption_helpers import Disruptions
@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 
 
 @tier1
+@skipif_ocs_version("<4.7")
 @bugzilla("1904917")
 class TestKillCephDaemon(ManageTest):
     """
