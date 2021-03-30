@@ -4,16 +4,12 @@ Test to verify PVC creation performance
 import logging
 import pytest
 import math
-import statistics
 import ocs_ci.ocs.exceptions as ex
 import ocs_ci.ocs.resources.pvc as pvc
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import performance, E2ETest, polarion_id, bugzilla
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import defaults, constants
-
-
-from ocs_ci.utility.performance_dashboard import push_to_pvc_time_dashboard
 
 log = logging.getLogger(__name__)
 
