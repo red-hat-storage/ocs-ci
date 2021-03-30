@@ -14,7 +14,6 @@ import base64
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
-from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.exceptions import (
     VaultDeploymentError,
     VaultOperationError,
@@ -23,7 +22,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     NotFoundError,
 )
-from ocs_ci.ocs.resources import storage_cluster
+from ocs_ci.ocs.resources import storage_cluster, pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     load_auth_config,
@@ -723,3 +722,15 @@ def vault_kv_list(path):
     out = subprocess.check_output(shlex.split(cmd))
     json_out = json.loads(out)
     return json_out
+
+
+def noobaa_kms_validation():
+    """
+    Validate from logs that there is successfully used NooBaa with KMS integration
+    """
+    operator_pod = pod.get_pods_having_label(
+        label=constants.NOOBAA_OPERATOR_POD_LABEL,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    )[0]
+    operator_logs = pod.get_pod_logs(pod_name=operator_pod["metadata"]["name"])
+    assert "found root secret in external KMS successfully" in operator_logs
