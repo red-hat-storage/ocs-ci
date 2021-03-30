@@ -16,14 +16,13 @@ from ocs_ci.ocs import defaults, constants
 from ocs_ci.utility.performance_dashboard import push_to_pvc_time_dashboard
 
 
-
 log = logging.getLogger(__name__)
 
 
 @performance
 class TestPVCCreationDeletionPerformance(E2ETest):
     """
-    Test to verify PVC deletion performance
+    Test to verify PVC creation and deletion performance
     """
 
     @pytest.fixture()
@@ -50,10 +49,12 @@ class TestPVCCreationDeletionPerformance(E2ETest):
         ],
     )
     @pytest.mark.usefixtures(base_setup.__name__)
-    def test_pvc_creation_deletion_measurement_performance(self, teardown_factory, pvc_size):
+    def test_pvc_creation_deletion_measurement_performance(
+        self, teardown_factory, pvc_size
+    ):
         """
-        Measuring PVC creation and deletion times
-        and verifying that the times are within supported limits
+        Measuring PVC creation and deletion times for pvc samples
+        Verifying that those times are within required limits
         """
 
         num_of_samples = 5
@@ -69,14 +70,14 @@ class TestPVCCreationDeletionPerformance(E2ETest):
             pvc_obj = helpers.create_pvc(sc_name=self.sc_obj.name, size=pvc_size)
             helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
             pvc_obj.reload()
-            #creation_time = helpers.measure_pvc_creation_time(
-            #    self.interface, pvc_obj.name
-            #)
+
             creation_time = performance_lib.measure_pvc_creation_time(
                 self.interface, pvc_obj.name, start_time
             )
 
-            logging.info(f"{msg_prefix} PVC number {i + 1} was created in {creation_time} seconds.")
+            logging.info(
+                f"{msg_prefix} PVC number {i + 1} was created in {creation_time} seconds."
+            )
             if creation_time > accepted_creation_time:
                 raise ex.PerformanceException(
                     f"{msg_prefix} PVC creation time is {creation_time} and is greater than "
@@ -91,13 +92,14 @@ class TestPVCCreationDeletionPerformance(E2ETest):
             pod_obj.delete(wait=True)
             teardown_factory(pvc_obj)
             logging.info(f"{msg_prefix} Start deleting PVC number {i + 1}")
-            #pvc_obj.delete(force=True)
             pvc_obj.delete()
             pvc_obj.ocp.wait_for_delete(pvc_obj.name)
             if pvc_reclaim_policy == constants.RECLAIM_POLICY_DELETE:
                 helpers.validate_pv_delete(pvc_obj.backed_pv)
             deletion_time = helpers.measure_pvc_deletion_time(self.interface, pv_name)
-            logging.info(f"{msg_prefix} PVC number {i + 1} was deleted in {deletion_time} seconds.")
+            logging.info(
+                f"{msg_prefix} PVC number {i + 1} was deleted in {deletion_time} seconds."
+            )
             if deletion_time > accepted_deletion_time:
                 raise ex.PerformanceException(
                     f"{msg_prefix} PVC deletion time is {deletion_time} and is greater than "
@@ -106,10 +108,13 @@ class TestPVCCreationDeletionPerformance(E2ETest):
 
             deletion_time_measures.append(deletion_time)
 
-        self.process_measurements(creation_time_measures, deletion_time_measures, msg_prefix)
+        self.process_measurements(
+            creation_time_measures, deletion_time_measures, msg_prefix
+        )
 
-
-    def process_measurements(self, creation_time_measures, deletion_time_measures, msg_prefix):
+    def process_measurements(
+        self, creation_time_measures, deletion_time_measures, msg_prefix
+    ):
         """
            Analyses the PVC creation and deletion times. If these times, for both creation and deletion, are within
            the given limits and the standard deviation is smaller than the predefined accepted one,
@@ -165,8 +170,7 @@ class TestPVCCreationDeletionPerformance(E2ETest):
         push_to_pvc_time_dashboard(self.interface, "1-pvc-creation", creation_average)
         push_to_pvc_time_dashboard(self.interface, "1-pvc-deletion", deletion_average)
 
-
-    def write_file_on_pvc(self, pvc_obj, filesize = 10):
+    def write_file_on_pvc(self, pvc_obj, filesize=10):
         """
         Writes a file on given PVC
         Args:
@@ -181,7 +185,6 @@ class TestPVCCreationDeletionPerformance(E2ETest):
         )
 
         # filesize to be written is always 10 GB
-
         file_size = f"{int(filesize * 1024)}M"
 
         log.info(f"Starting IO on the POD {pod_obj.name}")
@@ -269,7 +272,9 @@ class TestPVCCreationDeletionPerformance(E2ETest):
         pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
             interface=self.interface, pv_name_list=pv_name_list
         )
-        log.info(f"{msg_prefix} {number_of_pvcs} bulk deletion time is {pvc_deletion_time}")
+        log.info(
+            f"{msg_prefix} {number_of_pvcs} bulk deletion time is {pvc_deletion_time}"
+        )
 
         # accepted deletion time is 2 secs for each PVC
         accepted_pvc_deletion_time = number_of_pvcs * 2

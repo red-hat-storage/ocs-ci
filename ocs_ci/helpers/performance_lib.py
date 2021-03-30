@@ -115,7 +115,8 @@ def run_oc_command(cmd, namespace):
         kubeconfig = None
 
     command = f"oc --kubeconfig {kubeconfig} -n {namespace} {cmd}"
-    return run_command(command, out_format = "list")
+    return run_command(command, out_format="list")
+
 
 def get_log_names(interface):
     """
@@ -139,8 +140,9 @@ def get_log_names(interface):
         if provisioning_name in line:
             log_names.append(line.split()[0])
 
-    logger.info(f'The logs pods are : {log_names}')
+    logger.info(f"The logs pods are : {log_names}")
     return log_names
+
 
 def measure_pvc_creation_time(interface, pvc_name, start_time):
     """
@@ -191,5 +193,7 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
         logger.error(f"Can not find end time of {pvc_name}")
         raise Exception(f"Can not find end time of {pvc_name}")
 
-    logger.info(f'Creation time (in seconds) for pvc {pvc_name} is {(et - st).total_seconds()}')
+    logger.info(
+        f"Creation time (in seconds) for pvc {pvc_name} is {(et - st).total_seconds()}"
+    )
     return (et - st).total_seconds()
