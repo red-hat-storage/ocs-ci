@@ -76,6 +76,9 @@ class ResourceWrongStatusException(Exception):
             self.resource = resource_or_name
             self.resource_name = self.resource.name
         self.describe_out = describe_out
+        self.column = column
+        self.expected = expected
+        self.got = got
 
     def __str__(self):
         if self.resource:
