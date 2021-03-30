@@ -529,6 +529,8 @@ class CephCluster(object):
             if mod["name"] == "localpool":
                 return mod.get("module_options").get("num_rep").get("default_value")
         logger.error("Replica count number did not found !")
+        # if there is an error in the output of `ceph status` command and localpool
+        # module does not exist, return 0 as number of replica.
         return 0
 
     def get_ceph_capacity(self):
@@ -553,6 +555,8 @@ class CephCluster(object):
 
             return usable_capacity
         else:
+            # if the replica number is 0, usable capacity can not be calculate
+            # so, return 0 as usable capacity.
             return 0
 
     def get_ceph_cluster_iops(self):
