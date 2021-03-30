@@ -56,6 +56,7 @@ run it belongs here.
 * `log_utilization` - Enable logging of cluster utilization metrics every 10 seconds. Set via --log-cluster-utilization
 * `use_ocs_worker_for_scale` - Use OCS workers for scale testing (Default: false)
 * `load_status` - Current status of IO load
+* `save_live_pod_logs` - This config parameter is not supposed to be changed by the user but by the test fixture itself. It is used for saving the pods' logs during the test execution
 
 #### DEPLOYMENT
 

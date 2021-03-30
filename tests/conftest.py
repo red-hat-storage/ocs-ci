@@ -34,7 +34,10 @@ from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implement
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
-from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
+from ocs_ci.ocs.utils import (
+    setup_ceph_toolbox,
+    collect_ocs_logs,
+)
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
 )

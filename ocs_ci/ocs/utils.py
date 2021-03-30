@@ -7,6 +7,8 @@ import re
 import time
 import traceback
 from subprocess import TimeoutExpired
+import threading
+from uuid import uuid4
 
 import yaml
 from gevent import sleep
@@ -709,15 +711,16 @@ def get_pod_name_by_pattern(
     namespace = namespace if namespace else ocsci_config.ENV_DATA["cluster_namespace"]
     ocp_obj = OCP(kind="pod", namespace=namespace)
     pod_names = ocp_obj.exec_oc_cmd("get pods -o name", out_yaml_format=False)
-    pod_names = pod_names.split("\n")
     pod_list = []
-    for name in pod_names:
-        if filter is not None and re.search(filter, name):
-            log.info(f"Pod name filtered {name}")
-        elif re.search(pattern, name):
-            (_, name) = name.split("/")
-            log.info(f"pod name match found appending {name}")
-            pod_list.append(name)
+    if pod_names:
+        pod_names = pod_names.split("\n")
+        for name in pod_names:
+            if filter is not None and re.search(filter, name):
+                log.info(f"Pod name filtered {name}")
+            elif re.search(pattern, name):
+                (_, name) = name.split("/")
+                log.info(f"pod name match found appending {name}")
+                pod_list.append(name)
     return pod_list
 
 
@@ -890,6 +893,48 @@ def collect_noobaa_db_dump(log_dir_path):
     )
 
 
+def save_pods_logs_to_file(
+    pod_patterns_containers, dir_name_prefix, patterns_to_log=None
+):
+    """
+    Save live logs of requested pods
+
+    Args:
+        pod_patterns_containers (dict): The patterns of the pods that
+            their logs should be saved as keys and the container names as values
+        dir_name_prefix (str): A suffix for the logs directory name. Should be the test case name
+        patterns_to_log (list): A pattern in the logs to look for and log
+
+    """
+    log_dir_path = os.path.join(
+        os.path.expanduser(ocsci_config.RUN["log_dir"]),
+        f"live_logs_{ocsci_config.RUN['run_id']}",
+    )
+    pods_containers = dict()
+    for pattern, containers in pod_patterns_containers.items():
+        pod_names = get_pod_name_by_pattern(pattern=pattern)
+        for pod_name in pod_names:
+            pods_containers.update({pod_name: containers})
+    live_logs_dir_path = os.path.join(
+        log_dir_path, f"{dir_name_prefix}_{uuid4().hex[:8]}"
+    )
+    create_directory_path(live_logs_dir_path)
+
+    if len(pods_containers) > 0:
+        for pod, container in pods_containers.items():
+            cmd = f"oc -n openshift-storage logs {pod} -c {container}"
+            logs_file = os.path.join(live_logs_dir_path, f"{pod}")
+            out = run_cmd(cmd)
+            if patterns_to_log:
+                for pattern_to_log in patterns_to_log:
+                    if pattern_to_log in out:
+                        log.info(
+                            f"The requested pattern {pattern_to_log} was found and it will be saved in {logs_file}"
+                        )
+            with open(logs_file, "w") as f:
+                f.write(out)
+
+
 def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=True):
     """
     Collects OCS logs
@@ -1001,6 +1046,46 @@ def collect_prometheus_metrics(
         log.info(f"Saving {metric} data into {file_name}")
         with open(file_name, "w") as outfile:
             json.dump(datapoints.json(), outfile)
+
+
+def save_live_logs(request, pods_containers_dict, patterns_to_log=None):
+    """
+    Save pods logs to files
+
+    """
+    tc_name = request.node.name
+
+    def finalizer():
+        """
+        Stop the thread that executed save_logs()
+
+        """
+        ocsci_config.RUN["save_live_pod_logs"] = False
+        if thread:
+            thread.join()
+
+    request.addfinalizer(finalizer)
+
+    ocsci_config.RUN["save_live_pod_logs"] = True
+
+    def save_logs():
+        while ocsci_config.RUN.get("save_live_pod_logs"):
+            time.sleep(10)
+            if ocsci_config.RUN.get("save_live_pod_logs"):
+                try:
+                    save_pods_logs_to_file(
+                        pods_containers_dict, tc_name, patterns_to_log
+                    )
+                except Exception as ex:
+                    # We don't want to fail any test case in case of a logs
+                    # collection iteration failure, hence, we continue in case of any exception
+                    log.error(
+                        f"The logs collection iteration for pods {pods_containers_dict} "
+                        f"failed with the following exception {ex}"
+                    )
+
+    thread = threading.Thread(target=save_logs)
+    thread.start()
 
 
 def oc_get_all_obc_names():
