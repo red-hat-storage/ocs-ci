@@ -515,31 +515,50 @@ class CephCluster(object):
             cmd += f" -f {format}"
         return self.toolbox.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
+    def get_ceph_default_replica(self):
+        """
+        The function return the default replica count in the system,
+        taken from 'ceph status'. in case no parameter found, return '0'.
+
+        Returns:
+             int : the default replica count - 0 if not found.
+        """
+        ceph_pod = pod.get_ceph_tools_pod()
+        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph status")
+        av_mod = ceph_status.get("mgrmap").get("available_modules")
+        for mod in av_mod:
+            if mod["name"] == "localpool":
+                return mod.get("module_options").get("num_rep").get("default_value")
+        logger.error("Replica count number did not found !")
+        # if there is an error in the output of `ceph status` command and localpool
+        # module does not exist, return 0 as number of replica.
+        return 0
+
     def get_ceph_capacity(self):
         """
         The function gets the total mount of storage capacity of the ocs cluster.
-        the calculation is <Num of OSD> * <OSD size> / <replica number>
+        the calculation is <total bytes> / <replica number>
         it will not take into account the current used capacity.
 
         Returns:
             int : Total storage capacity in GiB (GiB is for development environment)
+                  if the replica is '0', return 0.
 
         """
-        storage_cluster_obj = storage_cluster.StorageCluster(
-            resource_name=config.ENV_DATA["storage_cluster_name"],
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
-        replica = int(
-            storage_cluster_obj.data["spec"]["storageDeviceSets"][0]["replica"]
-        )
+        replica = int(self.get_ceph_default_replica())
+        if replica > 0:
+            logger.info(f"Number of replica : {replica}")
+            ceph_pod = pod.get_ceph_tools_pod()
+            ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+            usable_capacity = (
+                int(ceph_status["stats"]["total_bytes"]) / replica / constant.GB
+            )
 
-        ceph_pod = pod.get_ceph_tools_pod()
-        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
-        usable_capacity = (
-            int(ceph_status["stats"]["total_bytes"]) / replica / constant.GB
-        )
-
-        return usable_capacity
+            return usable_capacity
+        else:
+            # if the replica number is 0, usable capacity can not be calculate
+            # so, return 0 as usable capacity.
+            return 0
 
     def get_ceph_cluster_iops(self):
         """
