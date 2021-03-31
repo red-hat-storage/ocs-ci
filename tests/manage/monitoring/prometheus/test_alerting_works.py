@@ -1,7 +1,11 @@
 import logging
 
-import ocs_ci.utility.prometheus
+import pytest
+
+from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
+import ocs_ci.utility.prometheus
 
 
 log = logging.getLogger(__name__)
@@ -19,6 +23,24 @@ def test_alerting_works():
     alerts = alerts_response.json()["data"]["alerts"]
     log.info(f"Prometheus Alerts: {alerts}")
     assert len(alerts) > 0
+
+
+@pytest.mark.polarion_id("OCS-2503")
+@tier1
+def test_prometheus_rule_failures():
+    """
+    There should be no PrometheusRuleFailures alert when OCS is configured.
+    """
+    prometheus = ocs_ci.utility.prometheus.PrometheusAPI()
+    alerts_response = prometheus.get(
+        "alerts", payload={"silenced": False, "inhibited": False}
+    )
+    assert alerts_response.ok is True
+    alerts = alerts_response.json()["data"]["alerts"]
+    log.info(f"Prometheus Alerts: {alerts}")
+    assert constants.ALERT_PROMETHEUSRULEFAILURES not in [
+        alert["labels"]["alertname"] for alert in alerts
+    ]
 
 
 def teardown_module():
