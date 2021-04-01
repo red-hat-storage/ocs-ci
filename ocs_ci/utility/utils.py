@@ -2804,14 +2804,19 @@ def set_registry_to_managed_state():
     properly propagated for the stage deployment as mentioned in BZ.
     """
     if config.ENV_DATA["platform"] not in constants.CLOUD_PLATFORMS:
-        run_cmd(
-            f"oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p "
-            f'\'{{"spec":{{"storage": {{"emptyDir":{{}}}}}}}}\''
+        cluster_config = yaml.safe_load(
+            exec_cmd(f"oc get {constants.IMAGE_REGISTRY_CONFIG} -o yaml").stdout
         )
-        run_cmd(
-            f"oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p "
-            f'\'{{"spec":{{"managementState": "Managed"}}}}\''
-        )
+        if "emptyDir" not in cluster_config["spec"].get("storage", {}).keys():
+            run_cmd(
+                f"oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p "
+                f'\'{{"spec":{{"storage": {{"emptyDir":{{}}}}}}}}\''
+            )
+        if cluster_config["spec"].get("managementState") != "Managed":
+            run_cmd(
+                f"oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p "
+                f'\'{{"spec":{{"managementState": "Managed"}}}}\''
+            )
 
 
 def add_stage_cert():
