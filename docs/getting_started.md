@@ -3,7 +3,7 @@
 
 ## Prerequisites
 
-1. Python >= 3.6
+1. Python >= 3.7
 2. Configure AWS Account credentials when testing with AWS platforms,
    check default section in `~/.aws/credentials` for access/secret key
    [check aws-configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
@@ -181,6 +181,7 @@ To enable ocs-ci to use this token, add the following to your `auth.yaml`:
 quay:
   access_token: 'YOUR_TOKEN'
 ```
+
 #### GitHub
 
 For disconnected cluster installation, we need to access github api (during

@@ -11,4 +11,5 @@ ENV_DATA:
   deployment_type: 'upi'
   monitoring_enabled: false
   number_of_storage_nodes: 3
-
+# Uncomment `number_of_storage_disks` if you are using powervs instead of libvirt
+#  number_of_storage_disks: 8

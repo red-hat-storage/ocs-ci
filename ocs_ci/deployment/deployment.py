@@ -46,6 +46,7 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state,
 )
+from ocs_ci.ocs.resources.storage_cluster import setup_ceph_debug
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
 from ocs_ci.utility.flexy import load_cluster_info
@@ -183,41 +184,68 @@ class Deployment(object):
         Label and taint worker nodes to be used by OCS operator
         """
 
+        arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
+
         nodes = ocp.OCP(kind="node").get().get("items", [])
+        zone_label = self.get_zone_label()
+
         worker_nodes = [
             node
             for node in nodes
-            if "node-role.kubernetes.io/worker" in node["metadata"]["labels"]
+            if constants.WORKER_LABEL in node["metadata"]["labels"]
         ]
         if not worker_nodes:
             raise UnavailableResourceException("No worker node found!")
         az_worker_nodes = {}
         for node in worker_nodes:
-            az = node["metadata"]["labels"].get(
-                "failure-domain.beta.kubernetes.io/zone"
-            )
+            az = node["metadata"]["labels"].get(zone_label)
             az_node_list = az_worker_nodes.get(az, [])
-            az_node_list.append(node)
+            az_node_list.append(node["metadata"]["name"])
             az_worker_nodes[az] = az_node_list
         logger.debug(f"Found the worker nodes in AZ: {az_worker_nodes}")
+
         distributed_worker_nodes = []
-        while az_worker_nodes:
+        if arbiter_deployment and config.DEPLOYMENT.get("arbiter_autodetect"):
             for az in list(az_worker_nodes.keys()):
                 az_node_list = az_worker_nodes.get(az)
-                if az_node_list:
-                    node_name = az_node_list.pop(0)["metadata"]["name"]
-                    distributed_worker_nodes.append(node_name)
+                if az_node_list and len(az_node_list) > 1:
+                    node_names = az_node_list[:2]
+                    distributed_worker_nodes += node_names
+        elif arbiter_deployment and not config.DEPLOYMENT.get("arbiter_autodetect"):
+            for az in list(config.DEPLOYMENT.get("worker_zones")):
+                az_node_list = az_worker_nodes.get(az)
+                if az_node_list and len(az_node_list) > 1:
+                    node_names = az_node_list[:2]
+                    distributed_worker_nodes += node_names
                 else:
-                    del az_worker_nodes[az]
+                    raise UnavailableResourceException(
+                        "Atleast 2 worker nodes required for arbiter cluster in zone %s",
+                        az,
+                    )
+        else:
+            while az_worker_nodes:
+                for az in list(az_worker_nodes.keys()):
+                    az_node_list = az_worker_nodes.get(az)
+                    if az_node_list:
+                        node_name = az_node_list.pop(0)
+                        distributed_worker_nodes.append(node_name)
+                    else:
+                        del az_worker_nodes[az]
         logger.info(f"Distributed worker nodes for AZ: {distributed_worker_nodes}")
-        to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 3)
+
+        if arbiter_deployment:
+            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
+        else:
+            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 3)
+
         to_taint = config.DEPLOYMENT.get("ocs_operator_nodes_to_taint", 0)
-        worker_count = len(worker_nodes)
-        if worker_count < to_label or worker_count < to_taint:
+
+        distributed_worker_count = len(distributed_worker_nodes)
+        if distributed_worker_count < to_label or distributed_worker_count < to_taint:
             logger.info(f"All nodes: {nodes}")
-            logger.info(f"Worker nodes: {worker_nodes}")
+            logger.info(f"Distributed worker nodes: {distributed_worker_nodes}")
             raise UnavailableResourceException(
-                f"Not enough worker nodes: {worker_count} to label: "
+                f"Not enough distributed worker nodes: {distributed_worker_count} to label: "
                 f"{to_label} or taint: {to_taint}!"
             )
 
@@ -378,6 +406,52 @@ class Deployment(object):
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
 
+    def get_zone_label(self):
+        nodes = ocp.OCP(kind="node").get().get("items", [])
+
+        # Check which zone label is present
+        return (
+            constants.ZONE_LABEL
+            if nodes[0]["metadata"]["labels"].get(constants.ZONE_LABEL, False)
+            else constants.ZONE_LABEL_NEW
+        )
+
+    def get_arbiter_location(self):
+        """
+        Get arbiter mon location for storage cluster
+        """
+        if config.DEPLOYMENT.get("arbiter_deployment") and not config.DEPLOYMENT.get(
+            "arbiter_autodetect"
+        ):
+            return config.DEPLOYMENT.get("arbiter_zone")
+
+        # below logic will autodetect arbiter_zone
+        nodes = ocp.OCP(kind="node").get().get("items", [])
+
+        zone_label = self.get_zone_label()
+
+        worker_nodes_zones = {
+            node["metadata"]["labels"].get(zone_label)
+            for node in nodes
+            if constants.WORKER_LABEL in node["metadata"]["labels"]
+            and str(constants.OPERATOR_NODE_LABEL)[:-3] in node["metadata"]["labels"]
+        }
+
+        master_nodes_zones = {
+            node["metadata"]["labels"].get(zone_label)
+            for node in nodes
+            if constants.MASTER_LABEL in node["metadata"]["labels"]
+        }
+
+        arbiter_locations = list(master_nodes_zones - worker_nodes_zones)
+
+        if len(arbiter_locations) < 1:
+            raise UnavailableResourceException(
+                "Atleast 1 different zone required than storage nodes in master nodes to host arbiter mon"
+            )
+
+        return arbiter_locations[0]
+
     def deploy_ocs_via_operator(self, image=None):
         """
         Method for deploy OCS via OCS operator
@@ -388,6 +462,7 @@ class Deployment(object):
         """
         ui_deployment = config.DEPLOYMENT.get("ui_deployment")
         live_deployment = config.DEPLOYMENT.get("live_deployment")
+        arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 
         if ui_deployment:
             self.deployment_with_ui()
@@ -434,35 +509,35 @@ class Deployment(object):
         csv.wait_for_phase("Succeeded", timeout=720)
         ocp_version = float(get_ocp_version())
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
-            if ocp_version < 4.6:
-                config_map = ocp.OCP(
-                    kind="configmap",
-                    namespace=self.namespace,
-                    resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
-                )
-                config_map.get(retry=10, wait=5)
-                config_map_patch = (
-                    '\'{"data": {"ROOK_CSI_KUBELET_DIR_PATH": "/var/data/kubelet"}}\''
-                )
-                logger.info("Patching config map to change KUBLET DIR PATH")
-                exec_cmd(
-                    f"oc patch configmap -n {self.namespace} "
-                    f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
-                )
-            logger.info("Creating secret for IBM Cloud Object Storage")
-            with open(constants.IBM_COS_SECRET_YAML, "r") as cos_secret_fd:
-                cos_secret_data = yaml.load(cos_secret_fd, Loader=yaml.SafeLoader)
-            key_id = config.AUTH["ibmcloud"]["ibm_cos_access_key_id"]
-            key_secret = config.AUTH["ibmcloud"]["ibm_cos_secret_access_key"]
-            cos_secret_data["data"]["IBM_COS_ACCESS_KEY_ID"] = key_id
-            cos_secret_data["data"]["IBM_COS_SECRET_ACCESS_KEY"] = key_secret
-            cos_secret_data_yaml = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="cos_secret", delete=False
+            config_map = ocp.OCP(
+                kind="configmap",
+                namespace=self.namespace,
+                resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
             )
-            templating.dump_data_to_temp_yaml(
-                cos_secret_data, cos_secret_data_yaml.name
+            config_map.get(retry=10, wait=5)
+            config_map_patch = (
+                '\'{"data": {"ROOK_CSI_KUBELET_DIR_PATH": "/var/data/kubelet"}}\''
             )
-            exec_cmd(f"oc create -f {cos_secret_data_yaml.name}")
+            logger.info("Patching config map to change KUBLET DIR PATH")
+            exec_cmd(
+                f"oc patch configmap -n {self.namespace} "
+                f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
+            )
+            if config.DEPLOYMENT.get("create_ibm_cos_secret", True):
+                logger.info("Creating secret for IBM Cloud Object Storage")
+                with open(constants.IBM_COS_SECRET_YAML, "r") as cos_secret_fd:
+                    cos_secret_data = yaml.load(cos_secret_fd, Loader=yaml.SafeLoader)
+                key_id = config.AUTH["ibmcloud"]["ibm_cos_access_key_id"]
+                key_secret = config.AUTH["ibmcloud"]["ibm_cos_secret_access_key"]
+                cos_secret_data["data"]["IBM_COS_ACCESS_KEY_ID"] = key_id
+                cos_secret_data["data"]["IBM_COS_SECRET_ACCESS_KEY"] = key_secret
+                cos_secret_data_yaml = tempfile.NamedTemporaryFile(
+                    mode="w+", prefix="cos_secret", delete=False
+                )
+                templating.dump_data_to_temp_yaml(
+                    cos_secret_data, cos_secret_data_yaml.name
+                )
+                exec_cmd(f"oc create -f {cos_secret_data_yaml.name}")
 
         # Modify the CSV with custom values if required
         if all(
@@ -483,155 +558,125 @@ class Deployment(object):
             run_cmd(f"oc create -f {self.CUSTOM_STORAGE_CLASS_PATH}")
 
         # creating StorageCluster
-        if self.platform == constants.IBM_POWER_PLATFORM:
-            cluster_data = templating.load_yaml(constants.IBM_STORAGE_CLUSTER_YAML)
-        else:
-            if config.DEPLOYMENT.get("kms_deployment"):
-                kms = KMS.get_kms_deployment()
-                kms.deploy()
-            cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
+        if config.DEPLOYMENT.get("kms_deployment"):
+            kms = KMS.get_kms_deployment()
+            kms.deploy()
+        cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
+
+        if arbiter_deployment:
+            cluster_data["spec"]["arbiter"] = {}
+            cluster_data["spec"]["nodeTopologies"] = {}
+            cluster_data["spec"]["arbiter"]["enable"] = True
+            cluster_data["spec"]["nodeTopologies"][
+                "arbiterLocation"
+            ] = self.get_arbiter_location()
+            cluster_data["spec"]["storageDeviceSets"][0][
+                "replica"
+            ] = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
 
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
 
-        if self.platform == constants.IBM_POWER_PLATFORM:
-            numberofstoragenodes = config.ENV_DATA["number_of_storage_nodes"]
-            deviceset = [None] * numberofstoragenodes
+        deviceset_data = cluster_data["spec"]["storageDeviceSets"][0]
+        device_size = int(config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE))
 
-            for i in range(numberofstoragenodes):
-                deviceset_data = cluster_data["spec"]["storageDeviceSets"][i]
-                device_size = int(
-                    config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
-                )
-
-                # set size of request for storage
-                if self.platform.lower() == "powervs":
-                    pv_size_list = helpers.get_pv_size(
-                        storageclass=self.DEFAULT_STORAGECLASS_LSO
-                    )
-                    pv_size_list.sort()
-                    deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
-                        "storage"
-                    ] = f"{pv_size_list[0]}"
-                else:
-                    deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
-                        "storage"
-                    ] = f"{device_size}Gi"
-
-                # set storage class to OCS default on current platform
-                if self.DEFAULT_STORAGECLASS_LSO:
-                    deviceset_data["dataPVCTemplate"]["spec"][
-                        "storageClassName"
-                    ] = self.DEFAULT_STORAGECLASS_LSO
-
-                # StorageCluster tweaks for LSO
-                if config.DEPLOYMENT.get("local_storage"):
-                    cluster_data["spec"]["manageNodes"] = False
-                    cluster_data["spec"]["monDataDirHostPath"] = "/var/lib/rook"
-                    deviceset_data["portable"] = False
-                    deviceset_data["dataPVCTemplate"]["spec"][
-                        "storageClassName"
-                    ] = self.DEFAULT_STORAGECLASS_LSO
-
-                deviceset[i] = deviceset_data
+        # set size of request for storage
+        if self.platform.lower() == constants.BAREMETAL_PLATFORM:
+            pv_size_list = helpers.get_pv_size(
+                storageclass=self.DEFAULT_STORAGECLASS_LSO
+            )
+            pv_size_list.sort()
+            deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
+                "storage"
+            ] = f"{pv_size_list[0]}"
         else:
-            deviceset_data = cluster_data["spec"]["storageDeviceSets"][0]
-            device_size = int(config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE))
+            deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
+                "storage"
+            ] = f"{device_size}Gi"
 
-            # set size of request for storage
-            if self.platform.lower() == constants.BAREMETAL_PLATFORM:
-                pv_size_list = helpers.get_pv_size(
-                    storageclass=self.DEFAULT_STORAGECLASS_LSO
-                )
-                pv_size_list.sort()
-                deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
-                    "storage"
-                ] = f"{pv_size_list[0]}"
-            else:
-                deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
-                    "storage"
-                ] = f"{device_size}Gi"
+        # set storage class to OCS default on current platform
+        if self.DEFAULT_STORAGECLASS:
+            deviceset_data["dataPVCTemplate"]["spec"][
+                "storageClassName"
+            ] = self.DEFAULT_STORAGECLASS
 
-            # set storage class to OCS default on current platform
-            if self.DEFAULT_STORAGECLASS:
-                deviceset_data["dataPVCTemplate"]["spec"][
-                    "storageClassName"
-                ] = self.DEFAULT_STORAGECLASS
+        ocs_version = float(config.ENV_DATA["ocs_version"])
 
-            ocs_version = float(config.ENV_DATA["ocs_version"])
-
-            # StorageCluster tweaks for LSO
-            if config.DEPLOYMENT.get("local_storage"):
-                cluster_data["spec"]["manageNodes"] = False
-                cluster_data["spec"]["monDataDirHostPath"] = "/var/lib/rook"
-                deviceset_data["portable"] = False
-                deviceset_data["dataPVCTemplate"]["spec"][
-                    "storageClassName"
-                ] = self.DEFAULT_STORAGECLASS_LSO
-                if self.platform.lower() == constants.AWS_PLATFORM:
-                    deviceset_data["count"] = 2
-                if ocs_version >= 4.5:
-                    deviceset_data["resources"] = {
-                        "limits": {"cpu": 2, "memory": "5Gi"},
-                        "requests": {"cpu": 1, "memory": "5Gi"},
-                    }
-                if (ocp_version >= 4.6) and (ocs_version >= 4.6):
-                    cluster_data["metadata"]["annotations"] = {
-                        "cluster.ocs.openshift.io/local-devices": "true"
-                    }
-
-            # Allow lower instance requests and limits for OCS deployment
-            # The resources we need to change can be found here:
-            # https://github.com/openshift/ocs-operator/blob/release-4.5/pkg/deploy-manager/storagecluster.go#L88-L116
-            if config.DEPLOYMENT.get("allow_lower_instance_requirements"):
-                none_resources = {"Requests": None, "Limits": None}
-                deviceset_data["resources"] = deepcopy(none_resources)
-                resources = [
-                    "mon",
-                    "mds",
-                    "rgw",
-                    "mgr",
-                    "noobaa-core",
-                    "noobaa-db",
-                ]
-                if ocs_version >= 4.5:
-                    resources.append("noobaa-endpoint")
-                cluster_data["spec"]["resources"] = {
-                    resource: deepcopy(none_resources) for resource in resources
+        # StorageCluster tweaks for LSO
+        if config.DEPLOYMENT.get("local_storage"):
+            cluster_data["spec"]["manageNodes"] = False
+            cluster_data["spec"]["monDataDirHostPath"] = "/var/lib/rook"
+            deviceset_data["name"] = constants.DEFAULT_DEVICESET_LSO_PVC_NAME
+            deviceset_data["portable"] = False
+            deviceset_data["dataPVCTemplate"]["spec"][
+                "storageClassName"
+            ] = self.DEFAULT_STORAGECLASS_LSO
+            lso_type = config.DEPLOYMENT.get("type")
+            if (
+                self.platform.lower() == constants.AWS_PLATFORM
+                and not lso_type == constants.AWS_EBS
+            ):
+                deviceset_data["count"] = 2
+            if ocs_version >= 4.5:
+                deviceset_data["resources"] = {
+                    "limits": {"cpu": 2, "memory": "5Gi"},
+                    "requests": {"cpu": 1, "memory": "5Gi"},
                 }
-                if ocs_version >= 4.5:
-                    cluster_data["spec"]["resources"]["noobaa-endpoint"] = {
-                        "limits": {"cpu": 1, "memory": "500Mi"},
-                        "requests": {"cpu": 1, "memory": "500Mi"},
+            if (ocp_version >= 4.6) and (ocs_version >= 4.6):
+                cluster_data["metadata"]["annotations"] = {
+                    "cluster.ocs.openshift.io/local-devices": "true"
+                }
+
+        # Allow lower instance requests and limits for OCS deployment
+        # The resources we need to change can be found here:
+        # https://github.com/openshift/ocs-operator/blob/release-4.5/pkg/deploy-manager/storagecluster.go#L88-L116
+        if config.DEPLOYMENT.get("allow_lower_instance_requirements"):
+            none_resources = {"Requests": None, "Limits": None}
+            deviceset_data["resources"] = deepcopy(none_resources)
+            resources = [
+                "mon",
+                "mds",
+                "rgw",
+                "mgr",
+                "noobaa-core",
+                "noobaa-db",
+            ]
+            if ocs_version >= 4.5:
+                resources.append("noobaa-endpoint")
+            cluster_data["spec"]["resources"] = {
+                resource: deepcopy(none_resources) for resource in resources
+            }
+            if ocs_version >= 4.5:
+                cluster_data["spec"]["resources"]["noobaa-endpoint"] = {
+                    "limits": {"cpu": 1, "memory": "500Mi"},
+                    "requests": {"cpu": 1, "memory": "500Mi"},
+                }
+        else:
+            local_storage = config.DEPLOYMENT.get("local_storage")
+            platform = config.ENV_DATA.get("platform", "").lower()
+            if local_storage and platform == "aws":
+                resources = {
+                    "mds": {
+                        "limits": {"cpu": 3, "memory": "8Gi"},
+                        "requests": {"cpu": 1, "memory": "8Gi"},
                     }
-            else:
-                local_storage = config.DEPLOYMENT.get("local_storage")
-                platform = config.ENV_DATA.get("platform", "").lower()
-                if local_storage and platform == "aws":
-                    resources = {
-                        "mds": {
-                            "limits": {"cpu": 3, "memory": "8Gi"},
-                            "requests": {"cpu": 1, "memory": "8Gi"},
-                        }
+                }
+                if ocs_version < 4.5:
+                    resources["noobaa-core"] = {
+                        "limits": {"cpu": 2, "memory": "8Gi"},
+                        "requests": {"cpu": 1, "memory": "8Gi"},
                     }
-                    if ocs_version < 4.5:
-                        resources["noobaa-core"] = {
-                            "limits": {"cpu": 2, "memory": "8Gi"},
-                            "requests": {"cpu": 1, "memory": "8Gi"},
-                        }
-                        resources["noobaa-db"] = {
-                            "limits": {"cpu": 2, "memory": "8Gi"},
-                            "requests": {"cpu": 1, "memory": "8Gi"},
-                        }
-                    cluster_data["spec"]["resources"] = resources
+                    resources["noobaa-db"] = {
+                        "limits": {"cpu": 2, "memory": "8Gi"},
+                        "requests": {"cpu": 1, "memory": "8Gi"},
+                    }
+                cluster_data["spec"]["resources"] = resources
+
         # Enable host network if enabled in config (this require all the
         # rules to be enabled on underlaying platform).
         if config.DEPLOYMENT.get("host_network"):
             cluster_data["spec"]["hostNetwork"] = True
 
-        if self.platform == constants.IBM_POWER_PLATFORM:
-            cluster_data["spec"]["storageDeviceSets"] = deviceset
-        else:
-            cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
+        cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
 
         if self.platform == constants.IBMCLOUD_PLATFORM:
             mon_pvc_template = {
@@ -659,6 +704,12 @@ class Deployment(object):
                 cluster_data["spec"]["encryption"]["kms"] = {
                     "enable": True,
                 }
+
+        if config.DEPLOYMENT.get("ceph_debug"):
+            setup_ceph_debug()
+            cluster_data["spec"]["managedResources"] = {
+                "cephConfig": {"reconcileStrategy": "ignore"}
+            }
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False

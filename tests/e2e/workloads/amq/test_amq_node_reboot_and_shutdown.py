@@ -2,14 +2,15 @@ import logging
 import pytest
 import time
 
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.framework.pytest_customization.marks import skipif_vsphere_ipi
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import default_storage_class
-from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs, get_nodes
-from ocs_ci.utility.retry import retry
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
+from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs, get_nodes
 from ocs_ci.ocs.resources.pod import get_all_pods
+from ocs_ci.utility.retry import retry
 
 
 log = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ TILLER_NAMESPACE = "tiller"
 
 @ignore_leftovers
 @workloads
+@skipif_vsphere_ipi
 class TestAMQNodeReboot(E2ETest):
     """
     Test case to reboot or shutdown and recovery

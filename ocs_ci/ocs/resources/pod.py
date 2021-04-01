@@ -476,7 +476,9 @@ class Pod(OCS):
             str: Node name
 
         """
-        if config.ENV_DATA.get("platform", "").lower() == "aws":
+        if config.ENV_DATA.get(
+            "platform", ""
+        ).lower() == "aws" and config.DEPLOYMENT.get("local_storage"):
             return self.pod_data["spec"]["nodeSelector"]["kubernetes.io/hostname"]
         else:
             return self.pod_data["spec"]["nodeName"]

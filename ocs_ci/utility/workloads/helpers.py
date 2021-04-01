@@ -7,7 +7,7 @@ from ocs_ci.ocs import constants
 
 log = logging.getLogger(__name__)
 
-DISTROS = {"Debian": "apt-get", "RHEL": "yum"}
+DISTROS = {"Debian": "apt-get", "RHEL": "yum", "Alpine": "apk"}
 
 
 def find_distro(io_pod):

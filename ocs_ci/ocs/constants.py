@@ -157,6 +157,7 @@ OPENSHIFT_INGRESS_NAMESPACE = "openshift-ingress"
 OPENSHIFT_MONITORING_NAMESPACE = "openshift-monitoring"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
+BOOTSTRAP_MACHINE = "bootstrap"
 INFRA_MACHINE = "infra"
 MOUNT_POINT = "/var/lib/www/html"
 TOLERATION_KEY = "node.ocs.openshift.io/storage"
@@ -262,9 +263,11 @@ NOOBAA_DB_LABEL_47_AND_ABOVE = "noobaa-db=postgres"
 NOOBAA_ENDPOINT_POD_LABEL = "noobaa-s3=noobaa"
 ROOK_CEPH_DETECT_VERSION_LABEL = "app=rook-ceph-detect-version"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
+DEFAULT_DEVICESET_LSO_PVC_NAME = "ocs-deviceset-localblock"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
 CEPH_ROOK_IO_PVC_LABEL = "ceph.rook.io/pvc"
+ROOK_CEPH_MON_PVC_LABEL = "pvc_name"
 PGSQL_APP_LABEL = "app=postgres"
 HOSTNAME_LABEL = "kubernetes.io/hostname"
 
@@ -287,6 +290,10 @@ TOOL_POD_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "toolbox_pod.yaml")
 CEPHFILESYSTEM_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "CephFileSystem.yaml")
 
 CEPHBLOCKPOOL_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "cephblockpool.yaml")
+
+VSPHERE_THICK_STORAGECLASS_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "vsphere_storageclass_thick.yaml"
+)
 
 CSI_RBD_STORAGECLASS_YAML = os.path.join(TEMPLATE_CSI_RBD_DIR, "storageclass.yaml")
 
@@ -435,6 +442,8 @@ AMQ_SIMPLE_WORKLOAD_YAML = os.path.join(TEMPLATE_AMQ_DIR, "amq_simple_workload.y
 
 NGINX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "nginx.yaml")
 
+PERF_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance.yaml")
+
 HSBENCH_OBJ_YAML = os.path.join(TEMPLATE_HSBENCH_DIR, "hsbench_obj.yaml")
 
 AWSCLI_SERVICE_CA_YAML = os.path.join(
@@ -473,10 +482,6 @@ STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
 SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml")
 
 STORAGE_CLUSTER_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml")
-
-IBM_STORAGE_CLUSTER_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "ibm-storage-cluster.yaml"
-)
 
 EXTERNAL_STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "external-storage-cluster.yaml"
@@ -544,6 +549,9 @@ EXTERNAL_VAULT_KMS_TOKEN = os.path.join(EXTERNAL_VAULT_TEMPLATES, "ocs-kms-token
 EXTERNAL_VAULT_KMS_CONNECTION_DETAILS = os.path.join(
     EXTERNAL_VAULT_TEMPLATES, "ocs-kms-connection-details.yaml"
 )
+CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "ceph-debug-log-level-configmap.yaml"
+)
 
 # constants
 RBD_INTERFACE = "rbd"
@@ -594,6 +602,8 @@ ALERT_PGREPAIRTAKINGTOOLONG = "CephPGRepairTakingTooLong"
 ALERT_BUCKETREACHINGQUOTASTATE = "NooBaaBucketReachingQuotaState"
 ALERT_BUCKETERRORSTATE = "NooBaaBucketErrorState"
 ALERT_BUCKETEXCEEDINGQUOTASTATE = "NooBaaBucketExceedingQuotaState"
+ALERT_NAMESPACERESOURCEERRORSTATE = "NooBaaNamespaceResourceErrorState"
+ALERT_NAMESPACEBUCKETERRORSTATE = "NooBaaNamespaceBucketErrorState"
 ALERT_CLUSTERNEARFULL = "CephClusterNearFull"
 ALERT_CLUSTERCRITICALLYFULL = "CephClusterCriticallyFull"
 ALERT_CLUSTEROBJECTSTORESTATE = "ClusterObjectStoreState"
@@ -612,7 +622,7 @@ MONITORING_NAMESPACE = "openshift-monitoring"
 OPERATOR_INTERNAL_SELECTOR = "ocs-operator-internal=true"
 OPERATOR_CS_QUAY_API_QUERY = (
     "https://quay.io/api/v1/repository/rhceph-dev/{image}/"
-    "tag/?onlyActiveTags=true&limit={tag_limit}"
+    "tag/?onlyActiveTags=true&limit={tag_limit}&page={page}"
 )
 OPTIONAL_OPERATORS_SELECTOR = "catalog=optional-operators"
 OCS_OPERATOR_BUNDLE_IMAGE = "quay.io/rhceph-dev/ocs-operator-bundle"
@@ -751,6 +761,7 @@ INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
 OCS_SUBSCRIPTION = "ocs-operator"
 ROOK_OPERATOR_CONFIGMAP = "rook-ceph-operator-config"
+ROOK_CONFIG_OVERRIDE_CONFIGMAP = "rook-config-override"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
@@ -779,6 +790,8 @@ SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scale
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
 APP_LABEL = "node-role.kubernetes.io/app"
+ZONE_LABEL = "failure-domain.beta.kubernetes.io/zone"
+ZONE_LABEL_NEW = "topology.kubernetes.io/zone"
 
 # Cluster name limits
 CLUSTER_NAME_MIN_CHARACTERS = 5
@@ -1081,6 +1094,7 @@ ROOT_DISK_NAME = "sda"
 RDM = "RDM"
 VMDK = "VMDK"
 DIRECTPATH = "VMDirectPath"
+AWS_EBS = "EBS"
 DISK_MODE = "independent_persistent"
 COMPATABILITY_MODE = "physicalMode"
 DISK_PATH_PREFIX = "/vmfs/devices/disks/"
@@ -1224,10 +1238,13 @@ VAULT_DOWNLOAD_BASE_URL = "https://releases.hashicorp.com/vault"
 VAULT_DEFAULT_NAMESPACE = ""
 VAULT_DEFAULT_PATH_PREFIX = "ocs"
 VAULT_DEFAULT_POLICY_PREFIX = "rook"
+VAULT_DEFAULT_NAMESPACE_PREFIX = "ocs-namespace"
 VAULT_DEFAULT_TLS_SERVER = ""
 VAULT_KMS_CONNECTION_DETAILS_RESOURCE = "ocs-kms-connection-details"
 VAULT_KMS_TOKEN_RESOURCE = "ocs-kms-token"
 VAULT_CLIENT_CERT_PATH = os.path.join(DATA_DIR, "vault-client.crt")
+VAULT_KMS_PROVIDER = "vault"
+VAULT_NOOBAA_ROOT_SECRET_PATH = "NOOBAA_ROOT_SECRET_PATH"
 
 # min and max Noobaa endpoints
 MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
@@ -1235,3 +1252,22 @@ MCG_TESTS_MIN_NB_ENDPOINT_COUNT = 2
 MAX_NB_ENDPOINT_COUNT = 2
 
 VOLUMESNAPSHOT = "volumesnapshot"
+
+PERF_IMAGE = "quay.io/ocsci/perf:latest"
+
+ROOK_CEPH_CONFIG_VALUES = """
+[global]
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_max_pg_per_osd = 600
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.5
+"""
+CEPH_DEBUG_CONFIG_VALUES = """
+[mon]
+debug_mon = 20
+debug_ms = 1
+debug_paxos = 20
+debug_crush = 20
+"""

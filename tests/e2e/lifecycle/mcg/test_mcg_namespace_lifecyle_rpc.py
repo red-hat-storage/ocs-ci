@@ -57,23 +57,23 @@ def setup_base_objects(awscli_pod, amount=2):
 
 @skipif_openshift_dedicated
 @skipif_aws_creds_are_missing
-@skipif_ocs_version("<4.6")
-class TestMcgNamespaceLifecycle(E2ETest):
+@skipif_ocs_version("!=4.6")
+class TestMcgNamespaceLifecycleRpc(E2ETest):
     """
-    Test MCG namespace resource/bucket lifecycle
+    Test MCG namespace resource/bucket lifecycle using RPC calls
 
     """
 
     @pytest.mark.polarion_id("OCS-2298")
     @tier2
-    def test_mcg_namespace_lifecycle(
+    def test_mcg_namespace_lifecycle_rpc(
         self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory
     ):
         """
-        Test MCG namespace resource/bucket lifecycle
+        Test MCG namespace resource/bucket lifecycle using RPC calls
 
-        1. Create namespace resources.
-        2. Create namespace bucket
+        1. Create namespace resources using RPC calls
+        2. Create namespace bucket using RPC calls
         3. Set bucket policy on namespace bucket with a S3 user principal
         4. Verify bucket policy.
         5. Read/write directly on namespace resource target.
@@ -111,17 +111,9 @@ class TestMcgNamespaceLifecycle(E2ETest):
         user = NoobaaAccount(mcg_obj, name=user_name, email=email, buckets=[ns_bucket])
         logger.info(f"Noobaa account: {user.email_id} with S3 access created")
 
-        actions = (
-            ["PutObject", "GetObject"]
-            if float(config.ENV_DATA["ocs_version"]) <= 4.6
-            else ["DeleteObject"]
-        )
-        effect = "Allow" if float(config.ENV_DATA["ocs_version"]) <= 4.6 else "Deny"
-
         bucket_policy_generated = gen_bucket_policy(
             user_list=[user.email_id],
-            actions_list=actions,
-            effect=effect,
+            actions_list=["PutObject", "GetObject"],
             resources_list=[f'{ns_bucket}/{"*"}'],
         )
         bucket_policy = json.dumps(bucket_policy_generated)

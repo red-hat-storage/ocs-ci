@@ -9,6 +9,7 @@ import os
 from shutil import rmtree
 import time
 
+import tempfile
 import hcl
 import yaml
 
@@ -26,6 +27,7 @@ from ocs_ci.ocs.node import (
     remove_nodes,
     wait_for_nodes_status,
 )
+from ocs_ci.utility import templating
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.csr import approve_pending_csr, wait_for_all_nodes_csr_and_approve
@@ -619,6 +621,18 @@ class VSPHEREUPI(VSPHEREBASE):
             configure_chrony_and_wait_for_machineconfig_status(
                 node_type="all", timeout=1800
             )
+        if config.DEPLOYMENT.get("thick_sc"):
+            sc_data = templating.load_yaml(constants.VSPHERE_THICK_STORAGECLASS_YAML)
+            sc_data_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="storageclass", delete=False
+            )
+            if config.DEPLOYMENT.get("eager_zeroed_thick_sc"):
+                sc_data["parameters"]["diskformat"] = "eagerzeroedthick"
+            else:
+                sc_data["parameters"]["diskformat"] = "zeroedthick"
+            templating.dump_data_to_temp_yaml(sc_data, sc_data_yaml.name)
+            run_cmd(f"oc create -f {sc_data_yaml.name}")
+            self.DEFAULT_STORAGECLASS = "thick"
 
     def destroy_cluster(self, log_level="DEBUG"):
         """

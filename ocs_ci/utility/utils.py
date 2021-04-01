@@ -696,15 +696,31 @@ def get_openshift_client(
 
     """
     version = version or config.RUN["client_version"]
+    version = expose_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     client_binary_path = os.path.join(bin_dir, "oc")
-    if os.path.isfile(client_binary_path) and force_download:
-        delete_file(client_binary_path)
-    if os.path.isfile(client_binary_path):
-        log.debug(f"Client exists ({client_binary_path}), skipping download.")
-        # TODO: check client version
-    else:
-        version = expose_ocp_version(version)
+    download_client = True
+
+    if force_download:
+        log.info("Forcing client download.")
+    elif os.path.isfile(client_binary_path):
+        current_client_version = get_client_version()
+        if current_client_version != version:
+            log.info(
+                f"Existing client version ({current_client_version}) does not match "
+                f"configured version ({version})."
+            )
+        else:
+            log.debug(
+                f"Client exists ({client_binary_path}) and matches configured version, "
+                f"skipping download."
+            )
+            download_client = False
+
+    if download_client:
+        if os.path.isfile(client_binary_path):
+            log.info(f"Deleting client that exists at {client_binary_path}")
+            delete_file(client_binary_path)
         log.info(f"Downloading openshift client ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
@@ -882,33 +898,53 @@ class TimeoutSampler(object):
     Yielding the output allows you to handle every value as you wish.
 
     Feel free to set the instance variables.
+
+
+    Args:
+        timeout (int): Timeout in seconds
+        sleep (int): Sleep interval in seconds
+        func (function): The function to sample
+        func_args: Arguments for the function
+        func_kwargs: Keyword arguments for the function
     """
 
     def __init__(self, timeout, sleep, func, *func_args, **func_kwargs):
         self.timeout = timeout
-        """ Timeout in seconds. """
         self.sleep = sleep
-        """ Sleep interval seconds. """
         # check that given timeout and sleep values makes sense
         if self.timeout < self.sleep:
             raise ValueError("timeout should be larger than sleep time")
 
         self.func = func
-        """ A function to sample. """
         self.func_args = func_args
-        """ Args for func. """
         self.func_kwargs = func_kwargs
-        """ Kwargs for func. """
 
+        # Timestamps of the first and most recent samples
         self.start_time = None
-        """ Time of starting the sampling. """
         self.last_sample_time = None
-        """ Time of last sample. """
-
+        # The exception to raise
         self.timeout_exc_cls = TimeoutExpiredError
-        """ Class of exception to be raised.  """
-        self.timeout_exc_args = (self.timeout,)
-        """ An args for __init__ of the timeout exception. """
+        # Arguments that will be passed to the exception
+        self.timeout_exc_args = [self.timeout]
+        try:
+            self.timeout_exc_args.append(
+                f"Timed out after {timeout}s running {self._build_call_string()}"
+            )
+        except Exception:
+            log.exception(
+                "Failed to assemble call string. Not necessarily a test failure."
+            )
+
+    def _build_call_string(self):
+        def stringify(value):
+            if isinstance(value, str):
+                return f'"{value}"'
+            return str(value)
+
+        args = list(map(stringify, self.func_args))
+        kwargs = [f"{stringify(k)}={stringify(v)}" for k, v in self.func_kwargs.items()]
+        all_args_string = ", ".join(args + kwargs)
+        return f"{self.func.__name__}({all_args_string})"
 
     def __iter__(self):
         if self.start_time is None:
@@ -1937,7 +1973,9 @@ def load_auth_config():
 
 def get_ocs_olm_operator_tags(limit=100):
     """
-    Query the OCS OLM Operator repo and retrieve a list of tags.
+    Query the OCS OLM Operator repo and retrieve a list of tags. Since we are limited
+    to 100 tags per page, we end up making several API calls and combining the results
+    into a single list of tags.
 
     Args:
         limit: the number of tags to limit the request to
@@ -1950,7 +1988,6 @@ def get_ocs_olm_operator_tags(limit=100):
         list: OCS OLM Operator tags
 
     """
-    log.info(f"Retrieving OCS OLM Operator tags (limit {limit})")
     try:
         quay_access_token = load_auth_config()["quay"]["access_token"]
     except (KeyError, TypeError):
@@ -1969,17 +2006,28 @@ def get_ocs_olm_operator_tags(limit=100):
     except (ValueError, TypeError):
         log.warning("Invalid ocs_version given, defaulting to ocs-registry image")
         pass
-    resp = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(
-            tag_limit=limit,
-            image=image,
-        ),
-        headers=headers,
-    )
-    if not resp.ok:
-        raise requests.RequestException(resp.json())
-    log.debug(resp.json()["tags"])
-    return resp.json()["tags"]
+    all_tags = []
+    page = 1
+    while True:
+        log.info(f"Retrieving OCS OLM Operator tags (limit {limit}, page {page})")
+        resp = requests.get(
+            constants.OPERATOR_CS_QUAY_API_QUERY.format(
+                tag_limit=limit,
+                image=image,
+                page=page,
+            ),
+            headers=headers,
+        )
+        if not resp.ok:
+            raise requests.RequestException(resp.json())
+        tags = resp.json()["tags"]
+        if len(tags) == 0:
+            log.info("No more tags to retrieve")
+            break
+        log.debug(tags)
+        all_tags.extend(tags)
+        page += 1
+    return all_tags
 
 
 def check_if_executable_in_path(exec_name):
@@ -3165,3 +3213,18 @@ def get_default_if_keyval_empty(dictionary, key, default_val):
     if not dictionary.get(key):
         return default_val
     return dictionary.get(key)
+
+
+def get_client_version():
+    """
+    Get version reported by `oc version`.
+
+    Returns:
+        str: version reported by `oc version`. None if oc is not on the path.
+
+    """
+    if which("oc"):
+        cmd = "oc version -o json"
+        resp = exec_cmd(cmd, ignore_error=True)
+        output = json.loads(resp.stdout.decode())
+        return output["releaseClientVersion"]

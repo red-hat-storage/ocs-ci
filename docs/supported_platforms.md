@@ -67,7 +67,10 @@ This platform supports deployment of OCP cluster + OCS cluster on top of it.
 ### Configuration files
 
 * `conf/deployment/ibmcloud/ibm_cloud_vpc_cluster.yaml` - this file can be used for deployment
-    on IBM Cloud - this config is for VPC gen 2 provider.
+  on IBM Cloud - this config is for VPC gen 2 provider.
+
+* `conf/deployment/ibmcloud/ibm_cloud_vpc_cluster_without_cos.yaml` - this file can be used for deployment
+  on IBM Cloud - this config is for VPC gen 2 provider without COS secret created.
 
 You will need to create also credential file with secret data which should
 never be shared publicly in this repository.

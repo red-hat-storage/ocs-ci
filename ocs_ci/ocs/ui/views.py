@@ -121,6 +121,29 @@ page_nav = {
     "alerting_page": ("Alerting", By.LINK_TEXT),
     "metrics_page": ("Metrics", By.LINK_TEXT),
     "dashboards_page": ("Dashboards", By.LINK_TEXT),
+    "Workloads": ("//button[text()='Workloads']", By.XPATH),
+    "Pods": ("Pods", By.LINK_TEXT),
+}
+
+infra = {
+    "ocs_operator": (
+        'a[data-test-operator-row="OpenShift Container Storage"]',
+        By.CSS_SELECTOR,
+    ),
+    "storage_cluster_tab": (
+        'a[data-test-id="horizontal-link-Storage Cluster"]',
+        By.CSS_SELECTOR,
+    ),
+    "kebab_storage_cluster": ('button[data-test-id="kebab-button"', By.CSS_SELECTOR),
+    "add_capacity_button": ('button[data-test-action="Add Capacity"]', By.CSS_SELECTOR),
+    "select_sc_add_capacity": (
+        'button[data-test="add-cap-sc-dropdown"]',
+        By.CSS_SELECTOR,
+    ),
+    "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
+    "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
+    "confirm_add_capacity": ('button[data-test="confirm-action"', By.CSS_SELECTOR),
+    "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
 }
 
 locators = {
@@ -129,10 +152,12 @@ locators = {
         "page": page_nav,
         "deployment": deployment_4_7,
         "pvc": pvc,
+        "infra": infra,
     },
     "4.6": {
         "login": login,
         "page": page_nav,
         "pvc": pvc,
+        "infra": infra,
     },
 }

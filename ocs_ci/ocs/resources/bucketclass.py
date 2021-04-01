@@ -78,6 +78,10 @@ def bucket_class_factory(
                     - type (str): Single | Multi | Cache
                     - namespacestore_dict (dict): Identical format to backingstore_dict, contains
                       data that's forwarded to cloud_uls_factory.
+                    - namespacestores (list): If namespacestores list is provided instead of
+                      namespacestore_dict then NamespaceStore instances provided in the list are
+                      used. First NamespaceStore is used as write resource. All of them are used
+                      as read resources.
 
         Returns:
             BucketClass: A Bucket Class object.
@@ -107,20 +111,21 @@ def bucket_class_factory(
                 namespace_policy["type"] = bucket_class_dict["namespace_policy_dict"][
                     "type"
                 ]
-                if namespace_policy["type"] == "Cache":
-                    namespace_policy["cache"] = {
-                        "hubResource": namespacestores[0].name,
-                        "caching": {
-                            "ttl": bucket_class_dict["namespace_policy_dict"]["ttl"]
-                        },
-                    }
-                else:
-                    # TODO: this scenario is not accurate and need to be changed
-                    # to support both single and multi namespace buckets
-                    namespace_policy["read_resources"] = [
-                        nss.name for nss in namespacestores
-                    ]
-                    namespace_policy["write_resource"] = namespacestores[0].name
+                namespace_policy["read_resources"] = [
+                    nss.name for nss in namespacestores
+                ]
+                namespace_policy["write_resource"] = namespacestores[0].name
+            elif "namespacestores" in bucket_class_dict["namespace_policy_dict"]:
+                namespacestores = bucket_class_dict["namespace_policy_dict"][
+                    "namespacestores"
+                ]
+                namespace_policy["type"] = bucket_class_dict["namespace_policy_dict"][
+                    "type"
+                ]
+                namespace_policy["read_resources"] = [
+                    nss.name for nss in namespacestores
+                ]
+                namespace_policy["write_resource"] = namespacestores[0].name
 
         elif "backingstore_dict" in bucket_class_dict:
             backingstores = [
