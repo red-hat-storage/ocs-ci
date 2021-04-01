@@ -91,9 +91,11 @@ def run_command(cmd, timeout=600, out_format="string", **kwargs):
     return output
 
 
-def run_oc_command(cmd, namespace):
+def run_oc_command(cmd, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
     """
     Running an 'oc' command
+    This function is needed in Performance tests in order to be able to run a ceparate command within the test
+    without creating additional objects which increases memory consumed by the test.
 
     Args:
         cmd (str): the command to run
@@ -124,6 +126,12 @@ def get_log_names(interface):
     For CephFS: 2 pods that start with "csi-cephfsplugin-provisioner" prefix
     For RBD: 2 pods that start with "csi-rbdplugin-provisioner" prefix
 
+    Args:
+        interface (str) : an interface (RBD or CephFS) to run on
+
+    Returns:
+        log names (list) : names of the log files relevant for searching in
+
     """
     log_names = []
 
@@ -146,12 +154,16 @@ def get_log_names(interface):
 
 def measure_pvc_creation_time(interface, pvc_name, start_time):
     """
+
+    Measure PVC creation time, provided pvc name and time after which the PVC was created
+
     Args:
-        pvc_name: Name of the pvc for which we measure the time
+        interface : an interface (RBD or CephFS) to run on
+        pvc_name : Name of the pvc for which we measure the time
         start_time: Time from which and on to search the relevant logs
 
     Returns:
-        creation time for pvc
+        creation time for PVC in seconds
 
     """
     log_names = get_log_names(interface)
