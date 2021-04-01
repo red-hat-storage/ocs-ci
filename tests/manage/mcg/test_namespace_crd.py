@@ -4,6 +4,8 @@ These tests are valid only for OCS version 4.7 and above because in later
 versions are for Namespace bucket creation used CRDs instead of NooBaa RPC calls.
 """
 import logging
+from time import sleep
+
 import pytest
 
 from ocs_ci.framework.testlib import (
@@ -15,11 +17,16 @@ from ocs_ci.framework.testlib import (
     tier4,
     tier4a,
 )
-from ocs_ci.ocs.bucket_utils import sync_object_directory, verify_s3_object_integrity
+from ocs_ci.ocs.bucket_utils import (
+    sync_object_directory,
+    verify_s3_object_integrity,
+    check_cached_objects,
+    s3_delete_object,
+)
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
@@ -357,6 +364,362 @@ class TestNamespace(MCGTest):
 
         logger.info("Compare between uploaded files and downloaded files")
         assert self.compare_dirs(awscli_pod, amount=4)
+
+    @tier1
+    @pytest.mark.parametrize(
+        argnames=["bucketclass_dict"],
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 3600,
+                        "namespacestore_dict": {
+                            "aws": [(1, "eu-central-1")],
+                        },
+                    },
+                    "placement_policy": {
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
+                    },
+                }
+            ),
+        ],
+        ids=[
+            "AWS-OC-Cache",
+        ],
+    )
+    def test_read_non_cached_object(
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+    ):
+        """
+        Test read an object that is not present in the cached namespace bucket.
+        """
+
+        # Create the cached namespace bucket on top of the namespace resource
+        bucket_obj = bucket_factory(
+            amount=1,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0]
+        if not check_cached_objects(mcg_obj, bucket_obj.name, 0):
+            raise UnexpectedBehaviour("Already cached objects when non has been read")
+        s3_creds = {
+            "access_key_id": cld_mgr.aws_client.access_key,
+            "access_key": cld_mgr.aws_client.secret_key,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "region": self.DEFAULT_REGION,
+        }
+        aws_target_bucket = bucket_obj.bucketclass.namespacestores[0].uls_name
+
+        # Upload files directly to AWS
+        self.write_files_to_pod_and_upload(
+            mcg_obj,
+            awscli_pod,
+            bucket_to_write=aws_target_bucket,
+            amount=3,
+            s3_creds=s3_creds,
+        )
+        if not check_cached_objects(mcg_obj, bucket_obj.name, 0):
+            raise UnexpectedBehaviour("Already cached objects when non has been read")
+        # Read files from ns bucket
+        self.download_files(mcg_obj, awscli_pod, bucket_to_read=bucket_obj.name)
+        if not check_cached_objects(mcg_obj, bucket_obj.name, 3):
+            raise UnexpectedBehaviour("Objects not cached properly")
+
+    @tier1
+    @pytest.mark.parametrize(
+        argnames=["bucketclass_dict"],
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 3600,
+                        "namespacestore_dict": {
+                            "aws": [(1, "eu-central-1")],
+                        },
+                    },
+                    "placement_policy": {
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
+                    },
+                }
+            ),
+        ],
+        ids=[
+            "AWS-OC-Cache",
+        ],
+    )
+    def test_read_cached_object(
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+    ):
+        """
+        Test read an object that is not present in the cached namespace bucket.
+        """
+
+        # Create the cached namespace bucket on top of the namespace resource
+        bucket_obj = bucket_factory(
+            amount=1,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0]
+        s3_creds = {
+            "access_key_id": cld_mgr.aws_client.access_key,
+            "access_key": cld_mgr.aws_client.secret_key,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "region": self.DEFAULT_REGION,
+        }
+        aws_target_bucket = bucket_obj.bucketclass.namespacestores[0].uls_name
+        # Upload files to NS bucket
+        self.write_files_to_pod_and_upload(
+            mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
+        )
+        if not check_cached_objects(mcg_obj, bucket_obj.name, 1):
+            raise UnexpectedBehaviour("Objects not cached properly")
+
+        # Upload files directly to AWS
+        self.write_files_to_pod_and_upload(
+            mcg_obj,
+            awscli_pod,
+            bucket_to_write=aws_target_bucket,
+            amount=1,
+            s3_creds=s3_creds,
+        )
+        # Read files from ns bucket
+        self.download_files(mcg_obj, awscli_pod, bucket_to_read=bucket_obj.name)
+
+        if not self.compare_dirs(awscli_pod):
+            raise UnexpectedBehaviour("Cached object was not downloaded")
+
+    @tier1
+    @pytest.mark.parametrize(
+        argnames=["bucketclass_dict"],
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 100,
+                        "namespacestore_dict": {
+                            "aws": [(1, "eu-central-1")],
+                        },
+                    },
+                    "placement_policy": {
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
+                    },
+                }
+            ),
+        ],
+        ids=[
+            "AWS-OC-Cache",
+        ],
+    )
+    def test_read_stale_object(
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+    ):
+        """
+        Test read an object that is stale from cached namespace bucket.
+        """
+
+        # Create the cached namespace bucket on top of the namespace resource
+        bucket_obj = bucket_factory(
+            amount=1,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0]
+        s3_creds = {
+            "access_key_id": cld_mgr.aws_client.access_key,
+            "access_key": cld_mgr.aws_client.secret_key,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "region": self.DEFAULT_REGION,
+        }
+        aws_target_bucket = bucket_obj.bucketclass.namespacestores[0].uls_name
+        # Upload files to NS bucket
+        self.write_files_to_pod_and_upload(
+            mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
+        )
+        if not check_cached_objects(mcg_obj, bucket_obj.name, 1):
+            raise UnexpectedBehaviour("Objects not cached properly")
+
+        awscli_pod.exec_cmd_on_pod("mv /original/testfile0.txt /original/testfile1.txt")
+        # Upload files directly to AWS
+        self.write_files_to_pod_and_upload(
+            mcg_obj,
+            awscli_pod,
+            bucket_to_write=aws_target_bucket,
+            amount=1,
+            s3_creds=s3_creds,
+        )
+        awscli_pod.exec_cmd_on_pod("mv /original/testfile1.txt /original/testfile0.txt")
+        # using sleep and not TimeoutSampler because we need to wait throughout the whole ttl
+        sleep(bucketclass_dict["namespace_policy_dict"]["ttl"])
+
+        # Read files from ns bucket
+        self.download_files(mcg_obj, awscli_pod, bucket_to_read=bucket_obj.name)
+
+        if self.compare_dirs(awscli_pod):
+            raise UnexpectedBehaviour(
+                "Updated file was not fetched after ttl was exceeded"
+            )
+
+    @tier1
+    @pytest.mark.parametrize(
+        argnames=["bucketclass_dict"],
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 100,
+                        "namespacestore_dict": {
+                            "aws": [(1, "eu-central-1")],
+                        },
+                    },
+                    "placement_policy": {
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
+                    },
+                }
+            ),
+        ],
+        ids=[
+            "AWS-OC-Cache",
+        ],
+    )
+    def test_write_object_to_cache(
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+    ):
+        """
+        Test write an object to the cached namespace bucket.
+        """
+
+        # Create the cached namespace bucket on top of the namespace resource
+        bucket_obj = bucket_factory(
+            amount=1,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0]
+        # Upload files to NS bucket
+        self.write_files_to_pod_and_upload(
+            mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
+        )
+        if not check_cached_objects(mcg_obj, bucket_obj.name, 1):
+            raise UnexpectedBehaviour("Object was not cached properly")
+
+    @tier1
+    @pytest.mark.parametrize(
+        argnames=["bucketclass_dict"],
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 100,
+                        "namespacestore_dict": {
+                            "aws": [(1, "eu-central-1")],
+                        },
+                    },
+                    "placement_policy": {
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
+                    },
+                }
+            ),
+        ],
+        ids=[
+            "AWS-OC-Cache",
+        ],
+    )
+    def test_list_cached_objects(
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+    ):
+        """
+        Test list all cached objects in cached namespace bucket.
+        """
+
+        # Create the cached namespace bucket on top of the namespace resource
+        bucket_obj = bucket_factory(
+            amount=1,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0]
+        # Upload files to NS bucket
+        self.write_files_to_pod_and_upload(
+            mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=3
+        )
+        if not check_cached_objects(mcg_obj, bucket_obj.name, 3):
+            raise UnexpectedBehaviour("Object was not cached properly")
+
+    @tier1
+    @pytest.mark.parametrize(
+        argnames=["bucketclass_dict"],
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 100,
+                        "namespacestore_dict": {
+                            "aws": [(1, "eu-central-1")],
+                        },
+                    },
+                    "placement_policy": {
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
+                    },
+                }
+            ),
+        ],
+        ids=[
+            "AWS-OC-Cache",
+        ],
+    )
+    def test_delete_cached_object(
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+    ):
+        """
+        Test list all cached objects in cached namespace bucket.
+        """
+
+        # Create the cached namespace bucket on top of the namespace resource
+        bucket_obj = bucket_factory(
+            amount=1,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0]
+        # Upload files to NS bucket
+        self.write_files_to_pod_and_upload(
+            mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
+        )
+        if not check_cached_objects(mcg_obj, bucket_obj.name, 1):
+            raise UnexpectedBehaviour("Object was not cached properly")
+
+        # Delete the object from mcg interface
+        s3_delete_object(mcg_obj, bucket_obj.name, "testfile0.txt")
+        if not check_cached_objects(mcg_obj, bucket_obj.name, 0):
+            raise UnexpectedBehaviour("Object was not deleted from cache properly")
+
+        # Check deletion in the cloud provider
+        aws_target_bucket = bucket_obj.bucketclass.namespacestores[0].uls_name
+        aws_obj_list = len(
+            list(cld_mgr.aws_client.client.Bucket(aws_target_bucket).objects.all())
+        )
+        if aws_obj_list != 0:
+            raise UnexpectedBehaviour("Object was not deleted from cache properly")
 
     @pytest.mark.polarion_id("OCS-2290")
     @tier2
