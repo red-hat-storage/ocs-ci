@@ -111,10 +111,20 @@ def bucket_class_factory(
                 namespace_policy["type"] = bucket_class_dict["namespace_policy_dict"][
                     "type"
                 ]
-                namespace_policy["read_resources"] = [
-                    nss.name for nss in namespacestores
-                ]
-                namespace_policy["write_resource"] = namespacestores[0].name
+                if namespace_policy["type"] == "Cache":
+                    namespace_policy["cache"] = {
+                        "hubResource": namespacestores[0].name,
+                        "caching": {
+                            "ttl": bucket_class_dict["namespace_policy_dict"]["ttl"]
+                        },
+                    }
+                else:
+                    # TODO: this scenario is not accurate and need to be changed
+                    # to support both single and multi namespace buckets
+                    namespace_policy["read_resources"] = [
+                        nss.name for nss in namespacestores
+                    ]
+                    namespace_policy["write_resource"] = namespacestores[0].name
             elif "namespacestores" in bucket_class_dict["namespace_policy_dict"]:
                 namespacestores = bucket_class_dict["namespace_policy_dict"][
                     "namespacestores"
