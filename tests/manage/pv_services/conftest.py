@@ -78,9 +78,6 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
             else len(access_modes_cephfs)
         )
 
-        num_of_rbd_pvc = num_of_rbd_pvc or len(access_modes_rbd)
-        num_of_cephfs_pvc = num_of_cephfs_pvc or len(access_modes_cephfs)
-
         pvcs_rbd = multi_pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             storageclass=sc_rbd,
