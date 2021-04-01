@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_bm,
     skipif_ibm_cloud,
     skipif_lso,
+    skipif_ibm_power,
     skipif_vsphere_ipi,
 )
 from ocs_ci.framework.testlib import (
@@ -562,6 +563,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
     @skipif_bm
     @skipif_ibm_cloud
+    @skipif_ibm_power
     @tier4a
     @pytest.mark.parametrize(
         argnames=[
@@ -699,6 +701,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
     @skipif_bm
     @skipif_ibm_cloud
+    @skipif_ibm_power
     @tier4b
     @pytest.mark.parametrize(
         argnames=[
@@ -849,6 +852,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
     @skipif_bm
     @skipif_ibm_cloud
+    @skipif_ibm_power
     @tier4c
     @pytest.mark.parametrize(
         argnames=[
