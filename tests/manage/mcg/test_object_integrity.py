@@ -51,10 +51,6 @@ class TestObjectIntegrity(MCGTest):
                 marks=[tier1],
             ),
             pytest.param(
-                {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
-                marks=[tier1],
-            ),
-            pytest.param(
                 {
                     "interface": "OC",
                     "namespace_policy_dict": {
