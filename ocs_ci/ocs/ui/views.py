@@ -123,6 +123,7 @@ page_nav = {
     "dashboards_page": ("Dashboards", By.LINK_TEXT),
     "Workloads": ("//button[text()='Workloads']", By.XPATH),
     "Pods": ("Pods", By.LINK_TEXT),
+    "quickstarts": ('a[href="/quickstart"]', By.CSS_SELECTOR),
 }
 
 infra = {
