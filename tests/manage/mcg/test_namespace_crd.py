@@ -438,7 +438,7 @@ class TestNamespace(MCGTest):
                     "interface": "OC",
                     "namespace_policy_dict": {
                         "type": "Cache",
-                        "ttl": 3600,
+                        "ttl": 60000,
                         "namespacestore_dict": {
                             "aws": [(1, "eu-central-1")],
                         },
@@ -493,7 +493,7 @@ class TestNamespace(MCGTest):
         # Read files from ns bucket
         self.download_files(mcg_obj, awscli_pod, bucket_to_read=bucket_obj.name)
 
-        if not self.compare_dirs(awscli_pod):
+        if self.compare_dirs(awscli_pod):
             raise UnexpectedBehaviour("Cached object was not downloaded")
 
     @tier1
@@ -505,7 +505,7 @@ class TestNamespace(MCGTest):
                     "interface": "OC",
                     "namespace_policy_dict": {
                         "type": "Cache",
-                        "ttl": 100,
+                        "ttl": 10000,
                         "namespacestore_dict": {
                             "aws": [(1, "eu-central-1")],
                         },
@@ -560,7 +560,7 @@ class TestNamespace(MCGTest):
         )
         awscli_pod.exec_cmd_on_pod("mv /original/testfile1.txt /original/testfile0.txt")
         # using sleep and not TimeoutSampler because we need to wait throughout the whole ttl
-        sleep(bucketclass_dict["namespace_policy_dict"]["ttl"])
+        sleep(bucketclass_dict["namespace_policy_dict"]["ttl"] / 1000)
 
         # Read files from ns bucket
         self.download_files(mcg_obj, awscli_pod, bucket_to_read=bucket_obj.name)
@@ -579,7 +579,7 @@ class TestNamespace(MCGTest):
                     "interface": "OC",
                     "namespace_policy_dict": {
                         "type": "Cache",
-                        "ttl": 100,
+                        "ttl": 10000,
                         "namespacestore_dict": {
                             "aws": [(1, "eu-central-1")],
                         },
