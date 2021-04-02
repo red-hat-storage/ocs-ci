@@ -115,7 +115,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
                 deletion_time_measures.append(deletion_time)
             else:
                 logging.info(
-                    f"Reclaim policy of PVC {pvc_obj.name} is not Delete;"
+                    f"Reclaim policy of the PVC {pvc_obj.name} is not Delete;"
                     f" therefore not measuring deletion time for this PVC."
                 )
 
