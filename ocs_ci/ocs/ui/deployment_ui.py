@@ -66,12 +66,16 @@ class DeploymentUI(PageNavigator):
         """
         osd_size = config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
         number_worker_nodes = get_worker_nodes()
-        capacity = str(osd_size * len(number_worker_nodes)) + " GiB"
+        capacity = int(osd_size) * len(number_worker_nodes)
+        if capacity >= 1024:
+            capacity_str = str(capacity / 1024).rstrip("0").rstrip(".") + " TiB"
+        else:
+            capacity_str = str(capacity) + " GiB"
         sample = TimeoutSampler(
             timeout=timeout,
             sleep=sleep,
             func=self.check_element_text,
-            expected_text=capacity,
+            expected_text=capacity_str,
         )
         if not sample.wait_for_func_status(result=True):
             logger.error(f" after {timeout} seconds")
