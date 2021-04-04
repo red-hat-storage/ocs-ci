@@ -2942,6 +2942,7 @@ def get_mon_pdb():
     return disruptions_allowed, min_available_mon
 
 
+@retry(CommandFailed, tries=10, delay=30, backoff=1)
 def run_cmd_verify_cli_output(
     cmd=None, expected_output_lst=(), cephtool_cmd=False, debug_node=None
 ):
