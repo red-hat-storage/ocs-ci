@@ -141,7 +141,6 @@ GATHER_COMMANDS_OTHERS = [
     "persistentvolumeclaims.yaml",
     "pods.yaml",
     "pools_rbd_ocs-storagecluster-cephblockpool",
-    "registry-cephfs-rwx-pvc.yaml",
     "replicasets.yaml",
     "replicationcontrollers.yaml",
     "routes.yaml",
