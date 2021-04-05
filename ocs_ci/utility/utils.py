@@ -707,7 +707,7 @@ def get_openshift_client(
     if force_download:
         log.info("Forcing client download.")
     elif os.path.isfile(client_binary_path):
-        current_client_version = get_client_version()
+        current_client_version = get_client_version(client_binary_path)
         if current_client_version != version:
             log.info(
                 f"Existing client version ({current_client_version}) does not match "
@@ -3248,16 +3248,20 @@ def get_default_if_keyval_empty(dictionary, key, default_val):
     return dictionary.get(key)
 
 
-def get_client_version():
+def get_client_version(client_binary_path):
     """
     Get version reported by `oc version`.
 
+    Args:
+        client_binary_path (str): path to `oc` binary
+
     Returns:
-        str: version reported by `oc version`. None if oc is not on the path.
+        str: version reported by `oc version`.
+            None if the client does not exist at the provided path.
 
     """
-    if which("oc"):
-        cmd = "oc version --client -o json"
+    if os.path.isfile(client_binary_path):
+        cmd = f"{client_binary_path} version --client -o json"
         resp = exec_cmd(cmd)
-        output = json.loads(resp.stdout.decode())
-        return output["releaseClientVersion"]
+        stdout = json.loads(resp.stdout.decode())
+        return stdout["releaseClientVersion"]
