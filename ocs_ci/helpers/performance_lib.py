@@ -22,7 +22,7 @@ def write_fio_on_pod(pod_obj, file_size):
     file_name = pod_obj.name
     logger.info(f"Starting IO on the POD {pod_obj.name}")
     now = datetime.now()
-    # Going to run only write IO to write to PVC file size data before creating a clone
+
     pod_obj.fillup_fs(size=file_size, fio_filename=file_name)
 
     # Wait for fio to finish
@@ -94,7 +94,7 @@ def run_command(cmd, timeout=600, out_format="string", **kwargs):
 def run_oc_command(cmd, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
     """
     Running an 'oc' command
-    This function is needed in Performance tests in order to be able to run a ceparate command within the test
+    This function is needed in Performance tests in order to be able to run a separate command within the test
     without creating additional objects which increases memory consumed by the test.
 
     Args:
@@ -120,9 +120,9 @@ def run_oc_command(cmd, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
     return run_command(command, out_format="list")
 
 
-def get_log_names(interface):
+def get_logfile_names(interface):
     """
-    Finds names for log files pods in which logs for clone creation are located
+    Finds names for log files pods in which logs for pvc creation are located
     For CephFS: 2 pods that start with "csi-cephfsplugin-provisioner" prefix
     For RBD: 2 pods that start with "csi-rbdplugin-provisioner" prefix
 
@@ -158,15 +158,15 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
     Measure PVC creation time, provided pvc name and time after which the PVC was created
 
     Args:
-        interface : an interface (RBD or CephFS) to run on
-        pvc_name : Name of the pvc for which we measure the time
-        start_time: Time from which and on to search the relevant logs
+        interface (str) : an interface (RBD or CephFS) to run on
+        pvc_name (str) : Name of the pvc for which we measure the time
+        start_time (str): Formatted time from which and on to search the relevant logs
 
     Returns:
-        creation time for PVC in seconds
+        (float) creation time for PVC in seconds
 
     """
-    log_names = get_log_names(interface)
+    log_names = get_logfile_names(interface)
     logs = []
     for l in log_names:
         logs.append(
@@ -180,8 +180,8 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
 
     st = None
     et = None
-    # look for start time and end time of clone creation. The start/end line may appear in log several times
-    # in order to be on the safe side and measure the longest time difference (which is the actual clone creation
+    # look for start time and end time of pvc creation. The start/end line may appear in log several times
+    # in order to be on the safe side and measure the longest time difference (which is the actual pvc creation
     # time), the earliest start time and the latest end time are taken
     for sublog in logs:
         for line in sublog:
