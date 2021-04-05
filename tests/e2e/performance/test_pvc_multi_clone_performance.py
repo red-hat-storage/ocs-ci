@@ -18,6 +18,7 @@ from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import ocsci_log_path
+from ocs_ci.helpers import helpers, performance_lib
 
 log = logging.getLogger(__name__)
 
@@ -108,8 +109,7 @@ class TestPvcMultiClonePerformance(E2ETest):
         self.params["ERRMSG"] = "Error in command"
 
         clone_yaml = self.build_params()
-        self.get_log_names()
-        self.run_fio_on_pod(file_size)
+        performance_lib.write_fio_on_pod(self.pod_obj, file_size)
 
         # Running the test
         results = []
@@ -150,7 +150,7 @@ class TestPvcMultiClonePerformance(E2ETest):
         if self.interface == constants.CEPHBLOCKPOOL:
             self.params["clone_yaml"] = constants.CSI_RBD_PVC_CLONE_YAML
 
-        output = self.run_oc_command(
+        output = performance_lib.run_oc_command(
             cmd=f"get pod {self.pod_obj.name} -o yaml", namespace=self.params["nspace"]
         )
 
@@ -181,55 +181,6 @@ class TestPvcMultiClonePerformance(E2ETest):
 
         return clone_yaml
 
-    def get_log_names(self):
-        """
-        Finds names for log files pods in which logs for clone creation are located
-        For CephFS: 2 pods that start with "csi-cephfsplugin-provisioner" prefix
-        For RBD: 2 pods that start with "csi-rbdplugin-provisioner" prefix
-
-        """
-        self.params["logs"] = []
-
-        pods = self.run_oc_command(cmd="get pod", namespace="openshift-storage")
-        if self.params["ERRMSG"] in pods:
-            raise Exception("Can not get csi controller pod")
-
-        provisioning_name = "csi-cephfsplugin-provisioner"
-        if self.interface == constants.CEPHBLOCKPOOL:
-            provisioning_name = "csi-rbdplugin-provisioner"
-
-        for line in pods:
-            if provisioning_name in line:
-                self.params["logs"].append(line.split()[0])
-        log.info(f'The logs pods are : {self.params["logs"]}')
-
-    def run_fio_on_pod(self, file_size):
-        """
-        Args:
-        file_size (str): Size of file to write in MB, e.g. 200M or 50000M
-
-        """
-        file_name = self.pod_obj.name
-        log.info(f"Starting IO on the POD {self.pod_obj.name}")
-        # Going to run only write IO to fill the PVC for the before creating a clone
-        self.pod_obj.fillup_fs(size=file_size, fio_filename=file_name)
-
-        # Wait for fio to finish - non default timeout is needed for big pvc/clones
-        fio_result = self.pod_obj.get_fio_results(timeout=18000)
-        err_count = fio_result.get("jobs")[0].get("error")
-        assert err_count == 0, (
-            f"IO error on pod {self.pod_obj.name}. " f"FIO result: {fio_result}."
-        )
-        log.info("IO on the PVC Finished")
-
-        # Verify presence of the file on pvc
-        file_path = pod.get_file_path(self.pod_obj, file_name)
-        log.info(f"Actual file path on the pod is {file_path}.")
-        assert pod.check_file_existence(
-            self.pod_obj, file_path
-        ), f"File {file_name} does not exist"
-        log.info(f"File {file_name} exists in {self.pod_obj.name}.")
-
     def create_clone(self, clone_num, clone_yaml):
         """
         Creating clone for pvc, measure the creation time
@@ -254,12 +205,16 @@ class TestPvcMultiClonePerformance(E2ETest):
             yaml.dump(clone_yaml, f, default_flow_style=False)
         start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         log.info(f"Clone yaml file is {clone_yaml}")
-        res = self.run_oc_command(f"create -f {tmpfile}", self.params["nspace"])
+        res = performance_lib.run_oc_command(
+            f"create -f {tmpfile}", self.params["nspace"]
+        )
         if self.params["ERRMSG"] in res[0]:
             raise Exception(f"Can not create clone : {res}")
         # wait until clone is ready
         self.wait_for_clone_creation(clone_name)
-        create_time = self.measure_clone_creation_time(clone_name, start_time)
+        create_time = performance_lib.measure_pvc_creation_time(
+            self.interface, clone_name, start_time
+        )
 
         log.info(f"Creation time of clone {clone_name} is {create_time} secs.")
 
@@ -275,7 +230,7 @@ class TestPvcMultiClonePerformance(E2ETest):
 
         """
         while timeout > 0:
-            res = self.run_oc_command(
+            res = performance_lib.run_oc_command(
                 f"get pvc {clone_name} -o yaml", self.params["nspace"]
             )
             if self.params["ERRMSG"] not in res[0]:
@@ -296,117 +251,3 @@ class TestPvcMultiClonePerformance(E2ETest):
             raise Exception(
                 f"Clone {clone_name}  for {self.interface} interface was not created for 600 seconds"
             )
-
-    def run_command(self, cmd):
-        """
-        Running command on the OS and return the STDOUT & STDERR outputs
-        in case of argument is not string or list, return error message
-
-        Args:
-            cmd (str/list): the command to execute
-
-        Returns:
-            list : all STDOUT / STDERR output as list of lines
-
-        """
-        if isinstance(cmd, str):
-            command = cmd.split()
-        elif isinstance(cmd, list):
-            command = cmd
-        else:
-            return self.params["ERRMSG"]
-
-        log.info(f"Going to run {cmd}")
-        cp = subprocess.run(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            stdin=subprocess.PIPE,
-            timeout=600,
-        )
-        output = cp.stdout.decode()
-        err = cp.stderr.decode()
-        # exit code is not zero
-        if cp.returncode:
-            log.error(f"Command finished with non zero ({cp.returncode}) {err}")
-            output += f"{self.params['ERRMSG']} {err}"
-
-        output = output.split("\n")  # convert output to list
-        output.pop()  # remove last empty element from the list
-        return output
-
-    def run_oc_command(self, cmd, namespace):
-        """
-        Running an 'oc' command
-
-        Args:
-            cmd (str): the command to run
-            namespace (str): the namespace where to run the command
-
-        Returns:
-            list : the results of the command as list of lines
-
-        """
-
-        cluster_dir_kubeconfig = os.path.join(
-            config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
-        )
-        if os.getenv("KUBECONFIG"):
-            kubeconfig = os.getenv("KUBECONFIG")
-        elif os.path.exists(cluster_dir_kubeconfig):
-            kubeconfig = cluster_dir_kubeconfig
-        else:
-            kubeconfig = None
-
-        command = f"oc --kubeconfig {kubeconfig} -n {namespace} {cmd}"
-        return self.run_command(command)
-
-    def measure_clone_creation_time(self, clone_name, start_time):
-        """
-        Args:
-            clone_name: Name of the clone for which we measure the time
-            start_time: Time from which and on to search the relevant logs
-
-        Returns:
-            creation time for each clone
-
-        """
-        logs = []
-        for l in self.params["logs"]:
-            logs.append(
-                self.run_oc_command(
-                    f"logs {l} -c csi-provisioner --since-time={start_time}",
-                    "openshift-storage",
-                )
-            )
-
-        format = "%H:%M:%S.%f"
-
-        st = None
-        et = None
-        # look for start time and end time of clone creation. The start/end line may appear in log several times
-        # in order to be on the safe side and measure the longest time difference (which is the actual clone creation
-        # time), the earliest start time and the latest end time are taken
-        for sublog in logs:
-            for line in sublog:
-                if (
-                    st is None
-                    and "provision" in line
-                    and clone_name in line
-                    and "started" in line
-                ):
-                    st = line.split(" ")[1]
-                    st = datetime.datetime.strptime(st, format)
-                elif "provision" in line and clone_name in line and "succeeded" in line:
-                    et = line.split(" ")[1]
-                    et = datetime.datetime.strptime(et, format)
-
-        if st is None:
-            log.error(f"Can not find start time of {clone_name}")
-            raise Exception(f"Can not find start time of {clone_name}")
-
-        if et is None:
-            log.error(f"Can not find end time of {clone_name}")
-            raise Exception(f"Can not find end time of {clone_name}")
-
-        return (et - st).total_seconds()
