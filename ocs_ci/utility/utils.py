@@ -3257,7 +3257,7 @@ def get_client_version():
 
     """
     if which("oc"):
-        cmd = "oc version -o json"
-        resp = exec_cmd(cmd, ignore_error=True)
+        cmd = "oc version --client -o json"
+        resp = exec_cmd(cmd)
         output = json.loads(resp.stdout.decode())
         return output["releaseClientVersion"]
