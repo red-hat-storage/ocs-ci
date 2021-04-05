@@ -145,8 +145,8 @@ class TestPVCCreationDeletionPerformance(PASTest):
         Args:
             action_name (str): Name of the action for which these measurements were collected; used for the logging
             time_measures (list of floats): A list of time measurements
-            accepted_deviation_percent (int): Accepted deviation percent, if the standard  deviation of the provided time
-                measurements is bigger than this value, the test fails
+            accepted_deviation_percent (int): Accepted deviation percent,
+                if the standard  deviation of the provided time measurements is bigger than this value, the test fails
             msg_prefix (str) : A string for comprehensive logging
 
         Returns:
