@@ -82,6 +82,10 @@ def bucket_class_factory(
                       namespacestore_dict then NamespaceStore instances provided in the list are
                       used. First NamespaceStore is used as write resource. All of them are used
                       as read resources.
+                      for cache bucket a required field of ttl (int), the behavior for this field is
+                      after the amount of ms has passed noobaa will go to the underlying storage and
+                      check if the etag of the file has changed.
+                      **Very important** ttl field is in ms not seconds!!
 
         Returns:
             BucketClass: A Bucket Class object.
@@ -119,8 +123,7 @@ def bucket_class_factory(
                         },
                     }
                 else:
-                    # TODO: this scenario is not accurate and need to be changed
-                    # to support both single and multi namespace buckets
+                    # TODO: Implement support for Single-tiered NS bucketclass
                     namespace_policy["read_resources"] = [
                         nss.name for nss in namespacestores
                     ]
