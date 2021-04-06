@@ -1272,3 +1272,6 @@ debug_ms = 1
 debug_paxos = 20
 debug_crush = 20
 """
+
+WORKLOAD_STORAGE_TYPE_BLOCK = "block"
+WORKLOAD_STORAGE_TYPE_FS = "fs"

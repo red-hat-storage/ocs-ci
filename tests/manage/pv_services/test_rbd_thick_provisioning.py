@@ -41,7 +41,8 @@ class TestRbdThickProvisioning(ManageTest):
     @polarion_id("OCS-2500")
     def test_rbd_thick_provisioning(self, multi_pvc_factory, pod_factory):
         """
-        Test to verify PVC creation and consumption using RBD thick provisioning enabled storage class
+        Test to verify RBD thick provisioning enabled storage class creation, PVC creation and consumption using
+        the storage class.
 
         """
         # Dict represents the PVC size and size of the file used to consume the volume
@@ -69,7 +70,10 @@ class TestRbdThickProvisioning(ManageTest):
             for pvc_obj in pvc_objs:
                 pvc_obj.io_file_size = pvc_and_file_sizes[pvc_size]
                 pvc_obj.storage_type = (
-                    "block" if pvc_obj.get()["spec"]["volumeMode"] == "Block" else "fs"
+                    constants.WORKLOAD_STORAGE_TYPE_BLOCK
+                    if pvc_obj.get()["spec"]["volumeMode"]
+                    == constants.VOLUME_MODE_BLOCK
+                    else constants.WORKLOAD_STORAGE_TYPE_FS
                 )
             pvcs.extend(pvc_objs)
 
