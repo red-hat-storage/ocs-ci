@@ -710,6 +710,11 @@ def get_openshift_client(
                 f"Existing client version ({current_client_version}) does not match "
                 f"configured version ({version})."
             )
+            if config.ENV_DATA.get("skip_ocp_deployment"):
+                log.info(
+                    "ENV_DATA.skip_ocp_deployment is set; leaving client in place."
+                )
+                download_client = False
         else:
             log.debug(
                 f"Client exists ({client_binary_path}) and matches configured version, "
