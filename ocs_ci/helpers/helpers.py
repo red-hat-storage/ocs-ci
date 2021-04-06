@@ -33,6 +33,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableBuildException,
     UnexpectedBehaviour,
+    PVNotSufficientException,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
@@ -3008,3 +3009,72 @@ def run_cmd_verify_cli_output(
         if expected_output not in out:
             return False
     return True
+
+
+def check_pvs_present_for_ocs_expansion(sc=constants.LOCALSTORAGE_SC):
+    """
+    Check for pvs present for OCS cluster expansion
+
+    Args:
+        sc (str): Name of SC
+
+    Raises:
+        Assertion if PVS not present
+    """
+    flexible_scaling = config.ENV_DATA.get('enable_flexible_scaling')
+    arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
+
+    if not flexible_scaling and not arbiter_deployment:
+        for rack_no in range(0, 3):
+            pv_check_list = list()
+            nodes_obj = OCP(
+                kind=constants.NODE,
+                selector=f"{constants.TOPOLOGY_ROOK_LABEL}=rack{rack_no}",
+            )
+            nodes_data = nodes_obj.get()["items"]
+            node_name = [nodes["metadata"]["name"] for nodes in nodes_data]
+            logger.info(node_name)
+            for nodes in node_name:
+                pvs_obj = OCP(
+                    kind=constants.PV, selector=f"{constants.HOSTNAME_LABEL}={nodes}"
+                )
+                pvs_data = pvs_obj.get()["items"]
+                for pv in pvs_data:
+                    if pv["spec"]["storageClassName"] == sc:
+                        if pv["status"]["phase"] == constants.STATUS_AVAILABLE:
+                            pv_check_list.append(pv["metadata"]["name"])
+            logger.info(pv_check_list)
+            if pv_check_list:
+                pass
+            else:
+                raise PVNotSufficientException(
+                    f"No Extra PV found in {constants.TOPOLOGY_ROOK_LABEL}=rack{rack_no} "
+                )
+    elif flexible_scaling and not arbiter_deployment:
+        pv_check_list = list()
+        nodes_obj = OCP(
+            kind=constants.NODE,
+            selector=f"{constants.OPERATOR_NODE_LABEL}",
+        )
+        nodes_data = nodes_obj.get()["items"]
+        node_name = [nodes["metadata"]["name"] for nodes in nodes_data]
+        logger.info(node_name)
+        for nodes in node_name:
+            pvs_obj = OCP(
+                kind=constants.PV, selector=f"{constants.HOSTNAME_LABEL}={nodes}"
+            )
+            pvs_data = pvs_obj.get()["items"]
+            for pv in pvs_data:
+                if pv["spec"]["storageClassName"] == sc:
+                    if pv["status"]["phase"] == constants.STATUS_AVAILABLE:
+                        pv_check_list.append(pv["metadata"]["name"])
+        logger.info(pv_check_list)
+        if pv_check_list:
+            pass
+        else:
+            raise PVNotSufficientException(
+                f"No Extra PV found in {constants.OPERATOR_NODE_LABEL}"
+            )
+
+    # TODO: need to handle it for arbiter_deployment
+    # elif not flexible_scaling and arbiter_deployment:
