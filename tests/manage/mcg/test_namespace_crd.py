@@ -20,7 +20,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     verify_s3_object_integrity,
-    check_cached_objects,
+    check_cached_objects_by_name,
     s3_delete_object,
 )
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
@@ -395,7 +395,7 @@ class TestNamespace(MCGTest):
         self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
     ):
         """
-        Test read an object that is not present in the cached namespace bucket.
+        Test reading an object that is not present in a cache bucket.
         """
 
         # Create the cached namespace bucket on top of the namespace resource
@@ -416,11 +416,15 @@ class TestNamespace(MCGTest):
             amount=3,
             s3_creds=s3_creds,
         )
-        if not check_cached_objects(mcg_obj, bucket_obj.name):
-            raise UnexpectedBehaviour("Already cached objects when non has been read")
+        if not check_cached_objects_by_name(mcg_obj, bucket_obj.name):
+            raise UnexpectedBehaviour(
+                "Objects were found in the cache of an empty bucket"
+            )
         # Read files from ns bucket
         self.download_files(mcg_obj, awscli_pod, bucket_to_read=bucket_obj.name)
-        if not check_cached_objects(mcg_obj, bucket_obj.name, writen_objs_names):
+        if not check_cached_objects_by_name(
+            mcg_obj, bucket_obj.name, writen_objs_names
+        ):
             raise UnexpectedBehaviour("Objects not cached properly")
 
     @tier1
@@ -453,7 +457,7 @@ class TestNamespace(MCGTest):
         self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
     ):
         """
-        Test read an object that is not present in the cached namespace bucket.
+        Test reading an object that is present in a cache bucket.
         """
 
         # Create the cached namespace bucket on top of the namespace resource
@@ -469,7 +473,9 @@ class TestNamespace(MCGTest):
         writen_objs_names = self.write_files_to_pod_and_upload(
             mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
         )
-        if not check_cached_objects(mcg_obj, bucket_obj.name, writen_objs_names):
+        if not check_cached_objects_by_name(
+            mcg_obj, bucket_obj.name, writen_objs_names
+        ):
             raise UnexpectedBehaviour("Objects not cached properly")
 
         # Upload files directly to AWS
@@ -483,6 +489,8 @@ class TestNamespace(MCGTest):
         # Read files from ns bucket
         self.download_files(mcg_obj, awscli_pod, bucket_to_read=bucket_obj.name)
 
+        # Compare dirs should return false since we expect the cached object to return
+        # instead of the new object currently present in the original dir
         if self.compare_dirs(awscli_pod):
             raise UnexpectedBehaviour("Cached object was not downloaded")
 
@@ -516,7 +524,7 @@ class TestNamespace(MCGTest):
         self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
     ):
         """
-        Test read an object that is stale from cached namespace bucket.
+        Test reading a stale object from a cache bucket.
         """
 
         # Create the cached namespace bucket on top of the namespace resource
@@ -532,7 +540,9 @@ class TestNamespace(MCGTest):
         writen_objs_names = self.write_files_to_pod_and_upload(
             mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
         )
-        if not check_cached_objects(mcg_obj, bucket_obj.name, writen_objs_names):
+        if not check_cached_objects_by_name(
+            mcg_obj, bucket_obj.name, writen_objs_names
+        ):
             raise UnexpectedBehaviour("Objects not cached properly")
 
         awscli_pod.exec_cmd_on_pod("mv /original/testfile0.txt /original/testfile1.txt")
@@ -586,7 +596,7 @@ class TestNamespace(MCGTest):
         self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
     ):
         """
-        Test write an object to the cached namespace bucket.
+        Test writing an object to a cache bucket.
         """
 
         # Create the cached namespace bucket on top of the namespace resource
@@ -595,7 +605,9 @@ class TestNamespace(MCGTest):
         writen_objs_names = self.write_files_to_pod_and_upload(
             mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
         )
-        if not check_cached_objects(mcg_obj, bucket_obj.name, writen_objs_names):
+        if not check_cached_objects_by_name(
+            mcg_obj, bucket_obj.name, writen_objs_names
+        ):
             raise UnexpectedBehaviour("Object was not cached properly")
 
     @tier1
@@ -628,7 +640,7 @@ class TestNamespace(MCGTest):
         self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
     ):
         """
-        Test list all cached objects in cached namespace bucket.
+        Test the ability to list the object stored in a cache bucket.
         """
 
         # Create the cached namespace bucket on top of the namespace resource
@@ -637,7 +649,9 @@ class TestNamespace(MCGTest):
         writen_objs_names = self.write_files_to_pod_and_upload(
             mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=3
         )
-        if not check_cached_objects(mcg_obj, bucket_obj.name, writen_objs_names):
+        if not check_cached_objects_by_name(
+            mcg_obj, bucket_obj.name, writen_objs_names
+        ):
             raise UnexpectedBehaviour("Object was not cached properly")
 
     @tier1
@@ -670,7 +684,7 @@ class TestNamespace(MCGTest):
         self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
     ):
         """
-        Test the deletion of an object that's cached
+        Test the deletion of an object that is present in the cache of a cache bucket.
         """
 
         # Create the cached namespace bucket on top of the namespace resource
@@ -679,13 +693,15 @@ class TestNamespace(MCGTest):
         writen_objs_names = self.write_files_to_pod_and_upload(
             mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
         )
-        if not check_cached_objects(mcg_obj, bucket_obj.name, writen_objs_names):
+        if not check_cached_objects_by_name(
+            mcg_obj, bucket_obj.name, writen_objs_names
+        ):
             raise UnexpectedBehaviour("Object was not cached properly")
 
         # Delete the object from mcg interface
         s3_delete_object(mcg_obj, bucket_obj.name, writen_objs_names[0])
         sleep(1)
-        if not check_cached_objects(mcg_obj, bucket_obj.name):
+        if not check_cached_objects_by_name(mcg_obj, bucket_obj.name):
             raise UnexpectedBehaviour("Object was not deleted from cache properly")
 
         # Check deletion in the cloud provider
