@@ -4,8 +4,15 @@ These tests are valid only for OCS version 4.7 and above because in later
 versions are for Namespace bucket creation used CRDs instead of NooBaa RPC calls.
 """
 import logging
-import pytest
+import uuid
 
+import boto3
+import pytest
+from botocore import UNSIGNED
+from botocore.config import Config
+import botocore.exceptions as boto3exception
+
+from ocs_ci.framework.pytest_customization import marks
 from ocs_ci.framework.testlib import (
     MCGTest,
     on_prem_platform_required,
@@ -15,13 +22,18 @@ from ocs_ci.framework.testlib import (
     tier4,
     tier4a,
 )
-from ocs_ci.ocs.bucket_utils import sync_object_directory, verify_s3_object_integrity
+from ocs_ci.ocs.bucket_utils import (
+    sync_object_directory,
+    verify_s3_object_integrity,
+    retrieve_verification_mode,
+)
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, bucket_utils
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.ocs.resources.bucket_policy import HttpResponseParser
 
 logger = logging.getLogger(__name__)
 
@@ -604,6 +616,75 @@ class TestNamespace(MCGTest):
             )
             logger.error(msg)
             assert False, msg
+
+    @pytest.mark.polarion_id("OCS-2504")
+    @tier2
+    @marks.bugzilla("1927367")
+    def test_ns_bucket_unsigned_access(
+        self, mcg_obj, bucket_factory, namespace_store_factory
+    ):
+        """
+        Test anonymous(unsigned) access of S3 operations are denied on Namespace bucket.
+        """
+        sample_data = "Sample string content to write to a S3 object"
+        object_key = "ObjKey-" + str(uuid.uuid4().hex)
+
+        # Create the namespace bucket
+        nss_tup = ("oc", {"aws": [(1, self.DEFAULT_REGION)]})
+        ns_store = namespace_store_factory(*nss_tup)[0]
+        bucketclass_dict = {
+            "interface": "OC",
+            "namespace_policy_dict": {
+                "type": "Single",
+                "namespacestores": [ns_store],
+            },
+        }
+        ns_bucket = bucket_factory(
+            amount=1,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0].name
+
+        # Put and Get object operations done with s3 credentials
+        logger.info(f"Put and Get object operations on {ns_bucket}")
+        assert bucket_utils.s3_put_object(
+            s3_obj=mcg_obj,
+            bucketname=ns_bucket,
+            object_key=object_key,
+            data=sample_data,
+        ), "Failed: PutObject"
+        assert bucket_utils.s3_get_object(
+            s3_obj=mcg_obj, bucketname=ns_bucket, object_key=object_key
+        ), "Failed: GetObject"
+
+        # Boto3 client with signing disabled
+        anon_s3_client = boto3.client(
+            "s3",
+            verify=retrieve_verification_mode(),
+            endpoint_url=mcg_obj.s3_endpoint,
+            config=Config(signature_version=UNSIGNED),
+        )
+
+        logger.info(
+            f"Verifying anonymous access is blocked on namespace bucket: {ns_bucket}"
+        )
+        try:
+            anon_s3_client.get_object(Bucket=ns_bucket, Key=object_key)
+        except boto3exception.ClientError as e:
+            response = HttpResponseParser(e.response)
+            assert (
+                response.error["Code"] == "AccessDenied"
+            ), f"Invalid error code:{response.error['Code']}"
+            assert (
+                response.status_code == 403
+            ), f"Invalid status code:{response.status_code}"
+            assert (
+                response.error["Message"] == "Access Denied"
+            ), f"Invalid error message:{response.error['Message']}"
+        else:
+            assert (
+                False
+            ), "GetObject operation has been granted access, when it should have been blocked"
 
     def write_files_to_pod_and_upload(
         self, mcg_obj, awscli_pod, bucket_to_write, amount=1, s3_creds=None
