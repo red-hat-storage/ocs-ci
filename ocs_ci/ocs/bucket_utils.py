@@ -1041,7 +1041,7 @@ def setup_base_objects(awscli_pod, original_dir, result_dir, amount=2):
 
 def check_cached_objects_by_name(mcg_obj, bucket_name, expected_objects_names=None):
     """
-    Check if the number of cached objects in a cache bucket are as expected using rpc call
+    Check if the names of cached objects in a cache bucket are as expected using rpc call
 
     Args:
         mcg_obj (MCG): An MCG object containing the MCG S3 connection credentials
