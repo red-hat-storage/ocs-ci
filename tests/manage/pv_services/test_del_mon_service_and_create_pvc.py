@@ -28,9 +28,9 @@ POD_OBJ = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPAC
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[
-        # pytest.param(
-        #     constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2495")
-        # ),
+        pytest.param(
+            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2495")
+        ),
         pytest.param(
             constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2494")
         ),
