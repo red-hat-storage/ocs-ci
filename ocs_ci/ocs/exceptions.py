@@ -314,3 +314,7 @@ class NotFoundError(Exception):
 
 class ResourcePoolNotFound(Exception):
     pass
+
+
+class ClientDownloadError(Exception):
+    pass
