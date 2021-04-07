@@ -1131,11 +1131,14 @@ def cluster(request, log_cli_level):
         log.info("Will teardown cluster because --teardown was provided")
 
     # Download client
-    force_download = (
-        config.RUN["cli_params"].get("deploy")
-        and config.DEPLOYMENT["force_download_client"]
-    )
-    get_openshift_client(force_download=force_download)
+    if config.DEPLOYMENT["skip_download_client"]:
+        log.info("Skipping client download")
+    else:
+        force_download = (
+            config.RUN["cli_params"].get("deploy")
+            and config.DEPLOYMENT["force_download_client"]
+        )
+        get_openshift_client(force_download=force_download)
 
     # set environment variable for early testing of RHCOS
     if config.ENV_DATA.get("early_testing"):

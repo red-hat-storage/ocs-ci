@@ -8,7 +8,6 @@ from ocs_ci.framework.testlib import BaseTest
 
 from ocs_ci.ocs import defaults, constants, node
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import *  # noqa: F403
 from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.ocp import OCP
@@ -20,8 +19,6 @@ from ocs_ci.ocs.resources import pod
 log = logging.getLogger(__name__)
 
 
-@scale  # noqa: F405
-@performance  # noqa: F405
 class PASTest(BaseTest):
     """
     Base class for QPAS team - Performance and Scale tests

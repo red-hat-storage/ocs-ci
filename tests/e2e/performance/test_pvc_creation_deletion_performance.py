@@ -7,11 +7,10 @@ import pytest
 import ocs_ci.ocs.exceptions as ex
 import threading
 import statistics
+from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.framework.testlib import performance
 from ocs_ci.ocs.perftests import PASTest
-
-from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import defaults, constants
 from ocs_ci.utility.performance_dashboard import push_to_pvc_time_dashboard
@@ -144,14 +143,14 @@ class TestPVCCreationDeletionPerformance(PASTest):
            provided accepted deviation percent, fails the test
 
         Args:
-            action_name (str) Name of the action for which these measurements were collected; used for the logging
-            time_measures: A list of time measurements
-            accepted_deviation_percent: Accepted deviation percent, if the standard  deviation of the provided time
-                measurements is bigger than this value, the test fails
-            msg_prefix: A string for comprehensive logging
+            action_name (str): Name of the action for which these measurements were collected; used for the logging
+            time_measures (list of floats): A list of time measurements
+            accepted_deviation_percent (int): Accepted deviation percent,
+                if the standard  deviation of the provided time measurements is bigger than this value, the test fails
+            msg_prefix (str) : A string for comprehensive logging
 
-        Returns
-            The average value of the provided time measurements
+        Returns:
+            (float) The average value of the provided time measurements
         """
         average = statistics.mean(time_measures)
         log.info(
