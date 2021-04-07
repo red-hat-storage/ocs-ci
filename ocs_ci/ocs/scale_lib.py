@@ -1012,6 +1012,7 @@ def check_all_pod_reached_running_state_in_kube_job(
         kube_job_obj (obj): Kube Job Object
         namespace (str): Namespace of PVC's created
         no_of_pod (int): POD count
+        timeout (sec): Timeout between each POD iteration check
 
     Returns:
         pod_running_list (list): List of all PODs reached running state.
@@ -1062,7 +1063,7 @@ def check_all_pod_reached_running_state_in_kube_job(
             time.sleep(timeout)
             while_iteration_count += 1
             # Breaking while loop after 10 Iteration i.e. after 30*10 secs of wait_time
-            # And if PODs are still not in bound state then there will be assert.
+            # And if PODs are still not in Running state then there will be assert.
             if while_iteration_count >= 10:
                 assert logging.error(
                     f" Listed PODs took more than 300secs to bound {pod_not_running_list}"
@@ -1091,7 +1092,7 @@ def attach_multiple_pvc_to_pod_dict(
         namespace (str): Name of the namespace where to deploy
         raw_block_pv (bool): Either PVC is raw block PV or not
         pvcs_per_pod (int): No of PVCs to be attached to single pod
-        deployement_config (bool): If True then DC enabled else not
+        deployment_config (bool): If True then DC enabled else not
 
     Returns:
         pod_data (str): pod data with multiple PVC mount paths added
@@ -1104,19 +1105,19 @@ def attach_multiple_pvc_to_pod_dict(
         if len(temp_list) == pvcs_per_pod:
             pod_dict = constants.PERF_POD_YAML
             pod_data = templating.load_yaml(pod_dict)
-            pod_name = helpers.create_unique_resource_name(f"scale", "pod")
+            pod_name = helpers.create_unique_resource_name("scale", "pod")
 
             # Update pod yaml with required params
             pod_data["metadata"]["name"] = pod_name
             pod_data["metadata"]["namespace"] = namespace
-            volume_list = pod_data.get('spec').get('volumes')
+            volume_list = pod_data.get("spec").get("volumes")
             del volume_list[0]
 
             if raw_block_pv:
-                device_list = pod_data.get('spec').get('containers')[0]['volumeDevices']
+                device_list = pod_data.get("spec").get("containers")[0]["volumeDevices"]
                 del device_list[0]
             else:
-                mount_list = pod_data.get('spec').get('containers')[0]['volumeMounts']
+                mount_list = pod_data.get("spec").get("containers")[0]["volumeMounts"]
                 del mount_list[0]
 
             # Flag to add Liveness probe or DeploymentConfig and Liveness probe once
@@ -1124,17 +1125,22 @@ def attach_multiple_pvc_to_pod_dict(
             flag = 1
 
             for name in temp_list:
-                volume_name = f'pvc-{pvc_list.index(name)}'
-                volume_list.append({
-                    'name': volume_name,
-                    'persistentVolumeClaim': {'claimName': f'{name}', 'readOnly': False}
-                })
+                volume_name = f"pvc-{pvc_list.index(name)}"
+                volume_list.append(
+                    {
+                        "name": volume_name,
+                        "persistentVolumeClaim": {
+                            "claimName": f"{name}",
+                            "readOnly": False,
+                        },
+                    }
+                )
                 if raw_block_pv:
-                    device_path = f'{constants.RAW_BLOCK_DEVICE + name}'
-                    device_list.append({'name': volume_name, 'devicePath': device_path})
+                    device_path = f"{constants.RAW_BLOCK_DEVICE + name}"
+                    device_list.append({"name": volume_name, "devicePath": device_path})
                 else:
-                    mount_path = f'/mnt/{name}'
-                    mount_list.append({'name': volume_name, 'mountPath': mount_path})
+                    mount_path = f"/mnt/{name}"
+                    mount_list.append({"name": volume_name, "mountPath": mount_path})
 
                 liveness_check_path = device_path if raw_block_pv else mount_path
 
@@ -1142,49 +1148,55 @@ def attach_multiple_pvc_to_pod_dict(
                     # Update pod yaml with DeploymentConfig liveness probe and IO
                     pod_data["kind"] = "DeploymentConfig"
                     pod_data["apiVersion"] = "apps.openshift.io/v1"
-                    spec_containers = pod_data.get('spec')
+                    spec_containers = pod_data.get("spec")
                     template_list = {
-                        'template': {'metadata': {'labels': {'name': pod_name}}}
+                        "template": {"metadata": {"labels": {"name": pod_name}}}
                     }
-                    pod_data['spec'] = template_list
-                    pod_data['spec']['template']['spec'] = spec_containers
-                    pod_data['spec']['template']['spec']['restartPolicy'] = "Always"
-                    pod_data['spec']['template']['spec']['containers'][0]['args'] = [
-                        '/bin/sh', '-c',
-                        f'fio --name=fio-rand-readwrite --filename={liveness_check_path}/abc '
-                        f'--readwrite=randrw --bs=4K --direct=1 --numjobs=1 --time_based=1 '
-                        f'--runtime=3600000 --size=512M --iodepth=4 --fsync_on_close=1 '
-                        f'--rwmixread=25 --ioengine=libaio --rate=2k'
+                    pod_data["spec"] = template_list
+                    pod_data["spec"]["template"]["spec"] = spec_containers
+                    pod_data["spec"]["template"]["spec"]["restartPolicy"] = "Always"
+                    pod_data["spec"]["template"]["spec"]["containers"][0]["args"] = [
+                        "/bin/sh",
+                        "-c",
+                        f"fio --name=fio-rand-readwrite --filename={liveness_check_path}/abc "
+                        f"--readwrite=randrw --bs=4K --direct=1 --numjobs=1 --time_based=1 "
+                        f"--runtime=3600000 --size=512M --iodepth=4 --fsync_on_close=1 "
+                        f"--rwmixread=25 --ioengine=libaio --rate=2k",
                     ]
                     liveness = {
-                        'exec': {'command': ['sh', '-ec', f"df /mnt"]},
-                        'initialDelaySeconds': 3, 'timeoutSeconds': 10
+                        "exec": {"command": ["sh", "-ec", "df /mnt"]},
+                        "initialDelaySeconds": 3,
+                        "timeoutSeconds": 10,
                     }
-                    pod_data['spec']['template']['spec']['containers'][0]['livenessProbe'] = liveness
-                    pod_data['spec']['replicas'] = 1
-                    pod_data['spec']['triggers'] = [{'type': "ConfigChange"}]
-                    pod_data['spec']['paused'] = False
-                    del pod_data['spec']['template']['spec']['containers'][0]['command']
-                    del pod_data['spec']['template']['spec']['containers'][0]['stdin']
-                    del pod_data['spec']['template']['spec']['containers'][0]['tty']
+                    pod_data["spec"]["template"]["spec"]["containers"][0][
+                        "livenessProbe"
+                    ] = liveness
+                    pod_data["spec"]["replicas"] = 1
+                    pod_data["spec"]["triggers"] = [{"type": "ConfigChange"}]
+                    pod_data["spec"]["paused"] = False
+                    del pod_data["spec"]["template"]["spec"]["containers"][0]["command"]
+                    del pod_data["spec"]["template"]["spec"]["containers"][0]["stdin"]
+                    del pod_data["spec"]["template"]["spec"]["containers"][0]["tty"]
                     flag = 0
                 elif flag:
                     # Update pod yaml with liveness probe and IO
-                    pod_data['spec']['containers'][0]['args'] = [
-                        '/bin/sh', '-c',
-                        f'fio --name=fio-rand-readwrite --filename={liveness_check_path}/abc '
-                        f'--readwrite=randrw --bs=4K --direct=1 --numjobs=1 --time_based=1 '
-                        f'--runtime=3600000 --size=512M --iodepth=4 --fsync_on_close=1 '
-                        f'--rwmixread=25 --ioengine=libaio --rate=2k'
+                    pod_data["spec"]["containers"][0]["args"] = [
+                        "/bin/sh",
+                        "-c",
+                        f"fio --name=fio-rand-readwrite --filename={liveness_check_path}/abc "
+                        f"--readwrite=randrw --bs=4K --direct=1 --numjobs=1 --time_based=1 "
+                        f"--runtime=3600000 --size=512M --iodepth=4 --fsync_on_close=1 "
+                        f"--rwmixread=25 --ioengine=libaio --rate=2k",
                     ]
                     liveness = {
-                        'exec': {'command': ['sh', '-ec', f"df /mnt"]},
-                        'initialDelaySeconds': 3, 'timeoutSeconds': 10
+                        "exec": {"command": ["sh", "-ec", "df /mnt"]},
+                        "initialDelaySeconds": 3,
+                        "timeoutSeconds": 10,
                     }
-                    pod_data['spec']['containers'][0]['livenessProbe'] = liveness
-                    del pod_data['spec']['containers'][0]['command']
-                    del pod_data['spec']['containers'][0]['stdin']
-                    del pod_data['spec']['containers'][0]['tty']
+                    pod_data["spec"]["containers"][0]["livenessProbe"] = liveness
+                    del pod_data["spec"]["containers"][0]["command"]
+                    del pod_data["spec"]["containers"][0]["stdin"]
+                    del pod_data["spec"]["containers"][0]["tty"]
                     flag = 0
 
             temp_list.clear()
@@ -1210,13 +1222,13 @@ def get_pod_creation_time_in_kube_job(kube_job_obj, namespace, no_of_pod):
     job_get_output = kube_job_obj.get(namespace=namespace)
     pod_dict = dict()
     for i in range(no_of_pod):
-        started_at_str = job_get_output["items"][i]["status"][
-            "containerStatuses"
-        ][0]["state"]["running"]["startedAt"]
+        started_at_str = job_get_output["items"][i]["status"]["containerStatuses"][0][
+            "state"
+        ]["running"]["startedAt"]
         start_time_str = job_get_output["items"][i]["status"]["startTime"]
-        started_at = re.search("(\d\d):(\d\d):(\d\d)", started_at_str)
+        started_at = re.search(r"(\d\d):(\d\d):(\d\d)", started_at_str)
         started_at = started_at[0]
-        start_time = re.search("(\d\d):(\d\d):(\d\d)", start_time_str)
+        start_time = re.search(r"(\d\d):(\d\d):(\d\d)", start_time_str)
         start_time = start_time[0]
         format = "%H:%M:%S"
         pod_start_at = datetime.datetime.strptime(started_at, format)
