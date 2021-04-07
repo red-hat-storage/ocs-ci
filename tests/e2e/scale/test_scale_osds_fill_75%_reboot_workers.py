@@ -20,6 +20,7 @@ from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_aws_i3,
+    skipif_ibm_power,
 )
 
 
@@ -41,6 +42,7 @@ logger = logging.getLogger(__name__)
     ],
 )
 @skipif_aws_i3
+@skipif_ibm_power
 class TestScaleOSDsRebootNodes(E2ETest):
     """
     Add first set of OSD to a minimum cluster with 50%
