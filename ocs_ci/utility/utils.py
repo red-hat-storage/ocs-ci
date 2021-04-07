@@ -32,6 +32,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
+    ClientDownloadError,
     CommandFailed,
     TagNotFoundException,
     TimeoutException,
@@ -699,12 +700,14 @@ def get_openshift_client(
     version = expose_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     client_binary_path = os.path.join(bin_dir, "oc")
+    kubectl_binary_path = os.path.join(bin_dir, "kubectl")
     download_client = True
+    client_version = None
 
     if force_download:
         log.info("Forcing client download.")
     elif os.path.isfile(client_binary_path):
-        current_client_version = get_client_version()
+        current_client_version = get_client_version(client_binary_path)
         if current_client_version != version:
             log.info(
                 f"Existing client version ({current_client_version}) does not match "
@@ -718,9 +721,17 @@ def get_openshift_client(
             download_client = False
 
     if download_client:
-        if os.path.isfile(client_binary_path):
-            log.info(f"Deleting client that exists at {client_binary_path}")
-            delete_file(client_binary_path)
+        # Move existing client binaries to backup location
+        client_binary_backup = f"{client_binary_path}.bak"
+        kubectl_binary_backup = f"{kubectl_binary_path}.bak"
+
+        try:
+            os.rename(client_binary_path, client_binary_backup)
+            os.rename(kubectl_binary_path, kubectl_binary_backup)
+        except FileNotFoundError:
+            pass
+
+        # Download the client
         log.info(f"Downloading openshift client ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
@@ -731,10 +742,32 @@ def get_openshift_client(
         download_file(url, tarball)
         run_cmd(f"tar xzvf {tarball} oc kubectl")
         delete_file(tarball)
+
+        try:
+            client_version = run_cmd(f"{client_binary_path} version --client")
+        except CommandFailed:
+            log.error("Unable to get version from downloaded client.")
+
+        if client_version:
+            try:
+                delete_file(client_binary_backup)
+                delete_file(kubectl_binary_backup)
+                log.info("Deleted backup binaries.")
+            except FileNotFoundError:
+                pass
+        else:
+            try:
+                os.rename(client_binary_backup, client_binary_path)
+                os.rename(kubectl_binary_backup, kubectl_binary_path)
+                log.info("Restored backup binaries to their original location.")
+            except FileNotFoundError:
+                raise ClientDownloadError(
+                    "No backups exist and new binary was unable to be verified."
+                )
+
         # return to the previous working directory
         os.chdir(previous_dir)
 
-    client_version = run_cmd(f"{client_binary_path} version --client")
     log.info(f"OpenShift Client version: {client_version}")
 
     return client_binary_path
@@ -3215,16 +3248,20 @@ def get_default_if_keyval_empty(dictionary, key, default_val):
     return dictionary.get(key)
 
 
-def get_client_version():
+def get_client_version(client_binary_path):
     """
     Get version reported by `oc version`.
 
+    Args:
+        client_binary_path (str): path to `oc` binary
+
     Returns:
-        str: version reported by `oc version`. None if oc is not on the path.
+        str: version reported by `oc version`.
+            None if the client does not exist at the provided path.
 
     """
-    if which("oc"):
-        cmd = "oc version -o json"
-        resp = exec_cmd(cmd, ignore_error=True)
-        output = json.loads(resp.stdout.decode())
-        return output["releaseClientVersion"]
+    if os.path.isfile(client_binary_path):
+        cmd = f"{client_binary_path} version --client -o json"
+        resp = exec_cmd(cmd)
+        stdout = json.loads(resp.stdout.decode())
+        return stdout["releaseClientVersion"]
