@@ -2572,6 +2572,26 @@ def modify_osd_replica_count(resource_name, replica_count):
     return ocp_obj.patch(resource_name=resource_name, params=params)
 
 
+def modify_deployment_replica_count(deployment_name, replica_count):
+    """
+    Function to modify deployment replica count,
+    i.e to scale up or down deployment
+
+    Args:
+        resource_name (str): Name of deployment i.e
+        replica_count (int): replica count to be changed to
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    ocp_obj = ocp.OCP(
+        kind=constants.DEPLOYMENT, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    params = f'{{"spec": {{"replicas": {replica_count}}}}}'
+    return ocp_obj.patch(resource_name=deployment_name, params=params)
+
+
 def collect_performance_stats(dir_name):
     """
     Collect performance stats and saves them in file in json format.

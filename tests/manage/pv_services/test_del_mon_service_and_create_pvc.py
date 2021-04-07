@@ -1,6 +1,7 @@
 import json
 import logging
 import pytest
+import time
 
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -9,12 +10,15 @@ from ocs_ci.framework.testlib import (
     tier4a,
     ignore_leftovers,
 )
-from ocs_ci.helpers.disruption_helpers import Disruptions
+from ocs_ci.helpers.helpers import modify_deployment_replica_count
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP, get_services_by_label
-from ocs_ci.ocs.resources.pod import get_mon_pods, run_io_in_bg
+from ocs_ci.ocs.resources.pod import get_mon_pods, get_operator_pods, run_io_in_bg
+from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
+
+POD_OBJ = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
 
 
 @tier4a
@@ -24,9 +28,9 @@ log = logging.getLogger(__name__)
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[
-        pytest.param(
-            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2495")
-        ),
+        # pytest.param(
+        #     constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2495")
+        # ),
         pytest.param(
             constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2494")
         ),
@@ -68,6 +72,20 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         list_old_svc = []
         for svc in mon_svc:
 
+            # Get rook-ceph-operator pod obj
+            operator_pod_obj = get_operator_pods()
+            operator_name = operator_pod_obj[0].get().get("metadata").get("name")
+
+            # Scale down rook-ceph-operator
+            log.info("Scale down rook-ceph-operator")
+            assert modify_deployment_replica_count(
+                deployment_name="rook-ceph-operator", replica_count=0
+            ), "Failed to scale down rook-ceph-operator to 0"
+            log.info("Successfully scaled down rook-ceph-operator to 0")
+
+            # Validate rook-ceph-operator pod not running
+            POD_OBJ.wait_for_delete(resource_name=operator_name)
+
             name = svc["metadata"]["labels"]["pvc_name"]
             cluster_ip = svc["spec"]["clusterIP"]
             port = svc["spec"]["ports"][0]["port"]
@@ -91,6 +109,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             pvc_obj.delete(resource_name=name)
 
             # Delete the mon service
+            log.info("Delete mon service")
             svc_obj = OCP(
                 kind=constants.SERVICE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
             )
@@ -136,18 +155,24 @@ class TestPvcCreationAfterDelMonService(E2ETest):
                 f"Configmap {constants.ROOK_CEPH_MON_ENDPOINTS} edited successfully"
             )
 
-            # Restart the operator pod
-            pod_name = "operator"
-            log.info(f"Respin {pod_name} pod")
-            disruption = Disruptions()
-            disruption.set_resource(resource=f"{pod_name}")
-            disruption.delete_resource()
+            # Scale up rook-ceph-operator
+            log.info("Scale up rook-ceph-operator")
+            assert modify_deployment_replica_count(
+                deployment_name="rook-ceph-operator", replica_count=1
+            ), "Failed to scale up rook-ceph-operator to 0"
+            log.info("Successfully scaled up rook-ceph-operator to 1")
+            log.info("Validate rook-ceph-operator pod is running")
+            POD_OBJ.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector=constants.OPERATOR_LABEL,
+                resource_count=1,
+                timeout=600,
+                sleep=5,
+            )
 
             # Validate all mons are running
-            pod_obj = OCP(
-                kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-            )
-            pod_obj.wait_for_resource(
+            log.info("Validate all mons are up and running")
+            POD_OBJ.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 selector=constants.MON_APP_LABEL,
                 resource_count=mon_count,
@@ -155,6 +180,14 @@ class TestPvcCreationAfterDelMonService(E2ETest):
                 sleep=5,
             )
             log.info("All mons are up and running")
+
+            # Check the ceph health OK
+            ceph_health_check(tries=90, delay=15)
+
+            # Sleep for some seconds before deleting another mon
+            sleep_time = 600
+            log.info(f"Waiting for {sleep_time} seconds before deleting another mon")
+            time.sleep(sleep_time)
 
         # Check the endpoints are different
         log.info("Validate the mon endpoints are changed")
