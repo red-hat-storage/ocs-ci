@@ -9,11 +9,17 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     tier4a,
     ignore_leftovers,
+    bugzilla,
 )
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP, get_services_by_label
-from ocs_ci.ocs.resources.pod import get_mon_pods, get_operator_pods, run_io_in_bg
+from ocs_ci.ocs.resources.pod import (
+    get_mon_pods,
+    get_operator_pods,
+    run_io_in_bg,
+    wait_for_storage_pods,
+)
 from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
@@ -21,6 +27,7 @@ log = logging.getLogger(__name__)
 POD_OBJ = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
 
 
+@bugzilla("1858195")
 @tier4a
 @ignore_leftovers
 @skipif_external_mode
@@ -50,9 +57,11 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         3. Delete deployment, pvc of deleted mon service
         4. Restart rook-ceph-operator
         5. Make sure all mon pods are running
-        6. Repeat above steps for all mons and at the
+        6. Make sure ceph health Ok and storage pods are running
+        7. Sleep for 300 seconds before deleting another mon
+        8. Repeat above steps for all mons and at the
            end each mon should contain different endpoints
-        7. Create PVC, should succeeded.
+        9. Create PVC, should succeeded.
 
         """
 
@@ -74,7 +83,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
 
             # Get rook-ceph-operator pod obj
             operator_pod_obj = get_operator_pods()
-            operator_name = operator_pod_obj[0].get().get("metadata").get("name")
+            operator_name = operator_pod_obj[0].name
 
             # Scale down rook-ceph-operator
             log.info("Scale down rook-ceph-operator")
@@ -86,7 +95,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             # Validate rook-ceph-operator pod not running
             POD_OBJ.wait_for_delete(resource_name=operator_name)
 
-            name = svc["metadata"]["labels"]["pvc_name"]
+            pvc_name = svc["metadata"]["labels"]["pvc_name"]
             cluster_ip = svc["spec"]["clusterIP"]
             port = svc["spec"]["ports"][0]["port"]
             mon_endpoint = f"{cluster_ip}:{port}"
@@ -99,21 +108,21 @@ class TestPvcCreationAfterDelMonService(E2ETest):
                 kind=constants.DEPLOYMENT,
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             )
-            del_obj.delete(resource_name=name)
+            del_obj.delete(resource_name=pvc_name)
 
             # Delete pvc
             log.info("Delete mon PVC")
             pvc_obj = OCP(
                 kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
             )
-            pvc_obj.delete(resource_name=name)
+            pvc_obj.delete(resource_name=pvc_name)
 
             # Delete the mon service
             log.info("Delete mon service")
             svc_obj = OCP(
                 kind=constants.SERVICE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
             )
-            svc_obj.delete(resource_name=name)
+            svc_obj.delete(resource_name=pvc_name)
 
             # Edit the cm
             log.info(f"Edit the configmap {constants.ROOK_CEPH_MON_ENDPOINTS}")
@@ -159,7 +168,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             log.info("Scale up rook-ceph-operator")
             assert modify_deployment_replica_count(
                 deployment_name="rook-ceph-operator", replica_count=1
-            ), "Failed to scale up rook-ceph-operator to 0"
+            ), "Failed to scale up rook-ceph-operator to 1"
             log.info("Successfully scaled up rook-ceph-operator to 1")
             log.info("Validate rook-ceph-operator pod is running")
             POD_OBJ.wait_for_resource(
@@ -184,8 +193,11 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             # Check the ceph health OK
             ceph_health_check(tries=90, delay=15)
 
+            # Validate all storage pods are running
+            wait_for_storage_pods()
+
             # Sleep for some seconds before deleting another mon
-            sleep_time = 600
+            sleep_time = 300
             log.info(f"Waiting for {sleep_time} seconds before deleting another mon")
             time.sleep(sleep_time)
 

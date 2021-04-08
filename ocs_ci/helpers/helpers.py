@@ -2578,7 +2578,7 @@ def modify_deployment_replica_count(deployment_name, replica_count):
     i.e to scale up or down deployment
 
     Args:
-        resource_name (str): Name of deployment i.e
+        deployment_name (str): Name of deployment i.e
         replica_count (int): replica count to be changed to
 
     Returns:
