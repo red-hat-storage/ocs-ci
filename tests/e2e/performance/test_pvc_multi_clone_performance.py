@@ -1,13 +1,11 @@
 import datetime
 import logging
 import os
-import subprocess
 import tempfile
 import time
 
 import yaml
 
-from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
@@ -16,9 +14,8 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.cluster import CephCluster
-from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import ocsci_log_path
-from ocs_ci.helpers import helpers, performance_lib
+from ocs_ci.helpers import performance_lib
 
 log = logging.getLogger(__name__)
 
