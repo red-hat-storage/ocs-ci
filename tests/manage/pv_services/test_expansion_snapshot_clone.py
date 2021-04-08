@@ -26,13 +26,13 @@ log = logging.getLogger(__name__)
             marks=[polarion_id("OCS-2408"), skipif_ocs_version("<4.6")],
         ),
         pytest.param(
-            *["thick", "thick"], marks=[polarion_id(""), skipif_ocs_version("<4.8")]
+            *["thick", "thick"], marks=[polarion_id("OCS-2502"), skipif_ocs_version("<4.8")]
         ),
         pytest.param(
-            *["thick", "thin"], marks=[polarion_id(""), skipif_ocs_version("<4.8")]
+            *["thin", "thick"], marks=[polarion_id("2507"), skipif_ocs_version("<4.8")]
         ),
         pytest.param(
-            *["thin", "thick"], marks=[polarion_id(""), skipif_ocs_version("<4.8")]
+            *["thick", "thin"], marks=[polarion_id("OCS-2508"), skipif_ocs_version("<4.8")]
         ),
     ],
 )
@@ -102,6 +102,10 @@ class TestExpansionSnapshotClone(ManageTest):
         Data integrity will be checked in each stage as required.
         This test verifies that the clone, snapshot and parent PVCs are
         independent and any operation in one will not impact the other.
+
+        Use of thin or think provision storage class for PVC creation and snapshot restore
+        will be based on value of the parameters 'pvc_create_sc_type' and 'restore_sc_type'
+        respectively.
 
         """
         filename = "fio_file"
