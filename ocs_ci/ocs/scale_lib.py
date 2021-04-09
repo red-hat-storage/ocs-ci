@@ -1081,7 +1081,12 @@ def check_all_pod_reached_running_state_in_kube_job(
 
 
 def attach_multiple_pvc_to_pod_dict(
-    pvc_list, namespace, raw_block_pv=False, pvcs_per_pod=10, deployment_config=False
+    pvc_list,
+    namespace,
+    raw_block_pv=False,
+    pvcs_per_pod=10,
+    deployment_config=False,
+    node_selector=None,
 ):
     """
     Function to construct pod.yaml with multiple PVC's
@@ -1093,6 +1098,8 @@ def attach_multiple_pvc_to_pod_dict(
         raw_block_pv (bool): Either PVC is raw block PV or not
         pvcs_per_pod (int): No of PVCs to be attached to single pod
         deployment_config (bool): If True then DC enabled else not
+        node_selector (dict): Pods will be created in this node_selector
+            Example, {'nodetype': 'app-pod'}
 
     Returns:
         pod_data (str): pod data with multiple PVC mount paths added
@@ -1198,6 +1205,9 @@ def attach_multiple_pvc_to_pod_dict(
                     del pod_data["spec"]["containers"][0]["stdin"]
                     del pod_data["spec"]["containers"][0]["tty"]
                     flag = 0
+
+                if node_selector:
+                    pod_data["spec"]["template"]["metadata"]["labels"] = node_selector
 
             temp_list.clear()
             pods_list.append(pod_data)
