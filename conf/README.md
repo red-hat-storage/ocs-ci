@@ -65,6 +65,7 @@ anywhere else.
 * `installer_version` - OCP installer version
 * `force_download_installer` - Download the OCP installer even if one already exists in the bin_dir
 * `force_download_client` - Download the OCP client even if one already exists in the bin_dir
+* `skip_download_client` - Skip the openshift client download step or not (Default: false)
 * `default_latest_tag` - OCS latest tag to be used by default if one is not provided
 * `external_mode` - If OCS cluster is setup in external mode (Default: false)
 * `ocs_csv_channel` - Channel used to install OCS CSV
