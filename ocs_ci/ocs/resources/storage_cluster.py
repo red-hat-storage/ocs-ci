@@ -8,12 +8,12 @@ import tempfile
 from jsonschema import validate
 
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.exceptions import ResourceNotFoundError, UnsupportedFeatureError
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
+from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.utility import localstorage, utils, templating, kms as KMS
@@ -537,6 +537,7 @@ def add_capacity(osd_size_capacity_requested):
             format_type="json",
         )
     lvspresent = localstorage.check_local_volume_set()
+    lv_set_present = localstorage.check_local_volume_set()
     if lvpresent:
         ocp_obj = OCP(
             kind="localvolume", namespace=config.ENV_DATA["local_storage_namespace"]
@@ -563,7 +564,7 @@ def add_capacity(osd_size_capacity_requested):
         localstorage.check_pvs_created(
             int(len(final_device_list) / new_storage_devices_sets_count)
         )
-    if lvspresent:
+    if lv_set_present:
         check_pvs_present_for_ocs_expansion()
 
     sc = get_storage_cluster()
