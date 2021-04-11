@@ -192,3 +192,21 @@ UI_SELENIUM:
   headless: True
   screenshot: True
   ignore_ssl: True
+
+# This section is related to performance tests which need Elasticsearch server
+PERF:
+  # deploy new ES (elastic-search) server in the tested cluster
+  deploy_internal_es: true
+  # use in the tests this ES IP and Port - in case of deploy_internal_es: false
+  internal_es_server: ""
+  internal_es_port: 9200
+  # There is a Lab ES for long term results saving
+  lab_es: true
+  # The Lab (long term results saving) ES information:  IP / Port
+  es_server: "10.0.78.167"
+  es_port: 9200
+  # There is a Lab ES for development testing - combine with --dev-mode argument
+  dev_lab_es: true
+  # The Dev. Lab ES information:  IP / Port
+  dev_es_server: "10.0.144.152"
+  dev_es_port: 9200
