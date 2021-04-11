@@ -20,7 +20,9 @@ def get_all_pvs(selector=None):
     Returns:
          dict: Dict of all pv in openshift-storage namespace
     """
-    ocp_pv_obj = ocp.OCP(kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE, selector=selector)
+    ocp_pv_obj = ocp.OCP(
+        kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE, selector=selector
+    )
     return ocp_pv_obj.get()
 
 
@@ -166,7 +168,7 @@ def check_pvs_present_for_ocs_expansion(sc=constants.LOCALSTORAGE_SC):
     Raises:
         Assertion if PVS not present
     """
-    flexible_scaling = config.ENV_DATA.get('enable_flexible_scaling')
+    flexible_scaling = config.ENV_DATA.get("enable_flexible_scaling")
     arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 
     if not flexible_scaling and not arbiter_deployment:
@@ -180,7 +182,9 @@ def check_pvs_present_for_ocs_expansion(sc=constants.LOCALSTORAGE_SC):
             node_names = [nodes["metadata"]["name"] for nodes in nodes_data]
             logger.info(node_names)
             for nodes in node_names:
-                pvs_data = get_all_pvs(selector=f"{constants.HOSTNAME_LABEL}={nodes}").get("items")
+                pvs_data = get_all_pvs(
+                    selector=f"{constants.HOSTNAME_LABEL}={nodes}"
+                ).get("items")
                 for pv in pvs_data:
                     if pv["spec"]["storageClassName"] == sc:
                         if get_pv_status(pv) == constants.STATUS_AVAILABLE:
@@ -202,7 +206,9 @@ def check_pvs_present_for_ocs_expansion(sc=constants.LOCALSTORAGE_SC):
         node_names = [nodes["metadata"]["name"] for nodes in nodes_data]
         logger.info(node_names)
         for nodes in node_names:
-            pvs_data = get_all_pvs(selector=f"{constants.HOSTNAME_LABEL}={nodes}").get("items")
+            pvs_data = get_all_pvs(selector=f"{constants.HOSTNAME_LABEL}={nodes}").get(
+                "items"
+            )
             for pv in pvs_data:
                 if pv["spec"]["storageClassName"] == sc:
                     if get_pv_status(pv) == constants.STATUS_AVAILABLE:

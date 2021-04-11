@@ -3009,5 +3009,3 @@ def run_cmd_verify_cli_output(
         if expected_output not in out:
             return False
     return True
-
-

@@ -142,8 +142,10 @@ def check_local_volume_set():
         namespace=config.ENV_DATA["local_storage_namespace"],
     ):
         ocp_obj = OCP()
-        command = f"get {constants.LOCAL_VOLUME_SET} {constants.LOCAL_BLOCK_RESOURCE} " \
-                  f"-n {config.ENV_DATA['local_storage_namespace']} "
+        command = (
+            f"get {constants.LOCAL_VOLUME_SET} {constants.LOCAL_BLOCK_RESOURCE} "
+            f"-n {config.ENV_DATA['local_storage_namespace']} "
+        )
         try:
             status = ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
         except CommandFailed as ex:
