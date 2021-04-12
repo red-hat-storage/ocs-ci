@@ -90,6 +90,7 @@ DEPLOYMENT:
   # Ignition version used for chrony
   ignition_version: "3.2.0"
 
+
 # Section for reporting configuration
 REPORTING:
   email:
@@ -195,6 +196,7 @@ UI_SELENIUM:
   screenshot: True
   ignore_ssl: True
 
+<<<<<<< HEAD
 # This section is related to performance tests which need Elasticsearch server
 PERF:
   # deploy new ES (elastic-search) server in the tested cluster
@@ -212,3 +214,14 @@ PERF:
   # The Dev. Lab ES information:  IP / Port
   dev_es_server: "10.0.144.152"
   dev_es_port: 9200
+=======
+
+# Specific component to be enabled/disabled
+# like RGW, NOOBAA, CephFS, RBD
+COMPONENTS:
+  enable_rgw: True
+  enable_noobaa: True
+  enable_cephfs: True
+  enable_rbd: True
+
+>>>>>>> Flexible component deployment

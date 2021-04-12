@@ -567,6 +567,22 @@ class Deployment(object):
             kms.deploy()
         cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
 
+        # Figure out all the OCS modules enabled/disabled
+        # CLI parameter --disable-components takes the precedence over
+        # anything which comes from config file
+        if config.ENV_DATA.get("disable_components"):
+            for component in config.ENV_DATA["disable_components"]:
+                config.COMPONENTS[f"enable_{component}"] = False
+
+        # Update cluster_data with respective component enable/disable
+        for key in config.COMPONENTS.keys():
+            if "noobaa" in key:
+                base_dict = cluster_data["spec"]
+            else:
+                base_dict = cluster_data["spec"]["managedResources"]
+            if not config.COMPONENTS[key]:
+                base_dict[constants.OCS_COMPONENTS_MAP[key.split("_")[1]]] = "ignore"
+
         if arbiter_deployment:
             cluster_data["spec"]["arbiter"] = {}
             cluster_data["spec"]["nodeTopologies"] = {}

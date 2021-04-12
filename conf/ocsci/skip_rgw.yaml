@@ -1,0 +1,3 @@
+COMPONENTS:
+  enable_rgw: False
+

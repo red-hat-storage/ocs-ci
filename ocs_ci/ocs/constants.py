@@ -1309,3 +1309,11 @@ debug_crush = 20
 
 WORKLOAD_STORAGE_TYPE_BLOCK = "block"
 WORKLOAD_STORAGE_TYPE_FS = "fs"
+# Components of OCS
+OCS_COMPONENTS = ["rgw", "cephfs", "noobaa", "blockpools"]
+OCS_COMPONENTS_MAP = {
+    "rgw": "CephObjectStores",
+    "cephfs": "CephFilesystems",
+    "noobaa": "multiCloudGateway",
+    "blockpools": "CephBlockPools",
+}
