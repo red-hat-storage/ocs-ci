@@ -108,24 +108,15 @@ def bucket_class_factory(
                     "namespacestore_dict"
                 ]
                 namespacestores = namespace_store_factory(interface, nss_dict)
-                namespace_policy["type"] = bucket_class_dict["namespace_policy_dict"][
-                    "type"
-                ]
-                namespace_policy["read_resources"] = [
-                    nss.name for nss in namespacestores
-                ]
-                namespace_policy["write_resource"] = namespacestores[0].name
             elif "namespacestores" in bucket_class_dict["namespace_policy_dict"]:
                 namespacestores = bucket_class_dict["namespace_policy_dict"][
                     "namespacestores"
                 ]
-                namespace_policy["type"] = bucket_class_dict["namespace_policy_dict"][
-                    "type"
-                ]
-                namespace_policy["read_resources"] = [
-                    nss.name for nss in namespacestores
-                ]
-                namespace_policy["write_resource"] = namespacestores[0].name
+            namespace_policy["type"] = bucket_class_dict["namespace_policy_dict"][
+                "type"
+            ]
+            namespace_policy["read_resources"] = [nss.name for nss in namespacestores]
+            namespace_policy["write_resource"] = namespacestores[0].name
 
         elif "backingstore_dict" in bucket_class_dict:
             backingstores = [

@@ -519,7 +519,7 @@ class TestNamespace(MCGTest):
         bucketclass_dict = {
             "interface": "OC",
             "namespace_policy_dict": {
-                "type": "Mulsti",
+                "type": "Multi",
                 "namespacestores": ns_resources,
             },
         }
