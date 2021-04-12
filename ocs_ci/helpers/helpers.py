@@ -1904,13 +1904,14 @@ def get_serviceaccount_obj(sa_name, namespace):
         logger.error("ServiceAccount not found in specified namespace")
 
 
-def validate_scc_policy(sa_name, namespace):
+def validate_scc_policy(sa_name, namespace, scc_name=constants.PRIVILEGED):
     """
     Validate serviceaccount is added to scc of privileged
 
     Args:
         sa_name (str): Service Account name
         namespace (str): The namespace for the serviceaccount creation
+        scc_name (str): SCC name
 
     Returns:
         bool: True if sc_name is present in scc of privileged else False
@@ -1918,7 +1919,7 @@ def validate_scc_policy(sa_name, namespace):
     sa_name = f"system:serviceaccount:{namespace}:{sa_name}"
     logger.info(sa_name)
     ocp_scc_obj = ocp.OCP(kind=constants.SCC, namespace=namespace)
-    scc_dict = ocp_scc_obj.get(resource_name=constants.PRIVILEGED)
+    scc_dict = ocp_scc_obj.get(resource_name=scc_name)
     scc_users_list = scc_dict.get("users")
     for scc_user in scc_users_list:
         if scc_user == sa_name:

@@ -3,6 +3,7 @@ from ocs_ci.framework import config
 
 import pytest
 
+from ocs_ci.framework.pytest_customization import marks
 from ocs_ci.framework.testlib import (
     MCGTest,
     ignore_leftovers,
@@ -10,9 +11,11 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     tier4,
     tier4a,
+    tier3,
 )
+from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
-from ocs_ci.ocs import cluster, constants, defaults
+from ocs_ci.ocs import cluster, constants, defaults, ocp
 from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
@@ -154,5 +157,132 @@ class TestMCGResourcesDisruptions(MCGTest):
         )
         # Verify that the new pod has reached a 'RUNNNING' status again and recovered successfully
         wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=120)
+        # Check the NB status to verify the system is healthy
+        self.cl_obj.wait_for_noobaa_health_ok()
+
+    @pytest.fixture()
+    def teardown(self, request):
+        """
+        Make sure noobaa db pod is running and scc is reverted back to noobaa.
+
+        """
+        # Teardown function to revert back the scc changes made
+        def finalizer():
+            pod_obj = pod.Pod(
+                **pod.get_pods_having_label(
+                    label=self.labels_map["noobaa_db"],
+                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                )[0]
+            )
+            pod_data_list = pod_obj.get()
+            ocp_scc = ocp.OCP(
+                kind=constants.SCC, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            )
+            if helpers.validate_scc_policy(
+                sa_name=constants.NOOBAA_RESOURCE_NAME,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                scc_name=constants.ANYUID,
+            ):
+                ocp_scc.patch(
+                    resource_name=constants.ANYUID,
+                    params='[{"op": "remove", "path": "/users/0", '
+                    '"value":"system:serviceaccount:openshift-storage:noobaa"}]',
+                    format_type="json",
+                )
+            if not helpers.validate_scc_policy(
+                sa_name=constants.NOOBAA_RESOURCE_NAME,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                scc_name=constants.NOOBAA_RESOURCE_NAME,
+            ):
+                ocp_scc.patch(
+                    resource_name=constants.NOOBAA_RESOURCE_NAME,
+                    params='[{"op": "add", "path": "/users/0", '
+                    '"value":"system:serviceaccount:openshift-storage:noobaa"}]',
+                    format_type="json",
+                )
+            if (
+                pod_data_list.get("metadata").get("annotations").get("openshift.io/scc")
+                == constants.ANYUID
+            ):
+                pod_obj.delete(force=True)
+                assert pod_obj.ocp.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=self.labels_map["noobaa_db"],
+                    resource_count=1,
+                    timeout=300,
+                ), "Noobaa pod did not reach running state"
+                pod_data_list = pod_obj.get()
+                assert (
+                    pod_data_list.get("metadata")
+                    .get("annotations")
+                    .get("openshift.io/scc")
+                    == constants.NOOBAA_RESOURCE_NAME
+                ), "Invalid scc"
+
+        request.addfinalizer(finalizer)
+
+    @tier3
+    @pytest.mark.polarion_id("OCS-2513")
+    @marks.bugzilla("1903573")
+    @skipif_ocs_version("<4.7")
+    def test_db_scc(self, teardown):
+        """
+        Test noobaa db is assigned with scc(anyuid) after changing the default noobaa SCC
+
+        """
+        pod_obj = pod.Pod(
+            **pod.get_pods_having_label(
+                label=self.labels_map["noobaa_db"],
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            )[0]
+        )
+        ocp_scc = ocp.OCP(kind=constants.SCC, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        pod_data = pod_obj.get()
+
+        log.info("Verifying current SCC is noobaa in db pod")
+        assert (
+            pod_data.get("metadata").get("annotations").get("openshift.io/scc")
+            == constants.NOOBAA_RESOURCE_NAME
+        ), "Invalid default scc"
+
+        log.info("Deleting the user array from the Noobaa scc")
+        ocp_scc.patch(
+            resource_name=constants.NOOBAA_RESOURCE_NAME,
+            params='[{"op": "remove", "path": "/users/0", '
+            '"value":"system:serviceaccount:openshift-storage:noobaa"}]',
+            format_type="json",
+        )
+        assert not helpers.validate_scc_policy(
+            sa_name=constants.NOOBAA_RESOURCE_NAME,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            scc_name=constants.NOOBAA_RESOURCE_NAME,
+        ), "SA name is  present in noobaa scc"
+        log.info("Adding the noobaa system sa user to anyuid scc")
+        ocp_scc.patch(
+            resource_name=constants.ANYUID,
+            params='[{"op": "add", "path": "/users/0", '
+            '"value":"system:serviceaccount:openshift-storage:noobaa"}]',
+            format_type="json",
+        )
+        assert helpers.validate_scc_policy(
+            sa_name=constants.NOOBAA_RESOURCE_NAME,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            scc_name=constants.ANYUID,
+        ), "SA name is not present in anyuid scc"
+
+        pod_obj.delete(force=True)
+        # Verify that the new pod has reached a 'RUNNNING' status
+        assert pod_obj.ocp.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=self.labels_map["noobaa_db"],
+            resource_count=1,
+            timeout=300,
+        ), "Noobaa pod did not reach running state"
+        pod_data = pod_obj.get()
+        log.info("Verifying SCC is now anyuid in the db pod")
+        assert (
+            pod_data.get("metadata").get("annotations").get("openshift.io/scc")
+            == constants.ANYUID
+        ), "Invalid scc"
         # Check the NB status to verify the system is healthy
         self.cl_obj.wait_for_noobaa_health_ok()
