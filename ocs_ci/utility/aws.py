@@ -1340,13 +1340,13 @@ class AWS(object):
         logger.info(f"Deleting CloudFormation Stack: {cfs_name}")
         self.delete_cloudformation_stacks([cfs_name])
 
-    def delete_hosted_zone(self, cluster_name):
+    def delete_hosted_zone(self, cluster_name, delete_zone=True):
         """
         Deletes the hosted zone
 
         Args:
             cluster_name (str): Name of the cluster
-
+            delete_zone (bool): Whether to delete complete zone
         """
         cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
         base_domain = config.ENV_DATA["base_domain"]
@@ -1366,7 +1366,8 @@ class AWS(object):
                     f"hosted zone ID {hosted_zone_id}"
                 )
                 self.delete_all_record_sets(hosted_zone_id)
-                self.route53_client.delete_hosted_zone(Id=hosted_zone_id)
+                if delete_zone:
+                    self.route53_client.delete_hosted_zone(Id=hosted_zone_id)
         else:
             logger.info(f"hosted zone {hosted_zone_name} not found")
             return
@@ -1470,6 +1471,94 @@ class AWS(object):
                 ]
             },
         )
+
+    def get_hosted_zone_id(self, cluster_name):
+        """
+        Get Zone id from given cluster_name
+
+        Args:
+            cluster_name (str): Name of cluster
+
+        Returns:
+            str: Zone id
+        """
+        cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+        base_domain = config.ENV_DATA["base_domain"]
+        hosted_zone_name = f"{cluster_name}.{base_domain}."
+        hosted_zones_output = self.route53_client.list_hosted_zones_by_name(
+            DNSName=hosted_zone_name
+        )
+        full_hosted_zone_id = hosted_zones_output['HostedZones'][0]['Id']
+        return full_hosted_zone_id.strip('/hostedzone/')
+
+    def update_hosted_zone_record(self, zone_id, record_name, data, type, operation_type, ttl=60):
+        """
+        Update Route53 DNS record
+
+        Args:
+            zone_id (str): Zone id of DNS record
+            record_name (str): Record Name eg:- api.apps.ocp-baremetal-auto.qe.rh-ocs.com
+            data (str): Data to be added for DNS Record
+            type (str): DNS record type
+            operation_type (str): Operation Type (Allowed Values:- Add, Delete)
+            ttl (int): Default set to 60 sec
+
+        Returns:
+            dict: The response from change_resource_record_sets
+        """
+        base_domain = config.ENV_DATA["base_domain"]
+        record_name = f"{record_name}.{base_domain}."
+        if "*" in record_name:
+            trim_record_name = record_name.strip('*.')
+        else:
+            trim_record_name = record_name
+        old_resource_record_list = []
+        res = self.route53_client.list_resource_record_sets(HostedZoneId=zone_id)
+        for records in res.get('ResourceRecordSets'):
+            if trim_record_name in records.get('Name'):
+                old_resource_record_list = records.get('ResourceRecords')
+
+        if operation_type == "Add":
+            old_resource_record_list.append({
+                'Value': data
+            })
+        elif operation_type == "Delete":
+            old_resource_record_list.remove({
+                'Value': data
+            })
+        response = self.route53_client.change_resource_record_sets(
+            HostedZoneId=zone_id,
+            ChangeBatch={
+                'Changes': [
+                    {
+                        'Action': 'UPSERT',
+                        'ResourceRecordSet': {
+                            'Name': record_name,
+                            'Type': type,
+                            'TTL': ttl,
+                            'ResourceRecords': old_resource_record_list
+                        }
+                    }
+                ],
+            }
+        )
+        logger.debug(f"Record Created with {record_name} for {data}")
+        return response
+
+    def wait_for_record_set(self, response_list, max_attempts=10):
+        """
+        Wait for Record to be created
+
+        Args:
+            max_attempts (int): Max Attempt's for Waiting
+            response_list (list): List of response
+
+        """
+
+        waiter = self.route53_client.get_waiter('resource_record_sets_changed')
+        for response in response_list:
+            logger.debug(f"Waiting for Response {response['ChangeInfo']['Id']}")
+            waiter.wait(Id=response['ChangeInfo']['Id'], WaiterConfig={'MaxAttempts': max_attempts})
 
 
 def get_instances_ids_and_names(instances):
