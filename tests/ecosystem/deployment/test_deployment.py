@@ -1,18 +1,27 @@
 import logging
 
+import pytest
+
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import deployment, polarion_id
 from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
 from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import is_cluster_running
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
+from ocs_ci.ocs.utils import save_live_logs_temp
 
 log = logging.getLogger(__name__)
 
 
+@pytest.fixture()
+def save_logs(request):
+    """"""
+    save_live_logs_temp(request, "openshift-marketplace", "controller-uid:")
+
+
 @deployment
 @polarion_id(get_polarion_id())
-def test_deployment(pvc_factory, pod_factory):
+def test_deployment(save_logs, pvc_factory, pod_factory):
     deploy = config.RUN["cli_params"].get("deploy")
     teardown = config.RUN["cli_params"].get("teardown")
     if not teardown or deploy:

@@ -460,6 +460,7 @@ class Deployment(object):
             image (str): Image of ocs registry.
 
         """
+        config.RUN["save_live_pod_logs"] = True
         ui_deployment = config.DEPLOYMENT.get("ui_deployment")
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")

@@ -724,6 +724,27 @@ def get_pod_name_by_pattern(
     return pod_list
 
 
+def get_pod_name_by_label_pattern(
+    label_pattern=None,
+    namespace=None,
+):
+    """"""
+    ocp_obj = OCP(kind="pod", namespace=namespace)
+    pods = ocp_obj.exec_oc_cmd(
+        'get pods -o=custom-columns="name:.metadata.name,label:metadata.labels"',
+        out_yaml_format=False,
+    )
+    pod_list = []
+    if pods:
+        pods = pods.split("\n")
+        for pod in pods:
+            if re.search(label_pattern, pod):
+                (_, pod) = pod.split("/")
+                log.info(f"pod label name match found appending {pod}")
+                pod_list.append(pod)
+    return pod_list
+
+
 def setup_ceph_toolbox(force_setup=False):
     """
     Setup ceph-toolbox - also checks if toolbox exists, if it exists it
@@ -935,6 +956,32 @@ def save_pods_logs_to_file(
                 f.write(out)
 
 
+def save_pods_logs_to_file_based_on_label(dir_name_prefix, namespace, label_pattern):
+    """"""
+    log_dir_path = os.path.join(
+        os.path.expanduser(ocsci_config.RUN["log_dir"]),
+        f"live_logs_{ocsci_config.RUN['run_id']}",
+    )
+
+    pods = get_pod_name_by_label_pattern(
+        label_pattern=label_pattern, namespace=namespace
+    )
+
+    live_logs_dir_path = os.path.join(
+        log_dir_path, f"{dir_name_prefix}_{uuid4().hex[:8]}"
+    )
+    create_directory_path(live_logs_dir_path)
+
+    if len(pods) > 0:
+        for pod in pods:
+            cmd = f"oc -n {namespace} logs {pod}"
+            logs_file = os.path.join(live_logs_dir_path, f"{pod}")
+            out = run_cmd(cmd)
+
+            with open(logs_file, "w") as f:
+                f.write(out)
+
+
 def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=True):
     """
     Collects OCS logs
@@ -1080,6 +1127,40 @@ def save_live_logs(request, pods_containers_dict, patterns_to_log=None):
                     # collection iteration failure, hence, we continue in case of any exception
                     log.error(
                         f"The logs collection iteration for pods {pods_containers_dict} "
+                        f"failed with the following exception {ex}"
+                    )
+
+    thread = threading.Thread(target=save_logs)
+    thread.start()
+
+
+def save_live_logs_temp(request, namespace, label_pattern):
+    """"""
+    tc_name = request.node.name
+
+    def finalizer():
+        """
+        Stop the thread that executed save_logs()
+
+        """
+        ocsci_config.RUN["save_live_pod_logs"] = False
+        if thread:
+            thread.join()
+
+    request.addfinalizer(finalizer)
+
+    def save_logs():
+        while ocsci_config.RUN.get("save_live_pod_logs"):
+            if ocsci_config.RUN.get("save_live_pod_logs"):
+                try:
+                    save_pods_logs_to_file_based_on_label(
+                        tc_name, namespace, label_pattern
+                    )
+                except Exception as ex:
+                    # We don't want to fail any test case in case of a logs
+                    # collection iteration failure, hence, we continue in case of any exception
+                    log.error(
+                        f"The logs collection iteration in namespace {namespace} "
                         f"failed with the following exception {ex}"
                     )
 
