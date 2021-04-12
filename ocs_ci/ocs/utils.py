@@ -1070,7 +1070,6 @@ def save_live_logs(request, pods_containers_dict, patterns_to_log=None):
 
     def save_logs():
         while ocsci_config.RUN.get("save_live_pod_logs"):
-            time.sleep(10)
             if ocsci_config.RUN.get("save_live_pod_logs"):
                 try:
                     save_pods_logs_to_file(
