@@ -383,6 +383,16 @@ def ocs_install_verification(
             kms = KMS.get_kms_deployment()
             kms.post_deploy_verification()
 
+    ocs_version = float(config.ENV_DATA["ocs_version"])
+    zone_num = utils.get_az_count()
+    if config.DEPLOYMENT.get("local_storage") and ocs_version >= 4.7 and zone_num < 3:
+        storage_cluster_obj = get_storage_cluster()
+        failure_domain = storage_cluster_obj.data["items"][0]["status"]["failureDomain"]
+        assert failure_domain == "host", (
+            f"The failure domain type on LSO cluster with {zone_num} zones should be "
+            f"'host' and not {failure_domain}."
+        )
+
 
 def osd_encryption_verification():
     """
