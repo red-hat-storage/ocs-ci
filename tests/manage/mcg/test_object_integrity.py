@@ -65,7 +65,8 @@ class TestObjectIntegrity(MCGTest):
                             {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
                         ]
                     },
-                }
+                },
+                marks=[tier1],
             ),
         ],
         ids=[
