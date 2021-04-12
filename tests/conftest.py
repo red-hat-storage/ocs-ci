@@ -1111,7 +1111,7 @@ def health_checker(request, tier_marks_name):
 from ocs_ci.ocs.utils import save_live_logs_temp
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def save_logs(request):
     """"""
     save_live_logs_temp(request, "openshift-marketplace", "controller-uid:")
