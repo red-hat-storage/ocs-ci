@@ -2,7 +2,7 @@ import logging
 import pytest
 import time
 
-from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla, skipif_ocs_version
+from ocs_ci.framework.testlib import ManageTest, tier1, skipif_ocs_version
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods, get_osd_pod_id
 
@@ -11,7 +11,6 @@ log = logging.getLogger(__name__)
 
 @tier1
 @skipif_ocs_version("<4.7")
-@bugzilla("1938049")
 @pytest.mark.polarion_id("OCS-2512")
 class TestOSDHeapProfile(ManageTest):
     """
