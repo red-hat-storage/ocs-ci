@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     tier4,
     tier4a,
     tier3,
+    skipif_openshift_dedicated,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
@@ -224,6 +225,7 @@ class TestMCGResourcesDisruptions(MCGTest):
     @tier3
     @pytest.mark.polarion_id("OCS-2513")
     @marks.bugzilla("1903573")
+    @skipif_openshift_dedicated
     @skipif_ocs_version("<4.7")
     def test_db_scc(self, teardown):
         """
