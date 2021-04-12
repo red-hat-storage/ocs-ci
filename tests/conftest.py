@@ -1108,8 +1108,17 @@ def health_checker(request, tier_marks_name):
                 pytest.skip("Ceph health check failed at setup")
 
 
+from ocs_ci.ocs.utils import save_live_logs_temp
+
+
+@pytest.fixture()
+def save_logs(request):
+    """"""
+    save_live_logs_temp(request, "openshift-marketplace", "controller-uid:")
+
+
 @pytest.fixture(scope="session", autouse=True)
-def cluster(request, log_cli_level):
+def cluster(request, log_cli_level, save_logs):
     """
     This fixture initiates deployment for both OCP and OCS clusters.
     Specific platform deployment classes will handle the fine details
