@@ -44,6 +44,8 @@ def delete_cluster(vsphere, cluster_name):
     vms = vsphere.get_all_vms_in_pool(cluster_name, datacenter, cluster)
     if not vms:
         logger.info(f"There is no VM's in resource pool {cluster_name}")
+        # delete the resource pool even though it empty
+        vsphere.destroy_pool(cluster_name, datacenter, cluster)
         return
 
     # Delete the disks
@@ -151,13 +153,13 @@ def vsphere_cleanup():
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
-        "--cluster_name",
+        "--cluster-name",
         action="store",
         required=True,
         help="The name of the cluster to delete from vSphere",
     )
     parser.add_argument(
-        "--vsphere_conf",
+        "--ocsci-conf",
         action="store",
         required=True,
         type=argparse.FileType("r", encoding="UTF-8"),
@@ -180,9 +182,8 @@ def vsphere_cleanup():
     )
 
     args = parser.parse_args()
-
     cluster_name = args.cluster_name
-    vsphere_conf = args.vsphere_conf
+    vsphere_conf = args.ocsci_conf
 
     # load vsphere_conf data to config
     vsphere_config_data = yaml.safe_load(vsphere_conf)

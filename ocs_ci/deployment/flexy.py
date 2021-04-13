@@ -1,6 +1,8 @@
 """
 All the flexy related classes and functionality lives here
 """
+import base64
+import binascii
 import logging
 import os
 import yaml
@@ -16,11 +18,16 @@ import shutil
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
-    get_ocp_version,
     clone_repo,
-    run_cmd,
+    exec_cmd,
     expose_ocp_version,
+    get_ocp_version,
+    login_to_mirror_registry,
     wait_for_machineconfigpool_status,
+)
+from ocs_ci.utility.flexy import (
+    configure_allowed_domains_in_proxy,
+    load_cluster_info,
 )
 
 logger = logging.getLogger(__name__)
@@ -206,12 +213,24 @@ class FlexyBase(object):
             self.flexy_host_private_conf_dir_path,
             self.flexy_private_conf_branch,
         )
+        # prepare flexy private repo keyfile (if it is base64 encoded)
+        keyfile = os.path.expanduser(constants.FLEXY_GIT_CRYPT_KEYFILE)
+        try:
+            with open(keyfile, "rb") as fd:
+                keyfile_content = base64.b64decode(fd.read())
+            logger.info(
+                "Private flexy repository git crypt keyfile is base64 encoded. "
+                f"Decoding it and saving to the same place ({keyfile})"
+            )
+            with open(keyfile, "wb") as fd:
+                fd.write(keyfile_content)
+        except binascii.Error:
+            logger.info(
+                f"Private flexy repository git crypt keyfile is already prepared ({keyfile})."
+            )
         # git-crypt unlock /path/to/keyfile
-        cmd = (
-            f"git-crypt unlock "
-            f"{os.path.expanduser(constants.FLEXY_GIT_CRYPT_KEYFILE)}"
-        )
-        run_cmd(cmd, cwd=self.flexy_host_private_conf_dir_path)
+        cmd = f"git-crypt unlock {keyfile}"
+        exec_cmd(cmd, cwd=self.flexy_host_private_conf_dir_path)
         logger.info("Unlocked the git repo")
 
     def merge_flexy_env(self):
@@ -297,7 +316,7 @@ class FlexyBase(object):
         chown_cmd = (
             f"sudo chown -R {constants.FLEXY_USER_LOCAL_UID} {self.flexy_host_dir}"
         )
-        run_cmd(chown_cmd)
+        exec_cmd(chown_cmd)
 
     def flexy_backup_work_dir(self):
         """
@@ -305,33 +324,50 @@ class FlexyBase(object):
         """
         # change ownership of flexy-dir back to current user
         chown_cmd = f"sudo chown -R {os.getuid()}:{os.getgid()} {self.flexy_host_dir}"
-        run_cmd(chown_cmd)
+        exec_cmd(chown_cmd)
         chmod_cmd = f"sudo chmod -R a+rX {self.flexy_host_dir}"
-        run_cmd(chmod_cmd)
+        exec_cmd(chmod_cmd)
         # mirror flexy work dir to cluster path
         rsync_cmd = f"rsync -av {self.flexy_host_dir} {self.cluster_path}/"
-        run_cmd(rsync_cmd)
+        exec_cmd(rsync_cmd)
 
-        # create symlink to auth directory
-        cluster_path_auth = os.path.join(self.cluster_path, "auth")
-        if not os.path.exists(cluster_path_auth):
-            os.symlink("flexy-dir/flexy/workdir/install-dir/auth", cluster_path_auth)
+        # mirror install-dir to cluster path (auth directory, metadata.json
+        # file and other files)
+        install_dir = os.path.join(self.flexy_host_dir, "flexy/workdir/install-dir/")
+        rsync_cmd = f"rsync -av {install_dir} {self.cluster_path}/"
+        exec_cmd(rsync_cmd)
 
     def flexy_post_processing(self):
         """
-        Update global pull-secret and configure ntp (if required).
+        Perform a few actions required after flexy execution:
+        - update global pull-secret
+        - login to mirror registry (disconected cluster)
+        - configure proxy server (disconnected cluster)
+        - configure ntp (if required)
         """
         # Apply pull secrets on ocp cluster
         kubeconfig = os.path.join(
             self.cluster_path, config.RUN.get("kubeconfig_location")
         )
+        # load cluster info
+        load_cluster_info()
+
+        # if on disconnected cluster, perform required tasks
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        if config.DEPLOYMENT.get("disconnected"):
+            # login to mirror registry
+            login_to_mirror_registry(pull_secret_path)
+            # configure additional allowed domains in proxy
+            configure_allowed_domains_in_proxy()
+
+        # update pull-secret
         secret_cmd = (
             f"oc set data secret/pull-secret "
             f"--kubeconfig {kubeconfig} "
             f"-n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
-            f"--from-file=.dockerconfigjson={constants.DATA_DIR}/pull-secret"
+            f"--from-file=.dockerconfigjson={pull_secret_path}"
         )
-        run_cmd(secret_cmd)
+        exec_cmd(secret_cmd)
 
         if not config.ENV_DATA.get("skip_ntp_configuration", False):
             ntp_cmd = (
@@ -339,7 +375,7 @@ class FlexyBase(object):
                 f"create -f {constants.NTP_CHRONY_CONF}"
             )
             logger.info("Creating NTP chrony")
-            run_cmd(ntp_cmd)
+            exec_cmd(ntp_cmd)
         # sleep here to start update machineconfigpool status
         time.sleep(60)
         wait_for_machineconfigpool_status("all")

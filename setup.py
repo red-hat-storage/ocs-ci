@@ -22,7 +22,7 @@ setup(
         "requests==2.23.0",
         "paramiko==2.7.2",
         "pyyaml>=4.2b1",
-        "jinja2==2.10.1",
+        "jinja2==2.11.3",
         "openshift==0.11.2",
         "boto3==1.14.7",
         "munch==2.5.0",
@@ -46,9 +46,9 @@ setup(
         "jsonschema>=3.2.0",
         "google-cloud-storage==1.29.0",
         "elasticsearch==7.8.0",
-        "numpy==1.18.5",
+        "numpy==1.19.5",
         "python-ipmi==0.4.2",
-        "scipy==1.4.1",
+        "scipy==1.6.0",
         "PrettyTable==0.7.2",
         "azure-common==1.1.25",
         "azure-mgmt-compute==12.0.0",
@@ -63,6 +63,9 @@ setup(
         "GitPython==3.1.7",
         "selenium==3.141.0",
         "webdriver-manager==3.2.2",
+        # greenlet 1.0.0 is broken on ppc64le
+        # https://github.com/python-greenlet/greenlet/issues/230
+        "greenlet<1.0.0",
     ],
     entry_points={
         "console_scripts": [

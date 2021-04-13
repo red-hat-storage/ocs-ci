@@ -15,7 +15,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     NotSupportedFunctionError,
     NonUpgradedImagesFoundError,
-    ResourceInUnexpectedState,
+    ResourceWrongStatusException,
     ResourceNameNotSpecifiedException,
     TimeoutExpiredError,
 )
@@ -562,9 +562,11 @@ class OCP(object):
                     )
                     actual_status = status
                     if error_condition is not None and status == error_condition:
-                        raise ResourceInUnexpectedState(
-                            f"Status of '{resource_name}' at column {column}"
-                            f" is {status}."
+                        raise ResourceWrongStatusException(
+                            resource_name,
+                            column=column,
+                            expected=condition,
+                            got=status,
                         )
                 # More than 1 resources returned
                 elif sample.get("kind") == "List":
@@ -585,9 +587,11 @@ class OCP(object):
                                 error_condition is not None
                                 and status == error_condition
                             ):
-                                raise ResourceInUnexpectedState(
-                                    f"Status of '{item_name}' "
-                                    f" at column {column} is {status}."
+                                raise ResourceWrongStatusException(
+                                    item_name,
+                                    column=column,
+                                    expected=condition,
+                                    got=status,
                                 )
                         except CommandFailed as ex:
                             log.info(
@@ -628,6 +632,12 @@ class OCP(object):
                     )
         except TimeoutExpiredError as ex:
             log.error(f"timeout expired: {ex}")
+            # run `oc describe` on the resources we were waiting for to provide
+            # evidence so that we can understand what was wrong
+            output = self.describe(resource_name, selector=selector)
+            log.warning(
+                "Description of the resource(s) we were waiting for:\n%s", output
+            )
             log.error(
                 (
                     f"Wait for {self._kind} resource {resource_name} at column {column}"
@@ -635,14 +645,12 @@ class OCP(object):
                     f" last actual status was {actual_status}"
                 )
             )
-            # run `oc describe` on the resources we were waiting for to provide
-            # evidence so that we can understand what was wrong
+            raise (ex)
+        except ResourceWrongStatusException:
             output = self.describe(resource_name, selector=selector)
             log.warning(
                 "Description of the resource(s) we were waiting for:\n%s", output
             )
-            raise (ex)
-        except ResourceInUnexpectedState:
             log.error(
                 (
                     "Waiting for %s resource %s at column %s"
@@ -654,10 +662,6 @@ class OCP(object):
                 column,
                 condition,
                 error_condition,
-            )
-            output = self.describe(resource_name, selector=selector)
-            log.warning(
-                "Description of the resource(s) we were waiting for:\n%s", output
             )
             raise
 
@@ -681,6 +685,8 @@ class OCP(object):
             bool: True in case resource deletion is successful
 
         """
+        if config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM:
+            timeout = 720
         start_time = time.time()
         while True:
             try:
@@ -838,7 +844,7 @@ class OCP(object):
             )
         return False
 
-    @retry(ResourceInUnexpectedState, tries=4, delay=5, backoff=1)
+    @retry(ResourceWrongStatusException, tries=4, delay=5, backoff=1)
     def wait_for_phase(self, phase, timeout=300, sleep=5):
         """
         Wait till phase of resource is the same as required one passed in
@@ -850,7 +856,7 @@ class OCP(object):
             sleep (int): Time in seconds to sleep between attempts
 
         Raises:
-            ResourceInUnexpectedState: In case the resource is not in expected
+            ResourceWrongStatusException: In case the resource is not in expected
                 phase.
             NotSupportedFunctionError: If resource doesn't have phase!
             ResourceNameNotSpecifiedException: in case the name is not
@@ -861,7 +867,7 @@ class OCP(object):
         self.check_name_is_specified()
         sampler = TimeoutSampler(timeout, sleep, func=self.check_phase, phase=phase)
         if not sampler.wait_for_func_status(True):
-            raise ResourceInUnexpectedState(
+            raise ResourceWrongStatusException(
                 f"Resource: {self.resource_name} is not in expected phase: " f"{phase}"
             )
 
@@ -963,6 +969,10 @@ def get_ocs_version():
     ocp_cluster = OCP(
         namespace=config.ENV_DATA["cluster_namespace"], kind="", resource_name="csv"
     )
+    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+        for item in ocp_cluster.get()["items"]:
+            if item["metadata"]["name"].startswith("ocs-operator"):
+                return item["spec"]["version"]
     return ocp_cluster.get()["items"][0]["spec"]["version"]
 
 

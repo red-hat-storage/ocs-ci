@@ -1,14 +1,16 @@
 import logging
 import pytest
 
+
 from ocs_ci.framework.testlib import (
     tier4,
     tier4a,
     ignore_leftovers,
     ManageTest,
-    aws_platform_required,
+    cloud_platform_required,
     bugzilla,
     skipif_no_lso,
+    skipif_vsphere_ipi,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs, get_nodes
@@ -24,6 +26,7 @@ logger = logging.getLogger(__name__)
 @tier4
 @tier4a
 @ignore_leftovers
+@skipif_vsphere_ipi
 class TestNodesRestart(ManageTest):
     """
     Test ungraceful cluster shutdown
@@ -55,7 +58,7 @@ class TestNodesRestart(ManageTest):
             pytest.param(*[True], marks=pytest.mark.polarion_id("OCS-894")),
             pytest.param(
                 *[False],
-                marks=[pytest.mark.polarion_id("OCS-895"), aws_platform_required],
+                marks=[pytest.mark.polarion_id("OCS-895"), cloud_platform_required],
             ),
         ],
     )

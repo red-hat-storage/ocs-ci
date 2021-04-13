@@ -1,5 +1,11 @@
 apiVersion: {{ api_version | default('v1') }}
 baseDomain: {{ base_domain | default('qe.rh-ocs.com') }}
+compute:
+  - name: worker
+    replicas: {{ worker_replicas | default(3) }}
+controlPlane:
+  name: master
+  replicas: {{ master_replicas | default(3) }}
 metadata:
   name: '{{ cluster_name }}'
 networking:

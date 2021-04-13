@@ -13,6 +13,7 @@ import re
 import threading
 import yaml
 import time
+from semantic_version import Version
 
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -254,7 +255,11 @@ class CephCluster(object):
         self.scan_cluster()
 
         # Check Noobaa health
-        self.wait_for_noobaa_health_ok()
+        if (
+            config.ENV_DATA["platform"].lower()
+            != constants.OPENSHIFT_DEDICATED_PLATFORM
+        ):
+            self.wait_for_noobaa_health_ok()
 
     def noobaa_health_check(self):
         """
@@ -510,31 +515,50 @@ class CephCluster(object):
             cmd += f" -f {format}"
         return self.toolbox.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
+    def get_ceph_default_replica(self):
+        """
+        The function return the default replica count in the system,
+        taken from 'ceph status'. in case no parameter found, return '0'.
+
+        Returns:
+             int : the default replica count - 0 if not found.
+        """
+        ceph_pod = pod.get_ceph_tools_pod()
+        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph status")
+        av_mod = ceph_status.get("mgrmap").get("available_modules")
+        for mod in av_mod:
+            if mod["name"] == "localpool":
+                return mod.get("module_options").get("num_rep").get("default_value")
+        logger.error("Replica count number did not found !")
+        # if there is an error in the output of `ceph status` command and localpool
+        # module does not exist, return 0 as number of replica.
+        return 0
+
     def get_ceph_capacity(self):
         """
         The function gets the total mount of storage capacity of the ocs cluster.
-        the calculation is <Num of OSD> * <OSD size> / <replica number>
+        the calculation is <total bytes> / <replica number>
         it will not take into account the current used capacity.
 
         Returns:
             int : Total storage capacity in GiB (GiB is for development environment)
+                  if the replica is '0', return 0.
 
         """
-        storage_cluster_obj = storage_cluster.StorageCluster(
-            resource_name=config.ENV_DATA["storage_cluster_name"],
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
-        replica = int(
-            storage_cluster_obj.data["spec"]["storageDeviceSets"][0]["replica"]
-        )
+        replica = int(self.get_ceph_default_replica())
+        if replica > 0:
+            logger.info(f"Number of replica : {replica}")
+            ceph_pod = pod.get_ceph_tools_pod()
+            ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+            usable_capacity = (
+                int(ceph_status["stats"]["total_bytes"]) / replica / constant.GB
+            )
 
-        ceph_pod = pod.get_ceph_tools_pod()
-        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
-        usable_capacity = (
-            int(ceph_status["stats"]["total_bytes"]) / replica / constant.GB
-        )
-
-        return usable_capacity
+            return usable_capacity
+        else:
+            # if the replica number is 0, usable capacity can not be calculate
+            # so, return 0 as usable capacity.
+            return 0
 
     def get_ceph_cluster_iops(self):
         """
@@ -766,7 +790,7 @@ class CephHealthMonitor(threading.Thread):
         )
 
 
-def validate_ocs_pods_on_pvc(pods, pvc_names):
+def validate_ocs_pods_on_pvc(pods, pvc_names, pvc_label=None):
     """
     Validate if ocs pod has PVC. This validation checking if there is the pvc
     like: rook-ceph-mon-a for the pod rook-ceph-mon-a-56f67f5968-6j4px.
@@ -774,6 +798,8 @@ def validate_ocs_pods_on_pvc(pods, pvc_names):
     Args:
         pods (list): OCS pod names
         pvc_names (list): names of all PVCs
+        pvc_label (str): label of PVC name for the pod. If None, we will verify
+            pvc based on name of pod.
 
     Raises:
          AssertionError: If no PVC found for one of the pod
@@ -781,14 +807,27 @@ def validate_ocs_pods_on_pvc(pods, pvc_names):
     """
     logger.info(f"Validating if each pod from: {pods} has PVC from {pvc_names}.")
     for pod_name in pods:
-        found_pvc = ""
-        for pvc in pvc_names:
-            if pvc in pod_name:
-                found_pvc = pvc
-        if found_pvc:
-            logger.info(f"PVC {found_pvc} found for pod {pod_name}")
-            continue
-        assert found_pvc, f"No PVC found for pod: {pod_name}!"
+        if not pvc_label:
+            found_pvc = ""
+            for pvc in pvc_names:
+                if pvc in pod_name:
+                    found_pvc = pvc
+            if found_pvc:
+                logger.info(f"PVC {found_pvc} found for pod {pod_name}")
+                continue
+            assert found_pvc, f"No PVC found for pod: {pod_name}!"
+        else:
+            pod_obj = ocp.OCP(
+                kind="Pod",
+                namespace=config.ENV_DATA["cluster_namespace"],
+                resource_name=pod_name,
+            )
+            pod_data = pod_obj.get()
+            pod_labels = pod_data["metadata"].get("labels", {})
+            pvc_name = pod_labels[pvc_label]
+            assert (
+                pvc_name in pvc_names
+            ), f"No PVC {pvc_name} found for pod: {pod_name} in PVCs: {pvc_names}!"
 
 
 def validate_cluster_on_pvc():
@@ -820,7 +859,14 @@ def validate_cluster_on_pvc():
     mon_pods = get_pod_name_by_pattern("rook-ceph-mon", ns)
     if not config.DEPLOYMENT.get("local_storage"):
         logger.info("Validating all mon pods have PVC")
-        validate_ocs_pods_on_pvc(mon_pods, pvc_names)
+        mon_pvc_label = constants.ROOK_CEPH_MON_PVC_LABEL
+        if Version.coerce(config.ENV_DATA["ocs_version"]) < Version.coerce("4.6"):
+            mon_pvc_label = None
+        validate_ocs_pods_on_pvc(
+            mon_pods,
+            pvc_names,
+            mon_pvc_label,
+        )
     else:
         logger.debug(
             "Skipping validation if all mon pods have PVC because in LSO "
@@ -830,7 +876,11 @@ def validate_cluster_on_pvc():
     osd_deviceset_pods = get_pod_name_by_pattern(
         "rook-ceph-osd-prepare-ocs-deviceset", ns
     )
-    validate_ocs_pods_on_pvc(osd_deviceset_pods, pvc_names)
+    validate_ocs_pods_on_pvc(
+        osd_deviceset_pods,
+        pvc_names,
+        constants.CEPH_ROOK_IO_PVC_LABEL,
+    )
     osd_pods = get_pod_name_by_pattern("rook-ceph-osd", ns, filter="prepare")
     for ceph_pod in mon_pods + osd_pods:
         out = run_cmd(f"oc -n {ns} get pods {ceph_pod} -o yaml")
@@ -1182,7 +1232,7 @@ def get_osd_pods_memory_sum():
     """
     osd_pods = pod.get_osd_pods()
     num_of_osd_pods = len(osd_pods)
-    osd_pod_mem_size_str = osd_pods[0].get_memory().get("osd")
+    osd_pod_mem_size_str = osd_pods[0].get_memory(container_name=constants.OSD)
     osd_pod_mem_size = convert_device_size(
         unformatted_size=osd_pod_mem_size_str, units_to_covert_to="GB"
     )
@@ -1273,11 +1323,11 @@ def check_osd_tree_1az_vmware(osd_tree, number_of_osds):
     return check_osds_in_hosts_osd_tree(all_hosts_flatten, osd_tree)
 
 
-def check_osd_tree_3az_aws(osd_tree, number_of_osds):
+def check_osd_tree_3az_cloud(osd_tree, number_of_osds):
     """
     Checks whether an OSD tree is created/modified correctly. This can be used as a verification step for
     deployment and cluster expansion tests.
-    This function is specifically for ocs cluster created on 3 AZ AWS config
+    This function is specifically for ocs cluster created on 3 AZ config
 
     Args:
         osd_tree (dict): Dictionary of the values which represent 'osd tree'.
@@ -1304,11 +1354,11 @@ def check_osd_tree_3az_aws(osd_tree, number_of_osds):
     return check_osds_in_hosts_osd_tree(all_hosts_flatten, osd_tree)
 
 
-def check_osd_tree_1az_aws(osd_tree, number_of_osds):
+def check_osd_tree_1az_cloud(osd_tree, number_of_osds):
     """
     Checks whether an OSD tree is created/modified correctly. This can be used as a verification step for
     deployment and cluster expansion tests.
-    This function is specifically for ocs cluster created on 1 AZ AWS config
+    This function is specifically for ocs cluster created on 1 AZ config
 
     Args:
         osd_tree (dict): Dictionary of the values which represent 'osd tree'.
@@ -1362,7 +1412,7 @@ def check_ceph_osd_tree():
     """
     Checks whether an OSD tree is created/modified correctly.
     It is a summary of the previous functions: 'check_osd_tree_1az_vmware',
-    'check_osd_tree_3az_aws', 'check_osd_tree_1az_aws'.
+    'check_osd_tree_3az_cloud', 'check_osd_tree_1az_cloud'.
 
     Returns:
          bool: True, if the ceph osd tree is formed correctly. Else False
@@ -1376,17 +1426,17 @@ def check_ceph_osd_tree():
     if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
         return check_osd_tree_1az_vmware(tree_output, len(osd_pods))
 
-    aws_number_of_zones = 3
-    if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+    number_of_zones = 3
+    if config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS:
         # parse the osd tree. if it contains a node 'rack' then it's a
-        # AWS_1AZ cluster. Else, 3 AWS_3AZ cluster
+        # 1AZ cluster. Else, 3 3AZ cluster
         for i in range(len(tree_output["nodes"])):
             if tree_output["nodes"][i]["name"] in "rack0":
-                aws_number_of_zones = 1
-        if aws_number_of_zones == 1:
-            return check_osd_tree_1az_aws(tree_output, len(osd_pods))
+                number_of_zones = 1
+        if number_of_zones == 1:
+            return check_osd_tree_1az_cloud(tree_output, len(osd_pods))
         else:
-            return check_osd_tree_3az_aws(tree_output, len(osd_pods))
+            return check_osd_tree_3az_cloud(tree_output, len(osd_pods))
 
 
 def check_ceph_osd_tree_after_node_replacement():

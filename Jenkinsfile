@@ -33,20 +33,16 @@ pipeline {
       steps {
         script { LAST_STAGE=env.STAGE_NAME }
         sh """
-          if [ ! -z '${env.EMAIL}' ]; then
-            sudo yum install -y /usr/sbin/postfix
-            sudo systemctl start postfix
-          fi
-          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
-          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
+          sudo yum install -y gcc python38-devel
           python3 -V
           pip3 install --user virtualenv
-          python3 -m virtualenv venv
+          python3 -m virtualenv -p python3.8 venv
           source ./venv/bin/activate
+          python -V
           pip3 install tox
           pip3 install -r requirements.txt
-          python3 setup.py develop
-          python3 ./.functional_ci_setup.py --skip-aws
+          python setup.py develop
+          python ./.functional_ci_setup.py --skip-aws
           """
       }
     }
@@ -64,7 +60,7 @@ pipeline {
         script { LAST_STAGE=env.STAGE_NAME }
         sh """
           source ./venv/bin/activate
-          tox -e py36
+          tox -e py38
           """
       }
     }

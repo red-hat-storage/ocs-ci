@@ -20,7 +20,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
-    ResourceInUnexpectedState,
+    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.utility import templating
@@ -88,6 +88,7 @@ class CloudManager(ABC):
             endpoint, access_key, secret_key = rgw_conn.get_credentials()
             cred_dict["RGW"] = {
                 "SECRET_PREFIX": "RGW",
+                "DATA_PREFIX": "AWS",
                 "ENDPOINT": endpoint,
                 "RGW_ACCESS_KEY_ID": access_key,
                 "RGW_SECRET_ACCESS_KEY": secret_key,
@@ -147,7 +148,7 @@ class CloudClient(ABC):
             )
         else:
             if is_available:
-                raise ResourceInUnexpectedState(
+                raise ResourceWrongStatusException(
                     f"{check_type[:-1]}ion of Underlying Storage {uls_name} timed out. "
                     f"Unable to {check_type.lower()} {uls_name}"
                 )
@@ -181,6 +182,7 @@ class S3Client(CloudClient):
         super().__init__(*args, **kwargs)
 
         secret_prefix = auth_dict.get("SECRET_PREFIX", "AWS")
+        data_prefix = auth_dict.get("DATA_PREFIX", "AWS")
         key_id = auth_dict.get(f"{secret_prefix}_ACCESS_KEY_ID")
         access_key = auth_dict.get(f"{secret_prefix}_SECRET_ACCESS_KEY")
         self.endpoint = auth_dict.get("ENDPOINT") or endpoint
@@ -195,8 +197,7 @@ class S3Client(CloudClient):
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
         )
-
-        self.secret = self.create_s3_secret(secret_prefix)
+        self.secret = self.create_s3_secret(secret_prefix, data_prefix)
 
     def internal_create_uls(self, name, region=None):
         """
@@ -329,7 +330,7 @@ class S3Client(CloudClient):
         else:
             self.client.meta.client.delete_bucket_policy(Bucket=aws_bucket_name)
 
-    def create_s3_secret(self, secret_prefix):
+    def create_s3_secret(self, secret_prefix, data_prefix):
         """
         Create a Kubernetes secret to allow NooBaa to create AWS-based backingstores
 
@@ -342,10 +343,10 @@ class S3Client(CloudClient):
         )
         bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         bs_secret_data["data"][
-            f"{secret_prefix}_ACCESS_KEY_ID"
+            f"{data_prefix}_ACCESS_KEY_ID"
         ] = base64.urlsafe_b64encode(self.access_key.encode("UTF-8")).decode("ascii")
         bs_secret_data["data"][
-            f"{secret_prefix}_SECRET_ACCESS_KEY"
+            f"{data_prefix}_SECRET_ACCESS_KEY"
         ] = base64.urlsafe_b64encode(self.secret_key.encode("UTF-8")).decode("ascii")
 
         return create_resource(**bs_secret_data)

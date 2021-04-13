@@ -7,8 +7,10 @@ from time import sleep
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_i3,
-    skipif_lso,
     skipif_bm,
+    skipif_ibm_cloud,
+    skipif_lso,
+    skipif_vsphere_ipi,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -31,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 @tier4
 @ignore_leftovers
+@skipif_vsphere_ipi
 class TestRwoPVCFencingUnfencing(ManageTest):
     """
     KNIP-677 OCS support for Automated fencing/unfencing RWO PV
@@ -558,6 +561,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         return True
 
     @skipif_bm
+    @skipif_ibm_cloud
     @tier4a
     @pytest.mark.parametrize(
         argnames=[
@@ -694,6 +698,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         )
 
     @skipif_bm
+    @skipif_ibm_cloud
     @tier4b
     @pytest.mark.parametrize(
         argnames=[
@@ -843,6 +848,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         )
 
     @skipif_bm
+    @skipif_ibm_cloud
     @tier4c
     @pytest.mark.parametrize(
         argnames=[

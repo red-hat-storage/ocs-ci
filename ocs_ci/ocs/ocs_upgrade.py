@@ -7,6 +7,7 @@ import time
 
 from ocs_ci.framework import config
 from ocs_ci.deployment.deployment import create_catalog_source
+from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
@@ -87,12 +88,38 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     osd_count = get_osd_count()
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
-    # in 4.3 app selector nooba have those pods: noobaa-core-ID, noobaa-db-ID,
-    # noobaa-operator-ID but in 4.2 only 2: noobaa-core-ID, noobaa-operator-ID
-    nooba_pods = 2 if upgrade_version < parse_version("4.3") else 3
-    verify_pods_upgraded(
-        old_images, selector=constants.NOOBAA_APP_LABEL, count=nooba_pods
-    )
+    default_noobaa_pods = 3
+    noobaa_pods = default_noobaa_pods
+    if upgrade_version >= parse_version("4.7"):
+        noobaa = OCP(kind="noobaa", namespace=config.ENV_DATA["cluster_namespace"])
+        resource = noobaa.get()["items"][0]
+        endpoints = resource.get("spec", {}).get("endpoints", {})
+        max_endpoints = endpoints.get("maxCount", constants.MAX_NB_ENDPOINT_COUNT)
+        min_endpoints = endpoints.get(
+            "minCount", constants.MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT
+        )
+        noobaa_pods = default_noobaa_pods + min_endpoints
+    try:
+        verify_pods_upgraded(
+            old_images,
+            selector=constants.NOOBAA_APP_LABEL,
+            count=noobaa_pods,
+        )
+    except TimeoutException as ex:
+        if upgrade_version >= parse_version("4.7"):
+            log.info(
+                "Nooba pods didn't match. Trying once more with max noobaa endpoints!"
+                f"Exception: {ex}"
+            )
+            noobaa_pods = default_noobaa_pods + max_endpoints
+            verify_pods_upgraded(
+                old_images,
+                selector=constants.NOOBAA_APP_LABEL,
+                count=noobaa_pods,
+                timeout=60,
+            )
+        else:
+            raise
     verify_pods_upgraded(
         old_images,
         selector=constants.CSI_CEPHFSPLUGIN_LABEL,
@@ -162,6 +189,10 @@ class OCSUpgrade(object):
     @property
     def ocs_registry_image(self):
         return self._ocs_registry_image
+
+    @ocs_registry_image.setter
+    def ocs_registry_image(self, value):
+        self._ocs_registry_image = value
 
     def get_upgrade_version(self):
         """
@@ -391,7 +422,7 @@ class OCSUpgrade(object):
                 self.get_parsed_versions()[1] > self.get_parsed_versions()[0]
             )
             if self.ocs_registry_image:
-                image_url, new_image_tag = self.ocs_registry_image.split(":")
+                image_url, new_image_tag = self.ocs_registry_image.rsplit(":", 1)
             elif config.UPGRADE.get("upgrade_to_latest", True) or version_change:
                 new_image_tag = get_latest_ds_olm_tag()
             else:
@@ -437,6 +468,11 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
     pre_upgrade_images = upgrade_ocs.get_pre_upgrade_image(csv_name_pre_upgrade)
     upgrade_ocs.load_version_config_file(upgrade_version)
+    if config.DEPLOYMENT.get("disconnected"):
+        upgrade_ocs.ocs_registry_image = prepare_disconnected_ocs_deployment(
+            upgrade=True
+        )
+        log.info(f"Disconnected upgrade - new image: {upgrade_ocs.ocs_registry_image}")
     with CephHealthMonitor(ceph_cluster):
         channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()

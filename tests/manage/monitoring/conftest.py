@@ -750,3 +750,61 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments):
         oc.exec_oc_cmd(f"scale --replicas=1 deployment/{rgw}")
 
     return measured_op
+
+
+@pytest.fixture
+def measure_noobaa_ns_target_bucket_deleted(
+    measurement_dir, request, bucket_factory, namespace_store_factory, cld_mgr
+):
+    """
+    Create Namespace bucket from 2 namespace resources. Delete target bucket
+    used in one of the resources.
+
+    Returns:
+        dict: Contains information about `start` and `stop` time for deleting
+            target bucket
+
+    """
+    logger.info("Create the namespace resources and verify health")
+    nss_tup = ("oc", {"aws": [(2, "us-east-2")]})
+    ns_stores = namespace_store_factory(*nss_tup)
+
+    logger.info("Create the namespace bucket on top of the namespace resource")
+    bucketclass_dict = {
+        "interface": "OC",
+        "namespace_policy_dict": {
+            "type": "Multi",
+            "namespacestores": ns_stores,
+        },
+    }
+    ns_bucket = bucket_factory(
+        amount=1,
+        interface=bucketclass_dict["interface"],
+        bucketclass=bucketclass_dict,
+    )
+
+    def delete_target_bucket():
+        """
+        Delete target bucket from NS store.
+
+        Returns:
+            str: Name of deleted target bucket
+
+        """
+        # run_time of operation
+        run_time = 60 * 12
+        nonlocal ns_stores
+        nonlocal cld_mgr
+
+        cld_mgr.aws_client.delete_uls(ns_stores[0].uls_name)
+        logger.info(f"Waiting for {run_time} seconds")
+        time.sleep(run_time)
+        return ns_stores[0].uls_name
+
+    test_file = os.path.join(measurement_dir, "measure_delete_target_bucket.json")
+    measured_op = measure_operation(delete_target_bucket, test_file)
+    logger.info("Delete NS bucket, bucketclass and NS store so that alert is cleared")
+    ns_bucket[0].delete()
+    ns_bucket[0].bucketclass.delete()
+    ns_stores[0].delete()
+    return measured_op

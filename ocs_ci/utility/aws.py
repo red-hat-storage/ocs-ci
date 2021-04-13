@@ -11,7 +11,8 @@ from botocore.exceptions import ClientError, NoCredentialsError
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import get_infra_id
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, exceptions
+from ocs_ci.ocs import constants, defaults, exceptions
+from ocs_ci.ocs.parallel import parallel
 from ocs_ci.utility.templating import load_yaml
 from tempfile import NamedTemporaryFile
 
@@ -1690,6 +1691,7 @@ def delete_cluster_buckets(cluster_name):
         f"nb.(\\d+).apps.{cluster_name}.{base_domain}",
         f"{cluster_name}-(\\w+)-image-registry-{region}-(\\w+)",
         f"{cluster_name}-(\\d{{4}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})",
+        f"{cluster_name}-(\\w+)-oidc",
     ]
     for pattern in patterns:
         r = re.compile(pattern)
@@ -1729,3 +1731,50 @@ def get_stack_name_from_instance_dict(instance_dict):
             stack_name = tag.get("Value")
 
     return stack_name
+
+
+def create_and_attach_ebs_volumes(
+    worker_pattern,
+    size=100,
+):
+    """
+    Create volumes on workers
+
+    Args:
+        worker_pattern (string): Worker name pattern e.g.:
+            cluster-55jx2-worker*
+        size (int): Size in GB (default: 100)
+
+    """
+    region = config.ENV_DATA["region"]
+    aws = AWS(region)
+    worker_instances = aws.get_instances_by_name_pattern(worker_pattern)
+    with parallel() as p:
+        for worker in worker_instances:
+            logger.info(f"Creating and attaching {size} GB volume to {worker['name']}")
+            p.spawn(
+                aws.create_volume_and_attach,
+                availability_zone=worker["avz"],
+                instance_id=worker["id"],
+                name=f"{worker['name']}_extra_volume",
+                size=size,
+            )
+
+
+def create_and_attach_volume_for_all_workers(device_size=None):
+    """
+    Create volumes on workers
+
+    Args:
+        device_size (int): Size in GB, if not specified value from:
+            config.ENV_DATA["device_size"] will be used
+
+    """
+    device_size = device_size or int(
+        config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
+    )
+    infra_id = get_infra_id(config.ENV_DATA["cluster_path"])
+    create_and_attach_ebs_volumes(
+        f"{infra_id}-worker*",
+        device_size,
+    )

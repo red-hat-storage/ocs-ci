@@ -4,7 +4,11 @@ from time import sleep
 
 from concurrent.futures import ThreadPoolExecutor
 
-from ocs_ci.framework.pytest_customization.marks import skipif_bm, skipif_aws_i3
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_bm,
+    skipif_aws_i3,
+    skipif_vsphere_ipi,
+)
 from ocs_ci.ocs import node, constants
 from ocs_ci.framework.testlib import E2ETest, flowtests, config, ignore_leftovers
 from ocs_ci.ocs.ocp import OCP
@@ -25,6 +29,7 @@ class TestBaseOperationNodeDrain(E2ETest):
 
     @skipif_aws_i3
     @skipif_bm
+    @skipif_vsphere_ipi
     @pytest.mark.polarion_id("OCS-2188")
     def test_base_operation_node_drain(
         self,

@@ -62,7 +62,7 @@ def init_ocsci_conf(arguments=None):
     parser.add_argument(
         "--ocs-version",
         action="store",
-        choices=["4.2", "4.3", "4.4", "4.5", "4.6", "4.7"],
+        choices=["4.2", "4.3", "4.4", "4.5", "4.6", "4.7", "4.8"],
     )
     parser.add_argument("--ocs-registry-image")
     parser.add_argument("--flexy-env-file", default="", help="Path to flexy env file")
@@ -109,7 +109,7 @@ def main(argv=None):
     init_ocsci_conf(arguments)
     pytest_logs_dir = utils.ocsci_log_path()
     utils.create_directory_path(framework.config.RUN["log_dir"])
-    launch_name = utils.get_testrun_name() + getuser()
+    launch_name = f"{utils.get_testrun_name()}-{getuser()}"
     arguments.extend(
         [
             "-p",

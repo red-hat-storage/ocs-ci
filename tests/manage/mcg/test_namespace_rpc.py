@@ -1,13 +1,20 @@
+"""
+Tests for Namespace resources and buckets by using RPC calls only.
+Most of these tests are valid only for OCS version lesser than 4.7
+because in later versions are for Namespace bucket creation used CRDs.
+"""
 import logging
 import pytest
+
 from ocs_ci.framework.testlib import (
     MCGTest,
+    skipif_ocs_version,
+    skipif_openshift_dedicated,
     tier1,
     tier2,
     tier3,
     tier4,
     tier4a,
-    acceptance,
 )
 from ocs_ci.ocs.bucket_utils import sync_object_directory, verify_s3_object_integrity
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
@@ -19,10 +26,12 @@ from ocs_ci.ocs.resources import pod
 logger = logging.getLogger(__name__)
 
 
+@skipif_openshift_dedicated
 @skipif_aws_creds_are_missing
+@skipif_ocs_version("!=4.6")
 class TestNamespace(MCGTest):
     """
-    Test creation of a namespace resource
+    Test creation of a namespace resources and buckets via RPC calls.
     """
 
     MCG_NS_RESULT_DIR = "/result"
@@ -33,7 +42,7 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2255")
     @tier1
-    def test_namespace_resource_creation(self, ns_resource_factory):
+    def test_namespace_resource_creation_rpc(self, ns_resource_factory):
         """
         Test namespace resource creation using the MCG RPC.
         """
@@ -41,7 +50,6 @@ class TestNamespace(MCGTest):
         ns_resource_factory()
 
     @tier1
-    @acceptance
     @pytest.mark.parametrize(
         argnames=["platform"],
         argvalues=[
@@ -53,7 +61,7 @@ class TestNamespace(MCGTest):
             ),
         ],
     )
-    def test_namespace_bucket_creation(
+    def test_namespace_bucket_creation_rpc(
         self, ns_resource_factory, bucket_factory, platform
     ):
         """
@@ -72,12 +80,11 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2407")
     @tier1
-    def test_namespace_bucket_creation_with_rgw(
+    def test_namespace_bucket_creation_with_rgw_rpc(
         self, ns_resource_factory, bucket_factory, rgw_deployments
     ):
         """
         Test namespace bucket creation using the MCG RPC.
-
         """
         # Create the namespace resource and verify health
         ns_resource_name = ns_resource_factory(platform=constants.RGW_PLATFORM)[1]
@@ -92,7 +99,7 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2257")
     @tier1
-    def test_write_to_aws_read_from_ns(
+    def test_write_to_aws_read_from_ns_rpc(
         self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory
     ):
         """
@@ -133,7 +140,7 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2258")
     @tier1
-    def test_write_to_ns_read_from_aws(
+    def test_write_to_ns_read_from_aws_rpc(
         self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory
     ):
         """
@@ -173,19 +180,18 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2292")
     @tier2
-    def test_distribution_of_objects_in_ns_bucket(
+    def test_distribution_of_objects_in_ns_bucket_rpc(
         self,
+        rgw_deployments,
         mcg_obj,
         cld_mgr,
         awscli_pod,
         ns_resource_factory,
         bucket_factory,
-        rgw_deployments,
     ):
         """
         Test that uploaded objects into resources were correctly uploaded even
         when some file is the same and downloaded after that.
-
         """
         logger.info("Create the namespace resources and verify health")
         target_bucket1, resource1 = ns_resource_factory(platform=constants.RGW_PLATFORM)
@@ -236,18 +242,17 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2290")
     @tier2
-    def test_create_ns_bucket_from_utilized_resources(
+    def test_create_ns_bucket_from_utilized_resources_rpc(
         self,
+        rgw_deployments,
         mcg_obj,
         cld_mgr,
         awscli_pod,
         ns_resource_factory,
         bucket_factory,
-        rgw_deployments,
     ):
         """
         Test Write to 2 resources, create bucket from them and read from the NS bucket.
-
         """
         logger.info("Create the namespace resources and verify health")
         target_bucket1, resource1 = ns_resource_factory(platform=constants.RGW_PLATFORM)
@@ -312,12 +317,11 @@ class TestNamespace(MCGTest):
             ),
         ],
     )
-    def test_resource_combinations(
+    def test_resource_combinations_rpc(
         self, ns_resource_factory, bucket_factory, platform1, platform2
     ):
         """
         Test namespace bucket creation using the MCG RPC. Use 2 resources.
-
         """
         # Create the namespace resources and verify health
         ns_resource_name1 = ns_resource_factory(platform=platform1)[1]
@@ -333,12 +337,11 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2417")
     @tier2
-    def test_resource_combinations_with_rgw(
+    def test_resource_combinations_with_rgw_rpc(
         self, ns_resource_factory, rgw_deployments, bucket_factory
     ):
         """
         Test namespace bucket creation using the MCG RPC. Use 2 resources.
-
         """
         # Create the namespace resource and verify health
         ns_resource_name1 = ns_resource_factory(platform=constants.RGW_PLATFORM)[1]
@@ -355,13 +358,12 @@ class TestNamespace(MCGTest):
     @pytest.mark.polarion_id("OCS-2280")
     @pytest.mark.bugzilla("1900760")
     @tier3
-    def test_create_resource_with_invalid_target_bucket(
+    def test_create_resource_with_invalid_target_bucket_rpc(
         self, mcg_obj, mcg_connection_factory
     ):
         """
         Test that a proper error message is reported when invalid target
         bucket is provided during namespace resource creation.
-
         """
         connection_name = mcg_connection_factory()
         for target_bucket in ("", " ", "/*-#$%@^"):
@@ -378,13 +380,12 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2282")
     @tier3
-    def test_delete_resource_used_in_ns_bucket(
+    def test_delete_resource_used_in_ns_bucket_rpc(
         self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory
     ):
         """
         Test that a proper error message is reported when invalid target
         bucket is provided during namespace resource creation.
-
         """
         # Create the namespace resources and verify health
         _, resource1 = ns_resource_factory()
@@ -404,11 +405,10 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2282")
     @tier3
-    def test_delete_nonexistent_resource(self, mcg_obj):
+    def test_delete_nonexistent_resource_rpc(self, mcg_obj):
         """
         Test that a proper error message is reported when nonexistent resource
         is deleted.
-
         """
         response = mcg_obj.send_rpc_query(
             "pool_api", "delete_namespace_resource", {"name": "notexisting_resource"}
@@ -427,13 +427,12 @@ class TestNamespace(MCGTest):
             ),
         ],
     )
-    def test_respin_mcg_pod_and_check_data_integrity(
+    def test_respin_mcg_pod_and_check_data_integrity_rpc(
         self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory, mcg_pod
     ):
         """
         Test Write to ns bucket using MCG RPC and read directly from AWS.
         Respin one of mcg pods when data are uploaded.
-
         """
 
         logger.info("Create the namespace resource and verify health")
@@ -486,13 +485,12 @@ class TestNamespace(MCGTest):
     @pytest.mark.polarion_id("OCS-2293")
     @tier4
     @tier4a
-    def test_namespace_bucket_creation_with_many_resources(
+    def test_namespace_bucket_creation_with_many_resources_rpc(
         self, ns_resource_factory, bucket_factory
     ):
         """
         Test namespace bucket creation using the MCG RPC.
         Use 100+ read resources.
-
         """
         logger.info("Create namespace resources and verify health")
         ns_resources = [ns_resource_factory()[1] for _ in range(0, 100)]
@@ -508,13 +506,12 @@ class TestNamespace(MCGTest):
     @pytest.mark.polarion_id("OCS-2325")
     @tier4
     @tier4a
-    def test_block_read_resource_in_namespace_bucket(
+    def test_block_read_resource_in_namespace_bucket_rpc(
         self, mcg_obj, awscli_pod, ns_resource_factory, bucket_factory, cld_mgr
     ):
         """
         Test blocking namespace resource in namespace bucket.
         Check data availability.
-
         """
         aws_client = cld_mgr.aws_client
         s3_creds = {

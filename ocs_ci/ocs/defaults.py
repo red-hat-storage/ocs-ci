@@ -63,3 +63,8 @@ ELASTICSEARCE_PORT = 9200
 
 # Local storage namespace
 LOCAL_STORAGE_NAMESPACE = "openshift-local-storage"
+
+# Vault related defaults
+VAULT_DEFAULT_CA_CERT = "ocs-kms-ca-secret"
+VAULT_DEFAULT_CLIENT_CERT = "ocs-kms-client-cert"
+VAULT_DEFAULT_CLIENT_KEY = "ocs-kms-client-key"

@@ -758,11 +758,20 @@ def setup_ceph_toolbox(force_setup=False):
     else:
         if external_mode:
             toolbox = templating.load_yaml(constants.TOOL_POD_YAML)
+            toolbox["metadata"]["name"] += "-external"
             keyring_dict = ocsci_config.EXTERNAL_MODE.get("admin_keyring")
             env = [{"name": "ROOK_ADMIN_SECRET", "value": keyring_dict["key"]}]
             toolbox["spec"]["template"]["spec"]["containers"][0]["env"] = env
+            # add ceph volumeMounts
+            ceph_volume_mount_path = {"mountPath": "/etc/ceph", "name": "ceph-config"}
+            ceph_volume = {"name": "ceph-config", "emptyDir": {}}
+            toolbox["spec"]["template"]["spec"]["containers"][0]["volumeMounts"].append(
+                ceph_volume_mount_path
+            )
+            toolbox["spec"]["template"]["spec"]["volumes"].append(ceph_volume)
             rook_toolbox = OCS(**toolbox)
             rook_toolbox.create()
+            return
         # for OCS >= 4.3 there is new toolbox pod deployment done here:
         # https://github.com/openshift/ocs-operator/pull/207/
         log.info("starting ceph toolbox pod")

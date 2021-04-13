@@ -46,20 +46,26 @@ class Terraform(object):
             cmd = f"{self.terraform_installer} init {self.path}"
         run_cmd(cmd, timeout=1200)
 
-    def apply(self, tfvars, bootstrap_complete=False):
+    def apply(self, tfvars, bootstrap_complete=False, module=None, refresh=True):
         """
         Apply the changes required to reach the desired state of the configuration
 
         Args:
             tfvars (str): path to terraform.tfvars file
             bootstrap_complete (bool): Removes bootstrap node if True
+            module (str): Module to apply
+                e.g: constants.COMPUTE_MODULE
+            refresh (bool): If True, updates the state for each resource prior to
+                planning and applying
 
         """
         bootstrap_complete_param = (
             "-var bootstrap_complete=true" if bootstrap_complete else ""
         )
+        module_param = f"-target={module}" if module else ""
+        refresh_param = "-refresh=false" if not refresh else ""
         cmd = (
-            f"{self.terraform_installer} apply '-var-file={tfvars}'"
+            f"{self.terraform_installer} apply {module_param} {refresh_param} '-var-file={tfvars}'"
             f" -auto-approve {bootstrap_complete_param} '{self.path}'"
         )
 

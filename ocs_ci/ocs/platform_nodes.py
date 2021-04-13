@@ -10,12 +10,16 @@ import boto3
 import yaml
 
 from ocs_ci.deployment.terraform import Terraform
-from ocs_ci.deployment.vmware import update_machine_conf
+from ocs_ci.deployment.vmware import (
+    clone_openshift_installer,
+    update_machine_conf,
+)
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
-from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils
-from ocs_ci.utility.retry import retry
+from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils, powernodes
 from ocs_ci.utility.csr import approve_pending_csr
+from ocs_ci.utility.load_balancer import LoadBalancer
+from ocs_ci.utility.retry import retry
 from ocs_ci.ocs import constants, ocp, exceptions, cluster
 from ocs_ci.ocs.node import (
     get_node_objs,
@@ -41,6 +45,7 @@ from ocs_ci.utility.utils import (
     get_running_ocp_version,
     set_aws_region,
     run_cmd,
+    get_module_ip,
 )
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.utility.vsphere_nodes import VSPHERENode
@@ -65,11 +70,12 @@ class PlatformNodesFactory:
             "azure": AZURENodes,
             "gcp": NodesBase,
             "vsphere_lso": VMWareLSONodes,
+            "powervs": IBMPowerNodes,
         }
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA["platform"]
-        if cluster.is_lso_cluster():
+        if cluster.is_lso_cluster() and platform == constants.VSPHERE_PLATFORM:
             platform += "_lso"
         return self.cls_map[platform]()
 
@@ -1408,7 +1414,18 @@ class VSPHEREUPINode(VMWareNodes):
         self.node_type = node_type
         self.compute_count = compute_count
         self.current_compute_count = len(get_nodes())
-        self.target_compute_count = self.current_compute_count + self.compute_count
+        self.terraform_var = os.path.join(
+            self.cluster_path, constants.TERRAFORM_DATA_DIR, "terraform.tfvars"
+        )
+        with open(self.terraform_var, "r") as fd:
+            compute_count_line = [
+                line.rstrip("\n") for line in fd.readlines() if "compute_count" in line
+            ][0]
+        self.current_count_in_tfvars = int(
+            compute_count_line.split("=")[1].strip().strip('"')
+        )
+
+        self.target_compute_count = self.current_count_in_tfvars + self.compute_count
 
         # update the terraform installer path in ENV_DATA
         # DON'T download terraform again since we need to use the same
@@ -1424,6 +1441,7 @@ class VSPHEREUPINode(VMWareNodes):
         if Version.coerce(ocp_version) >= Version.coerce("4.5"):
             set_aws_region()
             self.folder_structure = True
+            config.ENV_DATA["folder_structure"] = True
 
         # Initialize Terraform
         self.previous_dir = os.getcwd()
@@ -1442,11 +1460,7 @@ class VSPHEREUPINode(VMWareNodes):
         Update terraform variables
         """
         logger.debug("Updating terraform variables")
-        self.terraform_var = os.path.join(
-            self.cluster_path, constants.TERRAFORM_DATA_DIR, "terraform.tfvars"
-        )
         compute_str = "compute_count ="
-        to_change = f'{compute_str} "{self.current_compute_count}"'
         updated_compute_str = f'{compute_str} "{self.target_compute_count}"'
         logging.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
 
@@ -1455,7 +1469,12 @@ class VSPHEREUPINode(VMWareNodes):
         shutil.copyfile(self.terraform_var, original_file)
         logging.info(f"original terraform file: {original_file}")
 
-        replace_content_in_file(self.terraform_var, to_change, updated_compute_str)
+        replace_content_in_file(
+            self.terraform_var,
+            compute_str,
+            updated_compute_str,
+            match_and_replace_line=True,
+        )
 
     def _update_machine_conf(self):
         """
@@ -1463,15 +1482,16 @@ class VSPHEREUPINode(VMWareNodes):
         """
         to_change = "clone {"
         add_file_block = f"{constants.LIFECYCLE}\n  {to_change}"
-        logging.debug(
-            f"Adding {constants.LIFECYCLE} to" f" {constants.INSTALLER_MACHINE_CONF}"
+        vm_machine_conf = (
+            constants.VM_MAIN
+            if self.folder_structure
+            else constants.INSTALLER_MACHINE_CONF
         )
-        replace_content_in_file(
-            constants.INSTALLER_MACHINE_CONF, to_change, add_file_block
-        )
+        logging.debug(f"Adding {constants.LIFECYCLE} to {vm_machine_conf}")
+        replace_content_in_file(vm_machine_conf, to_change, add_file_block)
 
         # update the machine configurations
-        update_machine_conf()
+        update_machine_conf(self.folder_structure)
 
     @retry(
         (NoValidConnectionsError, AuthenticationException),
@@ -1496,9 +1516,14 @@ class VSPHEREUPINode(VMWareNodes):
         vmnode.set_host_name(host_name)
         vmnode.reboot()
 
-    def add_node(self):
+    def add_node(self, use_terraform=True):
         """
         Add nodes to the current cluster
+
+        Args:
+            use_terraform (bool): if True use terraform to add nodes,
+                otherwise use manual steps to add nodes
+
         """
         if self.node_type == constants.RHCOS:
             logger.info(f"Adding Nodes of type {self.node_type}")
@@ -1512,65 +1537,116 @@ class VSPHEREUPINode(VMWareNodes):
             pre_count_csr = len(existing_csr_data)
             logger.debug(f"Existing CSR count before adding nodes: {pre_count_csr}")
 
-            # adding node without terraform
-            # clone VM
-            new_nodes_names = self.generate_node_names_for_vsphere(self.compute_count)
-            logger.info(f"New node names: {new_nodes_names}")
+            if use_terraform:
+                self.add_nodes_with_terraform()
+            else:
+                self.add_nodes_without_terraform()
 
-            # get the worker ignition
-            worker_ignition_path = os.path.join(self.cluster_path, constants.WORKER_IGN)
-            worker_ignition_base64 = run_cmd(f"base64 -w0 {worker_ignition_path}")
-            data = {
-                "disk.EnableUUID": config.ENV_DATA["disk_enable_uuid"],
-                "guestinfo.ignition.config.data": worker_ignition_base64,
-                "guestinfo.ignition.config.data.encoding": config.ENV_DATA[
-                    "ignition_data_encoding"
-                ],
-            }
-
-            # clone VM
-            for node_name in new_nodes_names:
-                self.vsphere.clone_vm(
-                    node_name,
-                    config.ENV_DATA["vm_template"],
-                    self.datacenter,
-                    self.cluster_name,
-                    self.datastore,
-                    config.ENV_DATA["vsphere_cluster"],
-                    int(config.ENV_DATA["worker_num_cpus"]),
-                    int(config.ENV_DATA["compute_memory"]),
-                    125829120,
-                    config.ENV_DATA["vm_network"],
-                    power_on=True,
-                    **data,
-                )
-            logger.info("Sleeping for 120 sec to settle down the VMs")
-            time.sleep(120)
-
-            # set hostname
-            for node_name in new_nodes_names:
-                for ip in TimeoutSampler(
-                    600,
-                    60,
-                    self.vsphere.find_ip_by_vm,
-                    node_name,
-                    self.datacenter,
-                    config.ENV_DATA["vsphere_cluster"],
-                    self.cluster_name,
-                ):
-                    if not ("<unset>" in ip or "127.0.0.1" in ip):
-                        logger.info("setting host name")
-                        self.wait_for_connection_and_set_host_name(ip, node_name)
-                        break
-
+            # give some time to settle down the newly added nodes
             time.sleep(self.wait_time)
 
+            # approve pending CSRs
             if constants.CSR_BOOTSTRAPPER_NODE in existing_csr_data:
                 nodes_approve_csr_num = pre_count_csr + self.compute_count
             else:
                 nodes_approve_csr_num = pre_count_csr + self.compute_count + 1
 
             wait_for_all_nodes_csr_and_approve(expected_node_num=nodes_approve_csr_num)
+
+    def add_nodes_with_terraform(self):
+        """
+        Add nodes using terraform
+        """
+        terraform_state_file = os.path.join(
+            self.terraform_data_dir, "terraform.tfstate"
+        )
+        ips_before_adding_nodes = get_module_ip(
+            terraform_state_file, constants.COMPUTE_MODULE
+        )
+        logger.debug(f"Compute IP's before adding new nodes: {ips_before_adding_nodes}")
+
+        # clone openshift installer
+        clone_openshift_installer()
+        self._update_terraform()
+        self._update_machine_conf()
+
+        # initialize terraform and apply
+        os.chdir(self.terraform_data_dir)
+        self.terraform.initialize()
+        self.terraform.apply(
+            self.terraform_var, module=constants.COMPUTE_MODULE, refresh=False
+        )
+        self.terraform.apply(
+            self.terraform_var, module=constants.COMPUTE_MODULE_VM, refresh=False
+        )
+        os.chdir(self.previous_dir)
+
+        # get the newly added compute IPs
+        ips_after_adding_nodes = get_module_ip(
+            terraform_state_file, constants.COMPUTE_MODULE
+        )
+        logger.debug(f"Compute IP's after adding new nodes: {ips_after_adding_nodes}")
+        new_node_ips = list(set(ips_after_adding_nodes) - set(ips_before_adding_nodes))
+        logger.info(f"Newly added compute IP's: {new_node_ips}")
+
+        # inform load balancer regarding newly added nodes
+        lb = LoadBalancer()
+        lb.update_haproxy_with_nodes(new_node_ips)
+        lb.restart_haproxy()
+
+    def add_nodes_without_terraform(self):
+        """
+        Add nodes without terraform
+        """
+        # generate new node names
+        new_nodes_names = self.generate_node_names_for_vsphere(self.compute_count)
+        logger.info(f"New node names: {new_nodes_names}")
+
+        # get the worker ignition
+        worker_ignition_path = os.path.join(self.cluster_path, constants.WORKER_IGN)
+        worker_ignition_base64 = run_cmd(f"base64 -w0 {worker_ignition_path}")
+        data = {
+            "disk.EnableUUID": config.ENV_DATA["disk_enable_uuid"],
+            "guestinfo.ignition.config.data": worker_ignition_base64,
+            "guestinfo.ignition.config.data.encoding": config.ENV_DATA[
+                "ignition_data_encoding"
+            ],
+        }
+
+        # clone VM
+        for node_name in new_nodes_names:
+            self.vsphere.clone_vm(
+                node_name,
+                config.ENV_DATA["vm_template"],
+                self.datacenter,
+                self.cluster_name,
+                self.datastore,
+                config.ENV_DATA["vsphere_cluster"],
+                int(config.ENV_DATA["worker_num_cpus"]),
+                int(config.ENV_DATA["compute_memory"]),
+                125829120,
+                config.ENV_DATA["vm_network"],
+                power_on=True,
+                **data,
+            )
+        logger.info(f"Sleeping for {self.wait_time} sec to settle down the VMs")
+        time.sleep(self.wait_time)
+
+        # set hostname
+        for node_name in new_nodes_names:
+            for ip in TimeoutSampler(
+                600,
+                60,
+                self.vsphere.find_ip_by_vm,
+                node_name,
+                self.datacenter,
+                config.ENV_DATA["vsphere_cluster"],
+                self.cluster_name,
+            ):
+                if not ("<unset>" in ip or "127.0.0.1" in ip):
+                    logger.info("setting host name")
+                    self.wait_for_connection_and_set_host_name(ip, node_name)
+                    break
 
     def generate_node_names_for_vsphere(self, count, prefix="compute-"):
         """
@@ -1712,6 +1788,119 @@ class BaremetalNodes(NodesBase):
         return default_config_dict
 
 
+class IBMPowerNodes(NodesBase):
+    """
+    IBM Power Nodes class
+    """
+
+    def __init__(self):
+        super(IBMPowerNodes, self).__init__()
+        self.powernodes = powernodes.PowerNodes()
+
+    def stop_nodes(self, nodes, force=True):
+        """
+        Stop PowerNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force nodes stop, False otherwise
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.stop_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            self.powernodes.stop_powernodes_machines_powervs(
+                nodes, timeout=900, wait=True
+            )
+
+    def start_nodes(self, nodes, force=True):
+        """
+        Start PowerNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): Wait for node status
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.start_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            self.powernodes.start_powernodes_machines_powervs(
+                nodes, timeout=900, wait=True
+            )
+
+    def restart_nodes(self, nodes, timeout=540, wait=True, force=True):
+        """
+        Restart PowerNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+            wait (bool): True if need to wait till the restarted node reaches timeout
+            force (bool): True for force BM stop, False otherwise
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.restart_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            self.powernodes.restart_powernodes_machines_powervs(
+                nodes, timeout=900, wait=True
+            )
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        """
+        Restart PowerNodes with stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force node stop, False otherwise
+
+        """
+        if self.powernodes.iskvm():
+            self.powernodes.restart_powernodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            self.powernodes.restart_powernodes_machines_powervs(
+                nodes, timeout=900, wait=True
+            )
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Make sure all PowerNodes are up by the end of the test
+        """
+        self.cluster_nodes = get_node_objs()
+        if self.powernodes.iskvm():
+            stopped_powernodes = [
+                powernode
+                for powernode in self.cluster_nodes
+                if self.powernodes.verify_machine_is_down(powernode) is True
+            ]
+        else:
+            stopped_powernodes = [
+                powernode
+                for powernode in self.cluster_nodes
+                if powernode.ocp.get_resource_status(powernode.name)
+                == constants.NODE_NOT_READY
+            ]
+
+        if stopped_powernodes:
+            logger.info(
+                f"The following PowerNodes are powered off: {stopped_powernodes}"
+            )
+            if self.powernodes.iskvm():
+                self.powernodes.start_powernodes_machines(stopped_powernodes)
+            else:
+                self.powernodes.start_powernodes_machines_powervs(stopped_powernodes)
+
+
 class AZURENodes(NodesBase):
     """
     Azure Nodes class
@@ -1721,7 +1910,7 @@ class AZURENodes(NodesBase):
         super(AZURENodes, self).__init__()
         self.azure = azure_utils.AZURE()
 
-    def stop_nodes(self, nodes, timeout=540, wait=True):
+    def stop_nodes(self, nodes, timeout=540, wait=True, force=True):
         """
         Stop Azure vm instances
 
@@ -1729,14 +1918,15 @@ class AZURENodes(NodesBase):
             nodes (list): The OCS objects of the nodes
             wait (bool): True for waiting the instances to stop, False otherwise
             timeout (int): time in seconds to wait for node to reach 'not ready' state.
+            force (bool): True for force VM stop, False otherwise
 
         """
         if not nodes:
             raise ValueError("No nodes found to stop")
 
         node_names = [n.name for n in nodes]
-        for node_name in node_names:
-            self.azure.stop_vm_instance(node_name)
+        self.azure.stop_vm_instances(node_names, force=force)
+
         if wait:
             # When the node is not reachable then the node reaches status NotReady.
             logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
@@ -1757,8 +1947,8 @@ class AZURENodes(NodesBase):
         if not nodes:
             raise ValueError("No nodes found to start")
         node_names = [n.name for n in nodes]
-        for node_name in node_names:
-            self.azure.start_vm_instance(node_name)
+        self.azure.start_vm_instances(node_names)
+
         if wait:
             # When the node is reachable then the node reaches status Ready.
             logger.info(f"Waiting for nodes: {node_names} to reach ready state")
@@ -1782,8 +1972,7 @@ class AZURENodes(NodesBase):
             logger.error("No nodes found for restarting")
             raise ValueError
         node_names = [n.name for n in nodes]
-        for node_name in node_names:
-            self.azure.restart_az_vm_instance(node_name)
+        self.azure.restart_vm_instances(node_names)
 
         if wait:
             """
@@ -1804,7 +1993,9 @@ class AZURENodes(NodesBase):
                 node_names=node_names, status=constants.NODE_READY, timeout=timeout
             )
 
-    def restart_nodes_by_stop_and_start(self, nodes, timeout=540, wait=True):
+    def restart_nodes_by_stop_and_start(
+        self, nodes, timeout=540, wait=True, force=True
+    ):
         """
         Restart Azure vm instances by stop and start
 
@@ -1814,12 +2005,19 @@ class AZURENodes(NodesBase):
                 READY state. False otherwise
             timeout (int): time in seconds to wait for node to reach 'not ready' state,
                 and 'ready' state.
+            force (bool): True for force VM stop, False otherwise
 
         """
         if not nodes:
             raise ValueError("No nodes found for restarting")
-        self.stop_nodes(nodes, timeout=timeout, wait=wait)
-        self.start_nodes(nodes, timeout=timeout, wait=wait)
+        node_names = [n.name for n in nodes]
+        self.azure.restart_vm_instances_by_stop_and_start(node_names, force=force)
+
+        if wait:
+            logger.info(f"Waiting for nodes: {node_names} to reach ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY, timeout=timeout
+            )
 
     def get_data_volumes(self):
         """
@@ -1906,6 +2104,28 @@ class AZURENodes(NodesBase):
         raise NotImplementedError(
             "attach nodes to cluster functionality is not implemented"
         )
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Make sure all VM instances up by the end of the test
+
+        """
+        self.cluster_nodes = get_node_objs()
+        vms = self.azure.get_vm_names()
+        assert (
+            vms
+        ), f"Failed to get VM objects for nodes {[n.name for n in self.cluster_nodes]}"
+
+        stopped_vms = [
+            vm
+            for vm in vms
+            if self.azure.get_vm_power_status(vm) == constants.VM_STOPPED
+            or self.azure.get_vm_power_status(vm) == constants.VM_STOPPING
+        ]
+        # Start the VMs
+        if stopped_vms:
+            logger.info(f"The following VMs are powered off: {stopped_vms}")
+            self.azure.start_vm_instances(stopped_vms)
 
 
 class VMWareLSONodes(VMWareNodes):

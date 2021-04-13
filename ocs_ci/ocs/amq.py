@@ -20,7 +20,7 @@ from ocs_ci.utility import templating, utils
 from ocs_ci.utility.utils import run_cmd, exec_cmd, TimeoutSampler
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.helpers.helpers import storagecluster_independent_check, validate_pv_delete
-from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, delete_pvcs
 
 log = logging.getLogger(__name__)
 URL = "https://get.helm.sh/helm-v2.16.1-linux-amd64.tar.gz"
@@ -66,23 +66,23 @@ class AMQ(object):
         """
         try:
             log.info(f"cloning amq in {self.dir}")
-            git_clone_cmd = f"git clone -b {self.branch} {self.repo} "
+            git_clone_cmd = f"git clone {self.repo} "
             run(git_clone_cmd, shell=True, cwd=self.dir, check=True)
-            self.amq_dir = "strimzi-kafka-operator/install/cluster-operator/"
+            self.amq_dir = "strimzi-kafka-operator/packaging/install/cluster-operator/"
             self.amq_kafka_pers_yaml = (
-                "strimzi-kafka-operator/examples/kafka/kafka-persistent.yaml"
+                "strimzi-kafka-operator/packaging/examples/kafka/kafka-persistent.yaml"
             )
             self.amq_kafka_connect_yaml = (
-                "strimzi-kafka-operator/examples/connect/kafka-connect.yaml"
+                "strimzi-kafka-operator/packaging/examples/connect/kafka-connect.yaml"
             )
             self.amq_kafka_bridge_yaml = (
-                "strimzi-kafka-operator/examples/bridge/kafka-bridge.yaml"
+                "strimzi-kafka-operator/packaging/examples/bridge/kafka-bridge.yaml"
             )
             self.kafka_topic_yaml = (
-                "strimzi-kafka-operator/examples/topic/kafka-topic.yaml"
+                "strimzi-kafka-operator/packaging/examples/topic/kafka-topic.yaml"
             )
             self.kafka_user_yaml = (
-                "strimzi-kafka-operator/examples/user/kafka-user.yaml"
+                "strimzi-kafka-operator/packaging/examples/user/kafka-user.yaml"
             )
             self.hello_world_producer_yaml = constants.HELLO_WORLD_PRODUCER_YAML
             self.hello_world_consumer_yaml = constants.HELLO_WORLD_CONSUMER_YAML
@@ -122,20 +122,25 @@ class AMQ(object):
 
         # Create strimzi-cluster-operator pod
         run(
-            f"for i in `(ls strimzi-kafka-operator/install/cluster-operator/)`;"
-            f"do sed 's/{namespace}/myproject/g' strimzi-kafka-operator/install/cluster-operator/$i;done",
+            f"for i in `(ls strimzi-kafka-operator/packaging/install/cluster-operator/)`;"
+            f"do sed 's/{namespace}/myproject/g' "
+            f"strimzi-kafka-operator/packaging/install/cluster-operator/$i;done",
             shell=True,
             check=True,
             cwd=self.dir,
         )
-        run(
-            f"oc apply -f {self.amq_dir} -n {namespace}",
-            shell=True,
-            check=True,
-            cwd=self.dir,
-        )
-        time.sleep(10)
-
+        self.strimzi_kafka_operator = os.path.join(self.dir, self.amq_dir)
+        pf_files = os.listdir(self.strimzi_kafka_operator)
+        crds = []
+        for crd in pf_files:
+            crds.append(crd)
+        self.crd_objects = []
+        for adm_yaml in crds:
+            adm_data = templating.load_yaml(self.strimzi_kafka_operator + adm_yaml)
+            adm_obj = OCS(**adm_data)
+            adm_obj.create()
+            self.crd_objects.append(adm_obj)
+        time.sleep(30)
         #  Check strimzi-cluster-operator pod created
         if self.is_amq_pod_running(pod_pattern="cluster-operator", expected_pods=1):
             log.info("strimzi-cluster-operator pod is in running state")
@@ -909,6 +914,7 @@ class AMQ(object):
             tiller_namespace (str): Created namespace for benchmark
 
         """
+        ocs_pvc_obj = get_all_pvc_objs(namespace=kafka_namespace)
         if self.amq_is_setup:
             if self.messaging:
                 self.consumer_pod.delete()
@@ -930,20 +936,18 @@ class AMQ(object):
                 run_cmd(f"oc delete project {tiller_namespace}")
                 self.ns_obj.wait_for_delete(resource_name=tiller_namespace)
 
-            self.kafka_persistent.delete()
             self.kafka_connect.delete()
             self.kafka_bridge.delete()
-            run_cmd(
-                f"oc delete -f {self.amq_dir}", shell=True, check=True, cwd=self.dir
-            )
-
-            ocs_pvc_obj = get_all_pvc_objs(namespace=kafka_namespace)
-
-        run_cmd(f"oc delete project {kafka_namespace}")
-
-        self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
+            self.kafka_persistent.delete()
+            delete_pvcs(pvc_objs=ocs_pvc_obj)
+            for adm_obj in self.crd_objects:
+                adm_obj.delete()
+            time.sleep(20)
         for pvc in ocs_pvc_obj:
             logging.info(pvc.name)
             validate_pv_delete(pvc.backed_pv)
+        run_cmd(f"oc delete project {kafka_namespace}")
+
+        self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
         # Reset namespace to default
         switch_to_default_rook_cluster_project()

@@ -12,6 +12,8 @@ OCS4.5 Link:
 https://github.com/openshift/ocs-operator/blob/de48c9c00f8964f0f8813d7b3ddd25f7bc318449/must-gather/collection-scripts/
 
 """
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 
 
 GATHER_COMMANDS_CEPH = [
@@ -160,6 +162,31 @@ GATHER_COMMANDS_OTHERS = [
     "services.yaml",
     "statefulsets.yaml",
     "storagecluster.yaml",
+]
+
+GATHER_COMMANDS_OPENSHIFT_DEDICATED_EXCLUDE = [
+    "db-noobaa-db-0.yaml",
+    "my-alertmanager-claim-alertmanager-main-0.yaml",
+    "my-alertmanager-claim-alertmanager-main-1.yaml",
+    "my-alertmanager-claim-alertmanager-main-2.yaml",
+    "my-prometheus-claim-prometheus-k8s-0.yaml",
+    "my-prometheus-claim-prometheus-k8s-1.yaml",
+    "noobaa-core-0.log",
+    "noobaa-core-0.yaml",
+    "noobaa-db-0.log",
+    "noobaa-db-0.yaml",
+    "noobaa-default-backing-store.yaml",
+    "noobaa-default-bucket-class.yaml",
+    "noobaa.yaml",
+    "pools_rbd_ocs-storagecluster-cephblockpool",
+    "registry-cephfs-rwx-pvc.yaml",
+]
+
+GATHER_COMMANDS_OPENSHIFT_DEDICATED_EXCLUDE_4_6 = [
+    "openshift-storage-operatorgroup-admin.yaml",
+    "openshift-storage-operatorgroup-edit.yaml",
+    "openshift-storage-operatorgroup-view.yaml",
+    "openshift-storage.noobaa.io.yaml",
 ]
 
 GATHER_COMMANDS_CEPH_4_5 = [
@@ -681,6 +708,15 @@ GATHER_COMMANDS_OTHERS_EXTERNAL_4_6 = list(
     "ocs-external-storagecluster-cephfsplugin-snapclass.yaml",
     "ocs-external-storagecluster-rbdplugin-snapclass.yaml",
 ]
+
+if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+    GATHER_COMMANDS_OTHERS = list(
+        set(GATHER_COMMANDS_OTHERS) - set(GATHER_COMMANDS_OPENSHIFT_DEDICATED_EXCLUDE)
+    )
+    GATHER_COMMANDS_OTHERS_4_6 = list(
+        set(GATHER_COMMANDS_OTHERS_4_6)
+        - set(GATHER_COMMANDS_OPENSHIFT_DEDICATED_EXCLUDE_4_6)
+    )
 
 GATHER_COMMANDS_VERSION = {
     4.5: {
