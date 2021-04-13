@@ -4,6 +4,7 @@ platforms like AWS, VMWare, Baremetal etc.
 """
 
 from copy import deepcopy
+from semantic_version import Version
 import json
 import logging
 import tempfile
@@ -583,11 +584,11 @@ class Deployment(object):
         logger.info(
             "Flexible scaling is available from version 4.7 on LSO cluster with less than 3 zones"
         )
-        ocs_version = float(config.ENV_DATA["ocs_version"])
+        ocs_version = config.ENV_DATA["ocs_version"]
         zone_num = get_az_count()
         if (
             config.DEPLOYMENT.get("local_storage")
-            and ocs_version >= 4.7
+            and Version.coerce(ocs_version) >= Version.coerce("4.7")
             and zone_num < 3
         ):
             cluster_data["spec"]["flexibleScaling"] = True
