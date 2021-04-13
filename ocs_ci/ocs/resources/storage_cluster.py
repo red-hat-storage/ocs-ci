@@ -476,7 +476,9 @@ def add_capacity(osd_size_capacity_requested):
     is_lso = config.DEPLOYMENT.get("local_storage")
     if (
         ocp_version == "4.7"
-        and (platform == "aws" or platform == "vsphere")
+        and (
+            platform == constants.AWS_PLATFORM or platform == constants.VSPHERE_PLATFORM
+        )
         and (not is_lso)
     ):
         logging.info("Add capacity via UI")
