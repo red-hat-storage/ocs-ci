@@ -86,7 +86,8 @@ class TestKillCephDaemon(ManageTest):
         cmd_gen = "oc debug node/" + node_name + " -- chroot /host "
         cmd = cmd_gen + cmd_pid
         out = run_cmd(cmd=cmd)
-        pid = out.strip()
+        pids = out.strip().split()
+        pid = pids[0]
         if not pid.isnumeric():
             raise Exception(f"The ceph-{daemon_type} process-id was not found.")
 
