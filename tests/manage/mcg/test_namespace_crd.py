@@ -867,13 +867,13 @@ class TestNamespace(MCGTest):
         """
         logger.info("Create namespace resources and verify health")
         nss_tup = ("oc", {"aws": [(100, self.DEFAULT_REGION)]})
-        ns_resources = namespace_store_factory(*nss_tup)[0]
+        ns_resources = namespace_store_factory(*nss_tup)
 
         logger.info("Create the namespace bucket with many namespace resources")
         bucketclass_dict = {
             "interface": "OC",
             "namespace_policy_dict": {
-                "type": "Mulsti",
+                "type": "Multi",
                 "namespacestores": ns_resources,
             },
         }
