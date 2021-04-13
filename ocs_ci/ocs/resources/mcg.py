@@ -748,10 +748,8 @@ class MCG:
                 }
 
             elif ns_policy_type == constants.NAMESPACE_POLICY_TYPE_CACHE:
-                bc_data["spec"]["namespacePolicy"]["cache"] = {
-                    "hubResource": namespace_policy["write_resource"],
-                    "ttl": namespace_policy["ttl"],
-                }
+                bc_data["spec"]["placementPolicy"] = placement
+                bc_data["spec"]["namespacePolicy"]["cache"] = namespace_policy["cache"]
 
         return create_resource(**bc_data)
 
