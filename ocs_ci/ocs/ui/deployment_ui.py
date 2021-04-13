@@ -122,7 +122,6 @@ class DeploymentUI(PageNavigator):
         logger.info("Click Install OCS")
         self.do_click(self.dep_loc["click_install_ocs"])
         self.do_click(self.dep_loc["click_install_ocs_page"])
-        time.sleep(60)
         self.verify_operator_succeeded(operator="OpenShift Container Storage")
 
     def install_local_storage_operator(self):
@@ -141,7 +140,6 @@ class DeploymentUI(PageNavigator):
             logger.info("Click Install LSO")
             self.do_click(self.dep_loc["click_install_lso"])
             self.do_click(self.dep_loc["click_install_lso_page"])
-            time.sleep(60)
             self.verify_operator_succeeded(operator="Local Storage")
 
     def install_storage_cluster(self):
