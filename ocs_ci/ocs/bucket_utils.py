@@ -1039,6 +1039,39 @@ def setup_base_objects(awscli_pod, original_dir, result_dir, amount=2):
         )
 
 
+def check_cached_objects_by_name(mcg_obj, bucket_name, expected_objects_names=None):
+    """
+    Check if the names of cached objects in a cache bucket are as expected using rpc call
+
+    Args:
+        mcg_obj (MCG): An MCG object containing the MCG S3 connection credentials
+        bucket_name (str): Name of the cache bucket
+        expected_objects_names (list): Expected objects to be cached
+
+    Returns:
+        bool: True if all the objects exist in the cache as expected, False otherwise
+    """
+    res = mcg_obj.send_rpc_query(
+        "object_api",
+        "list_objects",
+        {
+            "bucket": bucket_name,
+        },
+    ).json()
+    list_objects_res = [name["key"] for name in res.get("reply").get("objects")]
+    if not expected_objects_names:
+        expected_objects_names = []
+    if set(expected_objects_names) == set(list_objects_res):
+        logger.info("Files cached as expected")
+        return True
+    logger.warning(
+        "Objects did not cache properly, \n"
+        f"Expected: [{expected_objects_names}]\n"
+        f"Cached: [{list_objects_res}]"
+    )
+    return False
+
+
 def compare_directory(awscli_pod, original_dir, result_dir, amount=2):
     """
     Compares object checksums on original and result directories
