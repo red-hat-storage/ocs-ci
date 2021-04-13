@@ -19,21 +19,21 @@ class TestPVCCreationPerformance(E2ETest):
     """
 
     @pytest.fixture()
-    def base_setup(self, request, interface_iterate, storageclass_factory):
+    def base_setup(self, request, interface_iterate):
         """
         A setup phase for the test
         Args:
             interface_iterate: A fixture to iterate over ceph interfaces
-            storageclass_factory: A fixture to create everything needed for a
-                storageclass
+
         """
         self.interface = interface_iterate
 
         if self.interface.lower() == "cephfs":
             self.interface = constants.CEPHFILESYSTEM
+            self.sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
         if self.interface.lower() == "rbd":
             self.interface = constants.CEPHBLOCKPOOL
-        self.sc_obj = storageclass_factory(self.interface)
+            self.sc_obj = constants.DEFAULT_STORAGECLASS_RBD
 
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_pvc_reattach_time_performance(self, pvc_factory, teardown_factory):
@@ -76,13 +76,13 @@ class TestPVCCreationPerformance(E2ETest):
         # Create a pod on one node
         logging.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_one}")
 
-        helpers.pull_images("nginx")
+        helpers.pull_images(constants.PERF_IMAGE)
         pod_obj1 = helpers.create_pod(
             interface_type=self.interface,
             pvc_name=pvc_obj.name,
             namespace=pvc_obj.namespace,
             node_name=node_one,
-            pod_dict_path=constants.NGINX_POD_YAML,
+            pod_dict_path=constants.PERF_POD_YAML,
         )
 
         # Confirm that pod is running on the selected_nodes
@@ -92,19 +92,14 @@ class TestPVCCreationPerformance(E2ETest):
         )
 
         pod_name = pod_obj1.name
-        pod_path = "/var/lib/www/html"
+        pod_path = "/mnt"
 
         _ocp = OCP(namespace=pvc_obj.namespace)
-
-        rsh_cmd = f"exec {pod_name} -- apt-get update"
-        _ocp.exec_oc_cmd(rsh_cmd)
-        rsh_cmd = f"exec {pod_name} -- apt-get install -y rsync"
-        _ocp.exec_oc_cmd(rsh_cmd, ignore_error=True, out_yaml_format=False)
 
         rsh_cmd = f"rsync {dir_path} {pod_name}:{pod_path}"
         _ocp.exec_oc_cmd(rsh_cmd)
 
-        rsh_cmd = f"exec {pod_name} -- tar xvf {pod_path}/tmp/file.gz -C /var/lib/www/html/tmp"
+        rsh_cmd = f"exec {pod_name} -- tar xvf {pod_path}/tmp/file.gz -C {pod_path}/tmp"
         _ocp.exec_oc_cmd(rsh_cmd)
 
         for x in range(copies):
@@ -112,7 +107,13 @@ class TestPVCCreationPerformance(E2ETest):
             _ocp.exec_oc_cmd(rsh_cmd)
             rsh_cmd = f"exec {pod_name} -- cp -r {pod_path}/tmp {pod_path}/folder{x}"
             _ocp.exec_oc_cmd(rsh_cmd)
+            rsh_cmd = f"exec {pod_name} -- sync"
+            _ocp.exec_oc_cmd(rsh_cmd)
 
+        log.info("Getting the amount of data written to the PVC")
+        rsh_cmd = f"exec {pod_name} -- df -h {pod_path}"
+        data_written = _ocp.exec_oc_cmd(rsh_cmd).split()[-4]
+        log.info(f"The Amount of data that was written to the pod is {data_written}")
         rsh_cmd = f"delete pod {pod_name}"
         _ocp.exec_oc_cmd(rsh_cmd)
 
@@ -123,7 +124,7 @@ class TestPVCCreationPerformance(E2ETest):
             pvc_name=pvc_obj.name,
             namespace=pvc_obj.namespace,
             node_name=node_two,
-            pod_dict_path=constants.NGINX_POD_YAML,
+            pod_dict_path=constants.PERF_POD_YAML,
         )
 
         start_time = time.time()
@@ -136,7 +137,7 @@ class TestPVCCreationPerformance(E2ETest):
         total_time = end_time - start_time
         if total_time > 60:
             raise ex.PerformanceException(
-                f"Pod creation time is {total_time} and " f"greater than 60 seconds"
+                f"Pod creation time is {total_time} and greater than 60 seconds"
             )
         logging.info(f"Pod {pod_name} creation time took {total_time} seconds")
 

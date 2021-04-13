@@ -6,9 +6,3 @@ metadata:
   labels:
     app: noobaa
 spec:
-  placementPolicy:
-    tiers:
-    - backingStores:
-      - backing-store
-      - backing-store
-      placement: Spread|Mirror

@@ -16,6 +16,7 @@ import base64
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.ocp import OCP, verify_images_upgraded
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
@@ -67,6 +68,8 @@ class Pod(OCS):
             Copy of ocs/defaults.py::<some pod> dictionary
         """
         self.pod_data = kwargs
+        # configure http[s]_proxy env variable, if applicable
+        update_container_with_proxy_env(self.pod_data)
         super(Pod, self).__init__(**kwargs)
 
         with tempfile.NamedTemporaryFile(
@@ -372,9 +375,14 @@ class Pod(OCS):
             self.io_params["filename"] = fio_filename
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
-    def run_git_clone(self):
+    def run_git_clone(self, skip_install=True):
         """
         Execute git clone on a pod to simulate a Jenkins user
+
+        Args:
+            skip_install (bool): By default True, skips git package
+                installation in pod
+
         """
         name = "test_workload"
         work_load = "jenkins"
@@ -382,7 +390,8 @@ class Pod(OCS):
         wl = workload.WorkLoad(
             name=name, work_load=work_load, pod=self, path=self.get_storage_path()
         )
-        assert wl.setup(), "Setup up for git failed"
+        if not skip_install:
+            assert wl.setup(), "Setup for git failed"
         wl.run()
 
     def install_packages(self, packages):
@@ -437,23 +446,27 @@ class Pod(OCS):
         cmd = f'ssh -i {authkey} -o "StrictHostKeyChecking no" {user}@{server} {cmd}'
         self.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
-    def get_memory(self):
+    def get_memory(self, container_name):
         """
         Get the pod memory size
 
+        Args:
+            container_name (str): The name of the container to look for
+
         Returns:
-            dict: The names of the pod's containers (str) as keys and their memory
-                size (str) as values
+            str: The container memory size (e.g. '5Gi')
 
         """
-        containers = self.pod_data.get("spec").get("containers")
-        container_names_and_memory = {
-            container.get("name"): container.get("resources")
-            .get("limits")
-            .get("memory")
-            for container in containers
-        }
-        return container_names_and_memory
+        pod_containers = self.pod_data.get("spec").get("containers")
+        matched_containers = [
+            c for c in pod_containers if c.get("name") == container_name
+        ]
+        if len(matched_containers) > 1:
+            logger.error(
+                f"Multiple containers, of the same name, were found: {[c.get('name') for c in matched_containers]}"
+            )
+        container = matched_containers[0]
+        return container.get("resources").get("limits").get("memory")
 
     def get_node(self):
         """
@@ -463,7 +476,9 @@ class Pod(OCS):
             str: Node name
 
         """
-        if config.ENV_DATA.get("platform", "").lower() == "aws":
+        if config.ENV_DATA.get(
+            "platform", ""
+        ).lower() == "aws" and config.DEPLOYMENT.get("local_storage"):
             return self.pod_data["spec"]["nodeSelector"]["kubernetes.io/hostname"]
         else:
             return self.pod_data["spec"]["nodeName"]

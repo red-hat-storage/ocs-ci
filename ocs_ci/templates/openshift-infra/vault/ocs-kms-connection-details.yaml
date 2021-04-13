@@ -1,0 +1,15 @@
+apiVersion: v1
+data:
+  KMS_PROVIDER: vault
+  KMS_SERVICE_NAME: vault
+  VAULT_ADDR: PLACEHOLDER
+  VAULT_BACKEND_PATH: "" 
+  VAULT_CACERT: ocs-kms-ca-secret
+  VAULT_CLIENT_CERT: ocs-kms-client-cert
+  VAULT_CLIENT_KEY: ocs-kms-client-key
+  VAULT_NAMESPACE: ""
+  VAULT_TLS_SERVER_NAME: ""
+kind: ConfigMap
+metadata:
+  name: ocs-kms-connection-details
+  namespace: openshift-storage

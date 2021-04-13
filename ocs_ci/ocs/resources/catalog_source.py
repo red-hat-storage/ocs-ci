@@ -4,7 +4,7 @@ CatalogSource related functionalities
 import logging
 
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceInUnexpectedState
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.retry import retry
 
@@ -50,7 +50,7 @@ class CatalogSource(OCP):
         except CommandFailed:
             logger.warning(f"Cannot find CatalogSource object {self.resource_name}")
             return None
-        return data["spec"]["image"].split(":")[1]
+        return data["spec"]["image"].rsplit(":", 1)[1]
 
     def get_image_url(self):
         """
@@ -66,7 +66,7 @@ class CatalogSource(OCP):
         except CommandFailed:
             logger.warning(f"Cannot find CatalogSource object {self.resource_name}")
             return None
-        return data["spec"]["image"].split(":")[0]
+        return data["spec"]["image"].rsplit(":", 1)[0]
 
     def check_state(self, state):
         """
@@ -99,7 +99,7 @@ class CatalogSource(OCP):
             )
         return False
 
-    @retry(ResourceInUnexpectedState, tries=4, delay=5, backoff=1)
+    @retry(ResourceWrongStatusException, tries=4, delay=5, backoff=1)
     def wait_for_state(self, state, timeout=480, sleep=5):
         """
         Wait till state of catalog source resource is the same as required one
@@ -111,14 +111,14 @@ class CatalogSource(OCP):
             sleep (int): Time in seconds to sleep between attempts
 
         Raises:
-            ResourceInUnexpectedState: In case the catalog source is not in
+            ResourceWrongStatusException: In case the catalog source is not in
                 expected state.
 
         """
         self.check_name_is_specified()
         sampler = TimeoutSampler(timeout, sleep, self.check_state, state=state)
         if not sampler.wait_for_func_status(True):
-            raise ResourceInUnexpectedState(
+            raise ResourceWrongStatusException(
                 f"Catalog source: {self.resource_name} is not in expected "
                 f"state: {state}"
             )

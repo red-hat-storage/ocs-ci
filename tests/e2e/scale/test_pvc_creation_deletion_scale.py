@@ -6,6 +6,7 @@ import logging
 import csv
 import pytest
 import time
+from timeit import default_timer
 
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pvc
@@ -28,6 +29,7 @@ class TestPVCCreationDeletionScale(E2ETest):
         """
         Create a new project
         """
+        self.start_time = default_timer()
         proj_obj = project_factory()
         self.namespace = proj_obj.namespace
 
@@ -154,6 +156,8 @@ class TestPVCCreationDeletionScale(E2ETest):
             for k, v in pvc_deletion_time.items():
                 csv_obj.writerow([k, v])
         logging.info(f"Delete data present in {log_path}-deletion-time.csv file")
+        end_time = default_timer()
+        logging.info(f"Elapsed time -- {end_time - self.start_time} seconds")
 
     @polarion_id("OCS-1885")
     @pytest.mark.usefixtures(namespace.__name__)
@@ -279,3 +283,5 @@ class TestPVCCreationDeletionScale(E2ETest):
             for k, v in fs_pvc_deletion_time.items():
                 csv_obj.writerow([k, v])
         logging.info(f"Delete data present in {log_path}-deletion-time.csv file")
+        end_time = default_timer()
+        logging.info(f"Elapsed time -- {end_time - self.start_time} seconds")

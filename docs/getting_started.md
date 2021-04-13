@@ -3,7 +3,7 @@
 
 ## Prerequisites
 
-1. Python >= 3.6
+1. Python >= 3.7
 2. Configure AWS Account credentials when testing with AWS platforms,
    check default section in `~/.aws/credentials` for access/secret key
    [check aws-configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
@@ -180,6 +180,21 @@ To enable ocs-ci to use this token, add the following to your `auth.yaml`:
 ```yaml
 quay:
   access_token: 'YOUR_TOKEN'
+```
+
+#### GitHub
+
+For disconnected cluster installation, we need to access github api (during
+downloading opm tool) which have very strict rate limit for unauthenticated
+requests ([60 requests per hour](https://docs.github.com/en/rest/overview/resources-in-the-rest-api#rate-limiting)).
+To avoid API rate limit exceeded errors, you can provide github authentication
+credentials (username and token) obtained on [Personal access tokens](https://github.com/settings/tokens)
+page (Settings -> Developer settings -> Personal access tokens).
+
+```yaml
+github:
+  username: "GITHUB_USERNAME"
+  token: "GITHUB_TOKEN"
 ```
 
 ## Tests

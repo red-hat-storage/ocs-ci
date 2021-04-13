@@ -45,6 +45,7 @@ DEPLOYMENT:
   installer_version: "4.7.0-0.nightly"
   force_download_installer: True
   force_download_client: True
+  skip_download_client: False
   default_latest_tag: 'latest-4.7'
   # define if ceph is setup as external mode, default is false
   external_mode: False
@@ -78,6 +79,14 @@ DEPLOYMENT:
   infra_nodes: False
   # How long should ocs-ci wait for `openshift-install create cluster` run?
   openshift_install_timeout: 3600
+  # redhat-operators CatalogSource image (used for disconnected installation)
+  cs_redhat_operators_image: "registry.redhat.io/redhat/redhat-operator-index"
+  # Deployment with KMS (vault etc)
+  kms_deployment: False
+  # define if ceph is setup as arbiter/stretch cluster, default is false
+  arbiter_deployment: False
+  # Ceph in debug log level
+  ceph_debug: False
 
 # Section for reporting configuration
 REPORTING:
@@ -118,7 +127,7 @@ ENV_DATA:
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
   # Default RHCOS image to be used for VmWare deployment
-  vm_template: 'rhcos-47.82.202010211043-0-vmware.x86_64'
+  vm_template: 'rhcos-47.83.202102090044-0-vmware.x86_64'
   # minimal write speed of fio as used in workload_fio_storageutilization
   # fixtures, which is used to compute timeout of the write job (so that
   # when actual write speed of the operation is smaller than this value, the
@@ -146,6 +155,10 @@ ENV_DATA:
   disk_enable_uuid: 'TRUE'
   # Encoding type for the ignition config
   ignition_data_encoding: base64
+  # opm tool github owner and repository (used in api url for downloading opm tool)
+  opm_owner_repo: "operator-framework/operator-registry"
+  # opm tool release tag (particular version or "latest") to be downloaded
+  opm_release_tag: "latest"
 
 # This section is related to upgrade
 UPGRADE:
@@ -174,7 +187,7 @@ EXTERNAL_MODE:
 # This section is related to ui testing with selenium
 UI_SELENIUM:
   browser_type: "chrome"
-  chrome_type: "chromium"
+  chrome_type: "google-chrome"
   headless: True
   screenshot: True
   ignore_ssl: True

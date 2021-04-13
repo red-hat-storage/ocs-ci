@@ -17,6 +17,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import (
     AWS as AWSUtil,
+    create_and_attach_volume_for_all_workers,
     delete_cluster_buckets,
     destroy_volumes,
     get_rhel_worker_instances,
@@ -189,6 +190,9 @@ class AWSIPI(AWSBase):
                 machine.wait_for_new_node_to_be_ready(node)
         if config.DEPLOYMENT.get("host_network"):
             self.host_network_update()
+        lso_type = config.DEPLOYMENT.get("type")
+        if lso_type == constants.AWS_EBS:
+            create_and_attach_volume_for_all_workers()
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -372,6 +376,10 @@ class AWSUPI(AWSBase):
 
         if config.ENV_DATA.get("rhel_workers"):
             self.add_rhel_workers()
+
+        lso_type = config.DEPLOYMENT.get("type")
+        if lso_type == constants.AWS_EBS:
+            create_and_attach_volume_for_all_workers()
 
     def gather_worker_data(self, suffix="no0"):
         """
@@ -791,12 +799,29 @@ class AWSUPIFlexy(AWSBase):
         self.aws.delete_apps_record_set()
         self.aws.delete_apps_record_set(from_base_domain=True)
 
+        stack_names = self.aws.get_worker_stacks()
+        stack_names.sort()
+
+        # add additional worker nodes to the cf_stack_list2 (if there are any)
+        cf_stack_list2_file_path = os.path.join(
+            self.cluster_path,
+            constants.FLEXY_HOST_DIR,
+            constants.FLEXY_RELATIVE_CLUSTER_DIR,
+            "cf_stack_list2",
+        )
+        if os.path.exists(cf_stack_list2_file_path):
+            with open(cf_stack_list2_file_path, "r+") as f:
+                lines = f.readlines()
+                for stack_name in stack_names:
+                    if f"{stack_name}\n" not in lines:
+                        f.write(f"{stack_name}\n")
+        else:
+            logger.warning(f"File {cf_stack_list2_file_path} doesn't exists!")
+
         super(AWSUPIFlexy, self).destroy_cluster(log_level)
 
         # Delete master, bootstrap, security group, and worker stacks
         suffixes = ["ma", "bs", "sg"]
-        stack_names = self.aws.get_worker_stacks()
-        stack_names.sort()
         stack_names.reverse()
         stack_names.extend([f"{self.cluster_name}-{s}" for s in suffixes])
         logger.info(f"Deleting stacks: {stack_names}")

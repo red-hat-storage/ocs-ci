@@ -3,11 +3,11 @@ import logging
 import uuid
 
 import pytest
-import botocore.exceptions as boto3exception
 
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     flowtests,
+    skipif_openshift_dedicated,
 )
 from ocs_ci.framework.testlib import E2ETest, skipif_ocs_version
 from ocs_ci.ocs.bucket_utils import (
@@ -23,13 +23,8 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status, schedule_nodes
-from ocs_ci.ocs.resources.bucket_policy import (
-    NoobaaAccount,
-    gen_bucket_policy,
-    HttpResponseParser,
-)
+from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount, gen_bucket_policy
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs.resources.pod import wait_for_storage_pods
@@ -40,9 +35,10 @@ MCG_NS_RESULT_DIR = "/result"
 MCG_NS_ORIGINAL_DIR = "/original"
 
 
+@skipif_openshift_dedicated
 @skipif_aws_creds_are_missing
-@skipif_ocs_version("<4.6")
-class TestMcgNamespaceDisruptions(E2ETest):
+@skipif_ocs_version("<4.7")
+class TestMcgNamespaceDisruptionsCrd(E2ETest):
     """
     Test MCG namespace disruption flow
 
@@ -54,22 +50,36 @@ class TestMcgNamespaceDisruptions(E2ETest):
         "noobaa_operator": constants.NOOBAA_OPERATOR_POD_LABEL,
     }
 
+    @pytest.mark.parametrize(
+        argnames=["bucketclass_dict"],
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                }
+            ),
+        ],
+    )
     @pytest.mark.polarion_id("OCS-2297")
     @flowtests
-    def test_mcg_namespace_disruptions(
+    def test_mcg_namespace_disruptions_crd(
         self,
         mcg_obj,
         cld_mgr,
         awscli_pod,
-        ns_resource_factory,
+        bucketclass_dict,
         bucket_factory,
         node_drain_teardown,
     ):
         """
         Test MCG namespace disruption flow
 
-        1. Create NS resources
-        2. Create NS bucket
+        1. Create NS resources with CRDs
+        2. Create NS bucket with CRDs
         3. Upload to NS bucket
         4. Delete noobaa related pods and verify integrity of objects
         5. Create public access policy on NS bucket and verify Get op
@@ -97,15 +107,15 @@ class TestMcgNamespaceDisruptions(E2ETest):
         setup_base_objects(awscli_pod, MCG_NS_ORIGINAL_DIR, MCG_NS_RESULT_DIR, amount=3)
 
         # Create the namespace resource and verify health
-        aws_res = ns_resource_factory()
-
-        # Create the namespace bucket on top of the namespace resources
-        ns_bucket = bucket_factory(
+        ns_buc = bucket_factory(
             amount=1,
-            interface="mcg-namespace",
-            write_ns_resource=aws_res[1],
-            read_ns_resources=[aws_res[1]],
-        )[0].name
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0]
+        ns_bucket = ns_buc.name
+
+        aws_target_bucket = ns_buc.bucketclass.namespacestores[0].uls_name
+
         logger.info(f"Namespace bucket: {ns_bucket} created")
 
         logger.info(f"Uploading objects to ns bucket: {ns_bucket}")
@@ -187,11 +197,13 @@ class TestMcgNamespaceDisruptions(E2ETest):
         assert s3_get_object(user, ns_bucket, object_key), "Failed: GetObject"
 
         # Upload files to NS target
-        logger.info(f"Uploading objects directly to ns resource target: {aws_res[0]}")
+        logger.info(
+            f"Uploading objects directly to ns resource target: {aws_target_bucket}"
+        )
         sync_object_directory(
             awscli_pod,
             src=MCG_NS_ORIGINAL_DIR,
-            target=f"s3://{aws_res[0]}",
+            target=f"s3://{aws_target_bucket}",
             signed_request_creds=aws_s3_creds,
         )
 
@@ -220,6 +232,7 @@ class TestMcgNamespaceDisruptions(E2ETest):
                 [node_name], status=constants.NODE_READY_SCHEDULING_DISABLED
             )
             schedule_nodes([node_name])
+            wait_for_nodes_status(timeout=300)
 
             # Retrieve the new pod
             pod_obj = pod.Pod(
@@ -256,8 +269,8 @@ class TestMcgNamespaceDisruptions(E2ETest):
         namespace_bucket_update(
             mcg_obj,
             bucket_name=ns_bucket,
-            read_resource=[aws_res[1]],
-            write_resource=aws_res[1],
+            read_resource=[aws_target_bucket],
+            write_resource=aws_target_bucket,
         )
 
         logger.info(f"Verifying object download after edit on ns bucket: {ns_bucket}")
@@ -272,24 +285,6 @@ class TestMcgNamespaceDisruptions(E2ETest):
         logger.info(
             f"Verifying whether user: {user.email_id} has only public read access"
         )
-        try:
-            s3_put_object(
-                s3_obj=user, bucketname=ns_bucket, object_key=object_key, data=data
-            )
-        except boto3exception.ClientError as e:
-            logger.info(e.response)
-            response = HttpResponseParser(e.response)
-            if response.error["Code"] == "AccessDenied":
-                logger.info("Put object action has been denied access")
-            else:
-                raise UnexpectedBehaviour(
-                    f"{e.response} received invalid error code "
-                    f"{response.error['Code']}"
-                )
-        else:
-            assert (
-                False
-            ), "Put object operation was granted access, when it should have denied"
 
         logger.info(f"Removing objects from ns bucket: {ns_bucket}")
         rm_object_recursive(awscli_pod, target=ns_bucket, mcg_obj=mcg_obj)

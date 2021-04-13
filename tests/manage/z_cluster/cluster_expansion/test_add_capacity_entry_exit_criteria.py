@@ -286,11 +286,11 @@ class TestAddCapacity(ManageTest):
                 if tree_output["nodes"][i]["name"] in "rack0":
                     aws_number_of_zones = 1
             if aws_number_of_zones == 1:
-                assert cluster_helpers.check_osd_tree_1az_aws(
+                assert cluster_helpers.check_osd_tree_1az_cloud(
                     tree_output, len(osd_pods_after)
                 ), "Exit criteria verification FAILED: Incorrect ceph osd tree formation found"
             else:
-                assert cluster_helpers.check_osd_tree_3az_aws(
+                assert cluster_helpers.check_osd_tree_3az_cloud(
                     tree_output, len(osd_pods_after)
                 ), "Exit criteria verification FAILED: Incorrect ceph osd tree formation found"
 

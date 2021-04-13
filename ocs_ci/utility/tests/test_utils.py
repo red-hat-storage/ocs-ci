@@ -1,6 +1,7 @@
 # -*- coding: utf8 -*-
 
 import logging
+from itertools import repeat
 from sys import platform
 
 import pytest
@@ -136,3 +137,32 @@ def test_run_cmd_simple_negative_ignoreerror(caplog):
     assert caplog.records[3].levelname == "DEBUG"
     return_code = 1 if platform == "darwin" else 2
     assert caplog.records[3].message == f"Command return code: {return_code}"
+
+
+class A:
+    def __init__(self, amount):
+        self.num = amount
+        if amount > 0:
+            self.sub_attr = A(amount - 1)
+
+
+@pytest.mark.parametrize("chain_length", [1, 2, 3, 4, 5])
+def test_get_attr_chain(chain_length):
+    attr_chain = ".".join(repeat("sub_attr", chain_length))
+    sub_attr = utils.get_attr_chain(A(chain_length), attr_chain)
+    assert sub_attr.num == 0
+
+
+@pytest.mark.parametrize("chain_length", [1, 2, 3, 4, 5])
+def test_get_nonexistent_attr_chain(chain_length):
+    attr_chain = ".".join(repeat("sub_attr", chain_length + 1))
+    sub_attr = utils.get_attr_chain(A(chain_length), attr_chain)
+    assert sub_attr is None
+
+
+def test_get_none_obj_attr():
+    assert utils.get_attr_chain(None, "attribute") is None
+
+
+def test_get_empty_attr():
+    assert utils.get_attr_chain(A(1), "") is None

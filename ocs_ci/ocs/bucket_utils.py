@@ -703,7 +703,7 @@ def put_bucket_policy(s3_obj, bucketname, policy):
     Args:
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
-        policy (json): Bucket policy in Json format
+        policy (str): Bucket policy in Json format
 
     Returns:
         dict : Bucket policy response
@@ -781,7 +781,7 @@ def s3_get_object(s3_obj, bucketname, object_key, versionid=""):
     )
 
 
-def s3_delete_object(s3_obj, bucketname, object_key, versionid=""):
+def s3_delete_object(s3_obj, bucketname, object_key, versionid=None):
     """
     Simple Boto3 client based Delete object
 
@@ -795,9 +795,12 @@ def s3_delete_object(s3_obj, bucketname, object_key, versionid=""):
         dict : Delete object response
 
     """
-    return s3_obj.s3_client.delete_object(
-        Bucket=bucketname, Key=object_key, VersionId=versionid
-    )
+    if versionid:
+        return s3_obj.s3_client.delete_object(
+            Bucket=bucketname, Key=object_key, VersionId=versionid
+        )
+    else:
+        return s3_obj.s3_client.delete_object(Bucket=bucketname, Key=object_key)
 
 
 def s3_put_bucket_website(s3_obj, bucketname, website_config):
@@ -1212,3 +1215,39 @@ def s3_delete_objects(s3_obj, bucketname, object_keys):
     return s3_obj.s3_client.delete_objects(
         Bucket=bucketname, Delete={"Objects": object_keys}
     )
+
+
+def bucket_read_api(mcg_obj, bucket_name):
+    """
+    Fetches the bucket metadata like size, tiers etc
+
+    Args:
+        mcg_obj (obj): MCG object
+        bucket_name (str): Name of the bucket
+
+    Returns:
+        dict : Bucket policy response
+
+    """
+    resp = mcg_obj.send_rpc_query(
+        "bucket_api", "read_bucket", params={"name": bucket_name}
+    )
+    bucket_read_resp = resp.json().get("reply")
+    return bucket_read_resp
+
+
+def get_bucket_available_size(mcg_obj, bucket_name):
+    """
+    Function to get the bucket available size
+
+    Args:
+        mcg_obj (obj): MCG object
+        bucket_name (str): Name of the bucket
+
+    Returns:
+        int : Available size in the bucket
+
+    """
+    resp = bucket_read_api(mcg_obj, bucket_name)
+    bucket_size = resp["storage"]["values"]["free"]
+    return bucket_size

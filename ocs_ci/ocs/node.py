@@ -66,11 +66,25 @@ def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
         list: The nodes OCP instances
 
     """
-    typed_nodes = [
-        node
-        for node in get_node_objs()
-        if node_type in node.ocp.get_resource(resource_name=node.name, column="ROLES")
-    ]
+    if (
+        config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+        and node_type == constants.WORKER_MACHINE
+    ):
+        typed_nodes = [
+            node
+            for node in get_node_objs()
+            if node_type
+            in node.ocp.get_resource(resource_name=node.name, column="ROLES")
+            and constants.INFRA_MACHINE
+            not in node.ocp.get_resource(resource_name=node.name, column="ROLES")
+        ]
+    else:
+        typed_nodes = [
+            node
+            for node in get_node_objs()
+            if node_type
+            in node.ocp.get_resource(resource_name=node.name, column="ROLES")
+        ]
     if num_of_nodes:
         typed_nodes = typed_nodes[:num_of_nodes]
     return typed_nodes
@@ -262,6 +276,30 @@ def get_node_ips(node_type="worker"):
         ]
     else:
         raise NotImplementedError
+
+
+def get_node_ip_addresses(ipkind):
+    """
+    Gets a dictionary of required IP addresses for all nodes
+
+    Args:
+        ipkind: ExternalIP or InternalIP or Hostname
+
+    Returns:
+        dict: Internal or Exteranl IP addresses keyed off of node name
+
+    """
+    ocp = OCP(kind=constants.NODE)
+    masternodes = ocp.get(selector=constants.MASTER_LABEL).get("items")
+    workernodes = ocp.get(selector=constants.WORKER_LABEL).get("items")
+    nodes = masternodes + workernodes
+
+    return {
+        node["metadata"]["name"]: each["address"]
+        for node in nodes
+        for each in node["status"]["addresses"]
+        if each["type"] == ipkind
+    }
 
 
 def add_new_node_and_label_it(machineset_name, num_nodes=1, mark_for_ocs_label=True):
@@ -791,10 +829,11 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     drain_nodes([osd_node_name])
     log.info("Getting machine name from specified node name")
     machine_name = machine.get_machine_from_node_name(osd_node_name)
+    machine_type = machine.get_machine_type(machine_name)
     log.info(f"Node {osd_node_name} associated machine is {machine_name}")
     log.info(f"Deleting machine {machine_name} and waiting for new machine to come up")
     machine.delete_machine_and_check_state_of_new_spinned_machine(machine_name)
-    new_machine_list = machine.get_machines()
+    new_machine_list = machine.get_machines(machine_type=machine_type)
     for machines in new_machine_list:
         # Trimming is done to get just machine name
         # eg:- machine_name:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b-nlgkr
@@ -805,10 +844,13 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     log.info("Waiting for new worker node to be in ready state")
     machine.wait_for_new_node_to_be_ready(machineset_name)
     new_node_name = get_node_from_machine_name(new_machine_name)
-    log.info("Adding ocs label to newly created worker node")
-    node_obj = ocp.OCP(kind="node")
-    node_obj.add_label(resource_name=new_node_name, label=constants.OPERATOR_NODE_LABEL)
-    log.info(f"Successfully labeled {new_node_name} with OCS storage label")
+    if not is_node_labeled(new_node_name):
+        log.info("Adding ocs label to newly created worker node")
+        node_obj = ocp.OCP(kind="node")
+        node_obj.add_label(
+            resource_name=new_node_name, label=constants.OPERATOR_NODE_LABEL
+        )
+        log.info(f"Successfully labeled {new_node_name} with OCS storage label")
 
     return new_node_name
 
@@ -1073,7 +1115,7 @@ def get_worker_nodes_not_in_ocs():
 
 
 def node_replacement_verification_steps_user_side(
-    old_node_name, new_node_name, old_osd_id
+    old_node_name, new_node_name, new_osd_node_name, old_osd_id
 ):
     """
     Check the verification steps that the user should perform after the process
@@ -1082,6 +1124,7 @@ def node_replacement_verification_steps_user_side(
     Args:
         old_node_name (str): The name of the old node that has been deleted
         new_node_name (str): The name of the new node that has been created
+        new_osd_node_name (str): The name of the new node that has been added to osd nodes
         old_osd_id (str): The old osd id
 
     Returns:
@@ -1110,7 +1153,7 @@ def node_replacement_verification_steps_user_side(
         log.warning("Not all the pods in running state")
         return False
 
-    new_osd_pod = get_node_pods(new_node_name, pods_to_search=pod.get_osd_pods())[0]
+    new_osd_pod = get_node_pods(new_osd_node_name, pods_to_search=pod.get_osd_pods())[0]
     if not new_osd_pod:
         log.warning("Didn't find any osd pods running on the new node")
         return False
@@ -1127,7 +1170,9 @@ def node_replacement_verification_steps_user_side(
     return True
 
 
-def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
+def node_replacement_verification_steps_ceph_side(
+    old_node_name, new_node_name, new_osd_node_name
+):
     """
     Check the verification steps from the Ceph side, after the process
     of node replacement as described in the docs
@@ -1135,6 +1180,7 @@ def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
     Args:
         old_node_name (str): The name of the old node that has been deleted
         new_node_name (str): The name of the new node that has been created
+        new_osd_node_name (str): The name of the new node that has been added to osd nodes
 
     Returns:
         bool: True if all the verification steps passed. False otherwise
@@ -1144,7 +1190,7 @@ def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
         log.warning("Hostname didn't change")
         return False
 
-    wait_for_nodes_status([new_node_name])
+    wait_for_nodes_status([new_node_name, new_osd_node_name])
     # It can take some time until all the ocs pods are up and running
     # after the process of node replacement
     if not pod.wait_for_pods_to_be_running():
@@ -1153,17 +1199,16 @@ def node_replacement_verification_steps_ceph_side(old_node_name, new_node_name):
 
     ct_pod = pod.get_ceph_tools_pod()
     ceph_osd_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd status")
-    if new_node_name not in ceph_osd_status:
-        log.warning("new node name not found in 'ceph osd status' output")
+    if new_osd_node_name not in ceph_osd_status:
+        log.warning("new osd node name not found in 'ceph osd status' output")
         return False
     if old_node_name in ceph_osd_status:
         log.warning("old node name found in 'ceph osd status' output")
         return False
 
-    osd_pods_obj = pod.get_osd_pods()
-    osd_node_names = [pod.get_pod_node(p).name for p in osd_pods_obj]
-    if new_node_name not in osd_node_names:
-        log.warning("the new hostname not found in osd node names")
+    osd_node_names = get_osd_running_nodes()
+    if new_osd_node_name not in osd_node_names:
+        log.warning("the new osd hostname not found in osd node names")
         return False
     if old_node_name in osd_node_names:
         log.warning("the old hostname found in osd node names")
@@ -1194,27 +1239,28 @@ def is_node_labeled(node_name, label=constants.OPERATOR_NODE_LABEL):
     return node_name in node_names_with_label
 
 
-def taint_nodes(nodes, taint_label=constants.OCS_TAINT):
+def taint_nodes(nodes, taint_label=None):
     """
     Taint nodes
 
     Args:
         nodes (list): list of node names need to taint
-        taint_label (str): New taint label to be assigned for these nodes.
-            Default value is the OCS taint
+        taint_label (str): Taint label to be used,
+            If None the constants.OPERATOR_NODE_TAINT will be used.
 
     """
     ocp_obj = ocp.OCP()
+    taint_label = taint_label if taint_label else constants.OPERATOR_NODE_TAINT
     for node in nodes:
         command = f"adm taint node {node} {taint_label}"
         try:
             ocp_obj.exec_oc_cmd(command)
-            logging.info(f"Successfully tainted {node} with OCS storage taint")
+            logging.info(f"Successfully tainted {node} with taint {taint_label}")
         except Exception as e:
             logging.info(f"{node} was not tainted - {e}")
 
 
-def check_taint_on_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT):
+def check_taint_on_nodes(taint=None):
     """
     Function to check for particular taint on nodes
 
@@ -1225,10 +1271,10 @@ def check_taint_on_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT):
         bool: True if taint is present on node. False otherwise
 
     """
-
-    ocs_nodes = get_ocs_nodes()
+    taint = taint if taint else constants.OPERATOR_NODE_TAINT
+    nodes = get_nodes()
     flag = -1
-    for node_obj in ocs_nodes:
+    for node_obj in nodes:
         if node_obj.get().get("spec").get("taints"):
             if taint in node_obj.get().get("spec").get("taints")[0].get("key"):
                 log.info(f"Node {node_obj.name} has taint {taint}")
@@ -1236,28 +1282,6 @@ def check_taint_on_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT):
         else:
             flag = 0
         return bool(flag)
-
-
-def taint_ocs_nodes(nodes_to_taint=None):
-    """
-    Function to taint nodes with "node.ocs.openshift.io/storage=true:NoSchedule"
-
-    Args:
-        nodes_to_taint (list): Nodes to taint
-
-    """
-    if not check_taint_on_ocs_nodes():
-        ocp = OCP()
-        ocs_nodes = get_ocs_nodes()
-        nodes_to_taint = nodes_to_taint if nodes_to_taint else ocs_nodes
-        log.info(f"Taint nodes with taint: " f"{constants.OPERATOR_NODE_TAINT}")
-        for node in nodes_to_taint:
-            taint_cmd = f"adm taint nodes {node.name} {constants.OPERATOR_NODE_TAINT}"
-            ocp.exec_oc_cmd(command=taint_cmd)
-    else:
-        log.info(
-            f"One or more nodes already have taint {constants.OPERATOR_NODE_TAINT} "
-        )
 
 
 def untaint_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT, nodes_to_untaint=None):
@@ -1272,7 +1296,7 @@ def untaint_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT, nodes_to_untaint=None
         bool: True if untainted, false otherwise
 
     """
-    if check_taint_on_ocs_nodes():
+    if check_taint_on_nodes():
         ocp = OCP()
         ocs_nodes = get_ocs_nodes()
         nodes_to_taint = nodes_to_untaint if nodes_to_untaint else ocs_nodes
@@ -1416,3 +1440,34 @@ def get_node_hostname_label(node_obj):
 
     """
     return node_obj.get().get("metadata").get("labels").get(constants.HOSTNAME_LABEL)
+
+
+def wait_for_new_osd_node(old_osd_node_names, timeout=180):
+    """
+    Wait for the new osd node to appear.
+
+    Args:
+        old_osd_node_names (list): List of the old osd node names
+        timeout (int): time to wait for the new osd node to appear
+
+    Returns:
+        str: The new osd node name if the new osd node appear in the specific timeout.
+            Else it returns None
+
+    """
+    try:
+        for current_osd_node_names in TimeoutSampler(
+            timeout=timeout, sleep=10, func=get_osd_running_nodes
+        ):
+            new_osd_node_names = [
+                node_name
+                for node_name in current_osd_node_names
+                if node_name not in old_osd_node_names
+            ]
+            if new_osd_node_names:
+                log.info(f"New osd node is {new_osd_node_names[0]}")
+                return new_osd_node_names[0]
+
+    except TimeoutExpiredError:
+        log.warning(f"New osd node didn't appear after {timeout} seconds")
+        return None

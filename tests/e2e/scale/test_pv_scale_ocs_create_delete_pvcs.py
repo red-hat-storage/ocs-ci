@@ -172,7 +172,12 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
 
     # TODO: Skipping memory leak fixture call in test function because of bz 1750328
     def test_pv_scale_out_create_delete_pvcs_with_and_without_io(
-        self, namespace, storageclass, setup_fixture, start_io
+        self,
+        namespace,
+        storageclass,
+        setup_fixture,
+        start_io,
+        memory_leak_function,
     ):
         pvc_count_each_itr = 10
         scale_pod_count = 120
@@ -182,9 +187,8 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
         self.delete_pod_count = 0
 
         # Identify median memory value for each worker node
-        # TODO: Skipping memory leak median calculate because of bz 1750328
-        # median_dict = helpers.get_memory_leak_median_value()
-        # log.info(f"Median dict values for memory leak {median_dict}")
+        median_dict = helpers.get_memory_leak_median_value()
+        log.info(f"Median dict values for memory leak {median_dict}")
 
         # First Iteration call to create PVC and POD
         self.create_pvc_pod(
@@ -220,5 +224,4 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
 
         # Added sleep for test case run time and for capturing memory leak after scale
         time.sleep(test_run_time)
-        # TODO: Skipping memory leak analysis because of bz 1750328
-        # helpers.memory_leak_analysis(median_dict)
+        helpers.memory_leak_analysis(median_dict)

@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3
 from ocs_ci.framework.testlib import E2ETest, workloads, tier1, ignore_leftovers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +30,6 @@ def setup_fixture(install_logging):
     logger.info("Testcases execution post deployment of openshift-logging")
 
 
-@pytest.mark.skipif(
-    get_ocp_version() == "4.7",
-    reason=(
-        "Skipping logging tests on OCP 4.7 cause of issue: "
-        "https://github.com/red-hat-storage/ocs-ci/issues/2823"
-    ),
-)
 @pytest.mark.usefixtures(setup_fixture.__name__)
 @ignore_leftovers
 class Testopenshiftloggingonocs(E2ETest):
@@ -128,7 +122,7 @@ class Testopenshiftloggingonocs(E2ETest):
             for pod in pod_list
             if ("delete" not in pod.name)
             and ("rollover" not in pod.name)
-            and (pod.name.startswith("elasticsearch"))
+            and (pod.name.startswith("elasticsearch-cdm"))
         ]
         elasticsearch_pod_obj = random.choice(elasticsearch_pod)
         return elasticsearch_pod_obj
@@ -157,6 +151,7 @@ class Testopenshiftloggingonocs(E2ETest):
 
     @pytest.mark.polarion_id("OCS-657")
     @tier1
+    @skipif_openshift_dedicated
     def test_create_new_project_to_verify_logging(
         self, create_pvc_and_deploymentconfig_pod
     ):

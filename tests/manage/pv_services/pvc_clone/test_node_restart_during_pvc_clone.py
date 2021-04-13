@@ -15,6 +15,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     skipif_bm,
     skipif_ocp_version,
+    skipif_vsphere_ipi,
 )
 
 log = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ log = logging.getLogger(__name__)
 @tier4b
 @ignore_leftovers
 @skipif_bm
+@skipif_vsphere_ipi
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 class TestNodeRestartDuringPvcClone(ManageTest):

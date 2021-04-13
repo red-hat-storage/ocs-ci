@@ -38,6 +38,9 @@ from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
 )
+from ocs_ci.ocs.resources.namespacestore import (
+    namespace_store_factory as namespacestore_factory_implementation,
+)
 from ocs_ci.ocs.resources.bucketclass import (
     bucket_class_factory as bucketclass_factory_implementation,
 )
@@ -59,14 +62,20 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
-from ocs_ci.utility import aws
-from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
-from ocs_ci.utility import templating
-from ocs_ci.utility import users
+from ocs_ci.utility import (
+    aws,
+    deployment_openshift_logging as ocp_logging_obj,
+    ibmcloud,
+    kms as KMS,
+    templating,
+    users,
+)
 from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
 )
+from ocs_ci.utility.flexy import load_cluster_info
+from ocs_ci.utility.kms import is_kms_enabled
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
@@ -94,6 +103,7 @@ from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
+from ocs_ci.ocs.ripsaw import RipSaw
 
 log = logging.getLogger(__name__)
 
@@ -117,7 +127,7 @@ def pytest_logger_config(logger_config):
 def pytest_collection_modifyitems(session, items):
     """
     A pytest hook to filter out skipped tests satisfying
-    skipif_ocs_version or skipif_upgraded_from
+    skipif_ocs_version, skipif_upgraded_from or skipif_no_kms
 
     Args:
         session: pytest session
@@ -127,13 +137,16 @@ def pytest_collection_modifyitems(session, items):
     """
     teardown = config.RUN["cli_params"].get("teardown")
     deploy = config.RUN["cli_params"].get("deploy")
-    if not (teardown or deploy):
+    skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
+
+    if not (teardown or deploy or skip_ocs_deployment):
         for item in items[:]:
             skipif_ocp_version_marker = item.get_closest_marker("skipif_ocp_version")
             skipif_ocs_version_marker = item.get_closest_marker("skipif_ocs_version")
             skipif_upgraded_from_marker = item.get_closest_marker(
                 "skipif_upgraded_from"
             )
+            skipif_no_kms_marker = item.get_closest_marker("skipif_no_kms")
             if skipif_ocp_version_marker:
                 skip_condition = skipif_ocp_version_marker.args
                 # skip_condition will be a tuple
@@ -160,6 +173,18 @@ def pytest_collection_modifyitems(session, items):
                         f" upgraded from one of these versions: {skip_args[0]}"
                     )
                     items.remove(item)
+            if skipif_no_kms_marker:
+                try:
+                    if not is_kms_enabled():
+                        log.info(
+                            f"Test: {item} will be skipped because the OCS cluster"
+                            f" has not configured cluster-wide encryption with KMS"
+                        )
+                        items.remove(item)
+                except KeyError:
+                    log.warning(
+                        "Cluster is not yet installed. Skipping skipif_no_kms check."
+                    )
 
 
 @pytest.fixture()
@@ -384,6 +409,7 @@ def storageclass_factory_fixture(
         compression=None,
         new_rbd_pool=False,
         pool_name=None,
+        rbd_thick_provision=False,
     ):
         """
         Args:
@@ -400,6 +426,8 @@ def storageclass_factory_fixture(
             new_rbd_pool (bool): True if user wants to create new rbd pool for SC
             pool_name (str): Existing pool name to create the storageclass other
                 then the default rbd pool.
+            rbd_thick_provision (bool): True to enable RBD thick provisioning.
+                Applicable if interface is CephBlockPool
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -431,6 +459,7 @@ def storageclass_factory_fixture(
                 secret_name=secret.name,
                 sc_name=sc_name,
                 reclaim_policy=reclaim_policy,
+                rbd_thick_provision=rbd_thick_provision,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
@@ -1095,21 +1124,39 @@ def cluster(request, log_cli_level):
     if teardown:
 
         def cluster_teardown_finalizer():
+            # If KMS is configured, clean up the backend resources
+            # we are doing it before OCP cleanup
+            if config.DEPLOYMENT.get("kms_deployment"):
+                kms = KMS.get_kms_deployment()
+                kms.cleanup()
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)
         log.info("Will teardown cluster because --teardown was provided")
 
     # Download client
-    force_download = (
-        config.RUN["cli_params"].get("deploy")
-        and config.DEPLOYMENT["force_download_client"]
-    )
-    get_openshift_client(force_download=force_download)
+    if config.DEPLOYMENT["skip_download_client"]:
+        log.info("Skipping client download")
+    else:
+        force_download = (
+            config.RUN["cli_params"].get("deploy")
+            and config.DEPLOYMENT["force_download_client"]
+        )
+        get_openshift_client(force_download=force_download)
+
+    # set environment variable for early testing of RHCOS
+    if config.ENV_DATA.get("early_testing"):
+        release_img = config.ENV_DATA["RELEASE_IMG"]
+        log.info(f"Running early testing of RHCOS with release image: {release_img}")
+        os.environ["RELEASE_IMG"] = release_img
+        os.environ["OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE"] = release_img
 
     if deploy:
         # Deploy cluster
         deployer.deploy_cluster(log_cli_level)
+    else:
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+            ibmcloud.login()
 
 
 @pytest.fixture(scope="class")
@@ -1708,6 +1755,12 @@ def rgw_deployments(request):
         label=constants.RGW_APP_LABEL, namespace=config.ENV_DATA["cluster_namespace"]
     )
     if rgw_deployments:
+        # Force-skipping in case of IBM Cloud -
+        # https://github.com/red-hat-storage/ocs-ci/issues/3863
+        if config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
+            pytest.skip(
+                "RGW deployments were found, but test will be skipped because of BZ1926831"
+            )
         return rgw_deployments
     else:
         pytest.skip("There is no RGW deployment available for this test.")
@@ -1770,6 +1823,9 @@ def mcg_obj_fixture(request, *args, **kwargs):
     Returns:
         MCG: An MCG resource
     """
+    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+        log.warning("As openshift dedicated is used, no MCG resource is returned")
+        return None
 
     mcg_obj = MCG(*args, **kwargs)
 
@@ -1958,19 +2014,27 @@ def rgw_bucket_factory_session(request, rgw_obj_session):
 @pytest.fixture()
 def bucket_factory(request, bucket_class_factory, mcg_obj):
     """
-    Returns an MCG bucket factory
+    Returns an MCG bucket factory.
+    If MCG object not found returns None
     """
-    return bucket_factory_fixture(request, bucket_class_factory, mcg_obj)
+    if mcg_obj:
+        return bucket_factory_fixture(request, bucket_class_factory, mcg_obj)
+    else:
+        return None
 
 
 @pytest.fixture(scope="session")
 def bucket_factory_session(request, bucket_class_factory_session, mcg_obj_session):
     """
-    Returns a session-scoped MCG bucket factory
+    Returns a session-scoped MCG bucket factory.
+    If session-scoped MCG object not found returns None
     """
-    return bucket_factory_fixture(
-        request, bucket_class_factory_session, mcg_obj_session
-    )
+    if mcg_obj_session:
+        return bucket_factory_fixture(
+            request, bucket_class_factory_session, mcg_obj_session
+        )
+    else:
+        return None
 
 
 def bucket_factory_fixture(
@@ -2020,6 +2084,10 @@ def bucket_factory_fixture(
                 buckets
 
         """
+        if bucketclass:
+            interface = bucketclass["interface"]
+
+        current_call_created_buckets = []
         if interface.lower() not in BUCKET_MAP:
             raise RuntimeError(
                 f"Invalid interface type received: {interface}. "
@@ -2030,7 +2098,7 @@ def bucket_factory_fixture(
             bucketclass if bucketclass is None else bucket_class_factory(bucketclass)
         )
 
-        for i in range(amount):
+        for _ in range(amount):
             bucket_name = helpers.create_unique_resource_name(
                 resource_description="bucket", resource_type=interface.lower()
             )
@@ -2042,11 +2110,12 @@ def bucket_factory_fixture(
                 *args,
                 **kwargs,
             )
+            current_call_created_buckets.append(created_bucket)
             created_buckets.append(created_bucket)
             if verify_health:
                 created_bucket.verify_health()
 
-        return created_buckets
+        return current_call_created_buckets
 
     def bucket_cleanup():
         for bucket in created_buckets:
@@ -2139,11 +2208,15 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     Returns:
         func: Factory method - each call to this function creates
             a backingstore
+        None: If MCG object not found
 
     """
-    return backingstore_factory_implementation(
-        request, cld_mgr, mcg_obj, cloud_uls_factory
-    )
+    if mcg_obj:
+        return backingstore_factory_implementation(
+            request, cld_mgr, mcg_obj, cloud_uls_factory
+        )
+    else:
+        return None
 
 
 @pytest.fixture(scope="session")
@@ -2157,30 +2230,20 @@ def backingstore_factory_session(
     Returns:
         func: Factory method - each call to this function creates
             a backingstore
+        None: If session-scoped MCG object not found
 
     """
-    return backingstore_factory_implementation(
-        request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
-    )
+    if mcg_obj_session:
+        return backingstore_factory_implementation(
+            request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
+        )
+    else:
+        return None
 
 
 @pytest.fixture()
-def bucket_class_factory(request, mcg_obj, backingstore_factory):
-    """
-    Create a Bucket Class factory.
-    Calling this fixture creates a new Bucket Class.
-
-    Returns:
-        func: Factory method - each call to this function creates
-            a bucketclass
-
-    """
-    return bucketclass_factory_implementation(request, mcg_obj, backingstore_factory)
-
-
-@pytest.fixture(scope="session")
-def bucket_class_factory_session(
-    request, mcg_obj_session, backingstore_factory_session
+def bucket_class_factory(
+    request, mcg_obj, backingstore_factory, namespace_store_factory
 ):
     """
     Create a Bucket Class factory.
@@ -2189,11 +2252,43 @@ def bucket_class_factory_session(
     Returns:
         func: Factory method - each call to this function creates
             a bucketclass
+        None: If MCG object not found
 
     """
-    return bucketclass_factory_implementation(
-        request, mcg_obj_session, backingstore_factory_session
-    )
+    if mcg_obj:
+        return bucketclass_factory_implementation(
+            request, mcg_obj, backingstore_factory, namespace_store_factory
+        )
+    else:
+        return None
+
+
+@pytest.fixture(scope="session")
+def bucket_class_factory_session(
+    request,
+    mcg_obj_session,
+    backingstore_factory_session,
+    namespace_store_factory_session,
+):
+    """
+    Create a Bucket Class factory.
+    Calling this fixture creates a new Bucket Class.
+
+    Returns:
+        func: Factory method - each call to this function creates
+            a bucketclass
+        None: If session-scoped MCG object not found
+
+    """
+    if mcg_obj_session:
+        return bucketclass_factory_implementation(
+            request,
+            mcg_obj_session,
+            backingstore_factory_session,
+            namespace_store_factory_session,
+        )
+    else:
+        return None
 
 
 @pytest.fixture()
@@ -2279,8 +2374,9 @@ def install_logging(request):
 
     # Checks OCP version
     ocp_version = get_running_ocp_version()
+    logging_channel = "stable" if ocp_version >= "4.7" else ocp_version
 
-    # Creates namespace opensift-operators-redhat
+    # Creates namespace openshift-operators-redhat
     ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
 
     # Creates an operator-group for elasticsearch
@@ -2295,7 +2391,7 @@ def install_logging(request):
 
     # Creates subscription for elastic-search operator
     subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
-    subscription_yaml["spec"]["channel"] = ocp_version
+    subscription_yaml["spec"]["channel"] = logging_channel
     helpers.create_resource(**subscription_yaml)
     assert ocp_logging_obj.get_elasticsearch_subscription()
 
@@ -2309,7 +2405,7 @@ def install_logging(request):
 
     # Creates subscription for cluster-logging
     cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
-    cl_subscription["spec"]["channel"] = ocp_version
+    cl_subscription["spec"]["channel"] = logging_channel
     helpers.create_resource(**cl_subscription)
     assert ocp_logging_obj.get_clusterlogging_subscription()
 
@@ -2495,7 +2591,14 @@ def couchbase_factory_fixture(request):
     """
     couchbase = CouchBase()
 
-    def factory(replicas=3, run_in_bg=False, skip_analyze=True, sc_name=None):
+    def factory(
+        replicas=3,
+        run_in_bg=False,
+        skip_analyze=True,
+        sc_name=None,
+        num_items=None,
+        num_threads=None,
+    ):
         """
         Factory to start couchbase workload
 
@@ -2509,7 +2612,12 @@ def couchbase_factory_fixture(request):
         # Create couchbase workers
         couchbase.create_couchbase_worker(replicas=replicas, sc_name=sc_name)
         # Run couchbase workload
-        couchbase.run_workload(replicas=replicas, run_in_bg=run_in_bg)
+        couchbase.run_workload(
+            replicas=replicas,
+            run_in_bg=run_in_bg,
+            num_items=num_items,
+            num_threads=num_threads,
+        )
         # Run sanity check on data logs
         couchbase.analyze_run(skip_analyze=skip_analyze)
 
@@ -2773,7 +2881,11 @@ def log_alerts(request):
 
     """
     teardown = config.RUN["cli_params"].get("teardown")
+    dev_mode = config.RUN["cli_params"].get("dev_mode")
     if teardown:
+        return
+    elif dev_mode:
+        log.info("Skipping alert check for development mode")
         return
 
     alerts_before = []
@@ -2826,7 +2938,11 @@ def ceph_toolbox(request):
     deploy = config.RUN["cli_params"]["deploy"]
     teardown = config.RUN["cli_params"].get("teardown")
     skip_ocs = config.ENV_DATA["skip_ocs_deployment"]
-    if not (deploy or teardown or skip_ocs):
+    deploy_teardown = deploy or teardown
+    ocp_dedicated = (
+        config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+    )
+    if not (deploy_teardown or skip_ocs) or (ocp_dedicated and not deploy_teardown):
         try:
             # Creating toolbox pod
             setup_ceph_toolbox()
@@ -2987,6 +3103,40 @@ def ns_resource_factory(
     request.addfinalizer(ns_resources_cleanup)
 
     return _create_ns_resources
+
+
+@pytest.fixture()
+def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
+    """
+    Create a Namespace Store factory.
+    Calling this fixture creates a new Namespace Store(s).
+
+    Returns:
+        func: Factory method - each call to this function creates
+            a namespacestore
+
+    """
+    return namespacestore_factory_implementation(
+        request, cld_mgr, mcg_obj, cloud_uls_factory
+    )
+
+
+@pytest.fixture(scope="session")
+def namespace_store_factory_session(
+    request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
+):
+    """
+    Create a Namespace Store factory.
+    Calling this fixture creates a new Namespace Store(s).
+
+    Returns:
+        func: Factory method - each call to this function creates
+            a namespacestore
+
+    """
+    return namespacestore_factory_implementation(
+        request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
+    )
 
 
 @pytest.fixture()
@@ -3653,3 +3803,27 @@ def setup_ui(request):
     request.addfinalizer(finalizer)
 
     return driver
+
+
+@pytest.fixture(scope="session", autouse=True)
+def load_cluster_info_file(request):
+    """
+    This fixture tries to load cluster_info.json file if exists (on cluster
+    installed via Flexy) and apply the information to the config object (for
+    example related to disconnected cluster)
+    """
+    load_cluster_info()
+
+
+@pytest.fixture(scope="function")
+def ripsaw(request):
+
+    # Create benchmark Operator (formerly ripsaw)
+    ripsaw = RipSaw()
+
+    def teardown():
+        ripsaw.cleanup()
+        time.sleep(10)
+
+    request.addfinalizer(teardown)
+    return ripsaw

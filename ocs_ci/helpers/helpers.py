@@ -20,6 +20,10 @@ from uuid import uuid4
 import yaml
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.proxy import (
+    get_cluster_proxies,
+    update_container_with_proxy_env,
+)
 from ocs_ci.ocs.utils import mirror_image
 from ocs_ci.ocs import constants, defaults, node, ocp
 from ocs_ci.ocs.exceptions import (
@@ -42,6 +46,7 @@ from ocs_ci.utility.utils import (
 )
 
 logger = logging.getLogger(__name__)
+DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
 
 
 def create_unique_resource_name(resource_description, resource_type):
@@ -267,22 +272,7 @@ def create_pod(
     update_container_with_mirrored_image(pod_data)
 
     # configure http[s]_proxy env variable, if required
-    try:
-        http_proxy, https_proxy, no_proxy = get_cluster_proxies()
-        if http_proxy:
-            if "containers" in pod_data["spec"]:
-                container = pod_data["spec"]["containers"][0]
-            else:
-                container = pod_data["spec"]["template"]["spec"]["containers"][0]
-            if "env" not in container:
-                container["env"] = []
-            container["env"].append({"name": "http_proxy", "value": http_proxy})
-            container["env"].append({"name": "https_proxy", "value": https_proxy})
-            container["env"].append({"name": "no_proxy", "value": no_proxy})
-    except KeyError as err:
-        logging.warning(
-            "Http(s)_proxy variable wasn't configured, " "'%s' key not found.", err
-        )
+    update_container_with_proxy_env(pod_data)
 
     if dc_deployment:
         ocs_obj = create_resource(**pod_data)
@@ -491,6 +481,7 @@ def create_storage_class(
     reclaim_policy=constants.RECLAIM_POLICY_DELETE,
     sc_name=None,
     provisioner=None,
+    rbd_thick_provision=False,
 ):
     """
     Create a storage class
@@ -505,6 +496,8 @@ def create_storage_class(
         sc_name (str): The name of storage class to create
         reclaim_policy (str): Type of reclaim policy. Defaults to 'Delete'
             (eg., 'Delete', 'Retain')
+        rbd_thick_provision (bool): True to enable RBD thick provisioning.
+                Applicable if interface_type is CephBlockPool
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -521,6 +514,8 @@ def create_storage_class(
         sc_data["provisioner"] = (
             provisioner if provisioner else defaults.RBD_PROVISIONER
         )
+        if rbd_thick_provision:
+            sc_data["parameters"]["thickProvision"] = "true"
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = templating.load_yaml(constants.CSI_CEPHFS_STORAGECLASS_YAML)
         sc_data["parameters"]["csi.storage.k8s.io/node-stage-secret-name"] = secret_name
@@ -1161,6 +1156,18 @@ def get_snapshot_time(interface, snap_name, status):
     """
     Get the starting/ending creation time of a PVC based on provisioner logs
 
+    The time and date extraction code below has been modified to read
+    the month and day data in the logs.  This fixes an error where negative
+    time values are calculated when test runs cross midnight.  Also, previous
+    calculations would not set the year, and so the calculations were done
+    as if the year were 1900.  This is not a problem except that 1900 was
+    not a leap year and so the next February 29th would throw ValueErrors
+    for the whole day.  To avoid this problem, changes were made to also
+    include the current year.
+
+    Incorrect times will still be given for tests that cross over from
+    December 31 to January 1.
+
     Args:
         interface (str): The interface backed the PVC
         pvc_name (str / list): Name of the PVC(s) for creation time
@@ -1178,20 +1185,21 @@ def get_snapshot_time(interface, snap_name, status):
 
         Args:
             log (list): list of all lines in the log file
-            snapname (str): the name of hte snapshot
+            snapname (str): the name of the snapshot
             pattern (str): the pattern that need to be found in the log (start / bound)
 
         Returns:
             str: string of the pattern timestamp in the log, if not found None
 
         """
+        this_year = str(datetime.datetime.now().year)
         for line in log:
             if re.search(snapname, line) and re.search(pattern, line):
-                return line.split(" ")[1]
+                mon_day = " ".join(line.split(" ")[0:2])
+                return f"{this_year} {mon_day}"
         return None
 
     logs = ""
-    format = "%H:%M:%S.%f"
 
     # the starting and ending time are taken from different logs,
     # the start creation time is taken from the snapshot controller, while
@@ -1230,7 +1238,7 @@ def get_snapshot_time(interface, snap_name, status):
         elif status.lower() == "start":
             stat = all_stats[0]  # return the lowest time
     if stat:
-        return datetime.datetime.strptime(stat, format)
+        return datetime.datetime.strptime(stat, DATE_TIME_FORMAT)
     else:
         return None
 
@@ -1274,7 +1282,7 @@ def get_provision_time(interface, pvc_name, status="start"):
     if status.lower() == "end":
         operation = "succeeded"
 
-    format = "%H:%M:%S.%f"
+    this_year = str(datetime.datetime.now().year)
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
     # get the logs from the csi-provisioner containers
@@ -1285,21 +1293,23 @@ def get_provision_time(interface, pvc_name, status="start"):
     # Extract the time for the one PVC provisioning
     if isinstance(pvc_name, str):
         stat = [i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)]
-        stat = stat[0].split(" ")[1]
+        mon_day = " ".join(stat[0].split(" ")[0:2])
+        stat = f"{this_year} {mon_day}"
     # Extract the time for the list of PVCs provisioning
     if isinstance(pvc_name, list):
         all_stats = []
         for pv_name in pvc_name:
             name = pv_name.name
             stat = [i for i in logs if re.search(f"provision.*{name}.*{operation}", i)]
-            stat = stat[0].split(" ")[1]
+            mon_day = " ".join(stat[0].split(" ")[0:2])
+            stat = f"{this_year} {mon_day}"
             all_stats.append(stat)
         all_stats = sorted(all_stats)
         if status.lower() == "end":
             stat = all_stats[-1]  # return the highest time
         elif status.lower() == "start":
             stat = all_stats[0]  # return the lowest time
-    return datetime.datetime.strptime(stat, format)
+    return datetime.datetime.strptime(stat, DATE_TIME_FORMAT)
 
 
 def get_start_creation_time(interface, pvc_name):
@@ -1314,7 +1324,7 @@ def get_start_creation_time(interface, pvc_name):
         datetime object: Start time of PVC creation
 
     """
-    format = "%H:%M:%S.%f"
+    this_year = str(datetime.datetime.now().year)
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
     # get the logs from the csi-provisioner containers
@@ -1324,8 +1334,9 @@ def get_start_creation_time(interface, pvc_name):
     logs = logs.split("\n")
     # Extract the starting time for the PVC provisioning
     start = [i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)]
-    start = start[0].split(" ")[1]
-    return datetime.datetime.strptime(start, format)
+    mon_day = " ".join(start[0].split(" ")[0:2])
+    start = f"{this_year} {mon_day}"
+    return datetime.datetime.strptime(start, DATE_TIME_FORMAT)
 
 
 def get_end_creation_time(interface, pvc_name):
@@ -1340,7 +1351,7 @@ def get_end_creation_time(interface, pvc_name):
         datetime object: End time of PVC creation
 
     """
-    format = "%H:%M:%S.%f"
+    this_year = str(datetime.datetime.now().year)
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
     # get the logs from the csi-provisioner containers
@@ -1351,8 +1362,9 @@ def get_end_creation_time(interface, pvc_name):
     # Extract the starting time for the PVC provisioning
     end = [i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)]
     # End provisioning string may appear in logs several times, take here the latest one
-    end = end[-1].split(" ")[1]
-    return datetime.datetime.strptime(end, format)
+    mon_day = " ".join(end[-1].split(" ")[0:2])
+    end = f"{this_year} {mon_day}"
+    return datetime.datetime.strptime(end, DATE_TIME_FORMAT)
 
 
 def measure_pvc_creation_time(interface, pvc_name):
@@ -1360,9 +1372,7 @@ def measure_pvc_creation_time(interface, pvc_name):
     Measure PVC creation time based on logs
 
     Args:
-        interface (str): The interface backed the PVC
-        pvc_name (str): Name of the PVC for creation time measurement
-
+        interface (str): The interface backed the PVC pvc_name (str): Name of the PVC for creation time measurement
     Returns:
         float: Creation time for the PVC
 
@@ -1424,16 +1434,18 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
             break
 
     pvc_dict = dict()
-    format = "%H:%M:%S.%f"
+    this_year = str(datetime.datetime.now().year)
     for pvc_name in pvc_name_list:
         # Extract the starting time for the PVC provisioning
         start = [i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)]
-        start = start[0].split(" ")[1]
-        start_time = datetime.datetime.strptime(start, format)
+        mon_day = " ".join(start[0].split(" ")[0:2])
+        start = f"{this_year} {mon_day}"
+        start_time = datetime.datetime.strptime(start, DATE_TIME_FORMAT)
         # Extract the end time for the PVC provisioning
         end = [i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)]
-        end = end[0].split(" ")[1]
-        end_time = datetime.datetime.strptime(end, format)
+        mon_day = " ".join(end[0].split(" ")[0:2])
+        end = f"{this_year} {mon_day}"
+        end_time = datetime.datetime.strptime(end, DATE_TIME_FORMAT)
         total = end_time - start_time
         pvc_dict[pvc_name] = total.total_seconds()
 
@@ -1491,16 +1503,18 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
             break
 
     pv_dict = dict()
-    format = "%H:%M:%S.%f"
+    this_year = str(datetime.datetime.now().year)
     for pv_name in pv_name_list:
         # Extract the deletion start time for the PV
         start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
-        start = start[0].split(" ")[1]
-        start_time = datetime.datetime.strptime(start, format)
+        mon_day = " ".join(start[0].split(" ")[0:2])
+        start = f"{this_year} {mon_day}"
+        start_time = datetime.datetime.strptime(start, DATE_TIME_FORMAT)
         # Extract the deletion end time for the PV
         end = [i for i in logs if re.search(f'delete "{pv_name}": succeeded', i)]
-        end = end[0].split(" ")[1]
-        end_time = datetime.datetime.strptime(end, format)
+        mon_day = " ".join(end[0].split(" ")[0:2])
+        end_tm = f"{this_year} {mon_day}"
+        end_time = datetime.datetime.strptime(end_tm, DATE_TIME_FORMAT)
         total = end_time - start_time
         pv_dict[pv_name] = total.total_seconds()
 
@@ -1519,7 +1533,7 @@ def get_start_deletion_time(interface, pv_name):
         datetime object: Start time of PVC deletion
 
     """
-    format = "%H:%M:%S.%f"
+    this_year = str(datetime.datetime.now().year)
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
     # get the logs from the csi-provisioner containers
@@ -1529,8 +1543,9 @@ def get_start_deletion_time(interface, pv_name):
     logs = logs.split("\n")
     # Extract the starting time for the PVC deletion
     start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
-    start = start[0].split(" ")[1]
-    return datetime.datetime.strptime(start, format)
+    mon_day = " ".join(start[0].split(" ")[0:2])
+    start = f"{this_year} {mon_day}"
+    return datetime.datetime.strptime(start, DATE_TIME_FORMAT)
 
 
 def get_end_deletion_time(interface, pv_name):
@@ -1545,7 +1560,7 @@ def get_end_deletion_time(interface, pv_name):
         datetime object: End time of PVC deletion
 
     """
-    format = "%H:%M:%S.%f"
+    this_year = str(datetime.datetime.now().year)
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
     # get the logs from the csi-provisioner containers
@@ -1555,8 +1570,9 @@ def get_end_deletion_time(interface, pv_name):
     logs = logs.split("\n")
     # Extract the starting time for the PV deletion
     end = [i for i in logs if re.search(f'delete "{pv_name}": succeeded', i)]
-    end = end[0].split(" ")[1]
-    return datetime.datetime.strptime(end, format)
+    mon_day = " ".join(end[0].split(" ")[0:2])
+    end = f"{this_year} {mon_day}"
+    return datetime.datetime.strptime(end, DATE_TIME_FORMAT)
 
 
 def measure_pvc_deletion_time(interface, pv_name):
@@ -2784,38 +2800,6 @@ def get_pv_names():
     return [pv_obj["metadata"]["name"] for pv_obj in pv_objs]
 
 
-def get_cluster_proxies():
-    """
-    Get http and https proxy configuration:
-
-     * If configuration ``ENV_DATA['http_proxy']`` (and prospectively
-       ``ENV_DATA['https_proxy']``) exists, return the respective values.
-       (If https_proxy not defined, use value from http_proxy.)
-     * If configuration ``ENV_DATA['http_proxy']`` doesn't exist, try to gather
-       cluster wide proxy configuration.
-     * If no proxy configuration found, return empty string for all http_proxy,
-       https_proxy and no_proxy.
-
-    Returns:
-        tuple: (http_proxy, https_proxy, no_proxy)
-
-    """
-    if "http_proxy" in config.ENV_DATA:
-        http_proxy = config.ENV_DATA["http_proxy"]
-        https_proxy = config.ENV_DATA.get("https_proxy", config.ENV_DATA["http_proxy"])
-        no_proxy = config.ENV_DATA.get("no_proxy", "")
-    else:
-        ocp_obj = ocp.OCP(kind=constants.PROXY, resource_name="cluster")
-        proxy_obj = ocp_obj.get()
-        http_proxy = proxy_obj.get("spec", {}).get("httpProxy", "")
-        https_proxy = proxy_obj.get("spec", {}).get("httpsProxy", "")
-        no_proxy = proxy_obj.get("status", {}).get("noProxy", "")
-    logger.info("Using http_proxy: '%s'", http_proxy)
-    logger.info("Using https_proxy: '%s'", https_proxy)
-    logger.info("Using no_proxy: '%s'", no_proxy)
-    return http_proxy, https_proxy, no_proxy
-
-
 def default_volumesnapshotclass(interface_type):
     """
     Return default VolumeSnapshotClass based on interface_type
@@ -2961,3 +2945,36 @@ def get_mon_pdb():
     disruptions_allowed = pdb_obj.get().get("status").get("disruptionsAllowed")
     min_available_mon = pdb_obj.get().get("spec").get("minAvailable")
     return disruptions_allowed, min_available_mon
+
+
+@retry(CommandFailed, tries=10, delay=30, backoff=1)
+def run_cmd_verify_cli_output(
+    cmd=None, expected_output_lst=(), cephtool_cmd=False, debug_node=None
+):
+    """
+    Run command and verify its output
+
+    Args:
+        cmd(str): cli command
+        expected_output_lst(set): A set of strings that need to be included in the command output.
+        cephtool_cmd(bool): command on ceph-tool pod
+        debug_node(str): name of node
+
+    Returns:
+        bool: True of all strings are included in the command output, False otherwise
+
+    """
+    if cephtool_cmd is True:
+        tool_pod = pod.get_ceph_tools_pod()
+        cmd_start = f"oc rsh -n openshift-storage {tool_pod.name} "
+        cmd = f"{cmd_start} {cmd}"
+    elif debug_node is not None:
+        cmd_start = f"oc debug nodes/{debug_node} -- chroot /host /bin/bash -c "
+        cmd = f'{cmd_start} "{cmd}"'
+
+    out = run_cmd(cmd=cmd)
+    logger.info(out)
+    for expected_output in expected_output_lst:
+        if expected_output not in out:
+            return False
+    return True

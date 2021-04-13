@@ -18,6 +18,7 @@ from ocs_ci.ocs import metrics
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_enum
 from ocs_ci.helpers.helpers import storagecluster_independent_check
+from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.post_ocp_upgrade
 @pytest.mark.first
 @pytest.mark.polarion_id("OCS-1261")
+@skipif_openshift_dedicated
 def test_monitoring_enabled():
     """
     OCS Monitoring is enabled after OCS installation (which is why this test
@@ -74,6 +76,7 @@ def test_monitoring_enabled():
 
 @tier1
 @pytest.mark.polarion_id("OCS-1265")
+@skipif_openshift_dedicated
 def test_ceph_mgr_dashboard_not_deployed():
     """
     Check that `ceph mgr dashboard`_ is not deployed after installation of OCS
@@ -109,6 +112,7 @@ def test_ceph_mgr_dashboard_not_deployed():
 @tier1
 @pytest.mark.bugzilla("1779336")
 @pytest.mark.polarion_id("OCS-1267")
+@skipif_openshift_dedicated
 def test_ceph_rbd_metrics_available():
     """
     Ceph RBD metrics should be provided via OCP Prometheus as well.
@@ -128,6 +132,7 @@ def test_ceph_rbd_metrics_available():
 @tier1
 @metrics_for_external_mode_required
 @pytest.mark.polarion_id("OCS-1268")
+@skipif_openshift_dedicated
 def test_ceph_metrics_available():
     """
     Ceph metrics as listed in KNIP-634 should be provided via OCP Prometheus.
@@ -154,6 +159,7 @@ def test_ceph_metrics_available():
 @metrics_for_external_mode_required
 @pytest.mark.post_ocp_upgrade
 @pytest.mark.polarion_id("OCS-1302")
+@skipif_openshift_dedicated
 def test_monitoring_reporting_ok_when_idle(workload_idle):
     """
     When nothing is happening, OCP Prometheus reports OCS status as OK.

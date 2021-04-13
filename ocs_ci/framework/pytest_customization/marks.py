@@ -19,6 +19,7 @@ from ocs_ci.ocs.constants import (
     ORDER_AFTER_UPGRADE,
     CLOUD_PLATFORMS,
     ON_PREM_PLATFORMS,
+    IBM_POWER_PLATFORM,
 )
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
@@ -181,9 +182,25 @@ skipif_bm = pytest.mark.skipif(
     reason="Test will not run on Bare Metal",
 )
 
+skipif_bmpsi = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == "baremetalpsi"
+    and config.DEPLOYMENT.get("local_storage") is True,
+    reason="Test will not run on Baremetal PSI",
+)
+
 skipif_openshift_dedicated = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == "openshiftdedicated",
     reason="Test will not run on Openshift dedicated cluster",
+)
+
+skipif_ibm_cloud = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == "ibm_cloud",
+    reason="Test will not run on IBM cloud",
+)
+
+skipif_ibm_power = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == IBM_POWER_PLATFORM,
+    reason="Test will not run on IBM Power",
 )
 
 skipif_external_mode = pytest.mark.skipif(
@@ -199,6 +216,14 @@ skipif_lso = pytest.mark.skipif(
 skipif_no_lso = pytest.mark.skipif(
     not config.DEPLOYMENT.get("local_storage"),
     reason="Test run only on LSO deployed cluster",
+)
+
+skipif_vsphere_ipi = pytest.mark.skipif(
+    (
+        config.ENV_DATA["platform"].lower() == "vsphere"
+        and config.ENV_DATA["deployment_type"].lower() == "ipi"
+    ),
+    reason="Test will not run on vSphere IPI cluster",
 )
 
 metrics_for_external_mode_required = pytest.mark.skipif(
@@ -228,3 +253,7 @@ skipif_ocs_version = pytest.mark.skipif_ocs_version
 # Marker for skipping tests if the cluster is upgraded from a particular
 # OCS version
 skipif_upgraded_from = pytest.mark.skipif_upgraded_from
+
+# Marker for skipping tests if the cluster doesn't have configured cluster-wide
+# encryption with KMS properly
+skipif_no_kms = pytest.mark.skipif_no_kms

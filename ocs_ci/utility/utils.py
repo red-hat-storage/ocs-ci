@@ -1,3 +1,4 @@
+from functools import reduce
 import io
 import json
 import logging
@@ -11,6 +12,7 @@ import string
 import subprocess
 import time
 import traceback
+import stat
 from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -31,11 +33,13 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
+    ClientDownloadError,
     CommandFailed,
     TagNotFoundException,
     TimeoutException,
     TimeoutExpiredError,
     UnavailableBuildException,
+    UnexpectedImage,
     UnsupportedOSType,
 )
 from ocs_ci.utility.retry import retry
@@ -509,28 +513,30 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     return completed_process
 
 
-def download_file(url, filename):
+def download_file(url, filename, **kwargs):
     """
     Download a file from a specified url
 
     Args:
         url (str): URL of the file to download
         filename (str): Name of the file to write the download to
+        kwargs (dict): additional keyword arguments passed to requests.get(...)
 
     """
     log.debug(f"Download '{url}' to '{filename}'.")
     with open(filename, "wb") as f:
-        r = requests.get(url)
+        r = requests.get(url, **kwargs)
         assert r.ok, f"The URL {url} is not available! Status: {r.status_code}."
         f.write(r.content)
 
 
-def get_url_content(url):
+def get_url_content(url, **kwargs):
     """
     Return URL content
 
     Args:
         url (str): URL address to return
+        kwargs (dict): additional keyword arguments passed to requests.get(...)
     Returns:
         str: Content of URL
 
@@ -539,7 +545,7 @@ def get_url_content(url):
 
     """
     log.debug(f"Download '{url}' content.")
-    r = requests.get(url)
+    r = requests.get(url, **kwargs)
     assert r.ok, f"Couldn't load URL: {url} content! Status: {r.status_code}."
     return r.content
 
@@ -625,6 +631,53 @@ def get_openshift_installer(
     return installer_binary_path
 
 
+def get_ocm_cli(
+    version=None,
+    bin_dir=None,
+    force_download=False,
+):
+    """
+    Download the OCM binary, if not already present.
+    Update env. PATH and get path of the OCM binary.
+
+    Args:
+        version (str): Version of the OCM to download
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+        force_download (bool): Force OCM download even if already present
+
+    Returns:
+        str: Path to the OCM binary
+
+    """
+    bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    ocm_filename = "ocm"
+    ocm_binary_path = os.path.join(bin_dir, ocm_filename)
+    if os.path.isfile(ocm_binary_path) and force_download:
+        delete_file(ocm_binary_path)
+    if os.path.isfile(ocm_binary_path):
+        log.debug(f"ocm exists ({ocm_binary_path}), skipping download.")
+    else:
+        log.info(f"Downloading ocm cli ({version}).")
+        prepare_bin_dir()
+        # record current working directory and switch to BIN_DIR
+        previous_dir = os.getcwd()
+        os.chdir(bin_dir)
+        url = f"https://github.com/openshift-online/ocm-cli/releases/download/v{version}/ocm-linux-amd64"
+        download_file(url, ocm_filename)
+        # return to the previous working directory
+        os.chdir(previous_dir)
+
+    current_file_permissions = os.stat(ocm_binary_path)
+    os.chmod(
+        ocm_binary_path,
+        current_file_permissions.st_mode | stat.S_IEXEC,
+    )
+    ocm_version = run_cmd(f"{ocm_binary_path} version")
+    log.info(f"OCM version: {ocm_version}")
+
+    return ocm_binary_path
+
+
 def get_openshift_client(
     version=None,
     bin_dir=None,
@@ -645,15 +698,41 @@ def get_openshift_client(
 
     """
     version = version or config.RUN["client_version"]
+    version = expose_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     client_binary_path = os.path.join(bin_dir, "oc")
-    if os.path.isfile(client_binary_path) and force_download:
-        delete_file(client_binary_path)
-    if os.path.isfile(client_binary_path):
-        log.debug(f"Client exists ({client_binary_path}), skipping download.")
-        # TODO: check client version
-    else:
-        version = expose_ocp_version(version)
+    kubectl_binary_path = os.path.join(bin_dir, "kubectl")
+    download_client = True
+    client_version = None
+
+    if force_download:
+        log.info("Forcing client download.")
+    elif os.path.isfile(client_binary_path):
+        current_client_version = get_client_version(client_binary_path)
+        if current_client_version != version:
+            log.info(
+                f"Existing client version ({current_client_version}) does not match "
+                f"configured version ({version})."
+            )
+        else:
+            log.debug(
+                f"Client exists ({client_binary_path}) and matches configured version, "
+                f"skipping download."
+            )
+            download_client = False
+
+    if download_client:
+        # Move existing client binaries to backup location
+        client_binary_backup = f"{client_binary_path}.bak"
+        kubectl_binary_backup = f"{kubectl_binary_path}.bak"
+
+        try:
+            os.rename(client_binary_path, client_binary_backup)
+            os.rename(kubectl_binary_path, kubectl_binary_backup)
+        except FileNotFoundError:
+            pass
+
+        # Download the client
         log.info(f"Downloading openshift client ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
@@ -664,13 +743,77 @@ def get_openshift_client(
         download_file(url, tarball)
         run_cmd(f"tar xzvf {tarball} oc kubectl")
         delete_file(tarball)
+
+        try:
+            client_version = run_cmd(f"{client_binary_path} version --client")
+        except CommandFailed:
+            log.error("Unable to get version from downloaded client.")
+
+        if client_version:
+            try:
+                delete_file(client_binary_backup)
+                delete_file(kubectl_binary_backup)
+                log.info("Deleted backup binaries.")
+            except FileNotFoundError:
+                pass
+        else:
+            try:
+                os.rename(client_binary_backup, client_binary_path)
+                os.rename(kubectl_binary_backup, kubectl_binary_path)
+                log.info("Restored backup binaries to their original location.")
+            except FileNotFoundError:
+                raise ClientDownloadError(
+                    "No backups exist and new binary was unable to be verified."
+                )
+
         # return to the previous working directory
         os.chdir(previous_dir)
 
-    client_version = run_cmd(f"{client_binary_path} version --client")
     log.info(f"OpenShift Client version: {client_version}")
 
     return client_binary_path
+
+
+def get_vault_cli(bind_dir=None, force_download=False):
+    """
+    Download vault based on platform
+    basically for CLI purpose. Binary will be directly
+    put into ocs_ci/bin/ directory
+
+    Args:
+        bind_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+        force_download (bool): Force vault cli download even if already present
+
+    """
+    res = requests.get(constants.VAULT_VERSION_INFO_URL)
+    version = res.url.split("/")[-1].lstrip("v")
+    bin_dir = os.path.expanduser(bind_dir or config.RUN["bin_dir"])
+    system = platform.system()
+    if "Darwin" not in system and "Linux" not in system:
+        raise UnsupportedOSType("Not a supported platform for vault")
+
+    system = system.lower()
+    zip_file = f"vault_{version}_{system}_amd64.zip"
+    vault_cli_filename = "vault"
+    vault_binary_path = os.path.join(bin_dir, vault_cli_filename)
+    if os.path.isfile(vault_binary_path) and force_download:
+        delete_file(vault_binary_path)
+    if os.path.isfile(vault_binary_path):
+        log.debug(
+            f"Vault CLI binary already exists {vault_binary_path}, skipping download."
+        )
+    else:
+        log.info(f"Downloading vault cli {version}")
+        prepare_bin_dir()
+        previous_dir = os.getcwd()
+        os.chdir(bin_dir)
+        url = f"{constants.VAULT_DOWNLOAD_BASE_URL}/{version}/{zip_file}"
+        download_file(url, zip_file)
+        run_cmd(f"unzip {zip_file}")
+        delete_file(zip_file)
+        os.chdir(previous_dir)
+    vault_ver = run_cmd(f"{vault_binary_path} version")
+    log.info(f"Vault cli version:{vault_ver}")
 
 
 def ensure_nightly_build_availability(build_url):
@@ -789,47 +932,92 @@ class TimeoutSampler(object):
     Yielding the output allows you to handle every value as you wish.
 
     Feel free to set the instance variables.
+
+
+    Args:
+        timeout (int): Timeout in seconds
+        sleep (int): Sleep interval in seconds
+        func (function): The function to sample
+        func_args: Arguments for the function
+        func_kwargs: Keyword arguments for the function
     """
 
     def __init__(self, timeout, sleep, func, *func_args, **func_kwargs):
         self.timeout = timeout
-        """ Timeout in seconds. """
         self.sleep = sleep
-        """ Sleep interval seconds. """
+        # check that given timeout and sleep values makes sense
+        if self.timeout < self.sleep:
+            raise ValueError("timeout should be larger than sleep time")
 
         self.func = func
-        """ A function to sample. """
         self.func_args = func_args
-        """ Args for func. """
         self.func_kwargs = func_kwargs
-        """ Kwargs for func. """
 
+        # Timestamps of the first and most recent samples
         self.start_time = None
-        """ Time of starting the sampling. """
         self.last_sample_time = None
-        """ Time of last sample. """
-
+        # The exception to raise
         self.timeout_exc_cls = TimeoutExpiredError
-        """ Class of exception to be raised.  """
-        self.timeout_exc_args = (self.timeout,)
-        """ An args for __init__ of the timeout exception. """
+        # Arguments that will be passed to the exception
+        self.timeout_exc_args = [self.timeout]
+        try:
+            self.timeout_exc_args.append(
+                f"Timed out after {timeout}s running {self._build_call_string()}"
+            )
+        except Exception:
+            log.exception(
+                "Failed to assemble call string. Not necessarily a test failure."
+            )
+
+    def _build_call_string(self):
+        def stringify(value):
+            if isinstance(value, str):
+                return f'"{value}"'
+            return str(value)
+
+        args = list(map(stringify, self.func_args))
+        kwargs = [f"{stringify(k)}={stringify(v)}" for k, v in self.func_kwargs.items()]
+        all_args_string = ", ".join(args + kwargs)
+        return f"{self.func.__name__}({all_args_string})"
 
     def __iter__(self):
         if self.start_time is None:
             self.start_time = time.time()
         while True:
             self.last_sample_time = time.time()
+            if self.timeout <= (self.last_sample_time - self.start_time):
+                raise self.timeout_exc_cls(*self.timeout_exc_args)
             try:
                 yield self.func(*self.func_args, **self.func_kwargs)
             except Exception as ex:
                 msg = f"Exception raised during iteration: {ex}"
-                logging.error(msg)
-            if self.timeout < (time.time() - self.start_time):
+                log.exception(msg)
+            if self.timeout <= (time.time() - self.start_time):
                 raise self.timeout_exc_cls(*self.timeout_exc_args)
-            log.info(
-                f"Going to sleep for {self.sleep} seconds" " before next iteration"
-            )
+            log.info("Going to sleep for %d seconds before next iteration", self.sleep)
             time.sleep(self.sleep)
+
+    def wait_for_func_value(self, value):
+        """
+        Implements common usecase of TimeoutSampler: waiting until func (given
+        function) returns a given value.
+
+        Args:
+            value: Expected return value of func we are waiting for.
+        """
+        try:
+            for i_value in self:
+                if i_value == value:
+                    break
+        except self.timeout_exc_cls:
+            log.error(
+                "function %s failed to return expected value %s "
+                "after multiple retries during %d second timeout",
+                self.func.__name__,
+                value,
+                self.timeout,
+            )
+            raise
 
     def wait_for_func_status(self, result):
         """
@@ -850,15 +1038,30 @@ class TimeoutSampler(object):
 
         """
         try:
-            for res in self:
-                if result == res:
-                    return True
+            self.wait_for_func_value(result)
+            return True
         except self.timeout_exc_cls:
-            log.error(
-                f"({self.func.__name__}) return incorrect status "
-                f"after {self.timeout} second timeout"
-            )
             return False
+
+
+class TimeoutIterator(TimeoutSampler):
+    """
+    Wrapper of TimeoutSampler which separates parameters of the class itself
+    and func arguments in __init__ method. Such way of passing function with
+    parameters is used in python standard library.
+
+    This allows more explicit usage, which improves readability, eg.::
+
+        t1 = TimeoutIterator(timeout=60, sleep=5, func=foo, func_args=[bar])
+        t2 = TimeoutIterator(3600, sleep=10, func=foo, func_args=[bar])
+    """
+
+    def __init__(self, timeout, sleep, func, func_args=None, func_kwargs=None):
+        if func_args is None:
+            func_args = []
+        if func_kwargs is None:
+            func_kwargs = {}
+        super().__init__(timeout, sleep, func, *func_args, **func_kwargs)
 
 
 def get_random_str(size=13):
@@ -1577,6 +1780,8 @@ def ceph_health_check(namespace=None, tries=20, delay=30):
             delay of 30 seconds if default values are not changed via args.
 
     """
+    if config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM:
+        delay = 60
     return retry(
         (CephHealthException, CommandFailed, subprocess.TimeoutExpired),
         tries=tries,
@@ -1802,7 +2007,9 @@ def load_auth_config():
 
 def get_ocs_olm_operator_tags(limit=100):
     """
-    Query the OCS OLM Operator repo and retrieve a list of tags.
+    Query the OCS OLM Operator repo and retrieve a list of tags. Since we are limited
+    to 100 tags per page, we end up making several API calls and combining the results
+    into a single list of tags.
 
     Args:
         limit: the number of tags to limit the request to
@@ -1815,7 +2022,6 @@ def get_ocs_olm_operator_tags(limit=100):
         list: OCS OLM Operator tags
 
     """
-    log.info(f"Retrieving OCS OLM Operator tags (limit {limit})")
     try:
         quay_access_token = load_auth_config()["quay"]["access_token"]
     except (KeyError, TypeError):
@@ -1834,17 +2040,28 @@ def get_ocs_olm_operator_tags(limit=100):
     except (ValueError, TypeError):
         log.warning("Invalid ocs_version given, defaulting to ocs-registry image")
         pass
-    resp = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(
-            tag_limit=limit,
-            image=image,
-        ),
-        headers=headers,
-    )
-    if not resp.ok:
-        raise requests.RequestException(resp.json())
-    log.debug(resp.json()["tags"])
-    return resp.json()["tags"]
+    all_tags = []
+    page = 1
+    while True:
+        log.info(f"Retrieving OCS OLM Operator tags (limit {limit}, page {page})")
+        resp = requests.get(
+            constants.OPERATOR_CS_QUAY_API_QUERY.format(
+                tag_limit=limit,
+                image=image,
+                page=page,
+            ),
+            headers=headers,
+        )
+        if not resp.ok:
+            raise requests.RequestException(resp.json())
+        tags = resp.json()["tags"]
+        if len(tags) == 0:
+            log.info("No more tags to retrieve")
+            break
+        log.debug(tags)
+        all_tags.extend(tags)
+        page += 1
+    return all_tags
 
 
 def check_if_executable_in_path(exec_name):
@@ -1911,7 +2128,7 @@ def read_file_as_str(filepath):
     return content
 
 
-def replace_content_in_file(file, old, new):
+def replace_content_in_file(file, old, new, match_and_replace_line=False):
     """
     Replaces contents in file, if old value is not found, it adds
     new value to the file
@@ -1920,21 +2137,34 @@ def replace_content_in_file(file, old, new):
         file (str): Name of the file in which contents will be replaced
         old (str): Data to search for
         new (str): Data to replace the old value
+        match_and_replace_line (bool): If True, it will match a line if
+            `old` pattern is found in the line. The whole line will be replaced
+            with `new` content.
+            Otherwise it will replace only `old` string with `new` string but
+            the rest of the line will be intact. This is the default option.
 
     """
     # Read the file
     with open(rf"{file}", "r") as fd:
-        file_data = fd.read()
+        file_data = [line.rstrip("\n") for line in fd.readlines()]
 
-    # Replace/add the new data
-    if old in file_data:
-        file_data = file_data.replace(old, new)
+    if match_and_replace_line:
+        # Replace the whole line with `new` string if the line contains `old`
+        # string pattern.
+        file_data = [new if old in line else line for line in file_data]
     else:
-        file_data = new + file_data
-
+        # Replace the old string by new
+        file_data = [
+            line.replace(old, new) if old in line else line for line in file_data
+        ]
+    updated_data = [line for line in file_data if new in line]
+    # In case the old pattern wasn't found it will be added as first line
+    if not updated_data:
+        file_data.insert(0, new)
+    file_data = [f"{line}\n" for line in file_data]
     # Write the file out again
     with open(rf"{file}", "w") as fd:
-        fd.write(file_data)
+        fd.writelines(file_data)
 
 
 @retry((CommandFailed), tries=100, delay=10, backoff=1)
@@ -2204,7 +2434,7 @@ def get_ocs_version_from_image(image):
 
     """
     try:
-        version = image.split(":")[1].lstrip("latest-").lstrip("stable-")
+        version = image.rsplit(":", 1)[1].lstrip("latest-").lstrip("stable-")
         version = Version.coerce(version)
         return "{major}.{minor}".format(major=version.major, minor=version.minor)
     except ValueError:
@@ -2359,6 +2589,125 @@ def convert_device_size(unformatted_size, units_to_covert_to):
     return conversion[units_to_covert_to][units]
 
 
+def prepare_customized_pull_secret(images=None):
+    """
+    Prepare customized pull-secret containing auth section related to given
+    image(s). If image(s) not defined or no related section is found, it will
+    use whole content of pull-secret.
+
+    Args:
+        images (str, list): image (or images) to match with auth section
+
+    Returns:
+        NamedTemporaryFile: prepared pull-secret
+
+    """
+    log.debug(f"Prepare customized pull-secret for images: {images}")
+    if type(images) == str:
+        images = [images]
+    # load pull-secret file to pull_secret dict
+    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+    with open(pull_secret_path) as pull_secret_fo:
+        pull_secret = json.load(pull_secret_fo)
+
+    authfile_content = {"auths": {}}
+    # if images defined, try to find auth section related to specified images
+    if images:
+        for image in images:
+            # find all auths which might be related to the specified image
+            tmp_auths = [auth for auth in pull_secret["auths"] if auth in image]
+            # get the most specific auth for particular image
+            tmp_auths = sorted(tmp_auths, key=len, reverse=True)
+            if tmp_auths:
+                # if there is match to particular auth, prepare authfile just with the
+                # matching auth
+                auth = tmp_auths[0]
+                # as key use only server name, without namespace
+                authfile_content["auths"][auth.split("/", 1)[0]] = pull_secret["auths"][
+                    auth
+                ]
+
+    if not authfile_content["auths"]:
+        authfile_content = pull_secret
+
+    # create temporary auth file
+    authfile_fo = NamedTemporaryFile(mode="w", prefix="authfile_")
+    json.dump(authfile_content, authfile_fo)
+    # ensure the content will be saved into the file
+    authfile_fo.flush()
+    return authfile_fo
+
+
+def inspect_image(image, authfile_fo):
+    """
+    Inspect image
+
+    Args:
+        image (str): image to inspect
+        authfile_fo (NamedTemporaryFile): pull-secret required for pulling the given image
+
+    Returns:
+        dict: json object of the inspected image
+
+    """
+    # pull original image (to be able to inspect it)
+    exec_cmd(f"podman image pull {image} --authfile {authfile_fo.name}")
+    # inspect the image
+    cmd_result = exec_cmd(f"podman image inspect {image}")
+    image_inspect = json.loads(cmd_result.stdout)
+    return image_inspect
+
+
+def get_image_with_digest(image):
+    """
+    Return image with sha256 digest for usage in disconnected environment
+
+    Args:
+        image (str): image
+
+    Raises:
+        UnexpectedImage: In case the image information is unexpected
+
+    Returns:
+        str: image with sha256 digest specification
+
+    """
+    if "@sha256:" in image:
+        return image
+    with prepare_customized_pull_secret(image) as authfile_fo:
+        image_inspect = inspect_image(image, authfile_fo)
+
+    # we expect, that 'Digest' will match one of the images in 'RepoDigests',
+    # if not, raise UnexpectedImage
+    for image in image_inspect[0]["RepoDigests"]:
+        if image_inspect[0]["Digest"] in image:
+            return image
+    else:
+        raise UnexpectedImage(
+            f"Image digest ({image_inspect[0]['Digest']}) doesn't match with "
+            f"any image from RepoDigests ({image_inspect[0]['RepoDigests']})."
+        )
+
+
+def login_to_mirror_registry(authfile):
+    """
+    Login to mirror registry
+
+    Args:
+        authfile (str): authfile (pull-secret) path
+
+    """
+    mirror_registry = config.DEPLOYMENT["mirror_registry"]
+    mirror_registry_user = config.DEPLOYMENT["mirror_registry_user"]
+    mirror_registry_password = config.DEPLOYMENT["mirror_registry_password"]
+    login_cmd = (
+        f"podman login --authfile {authfile} "
+        f"{mirror_registry} -u {mirror_registry_user} "
+        f"-p {mirror_registry_password} --tls-verify=false"
+    )
+    exec_cmd(login_cmd, (mirror_registry_user, mirror_registry_password))
+
+
 def mirror_image(image):
     """
     Mirror image to mirror image registry.
@@ -2371,42 +2720,13 @@ def mirror_image(image):
         str: the mirrored image link
 
     """
-    # load pull-secret file to pull_secret dict
-    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
-    with open(pull_secret_path) as pull_secret_fo:
-        pull_secret = json.load(pull_secret_fo)
+    with prepare_customized_pull_secret(image) as authfile_fo:
+        # login to mirror registry
+        login_to_mirror_registry(authfile_fo.name)
 
-    # find all auths which might be related to the specified image
-    tmp_auths = []
-    for auth in pull_secret["auths"]:
-        if auth in image:
-            tmp_auths.append(auth)
-    # get the most specific auth for particular image
-    tmp_auths = sorted(tmp_auths, key=len, reverse=True)
-    if tmp_auths:
-        # if there is match to particular auth, prepare authfile just with the
-        # matching auth
-        auth = tmp_auths[0]
-        # as key use only server name, without namespace
-        authfile_content = {
-            "auths": {auth.split("/", 1)[0]: pull_secret["auths"][auth]}
-        }
-    else:
-        # else use whole pull-secret
-        authfile_content = pull_secret
-
-    # create temporary auth file
-    with NamedTemporaryFile(mode="w", prefix="authfile_") as authfile_fo:
-        json.dump(authfile_content, authfile_fo)
-        # ensure the content will be saved into the file
-        authfile_fo.flush()
-        # pull original image (to be able to inspect it)
-        exec_cmd(f"podman image pull {image} --authfile {authfile_fo.name}")
-        # inspect the image and get full image url with tag
-        cmd_result = exec_cmd(f"podman image inspect {image}")
-        image_inspect = json.loads(cmd_result.stdout)
         # if there is any tag specified, use it in the full image url,
         # otherwise use url with digest
+        image_inspect = inspect_image(image, authfile_fo)
         if image_inspect[0].get("RepoTags"):
             orig_image_full = image_inspect[0]["RepoTags"][0]
         else:
@@ -2414,15 +2734,6 @@ def mirror_image(image):
         # prepare mirrored image url
         mirror_registry = config.DEPLOYMENT["mirror_registry"]
         mirrored_image = mirror_registry + re.sub(r"^[^/]*", "", orig_image_full)
-        # login to mirror registry
-        mirror_registry_user = config.DEPLOYMENT["mirror_registry_user"]
-        mirror_registry_password = config.DEPLOYMENT["mirror_registry_password"]
-        login_cmd = (
-            f"podman login --authfile {authfile_fo.name} "
-            f"{mirror_registry} -u {mirror_registry_user} "
-            f"-p {mirror_registry_password} --tls-verify=false"
-        )
-        exec_cmd(login_cmd, (mirror_registry_user, mirror_registry_password))
         # mirror the image
         logging.info(
             f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"
@@ -2882,6 +3193,23 @@ def get_cluster_id(cluster_path):
     return metadata["clusterID"]
 
 
+def get_running_cluster_id():
+    """
+    Get cluster UUID
+    Not relying on metadata.json as user sometimes want to run
+    only with kubeconfig for some tests. For this function to work
+    cluster has to be in running state
+
+    Returns:
+        str: cluster UUID
+
+    """
+    cluster_id = run_cmd(
+        "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
+    )
+    return cluster_id
+
+
 def get_ocp_upgrade_history():
     """
     Gets the OCP upgrade history for the cluster
@@ -2899,3 +3227,69 @@ def get_ocp_upgrade_history():
     upgrade_history_info = cluster_version_info["status"]["history"]
     upgrade_history = [each_upgrade["version"] for each_upgrade in upgrade_history_info]
     return upgrade_history
+
+
+def get_attr_chain(obj, attr_chain):
+    """
+    Attempt to retrieve object attributes when uncertain about the existence of the attribute
+    or a different attribute in a given attribute chain. If the retrieval fails, None is returned.
+    The function can be used to retrieve a direct attribute, or a chain of attributes.
+    i.e. - obj.attr_a, obj_attr_a.sub_attr
+
+    Another example - trying to access "sub_attr_b" in object.attr.sub_attr_a.sub_attr_b -
+    get_attr_chain(object, "attr.sub_attr_a.sub_attr_b")
+
+    The function can be used to try and retrieve "sub_attribute_b" without an exception,
+    even in cases where "attr" or "sub_attr_a" might not exist.
+    In those cases, the function will return None.
+
+    Args:
+        obj: An object
+        attr_chain (str): A string containing one attribute or several sub-attributes
+            separated by dots (i.e. - "attr.sub_attr_a.sub_attr_b")
+
+    Returns:
+        The requested attribute if found, otherwise None
+    """
+    return reduce(
+        lambda _obj, _attr: getattr(_obj, _attr, None), attr_chain.split("."), obj
+    )
+
+
+def get_default_if_keyval_empty(dictionary, key, default_val):
+    """
+    if Key has an empty value OR key doesn't exist
+    then return default value
+
+    Args:
+        dictionary (dict): Dictionary where we have to lookup
+        key (str): key to lookup
+        default_val (str): If key doesn't have value then return
+            this default_val
+
+    Returns:
+        dictionary[key] if value is present else default_val
+
+    """
+    if not dictionary.get(key):
+        return default_val
+    return dictionary.get(key)
+
+
+def get_client_version(client_binary_path):
+    """
+    Get version reported by `oc version`.
+
+    Args:
+        client_binary_path (str): path to `oc` binary
+
+    Returns:
+        str: version reported by `oc version`.
+            None if the client does not exist at the provided path.
+
+    """
+    if os.path.isfile(client_binary_path):
+        cmd = f"{client_binary_path} version --client -o json"
+        resp = exec_cmd(cmd)
+        stdout = json.loads(resp.stdout.decode())
+        return stdout["releaseClientVersion"]
