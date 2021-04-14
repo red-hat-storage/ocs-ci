@@ -1778,8 +1778,8 @@ def verify_osd_removal_job_completed_successfully(osd_id):
     is_completed = osd_removal_pod_obj.ocp.wait_for_resource(
         condition=constants.STATUS_COMPLETED,
         resource_name=osd_removal_pod_name,
-        sleep=10,
-        timeout=180,
+        sleep=20,
+        timeout=300,
     )
     if not is_completed:
         logger.info("ocs-osd-removal pod job failed to complete")
