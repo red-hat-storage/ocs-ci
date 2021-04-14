@@ -838,6 +838,7 @@ class Deployment(object):
         Handle OCS deployment, since OCS deployment steps are common to any
         platform, implementing OCS deployment here in base class.
         """
+        set_registry_to_managed_state()
         image = None
         ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
         try:
