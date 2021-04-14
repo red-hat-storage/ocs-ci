@@ -1544,11 +1544,7 @@ def is_flexible_scaling_enabled():
         bool: True if failure domain is "host" and flexible scaling is enabled. False otherwise
 
     """
-    ocs_storage_cluster = ocp.OCP(
-        kind=constants.STORAGECLUSTER,
-        resource_name=constants.DEFAULT_CLUSTERNAME,
-        namespace="openshift-storage",
-    )
+    ocs_storage_cluster = storage_cluster.get_storage_cluster()
 
     failure_domain = ocs_storage_cluster.get().get("status").get("failureDomain")
     flexible_scaling = ocs_storage_cluster.get().get("spec").get("flexibleScaling")
