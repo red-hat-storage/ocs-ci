@@ -4,19 +4,20 @@ import random
 import time
 import datetime
 import re
+import pathlib
 
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
 from ocs_ci.utility import templating, utils
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources import pod, pvc
+from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.ocs import constants, cluster, machine, node
+from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     UnexpectedBehaviour,
-    CephHealthException,
     UnsupportedPlatformError,
 )
 
@@ -30,8 +31,7 @@ class FioPodScale(object):
 
     def __init__(
         self,
-        kind="deploymentconfig",
-        pod_dict_path=constants.FEDORA_DC_YAML,
+        kind=constants.DEPLOYMENTCONFIG,
         node_selector=constants.SCALE_NODE_SELECTOR,
     ):
         """
@@ -39,24 +39,19 @@ class FioPodScale(object):
 
         Args:
             kind (str): Kind of service POD or DeploymentConfig
-            pod_dict_path (yaml): Pod yaml
             node_selector (dict): Pods will be created in this node_selector
             Example, {'nodetype': 'app-pod'}
 
         """
         self._kind = kind
-        self._pod_dict_path = pod_dict_path
         self._node_selector = node_selector
         self._set_dc_deployment()
         self.namespace_list = list()
+        self.kube_job_pvc_list, self.kube_job_pod_list = ([] for i in range(2))
 
     @property
     def kind(self):
         return self._kind
-
-    @property
-    def pod_dict_path(self):
-        return self._pod_dict_path
 
     @property
     def node_selector(self):
@@ -82,150 +77,151 @@ class FioPodScale(object):
         else:
             self.sa_name = None
 
-    def create_multi_pvc_pod(
-        self, pods_per_iter=5, io_runtime=3600, start_io=False, pvc_size=None
-    ):
+    def create_multi_pvc_pod(self, pvc_count=760, pvcs_per_pod=20, obj_name="obj1"):
         """
         Function to create PVC of different type and attach them to PODs and start IO.
 
         Args:
-            pods_per_iter (int): Number of PVC-POD to be created per PVC type
-            Example, If 2 then 8 PVC+POD will be created with 2 each of 4 PVC types
-            io_runtime (sec): Fio run time in seconds
-            start_io (bool): If True start IO else don't
-            pvc_size (Gi): size of PVC
+            pvc_count (int): Number of PVCs to be created
+            pvcs_per_pod (int): No of PVCs to be attached to single pod
+            Example, If 20 then a POD will be created with 20PVCs attached
+            obj_name (string): Object name prefix string
+            tmp_path (pathlib.Path): Directory where a temporary yaml file will
 
         Returns:
-            pod_objs (obj): Objs of all the PODs created
-            pvc_objs (obj): Objs of all the PVCs created
+            rbd_pvc_name (list): List all the rbd PVCs names created
+            fs_pvc_name (list): List all the fs PVCs names created
+            pod_running_list (list): List all the PODs names created
 
         """
-        rbd_sc = helpers.default_storage_class(constants.CEPHBLOCKPOOL)
-        cephfs_sc = helpers.default_storage_class(constants.CEPHFILESYSTEM)
-        pvc_size = pvc_size or f"{random.randrange(15, 105, 5)}Gi"
-        fio_size = get_size_based_on_cls_usage()
-        fio_rate = get_rate_based_on_cls_iops()
-        logging.info(f"Create {pods_per_iter * 4} PVCs and PODs")
-        # Create PVCs
-        cephfs_pvcs = helpers.create_multiple_pvc_parallel(
-            sc_obj=cephfs_sc,
+
+        # Condition to check kube_job batch count, value more than 750 per job
+        # will lead to failure in kube_job completion, below value is 1200
+        # since it will be divided by 2 i.e. 600 per job max as per below condition
+        if pvc_count > 1200:
+            raise UnexpectedBehaviour("Kube_job batch count should be lesser than 1200")
+
+        logging.info(f"Start creating {pvc_count} PVC of 2 types RBD-RWO & FS-RWX")
+        cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
+        rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
+
+        # Get pvc_dict_list, append all the pvc.yaml dict to pvc_dict_list
+        rbd_pvc_dict_list, cephfs_pvc_dict_list = ([] for i in range(2))
+        rbd_pvc_dict_list.extend(
+            construct_pvc_creation_yaml_bulk_for_kube_job(
+                no_of_pvc=int(pvc_count / 2),
+                access_mode=constants.ACCESS_MODE_RWO,
+                sc_name=rbd_sc_obj,
+            )
+        )
+        cephfs_pvc_dict_list.extend(
+            construct_pvc_creation_yaml_bulk_for_kube_job(
+                no_of_pvc=int(pvc_count / 2),
+                access_mode=constants.ACCESS_MODE_RWX,
+                sc_name=cephfs_sc_obj,
+            )
+        )
+
+        # kube_job for cephfs and rbd PVC creations
+        lcl = locals()
+        tmp_path = pathlib.Path(ocsci_log_path())
+        lcl[f"rbd_pvc_kube_{obj_name}"] = ObjectConfFile(
+            name=f"rbd_pvc_kube_{obj_name}",
+            obj_dict_list=rbd_pvc_dict_list,
+            project=self.namespace,
+            tmp_path=tmp_path,
+        )
+        lcl[f"cephfs_pvc_kube_{obj_name}"] = ObjectConfFile(
+            name=f"cephfs_pvc_kube_{obj_name}",
+            obj_dict_list=cephfs_pvc_dict_list,
+            project=self.namespace,
+            tmp_path=tmp_path,
+        )
+
+        # Create kube_job for PVC creations
+        lcl[f"rbd_pvc_kube_{obj_name}"].create(namespace=self.namespace)
+        lcl[f"cephfs_pvc_kube_{obj_name}"].create(namespace=self.namespace)
+
+        # Check all the PVC reached Bound state
+        rbd_pvc_name = check_all_pvc_reached_bound_state_in_kube_job(
+            kube_job_obj=lcl[f"rbd_pvc_kube_{obj_name}"],
             namespace=self.namespace,
-            number_of_pvc=pods_per_iter,
-            size=pvc_size,
-            access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX],
+            no_of_pvc=int(pvc_count / 2),
+            timeout=60,
         )
-        rbd_pvcs = helpers.create_multiple_pvc_parallel(
-            sc_obj=rbd_sc,
+        fs_pvc_name = check_all_pvc_reached_bound_state_in_kube_job(
+            kube_job_obj=lcl[f"cephfs_pvc_kube_{obj_name}"],
             namespace=self.namespace,
-            number_of_pvc=pods_per_iter,
-            size=pvc_size,
-            access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX],
+            no_of_pvc=int(pvc_count / 2),
+            timeout=60,
         )
 
-        # Appending all the pvc_obj and pod_obj to list
-        pvc_objs, pod_objs = ([] for i in range(2))
-        pvc_objs.extend(cephfs_pvcs + rbd_pvcs)
-
-        # Create pods with above pvc list
-        cephfs_pods = helpers.create_pods_parallel(
-            cephfs_pvcs,
-            self.namespace,
-            constants.CEPHFS_INTERFACE,
-            pod_dict_path=self.pod_dict_path,
-            sa_name=self.sa_name,
-            dc_deployment=self.dc_deployment,
-            node_selector=self.node_selector,
+        # Construct pod yaml file for kube_job
+        pod_data_list = list()
+        pod_data_list.extend(
+            attach_multiple_pvc_to_pod_dict(
+                pvc_list=rbd_pvc_name,
+                namespace=self.namespace,
+                pvcs_per_pod=pvcs_per_pod,
+                deployment_config=True,
+                node_selector=self.node_selector,
+            )
         )
-        rbd_rwo_pvc, rbd_rwx_pvc = ([] for i in range(2))
-        for pvc_obj in rbd_pvcs:
-            if pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWX:
-                rbd_rwx_pvc.append(pvc_obj)
-            else:
-                rbd_rwo_pvc.append(pvc_obj)
-        rbd_rwo_pods = helpers.create_pods_parallel(
-            rbd_rwo_pvc,
-            self.namespace,
-            constants.CEPHBLOCKPOOL,
-            pod_dict_path=self.pod_dict_path,
-            sa_name=self.sa_name,
-            dc_deployment=self.dc_deployment,
-            node_selector=self.node_selector,
+        pod_data_list.extend(
+            attach_multiple_pvc_to_pod_dict(
+                pvc_list=fs_pvc_name,
+                namespace=self.namespace,
+                pvcs_per_pod=pvcs_per_pod,
+                deployment_config=True,
+                node_selector=self.node_selector,
+            )
         )
-        rbd_rwx_pods = helpers.create_pods_parallel(
-            rbd_rwx_pvc,
-            self.namespace,
-            constants.CEPHBLOCKPOOL,
-            pod_dict_path=self.pod_dict_path,
-            sa_name=self.sa_name,
-            dc_deployment=self.dc_deployment,
-            raw_block_pv=True,
-            node_selector=self.node_selector,
+
+        # Create kube_job for pod creation
+        lcl[f"pod_kube_{obj_name}"] = ObjectConfFile(
+            name=f"pod_kube_{obj_name}",
+            obj_dict_list=pod_data_list,
+            project=self.namespace,
+            tmp_path=tmp_path,
         )
-        temp_pod_objs = list()
-        temp_pod_objs.extend(cephfs_pods + rbd_rwo_pods)
+        lcl[f"pod_kube_{obj_name}"].create(namespace=self.namespace)
 
-        # Appending all the pod_obj to list
-        pod_objs.extend(temp_pod_objs + rbd_rwx_pods)
+        # Check all the POD reached Running state
+        pod_running_list = check_all_pod_reached_running_state_in_kube_job(
+            kube_job_obj=lcl[f"pod_kube_{obj_name}"],
+            namespace=self.namespace,
+            no_of_pod=len(pod_data_list),
+            timeout=90,
+        )
 
-        # Start IO
-        if start_io:
-            threads = list()
-            for pod_obj in temp_pod_objs:
-                process = threading.Thread(
-                    target=pod_obj.run_io,
-                    kwargs={
-                        "storage_type": "fs",
-                        "size": fio_size,
-                        "runtime": io_runtime,
-                        "rate": fio_rate,
-                    },
-                )
-                process.start()
-                threads.append(process)
-                time.sleep(30)
-            for pod_obj in rbd_rwx_pods:
-                process = threading.Thread(
-                    target=pod_obj.run_io,
-                    kwargs={
-                        "storage_type": "block",
-                        "size": fio_size,
-                        "runtime": io_runtime,
-                        "rate": fio_rate,
-                    },
-                )
-                process.start()
-                threads.append(process)
-                time.sleep(30)
-            for process in threads:
-                process.join()
+        # Update list with all the kube_job object created, list will be
+        # used in cleanup
+        self.kube_job_pvc_list.append(lcl[f"rbd_pvc_kube_{obj_name}"])
+        self.kube_job_pvc_list.append(lcl[f"cephfs_pvc_kube_{obj_name}"])
+        self.kube_job_pod_list.append(lcl[f"pod_kube_{obj_name}"])
 
-        return pod_objs, pvc_objs
+        return rbd_pvc_name, fs_pvc_name, pod_running_list
 
-    def create_scale_pods(
-        self,
-        scale_count=1500,
-        pods_per_iter=5,
-        io_runtime=None,
-        pvc_size=None,
-        start_io=None,
-    ):
+    def create_scale_pods(self, scale_count=1500, pvc_per_pod_count=20):
         """
         Main Function with scale pod creation flow and checks to add nodes.
         For other platforms will not be considering the instance_type param
+        Function does scale pods in counts in 750 and more lesser than 750
+        not supported
 
         Args:
-            scale_count (int): Scale pod+pvc count
-            io_runtime (sec): Fio run time in seconds
-            start_io (bool): If True start IO else don't
-            pods_per_iter (int): Number of PVC-POD to be created per PVC type
-            pvc_size (Gi): size of PVC
-            Example, If 5 then 20 PVC+POD will be created with 5 each of 4 PVC types
-            Test value in-between 5-10
+            scale_count (int): No of PVCs to be Scaled
+            pvc_per_pod_count (int): Number of PVCs to be attached to single POD
+            Example, If 20 then 20 PVCs will be attached to single POD
 
         """
-        self.ms_name, all_pod_obj = ([] for i in range(2))
-        if not 5 <= pods_per_iter <= 10:
-            raise UnexpectedBehaviour("Pods_per_iter value should be in-between 5-15")
+
+        # Minimal scale creation count should be 750, code is optimized to
+        # scale PVC's more than 750 count
+        if scale_count < 750:
+            raise UnexpectedBehaviour("Minimal scale PVC creation count should be 750")
+
+        self.ms_name = list()
 
         # Check for expected worker count
         expected_worker_count = get_expected_worker_count(scale_count)
@@ -243,10 +239,15 @@ class FioPodScale(object):
         # Create namespace
         self.create_and_set_namespace()
 
+        expected_itr_counter = int(scale_count / 750)
+        actual_itr_counter = 0
+
         # Continue to iterate till the scale pvc limit is reached
         while True:
-            if scale_count <= len(all_pod_obj):
-                logger.info(f"Scaled {scale_count} pvc and pods")
+            if actual_itr_counter == expected_itr_counter:
+                logging.info(
+                    f"Scaled {scale_count} PVCs and created {scale_count/20} PODs"
+                )
 
                 if cluster.validate_pg_balancer():
                     logging.info(
@@ -257,39 +258,21 @@ class FioPodScale(object):
 
                 break
             else:
-                logger.info(f"Scaled PVC and POD count {len(all_pod_obj)}")
-                self.pod_obj, self.pvc_obj = self.create_multi_pvc_pod(
-                    pods_per_iter, io_runtime, start_io, pvc_size
+                actual_itr_counter += 1
+                rbd_pvc, fs_pvc, pod_running = self.create_multi_pvc_pod(
+                    pvc_count=760,
+                    pvcs_per_pod=pvc_per_pod_count,
+                    obj_name=f"obj{actual_itr_counter}",
                 )
-                all_pod_obj.extend(self.pod_obj)
-                try:
-                    # Check enough resources available in the dedicated app workers
-                    check_enough_resource_available_in_workers(
-                        self.ms_name, self.pod_dict_path
-                    )
+                logging.info(
+                    f"Scaled {len(rbd_pvc)+len(fs_pvc)} PVCs and Created "
+                    f"{len(pod_running)} PODs in interation {actual_itr_counter}"
+                )
 
-                    # Check for ceph cluster OSD utilization
-                    if not cluster.validate_osd_utilization(osd_used=75):
-                        logging.info("Cluster OSD utilization is below 75%")
-                    elif not cluster.validate_osd_utilization(osd_used=83):
-                        logger.warning("Cluster OSD utilization is above 75%")
-                    else:
-                        raise CephHealthException("Cluster OSDs are near full")
-
-                    # Check for 500 pods per namespace
-                    pod_objs = pod.get_all_pods(
-                        namespace=self.namespace_list[-1].namespace
-                    )
-                    if len(pod_objs) >= 500:
-                        self.create_and_set_namespace()
-
-                except UnexpectedBehaviour:
-                    logging.error(
-                        f"Scaling of cluster failed after {len(all_pod_obj)} pod creation"
-                    )
-                    raise UnexpectedBehaviour(
-                        "Scaling PVC+POD failed analyze setup and log for more details"
-                    )
+        logging.info(
+            f"Scaled {actual_itr_counter * 760} PVC's and "
+            f"Created {int((actual_itr_counter * 760)/20)} PODs"
+        )
 
     def pvc_expansion(self, pvc_new_size):
         """
@@ -305,17 +288,13 @@ class FioPodScale(object):
         Function to tear down
         """
         # Delete all pods, pvcs and namespaces
+        for job in self.kube_job_pod_list:
+            job.delete(namespace=self.namespace)
+
+        for job in self.kube_job_pvc_list:
+            job.delete(namespace=self.namespace)
+
         for namespace in self.namespace_list:
-            delete_objs_parallel(
-                obj_list=pod.get_all_pods(namespace=namespace.namespace),
-                namespace=namespace.namespace,
-                kind=self.kind,
-            )
-            delete_objs_parallel(
-                obj_list=pvc.get_all_pvc_objs(namespace=namespace.namespace),
-                namespace=namespace.namespace,
-                kind=constants.PVC,
-            )
             ocp = OCP(kind=constants.NAMESPACE)
             ocp.delete(resource_name=namespace.namespace)
 
