@@ -1571,7 +1571,7 @@ def get_instances_ids_and_names(instances):
 
     Returns:
         dict: The ID keys and the name values of the instances
-tox
+
     """
     return {
         "i-"
