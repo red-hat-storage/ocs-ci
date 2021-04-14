@@ -12,6 +12,7 @@ import time
 import calendar
 from threading import Thread
 import base64
+from semantic_version import Version
 
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.ocp import OCP, verify_images_upgraded
@@ -1675,9 +1676,11 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
         str: The osd removal pod name
 
     """
-    ocp_version = float(get_ocp_version())
-    ocs_version = float(config.ENV_DATA["ocs_version"])
-    if ocp_version >= 4.6 and ocs_version >= 4.7:
+    ocp_version = get_ocp_version()
+    ocs_version = config.ENV_DATA["ocs_version"]
+    if Version.coerce(ocp_version) >= Version.coerce("4.6") and Version.coerce(
+        ocs_version
+    ) >= Version.coerce("4.7"):
         pattern = "ocs-osd-removal-job"
     else:
         pattern = f"ocs-osd-removal-{osd_id}"
@@ -1739,8 +1742,8 @@ def run_osd_removal_job(osd_id):
         ocs_ci.ocs.resources.ocs.OCS: The ocs-osd-removal job object
 
     """
-    ocp_version = float(get_ocp_version())
-    if ocp_version >= 4.6:
+    ocp_version = get_ocp_version()
+    if Version.coerce(ocp_version) >= Version.coerce("4.6"):
         cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_id} -o yaml"
     else:
         cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_id} -o yaml"
@@ -1806,9 +1809,11 @@ def delete_osd_removal_job(osd_id):
         bool: True, if the ocs-osd-removal job deleted successfully. False, otherwise
 
     """
-    ocp_version = float(get_ocp_version())
-    ocs_version = float(config.ENV_DATA["ocs_version"])
-    if ocp_version >= 4.6 and ocs_version >= 4.7:
+    ocp_version = get_ocp_version()
+    ocs_version = config.ENV_DATA["ocs_version"]
+    if Version.coerce(ocp_version) >= Version.coerce("4.6") and Version.coerce(
+        ocs_version
+    ) >= Version.coerce("4.7"):
         job_name = "ocs-osd-removal-job"
     else:
         job_name = f"ocs-osd-removal-{osd_id}"
