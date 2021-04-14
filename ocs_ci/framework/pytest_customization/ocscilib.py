@@ -241,6 +241,13 @@ def pytest_addoption(parser):
             "For OCS cluster deployment with Ceph configured in debug mode. Available for OCS 4.7 and above"
         ),
     )
+    parser.addoption(
+        "--skip-download-client",
+        dest="skip_download_client",
+        action="store_true",
+        default=False,
+        help="Skip the openshift client download step or not",
+    )
 
 
 def pytest_configure(config):
@@ -495,6 +502,9 @@ def process_cluster_cli_params(config):
     ceph_debug = get_cli_param(config, "ceph_debug")
     if ceph_debug:
         ocsci_config.DEPLOYMENT["ceph_debug"] = True
+    skip_download_client = get_cli_param(config, "skip_download_client")
+    if skip_download_client:
+        ocsci_config.DEPLOYMENT["skip_download_client"] = True
 
 
 def pytest_collection_modifyitems(session, config, items):
