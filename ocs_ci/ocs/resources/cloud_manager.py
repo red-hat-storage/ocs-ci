@@ -95,7 +95,7 @@ class CloudManager(ABC):
             }
             setattr(self, "rgw_client", cloud_map["RGW"](auth_dict=cred_dict["RGW"]))
         except CommandFailed:
-            pass
+            setattr(self, "rgw_client", None)
 
 
 class CloudClient(ABC):
