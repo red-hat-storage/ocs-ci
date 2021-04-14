@@ -312,8 +312,9 @@ class AMQ(object):
             self.kafka_topic = OCS(**kafka_topic)
             self.kafka_topic.create()
         except (CommandFailed, CalledProcessError) as cf:
-            log.error("Failed during creating of Kafka topic")
-            raise cf
+            if f'kafkatopics.kafka.strimzi.io "{name}" already exists' not in str(cf):
+                log.error("Failed during creating of Kafka topic")
+                raise cf
 
         # Making sure kafka topic created
         if self.kafka_topic_obj.get(resource_name=name):
