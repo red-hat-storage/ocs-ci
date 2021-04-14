@@ -21,5 +21,5 @@ ENV_DATA:
     - 'us-east-1c'
   worker_replicas: 6
   master_replicas: 3
-  # since us-east-1e doesn't support m5.4xlarge, we are using m4.2xlarge as worker_instance_type
-  worker_instance_type: 'm4.2xlarge'
+  # since us-east-1e doesn't support m5.4xlarge, we are using m4.4xlarge as worker_instance_type
+  worker_instance_type: 'm4.4xlarge'

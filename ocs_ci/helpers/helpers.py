@@ -481,6 +481,7 @@ def create_storage_class(
     reclaim_policy=constants.RECLAIM_POLICY_DELETE,
     sc_name=None,
     provisioner=None,
+    rbd_thick_provision=False,
 ):
     """
     Create a storage class
@@ -495,6 +496,8 @@ def create_storage_class(
         sc_name (str): The name of storage class to create
         reclaim_policy (str): Type of reclaim policy. Defaults to 'Delete'
             (eg., 'Delete', 'Retain')
+        rbd_thick_provision (bool): True to enable RBD thick provisioning.
+                Applicable if interface_type is CephBlockPool
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -511,6 +514,8 @@ def create_storage_class(
         sc_data["provisioner"] = (
             provisioner if provisioner else defaults.RBD_PROVISIONER
         )
+        if rbd_thick_provision:
+            sc_data["parameters"]["thickProvision"] = "true"
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = templating.load_yaml(constants.CSI_CEPHFS_STORAGECLASS_YAML)
         sc_data["parameters"]["csi.storage.k8s.io/node-stage-secret-name"] = secret_name
@@ -2942,6 +2947,7 @@ def get_mon_pdb():
     return disruptions_allowed, min_available_mon
 
 
+@retry(CommandFailed, tries=10, delay=30, backoff=1)
 def run_cmd_verify_cli_output(
     cmd=None, expected_output_lst=(), cephtool_cmd=False, debug_node=None
 ):
