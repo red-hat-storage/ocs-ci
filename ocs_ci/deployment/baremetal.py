@@ -332,15 +332,15 @@ class BAREMETALUPI(Deployment):
                         == constants.BOOTSTRAP_MACHINE
                     ):
                         self.set_pxe_boot_and_reboot(machine)
-                        bootstrap_ip = self.mgmt_details[machine]['ip']
-                        api_record_ip_list.append(self.mgmt_details[machine]['ip'])
+                        bootstrap_ip = self.mgmt_details[machine]["ip"]
+                        api_record_ip_list.append(self.mgmt_details[machine]["ip"])
 
                     elif (
                         self.mgmt_details[machine]["role"] == constants.MASTER_MACHINE
                         and master_count < config.ENV_DATA["master_replicas"]
                     ):
                         self.set_pxe_boot_and_reboot(machine)
-                        api_record_ip_list.append(self.mgmt_details[machine]['ip'])
+                        api_record_ip_list.append(self.mgmt_details[machine]["ip"])
                         master_count += 1
 
                     elif (
@@ -348,7 +348,7 @@ class BAREMETALUPI(Deployment):
                         and worker_count < config.ENV_DATA["worker_replicas"]
                     ):
                         self.set_pxe_boot_and_reboot(machine)
-                        apps_record_ip_list.append(self.mgmt_details[machine]['ip'])
+                        apps_record_ip_list.append(self.mgmt_details[machine]["ip"])
                         worker_count += 1
 
             logger.info("Configuring DNS records")
@@ -357,19 +357,34 @@ class BAREMETALUPI(Deployment):
             if config.ENV_DATA["worker_replicas"] == 0:
                 apps_record_ip_list = api_record_ip_list
             for ip in api_record_ip_list:
-                response_list.append(self.aws.update_hosted_zone_record(
-                    zone_id=zone_id, record_name=f'api-int.{cluster_name}',
-                    data=ip, type='A', operation_type='Add'
-                ))
-                response_list.append(self.aws.update_hosted_zone_record(
-                    zone_id=zone_id, record_name=f'api.{cluster_name}',
-                    data=ip, type='A', operation_type='Add'
-                ))
+                response_list.append(
+                    self.aws.update_hosted_zone_record(
+                        zone_id=zone_id,
+                        record_name=f"api-int.{cluster_name}",
+                        data=ip,
+                        type="A",
+                        operation_type="Add",
+                    )
+                )
+                response_list.append(
+                    self.aws.update_hosted_zone_record(
+                        zone_id=zone_id,
+                        record_name=f"api.{cluster_name}",
+                        data=ip,
+                        type="A",
+                        operation_type="Add",
+                    )
+                )
             for ip in apps_record_ip_list:
-                response_list.append(self.aws.update_hosted_zone_record(
-                    zone_id=zone_id, record_name=f'*.apps.{cluster_name}',
-                    data=ip, type='A', operation_type='Add'
-                ))
+                response_list.append(
+                    self.aws.update_hosted_zone_record(
+                        zone_id=zone_id,
+                        record_name=f"*.apps.{cluster_name}",
+                        data=ip,
+                        type="A",
+                        operation_type="Add",
+                    )
+                )
 
             logger.info("Waiting for Record Response")
             self.aws.wait_for_record_set(response_list=response_list)
@@ -409,12 +424,18 @@ class BAREMETALUPI(Deployment):
             )
             logger.info("Removing Bootstrap Ip for DNS Records")
             self.aws.update_hosted_zone_record(
-                zone_id=zone_id, record_name=f'api-int.{cluster_name}',
-                data=bootstrap_ip, type='A', operation_type='Delete'
+                zone_id=zone_id,
+                record_name=f"api-int.{cluster_name}",
+                data=bootstrap_ip,
+                type="A",
+                operation_type="Delete",
             )
             self.aws.update_hosted_zone_record(
-                zone_id=zone_id, record_name=f'api.{cluster_name}',
-                data=bootstrap_ip, type='A', operation_type='Delete'
+                zone_id=zone_id,
+                record_name=f"api.{cluster_name}",
+                data=bootstrap_ip,
+                type="A",
+                operation_type="Delete",
             )
             # Approving CSRs here in-case if any exists
             approve_pending_csr()

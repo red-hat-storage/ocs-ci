@@ -1488,10 +1488,12 @@ class AWS(object):
         hosted_zones_output = self.route53_client.list_hosted_zones_by_name(
             DNSName=hosted_zone_name
         )
-        full_hosted_zone_id = hosted_zones_output['HostedZones'][0]['Id']
-        return full_hosted_zone_id.strip('/hostedzone/')
+        full_hosted_zone_id = hosted_zones_output["HostedZones"][0]["Id"]
+        return full_hosted_zone_id.strip("/hostedzone/")
 
-    def update_hosted_zone_record(self, zone_id, record_name, data, type, operation_type, ttl=60):
+    def update_hosted_zone_record(
+        self, zone_id, record_name, data, type, operation_type, ttl=60
+    ):
         """
         Update Route53 DNS record
 
@@ -1509,38 +1511,34 @@ class AWS(object):
         base_domain = config.ENV_DATA["base_domain"]
         record_name = f"{record_name}.{base_domain}."
         if "*" in record_name:
-            trim_record_name = record_name.strip('*.')
+            trim_record_name = record_name.strip("*.")
         else:
             trim_record_name = record_name
         old_resource_record_list = []
         res = self.route53_client.list_resource_record_sets(HostedZoneId=zone_id)
-        for records in res.get('ResourceRecordSets'):
-            if trim_record_name in records.get('Name'):
-                old_resource_record_list = records.get('ResourceRecords')
+        for records in res.get("ResourceRecordSets"):
+            if trim_record_name in records.get("Name"):
+                old_resource_record_list = records.get("ResourceRecords")
 
         if operation_type == "Add":
-            old_resource_record_list.append({
-                'Value': data
-            })
+            old_resource_record_list.append({"Value": data})
         elif operation_type == "Delete":
-            old_resource_record_list.remove({
-                'Value': data
-            })
+            old_resource_record_list.remove({"Value": data})
         response = self.route53_client.change_resource_record_sets(
             HostedZoneId=zone_id,
             ChangeBatch={
-                'Changes': [
+                "Changes": [
                     {
-                        'Action': 'UPSERT',
-                        'ResourceRecordSet': {
-                            'Name': record_name,
-                            'Type': type,
-                            'TTL': ttl,
-                            'ResourceRecords': old_resource_record_list
-                        }
+                        "Action": "UPSERT",
+                        "ResourceRecordSet": {
+                            "Name": record_name,
+                            "Type": type,
+                            "TTL": ttl,
+                            "ResourceRecords": old_resource_record_list,
+                        },
                     }
                 ],
-            }
+            },
         )
         logger.debug(f"Record Created with {record_name} for {data}")
         return response
@@ -1555,10 +1553,13 @@ class AWS(object):
 
         """
 
-        waiter = self.route53_client.get_waiter('resource_record_sets_changed')
+        waiter = self.route53_client.get_waiter("resource_record_sets_changed")
         for response in response_list:
             logger.debug(f"Waiting for Response {response['ChangeInfo']['Id']}")
-            waiter.wait(Id=response['ChangeInfo']['Id'], WaiterConfig={'MaxAttempts': max_attempts})
+            waiter.wait(
+                Id=response["ChangeInfo"]["Id"],
+                WaiterConfig={"MaxAttempts": max_attempts},
+            )
 
 
 def get_instances_ids_and_names(instances):
@@ -1570,7 +1571,7 @@ def get_instances_ids_and_names(instances):
 
     Returns:
         dict: The ID keys and the name values of the instances
-
+tox
     """
     return {
         "i-"
