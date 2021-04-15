@@ -259,6 +259,7 @@ def pytest_configure(config):
 
     """
     set_log_level(config)
+    set_rp_client_log_level()
     # Somewhat hacky but this lets us differentiate between run-ci executions
     # and plain pytest unit test executions
     ocscilib_module = "ocs_ci.framework.pytest_customization.ocscilib"
@@ -634,3 +635,13 @@ def set_log_level(config):
     """
     level = config.getini("log_cli_level") or "INFO"
     log.setLevel(logging.getLevelName(level))
+
+
+def set_rp_client_log_level():
+    """
+    Change log level of the reportportal_client logger. Default value is ERROR to limit
+    the amount of noise in our log files from this logger.
+    """
+    rp_logger = logging.getLogger("reportportal_client")
+    level = ocsci_config.REPORTING.get("rp_client_log_level")
+    rp_logger.setLevel(logging.getLevelName(level))
