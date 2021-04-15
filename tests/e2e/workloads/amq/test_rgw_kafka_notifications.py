@@ -107,12 +107,9 @@ class TestRGWAndKafkaNotifications(E2ETest):
 
         # Validate kafkadrop pod running
         ocp_obj = OCP(kind=constants.POD, namespace=constants.AMQ_NAMESPACE)
-        kafdrop_pod_name = ocp_obj.get(selector="app=kafdrop")["items"][0]["metadata"][
-            "name"
-        ]
         ocp_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            resource_name=kafdrop_pod_name,
+            selector="app=kafdrop",
             timeout=120,
             sleep=5,
         )
