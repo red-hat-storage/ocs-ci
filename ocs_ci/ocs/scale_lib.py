@@ -204,10 +204,10 @@ class FioPodScale(object):
 
     def create_scale_pods(self, scale_count=1500, pvc_per_pod_count=20):
         """
-        Main Function with scale pod creation flow and checks to add nodes.
-        For other platforms will not be considering the instance_type param
-        Function does scale pods in counts in 750 and more lesser than 750
-        not supported
+        Main Function with scale pod creation flow and checks to add nodes
+        for the supported platforms, validates pg-balancer after scaling
+        Function breaks the scale_count in multiples of 750 and iterates those
+        many time to reach the desired count.
 
         Args:
             scale_count (int): No of PVCs to be Scaled
@@ -217,8 +217,12 @@ class FioPodScale(object):
         """
 
         # Minimal scale creation count should be 750, code is optimized to
-        # scale PVC's more than 750 count
-        if scale_count < 750:
+        # scale PVC's not more than 750 count.
+        # Used max_pvc_count+10 in certain places to round up the value.
+        # i.e. while attaching 20 PVCs to single pod with 750 PVCs last pod
+        # will left out with 10 PVCs so to avoid the problem scaling 10 more.
+        max_pvc_count = 750
+        if scale_count < max_pvc_count:
             raise UnexpectedBehaviour("Minimal scale PVC creation count should be 750")
 
         self.ms_name = list()
@@ -239,7 +243,7 @@ class FioPodScale(object):
         # Create namespace
         self.create_and_set_namespace()
 
-        expected_itr_counter = int(scale_count / 750)
+        expected_itr_counter = int(scale_count / max_pvc_count)
         actual_itr_counter = 0
 
         # Continue to iterate till the scale pvc limit is reached
@@ -260,7 +264,7 @@ class FioPodScale(object):
             else:
                 actual_itr_counter += 1
                 rbd_pvc, fs_pvc, pod_running = self.create_multi_pvc_pod(
-                    pvc_count=760,
+                    pvc_count=max_pvc_count + 10,
                     pvcs_per_pod=pvc_per_pod_count,
                     obj_name=f"obj{actual_itr_counter}",
                 )
@@ -270,8 +274,8 @@ class FioPodScale(object):
                 )
 
         logging.info(
-            f"Scaled {actual_itr_counter * 760} PVC's and "
-            f"Created {int((actual_itr_counter * 760)/20)} PODs"
+            f"Scaled {actual_itr_counter * (max_pvc_count+10)} PVC's and "
+            f"Created {int((actual_itr_counter * (max_pvc_count+10))/20)} PODs"
         )
 
     def pvc_expansion(self, pvc_new_size):
