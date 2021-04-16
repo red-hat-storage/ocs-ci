@@ -13,15 +13,21 @@ from botocore import UNSIGNED
 from botocore.config import Config
 import botocore.exceptions as boto3exception
 
-from ocs_ci.framework.pytest_customization import marks
 from ocs_ci.framework.testlib import (
     MCGTest,
     on_prem_platform_required,
     skipif_ocs_version,
     tier1,
     tier2,
+    tier3,
     tier4,
     tier4a,
+)
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_aws_creds_are_missing,
+    skipif_openshift_dedicated,
+    bugzilla,
 )
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
@@ -30,13 +36,13 @@ from ocs_ci.ocs.bucket_utils import (
     s3_delete_object,
     retrieve_verification_mode,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
 from ocs_ci.ocs import constants, bucket_utils
 from ocs_ci.ocs.cluster import CephCluster
-from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour, UnhealthyBucket
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 from ocs_ci.ocs.resources.bucket_policy import HttpResponseParser
+from ocs_ci.ocs.resources.namespacestore import NamespaceStore
+from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
 
@@ -784,6 +790,148 @@ class TestNamespace(MCGTest):
         logger.info("Compare between uploaded files and downloaded files")
         assert self.compare_dirs(awscli_pod, amount=3)
 
+    @pytest.mark.polarion_id("OCS-2280")
+    @tier3
+    def test_create_resource_with_invalid_target_bucket_rpc(
+        self,
+        mcg_obj,
+    ):
+        """
+        Test that a proper error message is reported when invalid target
+        bucket is provided during namespace resource creation.
+        """
+        for target_bucket_name in ("", " ", "/*-#$%@^"):
+            nss_obj = NamespaceStore(
+                name="invalid-nss",
+                method="oc",
+                mcg_obj=mcg_obj,
+                uls_name=target_bucket_name,
+            )
+
+            try:
+                nss_obj.verify_health(timeout=15)
+            except AssertionError:
+                logger.info("Invalid NamespaceStore is not healthy as Expected")
+                nss_obj.delete()
+            else:
+                nss_obj.delete()
+                assert False, "Invalid NamespaceStore should not be healthy"
+
+    @pytest.mark.polarion_id("OCS-2282")
+    @tier3
+    def test_delete_resource_used_in_ns_bucket_crd(
+        self, namespace_store_factory, bucket_factory
+    ):
+        """
+        Test that a proper error message is reported when invalid target
+        bucket is provided during namespace resource creation.
+        """
+        logger.info("Create the namespace resources and verify health")
+        nss_tup = ("oc", {"aws": [(1, self.DEFAULT_REGION)]})
+        ns_store1 = namespace_store_factory(*nss_tup)[0]
+        nss_tup = ("oc", {"aws": [(1, self.DEFAULT_REGION)]})
+        ns_store2 = namespace_store_factory(*nss_tup)[0]
+
+        logger.info("Create the namespace bucket on top of the namespace resource")
+        bucketclass_dict = {
+            "interface": "OC",
+            "namespace_policy_dict": {
+                "type": "Multi",
+                "namespacestores": [ns_store1, ns_store2],
+            },
+        }
+        bucket_factory(
+            amount=1,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )
+        try:
+            ns_store2.delete(wait=False)
+        except AssertionError:
+            logger.info(f"NamespaceStore {ns_store2.name} was not deleted as expected")
+        conditions = OCP(
+            kind="namespacestore",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=ns_store2.name,
+        ).get()
+        assert (
+            "has buckets attached" in conditions["status"]["conditions"][0]["message"]
+        )
+
+    @pytest.mark.polarion_id("OCS-2283")
+    @tier3
+    def test_create_bucket_with_invalid_namespacestore_crd(
+        self, namespace_store_factory, bucket_factory
+    ):
+        """
+        Test that a proper error message is reported when invalid
+        NamespaceStore name is provided during namespace bucket creation.
+        """
+        logger.info("Create one valid namespace resource and verify health")
+        nss_tup = ("oc", {"aws": [(1, self.DEFAULT_REGION)]})
+        valid_store = namespace_store_factory(*nss_tup)[0]
+
+        class InvalidNamespacestore:
+            """
+            Empty class that contains invalid NamespaceStore name
+            """
+
+            def __init__(self, name):
+                self.name = name
+
+        for store_name in ("", "nonexistent"):
+            logger.info(
+                f"Trying to create namespace bucket with write resource set to '{store_name}'"
+            )
+            bucketclass_dict = {
+                "interface": "OC",
+                "namespace_policy_dict": {
+                    "type": "Multi",
+                    "namespacestores": [InvalidNamespacestore(store_name), valid_store],
+                },
+            }
+            bucket = bucket_factory(
+                amount=1,
+                interface=bucketclass_dict["interface"],
+                bucketclass=bucketclass_dict,
+                verify_health=False,
+            )[0]
+            try:
+                bucket.verify_health(timeout=15)
+            except UnhealthyBucket:
+                logger.info(
+                    "Bucket with invalid NamespaceStore is not healthy as Expected"
+                )
+            else:
+                assert False, "Bucket with invalid NamespaceStore should not be healthy"
+            bucket.delete()
+
+            logger.info(
+                f"trying to create namespace bucket with read resource set to '{store_name}'"
+            )
+            bucketclass_dict = {
+                "interface": "OC",
+                "namespace_policy_dict": {
+                    "type": "Multi",
+                    "namespacestores": [valid_store, InvalidNamespacestore(store_name)],
+                },
+            }
+            bucket = bucket_factory(
+                amount=1,
+                interface=bucketclass_dict["interface"],
+                bucketclass=bucketclass_dict,
+                verify_health=False,
+            )[0]
+            try:
+                bucket.verify_health(timeout=15)
+            except UnhealthyBucket:
+                logger.info(
+                    "Bucket with invalid NamespaceStore is not healthy as Expected"
+                )
+            else:
+                assert False, "Bucket with invalid NamespaceStore should not be healthy"
+            bucket.delete()
+
     @tier4
     @tier4a
     @pytest.mark.parametrize(
@@ -969,7 +1117,7 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2504")
     @tier2
-    @marks.bugzilla("1927367")
+    @bugzilla("1927367")
     def test_ns_bucket_unsigned_access(
         self, mcg_obj, bucket_factory, namespace_store_factory
     ):

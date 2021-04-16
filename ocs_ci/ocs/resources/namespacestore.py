@@ -31,9 +31,14 @@ class NamespaceStore:
         self.secret_name = secret_name
         self.mcg_obj = mcg_obj
 
-    def delete(self):
+    def delete(self, wait=True):
         """
         Deletes the current namespacestore by using OC/CLI commands
+
+        Args:
+            wait (bool): Determines if the delete command should wait to
+                completion. This is considered only when oc command is used
+                instead of mcg cli.
 
         """
         log.info(f"Cleaning up namespacestore {self.name}")
@@ -43,7 +48,7 @@ class NamespaceStore:
                 OCP(
                     kind="namespacestore",
                     namespace=config.ENV_DATA["cluster_namespace"],
-                ).delete(resource_name=self.name)
+                ).delete(resource_name=self.name, wait=wait)
             except CommandFailed as e:
                 if "not found" in str(e).lower():
                     log.warning(f"Namespacestore {self.name} was already deleted.")
