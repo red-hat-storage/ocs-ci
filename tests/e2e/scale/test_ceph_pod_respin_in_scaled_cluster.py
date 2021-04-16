@@ -19,13 +19,9 @@ def fioscale(request):
 
     # Scale FIO pods in the cluster
     fioscale = FioPodScale(
-        kind=constants.POD,
-        pod_dict_path=constants.NGINX_POD_YAML,
-        node_selector=constants.SCALE_NODE_SELECTOR,
+        kind=constants.POD, node_selector=constants.SCALE_NODE_SELECTOR
     )
-    fioscale.create_scale_pods(
-        scale_count=1500, pods_per_iter=10, io_runtime=36000, start_io=True
-    )
+    fioscale.create_scale_pods(scale_count=1500, pvc_per_pod_count=20)
 
     def teardown():
         fioscale.cleanup()
