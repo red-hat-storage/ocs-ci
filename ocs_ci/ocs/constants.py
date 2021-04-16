@@ -136,6 +136,7 @@ OPERATOR_GROUP = "OperatorGroup"
 SERVICE_ACCOUNT = "Serviceaccount"
 SCC = "SecurityContextConstraints"
 PRIVILEGED = "privileged"
+ANYUID = "anyuid"
 CLUSTER_SERVICE_VERSION = "csv"
 
 # Other
