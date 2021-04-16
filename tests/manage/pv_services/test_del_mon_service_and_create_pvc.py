@@ -31,7 +31,7 @@ POD_OBJ = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPAC
 @tier4a
 @ignore_leftovers
 @skipif_external_mode
-@skipif_ocs_version("<4.7")
+@skipif_ocs_version("<4.6")
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[
