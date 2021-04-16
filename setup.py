@@ -75,6 +75,7 @@ setup(
             "ci-pause=ocs_ci.pause.pause:cluster_pause",
             "aws-cleanup=ocs_ci.cleanup.aws.cleanup:aws_cleanup",
             "vsphere-cleanup=ocs_ci.cleanup.vsphere.cleanup:vsphere_cleanup",
+            "ocs-build=ocs_ci.utility.ocs_build:main",
         ],
     },
     zip_safe=True,
