@@ -1,0 +1,15 @@
+---
+# This configuration file is for development purpose only and allow you to
+# install OCS on nodes with lower then required resources. This can lead to
+# some issues and should be used only for development purpose only.
+DEPLOYMENT:
+  allow_lower_instance_requirements: true
+ENV_DATA:
+  platform: 'rhv'
+  deployment_type: 'ipi'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_num_cpus: '12'
+  master_num_cpus: '4'
+  master_memory: '16384'
+  compute_memory: '32768'
