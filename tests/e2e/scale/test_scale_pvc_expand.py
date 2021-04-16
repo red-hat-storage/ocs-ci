@@ -32,6 +32,10 @@ def resize_pvc(request):
 @scale
 @skipif_ocs_version("<4.5")
 @ignore_leftovers
+@pytest.mark.skip(
+    reason="Skipped due to scale_lib pod creations are "
+    "enhanced to use kube_job, TC needs update"
+)
 @pytest.mark.parametrize(
     argnames=[
         "start_io",
