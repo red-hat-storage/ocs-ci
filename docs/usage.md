@@ -34,6 +34,21 @@ get information on various image version deployed by ocs-ci
   action can be start or stop that performs the required action on all the nodes
   in the cluster
 
+# Usage for ocs-build tool
+
+Use `ocs-build --help` for printing the options.
+This tool returns latest OCS build tag which is available and by default will
+be used (output example: 4.7.0-353.ci).
+
+If --image parameter is provided, the whole image will be returned (output example:
+quay.io/rhceph-dev/ocs-registry:4.7.0-353.ci)
+
+You can also ask for build of specific OCS version using `--ocs-version 4.8`
+argument to get tag for 4.8 version (if no version provided, the OCS-CI default
+will be used).
+
+The quay access_token is required to be set in data/auth.yaml file.
+
 ## Required configuration
 
 * **AWS credentials** - if you have AWS already configured by `aws configure`,
