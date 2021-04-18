@@ -1544,10 +1544,10 @@ def is_flexible_scaling_enabled():
         bool: True if failure domain is "host" and flexible scaling is enabled. False otherwise
 
     """
-    ocs_storage_cluster = storage_cluster.get_storage_cluster()
+    ocs_storage_cluster = storage_cluster.get_storage_cluster().get()["items"][0]
 
-    failure_domain = ocs_storage_cluster.get().get("status").get("failureDomain")
-    flexible_scaling = ocs_storage_cluster.get().get("spec").get("flexibleScaling")
+    failure_domain = ocs_storage_cluster.get("status").get("failureDomain")
+    flexible_scaling = ocs_storage_cluster.get("spec").get("flexibleScaling")
     return failure_domain == "host" and flexible_scaling
 
 
