@@ -1146,11 +1146,6 @@ SCALE_MAX_PVCS_PER_NODE = 500
 AWS_PRODUCTION_INSTANCE_TYPE = "m5.4xlarge"
 AZURE_PRODUCTION_INSTANCE_TYPE = "Standard_D16s_v3"
 
-# Elasticsearch and codespeed constants
-ES_SERVER_IP = "10.0.78.167"
-ES_SERVER_PORT = "9200"
-ES_SERVER_URL = "https://10.0.78.167:9200"
-
 # Cluster metrics
 THROUGHPUT_QUERY = "(sum(rate(ceph_pool_wr_bytes[1m]) + rate(ceph_pool_rd_bytes[1m])))"
 LATENCY_QUERY = "cluster:ceph_disk_latency:join_ceph_node_disk_irate1m"

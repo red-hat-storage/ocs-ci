@@ -178,6 +178,7 @@ class TestFIOBenchmark(PASTest):
                     "server": config.PERF.get("internal_es_server"),
                     "port": config.PERF.get("internal_es_port"),
                     "url": f"http://{config.PERF.get('internal_es_server')}:{config.PERF.get('internal_es_port')}",
+                    "parallel": True,
                 }
                 # verify that the connection to the elasticsearch server is OK
                 if not super(TestFIOBenchmark, self).es_connect():
@@ -527,11 +528,13 @@ class TestFIOBenchmark(PASTest):
         pool_name = run_cmd(f"oc get sc {sc} -o jsonpath={{'.parameters.pool'}}")
         # Create fio benchmark
         self.crd_data["spec"]["workload"]["args"]["bs"] = [bs]
-        self.crd_data["spec"]["workload"]["args"]["prefill_bs"] = bs
         self.crd_data["spec"]["workload"]["args"]["cmp_ratio"] = cmp_ratio
 
         # Setting the data set to 40% of the total storage capacity
         self.setting_storage_usage()
+        self.crd_data["spec"]["workload"]["args"]["prefill_bs"] = self.crd_data["spec"][
+            "workload"
+        ]["args"]["bs"][0]
 
         self.get_env_info()
 

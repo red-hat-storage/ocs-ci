@@ -125,6 +125,7 @@ class PASTest(BaseTest):
                 "server": config.PERF.get("dev_es_server"),
                 "port": config.PERF.get("dev_es_port"),
                 "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
+                "parallel": True,
             }
 
         # for production mode use the Lab ES server
@@ -133,6 +134,7 @@ class PASTest(BaseTest):
                 "server": config.PERF.get("es_server"),
                 "port": config.PERF.get("es_port"),
                 "url": f"http://{config.PERF.get('es_server')}:{config.PERF.get('es_port')}",
+                "parallel": True,
             }
 
         # backup the Main ES info (if exists)
@@ -161,6 +163,7 @@ class PASTest(BaseTest):
                 "server": ip,
                 "port": port,
                 "url": f"http://{ip}:{port}",
+                "parallel": True,
             }
             log.info(f"Going to use the ES : {self.crd_data['spec']['elasticsearch']}")
         elif config.PERF.get("internal_es_server"):
@@ -169,6 +172,7 @@ class PASTest(BaseTest):
                 "server": config.PERF.get("internal_es_server"),
                 "port": config.PERF.get("internal_es_port"),
                 "url": f"http://{config.PERF.get('internal_es_server')}:{config.PERF.get('internal_es_port')}",
+                "parallel": True,
             }
 
     def set_storageclass(self, interface):
