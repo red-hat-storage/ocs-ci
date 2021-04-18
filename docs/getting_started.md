@@ -78,6 +78,16 @@ Values for report portal or polarion are only required if you plan on posting to
 Move a copy of the template to your conf directory and edit it from there with
 the proper values and pass it with --ocsci-conf parameter to pytest.
 
+### Performance Tests
+The OCS performance tests need to have an elastic-search server for running benchmarks and for storing the results.
+If elastic-search server is not available, the tests can deploy one in the tested OCP for the benchmark, and it will
+dump all results in JSON file.
+
+The deployment of the Elastic-search server is available only for x86_64 architecture
+for other architecture (e.g. PPC / s390), since the benchmark can not deploy ES server on the OCP cluster,
+an ES server need to be deployed in the LAB, and the IP/Port need to be configured in the configuration file.
+
+All elasticsearch configuration done in the `ocs_ci/framework/conf/default_config.yaml` at the `PERF:` section.
 
 ### Pull Secret
 
