@@ -72,11 +72,11 @@ class RGW(object):
         else:
             if config.DEPLOYMENT["external_mode"]:
                 endpoint = route_ocp_obj.get(
-                    resource_name=constants.RGW_DEFAULT_ROUTE_NAME
+                    resource_name=constants.RGW_EXTERNAL_ROUTE_NAME
                 )
             else:
                 endpoint = route_ocp_obj.get(
-                    resource_name=constants.RGW_EXTERNAL_ROUTE_NAME
+                    resource_name=constants.RGW_DEFAULT_ROUTE_NAME
                 )
 
         endpoint = f"http://{endpoint['status']['ingress'][0]['host']}"
