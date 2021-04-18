@@ -268,7 +268,7 @@ class PASTest(BaseTest):
                 )
                 self.client_pod = fname
                 restarts += 1
-            if restarts > 5:
+            if restarts > 3:
                 err_msg = f"Too much restarts of the benchmark ({restarts})"
                 log.error(err_msg)
                 raise Exception(err_msg)
