@@ -261,7 +261,9 @@ class TestBucketDeletion(MCGTest):
             logger.info("Writing objects to bucket")
             for i in range(3175):
                 full_object_path = f"s3://{bucketname}/{i}/"
-                sync_object_directory(awscli_pod_session, data_dir, full_object_path, mcg_obj)
+                sync_object_directory(
+                    awscli_pod_session, data_dir, full_object_path, mcg_obj
+                )
 
             # Delete bucket content use aws rm with --recursive option.
             # The object_versions.delete function does not work with objects
