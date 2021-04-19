@@ -1,4 +1,5 @@
 import copy
+import pytest
 import logging
 import re
 from prettytable import PrettyTable
@@ -1471,3 +1472,68 @@ def wait_for_new_osd_node(old_osd_node_names, timeout=180):
     except TimeoutExpiredError:
         log.warning(f"New osd node didn't appear after {timeout} seconds")
         return None
+
+
+def delete_and_create_osd_node(osd_node_name, validations=False):
+    """
+    Delete an osd node, and create a new one to replace it
+
+    Args:
+        osd_node_name (str): The osd node name to delete
+        validations (bool): On true, checks if the node replacement
+            verification steps finished successfully
+
+    """
+    from ocs_ci.ocs.cluster import is_lso_cluster
+
+    new_node_name = None
+    osd_pod = get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())[0]
+    old_osd_id = pod.get_osd_pod_id(osd_pod)
+
+    old_osd_node_names = get_osd_running_nodes()
+
+    # error message for invalid deployment configuration
+    msg_invalid = (
+        "ocs-ci config 'deployment_type' value "
+        f"'{config.ENV_DATA['deployment_type']}' is not valid, "
+        f"results of this test run are all invalid."
+    )
+    # TODO: refactor this so that AWS is not a "special" platform
+    if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+        if config.ENV_DATA["deployment_type"] == "ipi":
+            new_node_name = delete_and_create_osd_node_ipi(osd_node_name)
+
+        elif config.ENV_DATA["deployment_type"] == "upi":
+            new_node_name = delete_and_create_osd_node_aws_upi(osd_node_name)
+        else:
+            log.error(msg_invalid)
+            pytest.fail(msg_invalid)
+
+    elif config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS:
+        if config.ENV_DATA["deployment_type"] == "ipi":
+            new_node_name = delete_and_create_osd_node_ipi(osd_node_name)
+        else:
+            log.error(msg_invalid)
+            pytest.fail(msg_invalid)
+
+    elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+        if is_lso_cluster():
+            new_node_name = delete_and_create_osd_node_vsphere_upi_lso(
+                osd_node_name, use_existing_node=False
+            )
+        else:
+            new_node_name = delete_and_create_osd_node_vsphere_upi(
+                osd_node_name, use_existing_node=False
+            )
+
+    if validations:
+        log.info("Start node replacement verification steps...")
+        new_osd_node_name = wait_for_new_osd_node(old_osd_node_names)
+        assert new_osd_node_name, "New osd node not found"
+
+        assert node_replacement_verification_steps_ceph_side(
+            osd_node_name, new_node_name, new_osd_node_name
+        )
+        assert node_replacement_verification_steps_user_side(
+            osd_node_name, new_node_name, new_osd_node_name, old_osd_id
+        )

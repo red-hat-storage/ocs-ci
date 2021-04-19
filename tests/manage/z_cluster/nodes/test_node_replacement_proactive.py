@@ -14,7 +14,7 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required,
 )
 from ocs_ci.ocs import constants, node
-from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_openshift_dedicated,
@@ -38,86 +38,6 @@ def select_osd_node_name():
     osd_node_name = random.choice(osd_node_names)
     log.info(f"Selected OSD is {osd_node_name}")
     return osd_node_name
-
-
-def check_node_replacement_verification_steps(
-    old_node_name, new_node_name, old_osd_node_names, old_osd_id
-):
-    """
-    Check if the node replacement verification steps finished successfully.
-
-    Args:
-        old_node_name (str): The name of the old node that has been deleted
-        new_node_name (str): The name of the new node that has been created
-        old_osd_node_names (list): The name of the new node that has been added to osd nodes
-        old_osd_id (str): The old osd id
-
-    Raises:
-        AssertionError: If the node replacement verification steps failed.
-
-    """
-    new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names)
-    assert new_osd_node_name, "New osd node not found"
-
-    assert node.node_replacement_verification_steps_ceph_side(
-        old_node_name, new_node_name, new_osd_node_name
-    )
-    assert node.node_replacement_verification_steps_user_side(
-        old_node_name, new_node_name, new_osd_node_name, old_osd_id
-    )
-
-
-def delete_and_create_osd_node(osd_node_name):
-    """
-    Delete an osd node, and create a new one to replace it
-
-    Args:
-        osd_node_name (str): The osd node name to delete
-
-    """
-    new_node_name = None
-    osd_pod = node.get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())[0]
-    old_osd_id = pod.get_osd_pod_id(osd_pod)
-
-    old_osd_node_names = node.get_osd_running_nodes()
-
-    # error message for invalid deployment configuration
-    msg_invalid = (
-        "ocs-ci config 'deployment_type' value "
-        f"'{config.ENV_DATA['deployment_type']}' is not valid, "
-        f"results of this test run are all invalid."
-    )
-    # TODO: refactor this so that AWS is not a "special" platform
-    if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
-        if config.ENV_DATA["deployment_type"] == "ipi":
-            new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
-
-        elif config.ENV_DATA["deployment_type"] == "upi":
-            new_node_name = node.delete_and_create_osd_node_aws_upi(osd_node_name)
-        else:
-            log.error(msg_invalid)
-            pytest.fail(msg_invalid)
-    elif config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS:
-        if config.ENV_DATA["deployment_type"] == "ipi":
-            new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
-        else:
-            log.error(msg_invalid)
-            pytest.fail(msg_invalid)
-    elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-        if is_lso_cluster():
-            new_node_name = node.delete_and_create_osd_node_vsphere_upi_lso(
-                osd_node_name, use_existing_node=False
-            )
-
-        else:
-            new_node_name = node.delete_and_create_osd_node_vsphere_upi(
-                osd_node_name, use_existing_node=False
-            )
-
-    log.info("Start node replacement verification steps...")
-    check_node_replacement_verification_steps(
-        osd_node_name, new_node_name, old_osd_node_names, old_osd_id
-    )
 
 
 @tier4
@@ -174,7 +94,7 @@ class TestNodeReplacementWithIO(ManageTest):
                 )
                 pod.run_io_in_bg(cephfs_dc_pod, expect_to_fail=False, fedora_dc=True)
 
-        delete_and_create_osd_node(osd_node_name)
+        node.delete_and_create_osd_node(osd_node_name, True)
 
         # Creating Resources
         log.info("Creating Resources using sanity helpers")
@@ -218,7 +138,7 @@ class TestNodeReplacement(ManageTest):
 
         """
         osd_node_name = select_osd_node_name()
-        delete_and_create_osd_node(osd_node_name)
+        node.delete_and_create_osd_node(osd_node_name, True)
 
         # Verify everything running fine
         log.info("Verifying All resources are Running and matches expected result")
