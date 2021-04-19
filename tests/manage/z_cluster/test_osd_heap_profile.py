@@ -2,14 +2,14 @@ import logging
 import pytest
 import time
 
-from ocs_ci.framework.testlib import ManageTest, tier1, skipif_ocs_version
+from ocs_ci.framework.testlib import ManageTest, tier2, skipif_ocs_version
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods, get_osd_pod_id
 
 log = logging.getLogger(__name__)
 
 
-@tier1
+@tier2
 @skipif_ocs_version("<4.7")
 @pytest.mark.polarion_id("OCS-2512")
 class TestOSDHeapProfile(ManageTest):
@@ -40,7 +40,16 @@ class TestOSDHeapProfile(ManageTest):
 
     def test_osd_heap_profile(self):
         """
-        Test osd heap profile created on '/var/log/ceph/'.
+        1.Start heap profiler for osd
+          $ oc exec rook-ceph-tools-85ccf9f7c5-v7bgk ceph tell osd.0 heap start_profiler
+
+        2.Dump heap profile
+          $ oc exec rook-ceph-tools-85ccf9f7c5-v7bgk ceph tell osd.0 heap dump
+
+        3.Get heap profile in /var/log/ceph dir on osd node
+          $ oc rsh rook-ceph-osd-0-959dbdc6d-pddd4
+            sh-4.4# ls -ltr /var/log/ceph/
+            -rw-r--r--. 1 ceph ceph 295891 Apr 11 14:33 osd.0.profile.0001.heap
 
         """
         log.info("Start heap profiler for osd-0")
