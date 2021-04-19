@@ -55,7 +55,9 @@ class TestBucketDeletion:
         try:
             data_dir = "/test_objects"
             full_object_path = f"s3://{bucketname}"
-            sync_object_directory(awscli_pod_session, data_dir, full_object_path, obc_obj)
+            sync_object_directory(
+                awscli_pod_session, data_dir, full_object_path, obc_obj
+            )
 
             logger.info(f"Deleting bucket: {bucketname}")
             if interface == "S3":
