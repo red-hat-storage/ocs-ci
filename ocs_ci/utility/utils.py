@@ -3298,3 +3298,21 @@ def get_client_version(client_binary_path):
         resp = exec_cmd(cmd)
         stdout = json.loads(resp.stdout.decode())
         return stdout["releaseClientVersion"]
+
+
+def clone_notify():
+    """
+    Repository contains the source code of notify tool,
+    which is a python3 based tool wrapped by a container
+    used to configure Ceph Bucket Notifications
+
+    Returns:
+        notify_path (str): Path location of the notify code
+
+    """
+    notify_dir = mkdtemp(prefix="notify_")
+    log.info(f"cloning repo notify in {notify_dir}")
+    git_clone_cmd = f"git clone {constants.RGW_KAFKA_NOTIFY}"
+    subprocess.run(git_clone_cmd, shell=True, cwd=notify_dir, check=True)
+    notify_path = f"{notify_dir}/notify/notify.py"
+    return notify_path

@@ -900,6 +900,44 @@ class AMQ(object):
         self.amq_is_setup = True
         return self
 
+    def create_kafkadrop(self, wait=True):
+        """
+        Create kafkadrop pod, service and routes
+
+        Args:
+            wait (bool): If true waits till kafkadrop pod running
+
+        Return:
+            tuple: Contains objects of kafkadrop pod, service and route
+
+        """
+        # Create kafkadrop pod
+        try:
+            kafkadrop = list(
+                templating.load_yaml(constants.KAFKADROP_YAML, multi_document=True)
+            )
+            self.kafkadrop_pod = OCS(**kafkadrop[0])
+            self.kafkadrop_svc = OCS(**kafkadrop[1])
+            self.kafkadrop_route = OCS(**kafkadrop[2])
+            self.kafkadrop_pod.create()
+            self.kafkadrop_svc.create()
+            self.kafkadrop_route.create()
+        except (CommandFailed, CalledProcessError) as cf:
+            log.error("Failed during creation of kafkadrop which kafka UI")
+            raise cf
+
+        # Validate kafkadrop pod running
+        if wait:
+            ocp_obj = OCP(kind=constants.POD, namespace=constants.AMQ_NAMESPACE)
+            ocp_obj.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector="app=kafdrop",
+                timeout=120,
+                sleep=5,
+            )
+
+        return self.kafkadrop_pod, self.kafkadrop_svc, self.kafkadrop_route
+
     def cleanup(
         self,
         kafka_namespace=constants.AMQ_NAMESPACE,
