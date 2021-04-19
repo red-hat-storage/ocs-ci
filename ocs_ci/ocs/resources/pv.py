@@ -2,7 +2,7 @@ import logging
 from subprocess import TimeoutExpired
 
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 
 logger = logging.getLogger(__name__)
 
@@ -147,4 +147,4 @@ def get_pv_size(pv_obj):
 
     """
     storage_size = pv_obj.get("spec").get("capacity").get("storage")
-    return int(storage_size.replace("Gi", ""))
+    return convert_device_size(storage_size, "GB")
