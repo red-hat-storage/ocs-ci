@@ -4,6 +4,7 @@ platforms like AWS, VMWare, Baremetal etc.
 """
 
 from copy import deepcopy
+from semantic_version import Version
 import json
 import logging
 import tempfile
@@ -73,6 +74,7 @@ from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
+from ocs_ci.utility.utils import get_az_count
 
 logger = logging.getLogger(__name__)
 
@@ -579,6 +581,21 @@ class Deployment(object):
         deviceset_data = cluster_data["spec"]["storageDeviceSets"][0]
         device_size = int(config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE))
 
+        logger.info(
+            "Flexible scaling is available from version 4.7 on LSO cluster with less than 3 zones"
+        )
+        ocs_version = config.ENV_DATA["ocs_version"]
+        zone_num = get_az_count()
+        if (
+            config.DEPLOYMENT.get("local_storage")
+            and Version.coerce(ocs_version) >= Version.coerce("4.7")
+            and zone_num < 3
+        ):
+            cluster_data["spec"]["flexibleScaling"] = True
+            # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
+            cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
+            cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
+
         # set size of request for storage
         if self.platform.lower() == constants.BAREMETAL_PLATFORM:
             pv_size_list = helpers.get_pv_size(
@@ -821,6 +838,7 @@ class Deployment(object):
         Handle OCS deployment, since OCS deployment steps are common to any
         platform, implementing OCS deployment here in base class.
         """
+        set_registry_to_managed_state()
         image = None
         ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
         try:

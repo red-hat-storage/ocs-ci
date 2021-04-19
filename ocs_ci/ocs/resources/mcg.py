@@ -614,7 +614,7 @@ class MCG:
                 "awsS3": {
                     "targetBucket": target_bucket_name,
                     "secret": {
-                        "name": get_attr_chain(cld_mgr.aws_client, "secret.name")
+                        "name": get_attr_chain(cld_mgr, "aws_client.secret.name")
                     },
                 },
             },
@@ -623,7 +623,7 @@ class MCG:
                 "azureBlob": {
                     "targetBlobContainer": target_bucket_name,
                     "secret": {
-                        "name": get_attr_chain(cld_mgr.azure_client, "secret.name")
+                        "name": get_attr_chain(cld_mgr, "azure_client.secret.name")
                     },
                 },
             },
@@ -631,10 +631,10 @@ class MCG:
                 "type": "s3-compatible",
                 "s3Compatible": {
                     "targetBucket": target_bucket_name,
-                    "endpoint": get_attr_chain(cld_mgr.rgw_client, "endpoint"),
+                    "endpoint": get_attr_chain(cld_mgr, "rgw_client.endpoint"),
                     "signatureVersion": "v2",
                     "secret": {
-                        "name": get_attr_chain(cld_mgr.rgw_client, "secret.name")
+                        "name": get_attr_chain(cld_mgr, "rgw_client.secret.name")
                     },
                 },
             },
@@ -748,10 +748,8 @@ class MCG:
                 }
 
             elif ns_policy_type == constants.NAMESPACE_POLICY_TYPE_CACHE:
-                bc_data["spec"]["namespacePolicy"]["cache"] = {
-                    "hubResource": namespace_policy["write_resource"],
-                    "ttl": namespace_policy["ttl"],
-                }
+                bc_data["spec"]["placementPolicy"] = placement
+                bc_data["spec"]["namespacePolicy"]["cache"] = namespace_policy["cache"]
 
         return create_resource(**bc_data)
 

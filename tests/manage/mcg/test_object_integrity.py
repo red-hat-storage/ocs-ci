@@ -50,12 +50,31 @@ class TestObjectIntegrity(MCGTest):
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
                 marks=[tier1],
             ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 3600,
+                        "namespacestore_dict": {
+                            "aws": [(1, "eu-central-1")],
+                        },
+                    },
+                    "placement_policy": {
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
+                    },
+                },
+                marks=[tier1],
+            ),
         ],
         ids=[
             "DEFAULT-BACKINGSTORE",
             "AWS-OC-1",
             "AZURE-OC-1",
             "GCP-OC-1",
+            "AWS-OC-Cache",
         ],
     )
     def test_check_object_integrity(
