@@ -10,6 +10,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import get_worker_nodes
+from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
 
 
 logger = logging.getLogger(__name__)
@@ -31,30 +32,11 @@ class DeploymentUI(PageNavigator):
         Add Disks Vmware LSO
 
         """
-        if config.DEPLOYMENT.get("local_storage"):
-            logger.info("Add RDM disk for vSphere platform")
-            platform = config.ENV_DATA.get("platform").lower()
-            lso_type = config.DEPLOYMENT.get("type")
-            if platform == constants.VSPHERE_PLATFORM:
-                from ocs_ci.deployment.vmware import VSPHEREBASE
-
-                vsphere_base = VSPHEREBASE()
-
-                if lso_type == constants.RDM:
-                    logger.info(f"LSO Deployment type: {constants.RDM}")
-                    vsphere_base.add_rdm_disks()
-
-                if lso_type == constants.VMDK:
-                    logger.info(f"LSO Deployment type: {constants.VMDK}")
-                    vsphere_base.attach_disk(
-                        config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
-                        config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE),
-                    )
-
-                if lso_type == constants.DIRECTPATH:
-                    raise NotImplementedError(
-                        "LSO Deployment for VMDirectPath is not implemented"
-                    )
+        if (
+            config.DEPLOYMENT.get("local_storage")
+            and config.ENV_DATA.get("platform").lower() == constants.VSPHERE_PLATFORM
+        ):
+            add_disk_for_vsphere_platform()
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
         """
