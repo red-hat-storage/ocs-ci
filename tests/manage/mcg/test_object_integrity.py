@@ -76,7 +76,9 @@ class TestObjectIntegrity(MCGTest):
         ).split(" ")
 
         # Write all downloaded objects to the new bucket
-        sync_object_directory(awscli_pod_session, original_dir, full_object_path, mcg_obj)
+        sync_object_directory(
+            awscli_pod_session, original_dir, full_object_path, mcg_obj
+        )
         # Retrieve all objects from MCG bucket to result dir in Pod
         logger.info("Downloading all objects from MCG bucket to awscli pod")
         sync_object_directory(awscli_pod_session, full_object_path, result_dir, mcg_obj)
@@ -147,7 +149,9 @@ class TestObjectIntegrity(MCGTest):
                 if file_type == "large" and obj["Key"] != obj_key:
                     continue
                 logger.info(f'Downloading {obj["Key"]} from AWS bucket {public_bucket}')
-                download_obj_cmd = f'cp s3://{public_bucket}/{obj["Key"]} {original_dir}'
+                download_obj_cmd = (
+                    f'cp s3://{public_bucket}/{obj["Key"]} {original_dir}'
+                )
                 awscli_pod_session.exec_cmd_on_pod(
                     command=craft_s3_command(download_obj_cmd), out_yaml_format=False
                 )
@@ -162,11 +166,15 @@ class TestObjectIntegrity(MCGTest):
         base_path = f"s3://{bucketname}"
         for i in range(amount):
             full_object_path = base_path + f"/{i}/"
-            sync_object_directory(awscli_pod_session, original_dir, full_object_path, mcg_obj)
+            sync_object_directory(
+                awscli_pod_session, original_dir, full_object_path, mcg_obj
+            )
 
             # Retrieve all objects from MCG bucket to result dir in Pod
             logger.info("Downloading objects from MCG bucket to awscli pod")
-            sync_object_directory(awscli_pod_session, full_object_path, result_dir, mcg_obj)
+            sync_object_directory(
+                awscli_pod_session, full_object_path, result_dir, mcg_obj
+            )
 
             # Checksum is compared between original and result object
             for obj in download_files:
@@ -177,7 +185,9 @@ class TestObjectIntegrity(MCGTest):
                 ), "Checksum comparison between original and result object failed"
             # Clean up the temp dirs
             if file_type != "small":
-                awscli_pod_session.exec_cmd_on_pod(command=f'sh -c "rm -rf {original_dir}/*"')
+                awscli_pod_session.exec_cmd_on_pod(
+                    command=f'sh -c "rm -rf {original_dir}/*"'
+                )
             awscli_pod_session.exec_cmd_on_pod(command=f'sh -c "rm -rf {result_dir}/*"')
 
     @pytest.mark.polarion_id("OCS-1945")
@@ -196,7 +206,9 @@ class TestObjectIntegrity(MCGTest):
         command = "for i in $(seq 1 100); do touch /data/test$i; done"
         awscli_pod_session.exec_sh_cmd_on_pod(command=command, sh="sh")
         # Write all empty objects to the new bucket
-        sync_object_directory(awscli_pod_session, original_dir, full_object_path, mcg_obj)
+        sync_object_directory(
+            awscli_pod_session, original_dir, full_object_path, mcg_obj
+        )
 
         # Retrieve all objects from MCG bucket to result dir in Pod
         logger.info("Downloading objects from MCG bucket to awscli pod")

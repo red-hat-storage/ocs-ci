@@ -119,7 +119,9 @@ class TestMultiRegion(MCGTest):
 
         # Verify integrity of B
         # Retrieve all objects from MCG bucket to result dir in Pod
-        sync_object_directory(awscli_pod_session, mcg_bucket_path, local_temp_path, mcg_obj)
+        sync_object_directory(
+            awscli_pod_session, mcg_bucket_path, local_temp_path, mcg_obj
+        )
 
         # Checksum is compared between original and result object
         for obj in downloaded_objs:
@@ -130,7 +132,9 @@ class TestMultiRegion(MCGTest):
             ), "Checksum comparision between original and result object failed"
 
         # Clean up the temp dir
-        awscli_pod_session.exec_cmd_on_pod(command=f'sh -c "rm -rf {local_temp_path}/*"')
+        awscli_pod_session.exec_cmd_on_pod(
+            command=f'sh -c "rm -rf {local_temp_path}/*"'
+        )
 
         # Bring B down, bring A up
         logger.info("Blocking bucket B")
@@ -146,7 +150,9 @@ class TestMultiRegion(MCGTest):
 
         # Verify integrity of A
         # Retrieve all objects from MCG bucket to result dir in Pod
-        sync_object_directory(awscli_pod_session, mcg_bucket_path, local_temp_path, mcg_obj)
+        sync_object_directory(
+            awscli_pod_session, mcg_bucket_path, local_temp_path, mcg_obj
+        )
 
         # Checksum is compared between original and result object
         for obj in downloaded_objs:

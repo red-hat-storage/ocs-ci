@@ -44,7 +44,7 @@ class TestBucketDeletion:
         ],
     )
     def test_bucket_delete_with_objects(
-        self, rgw_bucket_factory, interface, awscli_pod
+        self, rgw_bucket_factory, interface, awscli_pod_session
     ):
         """
         Negative test with deletion of bucket has objects stored in.
@@ -53,10 +53,9 @@ class TestBucketDeletion:
         bucketname = bucket.name
         obc_obj = OBC(bucketname)
         try:
-            data_dir = "/data"
+            data_dir = "/test_objects"
             full_object_path = f"s3://{bucketname}"
-            retrieve_test_objects_to_pod(awscli_pod, data_dir)
-            sync_object_directory(awscli_pod, data_dir, full_object_path, obc_obj)
+            sync_object_directory(awscli_pod_session, data_dir, full_object_path, obc_obj)
 
             logger.info(f"Deleting bucket: {bucketname}")
             if interface == "S3":

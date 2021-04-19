@@ -197,7 +197,7 @@ class TestNamespace(MCGTest):
         self,
         mcg_obj,
         cld_mgr,
-        awscli_pod,
+        awscli_pod_session,
         bucket_factory,
         bucketclass_dict,
     ):
@@ -222,16 +222,16 @@ class TestNamespace(MCGTest):
         # Upload files directly to AWS
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=aws_target_bucket,
             amount=3,
             s3_creds=s3_creds,
         )
         # Read files from ns bucket
-        self.download_files(mcg_obj, awscli_pod, bucket_to_read=ns_bucket.name)
+        self.download_files(mcg_obj, awscli_pod_session, bucket_to_read=ns_bucket.name)
 
         # Compare between uploaded files and downloaded files
-        assert self.compare_dirs(awscli_pod, amount=3)
+        assert self.compare_dirs(awscli_pod_session, amount=3)
 
     @tier1
     @pytest.mark.parametrize(
