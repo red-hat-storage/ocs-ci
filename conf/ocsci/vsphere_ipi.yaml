@@ -1,0 +1,15 @@
+---
+# This configuration file is for development purpose only and allow you to
+# install OCS on nodes with lower then required resources. This can lead to
+# some issues and should be used only for development purpose only.
+DEPLOYMENT:
+  allow_lower_instance_requirements: true
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'ipi'
+  worker_replicas: 3
+  master_replicas: 3
+  fio_storageutilization_min_mbps: 10.0
+  master_memory: '16384'
+  compute_memory: '32768'
+  worker_num_cpus: '12'
