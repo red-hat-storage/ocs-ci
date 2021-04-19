@@ -102,6 +102,7 @@ REPORTING:
   default_ocs_must_gather_latest_tag: 'latest-4.7'
   gather_on_deploy_failure: true
   collect_logs_on_success_run: False
+  rp_client_log_level: "ERROR"
 
 # This is the default information about environment.
 ENV_DATA:
