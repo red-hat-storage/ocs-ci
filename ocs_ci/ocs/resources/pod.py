@@ -1776,13 +1776,17 @@ def verify_osd_removal_job_completed_successfully(osd_id):
         osd_removal_pod_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
 
-    timeout = 180
-    is_completed = osd_removal_pod_obj.ocp.wait_for_resource(
-        condition=constants.STATUS_COMPLETED,
-        resource_name=osd_removal_pod_name,
-        sleep=20,
-        timeout=timeout,
-    )
+    timeout = 300
+    try:
+        is_completed = osd_removal_pod_obj.ocp.wait_for_resource(
+            condition=constants.STATUS_COMPLETED,
+            resource_name=osd_removal_pod_name,
+            sleep=20,
+            timeout=timeout,
+        )
+    # Don't failed the test yet if the ocs-osd-removal pod job is not completed
+    except TimeoutExpiredError:
+        is_completed = False
 
     ocp_pod_obj = OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     osd_removal_pod_status = ocp_pod_obj.get_resource_status(osd_removal_pod_name)
