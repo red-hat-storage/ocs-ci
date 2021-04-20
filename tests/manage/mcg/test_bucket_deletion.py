@@ -4,24 +4,23 @@ import timeit
 import botocore
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier3,
     acceptance,
     performance,
 )
-from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
-from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket, BUCKET_MAP
+from ocs_ci.framework.testlib import MCGTest
+from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.bucket_utils import (
-    retrieve_test_objects_to_pod,
     sync_object_directory,
     rm_object_recursive,
 )
-from ocs_ci.helpers.helpers import create_unique_resource_name
-from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
+from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
 
 logger = logging.getLogger(__name__)
 ERRATIC_TIMEOUTS_SKIP_REASON = "Skipped because of erratic timeouts"

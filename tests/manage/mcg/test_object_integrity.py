@@ -2,16 +2,15 @@ import logging
 
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 from ocs_ci.framework.testlib import MCGTest, tier1, tier2, tier3
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
-    retrieve_test_objects_to_pod,
     sync_object_directory,
     craft_s3_command,
     verify_s3_object_integrity,
     retrieve_anon_s3_resource,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 
