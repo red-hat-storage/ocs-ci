@@ -201,6 +201,8 @@ def ocs_install_verification(
         f"{storage_cluster_name}-cephfs",
         f"{storage_cluster_name}-ceph-rbd",
     }
+    if float(config.ENV_DATA["ocs_version"]) >= 4.8:
+        required_storage_classes.update({f"{storage_cluster_name}-ceph-rbd-thick"})
     if config.DEPLOYMENT["external_mode"]:
         required_storage_classes.update(
             {
