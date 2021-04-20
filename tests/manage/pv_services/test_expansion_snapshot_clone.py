@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
@@ -9,15 +10,35 @@ from ocs_ci.framework.testlib import (
     tier2,
     skipif_ocs_version,
     skipif_ocp_version,
+    polarion_id,
 )
 
 log = logging.getLogger(__name__)
 
 
 @tier2
-@skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
-@pytest.mark.polarion_id("OCS-2408")
+@pytest.mark.parametrize(
+    argnames=["pvc_create_sc_type", "restore_sc_type"],
+    argvalues=[
+        pytest.param(
+            *["thin", "thin"],
+            marks=[polarion_id("OCS-2408"), skipif_ocs_version("<4.6")],
+        ),
+        pytest.param(
+            *["thick", "thick"],
+            marks=[polarion_id("OCS-2502"), skipif_ocs_version("<4.8")],
+        ),
+        pytest.param(
+            *["thin", "thick"],
+            marks=[polarion_id("OCS-2507"), skipif_ocs_version("<4.8")],
+        ),
+        pytest.param(
+            *["thick", "thin"],
+            marks=[polarion_id("OCS-2508"), skipif_ocs_version("<4.8")],
+        ),
+    ],
+)
 class TestExpansionSnapshotClone(ManageTest):
     """
     Tests to verify snapshot, clone and expansion
@@ -27,20 +48,47 @@ class TestExpansionSnapshotClone(ManageTest):
     @pytest.fixture(autouse=True)
     def setup(
         self,
+        storageclass_factory,
         project_factory,
         snapshot_restore_factory,
         pvc_clone_factory,
         create_pvcs_and_pods,
+        pvc_create_sc_type,
+        restore_sc_type,
     ):
         """
-        Create PVCs and pods
+        Create Storage Class, PVCs and pods
 
         """
         self.pvc_size = 2
+
+        if "thick" in (pvc_create_sc_type, restore_sc_type):
+            # Thick provisioning is applicable only for RBD
+            thick_sc = storageclass_factory(
+                interface=constants.CEPHBLOCKPOOL,
+                new_rbd_pool=False,
+                rbd_thick_provision=True,
+            )
+            access_modes_cephfs = None
+            num_of_cephfs_pvc = 0
+            thin_sc = default_storage_class(constants.CEPHBLOCKPOOL)
+        else:
+            thick_sc = None
+            access_modes_cephfs = [constants.ACCESS_MODE_RWO]
+            num_of_cephfs_pvc = 1
+            thin_sc = default_storage_class(constants.CEPHFILESYSTEM)
+
+        sc_dict = {"thin": thin_sc, "thick": thick_sc}
+        self.pvc_create_sc = sc_dict[pvc_create_sc_type]
+        self.restore_sc = sc_dict[restore_sc_type]
+
         self.pvcs, self.pods = create_pvcs_and_pods(
             pvc_size=self.pvc_size,
             access_modes_rbd=[constants.ACCESS_MODE_RWO],
-            access_modes_cephfs=[constants.ACCESS_MODE_RWO],
+            access_modes_cephfs=access_modes_cephfs,
+            num_of_rbd_pvc=1,
+            num_of_cephfs_pvc=num_of_cephfs_pvc,
+            sc_rbd=self.pvc_create_sc,
         )
 
     def test_expansion_snapshot_clone(
@@ -57,6 +105,10 @@ class TestExpansionSnapshotClone(ManageTest):
         Data integrity will be checked in each stage as required.
         This test verifies that the clone, snapshot and parent PVCs are
         independent and any operation in one will not impact the other.
+
+        Use of thin or think provision storage class for PVC creation and snapshot restore
+        will be based on value of the parameters 'pvc_create_sc_type' and 'restore_sc_type'
+        respectively.
 
         """
         filename = "fio_file"
@@ -163,7 +215,9 @@ class TestExpansionSnapshotClone(ManageTest):
         log.info("Restore snapshots")
         restore_objs = []
         for snap_obj in snapshots:
-            restore_obj = snapshot_restore_factory(snapshot_obj=snap_obj, status="")
+            restore_obj = snapshot_restore_factory(
+                snapshot_obj=snap_obj, status="", storageclass=self.restore_sc.name
+            )
             restore_obj.md5sum = snap_obj.md5sum
             restore_objs.append(restore_obj)
 
@@ -305,7 +359,9 @@ class TestExpansionSnapshotClone(ManageTest):
         log.info("Restoring snapshots of cloned PVCs")
         restore_objs_new = []
         for snap_obj in snapshots_new:
-            restore_obj = snapshot_restore_factory(snap_obj, status="")
+            restore_obj = snapshot_restore_factory(
+                snap_obj, status="", storageclass=self.restore_sc.name
+            )
             restore_obj.md5sum = snap_obj.md5sum
             restore_obj.md5sum_new = snap_obj.md5sum_new
             restore_objs_new.append(restore_obj)
