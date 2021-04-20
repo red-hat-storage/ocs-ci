@@ -27,15 +27,12 @@ class DeploymentUI(PageNavigator):
         ocp_version = get_ocp_version()
         self.dep_loc = locators[ocp_version]["deployment"]
 
-    def add_disks_vmware_lso(self):
+    def add_disks_lso(self):
         """
         Add Disks Vmware LSO
 
         """
-        if (
-            config.DEPLOYMENT.get("local_storage")
-            and config.ENV_DATA.get("platform").lower() == constants.VSPHERE_PLATFORM
-        ):
+        if config.DEPLOYMENT.get("local_storage"):
             add_disk_for_vsphere_platform()
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
@@ -295,7 +292,7 @@ class DeploymentUI(PageNavigator):
         Install OCS via UI
 
         """
-        self.add_disks_vmware_lso()
+        self.add_disks_lso()
         self.install_local_storage_operator()
         self.create_catalog_source_yaml()
         self.install_ocs_operator()
