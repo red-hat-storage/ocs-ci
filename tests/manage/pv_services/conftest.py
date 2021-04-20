@@ -24,6 +24,8 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
         num_of_cephfs_pvc=None,
         replica_count=1,
         deployment_config=False,
+        sc_rbd=None,
+        sc_cephfs=None,
     ):
         """
         Args:
@@ -40,15 +42,20 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
                 Default is set as ['ReadWriteOnce', 'ReadWriteMany']
             num_of_rbd_pvc (int): Number of rbd PVCs to be created. Value
                 should be greater than or equal to the number of elements in
-                the list 'access_modes_rbd'
-            num_of_cephfs_pvc (int): Number of cephfs PVCs to be created.
+                the list 'access_modes_rbd'. Pass 0 for not creating RBD PVC.
+            num_of_cephfs_pvc (int): Number of cephfs PVCs to be created
                 Value should be greater than or equal to the number of
-                elements in the list 'access_modes_cephfs'
+                elements in the list 'access_modes_cephfs'. Pass 0 for not
+                creating CephFS PVC
             replica_count (int): The replica count for deployment config
             deployment_config (bool): True for DeploymentConfig creation,
                 False otherwise
+            sc_rbd (OCS): RBD storage class. ocs_ci.ocs.resources.ocs.OCS instance
+                of 'StorageClass' kind
+            sc_cephfs (OCS): Cephfs storage class. ocs_ci.ocs.resources.ocs.OCS instance
+                of 'StorageClass' kind
         Returns:
-            list: OCS instance of pods
+            tuple: List of pvcs and pods
         """
 
         access_modes_rbd = access_modes_rbd or [
@@ -62,11 +69,18 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
             constants.ACCESS_MODE_RWX,
         ]
 
-        num_of_rbd_pvc = num_of_rbd_pvc or len(access_modes_rbd)
-        num_of_cephfs_pvc = num_of_cephfs_pvc or len(access_modes_cephfs)
+        num_of_rbd_pvc = (
+            num_of_rbd_pvc if num_of_rbd_pvc is not None else len(access_modes_rbd)
+        )
+        num_of_cephfs_pvc = (
+            num_of_cephfs_pvc
+            if num_of_cephfs_pvc is not None
+            else len(access_modes_cephfs)
+        )
 
         pvcs_rbd = multi_pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
+            storageclass=sc_rbd,
             size=pvc_size,
             access_modes=access_modes_rbd,
             status=constants.STATUS_BOUND,
@@ -76,11 +90,12 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
         for pvc_obj in pvcs_rbd:
             pvc_obj.interface = constants.CEPHBLOCKPOOL
 
-        project = pvcs_rbd[0].project
+        project = pvcs_rbd[0].project if pvcs_rbd else None
 
         pvcs_cephfs = multi_pvc_factory(
             interface=constants.CEPHFILESYSTEM,
             project=project,
+            storageclass=sc_cephfs,
             size=pvc_size,
             access_modes=access_modes_cephfs,
             status=constants.STATUS_BOUND,
@@ -139,7 +154,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
         # pods_dc will be an empty list if deployment_config is False
         for pod_dc in pods_dc:
             pod_objs = pod.get_all_pods(
-                namespace=project.namespace,
+                namespace=pvcs[0].project.namespace,
                 selector=[pod_dc.name],
                 selector_label="name",
             )
