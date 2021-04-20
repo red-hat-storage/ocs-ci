@@ -42,8 +42,9 @@ class DeploymentUI(PageNavigator):
         """
         Verify Disks Attached
 
-        timeout (int): Time in seconds to wait
-        sleep (int): Sampling time in seconds
+        Args:
+            timeout (int): Time in seconds to wait
+            sleep (int): Sampling time in seconds
 
         """
         osd_size = config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
@@ -264,9 +265,10 @@ class DeploymentUI(PageNavigator):
         """
         Verify Operator Installation
 
-        operator (str): type of operator
-        timeout_install (int): Time in seconds to wait
-        sleep (int): Sampling time in seconds
+        Args:
+            operator (str): type of operator
+            timeout_install (int): Time in seconds to wait
+            sleep (int): Sampling time in seconds
 
         """
         self.navigate_operatorhub_page()
