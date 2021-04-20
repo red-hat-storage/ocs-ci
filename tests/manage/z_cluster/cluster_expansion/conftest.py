@@ -74,7 +74,9 @@ def add_nodes():
                 node_type = constants.RHCOS
 
             new_nodes.append(
-                add_new_node_and_label_upi(node_type, num_nodes=node_count)
+                add_new_node_and_label_upi(
+                    node_type, node_count, mark_for_ocs_label=ocs_nodes
+                )
             )
             log.info(
                 f"The worker nodes number after expansion {len(get_worker_nodes())}"
