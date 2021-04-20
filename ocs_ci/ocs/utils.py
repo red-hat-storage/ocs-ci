@@ -20,11 +20,7 @@ from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.external_ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
-from ocs_ci.ocs.exceptions import (
-    CommandFailed,
-    ExternalClusterDetailsException,
-    NotAllNodesCreated,
-)
+from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterDetailsException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.openstack import CephVMNode
 from ocs_ci.ocs.parallel import parallel
@@ -1136,25 +1132,3 @@ def reboot_node(ceph_node, timeout=300):
     except SSHException:
         log.exception(f"Failed to connect to node {ceph_node.hostname}")
         raise
-
-
-def verify_all_nodes_created():
-    """
-    Verify all nodes are created or not
-
-    Raises:
-        NotAllNodesCreated: In case all nodes are not created
-
-    """
-    # importing here to avoid circular import
-    from ocs_ci.ocs.node import get_all_nodes
-
-    expected_num_nodes = (
-        ocsci_config.ENV_DATA["worker_replicas"]
-        + ocsci_config.ENV_DATA["master_replicas"]
-    )
-    existing_num_nodes = len(get_all_nodes())
-    if expected_num_nodes != existing_num_nodes:
-        raise NotAllNodesCreated(
-            f"Expected number of nodes is {expected_num_nodes} but created during deployment is {existing_num_nodes}"
-        )

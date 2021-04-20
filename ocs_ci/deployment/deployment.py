@@ -36,6 +36,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods,
 )
+from ocs_ci.ocs.node import verify_all_nodes_created
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -52,7 +53,6 @@ from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
     collect_ocs_logs,
-    verify_all_nodes_created,
 )
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility import (
