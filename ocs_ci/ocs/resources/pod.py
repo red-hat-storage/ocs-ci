@@ -1775,15 +1775,47 @@ def verify_osd_removal_job_completed_successfully(osd_id):
     osd_removal_pod_obj = get_pod_obj(
         osd_removal_pod_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
+
+    timeout = 180
     is_completed = osd_removal_pod_obj.ocp.wait_for_resource(
         condition=constants.STATUS_COMPLETED,
         resource_name=osd_removal_pod_name,
         sleep=20,
-        timeout=300,
+        timeout=timeout,
     )
-    if not is_completed:
-        logger.info("ocs-osd-removal pod job failed to complete")
-        return False
+
+    ocp_pod_obj = OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    osd_removal_pod_status = ocp_pod_obj.get_resource_status(osd_removal_pod_name)
+
+    # Check if 'osd_removal_pod' is in status 'completed'
+    if not is_completed and osd_removal_pod_status != constants.STATUS_COMPLETED:
+        if osd_removal_pod_status != constants.STATUS_RUNNING:
+            logger.info(
+                f"ocs-osd-removal pod job did not reach status '{constants.STATUS_COMPLETED}' "
+                f"or '{constants.STATUS_RUNNING}' after {timeout} seconds"
+            )
+            return False
+        else:
+            logger.info(
+                f"ocs-osd-removal pod job reached status '{constants.STATUS_RUNNING}',"
+                f" but we were waiting for status '{constants.STATUS_COMPLETED}' "
+            )
+
+            new_timeout = 900
+            logger.info(
+                f"Wait more {new_timeout} seconds for ocs-osd-removal pod job to be completed"
+            )
+            is_completed = osd_removal_pod_obj.ocp.wait_for_resource(
+                condition=constants.STATUS_COMPLETED,
+                resource_name=osd_removal_pod_name,
+                sleep=30,
+                timeout=new_timeout,
+            )
+            if not is_completed:
+                logger.info(
+                    f"ocs-osd-removal pod job did not complete after {new_timeout} seconds"
+                )
+                return False
 
     # Verify OSD removal from the ocs-osd-removal pod logs
     logger.info(f"Verifying removal of OSD from {osd_removal_pod_name} pod logs")
