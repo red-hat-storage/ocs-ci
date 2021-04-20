@@ -50,10 +50,7 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.resources.storage_cluster import setup_ceph_debug
 from ocs_ci.ocs.uninstall import uninstall_ocs
-from ocs_ci.ocs.utils import (
-    setup_ceph_toolbox,
-    collect_ocs_logs,
-)
+from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility import (
     templating,
