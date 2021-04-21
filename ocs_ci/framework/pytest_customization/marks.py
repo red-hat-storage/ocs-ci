@@ -35,16 +35,6 @@ tier4b = compose(tier4, pytest.mark.tier4b)
 tier4c = compose(tier4, pytest.mark.tier4c)
 tier_after_upgrade = pytest.mark.tier_after_upgrade(value=5)
 
-tier_marks = [
-    tier1,
-    tier2,
-    tier3,
-    tier4,
-    tier4a,
-    tier4b,
-    tier4c,
-    tier_after_upgrade,
-]
 
 # build acceptance
 acceptance = pytest.mark.acceptance
@@ -71,6 +61,20 @@ scale = pytest.mark.scale
 deployment = pytest.mark.deployment
 polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla
+
+tier_marks = [
+    tier1,
+    tier2,
+    tier3,
+    tier4,
+    tier4a,
+    tier4b,
+    tier4c,
+    tier_after_upgrade,
+    performance,
+    scale,
+    workloads,
+]
 
 # upgrade related markers
 # Requires pytest ordering plugin installed
