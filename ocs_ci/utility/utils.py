@@ -3316,3 +3316,35 @@ def clone_notify():
     subprocess.run(git_clone_cmd, shell=True, cwd=notify_dir, check=True)
     notify_path = f"{notify_dir}/notify/notify.py"
     return notify_path
+
+
+def add_chrony_to_ocp_deployment():
+    """
+    Created and Add's necessary chrony resources
+
+    """
+    for role in ["master", "worker"]:
+        log.info(f"Creating and Adding Chrony file for {role}")
+        ocp_version = get_ocp_version()
+        ign_version = ""
+        with open(constants.CHRONY_TEMPLATE) as file_stream:
+            chrony_template_obj = yaml.safe_load(file_stream)
+        chrony_template_obj["metadata"]["labels"][
+            "machineconfiguration.openshift.io/role"
+        ] = role
+        chrony_template_obj["metadata"]["name"] = f"99-{role}-chrony-configuration"
+        if Version.coerce(ocp_version) < Version.coerce("4.6"):
+            ign_version = "2.2.0"
+        elif Version.coerce(ocp_version) == Version.coerce("4.6"):
+            ign_version = "3.1.0"
+        elif Version.coerce(ocp_version) >= Version.coerce("4.7"):
+            ign_version = "3.2.0"
+        chrony_template_obj["spec"]["config"]["ignition"]["version"] = ign_version
+        chrony_template_str = yaml.safe_dump(chrony_template_obj)
+        chrony_file = os.path.join(
+            config.ENV_DATA["cluster_path"],
+            "openshift",
+            f"99-{role}-chrony-configuration.yaml",
+        )
+        with open(chrony_file, "w") as f:
+            f.write(chrony_template_str)

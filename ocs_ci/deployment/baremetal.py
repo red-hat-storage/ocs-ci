@@ -27,10 +27,10 @@ from ocs_ci.utility.utils import (
     get_ocp_version,
     load_auth_config,
     wait_for_co,
-    configure_chrony_and_wait_for_machineconfig_status,
     check_for_rhcos_images,
     get_infra_id,
     TimeoutSampler,
+    add_chrony_to_ocp_deployment,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,6 +69,8 @@ class BAREMETALUPI(Deployment):
             ), "Failed to update request"
             # create manifest
             self.create_manifest()
+            # create chrony resource
+            add_chrony_to_ocp_deployment()
             # create ignitions
             self.create_ignitions()
             self.kubeconfig = os.path.join(
@@ -443,16 +445,6 @@ class BAREMETALUPI(Deployment):
             self.test_cluster()
             logger.info("Performing Disk cleanup")
             clean_disk()
-            # We need NTP for OCS cluster to become clean
-            worker_timeout = 400 * config.ENV_DATA["worker_replicas"]
-            master_timeout = 400 * config.ENV_DATA["master_replicas"]
-            if master_timeout <= worker_timeout:
-                chrony_timeout = worker_timeout
-            else:
-                chrony_timeout = master_timeout
-            configure_chrony_and_wait_for_machineconfig_status(
-                node_type="all", timeout=chrony_timeout
-            )
 
         def create_config(self):
             """
