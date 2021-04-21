@@ -55,7 +55,7 @@ def svt_cluster_loader(
         "/bin/sh -c 'source /tmp/venv/bin/activate && python /tmp/svt/openshift_scalability/cluster-loader.py "
         f"-f {clusterload_file} --kubeconfig {KUBECONFIG}'"
     )
-    run_cmd(cmd)
+    run_cmd(cmd, timeout=1200)
     os.chdir(cwd)
 
 

@@ -137,7 +137,9 @@ def pytest_collection_modifyitems(session, items):
     """
     teardown = config.RUN["cli_params"].get("teardown")
     deploy = config.RUN["cli_params"].get("deploy")
-    if not (teardown or deploy):
+    skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
+
+    if not (teardown or deploy or skip_ocs_deployment):
         for item in items[:]:
             skipif_ocp_version_marker = item.get_closest_marker("skipif_ocp_version")
             skipif_ocs_version_marker = item.get_closest_marker("skipif_ocs_version")
@@ -407,6 +409,7 @@ def storageclass_factory_fixture(
         compression=None,
         new_rbd_pool=False,
         pool_name=None,
+        rbd_thick_provision=False,
     ):
         """
         Args:
@@ -423,6 +426,8 @@ def storageclass_factory_fixture(
             new_rbd_pool (bool): True if user wants to create new rbd pool for SC
             pool_name (str): Existing pool name to create the storageclass other
                 then the default rbd pool.
+            rbd_thick_provision (bool): True to enable RBD thick provisioning.
+                Applicable if interface is CephBlockPool
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -454,6 +459,7 @@ def storageclass_factory_fixture(
                 secret_name=secret.name,
                 sc_name=sc_name,
                 reclaim_policy=reclaim_policy,
+                rbd_thick_provision=rbd_thick_provision,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
@@ -1129,11 +1135,14 @@ def cluster(request, log_cli_level):
         log.info("Will teardown cluster because --teardown was provided")
 
     # Download client
-    force_download = (
-        config.RUN["cli_params"].get("deploy")
-        and config.DEPLOYMENT["force_download_client"]
-    )
-    get_openshift_client(force_download=force_download)
+    if config.DEPLOYMENT["skip_download_client"]:
+        log.info("Skipping client download")
+    else:
+        force_download = (
+            config.RUN["cli_params"].get("deploy")
+            and config.DEPLOYMENT["force_download_client"]
+        )
+        get_openshift_client(force_download=force_download)
 
     # set environment variable for early testing of RHCOS
     if config.ENV_DATA.get("early_testing"):
@@ -2582,7 +2591,14 @@ def couchbase_factory_fixture(request):
     """
     couchbase = CouchBase()
 
-    def factory(replicas=3, run_in_bg=False, skip_analyze=True, sc_name=None):
+    def factory(
+        replicas=3,
+        run_in_bg=False,
+        skip_analyze=True,
+        sc_name=None,
+        num_items=None,
+        num_threads=None,
+    ):
         """
         Factory to start couchbase workload
 
@@ -2596,7 +2612,12 @@ def couchbase_factory_fixture(request):
         # Create couchbase workers
         couchbase.create_couchbase_worker(replicas=replicas, sc_name=sc_name)
         # Run couchbase workload
-        couchbase.run_workload(replicas=replicas, run_in_bg=run_in_bg)
+        couchbase.run_workload(
+            replicas=replicas,
+            run_in_bg=run_in_bg,
+            num_items=num_items,
+            num_threads=num_threads,
+        )
         # Run sanity check on data logs
         couchbase.analyze_run(skip_analyze=skip_analyze)
 

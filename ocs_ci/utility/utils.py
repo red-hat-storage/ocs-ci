@@ -1,3 +1,4 @@
+from functools import reduce
 import io
 import json
 import logging
@@ -32,6 +33,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
+    ClientDownloadError,
     CommandFailed,
     TagNotFoundException,
     TimeoutException,
@@ -696,15 +698,41 @@ def get_openshift_client(
 
     """
     version = version or config.RUN["client_version"]
+    version = expose_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     client_binary_path = os.path.join(bin_dir, "oc")
-    if os.path.isfile(client_binary_path) and force_download:
-        delete_file(client_binary_path)
-    if os.path.isfile(client_binary_path):
-        log.debug(f"Client exists ({client_binary_path}), skipping download.")
-        # TODO: check client version
-    else:
-        version = expose_ocp_version(version)
+    kubectl_binary_path = os.path.join(bin_dir, "kubectl")
+    download_client = True
+    client_version = None
+
+    if force_download:
+        log.info("Forcing client download.")
+    elif os.path.isfile(client_binary_path):
+        current_client_version = get_client_version(client_binary_path)
+        if current_client_version != version:
+            log.info(
+                f"Existing client version ({current_client_version}) does not match "
+                f"configured version ({version})."
+            )
+        else:
+            log.debug(
+                f"Client exists ({client_binary_path}) and matches configured version, "
+                f"skipping download."
+            )
+            download_client = False
+
+    if download_client:
+        # Move existing client binaries to backup location
+        client_binary_backup = f"{client_binary_path}.bak"
+        kubectl_binary_backup = f"{kubectl_binary_path}.bak"
+
+        try:
+            os.rename(client_binary_path, client_binary_backup)
+            os.rename(kubectl_binary_path, kubectl_binary_backup)
+        except FileNotFoundError:
+            pass
+
+        # Download the client
         log.info(f"Downloading openshift client ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
@@ -715,10 +743,32 @@ def get_openshift_client(
         download_file(url, tarball)
         run_cmd(f"tar xzvf {tarball} oc kubectl")
         delete_file(tarball)
+
+        try:
+            client_version = run_cmd(f"{client_binary_path} version --client")
+        except CommandFailed:
+            log.error("Unable to get version from downloaded client.")
+
+        if client_version:
+            try:
+                delete_file(client_binary_backup)
+                delete_file(kubectl_binary_backup)
+                log.info("Deleted backup binaries.")
+            except FileNotFoundError:
+                pass
+        else:
+            try:
+                os.rename(client_binary_backup, client_binary_path)
+                os.rename(kubectl_binary_backup, kubectl_binary_path)
+                log.info("Restored backup binaries to their original location.")
+            except FileNotFoundError:
+                raise ClientDownloadError(
+                    "No backups exist and new binary was unable to be verified."
+                )
+
         # return to the previous working directory
         os.chdir(previous_dir)
 
-    client_version = run_cmd(f"{client_binary_path} version --client")
     log.info(f"OpenShift Client version: {client_version}")
 
     return client_binary_path
@@ -2788,14 +2838,19 @@ def set_registry_to_managed_state():
     properly propagated for the stage deployment as mentioned in BZ.
     """
     if config.ENV_DATA["platform"] not in constants.CLOUD_PLATFORMS:
-        run_cmd(
-            f"oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p "
-            f'\'{{"spec":{{"storage": {{"emptyDir":{{}}}}}}}}\''
+        cluster_config = yaml.safe_load(
+            exec_cmd(f"oc get {constants.IMAGE_REGISTRY_CONFIG} -o yaml").stdout
         )
-        run_cmd(
-            f"oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p "
-            f'\'{{"spec":{{"managementState": "Managed"}}}}\''
-        )
+        if "emptyDir" not in cluster_config["spec"].get("storage", {}).keys():
+            run_cmd(
+                f"oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p "
+                f'\'{{"spec":{{"storage": {{"emptyDir":{{}}}}}}}}\''
+            )
+        if cluster_config["spec"].get("managementState") != "Managed":
+            run_cmd(
+                f"oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p "
+                f'\'{{"spec":{{"managementState": "Managed"}}}}\''
+            )
 
 
 def add_stage_cert():
@@ -3179,6 +3234,33 @@ def get_ocp_upgrade_history():
     return upgrade_history
 
 
+def get_attr_chain(obj, attr_chain):
+    """
+    Attempt to retrieve object attributes when uncertain about the existence of the attribute
+    or a different attribute in a given attribute chain. If the retrieval fails, None is returned.
+    The function can be used to retrieve a direct attribute, or a chain of attributes.
+    i.e. - obj.attr_a, obj_attr_a.sub_attr
+
+    Another example - trying to access "sub_attr_b" in object.attr.sub_attr_a.sub_attr_b -
+    get_attr_chain(object, "attr.sub_attr_a.sub_attr_b")
+
+    The function can be used to try and retrieve "sub_attribute_b" without an exception,
+    even in cases where "attr" or "sub_attr_a" might not exist.
+    In those cases, the function will return None.
+
+    Args:
+        obj: An object
+        attr_chain (str): A string containing one attribute or several sub-attributes
+            separated by dots (i.e. - "attr.sub_attr_a.sub_attr_b")
+
+    Returns:
+        The requested attribute if found, otherwise None
+    """
+    return reduce(
+        lambda _obj, _attr: getattr(_obj, _attr, None), attr_chain.split("."), obj
+    )
+
+
 def get_default_if_keyval_empty(dictionary, key, default_val):
     """
     if Key has an empty value OR key doesn't exist
@@ -3197,3 +3279,22 @@ def get_default_if_keyval_empty(dictionary, key, default_val):
     if not dictionary.get(key):
         return default_val
     return dictionary.get(key)
+
+
+def get_client_version(client_binary_path):
+    """
+    Get version reported by `oc version`.
+
+    Args:
+        client_binary_path (str): path to `oc` binary
+
+    Returns:
+        str: version reported by `oc version`.
+            None if the client does not exist at the provided path.
+
+    """
+    if os.path.isfile(client_binary_path):
+        cmd = f"{client_binary_path} version --client -o json"
+        resp = exec_cmd(cmd)
+        stdout = json.loads(resp.stdout.decode())
+        return stdout["releaseClientVersion"]

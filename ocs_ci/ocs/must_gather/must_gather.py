@@ -100,6 +100,8 @@ class MustGather(object):
         Compare running pods list to "/pods" subdirectories
 
         """
+        if self.type_log != "OTHERS":
+            return
         must_gather_helper = re.compile(r"must-gather-.*.-helper")
         pod_objs = get_all_pods(namespace="openshift-storage")
         pod_names = []
@@ -113,7 +115,11 @@ class MustGather(object):
 
         pod_files = []
         for pod_file in os.listdir(pod_path):
-            if not must_gather_helper.match(pod_file):
+            if (
+                not must_gather_helper.match(pod_file)
+                and (re.match(r"compute-*", pod_file) is None)
+                and (re.match(r"ip-*", pod_file) is None)
+            ):
                 pod_files.append(pod_file)
 
         assert set(sorted(pod_files)) == set(sorted(pod_names)), (

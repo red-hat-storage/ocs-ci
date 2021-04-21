@@ -109,7 +109,7 @@ def main(argv=None):
     init_ocsci_conf(arguments)
     pytest_logs_dir = utils.ocsci_log_path()
     utils.create_directory_path(framework.config.RUN["log_dir"])
-    launch_name = utils.get_testrun_name() + getuser()
+    launch_name = f"{utils.get_testrun_name()}-{getuser()}"
     arguments.extend(
         [
             "-p",

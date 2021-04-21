@@ -241,6 +241,13 @@ def pytest_addoption(parser):
             "For OCS cluster deployment with Ceph configured in debug mode. Available for OCS 4.7 and above"
         ),
     )
+    parser.addoption(
+        "--skip-download-client",
+        dest="skip_download_client",
+        action="store_true",
+        default=False,
+        help="Skip the openshift client download step or not",
+    )
 
 
 def pytest_configure(config):
@@ -252,6 +259,7 @@ def pytest_configure(config):
 
     """
     set_log_level(config)
+    set_rp_client_log_level()
     # Somewhat hacky but this lets us differentiate between run-ci executions
     # and plain pytest unit test executions
     ocscilib_module = "ocs_ci.framework.pytest_customization.ocscilib"
@@ -495,6 +503,9 @@ def process_cluster_cli_params(config):
     ceph_debug = get_cli_param(config, "ceph_debug")
     if ceph_debug:
         ocsci_config.DEPLOYMENT["ceph_debug"] = True
+    skip_download_client = get_cli_param(config, "skip_download_client")
+    if skip_download_client:
+        ocsci_config.DEPLOYMENT["skip_download_client"] = True
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -624,3 +635,13 @@ def set_log_level(config):
     """
     level = config.getini("log_cli_level") or "INFO"
     log.setLevel(logging.getLevelName(level))
+
+
+def set_rp_client_log_level():
+    """
+    Change log level of the reportportal_client logger. Default value is ERROR to limit
+    the amount of noise in our log files from this logger.
+    """
+    rp_logger = logging.getLogger("reportportal_client")
+    level = ocsci_config.REPORTING.get("rp_client_log_level")
+    rp_logger.setLevel(logging.getLevelName(level))

@@ -65,6 +65,7 @@ anywhere else.
 * `installer_version` - OCP installer version
 * `force_download_installer` - Download the OCP installer even if one already exists in the bin_dir
 * `force_download_client` - Download the OCP client even if one already exists in the bin_dir
+* `skip_download_client` - Skip the openshift client download step or not (Default: false)
 * `default_latest_tag` - OCS latest tag to be used by default if one is not provided
 * `external_mode` - If OCS cluster is setup in external mode (Default: false)
 * `ocs_csv_channel` - Channel used to install OCS CSV
@@ -117,6 +118,7 @@ Reporting related config. (Do not store secret data in the repository!).
 * `gather_on_deploy_failure` - Run must-gather on deployment failure or not (Default: true)
 * `collect_logs_on_success_run` - Run must-gather on successful run or not (Default: false)
 * `must_gather_timeout` - Time (in seconds) to wait before timing out during must-gather
+* `rp_client_log_level` - Log level for the reportportal_client logger (Default: ERROR)
 
 #### ENV_DATA
 

@@ -78,6 +78,14 @@ def bucket_class_factory(
                     - type (str): Single | Multi | Cache
                     - namespacestore_dict (dict): Identical format to backingstore_dict, contains
                       data that's forwarded to cloud_uls_factory.
+                    - namespacestores (list): If namespacestores list is provided instead of
+                      namespacestore_dict then NamespaceStore instances provided in the list are
+                      used. First NamespaceStore is used as write resource. All of them are used
+                      as read resources.
+                      for cache bucket a required field of ttl (int), the behavior for this field is
+                      after the amount of ms has passed noobaa will go to the underlying storage and
+                      check if the etag of the file has changed.
+                      **Very important** ttl field is in ms not seconds!!
 
         Returns:
             BucketClass: A Bucket Class object.
@@ -104,6 +112,26 @@ def bucket_class_factory(
                     "namespacestore_dict"
                 ]
                 namespacestores = namespace_store_factory(interface, nss_dict)
+                namespace_policy["type"] = bucket_class_dict["namespace_policy_dict"][
+                    "type"
+                ]
+                if namespace_policy["type"] == "Cache":
+                    namespace_policy["cache"] = {
+                        "hubResource": namespacestores[0].name,
+                        "caching": {
+                            "ttl": bucket_class_dict["namespace_policy_dict"]["ttl"]
+                        },
+                    }
+                else:
+                    # TODO: Implement support for Single-tiered NS bucketclass
+                    namespace_policy["read_resources"] = [
+                        nss.name for nss in namespacestores
+                    ]
+                    namespace_policy["write_resource"] = namespacestores[0].name
+            elif "namespacestores" in bucket_class_dict["namespace_policy_dict"]:
+                namespacestores = bucket_class_dict["namespace_policy_dict"][
+                    "namespacestores"
+                ]
                 namespace_policy["type"] = bucket_class_dict["namespace_policy_dict"][
                     "type"
                 ]

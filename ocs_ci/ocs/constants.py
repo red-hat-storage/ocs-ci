@@ -109,6 +109,7 @@ SERVICE = "Service"
 NODE = "Node"
 DEPLOYMENTCONFIG = "deploymentconfig"
 CONFIG = "Config"
+CONFIGMAP = "ConfigMap"
 MACHINESETS = "machinesets"
 STORAGECLUSTER = "storagecluster"
 CLUSTER_OPERATOR = "ClusterOperator"
@@ -136,6 +137,7 @@ OPERATOR_GROUP = "OperatorGroup"
 SERVICE_ACCOUNT = "Serviceaccount"
 SCC = "SecurityContextConstraints"
 PRIVILEGED = "privileged"
+ANYUID = "anyuid"
 CLUSTER_SERVICE_VERSION = "csv"
 
 # Other
@@ -599,9 +601,12 @@ ALERT_MGRISABSENT = "CephMgrIsAbsent"
 ALERT_MONQUORUMATRISK = "CephMonQuorumAtRisk"
 ALERT_OSDDISKNOTRESPONDING = "CephOSDDiskNotResponding"
 ALERT_PGREPAIRTAKINGTOOLONG = "CephPGRepairTakingTooLong"
+ALERT_PROMETHEUSRULEFAILURES = "PrometheusRuleFailures"
 ALERT_BUCKETREACHINGQUOTASTATE = "NooBaaBucketReachingQuotaState"
 ALERT_BUCKETERRORSTATE = "NooBaaBucketErrorState"
 ALERT_BUCKETEXCEEDINGQUOTASTATE = "NooBaaBucketExceedingQuotaState"
+ALERT_NAMESPACERESOURCEERRORSTATE = "NooBaaNamespaceResourceErrorState"
+ALERT_NAMESPACEBUCKETERRORSTATE = "NooBaaNamespaceBucketErrorState"
 ALERT_CLUSTERNEARFULL = "CephClusterNearFull"
 ALERT_CLUSTERCRITICALLYFULL = "CephClusterCriticallyFull"
 ALERT_CLUSTEROBJECTSTORESTATE = "ClusterObjectStoreState"
@@ -760,6 +765,7 @@ EC2_USER = "ec2-user"
 OCS_SUBSCRIPTION = "ocs-operator"
 ROOK_OPERATOR_CONFIGMAP = "rook-ceph-operator-config"
 ROOK_CONFIG_OVERRIDE_CONFIGMAP = "rook-config-override"
+ROOK_CEPH_MON_ENDPOINTS = "rook-ceph-mon-endpoints"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
@@ -1106,15 +1112,20 @@ SCALE_NODE_SELECTOR = {"scale-label": "app-scale"}
 SCALE_LABEL = "scale-label=app-scale"
 # TODO: Revisit the dict value once there is change in instance/vm/server type
 # TODO: Generic worker count value to support all kind of pods.
-# Note: Below worker count value is based on nginx pod
-# aws dict value is based on the manual execution result with m5.4xlarge instance and nginx pod
+# Note: Below worker count value is based on performance pod and each pod
+# will be attached with 20 PVC's each, i.e. if we create 3000 PVCs then
+# will be creating 150 pods each pod attached with 20 PVCs and in PVC
+# there will be minimal fio started
+# aws dict value is based on the manual execution result with m5.4xlarge instance and perf pod
 # vmware dict value is based on each worker vm config of min 12CPU and 64G RAM
 # bm dict value is based on each worker BM machine of config 40CPU and 256G/184G RAM
 # azure dict value is based on assumption similar to vmware vms min worker config of 12CPU and 64G RAM
 SCALE_WORKER_DICT = {
-    1500: {"aws": 12, "vmware": 15, "bm": 5, "azure": 15},
-    3000: {"aws": 24, "vmware": 30, "bm": 10, "azure": 30},
-    4500: {"aws": 36, "vmware": 45, "bm": 15, "azure": 45},
+    1500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3},
+    3000: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3},
+    4500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3},
+    6000: {"aws": 6, "vmware": 6, "bm": 4, "azure": 6},
+    9000: {"aws": 6, "vmware": 6, "bm": 4, "azure": 6},
 }
 SCALE_MAX_PVCS_PER_NODE = 500
 
@@ -1269,3 +1280,6 @@ debug_ms = 1
 debug_paxos = 20
 debug_crush = 20
 """
+
+WORKLOAD_STORAGE_TYPE_BLOCK = "block"
+WORKLOAD_STORAGE_TYPE_FS = "fs"

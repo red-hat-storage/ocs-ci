@@ -481,6 +481,7 @@ def create_storage_class(
     reclaim_policy=constants.RECLAIM_POLICY_DELETE,
     sc_name=None,
     provisioner=None,
+    rbd_thick_provision=False,
 ):
     """
     Create a storage class
@@ -495,6 +496,8 @@ def create_storage_class(
         sc_name (str): The name of storage class to create
         reclaim_policy (str): Type of reclaim policy. Defaults to 'Delete'
             (eg., 'Delete', 'Retain')
+        rbd_thick_provision (bool): True to enable RBD thick provisioning.
+            Applicable if interface_type is CephBlockPool
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -511,6 +514,8 @@ def create_storage_class(
         sc_data["provisioner"] = (
             provisioner if provisioner else defaults.RBD_PROVISIONER
         )
+        if rbd_thick_provision:
+            sc_data["parameters"]["thickProvision"] = "true"
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = templating.load_yaml(constants.CSI_CEPHFS_STORAGECLASS_YAML)
         sc_data["parameters"]["csi.storage.k8s.io/node-stage-secret-name"] = secret_name
@@ -1899,13 +1904,14 @@ def get_serviceaccount_obj(sa_name, namespace):
         logger.error("ServiceAccount not found in specified namespace")
 
 
-def validate_scc_policy(sa_name, namespace):
+def validate_scc_policy(sa_name, namespace, scc_name=constants.PRIVILEGED):
     """
     Validate serviceaccount is added to scc of privileged
 
     Args:
         sa_name (str): Service Account name
         namespace (str): The namespace for the serviceaccount creation
+        scc_name (str): SCC name
 
     Returns:
         bool: True if sc_name is present in scc of privileged else False
@@ -1913,7 +1919,7 @@ def validate_scc_policy(sa_name, namespace):
     sa_name = f"system:serviceaccount:{namespace}:{sa_name}"
     logger.info(sa_name)
     ocp_scc_obj = ocp.OCP(kind=constants.SCC, namespace=namespace)
-    scc_dict = ocp_scc_obj.get(resource_name=constants.PRIVILEGED)
+    scc_dict = ocp_scc_obj.get(resource_name=scc_name)
     scc_users_list = scc_dict.get("users")
     for scc_user in scc_users_list:
         if scc_user == sa_name:
@@ -2567,6 +2573,26 @@ def modify_osd_replica_count(resource_name, replica_count):
     return ocp_obj.patch(resource_name=resource_name, params=params)
 
 
+def modify_deployment_replica_count(deployment_name, replica_count):
+    """
+    Function to modify deployment replica count,
+    i.e to scale up or down deployment
+
+    Args:
+        deployment_name (str): Name of deployment
+        replica_count (int): replica count to be changed to
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    ocp_obj = ocp.OCP(
+        kind=constants.DEPLOYMENT, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    params = f'{{"spec": {{"replicas": {replica_count}}}}}'
+    return ocp_obj.patch(resource_name=deployment_name, params=params)
+
+
 def collect_performance_stats(dir_name):
     """
     Collect performance stats and saves them in file in json format.
@@ -2942,6 +2968,7 @@ def get_mon_pdb():
     return disruptions_allowed, min_available_mon
 
 
+@retry(CommandFailed, tries=10, delay=30, backoff=1)
 def run_cmd_verify_cli_output(
     cmd=None, expected_output_lst=(), cephtool_cmd=False, debug_node=None
 ):

@@ -39,9 +39,16 @@ class NamespaceStore:
         log.info(f"Cleaning up namespacestore {self.name}")
 
         if self.method == "oc":
-            OCP(
-                kind="namespacestore", namespace=config.ENV_DATA["cluster_namespace"]
-            ).delete(resource_name=self.name)
+            try:
+                OCP(
+                    kind="namespacestore",
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                ).delete(resource_name=self.name)
+            except CommandFailed as e:
+                if "not found" in str(e).lower():
+                    log.warning(f"Namespacestore {self.name} was already deleted.")
+                else:
+                    raise
 
         elif self.method == "cli":
 
@@ -72,11 +79,18 @@ class NamespaceStore:
         ns_deleted_successfully = False
 
         if self.method == "oc":
-            OCP(
-                kind="namespacestore",
-                namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name=self.name,
-            ).get()
+            try:
+                OCP(
+                    kind="namespacestore",
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    resource_name=self.name,
+                ).get()
+            except CommandFailed as e:
+                if "not found" in str(e).lower():
+                    log.info(f"Namespacestore {self.name} was deleted.")
+                    ns_deleted_successfully = True
+                else:
+                    raise
         elif self.method == "cli":
             if self.name not in self.mcg_obj.exec_mcg_cmd("namespacestore list"):
                 ns_deleted_successfully = True
@@ -234,16 +248,7 @@ def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
 
     def nss_cleanup():
         for nss in created_nss:
-            try:
-                nss.delete()
-            except CommandFailed as e:
-                if "not found" in str(e).lower():
-                    log.warning(
-                        f"Namespacestore {nss.name} could not be found in cleanup."
-                        "\nSkipping deletion."
-                    )
-                else:
-                    raise
+            nss.delete()
 
     request.addfinalizer(nss_cleanup)
 
