@@ -15,22 +15,23 @@ log = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-2512")
 class TestOSDHeapProfile(ManageTest):
     """
-    Test osd heap profile created on '/var/log/ceph/'.
+    1.Start heap profiler for osd
+      $ oc exec rook-ceph-tools-85ccf9f7c5-v7bgk ceph tell osd.0 heap start_profiler
+
+    2.Dump heap profile
+      $ oc exec rook-ceph-tools-85ccf9f7c5-v7bgk ceph tell osd.0 heap dump
+
+    3.Get heap profile in /var/log/ceph dir on osd node
+      $ oc rsh rook-ceph-osd-0-959dbdc6d-pddd4
+        sh-4.4# ls -ltr /var/log/ceph/
+        -rw-r--r--. 1 ceph ceph 295891 Apr 11 14:33 osd.0.profile.0001.heap
 
     """
 
     def test_osd_heap_profile(self):
         """
-        1.Start heap profiler for osd
-          $ oc exec rook-ceph-tools-85ccf9f7c5-v7bgk ceph tell osd.0 heap start_profiler
-
-        2.Dump heap profile
-          $ oc exec rook-ceph-tools-85ccf9f7c5-v7bgk ceph tell osd.0 heap dump
-
-        3.Get heap profile in /var/log/ceph dir on osd node
-          $ oc rsh rook-ceph-osd-0-959dbdc6d-pddd4
-            sh-4.4# ls -ltr /var/log/ceph/
-            -rw-r--r--. 1 ceph ceph 295891 Apr 11 14:33 osd.0.profile.0001.heap
+        Generate heap profile dump file for OSDs and verify whether the file
+        is created on '/var/log/ceph/'
 
         """
         strings_err = ["error", "fail"]
@@ -45,7 +46,7 @@ class TestOSDHeapProfile(ManageTest):
         logging.info(out)
         for string_err in strings_err:
             if string_err in out.lower():
-                raise Exception(f"{out}")
+                assert f"error on the output command {out}"
 
         time.sleep(10)
 
@@ -54,7 +55,7 @@ class TestOSDHeapProfile(ManageTest):
         logging.info(out)
         for string_err in strings_err:
             if string_err in out.lower():
-                raise Exception(f"{out}")
+                assert f"error on the output command {out}"
 
         log.info(f"Get osd-{osd_id} pod object")
         for osd_pod in osd_pods:
@@ -65,6 +66,4 @@ class TestOSDHeapProfile(ManageTest):
         out = osd_pod_profile.exec_cmd_on_pod(command="ls -ltr /var/log/ceph/")
         log.info(out)
         if f"osd.{osd_id}.profile" not in out:
-            raise Exception(
-                f"osd.{osd_id}.profile log does not exist on /var/log/ceph/\n{out}"
-            )
+            assert f"osd.{osd_id}.profile log does not exist on /var/log/ceph/\n{out}"
