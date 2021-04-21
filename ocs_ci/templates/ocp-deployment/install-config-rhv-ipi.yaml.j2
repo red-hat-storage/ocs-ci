@@ -1,0 +1,57 @@
+apiVersion: {{ api_version | default('v1') }}
+baseDomain: {{ base_domain }}
+compute:
+- architecture: amd64
+  hyperthreading: Enabled
+  name: worker
+  platform:
+    ovirt:
+      cpu:
+        cores: {{ worker_num_cpus | default(4) }}
+        sockets: 1
+      memoryMB: {{ compute_memory | default(16348) }}
+      osDisk:
+        sizeGB: 120
+      vmType: server
+  replicas: {{ worker_replicas | default(3) }}
+controlPlane:
+  architecture: amd64
+  hyperthreading: Enabled
+  name: master
+  platform:
+    ovirt:
+      cpu:
+        cores: {{ master_num_cpus | default(4) }}
+        sockets: 1
+      memoryMB: {{ master_memory | default(16384) }}
+      osDisk:
+        sizeGB: 120
+      vmType: server
+  replicas: {{ master_replicas | default(3) }}
+metadata:
+  creationTimestamp: null
+  name: '{{ cluster_name }}'
+networking:
+  clusterNetwork:
+  - cidr: {{ cluster_network_cidr | default('10.128.0.0/14') }}
+    hostPrefix: 23
+  machineNetwork:
+  - cidr: 10.0.0.0/16
+  networkType: OpenShiftSDN
+  serviceNetwork:
+  - {{ service_network_cidr | default('172.30.0.0/16') }}
+{% if fips %}
+fips: {{ fips }}
+{% endif %}
+platform:
+  ovirt:
+    api_vip: {{ api_vip }}
+    ingress_vip: {{ ingress_vip }}
+    ovirt_cluster_id: {{ ovirt_cluster_id }}
+    ovirt_network_name: {{ ovirt_network_name }}
+    ovirt_storage_domain_id: {{ ovirt_storage_domain_id }}
+    vnicProfileID: {{ vnic_profile_id }}
+publish: External
+pullSecret: ''
+sshKey: |
+  ''
