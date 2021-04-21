@@ -12,7 +12,11 @@ from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    get_running_cluster_id,
+    ceph_health_check,
+)
 from ocs_ci.ocs.elasticsearch import elasticsearch_load
 from ocs_ci.ocs.resources import pod
 
@@ -32,6 +36,10 @@ class PASTest(BaseTest):
         Setting up the environment for each performance and scale test
 
         """
+
+        # Performance and Scale tests cannot run if Ceph is not ig good condition
+        assert ceph_health_check()
+
         log.info("Setting up test environment")
         self.crd_data = None  # place holder for Benchmark CDR data
         self.es_backup = None  # place holder for the elasticsearch backup
