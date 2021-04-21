@@ -45,7 +45,7 @@ class TestOSDHeapProfile(ManageTest):
         logging.info(out)
         for string_err in strings_err:
             if string_err in out.lower():
-                raise (ValueError, f"{out}")
+                raise Exception(f"{out}")
 
         time.sleep(10)
 
@@ -54,7 +54,7 @@ class TestOSDHeapProfile(ManageTest):
         logging.info(out)
         for string_err in strings_err:
             if string_err in out.lower():
-                raise (ValueError, f"{out}")
+                raise Exception(f"{out}")
 
         log.info(f"Get osd-{osd_id} pod object")
         for osd_pod in osd_pods:
