@@ -129,11 +129,11 @@ class PASTest(BaseTest):
             }
 
         # for production mode use the Lab ES server
-        if not self.dev_mode and config.PERF.get("lab_es"):
+        if not self.dev_mode and config.PERF.get("production_es"):
             self.crd_data["spec"]["elasticsearch"] = {
-                "server": config.PERF.get("es_server"),
-                "port": config.PERF.get("es_port"),
-                "url": f"http://{config.PERF.get('es_server')}:{config.PERF.get('es_port')}",
+                "server": config.PERF.get("production_es_server"),
+                "port": config.PERF.get("production_es_port"),
+                "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
                 "parallel": True,
             }
 
