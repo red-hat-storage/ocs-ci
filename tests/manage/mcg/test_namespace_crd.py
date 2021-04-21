@@ -29,6 +29,7 @@ from ocs_ci.ocs.bucket_utils import (
     check_cached_objects_by_name,
     s3_delete_object,
     retrieve_verification_mode,
+    wait_for_cache,
 )
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
 from ocs_ci.ocs import constants, bucket_utils
@@ -430,10 +431,7 @@ class TestNamespace(MCGTest):
             )
         # Read files from ns bucket
         self.download_files(mcg_obj, awscli_pod, bucket_to_read=bucket_obj.name)
-        if not check_cached_objects_by_name(
-            mcg_obj, bucket_obj.name, writen_objs_names
-        ):
-            raise UnexpectedBehaviour("Objects not cached properly")
+        wait_for_cache(mcg_obj, bucket_obj.name, writen_objs_names)
 
     @tier1
     @pytest.mark.parametrize(
@@ -481,10 +479,7 @@ class TestNamespace(MCGTest):
         writen_objs_names = self.write_files_to_pod_and_upload(
             mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
         )
-        if not check_cached_objects_by_name(
-            mcg_obj, bucket_obj.name, writen_objs_names
-        ):
-            raise UnexpectedBehaviour("Objects not cached properly")
+        wait_for_cache(mcg_obj, bucket_obj.name, writen_objs_names)
 
         # Upload files directly to AWS
         self.write_files_to_pod_and_upload(
@@ -548,10 +543,7 @@ class TestNamespace(MCGTest):
         writen_objs_names = self.write_files_to_pod_and_upload(
             mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
         )
-        if not check_cached_objects_by_name(
-            mcg_obj, bucket_obj.name, writen_objs_names
-        ):
-            raise UnexpectedBehaviour("Objects not cached properly")
+        wait_for_cache(mcg_obj, bucket_obj.name, writen_objs_names)
 
         awscli_pod.exec_cmd_on_pod("mv /original/testfile0.txt /original/testfile1.txt")
         # Upload files directly to AWS
@@ -613,10 +605,7 @@ class TestNamespace(MCGTest):
         writen_objs_names = self.write_files_to_pod_and_upload(
             mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
         )
-        if not check_cached_objects_by_name(
-            mcg_obj, bucket_obj.name, writen_objs_names
-        ):
-            raise UnexpectedBehaviour("Object was not cached properly")
+        wait_for_cache(mcg_obj, bucket_obj.name, writen_objs_names)
 
     @tier1
     @pytest.mark.parametrize(
@@ -657,10 +646,7 @@ class TestNamespace(MCGTest):
         writen_objs_names = self.write_files_to_pod_and_upload(
             mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=3
         )
-        if not check_cached_objects_by_name(
-            mcg_obj, bucket_obj.name, writen_objs_names
-        ):
-            raise UnexpectedBehaviour("Object was not cached properly")
+        wait_for_cache(mcg_obj, bucket_obj.name, writen_objs_names)
 
     @tier1
     @pytest.mark.parametrize(
@@ -701,14 +687,11 @@ class TestNamespace(MCGTest):
         writen_objs_names = self.write_files_to_pod_and_upload(
             mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
         )
-        if not check_cached_objects_by_name(
-            mcg_obj, bucket_obj.name, writen_objs_names
-        ):
-            raise UnexpectedBehaviour("Object was not cached properly")
+        wait_for_cache(mcg_obj, bucket_obj.name, writen_objs_names)
 
         # Delete the object from mcg interface
         s3_delete_object(mcg_obj, bucket_obj.name, writen_objs_names[0])
-        sleep(1)
+        sleep(5)
         if not check_cached_objects_by_name(mcg_obj, bucket_obj.name):
             raise UnexpectedBehaviour("Object was not deleted from cache properly")
 
