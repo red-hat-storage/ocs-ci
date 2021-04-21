@@ -3,13 +3,14 @@ import pytest
 import time
 import random
 
-from ocs_ci.framework.testlib import ManageTest, tier2, skipif_ocs_version
+from ocs_ci.framework.testlib import ManageTest, tier2, skipif_ocs_version, bugzilla
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods, get_osd_pod_id
 
 log = logging.getLogger(__name__)
 
 
 @tier2
+@bugzilla("1938049")
 @skipif_ocs_version("<4.7")
 @pytest.mark.polarion_id("OCS-2512")
 class TestOSDHeapProfile(ManageTest):
