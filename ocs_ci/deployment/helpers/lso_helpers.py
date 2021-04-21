@@ -114,29 +114,7 @@ def setup_local_storage(storageclass):
     # Add RDM disk for vSphere platform
     platform = config.ENV_DATA.get("platform").lower()
     lso_type = config.DEPLOYMENT.get("type")
-    if platform == constants.VSPHERE_PLATFORM:
-        # Types of LSO Deployment
-        # Importing here to avoid circular dependency
-        from ocs_ci.deployment.vmware import VSPHEREBASE
-
-        vsphere_base = VSPHEREBASE()
-
-        if lso_type == constants.RDM:
-            logger.info(f"LSO Deployment type: {constants.RDM}")
-            vsphere_base.add_rdm_disks()
-
-        if lso_type == constants.VMDK:
-            logger.info(f"LSO Deployment type: {constants.VMDK}")
-            vsphere_base.attach_disk(
-                config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
-                config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE),
-            )
-
-        if lso_type == constants.DIRECTPATH:
-            raise NotImplementedError(
-                "LSO Deployment for VMDirectPath is not implemented"
-            )
-
+    add_disk_for_vsphere_platform()
     if (ocp_version >= "4.6") and (ocs_version >= "4.6"):
         # Pull local volume discovery yaml data
         logger.info("Pulling LocalVolumeDiscovery CR data from yaml")
@@ -335,3 +313,34 @@ def verify_pvs_created(expected_pvs):
         ), f"{pv_name} not in 'Available' state. Current state is {pv_state}"
 
     logger.debug("PVs, Workers: %s, %s", num_pvs, expected_pvs)
+
+
+def add_disk_for_vsphere_platform():
+    """
+    Add RDM/VMDK disk for vSphere platform
+
+    """
+    platform = config.ENV_DATA.get("platform").lower()
+    lso_type = config.DEPLOYMENT.get("type")
+    if platform == constants.VSPHERE_PLATFORM:
+        # Types of LSO Deployment
+        # Importing here to avoid circular dependency
+        from ocs_ci.deployment.vmware import VSPHEREBASE
+
+        vsphere_base = VSPHEREBASE()
+
+        if lso_type == constants.RDM:
+            logger.info(f"LSO Deployment type: {constants.RDM}")
+            vsphere_base.add_rdm_disks()
+
+        if lso_type == constants.VMDK:
+            logger.info(f"LSO Deployment type: {constants.VMDK}")
+            vsphere_base.attach_disk(
+                config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
+                config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE),
+            )
+
+        if lso_type == constants.DIRECTPATH:
+            raise NotImplementedError(
+                "LSO Deployment for VMDirectPath is not implemented"
+            )

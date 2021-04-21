@@ -2,13 +2,15 @@ import logging
 import tempfile
 import time
 
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.views import locators, osd_sizes
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler, run_cmd
 from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.node import get_worker_nodes
+from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
 
 
 logger = logging.getLogger(__name__)
@@ -24,112 +26,32 @@ class DeploymentUI(PageNavigator):
         super().__init__(driver)
         ocp_version = get_ocp_version()
         self.dep_loc = locators[ocp_version]["deployment"]
-        self.mode = "internal"
-        self.storage_class_type = "thin_sc"
-        self.osd_size = "512"
-        self.is_wide_encryption = False
-        self.is_class_encryption = False
-        self.is_use_kms = False
 
-    @property
-    def select_mode(self):
-        return self.mode
+    def verify_disks_lso_attached(self, timeout=600, sleep=20):
+        """
+        Verify Disks Attached
 
-    @select_mode.setter
-    def select_mode(self, mode):
-        if not isinstance(mode, str):
-            raise ValueError("mode arg must be a string")
-        self.mode = mode
+        Args:
+            timeout (int): Time in seconds to wait
+            sleep (int): Sampling time in seconds
 
-    @property
-    def select_storage_class(self):
-        return self.storage_class_type
-
-    @select_storage_class.setter
-    def select_storage_class(self, storage_class):
-        if not isinstance(storage_class, str):
-            raise ValueError("storage class arg must be a string")
-        self.storage_class = storage_class
-
-    @property
-    def select_osd_size(self):
-        return self.osd_size
-
-    @select_osd_size.setter
-    def select_osd_size(self, osd_size):
-        if not isinstance(osd_size, str):
-            raise ValueError("osd size arg must be a string")
-        self.osd_size = osd_size
-
-    @property
-    def wide_encryption(self):
-        return self.is_wide_encryption
-
-    @wide_encryption.setter
-    def wide_encryption(self, is_wide_encryption):
-        if not isinstance(is_wide_encryption, bool):
-            raise ValueError("is_wide_encryption arg must be a bool")
-        self.is_wide_encryption = is_wide_encryption
-
-    @property
-    def class_encryption(self):
-        return self.is_class_encryption
-
-    @class_encryption.setter
-    def class_encryption(self, is_class_encryption):
-        if not isinstance(is_class_encryption, bool):
-            raise ValueError("is_class_encryption arg must be a bool")
-        self.is_class_encryption = is_class_encryption
-
-    @property
-    def select_service_name(self):
-        return self.service_name
-
-    @select_service_name.setter
-    def select_service_name(self, service_name):
-        if not isinstance(service_name, str):
-            raise ValueError("service_name arg must be a string")
-        self.service_name = service_name
-
-    @property
-    def use_kms(self):
-        return self.is_use_kms
-
-    @use_kms.setter
-    def use_kms(self, is_use_kms):
-        if not isinstance(is_use_kms, bool):
-            raise ValueError("is_use_kms arg must be a bool")
-        self.is_use_kms = is_use_kms
-
-    @property
-    def select_kms_address(self):
-        return self.kms_address
-
-    @select_kms_address.setter
-    def select_kms_address(self, kms_address):
-        if not isinstance(kms_address, str):
-            raise ValueError("kms_address arg must be a string")
-        self.kms_address = kms_address
-
-    @property
-    def select_kms_address_port(self):
-        return self.kms_address_port
-
-    @select_kms_address_port.setter
-    def select_kms_address_port(self, kms_address_port):
-        if not isinstance(kms_address_port, str):
-            raise ValueError("kms_address_port arg must be a string")
-        self.kms_address_port = kms_address_port
-
-    @property
-    def select_kms_token(self):
-        return self.kms_token
-
-    @select_kms_token.setter
-    def select_kms_token(self, kms_token):
-        if not isinstance(kms_token, str):
-            raise ValueError("kms_token arg must be a string")
-        self.kms_token = kms_token
+        """
+        osd_size = config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
+        number_worker_nodes = get_worker_nodes()
+        capacity = int(osd_size) * len(number_worker_nodes)
+        if capacity >= 1024:
+            capacity_str = str(capacity / 1024).rstrip("0").rstrip(".") + " TiB"
+        else:
+            capacity_str = str(capacity) + " GiB"
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=self.check_element_text,
+            expected_text=capacity_str,
+        )
+        if not sample.wait_for_func_status(result=True):
+            logger.error(f" after {timeout} seconds")
+            raise TimeoutExpiredError
 
     def create_catalog_source_yaml(self):
         """
@@ -172,7 +94,25 @@ class DeploymentUI(PageNavigator):
         logger.info("Click Install OCS")
         self.do_click(self.dep_loc["click_install_ocs"])
         self.do_click(self.dep_loc["click_install_ocs_page"])
-        time.sleep(60)
+        self.verify_operator_succeeded(operator="OpenShift Container Storage")
+
+    def install_local_storage_operator(self):
+        """
+        Install local storage operator
+
+        """
+        if config.DEPLOYMENT.get("local_storage"):
+            self.navigate_operatorhub_page()
+
+            logger.info("Search OCS Operator")
+            self.do_send_keys(self.dep_loc["search_operators"], text="Local Storage")
+            logger.info("Choose Local Storage Version")
+            self.do_click(self.dep_loc["choose_local_storage_version"])
+
+            logger.info("Click Install LSO")
+            self.do_click(self.dep_loc["click_install_lso"])
+            self.do_click(self.dep_loc["click_install_lso_page"])
+            self.verify_operator_succeeded(operator="Local Storage")
 
     def install_storage_cluster(self):
         """
@@ -198,10 +138,60 @@ class DeploymentUI(PageNavigator):
         self.refresh_page()
         self.do_click(locator=self.dep_loc["create_storage_cluster"])
 
-        if self.mode == "internal":
-            self.install_internal_cluster()
+        if config.DEPLOYMENT.get("local_storage"):
+            self.install_lso_cluster()
         else:
-            raise ValueError(f"Not Support on {self.mode}")
+            self.install_internal_cluster()
+
+    def install_lso_cluster(self):
+        """
+        Install LSO cluster via UI
+
+        """
+        logger.info("Click Internal - Attached Devices")
+        self.do_click(self.dep_loc["internal-attached_devices"])
+
+        logger.info("Click on All nodes")
+        self.do_click(self.dep_loc["all_nodes_lso"])
+        self.do_click(self.dep_loc["next"])
+
+        logger.info(
+            f"Configure Volume Set Name and Storage Class Name as {constants.LOCAL_BLOCK_RESOURCE}"
+        )
+        self.do_send_keys(
+            locator=self.dep_loc["lv_name"], text=constants.LOCAL_BLOCK_RESOURCE
+        )
+        self.do_send_keys(
+            locator=self.dep_loc["sc_name"], text=constants.LOCAL_BLOCK_RESOURCE
+        )
+        logger.info("Select all nodes on 'Create Storage Class' step")
+        self.do_click(locator=self.dep_loc["all_nodes_create_sc"])
+        self.verify_disks_lso_attached()
+        self.do_click(self.dep_loc["next"])
+
+        logger.info("Confirm new storage class")
+        self.do_click(self.dep_loc["yes"])
+
+        sample = TimeoutSampler(
+            timeout=600,
+            sleep=10,
+            func=self.check_element_text,
+            expected_text="Memory",
+        )
+        if not sample.wait_for_func_status(result=True):
+            logger.error("Nodes not found after 600 seconds")
+            raise TimeoutExpiredError
+
+        logger.info(f"Select {constants.LOCAL_BLOCK_RESOURCE} storage class")
+        self.choose_expanded_mode(
+            mode=True, locator=self.dep_loc["storage_class_dropdown_lso"]
+        )
+        self.do_click(locator=self.dep_loc["localblock_sc"])
+        self.do_click(self.dep_loc["next"])
+
+        self.configure_encryption()
+
+        self.create_storage_cluster()
 
     def install_internal_cluster(self):
         """
@@ -213,28 +203,31 @@ class DeploymentUI(PageNavigator):
 
         logger.info("Configure Storage Class (thin on vmware, gp2 on aws)")
         self.do_click(locator=self.dep_loc["storage_class_dropdown"])
-        self.do_click(locator=self.dep_loc[self.storage_class_type])
+        self.do_click(locator=self.dep_loc[self.storage_class])
 
-        logger.info(f"Configure OSD Capacity {self.osd_size}")
+        device_size = str(config.ENV_DATA.get("device_size"))
+        osd_size = device_size if device_size in osd_sizes else "512"
+        logger.info(f"Configure OSD Capacity {osd_size}")
         self.choose_expanded_mode(mode=True, locator=self.dep_loc["osd_size_dropdown"])
-        self.do_click(locator=self.dep_loc[self.osd_size])
+        self.do_click(locator=self.dep_loc[osd_size])
 
         logger.info("Select all worker nodes")
         self.select_checkbox_status(status=True, locator=self.dep_loc["all_nodes"])
 
         logger.info("Next on step 'Select capacity and nodes'")
-        self.do_click(locator=self.dep_loc["next_capacity"])
+        self.do_click(locator=self.dep_loc["next"])
 
         self.configure_encryption()
 
-        self.configure_kms()
+        self.create_storage_cluster()
 
-        logger.info("Click on Next on configure page")
-        self.do_click(locator=self.dep_loc["next_on_configure"])
+    def create_storage_cluster(self):
+        """
+        Review and Create storage cluster
 
+        """
         logger.info("Create on Review and create page")
         self.do_click(locator=self.dep_loc["create_on_review"])
-
         logger.info("Sleep 10 second after click on 'create storage cluster'")
         time.sleep(10)
 
@@ -243,62 +236,36 @@ class DeploymentUI(PageNavigator):
         Configure Encryption
 
         """
-        if self.is_wide_encryption or self.is_class_encryption:
-            logger.info("Enable Encryption")
+        if config.ENV_DATA.get("encryption_at_rest"):
+            logger.info("Enable OSD Encryption")
             self.select_checkbox_status(
                 status=True, locator=self.dep_loc["enable_encryption"]
             )
 
-        if self.is_wide_encryption:
             logger.info("Cluster-wide encryption")
             self.select_checkbox_status(
                 status=True, locator=self.dep_loc["wide_encryption"]
             )
+        self.do_click(self.dep_loc["next"])
 
-        if self.is_class_encryption:
-            logger.info("Storage class encryption")
-            self.select_checkbox_status(
-                status=True, locator=self.dep_loc["class_encryption"]
-            )
-
-    def configure_kms(self):
+    def verify_operator_succeeded(
+        self, operator="OpenShift Container Storage", timeout_install=300, sleep=20
+    ):
         """
-        Configure KMS
+        Verify Operator Installation
 
-        """
-        if self.is_use_kms:
-            logger.info(f"kms service name: {self.service_name}")
-            self.do_send_keys(
-                text=self.service_name, locator=self.dep_loc["kms_service_name"]
-            )
-
-            logger.info(f"kms address: {self.kms_address}")
-            self.do_send_keys(
-                text=self.kms_address, locator=self.dep_loc["kms_address"]
-            )
-
-            logger.info(f"kms address port: {self.kms_address_port}")
-            self.do_send_keys(
-                text=self.kms_address_port, locator=self.dep_loc["kms_address_port"]
-            )
-
-            logger.info(f"kms_token: {self.kms_token}")
-            self.do_send_keys(text=self.kms_token, locator=self.dep_loc["kms_token"])
-
-    def verify_ocs_operator_succeeded(self, timeout_install=300, sleep=20):
-        """
-        Verify OCS Installation
-
-        timeout_install (int): Time in seconds to wait
-        sleep (int): Sampling time in seconds
+        Args:
+            operator (str): type of operator
+            timeout_install (int): Time in seconds to wait
+            sleep (int): Sampling time in seconds
 
         """
         self.navigate_operatorhub_page()
         self.navigate_installed_operators_page()
 
         self.do_send_keys(
-            locator=self.dep_loc["search_ocs_install"],
-            text="OpenShift Container Storage",
+            locator=self.dep_loc["search_operator_installed"],
+            text=operator,
         )
         sample = TimeoutSampler(
             timeout=timeout_install,
@@ -308,7 +275,7 @@ class DeploymentUI(PageNavigator):
         )
         if not sample.wait_for_func_status(result=True):
             logger.error(
-                f"OCS Installation status is not Succeeded after {timeout_install} seconds"
+                f"{operator} Installation status is not Succeeded after {timeout_install} seconds"
             )
             raise TimeoutExpiredError
 
@@ -317,7 +284,9 @@ class DeploymentUI(PageNavigator):
         Install OCS via UI
 
         """
+        if config.DEPLOYMENT.get("local_storage"):
+            add_disk_for_vsphere_platform()
+        self.install_local_storage_operator()
         self.create_catalog_source_yaml()
         self.install_ocs_operator()
-        self.verify_ocs_operator_succeeded()
         self.install_storage_cluster()
