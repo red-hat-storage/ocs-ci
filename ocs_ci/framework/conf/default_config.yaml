@@ -219,9 +219,9 @@ PERF:
 # Specific component to be enabled/disabled
 # like RGW, NOOBAA, CephFS, RBD
 COMPONENTS:
-  enable_rgw: True
-  enable_noobaa: True
-  enable_cephfs: True
-  enable_rbd: True
+  disable_rgw: False
+  disable_noobaa: False
+  disable_cephfs: False
+  disable_rbd: False
 
 >>>>>>> Flexible component deployment

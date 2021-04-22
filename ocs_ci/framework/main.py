@@ -68,12 +68,9 @@ def init_ocsci_conf(arguments=None):
     parser.add_argument("--flexy-env-file", default="", help="Path to flexy env file")
     parser.add_argument(
         "--disable-components",
-        nargs="+",
-        type=utils.csv_args,
-        help=(
-            "disable deployment of ocs components:rgw, cephfs, noobaa, blockpools."
-            "Use comma seperated values"
-        ),
+        action="append",
+        choices=["rgw", "cephfs", "noobaa", "blockpools"],
+        help=("disable deployment of ocs components:rgw, cephfs, noobaa, blockpools."),
     )
     args, unknown = parser.parse_known_args(args=arguments)
     ocs_version = args.ocs_version

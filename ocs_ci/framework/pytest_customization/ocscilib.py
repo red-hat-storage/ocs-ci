@@ -251,10 +251,9 @@ def pytest_addoption(parser):
     parser.addoption(
         "--disable-components",
         dest="disable_components",
-        help=(
-            "disable deployment of ocs component:rgw, cephfs, noobaa, blockpools."
-            "Use comma seperated values"
-        ),
+        action="append",
+        choices=["rgw", "cephfs", "noobaa", "blockpools"],
+        help=("disable deployment of ocs component:rgw, cephfs, noobaa, blockpools."),
     )
 
 

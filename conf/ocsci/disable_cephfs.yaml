@@ -1,0 +1,3 @@
+COMPONENTS:
+  disable_cephfs: True 
+
