@@ -1450,9 +1450,14 @@ def check_ceph_osd_tree_after_node_replacement():
     """
     ct_pod = pod.get_ceph_tools_pod()
     osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
-    if not check_ceph_osd_tree():
-        logger.warning("Incorrect ceph osd tree formation found")
-        return False
+    # We need to add a function to check the ceph osd tree when flexible scaling is enabled.
+    # So currently, when flexible scaling is enabled don't check the Ceph osd tree.
+    # The issue for tracking is https://github.com/red-hat-storage/ocs-ci/issues/4052
+    if not is_flexible_scaling_enabled():
+        if not check_ceph_osd_tree():
+            logger.warning("Incorrect ceph osd tree formation found")
+            return False
+
     if not check_osds_in_hosts_are_up(osd_tree):
         logger.warning("Not all the osd's are in status 'up'")
         return False
@@ -1529,6 +1534,21 @@ def is_lso_cluster():
 
     """
     return config.DEPLOYMENT.get("local_storage", False)
+
+
+def is_flexible_scaling_enabled():
+    """
+    Check if flexible scaling is enabled
+
+    Returns:
+        bool: True if failure domain is "host" and flexible scaling is enabled. False otherwise
+
+    """
+    ocs_storage_cluster = storage_cluster.get_storage_cluster().get()["items"][0]
+
+    failure_domain = ocs_storage_cluster.get("status").get("failureDomain")
+    flexible_scaling = ocs_storage_cluster.get("spec").get("flexibleScaling")
+    return failure_domain == "host" and flexible_scaling
 
 
 class CephClusterExternal(CephCluster):
