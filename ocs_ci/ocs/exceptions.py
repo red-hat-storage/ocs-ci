@@ -322,3 +322,7 @@ class ClientDownloadError(Exception):
 
 class NotAllNodesCreated(Exception):
     pass
+
+
+class TemplateNotFound(Exception):
+    pass
