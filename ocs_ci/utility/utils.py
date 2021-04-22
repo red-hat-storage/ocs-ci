@@ -3320,7 +3320,7 @@ def clone_notify():
 
 def add_chrony_to_ocp_deployment():
     """
-    Created and Add's necessary chrony resources
+    Create and Add necessary chrony resources
 
     """
     for role in ["master", "worker"]:
