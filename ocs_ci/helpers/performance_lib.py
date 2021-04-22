@@ -209,3 +209,60 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
         f"Creation time (in seconds) for pvc {pvc_name} is {(et - st).total_seconds()}"
     )
     return (et - st).total_seconds()
+
+
+def diff_check(first, second, diffs=10):
+    """
+    Function to check the differance between 2 numbers, and return true if the
+    difference between them is more then expected
+
+    Args:
+        first (int) : the first number (usual the lowest)
+        second (int) : the second number (usual the highest)
+        diffs (int) : the acceptable difference between the number in percentage
+           the default is 10%
+
+    Return:
+        bool : True if the difference is more then the acceptable, other False
+
+    """
+    try:
+        # using the abs since the first number can be higher then the second
+        # one, and in this case the results can be negative
+        if abs((100 - (first * 100 / second))) > diffs:
+            return True
+    except ZeroDivisionError:
+        pass
+    return False
+
+
+def cleanup_results_numbers_from_spikes(data, spike=10):
+    """
+    Function to cleanup list of results number from the highest and lowes numbers,
+    usually, thous 2 numbers are 'noise' in the test.
+    if the list of the number have less then 5 numbers, it will not do any cleanup
+
+    Args:
+        data (list) : list of numbers - test results
+        spike (int) : the acceptable percentage, default is 10% (each side - total of 20%)
+
+    Returns:
+        list : the list of the numbers without the Highest & Lowest numbers
+
+    """
+
+    if len(data) < 5:
+        return data
+
+    # sorting the number list
+    data.sort()
+
+    logger.debug(f"The highest 2 numbers are {data[-1]}, {data[-2]}")
+    if diff_check(data[-1], data[-2], spike):
+        # remove the highest number from the list
+        data.remove(max(data))
+    logger.debug(f"The lowest 2 numbers are {data[0]}, {data[1]}")
+    if diff_check(data[1], data[0]):
+        # remove the lowest number from the list
+        data.remove(min(data))
+    return data
