@@ -356,14 +356,11 @@ class TestSmallFileWorkload(PASTest):
         self.crd_data["spec"]["workload"]["args"]["threads"] = threads
         self.crd_data["spec"]["workload"]["args"]["samples"] = samples
 
-        """
-        Calculating the size of the volume that need to be test, it should
-        be at least twice in the size then the size of the files, and at
-        least 100Gi.
-
-        Since the file_size is in Kb and the vol_size need to be in Gb, more
-        calculation is needed.
-        """
+        # Calculating the size of the volume that need to be test, it should
+        # be at least twice in the size then the size of the files, and at
+        # least 100Gi.
+        # Since the file_size is in Kb and the vol_size need to be in Gb, more
+        # calculation is needed.
         vol_size = int(files * threads * file_size * 3)
         vol_size = int(vol_size / constants.GB2KB)
         if vol_size < 100:
