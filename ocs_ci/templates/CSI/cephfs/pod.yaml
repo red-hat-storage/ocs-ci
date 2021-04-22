@@ -7,6 +7,10 @@ spec:
   containers:
    - name: web-server
      image: quay.io/ocsci/nginx:latest
+     resources:
+       limits:
+         memory: "512Mi"
+         cpu: "150m"
      volumeMounts:
        - name: mypvc
          mountPath: /var/lib/www/html

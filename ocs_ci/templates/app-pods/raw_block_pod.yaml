@@ -6,6 +6,10 @@ spec:
   containers:
     - name: my-container
       image: quay.io/ocsci/nginx:latest
+      resources:
+        limits:
+          memory: "512Mi"
+          cpu: "150m"
       securityContext:
          capabilities:
            add: ["SYS_ADMIN"]
