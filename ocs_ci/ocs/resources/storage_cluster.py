@@ -6,7 +6,6 @@ import logging
 import tempfile
 
 from jsonschema import validate
-from semantic_version import Version
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
@@ -18,7 +17,7 @@ from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.utility import localstorage, utils, templating, kms as KMS
 from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import run_cmd, skipif_upgraded_from
+from ocs_ci.utility.utils import run_cmd
 
 log = logging.getLogger(__name__)
 
@@ -384,19 +383,15 @@ def ocs_install_verification(
             kms = KMS.get_kms_deployment()
             kms.post_deploy_verification()
 
-    ocs_version = config.ENV_DATA["ocs_version"]
-    zone_num = utils.get_az_count()
-    if (
-        config.DEPLOYMENT.get("local_storage")
-        and Version.coerce(ocs_version) >= Version.coerce("4.7")
-        and zone_num < 3
-        and not skipif_upgraded_from(["4.6"])
-    ):
-        storage_cluster_obj = get_storage_cluster()
+    storage_cluster_obj = get_storage_cluster()
+    is_flexible_scaling = (
+        storage_cluster_obj.get()["items"][0].get("spec").get("flexibleScaling", False)
+    )
+    if is_flexible_scaling is True:
         failure_domain = storage_cluster_obj.data["items"][0]["status"]["failureDomain"]
         assert failure_domain == "host", (
-            f"The failure domain type on LSO cluster with {zone_num} zones should be "
-            f"'host' and not {failure_domain}."
+            f"The expected failure domain on cluster with flexible scaling is 'host',"
+            f" the actaul failure domain is {failure_domain}"
         )
 
 
