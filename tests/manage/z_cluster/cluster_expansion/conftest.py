@@ -65,23 +65,22 @@ def add_nodes():
                 )
 
         elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-            pytest.skip(
-                "Skipping add node in Vmware platform due to "
-                "https://bugzilla.redhat.com/show_bug.cgi?id=1844521"
+            log.info(
+                f"The worker nodes number before expansion {len(get_worker_nodes())}"
             )
-            # Issue to remove skip code https://github.com/red-hat-storage/ocs-ci/issues/2403
-            # log.info(
-            #     f"The worker nodes number before expansion {len(get_worker_nodes())}"
-            # )
-            # if config.ENV_DATA.get("rhel_user"):
-            #     pytest.skip("Skipping add RHEL node, code unavailable")
-            # node_type = constants.RHCOS
-            # new_nodes.append(
-            #     add_new_node_and_label_upi(node_type, num_nodes=node_count)
-            # )
-            # log.info(
-            #     f"The worker nodes number after expansion {len(get_worker_nodes())}"
-            # )
+            if config.ENV_DATA.get("rhel_user"):
+                node_type = constants.RHEL_OS
+            else:
+                node_type = constants.RHCOS
+
+            new_nodes.append(
+                add_new_node_and_label_upi(
+                    node_type, node_count, mark_for_ocs_label=ocs_nodes
+                )
+            )
+            log.info(
+                f"The worker nodes number after expansion {len(get_worker_nodes())}"
+            )
 
         nodes = [node for sublist in new_nodes for node in sublist]
 
