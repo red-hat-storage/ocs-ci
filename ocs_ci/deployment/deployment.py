@@ -36,6 +36,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods,
 )
+from ocs_ci.ocs.node import verify_all_nodes_created
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -177,6 +178,7 @@ class Deployment(object):
         """
         Function does post OCP deployment stuff we need to do.
         """
+        verify_all_nodes_created()
         set_selinux_permissions()
         set_registry_to_managed_state()
         add_stage_cert()

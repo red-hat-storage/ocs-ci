@@ -9,7 +9,7 @@ from subprocess import TimeoutExpired
 from ocs_ci.ocs.machine import get_machine_objs
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, NotAllNodesCreated
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
@@ -1486,3 +1486,21 @@ def add_disk_to_node(node_obj, disk_size=None):
         disk_size = get_pv_size(pv_objs[-1])
 
     node_util.create_and_attach_volume(node=node_obj, size=disk_size)
+
+
+def verify_all_nodes_created():
+    """
+    Verify all nodes are created or not
+
+    Raises:
+        NotAllNodesCreated: In case all nodes are not created
+
+    """
+    expected_num_nodes = (
+        config.ENV_DATA["worker_replicas"] + config.ENV_DATA["master_replicas"]
+    )
+    existing_num_nodes = len(get_all_nodes())
+    if expected_num_nodes != existing_num_nodes:
+        raise NotAllNodesCreated(
+            f"Expected number of nodes is {expected_num_nodes} but created during deployment is {existing_num_nodes}"
+        )
