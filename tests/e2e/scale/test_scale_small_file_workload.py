@@ -116,9 +116,9 @@ class TestSmallFileWorkloadScale(E2ETest):
         argvalues=[pytest.param(*[16, 1000000, 4, constants.CEPHFILESYSTEM])] * 20,
     )
     def test_scale_smallfile_workload(
-        self, ripsaw, es, scale_leaks, file_size, files, threads, interface
+        self, ripsaw, scale_leaks, file_size, files, threads, interface
     ):
-        smallfile_workload(ripsaw, es, file_size, files, threads, 3, interface)
+        smallfile_workload(ripsaw, None, file_size, files, threads, 3, interface)
         cephfs_data.count += 1
         run_data = get_cephfs_data()
         for entry in run_data:
