@@ -69,6 +69,8 @@ def smallfile_workload(ripsaw, es, file_size, files, threads, samples, interface
             "server": es.get_ip(),
             "port": es.get_port(),
         }
+    else:
+        del sf_data["spec"]["elasticsearch"]
 
     log.info("Apply Operator CRD")
     ripsaw.apply_crd("resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml")
