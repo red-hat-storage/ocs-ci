@@ -173,6 +173,7 @@ OCS_MONKEY_REPOSITORY = "https://github.com/red-hat-storage/ocs-monkey.git"
 # AMQ
 AMQ_NAMESPACE = "myproject"
 KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
+RGW_KAFKA_NOTIFY = "https://github.com/shonpaz123/notify/"
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 CODESPEED_URL = "http://10.0.78.167:8000/"
 
@@ -426,6 +427,8 @@ COUCHBASE_WORKER_EXAMPLE = os.path.join(
 
 COUCHBASE_OPERATOR = "couchbase-operator-namespace"
 
+KAFKADROP_YAML = os.path.join(TEMPLATE_AMQ_DIR, "kafkadrop.yaml")
+
 HELLO_WORLD_PRODUCER_YAML = os.path.join(TEMPLATE_AMQ_DIR, "hello-world-producer.yaml")
 
 HELLO_WORLD_CONSUMER_YAML = os.path.join(TEMPLATE_AMQ_DIR, "hello-world-consumer.yaml")
@@ -441,6 +444,8 @@ AMQ_DRIVER_KAFKA_YAML = os.path.join(TEMPLATE_AMQ_DIR, "driver-kafka.yaml")
 AMQ_WORKLOAD_YAML = os.path.join(TEMPLATE_AMQ_DIR, "amq_workload.yaml")
 
 AMQ_SIMPLE_WORKLOAD_YAML = os.path.join(TEMPLATE_AMQ_DIR, "amq_simple_workload.yaml")
+
+KAFKA_ENDPOINT = f"my-cluster-kafka-bootstrap.{AMQ_NAMESPACE}.svc.cluster.local:9092"
 
 NGINX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "nginx.yaml")
 
