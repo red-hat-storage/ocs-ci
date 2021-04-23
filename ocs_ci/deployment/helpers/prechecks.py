@@ -100,6 +100,10 @@ class VSpherePreChecks(PreChecks):
     def template_check(self):
         """
         Checks whether template exists in Datacenter
+
+        Raises:
+            TemplateNotFound: If template not found in Datacenter.
+
         """
         logger.debug(f"Checking for template existence in datacenter {self.datacenter}")
         if not self.vsphere.is_template_exist(
