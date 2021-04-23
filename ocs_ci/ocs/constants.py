@@ -67,6 +67,9 @@ ROOK_CSI_RBD_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "rbd")
 ROOK_CSI_CEPHFS_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "cephfs")
 CLEANUP_YAML = "cleanup.yaml.j2"
 MANIFESTS_DIR = "manifests"
+CHRONY_TEMPLATE = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "99-role-chrony-configuration.yaml"
+)
 
 
 # Statuses

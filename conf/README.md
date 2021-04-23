@@ -99,6 +99,7 @@ anywhere else.
   secret is created. If False, it will not be created. Relevant only for IBM
   Cloud deployment.
 * `ceph_dubg` - Deploy OCS with Ceph in debug log level. Available starting OCS 4.7 (Default: false)
+* `ignition_version` - Ignition Version is the version used in MachineConfigs.
 
 
 #### REPORTING
