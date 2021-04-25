@@ -2,6 +2,7 @@ import os
 import logging
 import subprocess
 from datetime import datetime
+import numpy
 
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework import config
@@ -241,6 +242,15 @@ def cleanup_results_numbers_from_spikes(data, spike=10):
     Function to cleanup list of results number from the highest and lowes numbers,
     usually, thous 2 numbers are 'noise' in the test.
     if the list of the number have less then 5 numbers, it will not do any cleanup
+    the number of elements in the list must to be odd to prevent situation that we have half
+    numbers are low and half numbers are high - which group of numbers are preferred ?
+
+    This function going to handle few results scenarios :
+
+        * 'sustain' results : [100, 99, 101, 100, 99] - do not need to be clean
+        * 'bell' results : [100, 60, 101, 200, 99] - remove the highest/lowest results
+        * 'half' results : [30, 100, 29, 31, 101] - return the largest group
+        * 'mix' results : [100, 90, 70, 120, 80] - can not clean - bad results
 
     Args:
         data (list) : list of numbers - test results
@@ -251,18 +261,31 @@ def cleanup_results_numbers_from_spikes(data, spike=10):
 
     """
 
-    if len(data) < 5:
+    # verify that the list of numbers is grater the 4, and with odd number of numbers
+    if (len(data) < 5) or (len(data) % 2 == 0):
+        logger.warning(
+            "The list need to have more then 4 numbers and with odd number of numbers"
+        )
         return data
 
-    # sorting the number list
-    data.sort()
+    elements = numpy.array(data)
 
-    logger.debug(f"The highest 2 numbers are {data[-1]}, {data[-2]}")
-    if diff_check(data[-1], data[-2], spike):
-        # remove the highest number from the list
-        data.remove(max(data))
-    logger.debug(f"The lowest 2 numbers are {data[0]}, {data[1]}")
-    if diff_check(data[1], data[0]):
-        # remove the lowest number from the list
-        data.remove(min(data))
-    return data
+    # Getting the average of the numbers
+    mean = numpy.mean(elements, axis=0)
+    # Getting the standard deviation between the numbers
+    sd = numpy.std(elements, axis=0)
+    # calculating the percentage deviation between the numbers
+    pct_dev = (sd / mean) * 100
+    high = mean + sd  # Acceptable high number
+    low = mean - sd  # Acceptable low number
+    if pct_dev < spike * 2:
+        # standard deviation is acceptable
+        return data
+
+    # remove the very high results
+    logger.debug(f"removing results high then {high}")
+    final_list = [x for x in data if (x < high)]
+    # remove the very low results
+    logger.debug(f"removing results low then {low}")
+    final_list = [x for x in final_list if (x > low)]
+    return final_list
