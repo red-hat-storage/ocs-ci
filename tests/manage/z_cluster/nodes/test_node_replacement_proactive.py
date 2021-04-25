@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     aws_platform_required,
     ipi_deployment_required,
+    bugzilla,
 )
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster
@@ -198,6 +199,7 @@ class TestNodeReplacementWithIO(ManageTest):
 @ignore_leftovers
 @skipif_openshift_dedicated
 @skipif_bmpsi
+@bugzilla("1953360")
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement proactive
