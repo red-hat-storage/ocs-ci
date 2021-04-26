@@ -16,7 +16,15 @@ from ocs_ci.deployment.vmware import (
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
-from ocs_ci.utility import aws, vsphere, templating, baremetal, azure_utils, powernodes
+from ocs_ci.utility import (
+    aws,
+    vsphere,
+    templating,
+    baremetal,
+    azure_utils,
+    powernodes,
+    rhv,
+)
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.utility.load_balancer import LoadBalancer
 from ocs_ci.utility.retry import retry
@@ -71,6 +79,7 @@ class PlatformNodesFactory:
             "gcp": NodesBase,
             "vsphere_lso": VMWareLSONodes,
             "powervs": IBMPowerNodes,
+            "rhv": RHVNodes,
         }
 
     def get_nodes_platform(self):
@@ -2167,3 +2176,13 @@ class VMWareLSONodes(VMWareNodes):
         self.vsphere.remove_disk(
             vm=vm, identifier=volume, key="disk_name", datastore=delete_from_backend
         )
+
+
+class RHVNodes(NodesBase):
+    """
+    RHV Nodes  class
+    """
+
+    def __init__(self):
+        super(RHVNodes, self).__init__()
+        self.rhv = rhv.RHV()
