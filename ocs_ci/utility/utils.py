@@ -2410,13 +2410,8 @@ def skipif_ocs_version(expressions):
     Return:
         'True' if test needs to be skipped else 'False'
     """
-    skip_this = True
     expr_list = [expressions] if isinstance(expressions, str) else expressions
-    for expr in expr_list:
-        comparision_str = config.ENV_DATA["ocs_version"] + expr
-        skip_this = skip_this and eval(comparision_str)
-    # skip_this will be either True or False after eval
-    return skip_this
+    return any(eval(config.ENV_DATA["ocs_version"] + expr) for expr in expr_list)
 
 
 def get_ocs_version_from_image(image):
