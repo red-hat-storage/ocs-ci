@@ -264,6 +264,7 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
                 storage_type=storage_type,
                 size="2G",
                 runtime=30,
+                rate="1m,10m",
                 fio_filename=f"{pod_obj.name}_io_file1",
             )
         log.info("FIO started on all pods.")
@@ -309,6 +310,7 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
                 storage_type=storage_type,
                 size="1G",
                 runtime=10,
+                rate="1m,10m",
                 fio_filename=f"{pod_obj.name}_io_file2",
             )
 
