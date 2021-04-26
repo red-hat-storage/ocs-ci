@@ -1140,6 +1140,10 @@ SCALE_WORKER_DICT = {
 }
 SCALE_MAX_PVCS_PER_NODE = 500
 
+# Production config instance type
+AWS_PRODUCTION_INSTANCE_TYPE = "m5.4xlarge"
+AZURE_PRODUCTION_INSTANCE_TYPE = "Standard_D16s_v3"
+
 # Elasticsearch and codespeed constants
 ES_SERVER_IP = "10.0.78.167"
 ES_SERVER_PORT = "9200"

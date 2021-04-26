@@ -339,7 +339,7 @@ def create_custom_machineset(
             kind=constants.MACHINESETS,
             namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
         )
-        vmsize = "Standard_D16s_v3"
+        vmsize = constants.AZURE_PRODUCTION_INSTANCE_TYPE
         azure_instance = instance_type if instance_type else vmsize
         for machine in machinesets_obj.get()["items"]:
             # Get inputs from existing machineset config.

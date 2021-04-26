@@ -710,7 +710,7 @@ def check_and_add_enough_worker(worker_count):
                     for zone in ["a", "b", "c"]:
                         ms_name.append(
                             machine.create_custom_machineset(
-                                instance_type="m5.4xlarge",
+                                instance_type=constants.AWS_PRODUCTION_INSTANCE_TYPE,
                                 labels=labels,
                                 zone=zone,
                             )
@@ -718,7 +718,7 @@ def check_and_add_enough_worker(worker_count):
                 else:
                     ms_name.append(
                         machine.create_custom_machineset(
-                            instance_type="m5.4xlarge",
+                            instance_type=constants.AWS_PRODUCTION_INSTANCE_TYPE,
                             labels=labels,
                             zone="a",
                         )
@@ -766,7 +766,7 @@ def check_and_add_enough_worker(worker_count):
                     for zone in ["1", "2", "3"]:
                         ms_name.append(
                             machine.create_custom_machineset(
-                                instance_type="Standard_D16s_v3",
+                                instance_type=constants.AZURE_PRODUCTION_INSTANCE_TYPE,
                                 labels=labels,
                                 zone=zone,
                             )
@@ -774,7 +774,7 @@ def check_and_add_enough_worker(worker_count):
                 else:
                     ms_name.append(
                         machine.create_custom_machineset(
-                            instance_type="Standard_D16s_v3",
+                            instance_type=constants.AZURE_PRODUCTION_INSTANCE_TYPE,
                             labels=labels,
                             zone="1",
                         )
@@ -1101,7 +1101,7 @@ def check_all_pod_reached_running_state_in_kube_job(
             # And if PODs are still not in Running state then there will be assert.
             if while_iteration_count >= 10:
                 assert logging.error(
-                    f" Listed PODs took more than 300secs to bound {pod_not_running_list}"
+                    f" Listed PODs took more than 300secs for Running {pod_not_running_list}"
                 )
                 break
             pod_not_running_list.clear()
