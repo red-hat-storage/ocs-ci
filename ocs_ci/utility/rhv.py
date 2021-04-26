@@ -155,6 +155,7 @@ class RHV(object):
             vm_id (str): unique identifier of the vm
             disk_id (str): unique identifier of the disk
 
+
         """
         return self.get_disk_attachments_service(vm_id).attachment_service(disk_id)
 
@@ -409,3 +410,48 @@ class RHV(object):
                 self.remove_disk(
                     vm=vm, identifier=disk.id, key="id", detach_only=detach_only
                 )
+
+    def get_vm_status(self, vm_name):
+        """
+        Get the power status of RHV VM
+
+        Args:
+           vm_name (str): RHV VM name
+
+        Returns :
+           str: Power status of RHV VM
+
+        """
+        vm = self.get_vms_by_pattern(pattern=vm_name)[0]
+        vm_service = self.vms_service.vm_service(vm.id)
+        vm_info = vm_service.get()
+        return vm_info.status
+
+    def stop_rhv_vms(self, vm_names, force=False):
+        """
+         Shutdown the RHV virtual machines
+
+        Args:
+            vm_names (list): Names of RHV vms
+            force (bool): True for non-graceful VM shutdown, False for
+                graceful VM shutdown.
+
+        """
+        for vm_name in vm_names:
+            # Find the virtual machine
+            vm = self.get_vms_by_pattern(pattern=vm_name)[0]
+            vm_service = self.vms_service.vm_service(vm.id)
+            vm_service.stop(force)
+            # Wait till the virtual machine is down:
+            try:
+                for status in TimeoutSampler(600, 5, self.get_vm_status, vm_name):
+                    logger.info(
+                        f"Waiting for RHV Machine {vm_name} to shutdown"
+                        f"Current status is : {status}"
+                    )
+                    if status == types.VmStatus.DOWN:
+                        logger.info(f"RHV Machine {vm_name} reached down status")
+                        break
+            except TimeoutExpiredError:
+                logger.error(f"RHV VM {vm_name} is still Running")
+                raise
