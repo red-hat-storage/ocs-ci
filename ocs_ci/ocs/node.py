@@ -1002,7 +1002,7 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     log.info(
         "Replace the old node with the new worker node in localVolumeDiscovery and localVolumeSet"
     )
-    res = add_new_node_to_lvd_and_lvs(
+    res = replace_old_node_in_lvd_and_lvs(
         old_node_name=osd_node_hostname_label,
         new_node_name=new_node_hostname_label,
     )
@@ -1387,7 +1387,7 @@ def get_node_index_in_local_block(node_name):
     return node_values.index(node_name)
 
 
-def add_new_node_to_lvd_and_lvs(old_node_name, new_node_name):
+def replace_old_node_in_lvd_and_lvs(old_node_name, new_node_name):
     """
     Replace the old node with the new node in localVolumeDiscovery and localVolumeSet,
     as described in the documents of node replacement with LSO
@@ -1504,3 +1504,72 @@ def verify_all_nodes_created():
         raise NotAllNodesCreated(
             f"Expected number of nodes is {expected_num_nodes} but created during deployment is {existing_num_nodes}"
         )
+
+
+def add_node_to_lvd_and_lvs(node_name):
+    """
+    Add a new node to localVolumeDiscovery and localVolumeSet
+
+    Args:
+        node_name (str): the new node name to add to localVolumeDiscovery and localVolumeSet
+
+    Returns:
+        bool: True in case the changes are applied successfully. False otherwise
+
+    """
+    path_to_nodes = "/spec/nodeSelector/nodeSelectorTerms/0/matchExpressions/0/values/-"
+    params = f"""[{{"op": "add", "path": "{path_to_nodes}", "value": "{node_name}"}}]"""
+
+    ocp_lvd_obj = OCP(
+        kind=constants.LOCAL_VOLUME_DISCOVERY,
+        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
+    )
+
+    ocp_lvs_obj = OCP(
+        kind=constants.LOCAL_VOLUME_SET,
+        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
+        resource_name=constants.LOCAL_BLOCK_RESOURCE,
+    )
+
+    lvd_result = ocp_lvd_obj.patch(params=params, format_type="json")
+    lvs_result = ocp_lvs_obj.patch(params=params, format_type="json")
+
+    return lvd_result and lvs_result
+
+
+def add_new_nodes_and_label_upi_lso(
+    node_type,
+    num_nodes,
+    mark_for_ocs_label=True,
+    node_conf=None,
+    add_disks=True,
+    add_nodes_to_lvs_and_lvd=True,
+):
+    """
+    Add a new node for aws/vmware upi lso platform and label it
+
+    Args:
+        node_type (str): Type of node, RHEL or RHCOS
+        num_nodes (int): number of nodes to add
+        mark_for_ocs_label (bool): True if label the new nodes
+        node_conf (dict): The node configurations.
+        add_disks (bool): True if add disks to the new nodes.
+        add_nodes_to_lvs_and_lvd (bool): True if add the new nodes to
+            localVolumeDiscovery and localVolumeSet.
+
+    Returns:
+        list: new spun node names
+
+    """
+    new_nodes = add_new_node_and_label_upi(
+        node_type, num_nodes, mark_for_ocs_label, node_conf
+    )
+    if add_disks:
+        for node_obj in new_nodes:
+            add_disk_to_node(node_obj)
+
+    if add_nodes_to_lvs_and_lvd:
+        for node_obj in new_nodes:
+            add_node_to_lvd_and_lvs(node_obj.name)
+
+    return new_nodes
