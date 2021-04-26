@@ -634,7 +634,7 @@ def get_expected_worker_count(scale_count=1500):
         ):
             expected_worker_count = worker_count_dict[scale_count]["bm"]
         elif (
-            config.ENV_DATA["deployment_type"] == "upi"
+            config.ENV_DATA["deployment_type"] == "ipi"
             and config.ENV_DATA["platform"].lower() == "azure"
         ):
             expected_worker_count = worker_count_dict[scale_count]["azure"]
@@ -748,6 +748,63 @@ def check_and_add_enough_worker(worker_count):
                     label_value="app-scale",
                 )
             return True
+
+        # Add enough worker for Azure
+        elif (
+            config.ENV_DATA["deployment_type"] == "ipi"
+            and config.ENV_DATA["platform"].lower() == "azure"
+        ):
+            # Create machineset for app worker nodes on each aws zone
+            # Each zone will have one app worker node
+            ms_name = list()
+            labels = [("node-role.kubernetes.io/app", "app-scale")]
+            for obj in machine.get_machineset_objs():
+                if "app" in obj.name:
+                    ms_name.append(obj.name)
+            if not ms_name:
+                if len(machine.get_machineset_objs()) == 3:
+                    for zone in ["1", "2", "3"]:
+                        ms_name.append(
+                            machine.create_custom_machineset(
+                                instance_type="Standard_D16s_v3",
+                                labels=labels,
+                                zone=zone,
+                            )
+                        )
+                else:
+                    ms_name.append(
+                        machine.create_custom_machineset(
+                            instance_type="Standard_D16s_v3",
+                            labels=labels,
+                            zone="1",
+                        )
+                    )
+                for ms in ms_name:
+                    machine.wait_for_new_node_to_be_ready(ms)
+            if len(ms_name) == 3:
+                exp_count = int(worker_count / 3)
+            else:
+                exp_count = worker_count
+            for name in ms_name:
+                machine.add_node(machine_set=name, count=exp_count)
+            for ms in ms_name:
+                machine.wait_for_new_node_to_be_ready(ms)
+            worker_list = node.get_worker_nodes()
+            ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+            scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
+            ocs_worker_list.extend(scale_label_worker)
+            final_list = list(dict.fromkeys(ocs_worker_list))
+            for node_item in final_list:
+                if node_item in worker_list:
+                    worker_list.remove(node_item)
+            if worker_list:
+                helpers.label_worker_node(
+                    node_list=worker_list,
+                    label_key="scale-label",
+                    label_value="app-scale",
+                )
+            return True
+
         elif (
             config.ENV_DATA["deployment_type"] == "upi"
             and config.ENV_DATA["platform"].lower() == "vsphere"
@@ -756,11 +813,6 @@ def check_and_add_enough_worker(worker_count):
         elif (
             config.ENV_DATA["deployment_type"] == "upi"
             and config.ENV_DATA["platform"].lower() == "baremetal"
-        ):
-            raise UnsupportedPlatformError("Unsupported Platform to add worker")
-        elif (
-            config.ENV_DATA["deployment_type"] == "upi"
-            and config.ENV_DATA["platform"].lower() == "azure"
         ):
             raise UnsupportedPlatformError("Unsupported Platform to add worker")
         else:
