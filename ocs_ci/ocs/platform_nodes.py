@@ -2186,3 +2186,27 @@ class RHVNodes(NodesBase):
     def __init__(self):
         super(RHVNodes, self).__init__()
         self.rhv = rhv.RHV()
+
+    def stop_nodes(self, nodes, timeout=600, wait=True, force=True):
+        """
+        Shutdown RHV VM
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to stop, False otherwise
+            timeout (int): time in seconds to wait for node to reach 'not ready' state.
+            force (bool): True for force VM stop, False otherwise
+
+        """
+        if not nodes:
+            raise ValueError("No nodes found to stop")
+
+        node_names = [n.name for n in nodes]
+        self.rhv.stop_vms(node_names, force=force)
+
+        if wait:
+            # When the node is not reachable then the node reaches status NotReady.
+            logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_NOT_READY, timeout=timeout
+            )
