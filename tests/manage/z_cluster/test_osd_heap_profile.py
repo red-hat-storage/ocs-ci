@@ -40,7 +40,7 @@ class TestOSDHeapProfile(ManageTest):
 
         log.info(f"Start heap profiler for osd-{osd_id}")
         pod_tool = get_ceph_tools_pod()
-        out = pod_tool.exec_sh_cmd_on_pod(
+        out = pod_tool.exec_cmd_on_pod(
             command=f"ceph tell osd.{osd_id} heap start_profiler"
         )
         logging.info(out)
