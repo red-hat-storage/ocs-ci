@@ -74,6 +74,12 @@ deployment_4_7 = {
     ),
     "click_install_lso": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
     "click_install_lso_page": ('button[data-test="install-operator"]', By.CSS_SELECTOR),
+    "object_service_tab": (
+        'a[data-test-id="horizontal-link-Object Service"]',
+        By.CSS_SELECTOR,
+    ),
+    "object_service_button": ("//button[text()='Object Service']", By.XPATH),
+    "data_resiliency_button": ("//button[text()='Data Resiliency']", By.XPATH),
     "yes": ("//*[contains(text(), 'Yes')]", By.XPATH),
     "next": ("//*[contains(text(), 'Next')]", By.XPATH),
 }

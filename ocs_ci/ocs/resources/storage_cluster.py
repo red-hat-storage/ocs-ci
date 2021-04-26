@@ -19,6 +19,7 @@ from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.utility import localstorage, utils, templating, kms as KMS
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd, get_ocp_version
+from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 
@@ -399,6 +400,23 @@ def ocs_install_verification(
             f"The failure domain type on LSO cluster with {zone_num} zones should be "
             f"'host' and not {failure_domain}."
         )
+    verify_noobaa_console()
+
+
+def verify_noobaa_console():
+    """
+    Verify Noobaa Console
+    """
+    try:
+        ocp_version = get_ocp_version()
+        if ocp_version == "4.7":
+            logging.debug("Verify Noobaa Console")
+            setup_ui = login_ui()
+            deployment_obj = DeploymentUI(setup_ui)
+            deployment_obj.verify_noobaa_ui()
+            close_browser(setup_ui)
+    except Exception as e:
+        logging.error(msg=e)
 
 
 def osd_encryption_verification():

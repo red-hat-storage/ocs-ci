@@ -279,6 +279,26 @@ class DeploymentUI(PageNavigator):
             )
             raise TimeoutExpiredError
 
+    def verify_noobaa_ui(self):
+        """
+        Verify Noobaa UI
+
+        """
+        self.navigate_overview_page()
+        self.do_click(self.dep_loc["object_service_tab"])
+        platform = config.ENV_DATA.get("platform").lower()
+        if platform == constants.VSPHERE_PLATFORM:
+            logger.info("Click on Object Service button")
+            self.do_click(self.dep_loc["object_service_button"])
+            logger.info("Click on Data Resiliency button")
+            self.do_click(self.dep_loc["data_resiliency_button"])
+        strings_object_service_tab = ["Total Reads", "Total Writes", "used"]
+        logger.info(f"verify {strings_object_service_tab} exist on object service tab")
+        for string in strings_object_service_tab:
+            if not self.check_element_text(string):
+                assert f"{string} string not found on object service tab"
+        self.take_screenshot()
+
     def install_ocs_ui(self):
         """
         Install OCS via UI
