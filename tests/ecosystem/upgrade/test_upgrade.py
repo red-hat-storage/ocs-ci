@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.disruptive_operations import worker_node_shutdown, osd_node_reboot
 from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
-from ocs_ci.ocs.ocp import get_ocs_version
+from ocs_ci.ocs.ocp import get_ocs_parsed_version
 from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.helpers.helpers import get_mon_pdb
@@ -95,7 +95,7 @@ def test_check_mon_pdb_post_upgrade():
 
     # The PDB values are considered from OCS 4.5 onwards.
     assert disruptions_allowed == 1, "Mon Disruptions_allowed count not matching"
-    if get_ocs_version() <= "4.6":
+    if get_ocs_parsed_version() <= 4.6:
         assert min_available_mon == 2, "Minimum available mon count is not matching"
     else:
         # This mon pdb change is from 4.7 on wards, please refer bz1935065
