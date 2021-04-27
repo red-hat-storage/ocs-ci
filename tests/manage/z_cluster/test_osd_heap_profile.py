@@ -45,8 +45,9 @@ class TestOSDHeapProfile(ManageTest):
         )
         logging.info(out)
         for string_err in strings_err:
-            if string_err in out.lower():
-                assert f"error on the output command {out}"
+            assert (
+                string_err not in out.lower()
+            ), f"{string_err} on the output command {out}"
 
         time.sleep(10)
 
@@ -54,8 +55,9 @@ class TestOSDHeapProfile(ManageTest):
         out = pod_tool.exec_sh_cmd_on_pod(command=f"ceph tell osd.{osd_id} heap dump")
         logging.info(out)
         for string_err in strings_err:
-            if string_err in out.lower():
-                assert f"error on the output command {out}"
+            assert (
+                string_err not in out.lower()
+            ), f"{string_err} on the output command {out}"
 
         log.info(f"Get osd-{osd_id} pod object")
         for osd_pod in osd_pods:
@@ -65,5 +67,6 @@ class TestOSDHeapProfile(ManageTest):
         log.info(f"Verify osd.{osd_id}.profile log exist on /var/log/ceph/")
         out = osd_pod_profile.exec_cmd_on_pod(command="ls -ltr /var/log/ceph/")
         log.info(out)
-        if f"osd.{osd_id}.profile" not in out:
-            assert f"osd.{osd_id}.profile log does not exist on /var/log/ceph/\n{out}"
+        assert (
+            f"osd.{osd_id}.profile" in out
+        ), f"osd.{osd_id}.profile log does not exist on /var/log/ceph/\n{out}"
