@@ -30,6 +30,7 @@ class TestScaleNamespace(MCGTest):
     """
 
     @skipif_ocs_version("<4.7")
+    @pytest.mark.polarion_id("OCS-2518")
     @pytest.mark.parametrize(
         argnames=["bucketclass_dict"],
         argvalues=[
@@ -53,9 +54,11 @@ class TestScaleNamespace(MCGTest):
     ):
         """
         Test namespace bucket creation using the MCG CRDs.
+        Create 50 namespace resources
+        For each namespace resource, create namespace bucket and start hsbench benchmark
 
         """
-        num_scale_namespace = 10
+        num_scale_namespace = 50
         num_s3_obj = 100000
 
         # Create hs s3 benchmark

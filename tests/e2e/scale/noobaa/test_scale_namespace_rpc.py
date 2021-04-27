@@ -19,7 +19,7 @@ class TestScaleNamespace(MCGTest):
     """
 
     @skipif_ocs_version("<4.6")
-    @pytest.mark.polarion_id("OCS-0000")
+    @pytest.mark.polarion_id("OCS-2516")
     def test_scale_namespace_bucket_creation(self, ns_resource_factory, bucket_factory):
         """
         Test namespace bucket creation using the MCG RPC.
@@ -36,7 +36,7 @@ class TestScaleNamespace(MCGTest):
         )
 
     @skipif_ocs_version("<4.6")
-    @pytest.mark.polarion_id("OCS-0000")
+    @pytest.mark.polarion_id("OCS-2517")
     @vsphere_platform_required
     def test_scale_namespace_bucket_creation_with_rgw(
         self, ns_resource_factory, bucket_factory, rgw_deployments
