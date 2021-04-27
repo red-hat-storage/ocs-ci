@@ -1,6 +1,5 @@
 import logging
 import pytest
-import time
 
 from ocs_ci.framework.testlib import (
     MCGTest,
@@ -57,7 +56,7 @@ class TestScaleNamespace(MCGTest):
 
         """
         num_scale_namespace = 10
-        num_s3_obj = 1000
+        num_s3_obj = 100000
 
         # Create hs s3 benchmark
         s3bench.create_resource_hsbench()
@@ -82,4 +81,3 @@ class TestScaleNamespace(MCGTest):
                 end_point=end_point,
                 run_mode="ipg",
             )
-            time.sleep(60)
