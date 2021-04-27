@@ -70,3 +70,4 @@ class TestOSDHeapProfile(ManageTest):
         assert (
             f"osd.{osd_id}.profile" in out
         ), f"osd.{osd_id}.profile log does not exist on /var/log/ceph/\n{out}"
+        log.info(f"osd.{osd_id}.profile log exist on /var/log/ceph")
