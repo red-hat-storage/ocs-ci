@@ -350,6 +350,12 @@ class TestSmallFileWorkload(PASTest):
         Getting the storage capacity, calculate the usage of the storage and
         setting the workload CR rile parameters.
 
+        Args:
+            file_size (int) : the size of the file to be used
+            files (int) : number of files to use
+            threads (int) : number of threads to be use in the test
+            samples (int) : how meany samples to run for each test
+
         """
         self.crd_data["spec"]["workload"]["args"]["file_size"] = file_size
         self.crd_data["spec"]["workload"]["args"]["files"] = files
@@ -465,6 +471,14 @@ class TestSmallFileWorkload(PASTest):
     def test_smallfile_workload(self, file_size, files, threads, samples, interface):
         """
         Run SmallFile Workload
+
+        Args:
+            file_size (int) : the size of the file to be used
+            files (int) : number of files to use
+            threads (int) : number of threads to be use in the test
+            samples (int) : how meany samples to run for each test
+            interface (str) : the volume type (rbd / cephfs)
+
         """
         # verify that there is an elasticsearch server for the benchmark
         if not self.es:
