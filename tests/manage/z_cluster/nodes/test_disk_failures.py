@@ -1,7 +1,7 @@
 import logging
 import pytest
 import random
-import re
+from semantic_version import Version
 
 from ocs_ci.ocs import node, constants, ocp, cluster
 from ocs_ci.framework import config
@@ -23,17 +23,16 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_node,
     get_operator_pods,
     get_osd_prepare_pods,
-    get_pod_obj,
-    get_pod_logs,
-    get_osd_removal_pod_name,
+    get_osd_pod_id,
+    run_osd_removal_job,
+    verify_osd_removal_job_completed_successfully,
+    delete_osd_removal_job,
 )
-from ocs_ci.ocs.resources.ocs import get_job_obj, OCS
+from ocs_ci.ocs.resources.ocs import get_job_obj
 from ocs_ci.utility.aws import AWSTimeoutException
 from ocs_ci.utility.utils import get_ocp_version
-from ocs_ci.ocs.resources.storage_cluster import (
-    osd_encryption_verification,
-    get_osd_size,
-)
+from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
+
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +255,7 @@ class TestDiskFailures(ManageTest):
             == claim_name
         ][0]
         logger.info(f"OSD_POD {osd_pod.name}")
-        osd_id = osd_pod.get().get("metadata").get("labels").get("ceph-osd-id")
+        osd_id = get_osd_pod_id(osd_pod)
 
         # Get the node that has the OSD pod running on
         logger.info(f"Getting the node that has the OSD pod {osd_pod.name} running on")
@@ -307,37 +306,13 @@ class TestDiskFailures(ManageTest):
             osd_pod.ocp.wait_for_delete(resource_name=osd_pod_name)
 
         # Run ocs-osd-removal job
-        ocp_version = float(get_ocp_version())
-        if ocp_version >= 4.6:
-            cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_id} -o yaml"
-        else:
-            cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_id} -o yaml"
-
-        logger.info(f"Executing OSD removal job on OSD-{osd_id}")
-        ocp_obj = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
-        osd_removal_job_yaml = ocp_obj.exec_oc_cmd(cmd)
-        osd_removal_job = OCS(**osd_removal_job_yaml)
-        osd_removal_job.create(do_reload=False)
-
-        # Get ocs-osd-removal pod name
-        logger.info("Getting the ocs-osd-removal pod name")
-        osd_removal_pod_name = get_osd_removal_pod_name(osd_id)
-        osd_removal_pod_obj = get_pod_obj(
-            osd_removal_pod_name, namespace="openshift-storage"
-        )
-        osd_removal_pod_obj.ocp.wait_for_resource(
-            condition=constants.STATUS_COMPLETED, resource_name=osd_removal_pod_name
-        )
-
-        # Verify OSD removal from the ocs-osd-removal pod logs
-        logger.info(f"Verifying removal of OSD from {osd_removal_pod_name} pod logs")
-        logs = get_pod_logs(osd_removal_pod_name)
-        pattern = f"purged osd.{osd_id}"
-        assert re.search(pattern, logs)
+        run_osd_removal_job(osd_id)
+        verify_osd_removal_job_completed_successfully(osd_id)
 
         osd_pvc_name = osd_pvc.name
+        ocp_version = get_ocp_version()
 
-        if ocp_version < 4.6:
+        if Version.coerce(ocp_version) < Version.coerce("4.6"):
             # Delete the OSD prepare job
             logger.info(f"Deleting OSD prepare job {osd_prepare_job_name}")
             osd_prepare_job.delete()
@@ -359,15 +334,23 @@ class TestDiskFailures(ManageTest):
         else:
             # If ocp version is '4.6' and above the osd removal job should
             # delete the OSD prepare job, OSD PVC, OSD deployment
-            logger.info(f"Verifying deletion of OSD prepare job {osd_prepare_job_name}")
-            osd_prepare_job.ocp.wait_for_delete(
-                resource_name=osd_prepare_job_name, timeout=30
+            # We just need to verify the old PV is in the expected status
+            logger.info(
+                f"Verify that the old PV '{osd_pv_name}' is in the expected status"
             )
-            logger.info(f"Verifying deletion of OSD PVC {osd_pvc_name}")
-            osd_pvc.ocp.wait_for_delete(resource_name=osd_pvc_name, timeout=30)
-            logger.info(f"Verifying deletion of OSD deployment {osd_deployment_name}")
-            osd_deployment.ocp.wait_for_delete(
-                resource_name=osd_deployment_name, timeout=30
+            if cluster.is_lso_cluster():
+                expected_old_pv_statuses = [constants.STATUS_RELEASED]
+            else:
+                expected_old_pv_statuses = [
+                    constants.STATUS_RELEASED,
+                    constants.STATUS_FAILED,
+                ]
+
+            assert (
+                osd_pv.ocp.get_resource_status(osd_pv_name) in expected_old_pv_statuses
+            ), logger.warning(
+                f"The old PV '{osd_pv_name}' is not in "
+                f"the expected statuses: {expected_old_pv_statuses}"
             )
 
         # Delete PV
@@ -380,11 +363,9 @@ class TestDiskFailures(ManageTest):
 
         # If we use LSO, we need to create and attach a new disk manually
         if cluster.is_lso_cluster():
-            osd_size = get_osd_size()
-            logger.info(f"Create a new disk with size {osd_size}")
-            nodes.create_and_attach_volume(node=osd_node, size=osd_size)
+            node.add_disk_to_node(osd_node)
 
-        if ocp_version < 4.6:
+        if Version.coerce(ocp_version) < Version.coerce("4.6"):
             # Delete the rook ceph operator pod to trigger reconciliation
             rook_operator_pod = get_operator_pods()[0]
             logger.info(f"deleting Rook Ceph operator pod {rook_operator_pod.name}")
@@ -392,9 +373,7 @@ class TestDiskFailures(ManageTest):
 
         # Delete the OSD removal job
         logger.info(f"Deleting OSD removal job ocs-osd-removal-{osd_id}")
-        osd_removal_job = get_job_obj(f"ocs-osd-removal-{osd_id}")
-        osd_removal_job.delete()
-        osd_removal_job.ocp.wait_for_delete(resource_name=f"ocs-osd-removal-{osd_id}")
+        delete_osd_removal_job(osd_id)
 
         timeout = 600
         # Wait for OSD PVC to get created and reach Bound state
@@ -424,7 +403,7 @@ class TestDiskFailures(ManageTest):
 
         # We need to silence the old osd crash warning due to BZ https://bugzilla.redhat.com/show_bug.cgi?id=1896810
         # This is a workaround - issue for tracking: https://github.com/red-hat-storage/ocs-ci/issues/3438
-        if ocp_version >= 4.6:
+        if Version.coerce(ocp_version) >= Version.coerce("4.6"):
             silence_osd_crash = cluster.wait_for_silence_ceph_osd_crash_warning(
                 osd_pod_name
             )
