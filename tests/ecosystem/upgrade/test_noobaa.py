@@ -57,14 +57,14 @@ def test_fill_bucket(
         )
 
     mcg_obj_session.check_if_mirroring_is_done(bucket.name, timeout=420)
-    assert bucket.verify_health()
+    bucket.verify_health()
 
     # Retrieve all objects from MCG bucket to result dir in Pod
     sync_object_directory(
         awscli_pod_session, mcg_bucket_path, LOCAL_TEMP_PATH, mcg_obj_session
     )
 
-    assert bucket.verify_health()
+    bucket.verify_health()
 
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
@@ -74,7 +74,7 @@ def test_fill_bucket(
                 result_object_path=f"{LOCAL_TEMP_PATH}/{i}/{obj}",
                 awscli_pod=awscli_pod_session,
             ), "Checksum comparison between original and result object failed"
-    assert bucket.verify_health()
+    bucket.verify_health()
 
 
 @skipif_aws_creds_are_missing
@@ -101,7 +101,7 @@ def test_noobaa_postupgrade(
             awscli_pod=awscli_pod_session,
         ), "Checksum comparision between original and result object failed"
 
-    assert bucket.verify_health()
+    bucket.verify_health()
 
     # Clean up the temp dir
     awscli_pod_session.exec_cmd_on_pod(command=f'sh -c "rm -rf {LOCAL_TEMP_PATH}/*"')
@@ -113,14 +113,14 @@ def test_noobaa_postupgrade(
         "backing-store-" + backingstore2.name, BS_OPTIMAL, timeout=360
     )
 
-    assert bucket.verify_health()
+    bucket.verify_health()
 
     # Verify integrity of A
     # Retrieve all objects from MCG bucket to result dir in Pod
     sync_object_directory(
         awscli_pod_session, mcg_bucket_path, LOCAL_TEMP_PATH, mcg_obj_session
     )
-    assert bucket.verify_health()
+    bucket.verify_health()
 
 
 @aws_platform_required
