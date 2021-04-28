@@ -1,11 +1,13 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from itertools import cycle
+
 import pytest
 from functools import partial
 
 from ocs_ci.framework.testlib import ManageTest, tier4, tier4b
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods,
@@ -106,6 +108,9 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         pod_objs = []
         rwx_pod_objs = []
 
+        nodes = node.get_worker_nodes()
+        nodes_iter = cycle(nodes) if nodes else None
+
         # Create one pod using each RWO PVC and two pods using each RWX PVC
         for pvc_obj in pvc_objs:
             pvc_info = pvc_obj.get()
@@ -120,6 +125,7 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
                     interface=interface,
                     pvc=pvc_obj,
                     status="",
+                    node_name=next(nodes_iter),
                     pod_dict_path=pod_dict,
                     raw_block_pv=raw_block_pv,
                 )
@@ -128,6 +134,7 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
                 interface=interface,
                 pvc=pvc_obj,
                 status="",
+                node_name=next(nodes_iter),
                 pod_dict_path=pod_dict,
                 raw_block_pv=raw_block_pv,
             )
