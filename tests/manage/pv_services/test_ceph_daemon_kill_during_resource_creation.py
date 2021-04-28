@@ -210,7 +210,12 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
 
         # Start creating pods
         bulk_pod_create = executor.submit(
-            helpers.create_pods, pvc_objs, pod_factory, interface, 2, nodes=node.get_worker_nodes()
+            helpers.create_pods,
+            pvc_objs,
+            pod_factory,
+            interface,
+            2,
+            nodes=node.get_worker_nodes(),
         )
 
         if operation_to_disrupt == "create_pod":
