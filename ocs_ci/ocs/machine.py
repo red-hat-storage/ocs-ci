@@ -182,7 +182,7 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
 
 def create_custom_machineset(
     role="app",
-    instance_type="m4.xlarge",
+    instance_type=None,
     labels=None,
     taints=None,
     zone="a",
@@ -194,8 +194,8 @@ def create_custom_machineset(
 
     Args:
         role (str): Role type to be added for node eg: it will be app,worker
-        instance_type (str): Type of aws instance
-        label (list): List of Labels (key, val) to be added to the node
+        instance_type (str): Type of instance
+        labels (list): List of Labels (key, val) to be added to the node
         taints (list): List of taints to be applied
         zone (str): Machineset zone for node creation.
 
@@ -207,12 +207,14 @@ def create_custom_machineset(
         UnsupportedPlatformError: Incase of wrong platform
 
     """
-    # check for platform, since it's supported only for IPI
-    if config.ENV_DATA["deployment_type"] == "ipi":
+    # check for aws and IPI platform
+    if config.ENV_DATA["platform"] == "aws":
         machinesets_obj = OCP(
             kind=constants.MACHINESETS,
             namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
         )
+        m4_xlarge = "m4.xlarge"
+        aws_instance = instance_type if instance_type else m4_xlarge
         for machine in machinesets_obj.get()["items"]:
             # Get inputs from existing machineset config.
             region = (
@@ -282,7 +284,7 @@ def create_custom_machineset(
                 ]["id"] = f"{cls_id}-worker-profile"
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "instanceType"
-                ] = instance_type
+                ] = aws_instance
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "placement"
                 ]["availabilityZone"] = aws_zone
@@ -330,8 +332,121 @@ def create_custom_machineset(
                     return f"{cls_id}-{role}-{aws_zone}"
                 else:
                     raise ResourceNotFoundError("Machineset resource not found")
+
+    # check for azure and IPI platform
+    elif config.ENV_DATA["platform"] == "azure":
+        machinesets_obj = OCP(
+            kind=constants.MACHINESETS,
+            namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
+        )
+        vmsize = constants.AZURE_PRODUCTION_INSTANCE_TYPE
+        azure_instance = instance_type if instance_type else vmsize
+        for machine in machinesets_obj.get()["items"]:
+            # Get inputs from existing machineset config.
+            region = (
+                machine.get("spec")
+                .get("template")
+                .get("spec")
+                .get("providerSpec")
+                .get("value")
+                .get("location")
+            )
+            azure_zone = (
+                machine.get("spec")
+                .get("template")
+                .get("spec")
+                .get("providerSpec")
+                .get("value")
+                .get("zone")
+            )
+            cls_id = (
+                machine.get("spec")
+                .get("selector")
+                .get("matchLabels")
+                .get("machine.openshift.io/cluster-api-cluster")
+            )
+            if azure_zone == zone:
+                az_zone = f"{region}{zone}"
+                machineset_yaml = templating.load_yaml(constants.MACHINESET_YAML_AZURE)
+
+                # Update machineset_yaml with required values.
+                machineset_yaml["metadata"]["labels"][
+                    "machine.openshift.io/cluster-api-cluster"
+                ] = cls_id
+                machineset_yaml["metadata"]["name"] = f"{cls_id}-{role}-{az_zone}"
+                machineset_yaml["spec"]["selector"]["matchLabels"][
+                    "machine.openshift.io/cluster-api-cluster"
+                ] = cls_id
+                machineset_yaml["spec"]["selector"]["matchLabels"][
+                    "machine.openshift.io/cluster-api-machineset"
+                ] = f"{cls_id}-{role}-{az_zone}"
+                machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                    "machine.openshift.io/cluster-api-cluster"
+                ] = cls_id
+                machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                    "machine.openshift.io/cluster-api-machine-role"
+                ] = role
+                machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                    "machine.openshift.io/cluster-api-machine-type"
+                ] = role
+                machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                    "machine.openshift.io/cluster-api-machineset"
+                ] = f"{cls_id}-{role}-{az_zone}"
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "image"
+                ][
+                    "resourceID"
+                ] = f"/resourceGroups/{cls_id}-rg/providers/Microsoft.Compute/images/{cls_id}"
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "location"
+                ] = region
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "managedIdentity"
+                ] = f"{cls_id}-identity"
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "resourceGroup"
+                ] = f"{cls_id}-rg"
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "subnet"
+                ] = f"{cls_id}-worker-subnet"
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "vmSize"
+                ] = azure_instance
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "vnet"
+                ] = f"{cls_id}-vnet"
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "zone"
+                ] = zone
+
+                # Apply the labels
+                if labels:
+                    for label in labels:
+                        machineset_yaml["spec"]["template"]["spec"]["metadata"][
+                            "labels"
+                        ][label[0]] = label[1]
+                    # Remove app label in case of infra nodes
+                    if role == "infra":
+                        machineset_yaml["spec"]["template"]["spec"]["metadata"][
+                            "labels"
+                        ].pop(constants.APP_LABEL, None)
+
+                if taints:
+                    machineset_yaml["spec"]["template"]["spec"].update(
+                        {"taints": taints}
+                    )
+
+                # Create new custom machineset
+                ms_obj = OCS(**machineset_yaml)
+                ms_obj.create()
+                if check_machineset_exists(f"{cls_id}-{role}-{az_zone}"):
+                    logging.info(f"Machineset {cls_id}-{role}-{az_zone} created")
+                    return f"{cls_id}-{role}-{az_zone}"
+                else:
+                    raise ResourceNotFoundError("Machineset resource not found")
+
     else:
-        raise UnsupportedPlatformError("Functionality not supported in UPI")
+        raise UnsupportedPlatformError("Functionality not supported in this platform")
 
 
 def create_ocs_infra_nodes(num_nodes):
