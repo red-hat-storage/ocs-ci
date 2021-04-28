@@ -293,7 +293,9 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
             pod_obj.ocp.wait_for_delete(pod_obj.name)
 
         # Verify that PVCs are reusable by creating new pods
-        pod_objs = helpers.create_pods(pvc_objs, pod_factory, interface, 2)
+        pod_objs = helpers.create_pods(
+            pvc_objs, pod_factory, interface, 2, nodes=node.get_worker_nodes()
+        )
 
         # Verify new pods are Running
         for pod_obj in pod_objs:
