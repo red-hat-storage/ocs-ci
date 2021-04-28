@@ -5,7 +5,7 @@ from functools import partial
 
 from ocs_ci.framework.testlib import ManageTest, tier4, tier4b
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
@@ -210,7 +210,7 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
 
         # Start creating pods
         bulk_pod_create = executor.submit(
-            helpers.create_pods, pvc_objs, pod_factory, interface, 2
+            helpers.create_pods, pvc_objs, pod_factory, interface, 2, nodes=node.get_worker_nodes()
         )
 
         if operation_to_disrupt == "create_pod":
