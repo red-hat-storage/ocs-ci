@@ -1,19 +1,20 @@
 import logging
 import pytest
 
+from ocs_ci.framework.testlib import ManageTest, tier4a, vsphere_platform_required
+from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.ocs.bucket_utils import s3_put_object, s3_get_object
+from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.resources.pod import (
     get_rgw_pods,
     get_pod_node,
     get_noobaa_pods,
     wait_for_storage_pods,
 )
-from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.framework.testlib import ManageTest, tier4a, vsphere_platform_required
-from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.helpers.helpers import wait_for_resource_state
-from ocs_ci.ocs.node import get_node_objs
-from ocs_ci.ocs.bucket_utils import s3_put_object, s3_get_object
+from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
 
@@ -98,17 +99,24 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
                     selector=constants.RGW_APP_LABEL,
                 )
 
-                # Create OBC and read wnd write
-                self.create_obc_creation(bucket_factory, mcg_obj, "Object-key-1")
-
                 # Start the node
                 nodes.start_nodes(node_obj)
+
+                # Check the ceph health OK
+                ceph_health_check(tries=90, delay=15)
+
+                # Verify all storage pods are running
+                wait_for_storage_pods()
 
                 # Create OBC and read wnd write
                 self.create_obc_creation(bucket_factory, mcg_obj, "Object-key-2")
 
+            else:
+                pytest.skip(
+                    "RGW pod and NooBaa DB are not hosted on same node. "
+                    f"RGW pod hosted on node: {pod_node} "
+                    f"NooBaa DB pod hosted on node: {noobaa_pod_node.name}"
+                )
+
         # Verify cluster health
         self.sanity_helpers.health_check()
-
-        # Verify all storage pods are running
-        wait_for_storage_pods()
