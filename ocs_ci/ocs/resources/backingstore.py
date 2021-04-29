@@ -69,7 +69,7 @@ class BackingStore:
                 log.error(
                     f"Could not find the OCP object for {self.name}, proceeding without removal"
                 )
-                return
+                return True
             pv_name = backingstore_pvc["spec"]["volumeName"]
 
         if self.method == "oc":
