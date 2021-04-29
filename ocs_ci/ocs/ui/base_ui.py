@@ -31,7 +31,8 @@ class BaseUI:
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
             f"screenshots_ui_{ocsci_config.RUN['run_id']}",
         )
-        os.mkdir(self.screenshots_folder)
+        if not os.path.isdir(self.screenshots_folder):
+            os.mkdir(self.screenshots_folder)
         logger.info(f"screenshots pictures:{self.screenshots_folder}")
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             self.storage_class = "thin_sc"
