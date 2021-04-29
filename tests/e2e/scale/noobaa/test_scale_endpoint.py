@@ -99,8 +99,8 @@ class TestScaleEndpointAutoScale(MCGTest):
 
         # Delete mcg_job_factory
         for i in range(10):
-            f"job{i}".delete()
-            f"job{i}".ocp.wait_for_delete(resource_name=f"job{i}".name, timeout=60)
+            exec(f"job{i}.delete()")
+            exec(f"job{i}.ocp.wait_for_delete(resource_name=job{i}.name, timeout=60)")
 
         # Validate autoscale endpoint count
         self._assert_endpoint_count(desired_count=1)
