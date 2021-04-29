@@ -49,6 +49,7 @@ class TestOSDHeapProfile(ManageTest):
                 string_err not in out.lower()
             ), f"{string_err} on the output command {out}"
 
+        logging.info("Sleep 10 sec, for running heap profiler")
         time.sleep(10)
 
         log.info("Dump heap profile")
