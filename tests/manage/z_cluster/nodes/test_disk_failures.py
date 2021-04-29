@@ -306,8 +306,11 @@ class TestDiskFailures(ManageTest):
             osd_pod.ocp.wait_for_delete(resource_name=osd_pod_name)
 
         # Run ocs-osd-removal job
-        run_osd_removal_job(osd_id)
-        verify_osd_removal_job_completed_successfully(osd_id)
+        osd_removal_job = run_osd_removal_job(osd_id)
+        assert osd_removal_job, "ocs-osd-removal failed to create"
+        is_completed = verify_osd_removal_job_completed_successfully(osd_id)
+        assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
+        logger.info("ocs-osd-removal-job completed successfully")
 
         osd_pvc_name = osd_pvc.name
         ocp_version = get_ocp_version()
@@ -373,7 +376,9 @@ class TestDiskFailures(ManageTest):
 
         # Delete the OSD removal job
         logger.info(f"Deleting OSD removal job ocs-osd-removal-{osd_id}")
-        delete_osd_removal_job(osd_id)
+        is_deleted = delete_osd_removal_job(osd_id)
+        assert is_deleted, "Failed to delete ocs-osd-removal-job"
+        logger.info("ocs-osd-removal-job deleted successfully")
 
         timeout = 600
         # Wait for OSD PVC to get created and reach Bound state
