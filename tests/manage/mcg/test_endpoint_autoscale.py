@@ -52,6 +52,7 @@ class TestEndpointAutoScale(MCGTest):
         }
         for i in range(10):
             exec(f"job{i} = mcg_job_factory(custom_options={options})")
+        self._assert_endpoint_count(2)
 
         for i in range(10):
             exec(f"job{i}.delete()")
