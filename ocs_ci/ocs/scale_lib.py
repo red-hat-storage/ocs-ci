@@ -233,6 +233,9 @@ class FioPodScale(object):
             if (
                 config.ENV_DATA["deployment_type"] == "ipi"
                 and config.ENV_DATA["platform"].lower() == "aws"
+            ) or (
+                config.ENV_DATA["deployment_type"] == "ipi"
+                and config.ENV_DATA["platform"].lower() == "azure"
             ):
                 for obj in machine.get_machineset_objs():
                     if "app" in obj.name:
