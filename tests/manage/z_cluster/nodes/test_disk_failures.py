@@ -416,7 +416,7 @@ class TestDiskFailures(ManageTest):
                 logger.info("Didn't find ceph osd crash warning")
 
         # Validate cluster is still functional
-        self.sanity_helpers.health_check(tries=100)
+        self.sanity_helpers.health_check(tries=120)
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
