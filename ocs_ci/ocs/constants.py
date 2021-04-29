@@ -538,6 +538,9 @@ FIO_S3 = os.path.join(TEMPLATE_FIO_DIR, "config_s3.fio")
 # Openshift infra yamls:
 RSYNC_POD_YAML = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "rsync-pod.yaml")
 MACHINESET_YAML = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "machine-set.yaml")
+MACHINESET_YAML_AZURE = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-azure.yaml"
+)
 PODS_PER_NODE_COUNT_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "max-pods-per-node.yaml"
 )
@@ -1138,6 +1141,10 @@ SCALE_WORKER_DICT = {
     9000: {"aws": 6, "vmware": 6, "bm": 4, "azure": 6},
 }
 SCALE_MAX_PVCS_PER_NODE = 500
+
+# Production config instance type
+AWS_PRODUCTION_INSTANCE_TYPE = "m5.4xlarge"
+AZURE_PRODUCTION_INSTANCE_TYPE = "Standard_D16s_v3"
 
 # Elasticsearch and codespeed constants
 ES_SERVER_IP = "10.0.78.167"
