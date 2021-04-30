@@ -216,20 +216,19 @@ class TestPVCDisruption(ManageTest):
         # Get number of pods of type 'resource_to_delete'
         num_of_resource_to_delete = len(pod_functions[resource_to_delete]())
 
-        num_of_pvc = 12
         namespace = self.proj_obj.namespace
 
         # Fetch the number of Pods and PVCs
         initial_num_of_pods = len(pod.get_all_pods(namespace=namespace))
         initial_num_of_pvc = len(get_all_pvcs(namespace=namespace)["items"])
 
-        executor = ThreadPoolExecutor(max_workers=(2 * num_of_pvc))
-
         DISRUPTION_OPS.set_resource(resource=resource_to_delete)
 
         access_modes = [constants.ACCESS_MODE_RWO]
         if interface == constants.CEPHFILESYSTEM:
             access_modes.append(constants.ACCESS_MODE_RWX)
+            num_of_pvc = 8
+            access_mode_dist_ratio = [6, 2]
 
         # Modify access_modes list to create rbd `block` type volume with
         # RWX access mode. RWX is not supported in non-block type rbd
@@ -240,6 +239,10 @@ class TestPVCDisruption(ManageTest):
                     f"{constants.ACCESS_MODE_RWX}-Block",
                 ]
             )
+            num_of_pvc = 9
+            access_mode_dist_ratio = [4, 3, 2]
+
+        executor = ThreadPoolExecutor(max_workers=(2 * num_of_pvc))
 
         # Start creation of PVCs
         bulk_pvc_create = executor.submit(
@@ -249,6 +252,7 @@ class TestPVCDisruption(ManageTest):
             size=5,
             access_modes=access_modes,
             access_modes_selection="distribute_random",
+            access_mode_dist_ratio=access_mode_dist_ratio,
             status=constants.STATUS_BOUND,
             num_of_pvc=num_of_pvc,
             wait_each=False,
