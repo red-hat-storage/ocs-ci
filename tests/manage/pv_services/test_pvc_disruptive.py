@@ -5,7 +5,7 @@ from functools import partial
 
 from ocs_ci.framework.testlib import ManageTest, tier4, tier4a, ignore_leftover_label
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
@@ -280,7 +280,12 @@ class TestPVCDisruption(ManageTest):
 
         # Start creating pods
         bulk_pod_create = executor.submit(
-            helpers.create_pods, pvc_objs, pod_factory, interface, 2
+            helpers.create_pods,
+            pvc_objs,
+            pod_factory,
+            interface,
+            2,
+            nodes=node.get_worker_nodes(),
         )
 
         if operation_to_disrupt == "create_pod":
@@ -357,7 +362,13 @@ class TestPVCDisruption(ManageTest):
             pod_obj.ocp.wait_for_delete(pod_obj.name)
 
         # Verify that PVCs are reusable by creating new pods
-        pod_objs = helpers.create_pods(pvc_objs, pod_factory, interface, 2)
+        pod_objs = helpers.create_pods(
+            pvc_objs,
+            pod_factory,
+            interface,
+            2,
+            nodes=node.get_worker_nodes(),
+        )
 
         # Verify new pods are Running
         for pod_obj in pod_objs:
