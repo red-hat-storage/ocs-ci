@@ -281,6 +281,8 @@ class FioPodScale(object):
             f"Created {int((actual_itr_counter * (max_pvc_count+10))/20)} PODs"
         )
 
+        return self.kube_job_pod_list, self.kube_job_pvc_list
+
     def pvc_expansion(self, pvc_new_size):
         """
         Function to expand PVC size and verify the new size is reflected.
