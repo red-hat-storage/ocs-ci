@@ -7,6 +7,8 @@ networking:
     - cidr: {{ cluster_network_cidr | default('10.128.0.0/14') }}
       hostPrefix: {{ cluster_host_prefix | default(23) }}
   machineCIDR: '{{ machine_cidr }}'
+  serviceNetwork:
+    - {{ service_network_cidr | default('172.30.0.0/16') }}
 {% if fips %}
 fips: {{ fips }}
 {% endif %}
