@@ -9,7 +9,7 @@ from subprocess import TimeoutExpired
 from ocs_ci.ocs.machine import get_machine_objs
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, NotAllNodesCreated
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
@@ -21,6 +21,7 @@ from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
     verify_new_pv_available_in_sc,
     delete_released_pvs_in_sc,
+    get_pv_size,
 )
 
 
@@ -973,9 +974,6 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
         str: The new node name
 
     """
-    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
-    from ocs_ci.ocs.resources.storage_cluster import get_osd_size
-
     sc_name = constants.LOCAL_BLOCK_RESOURCE
     old_pv_objs = get_pv_objs_in_sc(sc_name)
 
@@ -998,13 +996,7 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
 
     # If we use LSO, we need to create and attach a new disk manually
     new_node = get_node_objs(node_names=[new_node_name])[0]
-    plt = PlatformNodesFactory()
-    node_util = plt.get_nodes_platform()
-    osd_size = get_osd_size()
-    log.info(
-        f"Create a new disk with size {osd_size}, and attach to node {new_node_name}"
-    )
-    node_util.create_and_attach_volume(node=new_node, size=osd_size)
+    add_disk_to_node(new_node)
 
     new_node_hostname_label = get_node_hostname_label(new_node)
     log.info(
@@ -1027,11 +1019,13 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
     log.info("ocs-osd-removal-job completed successfully")
 
-    expected_num_of_deleted_pvs = 1
+    expected_num_of_deleted_pvs = [0, 1]
     num_of_deleted_pvs = delete_released_pvs_in_sc(sc_name)
-    assert (
-        num_of_deleted_pvs == expected_num_of_deleted_pvs
-    ), f"num of deleted PVs is {num_of_deleted_pvs} instead of {expected_num_of_deleted_pvs}"
+    assert num_of_deleted_pvs in expected_num_of_deleted_pvs, (
+        f"num of deleted PVs is {num_of_deleted_pvs} "
+        f"instead of the expected values {expected_num_of_deleted_pvs}"
+    )
+    log.info(f"num of deleted PVs is {num_of_deleted_pvs}")
     log.info("Successfully deleted old pv")
 
     is_deleted = pod.delete_osd_removal_job(osd_id)
@@ -1193,8 +1187,7 @@ def node_replacement_verification_steps_ceph_side(
     wait_for_nodes_status([new_node_name, new_osd_node_name])
     # It can take some time until all the ocs pods are up and running
     # after the process of node replacement
-    if not pod.wait_for_pods_to_be_running():
-        log.warning("Not all the pods in running state")
+    if not pod.check_pods_after_node_replacement():
         return False
 
     ct_pod = pod.get_ceph_tools_pod()
@@ -1442,7 +1435,7 @@ def get_node_hostname_label(node_obj):
     return node_obj.get().get("metadata").get("labels").get(constants.HOSTNAME_LABEL)
 
 
-def wait_for_new_osd_node(old_osd_node_names, timeout=180):
+def wait_for_new_osd_node(old_osd_node_names, timeout=600):
     """
     Wait for the new osd node to appear.
 
@@ -1457,7 +1450,7 @@ def wait_for_new_osd_node(old_osd_node_names, timeout=180):
     """
     try:
         for current_osd_node_names in TimeoutSampler(
-            timeout=timeout, sleep=10, func=get_osd_running_nodes
+            timeout=timeout, sleep=30, func=get_osd_running_nodes
         ):
             new_osd_node_names = [
                 node_name
@@ -1471,3 +1464,45 @@ def wait_for_new_osd_node(old_osd_node_names, timeout=180):
     except TimeoutExpiredError:
         log.warning(f"New osd node didn't appear after {timeout} seconds")
         return None
+
+
+def add_disk_to_node(node_obj, disk_size=None):
+    """
+    Add a new disk to a node
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+        disk_size (int): The size of the new disk to attach. If not specified,
+            the disk size will be equal to the size of the previous disk.
+
+    """
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
+
+    if not disk_size:
+        pv_objs = get_pv_objs_in_sc(sc_name=constants.LOCAL_BLOCK_RESOURCE)
+        disk_size = get_pv_size(pv_objs[-1])
+
+    node_util.create_and_attach_volume(node=node_obj, size=disk_size)
+
+
+def verify_all_nodes_created():
+    """
+    Verify all nodes are created or not
+
+    Raises:
+        NotAllNodesCreated: In case all nodes are not created
+
+    """
+    expected_num_nodes = (
+        config.ENV_DATA["worker_replicas"]
+        + config.ENV_DATA["master_replicas"]
+        + config.ENV_DATA.get("infra_replicas", 0)
+    )
+    existing_num_nodes = len(get_all_nodes())
+    if expected_num_nodes != existing_num_nodes:
+        raise NotAllNodesCreated(
+            f"Expected number of nodes is {expected_num_nodes} but created during deployment is {existing_num_nodes}"
+        )

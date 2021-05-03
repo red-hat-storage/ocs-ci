@@ -12,6 +12,7 @@ import time
 import calendar
 from threading import Thread
 import base64
+from semantic_version import Version
 
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.ocp import OCP, verify_images_upgraded
@@ -1613,13 +1614,16 @@ def get_running_state_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     return running_pods_object
 
 
-def wait_for_pods_to_be_running(timeout=200, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def wait_for_pods_to_be_running(
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE, timeout=200, sleep=10
+):
     """
     Wait for all the pods in a specific namespace to be running.
 
     Args:
-        timeout (int): time to wait for pods to be running
         namespace (str): the namespace ot the pods
+        timeout (int): time to wait for pods to be running
+        sleep (int): Time in seconds to sleep between attempts
 
     Returns:
          bool: True, if all pods in Running state. False, otherwise
@@ -1628,7 +1632,7 @@ def wait_for_pods_to_be_running(timeout=200, namespace=defaults.ROOK_CLUSTER_NAM
     try:
         for pods_running in TimeoutSampler(
             timeout=timeout,
-            sleep=10,
+            sleep=sleep,
             func=check_pods_in_running_state,
             namespace=namespace,
         ):
@@ -1672,12 +1676,21 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
         str: The osd removal pod name
 
     """
+    ocp_version = get_ocp_version()
+    ocs_version = config.ENV_DATA["ocs_version"]
+    if Version.coerce(ocp_version) >= Version.coerce("4.6") and Version.coerce(
+        ocs_version
+    ) >= Version.coerce("4.7"):
+        pattern = "ocs-osd-removal-job"
+    else:
+        pattern = f"ocs-osd-removal-{osd_id}"
+
     try:
         for osd_removal_pod_names in TimeoutSampler(
             timeout=timeout,
             sleep=5,
             func=get_pod_name_by_pattern,
-            pattern=f"ocs-osd-removal-{osd_id}",
+            pattern=pattern,
         ):
             if osd_removal_pod_names:
                 osd_removal_pod_name = osd_removal_pod_names[0]
@@ -1685,7 +1698,7 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
                 return osd_removal_pod_name
 
     except TimeoutExpiredError:
-        logger.warning(f"Failed to get pod ocs-osd-removal-{osd_id}")
+        logger.warning(f"Failed to get pod by the pattern {pattern}")
         return None
 
 
@@ -1729,8 +1742,8 @@ def run_osd_removal_job(osd_id):
         ocs_ci.ocs.resources.ocs.OCS: The ocs-osd-removal job object
 
     """
-    ocp_version = float(get_ocp_version())
-    if ocp_version >= 4.6:
+    ocp_version = get_ocp_version()
+    if Version.coerce(ocp_version) >= Version.coerce("4.6"):
         cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_id} -o yaml"
     else:
         cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_id} -o yaml"
@@ -1738,6 +1751,8 @@ def run_osd_removal_job(osd_id):
     logger.info(f"Executing OSD removal job on OSD-{osd_id}")
     ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     osd_removal_job_yaml = ocp_obj.exec_oc_cmd(cmd)
+    # Add the namespace param, so that the ocs-osd-removal job will be created in the correct namespace
+    osd_removal_job_yaml["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
     osd_removal_job = OCS(**osd_removal_job_yaml)
     osd_removal_job.create(do_reload=False)
 
@@ -1760,12 +1775,51 @@ def verify_osd_removal_job_completed_successfully(osd_id):
     osd_removal_pod_obj = get_pod_obj(
         osd_removal_pod_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
-    is_completed = osd_removal_pod_obj.ocp.wait_for_resource(
-        condition=constants.STATUS_COMPLETED, resource_name=osd_removal_pod_name
-    )
-    if not is_completed:
-        logger.info("ocs-osd-removal pod job failed to complete")
-        return False
+
+    timeout = 300
+    try:
+        is_completed = osd_removal_pod_obj.ocp.wait_for_resource(
+            condition=constants.STATUS_COMPLETED,
+            resource_name=osd_removal_pod_name,
+            sleep=20,
+            timeout=timeout,
+        )
+    # Don't failed the test yet if the ocs-osd-removal pod job is not completed
+    except TimeoutExpiredError:
+        is_completed = False
+
+    ocp_pod_obj = OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    osd_removal_pod_status = ocp_pod_obj.get_resource_status(osd_removal_pod_name)
+
+    # Check if 'osd_removal_pod' is in status 'completed'
+    if not is_completed and osd_removal_pod_status != constants.STATUS_COMPLETED:
+        if osd_removal_pod_status != constants.STATUS_RUNNING:
+            logger.info(
+                f"ocs-osd-removal pod job did not reach status '{constants.STATUS_COMPLETED}' "
+                f"or '{constants.STATUS_RUNNING}' after {timeout} seconds"
+            )
+            return False
+        else:
+            logger.info(
+                f"ocs-osd-removal pod job reached status '{constants.STATUS_RUNNING}',"
+                f" but we were waiting for status '{constants.STATUS_COMPLETED}' "
+            )
+
+            new_timeout = 900
+            logger.info(
+                f"Wait more {new_timeout} seconds for ocs-osd-removal pod job to be completed"
+            )
+            is_completed = osd_removal_pod_obj.ocp.wait_for_resource(
+                condition=constants.STATUS_COMPLETED,
+                resource_name=osd_removal_pod_name,
+                sleep=30,
+                timeout=new_timeout,
+            )
+            if not is_completed:
+                logger.info(
+                    f"ocs-osd-removal pod job did not complete after {new_timeout} seconds"
+                )
+                return False
 
     # Verify OSD removal from the ocs-osd-removal pod logs
     logger.info(f"Verifying removal of OSD from {osd_removal_pod_name} pod logs")
@@ -1791,14 +1845,21 @@ def delete_osd_removal_job(osd_id):
         bool: True, if the ocs-osd-removal job deleted successfully. False, otherwise
 
     """
-    osd_removal_job = get_job_obj(
-        f"ocs-osd-removal-{osd_id}", namespace=defaults.ROOK_CLUSTER_NAMESPACE
-    )
+    ocp_version = get_ocp_version()
+    ocs_version = config.ENV_DATA["ocs_version"]
+    if Version.coerce(ocp_version) >= Version.coerce("4.6") and Version.coerce(
+        ocs_version
+    ) >= Version.coerce("4.7"):
+        job_name = "ocs-osd-removal-job"
+    else:
+        job_name = f"ocs-osd-removal-{osd_id}"
+
+    osd_removal_job = get_job_obj(job_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     osd_removal_job.delete()
     try:
-        osd_removal_job.ocp.wait_for_delete(resource_name=f"ocs-osd-removal-{osd_id}")
+        osd_removal_job.ocp.wait_for_delete(resource_name=job_name)
     except TimeoutError:
-        logger.warning(f"ocs-osd-removal-{osd_id} job did not deleted successfully")
+        logger.warning(f"{job_name} job did not get deleted successfully")
         return False
 
     return True
@@ -1830,3 +1891,95 @@ def get_osd_pod_id(osd_pod):
 
     """
     return osd_pod.get().get("metadata").get("labels").get("ceph-osd-id")
+
+
+def get_pods_in_statuses(status_options, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Get all the pods in specific statuses
+
+    Args:
+        status_options (list): The list of the status options.
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list: All the pods that their status in the 'status_options' list.
+
+    """
+    pods = get_all_pods(namespace)
+    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    pods_in_status_options = list()
+    for p in pods:
+        pod_status = ocp_pod_obj.get_resource_status(p.name)
+        if pod_status in status_options:
+            pods_in_status_options.append(p)
+
+    return pods_in_status_options
+
+
+def get_pod_ceph_daemon_type(pod_obj):
+    """
+    Get the ceph daemon type of the pod object
+
+    Args:
+        pod_obj (Pod): the pod object
+
+    Returns:
+        str: The pod's ceph daemon type
+
+    """
+    return pod_obj.get_labels().get("ceph_daemon_type")
+
+
+def check_pods_after_node_replacement():
+    """
+    Check the pods status after the node replacement process.
+
+    Returns:
+        bool: True if all the pods are running after a specific time. False otherwise.
+
+    """
+    are_pods_running = wait_for_pods_to_be_running(timeout=180)
+    if are_pods_running:
+        return True
+
+    not_ready_statuses = [
+        constants.STATUS_ERROR,
+        constants.STATUS_PENDING,
+        constants.STATUS_CLBO,
+        constants.STATUS_TERMINATING,
+    ]
+
+    pods_not_ready = get_pods_in_statuses(status_options=not_ready_statuses)
+    if len(pods_not_ready) == 0:
+        logger.info("All the pods are running")
+        return True
+
+    if len(pods_not_ready) > 1:
+        logger.warning("More than one pod is not running")
+        return False
+
+    # if len(pods_not_ready) == 1
+    pod_not_ready = pods_not_ready[0]
+    pod_daemon_type = get_pod_ceph_daemon_type(pod_not_ready)
+    if pod_daemon_type == constants.MON_DAEMON:
+        logger.info(
+            f"One of the '{pod_daemon_type}' pods is not running, "
+            f"but all the other pods are running"
+        )
+        timeout = 1500
+        logger.info(
+            f"waiting another {timeout} seconds for all the pods to be running..."
+        )
+        are_pods_running = wait_for_pods_to_be_running(timeout=timeout, sleep=30)
+        if are_pods_running:
+            logger.info("All the pods are running")
+            return True
+        else:
+            logger.warning(
+                f"Not all the pods are in a running state after {timeout} seconds"
+            )
+            return False
+
+    else:
+        logger.warning(f"One of the '{pod_daemon_type}' pods is not running")
+        return False

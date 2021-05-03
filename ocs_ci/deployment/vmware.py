@@ -50,10 +50,10 @@ from ocs_ci.utility.utils import (
     get_ocp_version,
     get_terraform,
     set_aws_region,
-    configure_chrony_and_wait_for_machineconfig_status,
     get_terraform_ignition_provider,
     get_ocp_upgrade_history,
     load_auth_config,
+    add_chrony_to_ocp_deployment,
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from semantic_version import Version
@@ -391,6 +391,8 @@ class VSPHEREUPI(VSPHEREBASE):
             super(VSPHEREUPI.OCPDeployment, self).deploy_prereq()
             # generate manifests
             self.generate_manifests()
+            # create chrony resource
+            add_chrony_to_ocp_deployment()
             # create ignitions
             self.create_ignitions()
             self.kubeconfig = os.path.join(
@@ -612,15 +614,6 @@ class VSPHEREUPI(VSPHEREBASE):
             logger.info("Removing RHCOS compute nodes from a cluster")
             remove_nodes(rhcos_nodes)
 
-        # get datastore type and configure chrony for all nodes ONLY if
-        # datastore type is vsan
-        datastore_type = self.vsphere.get_datastore_type_by_name(
-            self.datastore, self.datacenter
-        )
-        if datastore_type != constants.VMFS:
-            configure_chrony_and_wait_for_machineconfig_status(
-                node_type="all", timeout=1800
-            )
         if config.DEPLOYMENT.get("thick_sc"):
             sc_data = templating.load_yaml(constants.VSPHERE_THICK_STORAGECLASS_YAML)
             sc_data_yaml = tempfile.NamedTemporaryFile(

@@ -2410,13 +2410,8 @@ def skipif_ocs_version(expressions):
     Return:
         'True' if test needs to be skipped else 'False'
     """
-    skip_this = True
     expr_list = [expressions] if isinstance(expressions, str) else expressions
-    for expr in expr_list:
-        comparision_str = config.ENV_DATA["ocs_version"] + expr
-        skip_this = skip_this and eval(comparision_str)
-    # skip_this will be either True or False after eval
-    return skip_this
+    return any(eval(config.ENV_DATA["ocs_version"] + expr) for expr in expr_list)
 
 
 def get_ocs_version_from_image(image):
@@ -3298,3 +3293,47 @@ def get_client_version(client_binary_path):
         resp = exec_cmd(cmd)
         stdout = json.loads(resp.stdout.decode())
         return stdout["releaseClientVersion"]
+
+
+def clone_notify():
+    """
+    Repository contains the source code of notify tool,
+    which is a python3 based tool wrapped by a container
+    used to configure Ceph Bucket Notifications
+
+    Returns:
+        notify_path (str): Path location of the notify code
+
+    """
+    notify_dir = mkdtemp(prefix="notify_")
+    log.info(f"cloning repo notify in {notify_dir}")
+    git_clone_cmd = f"git clone {constants.RGW_KAFKA_NOTIFY}"
+    subprocess.run(git_clone_cmd, shell=True, cwd=notify_dir, check=True)
+    notify_path = f"{notify_dir}/notify/notify.py"
+    return notify_path
+
+
+def add_chrony_to_ocp_deployment():
+    """
+    Create and Add necessary chrony resources
+
+    """
+    for role in ["master", "worker"]:
+        log.info(f"Creating and Adding Chrony file for {role}")
+        with open(constants.CHRONY_TEMPLATE) as file_stream:
+            chrony_template_obj = yaml.safe_load(file_stream)
+        chrony_template_obj["metadata"]["labels"][
+            "machineconfiguration.openshift.io/role"
+        ] = role
+        chrony_template_obj["metadata"]["name"] = f"99-{role}-chrony-configuration"
+        chrony_template_obj["spec"]["config"]["ignition"][
+            "version"
+        ] = config.DEPLOYMENT["ignition_version"]
+        chrony_template_str = yaml.safe_dump(chrony_template_obj)
+        chrony_file = os.path.join(
+            config.ENV_DATA["cluster_path"],
+            "openshift",
+            f"99-{role}-chrony-configuration.yaml",
+        )
+        with open(chrony_file, "w") as f:
+            f.write(chrony_template_str)

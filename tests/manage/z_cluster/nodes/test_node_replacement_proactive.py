@@ -56,7 +56,7 @@ def check_node_replacement_verification_steps(
         AssertionError: If the node replacement verification steps failed.
 
     """
-    new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names)
+    new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout=1500)
     assert new_osd_node_name, "New osd node not found"
 
     assert node.node_replacement_verification_steps_ceph_side(

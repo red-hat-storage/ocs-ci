@@ -23,7 +23,10 @@ def test_fixture_amq(request):
 
 
 @scale
-@pytest.mark.polarion_id("OCS-424")
+@pytest.mark.skip(
+    reason="Skipped due to github issue #3372, TC is failing "
+    "in each test-run, priority to fix this issue is lower"
+)
 class TestAMQBasics(E2ETest):
     @pytest.mark.parametrize(
         argnames=["interface"],

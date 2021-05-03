@@ -2,7 +2,7 @@ import logging
 from subprocess import TimeoutExpired
 
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 
 logger = logging.getLogger(__name__)
 
@@ -133,3 +133,18 @@ def delete_released_pvs_in_sc(sc_name):
             logger.info(f"Failed to delete pv {pv_name} after {timeout} seconds")
 
     return num_of_deleted_pvs
+
+
+def get_pv_size(pv_obj):
+    """
+    Get the size of a pv object
+
+    Args:
+        pv_obj (dict): A dictionary that represent the pv object
+
+    Returns:
+        int: The size of the pv object
+
+    """
+    storage_size = pv_obj.get("spec").get("capacity").get("storage")
+    return convert_device_size(storage_size, "GB")
