@@ -1744,7 +1744,7 @@ def rgw_obj_fixture(request):
             kind=constants.STORAGECLASS,
             namespace=config.ENV_DATA["cluster_namespace"],
             resource_name=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW,
-        )
+        ).get()
     except CommandFailed:
         storageclass = None
 
