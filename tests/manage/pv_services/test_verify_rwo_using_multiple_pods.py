@@ -15,17 +15,11 @@ log = logging.getLogger(__name__)
     argvalues=[
         pytest.param(
             *[constants.CEPHBLOCKPOOL],
-            marks=[
-                pytest.mark.polarion_id("OCS-1177"),
-                pytest.mark.bugzilla("1772990"),
-            ],
+            marks=[pytest.mark.polarion_id("OCS-1177")],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM],
-            marks=[
-                pytest.mark.polarion_id("OCS-1179"),
-                pytest.mark.bugzilla("1772990"),
-            ],
+            marks=[pytest.mark.polarion_id("OCS-1179")],
         ),
     ],
 )
