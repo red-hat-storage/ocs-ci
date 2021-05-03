@@ -4,6 +4,8 @@ from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicat
 
 
 # @pytest.mark.polarion_id("OCS-XXXX")
+# Skipped above 4.6 because of https://github.com/red-hat-storage/ocs-ci/issues/4129
+@skipif_ocs_version(["<4.5", ">4.6"])
 @skipif_openshift_dedicated
 @tier1
 class TestEndpointAutoScale(MCGTest):
@@ -17,7 +19,6 @@ class TestEndpointAutoScale(MCGTest):
     MIN_ENDPOINT_COUNT = 1
     MAX_ENDPOINT_COUNT = 2
 
-    @skipif_ocs_version("<4.5")
     def test_scaling_under_load(self, mcg_job_factory):
         self._assert_endpoint_count(1)
 
