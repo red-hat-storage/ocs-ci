@@ -1,4 +1,5 @@
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -220,7 +221,7 @@ class TestBucketIO(MCGTest):
         bucketname = bucket_factory(1, bucketclass=bucketclass_dict)[0].name
         full_object_path = f"s3://{bucketname}"
         awscli_pod_session.exec_cmd_on_pod(
-            command=craft_s3_command(f"cp {download_dir}enwik8 {full_object_path}"),
+            command=craft_s3_command(f"cp {download_dir}enwik8 {full_object_path}", mcg_obj),
             out_yaml_format=False,
         )
         # For this test, enwik8 is used in conjunction with Snappy compression
@@ -272,12 +273,11 @@ class TestBucketIO(MCGTest):
         ],
     )
     def test_write_multi_files_to_bucket(
-        self, mcg_obj, awscli_pod, bucket_factory, amount, file_type
+        self, mcg_obj, awscli_pod_session, bucket_factory, amount, file_type
     ):
         """
         Test write multiple files to bucket
         """
-        data_dir = "/data"
         if file_type == "large":
             public_bucket = PUBLIC_BUCKET
             obj_key = LARGE_FILE_KEY
@@ -288,10 +288,15 @@ class TestBucketIO(MCGTest):
             public_bucket = PUBLIC_BUCKET
             obj_key = LARGE_FILE_KEY.rsplit("/", 1)[0]
 
-        # Download the file to pod
-        awscli_pod.exec_cmd_on_pod(command=f"mkdir {data_dir}")
-        public_s3_client = retrieve_anon_s3_resource().meta.client
         download_files = []
+        # Download the file to pod
+        test_name = (
+            os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+        )
+        data_dir = f"{test_name}/data"
+        awscli_pod_session.exec_cmd_on_pod(command=f"mkdir {test_name}")
+        awscli_pod_session.exec_cmd_on_pod(command=f"mkdir {data_dir}")
+        public_s3_client = retrieve_anon_s3_resource().meta.client
         # Use obj_key as prefix to download multiple files for large_small
         # case, it also works with single file
         for obj in public_s3_client.list_objects(
@@ -302,7 +307,7 @@ class TestBucketIO(MCGTest):
                 continue
             logger.info(f'Downloading {obj["Key"]} from AWS bucket {public_bucket}')
             download_obj_cmd = f'cp s3://{public_bucket}/{obj["Key"]} {data_dir}'
-            awscli_pod.exec_cmd_on_pod(
+            awscli_pod_session.exec_cmd_on_pod(
                 command=craft_s3_command(download_obj_cmd), out_yaml_format=False
             )
             download_files.append(obj["Key"])
@@ -311,7 +316,9 @@ class TestBucketIO(MCGTest):
         base_path = f"s3://{bucketname}"
         for i in range(amount):
             full_object_path = base_path + f"/{i}/"
-            sync_object_directory(awscli_pod, data_dir, full_object_path, mcg_obj)
+            sync_object_directory(
+                awscli_pod_session, data_dir, full_object_path, mcg_obj
+            )
 
         obj_list = list(
             obj.key.split("/")[-1]
@@ -330,20 +337,24 @@ class TestBucketIO(MCGTest):
 
     @pytest.mark.polarion_id("OCS-1945")
     @tier2
-    def test_write_empty_file_to_bucket(self, mcg_obj, awscli_pod, bucket_factory):
+    def test_write_empty_file_to_bucket(
+        self, mcg_obj, awscli_pod_session, bucket_factory
+    ):
         """
         Test write empty files to bucket
         """
-        data_dir = "/data"
+        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+        data_dir = f"{test_name}/data"
         bucketname = bucket_factory(1)[0].name
         full_object_path = f"s3://{bucketname}"
 
         # Touch create 1000 empty files in pod
-        awscli_pod.exec_cmd_on_pod(command=f"mkdir {data_dir}")
-        command = "for i in $(seq 1 100); do touch /data/test$i; done"
-        awscli_pod.exec_sh_cmd_on_pod(command=command, sh="sh")
+        awscli_pod_session.exec_cmd_on_pod(command=f"mkdir {test_name}")
+        awscli_pod_session.exec_cmd_on_pod(command=f"mkdir {data_dir}")
+        command = f"for i in $(seq 1 100); do touch {data_dir}/test$i; done"
+        awscli_pod_session.exec_sh_cmd_on_pod(command=command, sh="sh")
         # Write all empty objects to the new bucket
-        sync_object_directory(awscli_pod, data_dir, full_object_path, mcg_obj)
+        sync_object_directory(awscli_pod_session, data_dir, full_object_path, mcg_obj)
 
         obj_set = set(
             obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(bucketname)
@@ -383,7 +394,7 @@ class TestBucketIO(MCGTest):
         verify_rgw_restart_count,
         setup_rbd_cephfs_pods,
         mcg_obj,
-        awscli_pod,
+        awscli_pod_session,
         bucket_factory,
     ):
         """
@@ -392,10 +403,11 @@ class TestBucketIO(MCGTest):
         """
         bucketname = bucket_factory(1)[0].name
         full_object_path = f"s3://{bucketname}"
-        target_dir = "/data/"
-        retrieve_test_objects_to_pod(awscli_pod, target_dir)
+        target_dir = "/test_objects/"
         with ThreadPoolExecutor() as p:
             p.submit(pod_io, setup_rbd_cephfs_pods)
             p.submit(
-                sync_object_directory(awscli_pod, target_dir, full_object_path, mcg_obj)
+                sync_object_directory(
+                    awscli_pod_session, target_dir, full_object_path, mcg_obj
+                )
             )
