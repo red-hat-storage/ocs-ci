@@ -221,7 +221,9 @@ class TestBucketIO(MCGTest):
         bucketname = bucket_factory(1, bucketclass=bucketclass_dict)[0].name
         full_object_path = f"s3://{bucketname}"
         awscli_pod_session.exec_cmd_on_pod(
-            command=craft_s3_command(f"cp {download_dir}enwik8 {full_object_path}", mcg_obj),
+            command=craft_s3_command(
+                f"cp {download_dir}enwik8 {full_object_path}", mcg_obj
+            ),
             out_yaml_format=False,
         )
         # For this test, enwik8 is used in conjunction with Snappy compression
@@ -290,9 +292,7 @@ class TestBucketIO(MCGTest):
 
         download_files = []
         # Download the file to pod
-        test_name = (
-            os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
-        )
+        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
         data_dir = f"{test_name}/data"
         awscli_pod_session.exec_cmd_on_pod(command=f"mkdir {test_name}")
         awscli_pod_session.exec_cmd_on_pod(command=f"mkdir {data_dir}")
