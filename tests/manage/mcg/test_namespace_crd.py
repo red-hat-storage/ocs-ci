@@ -4,6 +4,7 @@ These tests are valid only for OCS version 4.7 and above because in later
 versions are for Namespace bucket creation used CRDs instead of NooBaa RPC calls.
 """
 import logging
+import os
 from time import sleep
 import uuid
 
@@ -268,7 +269,7 @@ class TestNamespace(MCGTest):
         self,
         mcg_obj,
         cld_mgr,
-        awscli_pod,
+        awscli_pod_session,
         bucket_factory,
         bucketclass_dict,
     ):
@@ -292,15 +293,18 @@ class TestNamespace(MCGTest):
 
         # Upload files to NS bucket
         self.write_files_to_pod_and_upload(
-            mcg_obj, awscli_pod, bucket_to_write=ns_bucket.name, amount=3
+            mcg_obj, awscli_pod_session, bucket_to_write=ns_bucket.name, amount=3
         )
         # Read files directly from AWS
         self.download_files(
-            mcg_obj, awscli_pod, bucket_to_read=aws_target_bucket, s3_creds=s3_creds
+            mcg_obj,
+            awscli_pod_session,
+            bucket_to_read=aws_target_bucket,
+            s3_creds=s3_creds,
         )
 
         # Compare between uploaded files and downloaded files
-        assert self.compare_dirs(awscli_pod, amount=3)
+        assert self.compare_dirs(awscli_pod_session, amount=3)
 
     @tier1
     @pytest.mark.polarion_id("OCS-2258")
@@ -309,7 +313,7 @@ class TestNamespace(MCGTest):
         self,
         mcg_obj,
         cld_mgr,
-        awscli_pod,
+        awscli_pod_session,
         bucket_factory,
         namespace_store_factory,
     ):
@@ -331,7 +335,7 @@ class TestNamespace(MCGTest):
         }
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=ns_store1.uls_name,
             amount=4,
             s3_creds=rgw_creds,
@@ -361,17 +365,17 @@ class TestNamespace(MCGTest):
         }
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=ns_store2.uls_name,
             amount=3,
             s3_creds=aws_creds,
         )
 
         logger.info("Read files from ns bucket")
-        self.download_files(mcg_obj, awscli_pod, bucket_to_read=ns_bucket.name)
+        self.download_files(mcg_obj, awscli_pod_session, bucket_to_read=ns_bucket.name)
 
         logger.info("Compare between uploaded files and downloaded files")
-        assert self.compare_dirs(awscli_pod, amount=4)
+        assert self.compare_dirs(awscli_pod_session, amount=4)
 
     @tier1
     @pytest.mark.parametrize(
@@ -400,7 +404,7 @@ class TestNamespace(MCGTest):
         ],
     )
     def test_read_non_cached_object(
-        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod_session, bucketclass_dict
     ):
         """
         Test reading an object that is not present in a cache bucket.
@@ -419,7 +423,7 @@ class TestNamespace(MCGTest):
         # Upload files directly to AWS
         writen_objs_names = self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=aws_target_bucket,
             amount=3,
             s3_creds=s3_creds,
@@ -429,7 +433,7 @@ class TestNamespace(MCGTest):
                 "Objects were found in the cache of an empty bucket"
             )
         # Read files from ns bucket
-        self.download_files(mcg_obj, awscli_pod, bucket_to_read=bucket_obj.name)
+        self.download_files(mcg_obj, awscli_pod_session, bucket_to_read=bucket_obj.name)
         if not check_cached_objects_by_name(
             mcg_obj, bucket_obj.name, writen_objs_names
         ):
@@ -462,7 +466,7 @@ class TestNamespace(MCGTest):
         ],
     )
     def test_read_cached_object(
-        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod_session, bucketclass_dict
     ):
         """
         Test reading an object that is present in a cache bucket.
@@ -479,7 +483,7 @@ class TestNamespace(MCGTest):
         aws_target_bucket = bucket_obj.bucketclass.namespacestores[0].uls_name
         # Upload files to NS bucket
         writen_objs_names = self.write_files_to_pod_and_upload(
-            mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
+            mcg_obj, awscli_pod_session, bucket_to_write=bucket_obj.name, amount=1
         )
         if not check_cached_objects_by_name(
             mcg_obj, bucket_obj.name, writen_objs_names
@@ -489,17 +493,17 @@ class TestNamespace(MCGTest):
         # Upload files directly to AWS
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=aws_target_bucket,
             amount=1,
             s3_creds=s3_creds,
         )
         # Read files from ns bucket
-        self.download_files(mcg_obj, awscli_pod, bucket_to_read=bucket_obj.name)
+        self.download_files(mcg_obj, awscli_pod_session, bucket_to_read=bucket_obj.name)
 
         # Compare dirs should return false since we expect the cached object to return
         # instead of the new object currently present in the original dir
-        if self.compare_dirs(awscli_pod):
+        if self.compare_dirs(awscli_pod_session):
             raise UnexpectedBehaviour("Cached object was not downloaded")
 
     @tier1
@@ -529,7 +533,7 @@ class TestNamespace(MCGTest):
         ],
     )
     def test_read_stale_object(
-        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod_session, bucketclass_dict
     ):
         """
         Test reading a stale object from a cache bucket.
@@ -546,30 +550,36 @@ class TestNamespace(MCGTest):
         aws_target_bucket = bucket_obj.bucketclass.namespacestores[0].uls_name
         # Upload files to NS bucket
         writen_objs_names = self.write_files_to_pod_and_upload(
-            mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
+            mcg_obj, awscli_pod_session, bucket_to_write=bucket_obj.name, amount=1
         )
         if not check_cached_objects_by_name(
             mcg_obj, bucket_obj.name, writen_objs_names
         ):
             raise UnexpectedBehaviour("Objects not cached properly")
 
-        awscli_pod.exec_cmd_on_pod("mv /original/testfile0.txt /original/testfile1.txt")
+        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+        original_folder = f"{test_name}/{self.MCG_NS_ORIGINAL_DIR}"
+        awscli_pod_session.exec_cmd_on_pod(
+            f"mv {original_folder}/testfile0.txt {original_folder}/testfile1.txt"
+        )
         # Upload files directly to AWS
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=aws_target_bucket,
             amount=1,
             s3_creds=s3_creds,
         )
-        awscli_pod.exec_cmd_on_pod("mv /original/testfile1.txt /original/testfile0.txt")
+        awscli_pod_session.exec_cmd_on_pod(
+            f"mv {original_folder}/testfile1.txt {original_folder}/testfile0.txt"
+        )
         # using sleep and not TimeoutSampler because we need to wait throughout the whole ttl
         sleep(bucketclass_dict["namespace_policy_dict"]["ttl"] / 1000)
 
         # Read files from ns bucket
-        self.download_files(mcg_obj, awscli_pod, bucket_to_read=bucket_obj.name)
+        self.download_files(mcg_obj, awscli_pod_session, bucket_to_read=bucket_obj.name)
 
-        if self.compare_dirs(awscli_pod):
+        if self.compare_dirs(awscli_pod_session):
             raise UnexpectedBehaviour(
                 "Updated file was not fetched after ttl was exceeded"
             )
@@ -601,7 +611,7 @@ class TestNamespace(MCGTest):
         ],
     )
     def test_write_object_to_cache(
-        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod_session, bucketclass_dict
     ):
         """
         Test writing an object to a cache bucket.
@@ -611,7 +621,7 @@ class TestNamespace(MCGTest):
         bucket_obj = bucket_factory(bucketclass=bucketclass_dict)[0]
         # Upload files to NS bucket
         writen_objs_names = self.write_files_to_pod_and_upload(
-            mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
+            mcg_obj, awscli_pod_session, bucket_to_write=bucket_obj.name, amount=1
         )
         if not check_cached_objects_by_name(
             mcg_obj, bucket_obj.name, writen_objs_names
@@ -645,7 +655,7 @@ class TestNamespace(MCGTest):
         ],
     )
     def test_list_cached_objects(
-        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod_session, bucketclass_dict
     ):
         """
         Test the ability to list the object stored in a cache bucket.
@@ -655,7 +665,7 @@ class TestNamespace(MCGTest):
         bucket_obj = bucket_factory(bucketclass=bucketclass_dict)[0]
         # Upload files to NS bucket
         writen_objs_names = self.write_files_to_pod_and_upload(
-            mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=3
+            mcg_obj, awscli_pod_session, bucket_to_write=bucket_obj.name, amount=3
         )
         if not check_cached_objects_by_name(
             mcg_obj, bucket_obj.name, writen_objs_names
@@ -689,7 +699,7 @@ class TestNamespace(MCGTest):
         ],
     )
     def test_delete_cached_object(
-        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod, bucketclass_dict
+        self, bucket_factory, mcg_obj, cld_mgr, awscli_pod_session, bucketclass_dict
     ):
         """
         Test the deletion of an object that is present in the cache of a cache bucket.
@@ -699,7 +709,7 @@ class TestNamespace(MCGTest):
         bucket_obj = bucket_factory(bucketclass=bucketclass_dict)[0]
         # Upload files to NS bucket
         writen_objs_names = self.write_files_to_pod_and_upload(
-            mcg_obj, awscli_pod, bucket_to_write=bucket_obj.name, amount=1
+            mcg_obj, awscli_pod_session, bucket_to_write=bucket_obj.name, amount=1
         )
         if not check_cached_objects_by_name(
             mcg_obj, bucket_obj.name, writen_objs_names
@@ -727,7 +737,7 @@ class TestNamespace(MCGTest):
         self,
         mcg_obj,
         cld_mgr,
-        awscli_pod,
+        awscli_pod_session,
         namespace_store_factory,
         bucket_factory,
         rgw_deployments,
@@ -754,14 +764,14 @@ class TestNamespace(MCGTest):
         }
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=ns_store1.uls_name,
             amount=3,
             s3_creds=rgw_creds,
         )
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=ns_store2.uls_name,
             amount=3,
             s3_creds=aws_creds,
@@ -780,9 +790,9 @@ class TestNamespace(MCGTest):
             bucketclass=bucketclass_dict,
         )[0].name
         logger.info("Read files from ns bucket")
-        self.download_files(mcg_obj, awscli_pod, bucket_to_read=ns_bucket)
+        self.download_files(mcg_obj, awscli_pod_session, bucket_to_read=ns_bucket)
         logger.info("Compare between uploaded files and downloaded files")
-        assert self.compare_dirs(awscli_pod, amount=3)
+        assert self.compare_dirs(awscli_pod_session, amount=3)
 
     @tier4
     @tier4a
@@ -800,7 +810,7 @@ class TestNamespace(MCGTest):
         self,
         mcg_obj,
         cld_mgr,
-        awscli_pod,
+        awscli_pod_session,
         namespace_store_factory,
         bucket_factory,
         mcg_pod,
@@ -837,7 +847,7 @@ class TestNamespace(MCGTest):
 
         logger.info("Upload files to NS bucket")
         self.write_files_to_pod_and_upload(
-            mcg_obj, awscli_pod, bucket_to_write=ns_bucket, amount=3
+            mcg_obj, awscli_pod_session, bucket_to_write=ns_bucket, amount=3
         )
 
         logger.info(f"Respin mcg resource {mcg_pod}")
@@ -857,11 +867,14 @@ class TestNamespace(MCGTest):
 
         logger.info("Read files directly from AWS")
         self.download_files(
-            mcg_obj, awscli_pod, bucket_to_read=ns_store.uls_name, s3_creds=s3_creds
+            mcg_obj,
+            awscli_pod_session,
+            bucket_to_read=ns_store.uls_name,
+            s3_creds=s3_creds,
         )
 
         logger.info("Compare between uploaded files and downloaded files")
-        assert self.compare_dirs(awscli_pod, amount=3)
+        assert self.compare_dirs(awscli_pod_session, amount=3)
 
     @pytest.mark.polarion_id("OCS-2293")
     @tier4
@@ -896,7 +909,12 @@ class TestNamespace(MCGTest):
     @tier4
     @tier4a
     def test_block_read_resource_in_namespace_bucket_crd(
-        self, mcg_obj, awscli_pod, namespace_store_factory, bucket_factory, cld_mgr
+        self,
+        mcg_obj,
+        awscli_pod_session,
+        namespace_store_factory,
+        bucket_factory,
+        cld_mgr,
     ):
         """
         Test blocking namespace resource in namespace bucket.
@@ -918,14 +936,14 @@ class TestNamespace(MCGTest):
         logger.info("Upload files to NS resources")
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=ns_store1.uls_name,
             amount=3,
             s3_creds=s3_creds,
         )
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=ns_store2.uls_name,
             amount=2,
             s3_creds=s3_creds,
@@ -951,7 +969,7 @@ class TestNamespace(MCGTest):
 
         logger.info("Read files directly from AWS")
         try:
-            self.download_files(mcg_obj, awscli_pod, bucket_to_read=ns_bucket)
+            self.download_files(mcg_obj, awscli_pod_session, bucket_to_read=ns_bucket)
         except CommandFailed:
             logger.info("Attempt to read files failed as expected")
             logger.info("Bring ns_store1 up")
@@ -1042,7 +1060,10 @@ class TestNamespace(MCGTest):
         """
         Upload files to bucket (NS or uls)
         """
-        awscli_pod.exec_cmd_on_pod(command=f"mkdir -p {self.MCG_NS_ORIGINAL_DIR}")
+        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+        awscli_pod.exec_cmd_on_pod(command=f"mkdir -p {test_name}")
+        original_folder = f"{test_name}/{self.MCG_NS_ORIGINAL_DIR}"
+        awscli_pod.exec_cmd_on_pod(command=f"mkdir -p {original_folder}")
         full_object_path = f"s3://{bucket_to_write}"
         object_list = []
 
@@ -1050,20 +1071,20 @@ class TestNamespace(MCGTest):
             file_name = f"testfile{i}.txt"
             object_list.append(file_name)
             awscli_pod.exec_cmd_on_pod(
-                f"dd if=/dev/urandom of={self.MCG_NS_ORIGINAL_DIR}/{file_name} bs=1M count=1 status=none"
+                f"dd if=/dev/urandom of={original_folder}/{file_name} bs=1M count=1 status=none"
             )
         if s3_creds:
             # Write data directly to target bucket from original dir
             sync_object_directory(
                 awscli_pod,
-                self.MCG_NS_ORIGINAL_DIR,
+                original_folder,
                 full_object_path,
                 signed_request_creds=s3_creds,
             )
         else:
             # Write data directly to NS bucket from original dir
             sync_object_directory(
-                awscli_pod, self.MCG_NS_ORIGINAL_DIR, full_object_path, mcg_obj
+                awscli_pod, original_folder, full_object_path, mcg_obj
             )
         return object_list
 
@@ -1071,7 +1092,10 @@ class TestNamespace(MCGTest):
         """
         Download files from bucket (NS or uls)
         """
-        awscli_pod.exec_cmd_on_pod(command=f"mkdir {self.MCG_NS_RESULT_DIR}")
+        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+        awscli_pod.exec_cmd_on_pod(command=f"mkdir -p {test_name}")
+        result_folder = f"{test_name}/{self.MCG_NS_RESULT_DIR}"
+        awscli_pod.exec_cmd_on_pod(command=f"mkdir -p {result_folder}")
         ns_bucket_path = f"s3://{bucket_to_read}"
 
         if s3_creds:
@@ -1079,22 +1103,23 @@ class TestNamespace(MCGTest):
             sync_object_directory(
                 awscli_pod,
                 ns_bucket_path,
-                self.MCG_NS_RESULT_DIR,
+                result_folder,
                 signed_request_creds=s3_creds,
             )
         else:
             # Read data from NS bucket to result dir
-            sync_object_directory(
-                awscli_pod, ns_bucket_path, self.MCG_NS_RESULT_DIR, mcg_obj
-            )
+            sync_object_directory(awscli_pod, ns_bucket_path, result_folder, mcg_obj)
 
     def compare_dirs(self, awscli_pod, amount=1):
         # Checksum is compared between original and result object
         result = True
+        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+        original_folder = f"{test_name}/{self.MCG_NS_ORIGINAL_DIR}"
+        result_folder = f"{test_name}/{self.MCG_NS_RESULT_DIR}"
         for i in range(amount):
             file_name = f"testfile{i}.txt"
-            original_object_path = f"{self.MCG_NS_ORIGINAL_DIR}/{file_name}"
-            result_object_path = f"{self.MCG_NS_RESULT_DIR}/{file_name}"
+            original_object_path = f"{original_folder}/{file_name}"
+            result_object_path = f"{result_folder}/{file_name}"
             if not verify_s3_object_integrity(
                 original_object_path=original_object_path,
                 result_object_path=result_object_path,

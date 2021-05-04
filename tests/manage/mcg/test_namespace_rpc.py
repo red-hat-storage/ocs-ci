@@ -4,6 +4,8 @@ Most of these tests are valid only for OCS version lesser than 4.7
 because in later versions are for Namespace bucket creation used CRDs.
 """
 import logging
+import os
+
 import pytest
 
 from ocs_ci.framework.testlib import (
@@ -576,33 +578,42 @@ class TestNamespace(MCGTest):
         """
         Upload files to bucket (NS or uls)
         """
-        awscli_pod.exec_cmd_on_pod(command=f"mkdir -p {self.MCG_NS_ORIGINAL_DIR}")
+        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+        awscli_pod.exec_cmd_on_pod(command=f"mkdir -p {test_name}")
+        original_folder = f"{test_name}/{self.MCG_NS_ORIGINAL_DIR}"
+        awscli_pod.exec_cmd_on_pod(command=f"mkdir -p {original_folder}")
         full_object_path = f"s3://{bucket_to_write}"
+        object_list = []
 
         for i in range(amount):
-            file_name = f"testfile{i}"
+            file_name = f"testfile{i}.txt"
+            object_list.append(file_name)
             awscli_pod.exec_cmd_on_pod(
-                f"dd if=/dev/urandom of={self.MCG_NS_ORIGINAL_DIR}/{file_name}.txt bs=1M count=1 status=none"
+                f"dd if=/dev/urandom of={original_folder}/{file_name} bs=1M count=1 status=none"
             )
         if s3_creds:
             # Write data directly to target bucket from original dir
             sync_object_directory(
                 awscli_pod,
-                self.MCG_NS_ORIGINAL_DIR,
+                original_folder,
                 full_object_path,
                 signed_request_creds=s3_creds,
             )
         else:
             # Write data directly to NS bucket from original dir
             sync_object_directory(
-                awscli_pod, self.MCG_NS_ORIGINAL_DIR, full_object_path, mcg_obj
+                awscli_pod, original_folder, full_object_path, mcg_obj
             )
+        return object_list
 
     def download_files(self, mcg_obj, awscli_pod, bucket_to_read, s3_creds=None):
         """
         Download files from bucket (NS or uls)
         """
-        awscli_pod.exec_cmd_on_pod(command=f"mkdir {self.MCG_NS_RESULT_DIR}")
+        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+        awscli_pod.exec_cmd_on_pod(command=f"mkdir -p {test_name}")
+        result_folder = f"{test_name}/{self.MCG_NS_RESULT_DIR}"
+        awscli_pod.exec_cmd_on_pod(command=f"mkdir -p {result_folder}")
         ns_bucket_path = f"s3://{bucket_to_read}"
 
         if s3_creds:
@@ -610,22 +621,23 @@ class TestNamespace(MCGTest):
             sync_object_directory(
                 awscli_pod,
                 ns_bucket_path,
-                self.MCG_NS_RESULT_DIR,
+                result_folder,
                 signed_request_creds=s3_creds,
             )
         else:
             # Read data from NS bucket to result dir
-            sync_object_directory(
-                awscli_pod, ns_bucket_path, self.MCG_NS_RESULT_DIR, mcg_obj
-            )
+            sync_object_directory(awscli_pod, ns_bucket_path, result_folder, mcg_obj)
 
     def compare_dirs(self, awscli_pod, amount=1):
         # Checksum is compared between original and result object
         result = True
+        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+        original_folder = f"{test_name}/{self.MCG_NS_ORIGINAL_DIR}"
+        result_folder = f"{test_name}/{self.MCG_NS_RESULT_DIR}"
         for i in range(amount):
             file_name = f"testfile{i}.txt"
-            original_object_path = f"{self.MCG_NS_ORIGINAL_DIR}/{file_name}"
-            result_object_path = f"{self.MCG_NS_RESULT_DIR}/{file_name}"
+            original_object_path = f"{original_folder}/{file_name}"
+            result_object_path = f"{result_folder}/{file_name}"
             if not verify_s3_object_integrity(
                 original_object_path=original_object_path,
                 result_object_path=result_object_path,
