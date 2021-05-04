@@ -80,7 +80,7 @@ the proper values and pass it with --ocsci-conf parameter to pytest.
 
 ### Performance Tests
 The OCS performance tests need to have an elastic-search server for running benchmarks and for storing the results.
-If elastic-search server is not available, the tests can deploy one in the tested OCP for the benchmark, and it will
+If an elastic-search server is not available, the tests can deploy ES in the system under test for the benchmark, and it will
 dump all results in JSON file.
 
 The deployment of the Elastic-search server is available only for x86_64 architecture
