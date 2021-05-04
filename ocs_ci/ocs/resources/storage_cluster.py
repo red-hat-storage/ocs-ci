@@ -6,7 +6,6 @@ import logging
 import tempfile
 
 from jsonschema import validate
-from semantic_version import Version
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
@@ -18,7 +17,9 @@ from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.utility import localstorage, utils, templating, kms as KMS
 from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, get_ocp_version
+from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
+from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 
 log = logging.getLogger(__name__)
 
@@ -384,18 +385,15 @@ def ocs_install_verification(
             kms = KMS.get_kms_deployment()
             kms.post_deploy_verification()
 
-    ocs_version = config.ENV_DATA["ocs_version"]
-    zone_num = utils.get_az_count()
-    if (
-        config.DEPLOYMENT.get("local_storage")
-        and Version.coerce(ocs_version) >= Version.coerce("4.7")
-        and zone_num < 3
-    ):
-        storage_cluster_obj = get_storage_cluster()
+    storage_cluster_obj = get_storage_cluster()
+    is_flexible_scaling = (
+        storage_cluster_obj.get()["items"][0].get("spec").get("flexibleScaling", False)
+    )
+    if is_flexible_scaling is True:
         failure_domain = storage_cluster_obj.data["items"][0]["status"]["failureDomain"]
         assert failure_domain == "host", (
-            f"The failure domain type on LSO cluster with {zone_num} zones should be "
-            f"'host' and not {failure_domain}."
+            f"The expected failure domain on cluster with flexible scaling is 'host',"
+            f" the actaul failure domain is {failure_domain}"
         )
 
 
@@ -484,41 +482,59 @@ def add_capacity(osd_size_capacity_requested):
         device_sets_required + old_storage_devices_sets_count
     )
     lvpresent = localstorage.check_local_volume()
-    if lvpresent:
-        ocp_obj = OCP(
-            kind="localvolume", namespace=config.ENV_DATA["local_storage_namespace"]
+    ocp_version = get_ocp_version()
+    platform = config.ENV_DATA.get("platform", "").lower()
+    is_lso = config.DEPLOYMENT.get("local_storage")
+    if (
+        ocp_version == "4.7"
+        and (
+            platform == constants.AWS_PLATFORM or platform == constants.VSPHERE_PLATFORM
         )
-        localvolume_data = ocp_obj.get(resource_name="local-block")
-        device_list = localvolume_data["spec"]["storageClassDevices"][0]["devicePaths"]
-        final_device_list = localstorage.get_new_device_paths(
-            device_sets_required, osd_size_capacity_requested
-        )
-        device_list.sort()
-        final_device_list.sort()
-        if device_list == final_device_list:
-            raise ResourceNotFoundError("No Extra device found")
-        param = f"""[{{ "op": "replace", "path": "/spec/storageClassDevices/0/devicePaths",
-                                                 "value": {final_device_list}}}]"""
-        log.info(f"Final device list : {final_device_list}")
-        lvcr = localstorage.get_local_volume_cr()
-        log.info("Patching Local Volume CR...")
-        lvcr.patch(
-            resource_name=lvcr.get()["items"][0]["metadata"]["name"],
-            params=param.strip("\n"),
+        and (not is_lso)
+    ):
+        logging.info("Add capacity via UI")
+        setup_ui = login_ui()
+        add_ui_obj = AddReplaceDeviceUI(setup_ui)
+        add_ui_obj.add_capacity_ui()
+        close_browser(setup_ui)
+    else:
+        if lvpresent:
+            ocp_obj = OCP(
+                kind="localvolume", namespace=config.ENV_DATA["local_storage_namespace"]
+            )
+            localvolume_data = ocp_obj.get(resource_name="local-block")
+            device_list = localvolume_data["spec"]["storageClassDevices"][0][
+                "devicePaths"
+            ]
+            final_device_list = localstorage.get_new_device_paths(
+                device_sets_required, osd_size_capacity_requested
+            )
+            device_list.sort()
+            final_device_list.sort()
+            if device_list == final_device_list:
+                raise ResourceNotFoundError("No Extra device found")
+            param = f"""[{{ "op": "replace", "path": "/spec/storageClassDevices/0/devicePaths",
+                                                     "value": {final_device_list}}}]"""
+            log.info(f"Final device list : {final_device_list}")
+            lvcr = localstorage.get_local_volume_cr()
+            log.info("Patching Local Volume CR...")
+            lvcr.patch(
+                resource_name=lvcr.get()["items"][0]["metadata"]["name"],
+                params=param.strip("\n"),
+                format_type="json",
+            )
+            localstorage.check_pvs_created(
+                int(len(final_device_list) / new_storage_devices_sets_count)
+            )
+        sc = get_storage_cluster()
+        # adding the storage capacity to the cluster
+        params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
+                    "value": {new_storage_devices_sets_count}}}]"""
+        sc.patch(
+            resource_name=sc.get()["items"][0]["metadata"]["name"],
+            params=params.strip("\n"),
             format_type="json",
         )
-        localstorage.check_pvs_created(
-            int(len(final_device_list) / new_storage_devices_sets_count)
-        )
-    sc = get_storage_cluster()
-    # adding the storage capacity to the cluster
-    params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
-                "value": {new_storage_devices_sets_count}}}]"""
-    sc.patch(
-        resource_name=sc.get()["items"][0]["metadata"]["name"],
-        params=params.strip("\n"),
-        format_type="json",
-    )
     return new_storage_devices_sets_count
 
 

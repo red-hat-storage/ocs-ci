@@ -67,6 +67,9 @@ ROOK_CSI_RBD_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "rbd")
 ROOK_CSI_CEPHFS_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "cephfs")
 CLEANUP_YAML = "cleanup.yaml.j2"
 MANIFESTS_DIR = "manifests"
+CHRONY_TEMPLATE = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "99-role-chrony-configuration.yaml"
+)
 
 
 # Statuses
@@ -109,6 +112,7 @@ SERVICE = "Service"
 NODE = "Node"
 DEPLOYMENTCONFIG = "deploymentconfig"
 CONFIG = "Config"
+CONFIGMAP = "ConfigMap"
 MACHINESETS = "machinesets"
 STORAGECLUSTER = "storagecluster"
 CLUSTER_OPERATOR = "ClusterOperator"
@@ -172,6 +176,7 @@ OCS_MONKEY_REPOSITORY = "https://github.com/red-hat-storage/ocs-monkey.git"
 # AMQ
 AMQ_NAMESPACE = "myproject"
 KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
+RGW_KAFKA_NOTIFY = "https://github.com/shonpaz123/notify/"
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 CODESPEED_URL = "http://10.0.78.167:8000/"
 
@@ -425,6 +430,8 @@ COUCHBASE_WORKER_EXAMPLE = os.path.join(
 
 COUCHBASE_OPERATOR = "couchbase-operator-namespace"
 
+KAFKADROP_YAML = os.path.join(TEMPLATE_AMQ_DIR, "kafkadrop.yaml")
+
 HELLO_WORLD_PRODUCER_YAML = os.path.join(TEMPLATE_AMQ_DIR, "hello-world-producer.yaml")
 
 HELLO_WORLD_CONSUMER_YAML = os.path.join(TEMPLATE_AMQ_DIR, "hello-world-consumer.yaml")
@@ -440,6 +447,8 @@ AMQ_DRIVER_KAFKA_YAML = os.path.join(TEMPLATE_AMQ_DIR, "driver-kafka.yaml")
 AMQ_WORKLOAD_YAML = os.path.join(TEMPLATE_AMQ_DIR, "amq_workload.yaml")
 
 AMQ_SIMPLE_WORKLOAD_YAML = os.path.join(TEMPLATE_AMQ_DIR, "amq_simple_workload.yaml")
+
+KAFKA_ENDPOINT = f"my-cluster-kafka-bootstrap.{AMQ_NAMESPACE}.svc.cluster.local:9092"
 
 NGINX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "nginx.yaml")
 
@@ -529,6 +538,9 @@ FIO_S3 = os.path.join(TEMPLATE_FIO_DIR, "config_s3.fio")
 # Openshift infra yamls:
 RSYNC_POD_YAML = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "rsync-pod.yaml")
 MACHINESET_YAML = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "machine-set.yaml")
+MACHINESET_YAML_AZURE = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-azure.yaml"
+)
 PODS_PER_NODE_COUNT_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "max-pods-per-node.yaml"
 )
@@ -655,11 +667,13 @@ BAREMETALPSI_PLATFORM = "baremetalpsi"
 RGW_PLATFORM = "rgw"
 IBMCLOUD_PLATFORM = "ibm_cloud"
 OPENSHIFT_DEDICATED_PLATFORM = "openshiftdedicated"
+RHV_PLATFORM = "rhv"
 ON_PREM_PLATFORMS = [
     VSPHERE_PLATFORM,
     BAREMETAL_PLATFORM,
     BAREMETALPSI_PLATFORM,
     IBM_POWER_PLATFORM,
+    RHV_PLATFORM,
 ]
 CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
 
@@ -764,6 +778,7 @@ EC2_USER = "ec2-user"
 OCS_SUBSCRIPTION = "ocs-operator"
 ROOK_OPERATOR_CONFIGMAP = "rook-ceph-operator-config"
 ROOK_CONFIG_OVERRIDE_CONFIGMAP = "rook-config-override"
+ROOK_CEPH_MON_ENDPOINTS = "rook-ceph-mon-endpoints"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
@@ -1126,6 +1141,10 @@ SCALE_WORKER_DICT = {
     9000: {"aws": 6, "vmware": 6, "bm": 4, "azure": 6},
 }
 SCALE_MAX_PVCS_PER_NODE = 500
+
+# Production config instance type
+AWS_PRODUCTION_INSTANCE_TYPE = "m5.4xlarge"
+AZURE_PRODUCTION_INSTANCE_TYPE = "Standard_D16s_v3"
 
 # Elasticsearch and codespeed constants
 ES_SERVER_IP = "10.0.78.167"

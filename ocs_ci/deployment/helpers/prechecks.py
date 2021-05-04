@@ -10,7 +10,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import MIN_STORAGE_FOR_DATASTORE
-from ocs_ci.ocs.exceptions import StorageNotSufficientException
+from ocs_ci.ocs.exceptions import StorageNotSufficientException, TemplateNotFound
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 
 logger = logging.getLogger(__name__)
@@ -97,6 +97,23 @@ class VSpherePreChecks(PreChecks):
         # TODO: Implement network checks
         pass
 
+    def template_check(self):
+        """
+        Checks whether template exists in Datacenter
+
+        Raises:
+            TemplateNotFound: If template not found in Datacenter.
+
+        """
+        logger.debug(f"Checking for template existence in datacenter {self.datacenter}")
+        if not self.vsphere.is_template_exist(
+            config.ENV_DATA["vm_template"], self.datacenter
+        ):
+            # TODO: Upload template instead of raising exception
+            raise TemplateNotFound(
+                f"Template {config.ENV_DATA['vm_template']} not found in Datacenter {self.datacenter}"
+            )
+
     def get_all_checks(self):
         """
         Aggregate all the checks needed for vSphere platform
@@ -105,6 +122,7 @@ class VSpherePreChecks(PreChecks):
         self.memory_check()
         self.cpu_check()
         self.network_check()
+        self.template_check()
 
 
 class BareMetalPreChecks(PreChecks):

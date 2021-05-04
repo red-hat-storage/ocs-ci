@@ -36,6 +36,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods,
 )
+from ocs_ci.ocs.node import verify_all_nodes_created
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -177,6 +178,7 @@ class Deployment(object):
         """
         Function does post OCP deployment stuff we need to do.
         """
+        verify_all_nodes_created()
         set_selinux_permissions()
         set_registry_to_managed_state()
         add_stage_cert()
@@ -747,26 +749,6 @@ class Deployment(object):
         """
         setup_ui = login_ui()
         deployment_obj = DeploymentUI(setup_ui)
-
-        if config.DEPLOYMENT.get("local_storage"):
-            deployment_obj.mode = "lso"
-        else:
-            deployment_obj.mode = "internal"
-
-        if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-            deployment_obj.storage_class_type = "thin_sc"
-        elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
-            deployment_obj.storage_class_type = "gp2_sc"
-
-        device_size = str(config.ENV_DATA.get("device_size"))
-        if device_size in ("512", "2048", "4096"):
-            deployment_obj.osd_size = device_size
-        else:
-            deployment_obj.osd_size = "512"
-
-        deployment_obj.is_wide_encryption = config.ENV_DATA.get("encryption_at_rest")
-        deployment_obj.is_class_encryption = False
-        deployment_obj.is_use_kms = False
         deployment_obj.install_ocs_ui()
         close_browser(setup_ui)
 
