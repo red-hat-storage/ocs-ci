@@ -1207,6 +1207,14 @@ BM_METAL_IMAGE = "rhcos-metal.x86_64.raw.gz"
 # MCG constants
 PLACEMENT_BUCKETCLASS = "placement-bucketclass"
 
+# Cosbench constants
+COSBENCH = "cosbench"
+COSBENCH_PROJECT = "cosbench-project"
+
+COSBENCH_DIR = os.path.join(TEMPLATE_DIR, "cosbench")
+COSBENCH_POD = os.path.join(COSBENCH_DIR, "cosbench_pod.yaml")
+COSBENCH_CONFIGMAP = os.path.join(COSBENCH_DIR, "cosbench_configmap.yaml")
+
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
 MCG_NS_AZURE_ENDPOINT = "https://blob.core.windows.net"
