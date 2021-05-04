@@ -16,12 +16,12 @@ class OSDCashDrop(OCP):
     Usage:
         import OSDCashDrop
 
-        cd = OSDCashDrop()                          # create new cache_drop object
-        cd.deploy()                                 # deploy the cache_drop pod
-        ....                                        # run test
-        cd.drop_cache()                             # drop the OSD's cache
-        ....                                        # run the test again
-        cd.delete(resource_name=cd.resource_name)   # delete the cache_drop pod
+        cd = OSDCashDrop()  # create new cache_drop object
+        cd.deploy()         # deploy the cache_drop pod
+        ....                # run test
+        cd.drop_cache()     # drop the OSD's cache
+        ....                # run the test again
+        cd.cleanup()        # delete the cache_drop pod
 
     """
 
@@ -44,6 +44,14 @@ class OSDCashDrop(OCP):
         """
         self.create(self.crd)
         self.wait_for_resource(condition=constants.STATUS_RUNNING, timeout=240)
+
+    def cleanup(self):
+        """
+        Delete the pod from the cluster
+
+        """
+        self.delete(resource_name=self.resource_name)
+        self.wait_for_delete(resource_name=self.resource_name)
 
     @property
     def ip(self):
