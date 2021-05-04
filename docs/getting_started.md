@@ -83,7 +83,7 @@ The OCS performance tests need to have an elastic-search server for running benc
 If an elastic-search server is not available, the tests can deploy ES in the system under test for the benchmark, and it will
 dump all results in JSON file.
 
-The deployment of the Elastic-search server is available only for x86_64 architecture
+The support for automated deployment of the Elastic-search server is available only for x86_64 architecture
 for other architecture (e.g. PPC / s390), since the benchmark can not deploy ES server on the OCP cluster,
 an ES server need to be deployed in the LAB, and the IP/Port need to be configured in the configuration file.
 
