@@ -1983,3 +1983,26 @@ def check_pods_after_node_replacement():
     else:
         logger.warning(f"One of the '{pod_daemon_type}' pods is not running")
         return False
+
+
+def get_osd_pods_having_ids(osd_ids):
+    """
+    Get the osd pods having specific ids
+
+    Args:
+        osd_ids (list): The list of the osd ids
+
+    Returns:
+        list: The osd pods having the osd ids
+
+    """
+    # Convert it to set to reduce complexity
+    osd_ids_set = set(osd_ids)
+    osd_pods_having_ids = []
+
+    osd_pods = get_osd_pods()
+    for osd_pod in osd_pods:
+        if get_osd_pod_id(osd_pod) in osd_ids_set:
+            osd_pods_having_ids.append(osd_pod)
+
+    return osd_pods_having_ids

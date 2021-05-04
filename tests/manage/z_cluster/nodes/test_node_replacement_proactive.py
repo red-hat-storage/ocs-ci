@@ -41,7 +41,7 @@ def select_osd_node_name():
 
 
 def check_node_replacement_verification_steps(
-    old_node_name, new_node_name, old_osd_node_names, old_osd_id
+    old_node_name, new_node_name, old_osd_node_names, old_osd_ids
 ):
     """
     Check if the node replacement verification steps finished successfully.
@@ -50,7 +50,7 @@ def check_node_replacement_verification_steps(
         old_node_name (str): The name of the old node that has been deleted
         new_node_name (str): The name of the new node that has been created
         old_osd_node_names (list): The name of the new node that has been added to osd nodes
-        old_osd_id (str): The old osd id
+        old_osd_ids (list): List of the old osd ids
 
     Raises:
         AssertionError: If the node replacement verification steps failed.
@@ -63,7 +63,7 @@ def check_node_replacement_verification_steps(
         old_node_name, new_node_name, new_osd_node_name
     )
     assert node.node_replacement_verification_steps_user_side(
-        old_node_name, new_node_name, new_osd_node_name, old_osd_id
+        old_node_name, new_node_name, new_osd_node_name, old_osd_ids
     )
 
 
@@ -76,8 +76,8 @@ def delete_and_create_osd_node(osd_node_name):
 
     """
     new_node_name = None
-    osd_pod = node.get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())[0]
-    old_osd_id = pod.get_osd_pod_id(osd_pod)
+    osd_pods = node.get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())
+    old_osd_ids = [pod.get_osd_pod_id(osd_pod) for osd_pod in osd_pods]
 
     old_osd_node_names = node.get_osd_running_nodes()
 
@@ -116,7 +116,7 @@ def delete_and_create_osd_node(osd_node_name):
 
     log.info("Start node replacement verification steps...")
     check_node_replacement_verification_steps(
-        osd_node_name, new_node_name, old_osd_node_names, old_osd_id
+        osd_node_name, new_node_name, old_osd_node_names, old_osd_ids
     )
 
 
