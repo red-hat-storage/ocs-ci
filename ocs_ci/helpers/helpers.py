@@ -497,7 +497,7 @@ def create_storage_class(
         reclaim_policy (str): Type of reclaim policy. Defaults to 'Delete'
             (eg., 'Delete', 'Retain')
         rbd_thick_provision (bool): True to enable RBD thick provisioning.
-                Applicable if interface_type is CephBlockPool
+            Applicable if interface_type is CephBlockPool
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -2571,6 +2571,26 @@ def modify_osd_replica_count(resource_name, replica_count):
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     resource_name = "-".join(resource_name.split("-")[0:4])
     return ocp_obj.patch(resource_name=resource_name, params=params)
+
+
+def modify_deployment_replica_count(deployment_name, replica_count):
+    """
+    Function to modify deployment replica count,
+    i.e to scale up or down deployment
+
+    Args:
+        deployment_name (str): Name of deployment
+        replica_count (int): replica count to be changed to
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    ocp_obj = ocp.OCP(
+        kind=constants.DEPLOYMENT, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    params = f'{{"spec": {{"replicas": {replica_count}}}}}'
+    return ocp_obj.patch(resource_name=deployment_name, params=params)
 
 
 def collect_performance_stats(dir_name):

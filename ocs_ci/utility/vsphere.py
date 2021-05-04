@@ -1386,3 +1386,26 @@ class VSPHERE(object):
         """
         vms = self.get_all_vms_in_pool(name, dc, cluster)
         return [vm for vm in vms if vm.name.startswith("compute")]
+
+    def is_template_exist(self, template_name, dc):
+        """
+        Checks whether template exists in Datacenter
+
+        Args:
+            template_name (str): template name
+            dc (str): Datacenter name
+
+        Returns:
+            bool: True if template exists, otherwise False
+
+        """
+        datacenter = self.find_datacenter_by_name(dc)
+        dest_folder = datacenter.vmFolder
+
+        return (
+            True
+            if self.find_object_by_name(
+                self.get_content, template_name, [vim.VirtualMachine], dest_folder
+            )
+            else False
+        )

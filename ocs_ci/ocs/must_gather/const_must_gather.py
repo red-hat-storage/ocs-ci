@@ -694,7 +694,6 @@ GATHER_COMMANDS_OTHERS_4_7 = [
     "noobaa-db-pg-0.yaml",
     "db-noobaa-db-pg-0.yaml",
     "noobaa-db-pg-0.log",
-    "noobaa-ceph-objectstore-user.yaml",
     "namespacestores.noobaa.io-v1alpha1-view.yaml",
     "namespacestores.noobaa.io-v1alpha1-edit.yaml",
     "namespacestores.noobaa.io-v1alpha1-crdview.yaml",

@@ -318,3 +318,11 @@ class ResourcePoolNotFound(Exception):
 
 class ClientDownloadError(Exception):
     pass
+
+
+class NotAllNodesCreated(Exception):
+    pass
+
+
+class TemplateNotFound(Exception):
+    pass

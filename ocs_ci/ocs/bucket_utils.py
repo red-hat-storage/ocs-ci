@@ -11,7 +11,7 @@ from botocore.handlers import disable_signing
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.helpers.helpers import create_resource
@@ -1070,6 +1070,31 @@ def check_cached_objects_by_name(mcg_obj, bucket_name, expected_objects_names=No
         f"Cached: [{list_objects_res}]"
     )
     return False
+
+
+def wait_for_cache(mcg_obj, bucket_name, expected_objects_names=None):
+    """
+    wait for existing cache bucket to cache all required objects
+
+    Args:
+        mcg_obj (MCG): An MCG object containing the MCG S3 connection credentials
+        bucket_name (str): Name of the cache bucket
+        expected_objects_names (list): Expected objects to be cached
+
+    """
+    sample = TimeoutSampler(
+        timeout=60,
+        sleep=10,
+        func=check_cached_objects_by_name,
+        mcg_obj=mcg_obj,
+        bucket_name=bucket_name,
+        expected_objects_names=expected_objects_names,
+    )
+    if not sample.wait_for_func_status(result=True):
+        logger.error("Objects were not able to cache properly")
+        raise UnexpectedBehaviour
+    else:
+        logger.info("Objects were not cached yet, Retrying")
 
 
 def compare_directory(awscli_pod, original_dir, result_dir, amount=2):
