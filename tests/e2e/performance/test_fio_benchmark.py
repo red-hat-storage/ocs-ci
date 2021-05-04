@@ -79,6 +79,9 @@ class FIOResultsAnalyse(PerfResult):
         Analyzing the results of the test and creating one record with all test
         information
 
+        Args:
+            tst (FIOResultsAnalyse obj): the full results object
+
         """
         if config.PERF.get("deploy_internal_es"):
             results = self.read_results_from_file()
