@@ -1,0 +1,91 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "db2u-data-load-job"
+  namespace: "db2u-project"                                ###  *** Namespace where db2u deployment is running  *** ###
+  labels:
+    app: db2u.workload
+spec:
+  template:
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      initContainers:
+      - name: wait-configure
+        image: "icr.io/obs/hdm/db2u/db2u.db2client.workload:11.5.4.0-1362-x86_64"              ### *** Update the image registry as required *** ###
+        imagePullPolicy: Always
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 500
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "50Mi"
+          limits:
+            cpu: "200m"
+            memory: "100Mi"
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          name: db2u-meta-vol
+        command:
+          - "/bin/sh"
+          - "-ecx"
+          - |
+            success=0
+            until [[ $status -eq 1 ]]; do
+                status=$(kubectl get job -n $POD_NAMESPACE db2u-configure-workload-job -o jsonpath='{.status.succeeded}')
+            done
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      containers:
+      - name: load-data
+        image: "icr.io/obs/hdm/db2u/db2u.db2client.workload:11.5.4.0-1362-x86_64"               ### *** Update the image registry as required *** ###
+        imagePullPolicy: Always
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 500
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "50Mi"
+          limits:
+            cpu: "200m"
+            memory: "400Mi"
+        command:
+          - "/bin/sh"
+          - "-ecx"
+          - /workload/scripts/configure-workload.sh --load
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          name: db2u-meta-vol
+        - mountPath: "/secrets/db2instancepwd"
+          name: db2instance-secret
+          readOnly: true
+      restartPolicy: Never
+      serviceAccount: db2u          ### !!!!!! Default service account that db2u uses. Change it if necessary !!!!!! ### [REQUIRED]
+      volumes:
+      - name: db2u-meta-vol
+        persistentVolumeClaim:
+          claimName: "test-bdi-db-release-name-db2u-meta-storage"             ### !!!!!! Db2u meta storage pvc name !!!!!! ### [REQUIRED]
+      - name: db2instance-secret
+        secret:
+          secretName: "test-bdi-db-release-name-db2u-instance"                   ### !!!!!!  Db2u instance secret name !!!!!! ### [REQUIRED]
+          defaultMode: 256

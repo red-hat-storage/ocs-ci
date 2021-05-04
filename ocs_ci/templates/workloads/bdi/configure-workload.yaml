@@ -1,0 +1,85 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "db2u-configure-workload-job"
+  namespace: "db2u-project"                                ###  *** Namespace where db2u deployment is running  *** ###
+  labels:
+    app: db2u.workload
+spec:
+  template:
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      initContainers:
+      - name: configure-workload
+        image: "icr.io/obs/hdm/db2u/db2u.db2client.workload:11.5.4.0-1362-x86_64"        ### *** Update the image registry as required *** ###
+        imagePullPolicy: Always
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 500
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "50Mi"
+          limits:
+            cpu: "200m"
+            memory: "400Mi"
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          name: db2u-meta-vol
+        command:
+          - "/bin/sh"
+          - "-ecx"
+          - |
+            /workload/scripts/configure-workload.sh --type $WORKLOAD_TYPE --namespace $POD_NAMESPACE --scale $SCALE_FACTOR --configure
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: WORKLOAD_TYPE
+          value: "bdi"                        ### *** Accepts dtw/bdi/tpcds *** ###
+        - name: SCALE_FACTOR
+          value: "1"                        ### *** Accepts Scale Factors 1/10/100/500/1000...n [ Refer original workload docs to use appropriate scale factor ] (BDI/TPC-DS) ###
+      containers:
+      - name: generate-data
+        image: "icr.io/obs/hdm/db2u/db2u.db2client.workload:11.5.4.0-1362-x86_64"                 ### *** Update the image registry as required *** ###
+        imagePullPolicy: Always
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 500
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "50Mi"
+          limits:
+            cpu: "200m"
+            memory: "400Mi"
+        command:
+          - "/bin/sh"
+          - "-ecx"
+          - /workload/scripts/configure-workload.sh --generate
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          name: db2u-meta-vol
+      restartPolicy: Never
+      serviceAccount: db2u          ### !!!!!! Default service account that db2u uses. Change it if necessary !!!!!! ### [REQUIRED]
+      volumes:
+      - name: db2u-meta-vol
+        persistentVolumeClaim:
+            claimName: "test-bdi-db-release-name-db2u-meta-storage"             ### !!!!!! Db2u meta storage pvc name !!!!!! ### [REQUIRED]
