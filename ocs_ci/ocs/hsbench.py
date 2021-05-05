@@ -31,7 +31,6 @@ class HsBench(object):
         self.num_bucket = self.hsbench_cr["num_bucket"]
         self.bucket_prefix = self.hsbench_cr["bucket_prefix"]
         self.end_point = self.hsbench_cr["end_point"]
-        self.end_point_port = self.hsbench_cr["end_point_port"]
         self.hsbench_bin_dir = self.hsbench_cr["hsbench_bin_dir"]
 
     def create_resource_hsbench(self):
