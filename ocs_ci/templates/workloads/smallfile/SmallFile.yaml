@@ -30,3 +30,8 @@ spec:
       files: 50000
       storageclass: ocs-storageclass-ceph-rbd
       storagesize: 100Gi
+      # un comment the next line when the  drop-cache-kernel will support multi-arch
+      # drop_cache_kernel: true
+      rook_ceph_drop_caches: True
+      # place holder for the pod ip - will be filled up in the test
+      rook_ceph_drop_cache_pod_ip:

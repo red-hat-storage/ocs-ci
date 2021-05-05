@@ -28,6 +28,7 @@ from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.elasticsearch import ElasticSearch
+from ocs_ci.ocs.resources import cache_drop
 
 log = logging.getLogger(__name__)
 
@@ -241,6 +242,7 @@ class SmallFileResultsAnalyse(PerfResult):
         """
 
         test_pass = True
+        float_formatter = "{0:.2f}"
         for op in self.results["operations"]:
             log.debug(f'Aggregating {op} - {self.results["full-res"][op]}')
             results = self.combine_results(self.results["full-res"][op], False)
@@ -249,18 +251,22 @@ class SmallFileResultsAnalyse(PerfResult):
 
             for key in self.managed_keys.keys():
                 if self.managed_keys[key]["name"] in results.keys():
-                    results[key] = np.average(results[self.managed_keys[key]["name"]])
+                    results[key] = float_formatter.format(
+                        np.average(results[self.managed_keys[key]["name"]])
+                    )
                     if key == "IOPS":
                         st_deviation = np.std(results[self.managed_keys[key]["name"]])
                         mean = np.mean(results[self.managed_keys[key]["name"]])
 
-                        pct_dev = (st_deviation / mean) * 100
+                        pct_dev = float(
+                            float_formatter.format((st_deviation / mean) * 100)
+                        )
                         if pct_dev > 20:
                             log.error(
-                                f"Deviation for {op} IOPS is more the 20% ({pct_dev})"
+                                f"Deviation for {op} IOPS is more the 20% ({pct_dev}%)"
                             )
                             test_pass = False
-                    del results[self.managed_keys[key]["name"]]
+                        results["std_deviation_pct"] = pct_dev
                 self.results["full-res"][op] = results
 
         return test_pass
@@ -442,6 +448,15 @@ class TestSmallFileWorkload(PASTest):
         )
         time.sleep(sleep_time * 60)
 
+        # Deploying OSD cache drop pod
+        self.c_drop = cache_drop.OSDCashDrop()
+        self.c_drop.deploy()
+
+    def teardown(self):
+
+        # Deleting the OSD cache drop pod
+        self.c_drop.cleanup()
+
     @pytest.mark.parametrize(
         argnames=["file_size", "files", "threads", "samples", "interface"],
         argvalues=[
@@ -503,6 +518,10 @@ class TestSmallFileWorkload(PASTest):
         self.setting_storage_usage(file_size, files, threads, samples)
 
         self.get_env_info()
+
+        self.crd_data["spec"]["workload"]["args"][
+            "rook_ceph_drop_cache_pod_ip"
+        ] = self.c_drop.ip
 
         if not self.run():
             log.error("The benchmark failed to run !")
