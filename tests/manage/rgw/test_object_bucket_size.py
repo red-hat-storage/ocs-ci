@@ -2,13 +2,16 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import (
-    tier2,
+    tier1,
     config,
     bugzilla,
     skipif_ocs_version,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_openshift_dedicated,
+    skipif_upgraded_from,
+)
 from ocs_ci.ocs.bucket_utils import get_bucket_available_size
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
@@ -54,7 +57,8 @@ def compare_sizes(mcg_obj, ceph_obj, bucket_name):
 @pytest.mark.polarion_id("OCS-2476")
 @bugzilla("1880747")
 @bugzilla("1880748")
-@tier2
+@skipif_upgraded_from(["4.6"])
+@tier1
 def test_object_bucket_size(mcg_obj, bucket_factory, rgw_deployments):
     """
     Test to verify object bucket(backed by RGW) available size
