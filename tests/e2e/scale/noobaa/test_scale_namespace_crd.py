@@ -45,7 +45,7 @@ class TestScaleNamespace(MCGTest):
             ),
         ],
     )
-    def test_scale_namespace_bucket_creation_cdr(
+    def test_scale_namespace_bucket_creation_crd(
         self,
         mcg_obj,
         bucket_factory,

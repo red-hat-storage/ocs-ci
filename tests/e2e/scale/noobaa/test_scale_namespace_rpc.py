@@ -19,13 +19,25 @@ class TestScaleNamespace(MCGTest):
     """
 
     @skipif_ocs_version("<4.6")
-    @pytest.mark.polarion_id("OCS-2516")
-    def test_scale_namespace_bucket_creation(self, ns_resource_factory, bucket_factory):
+    @pytest.mark.parametrize(
+        argnames=["platform"],
+        argvalues=[
+            pytest.param(
+                constants.AWS_PLATFORM, marks=pytest.mark.polarion_id("OCS-2516")
+            ),
+            pytest.param(
+                constants.AZURE_PLATFORM, marks=pytest.mark.polarion_id("OCS-2523")
+            ),
+        ],
+    )
+    def test_scale_namespace_bucket_creation(
+        self, ns_resource_factory, bucket_factory, platform
+    ):
         """
         Test namespace bucket creation using the MCG RPC.
         """
         # Create the namespace resource and verify health
-        ns_resource_name = ns_resource_factory(platform=constants.AWS_PLATFORM)[1]
+        ns_resource_name = ns_resource_factory(platform=platform)[1]
 
         # Create the namespace buckets on top of the namespace resource
         bucket_factory(
