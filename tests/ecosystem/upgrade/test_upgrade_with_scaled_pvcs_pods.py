@@ -112,7 +112,7 @@ def test_scale_pvcs_pods_post_upgrade():
     ocp_pod_obj = OCP(kind=constants.DEPLOYMENTCONFIG, namespace=namespace)
     all_pods_dict = ocp_pod_obj.get()
     pod_running_list, pod_not_running_list = ([], [])
-    for i in range(4):
+    for i in range(len(pod_scale_list)):
         pod_data = all_pods_dict["items"][i]
         if not pod_data["status"]["availableReplicas"]:
             pod_not_running_list.append(pod_data["metadata"]["name"])
