@@ -35,7 +35,7 @@ def test_scale_pvcs_pods_pre_upgrade():
     Function to scale PVCs and PODs
     """
 
-    # Scale FIO pods in the cluster
+    # Scale 1500+ PVCs and PODs in the cluster
     fioscale = FioPodScale(
         kind=constants.DEPLOYMENTCONFIG, node_selector=constants.SCALE_NODE_SELECTOR
     )
@@ -47,7 +47,7 @@ def test_scale_pvcs_pods_pre_upgrade():
     scale_round_up_count = SCALE_COUNT + 20
 
     # Get PVCs and PODs count and list
-    pod_running_list, pvc_bound_list = ([] for i in range(2))
+    pod_running_list, pvc_bound_list = ([], [])
     for pod_objs in kube_pod_obj_list:
         pod_running_list.extend(
             scale_lib.check_all_pod_reached_running_state_in_kube_job(
@@ -98,9 +98,16 @@ def test_scale_pvcs_pods_post_upgrade():
     pod_scale_list = file_data.get("POD_SCALE_LIST")
     pvc_scale_list = file_data.get("PVC_SCALE_LIST")
 
+    # List declaration
+    (pvc_bound_list, pvc_not_bound_list, pod_running_list, pod_not_running_list) = (
+        [],
+        [],
+        [],
+        [],
+    )
+
     # Get all PVCs from namespace
     all_pvc_dict = get_all_pvcs(namespace=namespace)
-    pvc_bound_list, pvc_not_bound_list = ([] for i in range(2))
     for i in range(len(pvc_scale_list)):
         pvc_data = all_pvc_dict["items"][i]
         if not pvc_data["status"]["phase"] == constants.STATUS_BOUND:
@@ -111,7 +118,6 @@ def test_scale_pvcs_pods_post_upgrade():
     # Get all PODs from namespace
     ocp_pod_obj = OCP(kind=constants.DEPLOYMENTCONFIG, namespace=namespace)
     all_pods_dict = ocp_pod_obj.get()
-    pod_running_list, pod_not_running_list = ([] for i in range(2))
     for i in range(4):
         pod_data = all_pods_dict["items"][i]
         if not pod_data["status"]["availableReplicas"]:
@@ -122,11 +128,11 @@ def test_scale_pvcs_pods_post_upgrade():
     # Check status of PVCs PODs scaled in pre-upgrade
     if not len(pvc_bound_list) == len(pvc_scale_list):
         raise UnexpectedBehaviour(
-            f"PVC Bound count mismatch {len(pvc_not_bound_list)} PVCs not in Bound state"
+            f"PVC Bound count mismatch {len(pvc_not_bound_list)} PVCs not in Bound state "
             f"PVCs not in Bound state {pvc_not_bound_list}"
         )
     else:
-        logging.info(f"All the expected {len(pvc_bound_list)} PVCs in Bound state")
+        logging.info(f"All the expected {len(pvc_bound_list)} PVCs are in Bound state")
 
     if not len(pod_running_list) == len(pod_scale_list):
         raise UnexpectedBehaviour(
@@ -134,7 +140,9 @@ def test_scale_pvcs_pods_post_upgrade():
             f"PODs not in Running state {pod_not_running_list}"
         )
     else:
-        logging.info(f"All the expected {len(pod_running_list)} PODs in Running state")
+        logging.info(
+            f"All the expected {len(pod_running_list)} PODs are in Running state"
+        )
 
     # Check ceph health status
     utils.ceph_health_check()
