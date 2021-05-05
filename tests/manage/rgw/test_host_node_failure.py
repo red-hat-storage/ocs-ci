@@ -73,6 +73,17 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
         if noobaa_pod_node is None:
             assert False, "Could not find the NooBaa DB pod"
 
+        # Validate if RGW pod and noobaa-db are hosted on same node else skip test
+        rgw_pod_node_list = []
+        for rgw_pod in rgw_pod_obj:
+            rgw_pod_node_list.append(rgw_pod.get().get("spec").get("nodeName"))
+        if set(rgw_pod_node_list).intersection(noobaa_pod_node.name):
+            pytest.skip(
+                "RGW pod and NooBaa DB are not hosted on same node. "
+                f"RGW pod hosted on nodes: {rgw_pod_node_list} "
+                f"NooBaa DB pod hosted on node: {noobaa_pod_node.name}"
+            )
+
         for rgw_pod in rgw_pod_obj:
             pod_node = rgw_pod.get().get("spec").get("nodeName")
             if pod_node == noobaa_pod_node.name:
@@ -110,13 +121,6 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
 
                 # Create OBC and read wnd write
                 self.create_obc_creation(bucket_factory, mcg_obj, "Object-key-2")
-
-            else:
-                pytest.skip(
-                    "RGW pod and NooBaa DB are not hosted on same node. "
-                    f"RGW pod hosted on node: {pod_node} "
-                    f"NooBaa DB pod hosted on node: {noobaa_pod_node.name}"
-                )
 
         # Verify cluster health
         self.sanity_helpers.health_check()
