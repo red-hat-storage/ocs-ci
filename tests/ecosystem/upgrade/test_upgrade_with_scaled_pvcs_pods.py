@@ -98,16 +98,9 @@ def test_scale_pvcs_pods_post_upgrade():
     pod_scale_list = file_data.get("POD_SCALE_LIST")
     pvc_scale_list = file_data.get("PVC_SCALE_LIST")
 
-    # List declaration
-    (pvc_bound_list, pvc_not_bound_list, pod_running_list, pod_not_running_list) = (
-        [],
-        [],
-        [],
-        [],
-    )
-
     # Get all PVCs from namespace
     all_pvc_dict = get_all_pvcs(namespace=namespace)
+    pvc_bound_list, pvc_not_bound_list = ([], [])
     for i in range(len(pvc_scale_list)):
         pvc_data = all_pvc_dict["items"][i]
         if not pvc_data["status"]["phase"] == constants.STATUS_BOUND:
@@ -118,6 +111,7 @@ def test_scale_pvcs_pods_post_upgrade():
     # Get all PODs from namespace
     ocp_pod_obj = OCP(kind=constants.DEPLOYMENTCONFIG, namespace=namespace)
     all_pods_dict = ocp_pod_obj.get()
+    pod_running_list, pod_not_running_list = ([], [])
     for i in range(4):
         pod_data = all_pods_dict["items"][i]
         if not pod_data["status"]["availableReplicas"]:
