@@ -1,15 +1,16 @@
 import logging
+import os
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier4,
     tier4a,
     bugzilla,
     skipif_ocs_version,
+    skipif_aws_creds_are_missing,
+    skipif_openshift_dedicated,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs.bucket_utils import (
@@ -99,7 +100,10 @@ class TestMultiRegion(MCGTest):
         ).split(" ")
 
         logger.info("Uploading all pod objects to MCG bucket")
-        local_temp_path = "/aws"
+        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+        awscli_pod_session.exec_cmd_on_pod(command=f"mkdir -p {test_name}")
+        local_temp_path = f"{test_name}/temp"
+        awscli_pod_session.exec_cmd_on_pod(command=f"mkdir -p {local_temp_path}")
         mcg_bucket_path = f"s3://{bucket_name}"
 
         # Upload test objects to the NooBucket
@@ -164,5 +168,3 @@ class TestMultiRegion(MCGTest):
         mcg_obj.check_backingstore_state(
             "backing-store-" + backingstore2.name, BS_OPTIMAL
         )
-        # Clean up the temp dir
-        awscli_pod_session.exec_cmd_on_pod(command=f'sh -c "rm -rf {local_temp_path}"')

@@ -4,12 +4,12 @@ import timeit
 import botocore
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier3,
     acceptance,
     performance,
+    skipif_openshift_dedicated,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.helpers.helpers import create_unique_resource_name

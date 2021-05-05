@@ -1,4 +1,5 @@
 import logging
+import os
 
 import pytest
 import uuid
@@ -33,12 +34,14 @@ def setup(pod_obj, bucket_factory):
     """
     bucket = bucket_factory(amount=1, interface="OC")[0].name
     object_key = "ObjKey-" + str(uuid.uuid4().hex)
-    origin_dir = "/aws/objectdir"
-    res_dir = "/aws/partsdir"
+    test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+    origin_dir = f"{test_name}/objectdir"
+    res_dir = f"{test_name}/partsdir"
     full_object_path = f"s3://{bucket}"
     # Creates a 500MB file and splits it into multiple parts
     pod_obj.exec_cmd_on_pod(
-        f'sh -c "mkdir {origin_dir}; mkdir {res_dir}; '
+        f'sh -c "mkdir {test_name}; '
+        f"mkdir {origin_dir}; mkdir {res_dir}; "
         f"dd if=/dev/urandom of={origin_dir}/{object_key} bs=1MB count=500; "
         f'split -a 1 -b 41m {origin_dir}/{object_key} {res_dir}/part"'
     )
