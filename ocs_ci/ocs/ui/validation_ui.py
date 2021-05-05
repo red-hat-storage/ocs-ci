@@ -149,6 +149,7 @@ class ValidationUI(PageNavigator):
         self.verify_object_service_page()
         self.verify_persistent_storage_page()
         self.verify_ocs_operator_tabs()
+        self.take_screenshot()
         for err in self.err_list:
             logger.error(err)
         assert len(self.err_list) == 0, f"{self.err_list}"
