@@ -66,7 +66,7 @@ class OSDCashDrop(OCP):
         Drop the OSD's cache by sending http request to the pod
 
         Raises:
-            exaption : if the request to drop the cache failed
+            exception : if the request to drop the cache failed
 
         """
         log.info(f"ceph OSD cache drop pod: {self.ip}")
