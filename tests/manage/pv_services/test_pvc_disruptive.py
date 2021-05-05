@@ -293,7 +293,7 @@ class TestPVCDisruption(ManageTest):
         # Verify pods are Running
         for pod_obj in pod_objs:
             helpers.wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=90
             )
             pod_obj.reload()
         logger.info("Verified: All pods are Running.")
@@ -358,7 +358,7 @@ class TestPVCDisruption(ManageTest):
         # Verify new pods are Running
         for pod_obj in pod_objs:
             helpers.wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=90
             )
             pod_obj.reload()
         logging.info("Verified: All new pods are Running.")
