@@ -102,7 +102,7 @@ class TestNamespace(MCGTest):
     @pytest.mark.polarion_id("OCS-2257")
     @tier1
     def test_write_to_aws_read_from_ns_rpc(
-        self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory
+        self, mcg_obj, cld_mgr, awscli_pod_session, ns_resource_factory, bucket_factory
     ):
         """
         Test Write to AWS and read from ns bucket using MCG RPC.
@@ -129,21 +129,21 @@ class TestNamespace(MCGTest):
         # Upload files directly to AWS
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=target_bucket_name,
             amount=3,
             s3_creds=s3_creds,
         )
         # Read files from ns bucket
-        self.download_files(mcg_obj, awscli_pod, bucket_to_read=rand_ns_bucket)
+        self.download_files(mcg_obj, awscli_pod_session, bucket_to_read=rand_ns_bucket)
 
         # Compare between uploaded files and downloaded files
-        assert self.compare_dirs(awscli_pod, amount=3)
+        assert self.compare_dirs(awscli_pod_session, amount=3)
 
     @pytest.mark.polarion_id("OCS-2258")
     @tier1
     def test_write_to_ns_read_from_aws_rpc(
-        self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory
+        self, mcg_obj, cld_mgr, awscli_pod_session, ns_resource_factory, bucket_factory
     ):
         """
         Test Write to ns bucket using MCG RPC and read directly from AWS.
@@ -170,15 +170,18 @@ class TestNamespace(MCGTest):
         }
         # Upload files to NS bucket
         self.write_files_to_pod_and_upload(
-            mcg_obj, awscli_pod, bucket_to_write=rand_ns_bucket, amount=3
+            mcg_obj, awscli_pod_session, bucket_to_write=rand_ns_bucket, amount=3
         )
         # Read files directly from AWS
         self.download_files(
-            mcg_obj, awscli_pod, bucket_to_read=target_bucket_name, s3_creds=s3_creds
+            mcg_obj,
+            awscli_pod_session,
+            bucket_to_read=target_bucket_name,
+            s3_creds=s3_creds,
         )
 
         # Compare between uploaded files and downloaded files
-        assert self.compare_dirs(awscli_pod, amount=3)
+        assert self.compare_dirs(awscli_pod_session, amount=3)
 
     @pytest.mark.polarion_id("OCS-2292")
     @tier2
@@ -187,7 +190,7 @@ class TestNamespace(MCGTest):
         rgw_deployments,
         mcg_obj,
         cld_mgr,
-        awscli_pod,
+        awscli_pod_session,
         ns_resource_factory,
         bucket_factory,
     ):
@@ -207,7 +210,7 @@ class TestNamespace(MCGTest):
         }
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=target_bucket1,
             amount=4,
             s3_creds=rgw_creds,
@@ -230,17 +233,17 @@ class TestNamespace(MCGTest):
         }
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=target_bucket2,
             amount=3,
             s3_creds=aws_creds,
         )
 
         logger.info("Read files from ns bucket")
-        self.download_files(mcg_obj, awscli_pod, bucket_to_read=rand_ns_bucket)
+        self.download_files(mcg_obj, awscli_pod_session, bucket_to_read=rand_ns_bucket)
 
         logger.info("Compare between uploaded files and downloaded files")
-        assert self.compare_dirs(awscli_pod, amount=4)
+        assert self.compare_dirs(awscli_pod_session, amount=4)
 
     @pytest.mark.polarion_id("OCS-2290")
     @tier2
@@ -249,7 +252,7 @@ class TestNamespace(MCGTest):
         rgw_deployments,
         mcg_obj,
         cld_mgr,
-        awscli_pod,
+        awscli_pod_session,
         ns_resource_factory,
         bucket_factory,
     ):
@@ -274,14 +277,14 @@ class TestNamespace(MCGTest):
         }
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=target_bucket1,
             amount=3,
             s3_creds=rgw_creds,
         )
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=target_bucket2,
             amount=3,
             s3_creds=aws_creds,
@@ -296,10 +299,10 @@ class TestNamespace(MCGTest):
         )[0].name
 
         logger.info("Read files from ns bucket")
-        self.download_files(mcg_obj, awscli_pod, bucket_to_read=rand_ns_bucket)
+        self.download_files(mcg_obj, awscli_pod_session, bucket_to_read=rand_ns_bucket)
 
         logger.info("Compare between uploaded files and downloaded files")
-        assert self.compare_dirs(awscli_pod, amount=3)
+        assert self.compare_dirs(awscli_pod_session, amount=3)
 
     @tier2
     @pytest.mark.parametrize(
@@ -383,7 +386,7 @@ class TestNamespace(MCGTest):
     @pytest.mark.polarion_id("OCS-2282")
     @tier3
     def test_delete_resource_used_in_ns_bucket_rpc(
-        self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory
+        self, mcg_obj, cld_mgr, awscli_pod_session, ns_resource_factory, bucket_factory
     ):
         """
         Test that a proper error message is reported when invalid target
@@ -430,7 +433,13 @@ class TestNamespace(MCGTest):
         ],
     )
     def test_respin_mcg_pod_and_check_data_integrity_rpc(
-        self, mcg_obj, cld_mgr, awscli_pod, ns_resource_factory, bucket_factory, mcg_pod
+        self,
+        mcg_obj,
+        cld_mgr,
+        awscli_pod_session,
+        ns_resource_factory,
+        bucket_factory,
+        mcg_pod,
     ):
         """
         Test Write to ns bucket using MCG RPC and read directly from AWS.
@@ -458,7 +467,7 @@ class TestNamespace(MCGTest):
 
         logger.info("Upload files to NS bucket")
         self.write_files_to_pod_and_upload(
-            mcg_obj, awscli_pod, bucket_to_write=rand_ns_bucket, amount=3
+            mcg_obj, awscli_pod_session, bucket_to_write=rand_ns_bucket, amount=3
         )
 
         logger.info(f"Respin mcg resource {mcg_pod}")
@@ -478,11 +487,14 @@ class TestNamespace(MCGTest):
 
         logger.info("Read files directly from AWS")
         self.download_files(
-            mcg_obj, awscli_pod, bucket_to_read=target_bucket_name, s3_creds=s3_creds
+            mcg_obj,
+            awscli_pod_session,
+            bucket_to_read=target_bucket_name,
+            s3_creds=s3_creds,
         )
 
         logger.info("Compare between uploaded files and downloaded files")
-        assert self.compare_dirs(awscli_pod, amount=3)
+        assert self.compare_dirs(awscli_pod_session, amount=3)
 
     @pytest.mark.polarion_id("OCS-2293")
     @tier4
@@ -509,7 +521,7 @@ class TestNamespace(MCGTest):
     @tier4
     @tier4a
     def test_block_read_resource_in_namespace_bucket_rpc(
-        self, mcg_obj, awscli_pod, ns_resource_factory, bucket_factory, cld_mgr
+        self, mcg_obj, awscli_pod_session, ns_resource_factory, bucket_factory, cld_mgr
     ):
         """
         Test blocking namespace resource in namespace bucket.
@@ -530,14 +542,14 @@ class TestNamespace(MCGTest):
         logger.info("Upload files to NS resources")
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=resource1[0],
             amount=3,
             s3_creds=s3_creds,
         )
         self.write_files_to_pod_and_upload(
             mcg_obj,
-            awscli_pod,
+            awscli_pod_session,
             bucket_to_write=resource2[0],
             amount=2,
             s3_creds=s3_creds,
@@ -556,7 +568,9 @@ class TestNamespace(MCGTest):
 
         logger.info("Read files directly from AWS")
         try:
-            self.download_files(mcg_obj, awscli_pod, bucket_to_read=rand_ns_bucket)
+            self.download_files(
+                mcg_obj, awscli_pod_session, bucket_to_read=rand_ns_bucket
+            )
         except CommandFailed:
             logger.info("Attempt to read files failed as expected")
             logger.info("Bring resource1 up")

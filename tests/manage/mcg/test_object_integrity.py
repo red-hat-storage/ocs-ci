@@ -1,4 +1,5 @@
 import logging
+import os
 
 import pytest
 
@@ -84,10 +85,11 @@ class TestObjectIntegrity(MCGTest):
         """
         bucketname = bucket_factory(1, bucketclass=bucketclass_dict)[0].name
         original_dir = "/test_objects"
-        result_dir = "/result"
-        awscli_pod_session.exec_cmd_on_pod(command=f"mkdir {result_dir}")
-        # Retrieve a list of all objects on the test-objects bucket and
-        # downloads them to the pod
+        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+        result_dir = f"{test_name}/result"
+        awscli_pod_session.exec_cmd_on_pod(
+            command=f'sh -c "mkdir {test_name}; ' f'mkdir {result_dir}; "'
+        )
         full_object_path = f"s3://{bucketname}"
         downloaded_files = awscli_pod_session.exec_cmd_on_pod(
             f"ls -A1 {original_dir}"
@@ -108,105 +110,6 @@ class TestObjectIntegrity(MCGTest):
                 result_object_path=f"{result_dir}/{obj}",
                 awscli_pod=awscli_pod_session,
             ), "Checksum comparison between original and result object failed"
-        # Clean up the results dir
-        awscli_pod_session.exec_cmd_on_pod(command=f'sh -c "rm -rf {result_dir}/*"')
-
-    @pytest.mark.parametrize(
-        argnames="amount,file_type",
-        argvalues=[
-            pytest.param(
-                *[1, "large"],
-                marks=[pytest.mark.polarion_id("OCS-1944"), tier2, FILESIZE_SKIP],
-            ),
-            pytest.param(
-                *[100, "large"],
-                marks=[pytest.mark.polarion_id("OCS-1946"), tier3, FILESIZE_SKIP],
-            ),
-            pytest.param(
-                *[1, "small"], marks=[pytest.mark.polarion_id("OCS-1950"), tier2]
-            ),
-            pytest.param(
-                *[1000, "small"],
-                marks=[pytest.mark.polarion_id("OCS-1951"), tier3, RUNTIME_SKIP],
-            ),
-            pytest.param(
-                *[100, "large_small"],
-                marks=[pytest.mark.polarion_id("OCS-1952"), tier3, FILESIZE_SKIP],
-            ),
-        ],
-    )
-    def test_check_multi_object_integrity(
-        self, mcg_obj, awscli_pod_session, bucket_factory, amount, file_type
-    ):
-        """
-        Test write multiple files to bucket and check integrity
-        """
-        original_dir = "/original"
-        result_dir = "/result"
-        if file_type == "large":
-            public_bucket = PUBLIC_BUCKET
-            obj_key = LARGE_FILE_KEY
-        elif file_type == "small":
-            public_bucket = "/test_objects"
-            obj_key = "random1.txt"
-        elif file_type == "large_small":
-            public_bucket = PUBLIC_BUCKET
-            obj_key = LARGE_FILE_KEY.rsplit("/", 1)[0]
-
-        # Download the file to pod
-        awscli_pod_session.exec_cmd_on_pod(command=f"mkdir {original_dir} {result_dir}")
-        public_s3_client = retrieve_anon_s3_resource().meta.client
-        download_files = []
-        # Use obj_key as prefix to download multiple files for large_small
-        # case, it also works with single file
-        if file_type != "small":
-            for obj in public_s3_client.list_objects(
-                Bucket=public_bucket, Prefix=obj_key
-            ).get("Contents"):
-                # Skip the extra file in large file type
-                if file_type == "large" and obj["Key"] != obj_key:
-                    continue
-                logger.info(f'Downloading {obj["Key"]} from AWS bucket {public_bucket}')
-                download_obj_cmd = (
-                    f'cp s3://{public_bucket}/{obj["Key"]} {original_dir}'
-                )
-                awscli_pod_session.exec_cmd_on_pod(
-                    command=craft_s3_command(download_obj_cmd), out_yaml_format=False
-                )
-                download_files.append(obj["Key"].split("/")[-1])
-        else:
-            original_dir = public_bucket
-            download_files = awscli_pod_session.exec_cmd_on_pod(
-                f"ls -A1 {public_bucket}"
-            ).split(" ")
-        # Write downloaded objects to the new bucket and check integrity
-        bucketname = bucket_factory(1)[0].name
-        base_path = f"s3://{bucketname}"
-        for i in range(amount):
-            full_object_path = base_path + f"/{i}/"
-            sync_object_directory(
-                awscli_pod_session, original_dir, full_object_path, mcg_obj
-            )
-
-            # Retrieve all objects from MCG bucket to result dir in Pod
-            logger.info("Downloading objects from MCG bucket to awscli pod")
-            sync_object_directory(
-                awscli_pod_session, full_object_path, result_dir, mcg_obj
-            )
-
-            # Checksum is compared between original and result object
-            for obj in download_files:
-                assert verify_s3_object_integrity(
-                    original_object_path=f"{original_dir}/{obj}",
-                    result_object_path=f"{result_dir}/{obj}",
-                    awscli_pod=awscli_pod_session,
-                ), "Checksum comparison between original and result object failed"
-            # Clean up the temp dirs
-            if file_type != "small":
-                awscli_pod_session.exec_cmd_on_pod(
-                    command=f'sh -c "rm -rf {original_dir}/*"'
-                )
-            awscli_pod_session.exec_cmd_on_pod(command=f'sh -c "rm -rf {result_dir}/*"')
 
     @pytest.mark.polarion_id("OCS-1945")
     @tier2
@@ -214,14 +117,18 @@ class TestObjectIntegrity(MCGTest):
         """
         Test write empty files to bucket and check integrity
         """
-        original_dir = "/data"
-        result_dir = "/result"
+        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+        original_dir = f"{test_name}/data"
+        result_dir = f"{test_name}/result"
+        awscli_pod_session.exec_cmd_on_pod(
+            command=f'sh -c "mkdir {test_name}; '
+            f'mkdir {original_dir}; mkdir {result_dir}; "'
+        )
         bucketname = bucket_factory(1)[0].name
         full_object_path = f"s3://{bucketname}"
 
         # Touch create 1000 empty files in pod
-        awscli_pod_session.exec_cmd_on_pod(command=f"mkdir {original_dir} {result_dir}")
-        command = "for i in $(seq 1 100); do touch /data/test$i; done"
+        command = f"for i in $(seq 1 100); do touch {original_dir}/test$i; done"
         awscli_pod_session.exec_sh_cmd_on_pod(command=command, sh="sh")
         # Write all empty objects to the new bucket
         sync_object_directory(
@@ -240,5 +147,3 @@ class TestObjectIntegrity(MCGTest):
             f'sh -c "cat {original_dir}/* | md5sum"'
         )
         assert original_md5 == result_md5
-        awscli_pod_session.exec_cmd_on_pod(command=f'sh -c "rm -rf {original_dir}/*"')
-        awscli_pod_session.exec_cmd_on_pod(command=f'sh -c "rm -rf {result_dir}/*"')
