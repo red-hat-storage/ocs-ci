@@ -7,6 +7,7 @@ from ocs_ci.ocs.node import (
     get_worker_nodes,
     add_new_node_and_label_it,
     add_new_node_and_label_upi,
+    add_new_nodes_and_label_upi_lso,
     taint_nodes,
 )
 from ocs_ci.ocs import machine as machine_utils
@@ -73,11 +74,19 @@ def add_nodes():
             else:
                 node_type = constants.RHCOS
 
-            new_nodes.append(
-                add_new_node_and_label_upi(
-                    node_type, node_count, mark_for_ocs_label=ocs_nodes
+            if config.DEPLOYMENT.get("local_storage"):
+                new_nodes.append(
+                    add_new_nodes_and_label_upi_lso(
+                        node_type, node_count, mark_for_ocs_label=ocs_nodes
+                    )
                 )
-            )
+            else:
+                new_nodes.append(
+                    add_new_node_and_label_upi(
+                        node_type, node_count, mark_for_ocs_label=ocs_nodes
+                    )
+                )
+
             log.info(
                 f"The worker nodes number after expansion {len(get_worker_nodes())}"
             )
