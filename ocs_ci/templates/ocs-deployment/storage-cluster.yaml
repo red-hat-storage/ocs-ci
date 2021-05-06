@@ -5,15 +5,6 @@ metadata:
   namespace: openshift-storage
   name: ocs-storagecluster
 spec:
-  managedResources:
-    CephObjectStores:
-      reconcileStrategy: "manage"
-    CephFilesystems:
-      reconcileStrategy: "manage"
-    CephBlockPools:
-      reocncileStrategy: "manage"
-  multiCloudGateway:
-    reconcileStrategy: "manage"
   storageDeviceSets:
   - name: ocs-deviceset
     count: 1

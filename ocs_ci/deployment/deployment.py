@@ -16,7 +16,7 @@ import yaml
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
-from ocs_ci.framework import config
+from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
     validate_cluster_on_pvc,
@@ -488,6 +488,7 @@ class Deployment(object):
                 create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         if not live_deployment:
             self.create_ocs_operator_source(image)
+            pass
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
@@ -576,12 +577,28 @@ class Deployment(object):
 
         # Update cluster_data with respective component enable/disable
         for key in config.COMPONENTS.keys():
-            if "noobaa" in key:
-                base_dict = cluster_data["spec"]
-            else:
-                base_dict = cluster_data["spec"]["managedResources"]
+            comp_name = constants.OCS_COMPONENTS_MAP[key.split("_")[1]]
             if config.COMPONENTS[key]:
-                base_dict[constants.OCS_COMPONENTS_MAP[key.split("_")[1]]] = "ignore"
+                if "noobaa" in key:
+                    merge_dict(
+                        cluster_data,
+                        {
+                            "spec": {
+                                "multiCloudGateway": {"reconcileStrategy": "ignore"}
+                            }
+                        },
+                    )
+                else:
+                    merge_dict(
+                        cluster_data,
+                        {
+                            "spec": {
+                                "managedResources": {
+                                    f"{comp_name}": {"reconcileStrategy": "ignore"}
+                                }
+                            }
+                        },
+                    )
 
         if arbiter_deployment:
             cluster_data["spec"]["arbiter"] = {}
