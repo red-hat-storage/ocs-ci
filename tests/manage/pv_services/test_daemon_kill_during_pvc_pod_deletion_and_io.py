@@ -112,8 +112,7 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         pod_objs = []
         rwx_pod_objs = []
 
-        nodes = node.get_worker_nodes()
-        nodes_iter = cycle(nodes) if nodes else None
+        nodes_iter = cycle(node.get_worker_nodes())
 
         # Create one pod using each RWO PVC and two pods using each RWX PVC
         for pvc_obj in pvc_objs:
