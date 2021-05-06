@@ -294,7 +294,8 @@ class TestDiskFailures(ManageTest):
 
         # Scale down OSD deployment
         logger.info(f"Scaling down OSD deployment {osd_deployment_name} to 0")
-        ocp.OCP().exec_oc_cmd(f"scale --replicas=0 deployment/{osd_deployment_name}")
+        ocp_obj = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
+        ocp_obj.exec_oc_cmd(f"scale --replicas=0 deployment/{osd_deployment_name}")
 
         # Force delete OSD pod if necessary
         osd_pod_name = osd_pod.name
