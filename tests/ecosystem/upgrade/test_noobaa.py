@@ -82,12 +82,14 @@ def test_fill_bucket(
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2038")
 def test_noobaa_postupgrade(
-    mcg_obj_session, awscli_pod_session, multiregion_mirror_setup_session
+    mcg_obj_session,
+    awscli_pod_session,
+    multiregion_mirror_setup_session,
+    upgraded_noobaa_cli,
 ):
     """
     Check bucket data and remove resources created in 'test_fill_bucket'.
     """
-
     (bucket, created_backingstores) = multiregion_mirror_setup_session
     backingstore1 = created_backingstores[0]
     backingstore2 = created_backingstores[1]
@@ -138,7 +140,7 @@ def test_buckets_before_upgrade(upgrade_buckets, mcg_obj_session):
 @bugzilla("1820974")
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2181")
-def test_buckets_after_upgrade(upgrade_buckets, mcg_obj_session):
+def test_buckets_after_upgrade(upgrade_buckets, mcg_obj_session, upgraded_noobaa_cli):
     """
     Test that all buckets in cluster are in OPTIMAL state after upgrade.
     """
@@ -160,7 +162,7 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2207")
 @bugzilla("1874243")
-def test_upgrade_mcg_io(mcg_workload_job):
+def test_upgrade_mcg_io(mcg_workload_job, upgraded_noobaa_cli):
     """
     Confirm that there is MCG workload job running after upgrade.
     """

@@ -568,3 +568,13 @@ def upgrade_buckets(bucket_factory_session, awscli_pod_session, mcg_obj_session)
         )
 
     return buckets
+
+
+@pytest.fixture(scope="session")
+def upgraded_noobaa_cli(mcg_obj_session):
+    """
+    This fixture serves as a prerequisite for all noobaa post upgrade tests to
+    make sure that updated version of mcg cli is used after upgrade.
+    """
+    log.info("Making sure that correct version of mcg cli is used.")
+    mcg_obj_session.retrieve_noobaa_cli_binary()

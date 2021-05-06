@@ -968,6 +968,8 @@ class MCG:
             assert (
                 _compare_cli_hashes()
             ), "Binary hash doesn't match the one on the operator pod"
+        logger.info("Retrieving mcg cli version")
+        self.exec_mcg_cmd("version")
 
     @property
     def status(self):
