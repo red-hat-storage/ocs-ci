@@ -35,7 +35,6 @@
 /tests/manage/monitoring/ @red-hat-storage/blue-squad
 /tests/manage/mcg/ @red-hat-storage/red-squad
 /tests/manage/rgw/ @red-hat-storage/red-squad
-/tests/manage/z_cluster/test_must_gather.py @red-hat-storage/purple-squad
 /tests/ecosystem/upgrade/ @red-hat-storage/purple-squad
 /tests/e2e/flowtest/ @red-hat-storage/magenta-squad
 /tests/e2e/lifecycle/ @red-hat-storage/magenta-squad
