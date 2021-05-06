@@ -1561,9 +1561,11 @@ def add_new_nodes_and_label_upi_lso(
         list: new spun node names
 
     """
-    new_nodes = add_new_node_and_label_upi(
+    new_node_names = add_new_node_and_label_upi(
         node_type, num_nodes, mark_for_ocs_label, node_conf
     )
+    new_nodes = get_node_objs(new_node_names)
+
     if add_disks:
         for node_obj in new_nodes:
             add_disk_to_node(node_obj)
@@ -1572,4 +1574,4 @@ def add_new_nodes_and_label_upi_lso(
         for node_obj in new_nodes:
             add_node_to_lvd_and_lvs(node_obj.name)
 
-    return new_nodes
+    return new_node_names
