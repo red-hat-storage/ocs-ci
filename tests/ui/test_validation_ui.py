@@ -18,6 +18,9 @@ class TestUserInterfaceValidation(object):
         """
         Validate User Interface
 
+        Args:
+            setup_ui: login function on conftest file
+
         """
         validation_ui_obj = ValidationUI(setup_ui)
         validation_ui_obj.verification_ui()
