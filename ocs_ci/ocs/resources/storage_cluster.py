@@ -555,14 +555,17 @@ def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
 
 def get_osd_count():
     """
-    Get osd count from Storage cluster
+    Get osd count from Storage cluster.
 
     Returns:
-        int: osd count
+        int: osd count (In the case of external mode it returns 0)
 
     """
     sc = get_storage_cluster()
-    return int(sc.get().get("items")[0]["spec"]["storageDeviceSets"][0]["count"]) * int(
+    sc_data = sc.get().get("items")[0]
+    if sc_data["spec"].get("externalStorage", {}).get("enable"):
+        return 0
+    return int(sc_data["spec"]["storageDeviceSets"][0]["count"]) * int(
         sc.get().get("items")[0]["spec"]["storageDeviceSets"][0]["replica"]
     )
 
