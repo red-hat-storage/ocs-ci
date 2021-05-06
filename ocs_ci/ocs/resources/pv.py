@@ -1,11 +1,9 @@
 import logging
 from subprocess import TimeoutExpired
-
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
+
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.ocs.exceptions import PVNotSufficientException
-from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
@@ -169,6 +167,7 @@ def check_pvs_present_for_ocs_expansion(sc=constants.LOCALSTORAGE_SC):
     Raises:
         Assertion if PVS not present
     """
+    from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
     flexible_scaling = is_flexible_scaling_enabled()
     arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 
