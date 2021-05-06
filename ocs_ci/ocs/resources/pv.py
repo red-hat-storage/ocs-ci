@@ -168,6 +168,7 @@ def check_pvs_present_for_ocs_expansion(sc=constants.LOCALSTORAGE_SC):
         Assertion if PVS not present
     """
     from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
+
     flexible_scaling = is_flexible_scaling_enabled()
     arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 

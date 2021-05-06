@@ -123,16 +123,16 @@ def check_local_volume_local_volume_set():
         command = f"get localvolume local-block -n {config.ENV_DATA['local_storage_namespace']} "
         try:
             ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
-            lv_or_lvs_dict['localvolume'] = True
+            lv_or_lvs_dict["localvolume"] = True
         except CommandFailed as ex:
             logger.debug(f"Local volume does not exists! Exception: {ex}")
             logger.info("No Local volume found")
-            lv_or_lvs_dict['localvolume'] = False
+            lv_or_lvs_dict["localvolume"] = False
 
     logger.info("Checking if Local Volume Set is Present")
     if csv.get_csvs_start_with_prefix(
-            csv_prefix=defaults.LOCAL_STORAGE_OPERATOR_NAME,
-            namespace=config.ENV_DATA["local_storage_namespace"],
+        csv_prefix=defaults.LOCAL_STORAGE_OPERATOR_NAME,
+        namespace=config.ENV_DATA["local_storage_namespace"],
     ):
         ocp_obj = OCP()
         command = (
@@ -141,10 +141,10 @@ def check_local_volume_local_volume_set():
         )
         try:
             ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
-            lv_or_lvs_dict['localvolumeset'] = True
+            lv_or_lvs_dict["localvolumeset"] = True
         except CommandFailed as ex:
             logger.debug(f"Local volume Set does not exists! Exception: {ex}")
-            lv_or_lvs_dict['localvolumeset'] = False
+            lv_or_lvs_dict["localvolumeset"] = False
 
     return lv_or_lvs_dict
 
