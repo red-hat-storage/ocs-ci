@@ -8,7 +8,7 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
-from ocs_ci.ocs.resources.pod import Pod
+from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.helpers import helpers
 
 
@@ -574,7 +574,17 @@ def upgrade_buckets(bucket_factory_session, awscli_pod_session, mcg_obj_session)
 def upgraded_noobaa_cli(mcg_obj_session):
     """
     This fixture serves as a prerequisite for all noobaa post upgrade tests to
-    make sure that updated version of mcg cli is used after upgrade.
+    make sure that current operator pod and updated version of mcg cli is used
+    after upgrade.
     """
+    log.info(
+        "Making sure that current noobaa operator pod is set in mcg_obj_session "
+        "fixture after upgrade."
+    )
+    mcg_obj_session.operator_pod = Pod(
+        **get_pods_having_label(
+            constants.NOOBAA_OPERATOR_POD_LABEL, mcg_obj_session.namespace
+        )[0]
+    )
     log.info("Making sure that correct version of mcg cli is used.")
     mcg_obj_session.retrieve_noobaa_cli_binary()
