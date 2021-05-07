@@ -2961,6 +2961,7 @@ def get_mon_pdb():
     Returns:
         disruptions_allowed (int): Count of mon allowed disruption
         min_available_mon (int): Count of minimum mon available
+        max_unavailable_mon (int): Count of maximun mon unavailable
 
     """
 
@@ -2972,7 +2973,8 @@ def get_mon_pdb():
 
     disruptions_allowed = pdb_obj.get().get("status").get("disruptionsAllowed")
     min_available_mon = pdb_obj.get().get("spec").get("minAvailable")
-    return disruptions_allowed, min_available_mon
+    max_unavailable_mon = pdb_obj.get().get("spec").get("maxUnavailable")
+    return disruptions_allowed, min_available_mon, max_unavailable_mon
 
 
 @retry(CommandFailed, tries=10, delay=30, backoff=1)
