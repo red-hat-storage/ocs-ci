@@ -4,9 +4,7 @@ import pytest
 from semantic_version import Version
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import (
-    post_ocs_upgrade, ManageTest, skipif_external_mode
-)
+from ocs_ci.framework.testlib import post_ocs_upgrade, ManageTest, skipif_external_mode
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.helpers.helpers import get_mon_pdb
 
@@ -46,6 +44,7 @@ class TestToCheckMonPDBPostUpgrade(ManageTest):
             assert min_available_mon == 2, "Minimum available mon count is not matching"
         else:
             # This mon pdb change is from 4.7 on wards, please refer bz1935065
+            # (https://bugzilla.redhat.com/show_bug.cgi?id=1935065)
             assert (
                 max_unavailable_mon == 1
             ), "Maximum unavailable mon count is not matching"
