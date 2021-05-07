@@ -67,7 +67,7 @@ class TestScaleEndpointAutoScale(MCGTest):
             condition=constants.STATUS_RUNNING,
             selector=constants.NOOBAA_ENDPOINT_POD_LABEL,
             dont_allow_other_resources=True,
-            timeout=500,
+            timeout=900,
         )
 
     def test_scale_endpoint_and_respin_ceph_pods(
@@ -84,7 +84,8 @@ class TestScaleEndpointAutoScale(MCGTest):
         self._assert_endpoint_count(desired_count=1)
 
         # Create s3 workload using mcg_job_factory
-        job = mcg_job_factory(custom_options=options)
+        for i in range(10):
+            exec(f"job{i} = mcg_job_factory(custom_options=options)")
 
         # Validate autoscale endpoint count
         self._assert_endpoint_count(desired_count=2)
@@ -97,8 +98,9 @@ class TestScaleEndpointAutoScale(MCGTest):
             disruption.delete_resource(resource_id=i)
 
         # Delete mcg_job_factory
-        job.delete()
-        job.ocp.wait_for_delete(resource_name=job.name, timeout=60)
+        for i in range(10):
+            exec(f"job{i}.delete()")
+            exec(f"job{i}.ocp.wait_for_delete(resource_name=job{i}.name, timeout=60)")
 
         # Validate autoscale endpoint count
         self._assert_endpoint_count(desired_count=1)
