@@ -1,4 +1,5 @@
 import logging
+from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.node import wait_for_nodes_status
@@ -22,7 +23,7 @@ class Service(object):
     use these methods.
     """
 
-    def __init__(self, service_name, force=False):
+    def __init__(self, service_name, force=True):
         """
         Class Initialization.
 
@@ -33,6 +34,10 @@ class Service(object):
         self.force = force
 
         self.nodes = node.get_node_ip_addresses("InternalIP")
+
+        self.bastion_ip = "127.0.0.1"
+        if "bastion_ip" in config.ENV_DATA:
+            self.bastion_ip = config.ENV_DATA["bastion_ip"]
 
     def verify_service(self, node, action):
         """
@@ -48,10 +53,19 @@ class Service(object):
         """
         nodeip = self.nodes[node.name]
         result = exec_cmd(
-            f"ssh core@{nodeip} sudo systemctl is-active {self.service_name}.service",
+            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
+            "sudo systemctl is-active {self.service_name}.service",
             ignore_error=True,
         )
-        if result.stdout.lower().rstrip() == action:
+
+        output = result.stdout.lower().rstrip()
+        if INACTIVE in output:
+            output = INACTIVE
+        elif ACTIVE in output:
+            output = ACTIVE
+        elif FAILED in output:
+            output = FAILED
+        if output == action:
             logger.info("Action succeeded.")
             return True
         else:
@@ -70,7 +84,10 @@ class Service(object):
             UnexpectedBehaviour: If service on PowerNode machine is still up
         """
         nodeip = self.nodes[node.name]
-        cmd = f"ssh core@{nodeip} sudo systemctl stop {self.service_name}.service"
+        cmd = (
+            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
+            "sudo systemctl stop {self.service_name}.service"
+        )
         if self.force:
             cmd += " -f"
         result = exec_cmd(cmd)
@@ -101,7 +118,10 @@ class Service(object):
             UnexpectedBehaviour: If service on powerNode machine is still not up
         """
         nodeip = self.nodes[node.name]
-        cmd = f"ssh core@{nodeip} sudo systemctl start {self.service_name}.service"
+        cmd = (
+            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
+            "sudo systemctl start {self.service_name}.service"
+        )
         result = exec_cmd(cmd)
         logger.info(f"Result of start of service {self.service_name} is {result}")
         ret = TimeoutSampler(
@@ -126,7 +146,10 @@ class Service(object):
 
         """
         nodeip = self.nodes[node.name]
-        cmd = f"ssh core@{nodeip} sudo systemctl kill {self.service_name}.service"
+        cmd = (
+            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
+            "sudo systemctl kill {self.service_name}.service"
+        )
         result = exec_cmd(cmd)
         ret = TimeoutSampler(
             timeout=timeout,
@@ -147,7 +170,10 @@ class Service(object):
 
         """
         nodeip = self.nodes[node.name]
-        cmd = f"ssh core@{nodeip} sudo systemctl restart {self.service_name}.service"
+        cmd = (
+            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
+            "sudo systemctl restart {self.service_name}.service"
+        )
         result = exec_cmd(cmd)
         ret = TimeoutSampler(
             timeout=timeout,
@@ -172,7 +198,10 @@ class Service(object):
             (string): 'active' or 'inactive' or 'failed', etc.
         """
         nodeip = self.nodes[node.name]
-        cmd = f"ssh core@{nodeip} sudo systemctl status {self.service_name}.service"
+        cmd = (
+            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
+            "sudo systemctl status {self.service_name}.service"
+        )
         result = exec_cmd(cmd)
         logger.info(f"Result of status of service {self.service_name} is {result}")
         return result.stdout.lower().rstrip()
