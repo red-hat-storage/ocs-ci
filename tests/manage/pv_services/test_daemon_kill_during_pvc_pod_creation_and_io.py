@@ -138,7 +138,7 @@ class TestDaemonKillDuringCreationOperations(ManageTest):
         # Wait for pods to be in Running state
         for pod_obj in io_pods:
             helpers.wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=90
             )
             pod_obj.reload()
         log.info(f"Created {len(io_pods)} pods for running IO.")
@@ -256,7 +256,7 @@ class TestDaemonKillDuringCreationOperations(ManageTest):
         # Verify new pods are Running
         for pod_obj in pod_objs_new:
             helpers.wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=90
             )
             pod_obj.reload()
         log.info("Verified: All new pods are Running.")
@@ -332,7 +332,7 @@ class TestDaemonKillDuringCreationOperations(ManageTest):
         # Verify pods are Running
         for pod_obj in pod_objs_re:
             helpers.wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=90
             )
             pod_obj.reload()
         log.info("Successfully created new pods using all PVCs.")
