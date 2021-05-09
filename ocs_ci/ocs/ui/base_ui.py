@@ -376,11 +376,15 @@ def login_ui():
         if ignore_ssl:
             chrome_options.add_argument("--ignore-ssl-errors=yes")
             chrome_options.add_argument("--ignore-certificate-errors")
+            chrome_options.add_argument("--allow-insecure-localhost")
+            capabilities = chrome_options.to_capabilities()
+            capabilities["acceptInsecureCerts"] = True
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
         if headless:
             chrome_options.add_argument("--headless")
+            chrome_options.add_argument("window-size=1920,1400")
 
         chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
         driver = webdriver.Chrome(
@@ -390,7 +394,7 @@ def login_ui():
     else:
         raise ValueError(f"Not Support on {browser}")
 
-    wait = WebDriverWait(driver, 30)
+    wait = WebDriverWait(driver, 60)
     driver.maximize_window()
     driver.get(console_url)
     element = wait.until(
@@ -407,7 +411,7 @@ def login_ui():
         )
     )
     element.click()
-    WebDriverWait(driver, 30).until(ec.title_is(login_loc["ocp_page"]))
+    WebDriverWait(driver, 60).until(ec.title_is(login_loc["ocp_page"]))
     return driver
 
 
