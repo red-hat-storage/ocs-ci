@@ -382,7 +382,6 @@ def login_ui():
         if headless:
             chrome_options.add_argument("--headless")
 
-        chrome_options.add_argument("window-size=1920,1500")
         chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
         driver = webdriver.Chrome(
             ChromeDriverManager(chrome_type=chrome_browser_type).install(),
