@@ -1165,12 +1165,12 @@ def node_replacement_verification_steps_user_side(
         osd_pod_node = pod.get_pod_node(osd_pod)
         if not osd_pod_node:
             log.warning(
-                f"Didn't find osd node for the osd pod '{osd_pod}' with id '{osd_id}'"
+                f"Didn't find osd node for the osd pod '{osd_pod.name}' with id '{osd_id}'"
             )
             return False
 
         log.info(
-            f"Found new osd pod '{osd_pod}' with id '{osd_id}' on the node '{osd_pod_node.name}'"
+            f"Found new osd pod '{osd_pod.name}' with id '{osd_id}' on the node '{osd_pod_node.name}'"
         )
 
     log.info("Verification steps from the user side finish successfully")
