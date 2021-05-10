@@ -1109,7 +1109,7 @@ def get_worker_nodes_not_in_ocs():
 
 
 def node_replacement_verification_steps_user_side(
-    old_node_name, new_node_name, new_osd_node_name, old_osd_id
+    old_node_name, new_node_name, new_osd_node_name, old_osd_ids
 ):
     """
     Check the verification steps that the user should perform after the process
@@ -1119,7 +1119,7 @@ def node_replacement_verification_steps_user_side(
         old_node_name (str): The name of the old node that has been deleted
         new_node_name (str): The name of the new node that has been created
         new_osd_node_name (str): The name of the new node that has been added to osd nodes
-        old_osd_id (str): The old osd id
+        old_osd_ids (list): List of the old osd ids
 
     Returns:
         bool: True if all the verification steps passed. False otherwise
@@ -1147,18 +1147,31 @@ def node_replacement_verification_steps_user_side(
         log.warning("Not all the pods in running state")
         return False
 
-    new_osd_pod = get_node_pods(new_osd_node_name, pods_to_search=pod.get_osd_pods())[0]
-    if not new_osd_pod:
+    new_osd_node_pods = get_node_pods(
+        new_osd_node_name, pods_to_search=pod.get_osd_pods()
+    )
+    if not new_osd_node_pods:
         log.warning("Didn't find any osd pods running on the new node")
         return False
 
-    new_osd_id = pod.get_osd_pod_id(new_osd_pod)
-    if old_osd_id != new_osd_id:
-        log.warning(
-            f"The osd pod, that associated to the new node, has the id {new_osd_id} "
-            f"instead of the expected osd id {old_osd_id}"
-        )
+    log.info("Search for the old osd ids")
+    new_osd_pods = pod.get_osd_pods_having_ids(old_osd_ids)
+    if len(new_osd_pods) < len(old_osd_ids):
+        log.warning("Didn't find osd pods for all the osd ids")
         return False
+
+    for osd_pod in new_osd_pods:
+        osd_id = pod.get_osd_pod_id(osd_pod)
+        osd_pod_node = pod.get_pod_node(osd_pod)
+        if not osd_pod_node:
+            log.warning(
+                f"Didn't find osd node for the osd pod '{osd_pod.name}' with id '{osd_id}'"
+            )
+            return False
+
+        log.info(
+            f"Found new osd pod '{osd_pod.name}' with id '{osd_id}' on the node '{osd_pod_node.name}'"
+        )
 
     log.info("Verification steps from the user side finish successfully")
     return True
