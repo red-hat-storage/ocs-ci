@@ -211,38 +211,39 @@ def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
         current_call_created_nss = []
         for platform, nss_lst in nss_dict.items():
             for nss_tup in nss_lst:
-                # Create the actual namespace resource
-                nss_name = create_unique_resource_name(constants.MCG_NSS, platform)
+                for _ in range(nss_tup[0]):
+                    # Create the actual namespace resource
+                    nss_name = create_unique_resource_name(constants.MCG_NSS, platform)
 
-                target_bucket_name = cmdMap[method.lower()](
-                    nss_name, nss_tup[1], cld_mgr, cloud_uls_factory, platform
-                )
+                    target_bucket_name = cmdMap[method.lower()](
+                        nss_name, nss_tup[1], cld_mgr, cloud_uls_factory, platform
+                    )
 
-                # TODO: Check platform exists in endpointMap
+                    # TODO: Check platform exists in endpointMap
 
-                sample = TimeoutSampler(
-                    timeout=60,
-                    sleep=5,
-                    func=mcg_obj.check_ns_resource_validity,
-                    ns_resource_name=nss_name,
-                    target_bucket_name=target_bucket_name,
-                    endpoint=endpointMap[platform],
-                )
-                if not sample.wait_for_func_status(result=True):
-                    log.error(f"{nss_name} failed its verification check")
-                    raise TimeoutExpiredError
+                    sample = TimeoutSampler(
+                        timeout=60,
+                        sleep=5,
+                        func=mcg_obj.check_ns_resource_validity,
+                        ns_resource_name=nss_name,
+                        target_bucket_name=target_bucket_name,
+                        endpoint=endpointMap[platform],
+                    )
+                    if not sample.wait_for_func_status(result=True):
+                        log.error(f"{nss_name} failed its verification check")
+                        raise TimeoutExpiredError
 
-                nss_obj = NamespaceStore(
-                    name=nss_name,
-                    method=method.lower(),
-                    mcg_obj=mcg_obj,
-                    uls_name=target_bucket_name,
-                )
+                    nss_obj = NamespaceStore(
+                        name=nss_name,
+                        method=method.lower(),
+                        mcg_obj=mcg_obj,
+                        uls_name=target_bucket_name,
+                    )
 
-                nss_obj.verify_health()
+                    nss_obj.verify_health()
 
-                created_nss.append(nss_obj)
-                current_call_created_nss.append(nss_obj)
+                    created_nss.append(nss_obj)
+                    current_call_created_nss.append(nss_obj)
 
         return current_call_created_nss
 
