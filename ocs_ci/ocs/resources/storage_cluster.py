@@ -6,6 +6,7 @@ import logging
 import tempfile
 
 from jsonschema import validate
+from semantic_version import Version
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
