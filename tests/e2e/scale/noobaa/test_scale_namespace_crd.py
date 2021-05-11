@@ -58,29 +58,25 @@ class TestScaleNamespace(MCGTest):
         For each namespace resource, create namespace bucket and start hsbench benchmark
 
         """
-        num_scale_namespace = 50
         num_s3_obj = 100000
 
         # Create hs s3 benchmark
         s3bench.create_resource_hsbench()
         s3bench.install_hsbench()
 
-        for i in range(int(num_scale_namespace)):
-            # Create the namespace bucket on top of the namespace resource
-            ns_bucket = bucket_factory(
-                amount=1,
-                interface=bucketclass_dict["interface"],
-                bucketclass=bucketclass_dict,
-            )[0]
+        # Create the namespace bucket on top of the namespace resource
+        ns_bucket_list = bucket_factory(
+            amount=50,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )
 
-            logger.info(f"Bucket Name: {ns_bucket.name}")
-            end_point = f"http://s3.openshift-storage.svc/{ns_bucket.name}"
-
+        for ns_bucket in ns_bucket_list:
             s3bench.run_benchmark(
                 num_obj=num_s3_obj,
                 timeout=7200,
                 access_key=mcg_obj.access_key_id,
                 secret_key=mcg_obj.access_key,
-                end_point=end_point,
+                end_point=f"http://s3.openshift-storage.svc/{ns_bucket.name}",
                 run_mode="ipg",
             )
