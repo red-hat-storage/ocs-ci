@@ -41,6 +41,7 @@ from ocs_ci.utility.csr import (
     wait_for_all_nodes_csr_and_approve,
 )
 from ocs_ci.utility.utils import (
+    exec_cmd,
     get_cluster_name,
     get_infra_id,
     create_rhelpod,
@@ -1805,6 +1806,23 @@ class IBMPowerNodes(NodesBase):
     def __init__(self):
         super(IBMPowerNodes, self).__init__()
         self.powernodes = powernodes.PowerNodes()
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        """
+        Create and Attach nodes to cluster
+
+        Args:
+            node_conf: Node configuration
+            node_type: Node type RHCOS or RHEL. For Power platform, this will be
+                        ignored, as the type will always be RHCOS
+            num_nodes: Number of nodes to be added to the cluster
+
+        """
+        if self.powernodes.iskvm():
+            logger.info("Adding nodes to cluster is not implemented on Libvirt.")
+        else:
+            result = exec_cmd("ocpdr " + "addnode " + str(num_nodes))
+            logger.info(f"Result of add node: {result}")
 
     def stop_nodes(self, nodes, force=True):
         """

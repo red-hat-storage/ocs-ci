@@ -113,6 +113,14 @@ def delete_and_create_osd_node(osd_node_name):
             new_node_name = node.delete_and_create_osd_node_vsphere_upi(
                 osd_node_name, use_existing_node=False
             )
+    elif config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM:
+        if config.ENV_DATA["deployment_type"] == "upi":
+            new_node_name = node.delete_and_create_osd_node_ibm_power_upi(osd_node_name)
+        elif config.ENV_DATA["deployment_type"] == "ipi":
+            log.info("IPI for IBM Power not supported yet.")
+        else:
+            log.error(msg_invalid)
+            pytest.fail(msg_invalid)
 
     log.info("Start node replacement verification steps...")
     check_node_replacement_verification_steps(

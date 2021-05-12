@@ -384,7 +384,15 @@ def add_new_node_and_label_upi(
     plt = PlatformNodesFactory()
     node_util = plt.get_nodes_platform()
     node_util.create_and_attach_nodes_to_cluster(node_conf, node_type, num_nodes)
-    for sample in TimeoutSampler(timeout=600, sleep=6, func=get_worker_nodes):
+
+    addnodetimeout = 600
+
+    if config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM:
+        addnodetimeout = 1200
+
+    for sample in TimeoutSampler(
+        timeout=addnodetimeout, sleep=6, func=get_worker_nodes
+    ):
         if len(sample) == len(initial_nodes) + num_nodes:
             break
 
@@ -957,6 +965,99 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
             set_selinux_permissions(workers=[node_not_in_ocs])
         label_nodes([node_not_in_ocs])
         new_node_name = node_not_in_ocs.name
+
+    return new_node_name
+
+
+def delete_and_create_osd_node_ibm_power_upi(osd_node_name, use_existing_node=False):
+    """
+    Unschedule, drain and delete osd node, and create a new osd node.
+
+    Args:
+        osd_node_name (str): the name of the osd node
+        use_existing_node (bool): If False, create a new node and label it.
+            If True, use an existing node to replace the deleted node
+            and label it.
+
+    Returns:
+        str: the new node name
+    """
+
+    sc_name = constants.LOCAL_BLOCK_RESOURCE
+    old_pv_objs = get_pv_objs_in_sc(sc_name)
+
+    sc_name = constants.LOCAL_BLOCK_RESOURCE
+    old_pv_objs = get_pv_objs_in_sc(sc_name)
+
+    osd_node = get_node_objs(node_names=[osd_node_name])[0]
+    osd_pod = get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())[0]
+    osd_id = pod.get_osd_pod_id(osd_pod)
+    log.info(f"osd id to remove = {osd_id}")
+    # Save the node hostname before deleting the node
+    osd_node_hostname_label = get_node_hostname_label(osd_node)
+
+    log.info("Scale down node deployments...")
+    scale_down_deployments(osd_node_name)
+    log.info("Scale down deployments finished successfully")
+
+    node_type = constants.RHCOS
+
+    if not use_existing_node:
+        log.info("Preparing to create a new node...")
+        new_node_names = add_new_node_and_label_upi(node_type, 1)
+        new_node_name = new_node_names[0]
+    else:
+        node_not_in_ocs = get_worker_nodes_not_in_ocs()[0]
+        log.info(
+            f"Preparing to replace the node {osd_node_name} "
+            f"with an existing node {node_not_in_ocs.name}"
+        )
+        if node_type == constants.RHEL_OS:
+            set_selinux_permissions(workers=[node_not_in_ocs])
+        label_nodes([node_not_in_ocs])
+        new_node_name = node_not_in_ocs.name
+
+    assert new_node_name, "Failed to create a new node"
+    log.info(f"New node created successfully. Node name: {new_node_name}")
+
+    new_node = get_node_objs(node_names=[new_node_name])[0]
+
+    new_node_hostname_label = get_node_hostname_label(new_node)
+    log.info(
+        "Replace the old node with the new worker node in localVolumeDiscovery and localVolumeSet"
+    )
+    res = replace_old_node_in_lvd_and_lvs(
+        old_node_name=osd_node_hostname_label,
+        new_node_name=new_node_hostname_label,
+    )
+    assert res, "Failed to add the new node to LVD and LVS"
+
+    log.info("Verify new pv is available...")
+    is_new_pv_available = verify_new_pv_available_in_sc(old_pv_objs, sc_name)
+    assert is_new_pv_available, "New pv is not available"
+    log.info("Finished verifying that the new pv is available")
+
+    osd_removal_job = pod.run_osd_removal_job(osd_id)
+    assert osd_removal_job, "ocs-osd-removal failed to create"
+    is_completed = (pod.verify_osd_removal_job_completed_successfully(osd_id),)
+    assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
+    log.info("ocs-osd-removal-job completed successfully")
+
+    expected_num_of_deleted_pvs = [0, 1]
+    if config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM:
+        numberofstoragedisks = config.ENV_DATA.get("number_of_storage_disks", 1)
+        expected_num_of_deleted_pvs = [0, 1, numberofstoragedisks]
+    num_of_deleted_pvs = delete_released_pvs_in_sc(sc_name)
+    assert num_of_deleted_pvs in expected_num_of_deleted_pvs, (
+        f"num of deleted PVs is {num_of_deleted_pvs} "
+        f"instead of the expected values {expected_num_of_deleted_pvs}"
+    )
+    log.info(f"num of deleted PVs is {num_of_deleted_pvs}")
+    log.info("Successfully deleted old pv")
+
+    is_deleted = pod.delete_osd_removal_job(osd_id)
+    assert is_deleted, "Failed to delete ocs-osd-removal-job"
+    log.info("ocs-osd-removal-job deleted successfully")
 
     return new_node_name
 

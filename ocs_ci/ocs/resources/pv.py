@@ -1,6 +1,7 @@
 import logging
 from subprocess import TimeoutExpired
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 
@@ -82,7 +83,12 @@ def verify_new_pv_available_in_sc(old_pv_objs, sc_name, timeout=120):
             sc_name=sc_name,
         ):
             num_of_new_pv = len(new_pv_objs)
-            expected_num_of_new_pv = len(old_pv_objs) + 1
+            if config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM:
+                numberofstoragedisks = config.ENV_DATA.get("number_of_storage_disks", 1)
+                expected_num_of_new_pv = len(old_pv_objs) + (1 * numberofstoragedisks)
+            else:
+                expected_num_of_new_pv = len(old_pv_objs) + 1
+
             if num_of_new_pv == expected_num_of_new_pv:
                 logger.info(f"Found {expected_num_of_new_pv} PVs as expected")
                 break
