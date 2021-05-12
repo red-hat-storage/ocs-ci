@@ -679,9 +679,7 @@ def get_ocm_cli(
 
 
 def get_openshift_client(
-    version=None,
-    bin_dir=None,
-    force_download=False,
+    version=None, bin_dir=None, force_download=False, skip_comparison=False
 ):
     """
     Download the OpenShift client binary, if not already present.
@@ -692,22 +690,30 @@ def get_openshift_client(
             (default: config.RUN['client_version'])
         bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
         force_download (bool): Force client download even if already present
+        skip_comparison (bool): Skip the comparison between the existing OCP client
+            version and the configured one.
 
     Returns:
         str: Path to the client binary
 
     """
     version = version or config.RUN["client_version"]
-    version = expose_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     client_binary_path = os.path.join(bin_dir, "oc")
     kubectl_binary_path = os.path.join(bin_dir, "kubectl")
     download_client = True
     client_version = None
+    try:
+        version = expose_ocp_version(version)
+    except Exception:
+        log.exception("Unable to expose OCP version, skipping client download.")
+        skip_comparison = True
+        download_client = False
+        force_download = False
 
     if force_download:
         log.info("Forcing client download.")
-    elif os.path.isfile(client_binary_path):
+    elif os.path.isfile(client_binary_path) and not skip_comparison:
         current_client_version = get_client_version(client_binary_path)
         if current_client_version != version:
             log.info(
@@ -770,7 +776,6 @@ def get_openshift_client(
         os.chdir(previous_dir)
 
     log.info(f"OpenShift Client version: {client_version}")
-
     return client_binary_path
 
 
