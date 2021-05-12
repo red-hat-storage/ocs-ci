@@ -4,6 +4,7 @@ import logging
 from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4a
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
@@ -74,11 +75,15 @@ class TestAddCapacityNodeRestart(ManageTest):
         # 'wip-add-capacity-e_e' will be merged into master I will use the functions from this branch.
 
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+        if is_flexible_scaling_enabled:
+            replica_count = 1
+        else:
+            replica_count = 3
         pod.wait_for_resource(
-            timeout=600,
+            timeout=300,
             condition=constants.STATUS_RUNNING,
             selector="app=rook-ceph-osd",
-            resource_count=result * 3,
+            resource_count=result * replica_count,
         )
 
         # Verify OSDs are encrypted

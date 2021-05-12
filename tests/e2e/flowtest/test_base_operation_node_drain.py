@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import node, constants
 from ocs_ci.framework.testlib import E2ETest, flowtests, config, ignore_leftovers
+from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs import flowtest
@@ -105,11 +106,15 @@ class TestBaseOperationNodeDrain(E2ETest):
         osd_size = storage_cluster.get_osd_size()
         result = storage_cluster.add_capacity(osd_size)
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+        if is_flexible_scaling_enabled:
+            replica_count = 1
+        else:
+            replica_count = 3
         pod.wait_for_resource(
             timeout=300,
             condition=constants.STATUS_RUNNING,
             selector="app=rook-ceph-osd",
-            resource_count=result * 3,
+            resource_count=result * replica_count,
         )
         logger.info("Verifying exit criteria for operation 2: Add Capacity")
         flow_ops.add_capacity_exit_criteria(restart_count_before, osd_pods_before)
