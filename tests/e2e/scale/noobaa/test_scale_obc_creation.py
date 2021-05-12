@@ -10,6 +10,14 @@ from ocs_ci.framework.pytest_customization.marks import vsphere_platform_require
 log = logging.getLogger(__name__)
 
 
+@pytest.fixture(autouse=True)
+def teardown(request):
+    def finalizer():
+        scale_noobaa_lib.cleanup(constants.OPENSHIFT_STORAGE_NAMESPACE)
+
+    request.addfinalizer(finalizer)
+
+
 @scale
 class TestScaleOCBCreation(E2ETest):
     """
@@ -63,8 +71,6 @@ class TestScaleOCBCreation(E2ETest):
                 )
             )
             log.info(f"Number of PVCs in Bound state {len(obc_bound_list)}")
-        # Delete obc on cluster
-        scale_noobaa_lib.cleanup(self.namespace)
 
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2479")
@@ -106,8 +112,6 @@ class TestScaleOCBCreation(E2ETest):
                 )
             )
             log.info(f"Number of PVCs in Bound state {len(obc_bound_list)}")
-        # Delete obc on cluster
-        scale_noobaa_lib.cleanup(self.namespace)
 
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2480")
@@ -173,8 +177,5 @@ class TestScaleOCBCreation(E2ETest):
                 f"Number of OBCs in Bound state MCG: {len(obc_mcg_bound_list)},"
                 f" RGW: {len(obc_rgw_bound_list)}"
             )
-
-        # Delete obc on cluster
-        scale_noobaa_lib.cleanup(self.namespace)
 
         # TODO: Adding support to calculate OBC creation time
