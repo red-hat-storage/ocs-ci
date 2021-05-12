@@ -3,6 +3,8 @@ import logging
 import pytest
 import re
 
+from datetime import datetime
+
 from ocs_ci.framework.testlib import (
     E2ETest,
     tier1,
@@ -16,7 +18,8 @@ from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.rgw import RGW
-from ocs_ci.ocs.resources.pod import get_pod_logs, get_rgw_pods
+from ocs_ci.ocs.resources.pod import get_pod_logs, get_rgw_pods, get_pod_obj
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.utils import exec_cmd, run_cmd, clone_notify
 
 
@@ -25,6 +28,7 @@ log = logging.getLogger(__name__)
 
 @tier1
 @bugzilla("1937187")
+@bugzilla("1958818")
 @on_prem_platform_required
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-2514")
@@ -146,5 +150,26 @@ class TestRGWAndKafkaNotifications(E2ETest):
                 "Error: Messages are not recieved from Kafka side."
                 "RGW bucket notification is not working as expected."
             )
+
+        # Validate the timestamp events
+        cmd = (
+            f"bin/kafka-console-consumer.sh --bootstrap-server {constants.KAFKA_ENDPOINT} "
+            f"--topic {self.kafka_topic.name} --from-beginning --timeout-ms 20000"
+        )
+        pod_list = get_pod_name_by_pattern(
+            pattern="my-cluster-zookeeper", namespace=constants.AMQ_NAMESPACE
+        )
+        zookeeper_obj = get_pod_obj(name=pod_list[0], namespace=constants.AMQ_NAMESPACE)
+        event_obj = zookeeper_obj.exec_cmd_on_pod(command=cmd)
+        log.info(f"Event obj: {event_obj}")
+        event_time = event_obj.get("Records")[0].get("eventTime")
+        format_string = "%Y-%m-%dT%H:%M:%S.%fZ"
+        try:
+            datetime.strptime(event_time, format_string)
+        except ValueError as ef:
+            log.error(
+                f"Timestamp event {event_time} doesnt match the pattern {format_string}"
+            )
+            raise ef
 
         # ToDo: To check from KafkaUI the messages are viewed
