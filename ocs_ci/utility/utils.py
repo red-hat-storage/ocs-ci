@@ -42,6 +42,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedImage,
     UnsupportedOSType,
 )
+from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
 
 
@@ -2692,6 +2693,9 @@ def login_to_mirror_registry(authfile):
         authfile (str): authfile (pull-secret) path
 
     """
+    # load cluster info
+    load_cluster_info()
+
     mirror_registry = config.DEPLOYMENT["mirror_registry"]
     mirror_registry_user = config.DEPLOYMENT["mirror_registry_user"]
     mirror_registry_password = config.DEPLOYMENT["mirror_registry_password"]
