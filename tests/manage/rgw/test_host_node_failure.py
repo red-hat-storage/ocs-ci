@@ -1,7 +1,12 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier4a, vsphere_platform_required
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier4a,
+    on_prem_platform_required,
+    skipif_external_mode,
+)
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs.bucket_utils import s3_put_object, s3_get_object
@@ -22,7 +27,8 @@ log = logging.getLogger(__name__)
 @tier4a
 @pytest.mark.polarion_id("OCS-2374")
 @pytest.mark.bugzilla("1852983")
-@vsphere_platform_required
+@on_prem_platform_required
+@skipif_external_mode
 class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
     """
     Test to verify fail node hosting
@@ -39,7 +45,7 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
         self.sanity_helpers = Sanity()
 
     def create_obc_creation(self, bucket_factory, mcg_obj, key):
-        """"""
+
         # Create a bucket then read & write
         bucket_name = bucket_factory(amount=1, interface="OC")[0].name
         obj_data = "A random string data"
@@ -56,8 +62,6 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
         and verify the new pods spin on a healthy node
 
         """
-        # Get rgw pods
-        rgw_pod_obj = get_rgw_pods()
 
         # Get nooba pods
         noobaa_pod_obj = get_noobaa_pods()
@@ -74,16 +78,40 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
             assert False, "Could not find the NooBaa DB pod"
 
         # Validate if RGW pod and noobaa-db are hosted on same node else skip test
-        rgw_pod_node_list = []
-        for rgw_pod in rgw_pod_obj:
-            rgw_pod_node_list.append(rgw_pod.get().get("spec").get("nodeName"))
-        if set(rgw_pod_node_list).intersection(noobaa_pod_node.name):
+        log.info(
+            "Validate if RGW pod and noobaa-db are hosted on same node else skip test"
+        )
+        i = 0
+        skip = True
+        while i < 6:
+            rgw_pod_obj = get_rgw_pods()
+            rgw_pod_node_list = [
+                rgw_pod.get().get("spec").get("nodeName") for rgw_pod in rgw_pod_obj
+            ]
+            if set(rgw_pod_node_list).intersection(noobaa_pod_node.name):
+                skip = False
+                break
+            rgw_pod_obj[0].delete()
+            ocp_obj = OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+            ocp_obj.wait_for_delete(resource_name=rgw_pod_obj[0].name, timeout=120)
+            ocp_obj.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                resource_count=len(rgw_pod_obj),
+                selector=constants.RGW_APP_LABEL,
+                timeout=300,
+                sleep=5,
+            )
+            i += 1
+
+        if skip:
             pytest.skip(
                 "RGW pod and NooBaa DB are not hosted on same node. "
                 f"RGW pod hosted on nodes: {rgw_pod_node_list} "
                 f"NooBaa DB pod hosted on node: {noobaa_pod_node.name}"
             )
 
+        log.info("RGW and noobaa-db are hosted on same node start the test execution")
+        rgw_pod_obj = get_rgw_pods()
         for rgw_pod in rgw_pod_obj:
             pod_node = rgw_pod.get().get("spec").get("nodeName")
             if pod_node == noobaa_pod_node.name:
