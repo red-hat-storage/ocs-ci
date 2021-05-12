@@ -1,6 +1,7 @@
 """
 Test to verify PVC deletion performance
 """
+import time
 import logging
 import datetime
 import pytest
@@ -8,15 +9,45 @@ import ocs_ci.ocs.exceptions as ex
 import threading
 import statistics
 from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
 
 from ocs_ci.framework.testlib import performance
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import defaults, constants
 from ocs_ci.utility.performance_dashboard import push_to_pvc_time_dashboard
+from ocs_ci.helpers.helpers import get_full_test_logs_path
+from ocs_ci.ocs.perfresult import PerfResult
+from ocs_ci.framework import config
 
 
 log = logging.getLogger(__name__)
+
+
+class ResultsAnalyse(PerfResult):
+    """
+    This class generates results for all tests as one unit
+    and save them to an elasticsearch server
+
+    """
+
+    def __init__(self, uuid, crd, full_log_path):
+        """
+        Initialize the object by reading some of the data from the CRD file and
+        by connecting to the ES server and read all results from it.
+
+        Args:
+            uuid (str): the unique uid of the test
+            crd (dict): dictionary with test parameters - the test yaml file
+                        that modify it in the test itself.
+            full_log_path (str): the path of the results files to be found
+
+        """
+        super(ResultsAnalyse, self).__init__(uuid, crd)
+        self.new_index = "pvc_create_delete_fullres"
+        self.full_log_path = full_log_path
+        # make sure we have connection to the elastic search server
+        self.es_connect()
 
 
 @performance
@@ -24,6 +55,32 @@ class TestPVCCreationDeletionPerformance(PASTest):
     """
     Test to verify PVC creation and deletion performance
     """
+
+    def setup(self):
+        """
+        Setting up test parameters
+        """
+        log.info("Starting the test setup")
+        super(TestPVCCreationDeletionPerformance, self).setup()
+        self.benchmark_name = "PVC_Creation-Deletion"
+        self.uuid = uuid4().hex
+        self.crd_data = {
+            "spec": {
+                "test_user": "Homer simpson",
+                "clustername": "test_cluster",
+                "elasticsearch": {
+                    "server": config.PERF.get("production_es_server"),
+                    "port": config.PERF.get("production_es_port"),
+                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
+                },
+            }
+        }
+        if self.dev_mode:
+            self.crd_data["spec"]["elasticsearch"] = {
+                "server": config.PERF.get("dev_es_server"),
+                "port": config.PERF.get("dev_es_port"),
+                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
+            }
 
     @pytest.fixture()
     def base_setup(self, interface_iterate, storageclass_factory, pod_factory):
@@ -39,6 +96,23 @@ class TestPVCCreationDeletionPerformance(PASTest):
         self.interface = interface_iterate
         self.sc_obj = storageclass_factory(self.interface)
         self.pod_factory = pod_factory
+
+    def init_full_results(self, full_results):
+        """
+        Initialize the full results object which will send to the ES server
+
+        Args:
+            full_results (obj): an empty FIOResultsAnalyse object
+
+        Returns:
+            FIOResultsAnalyse (obj): the input object fill with data
+
+        """
+        for key in self.environment:
+            full_results.add_key(key, self.environment[key])
+        full_results.add_key("storageclass", self.sc)
+        full_results.add_key("index", full_results.new_index)
+        return full_results
 
     @pytest.mark.parametrize(
         argnames=["pvc_size"],
@@ -57,9 +131,28 @@ class TestPVCCreationDeletionPerformance(PASTest):
         Verifying that those times are within required limits
         """
 
+        # Getting the full path for the test logs
+        self.full_log_path = get_full_test_logs_path(cname=self)
+        if self.interface == constants.CEPHBLOCKPOOL:
+            self.sc = "RBD"
+        if self.interface == constants.CEPHFILESYSTEM:
+            self.sc = "CephFS"
+        self.full_log_path += f"-{self.sc}-{pvc_size}"
+        log.info(f"Logs file path name is : {self.full_log_path}")
+
+        self.start_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
+
+        self.get_env_info()
+
+        # Initialize the results doc file.
+        self.full_results = self.init_full_results(
+            ResultsAnalyse(self.uuid, self.crd_data, self.full_log_path)
+        )
+        self.full_results.add_key("pvc_size", pvc_size)
         num_of_samples = 5
         accepted_creation_time = 1
         accepted_deletion_time = 2 if self.interface == constants.CEPHFILESYSTEM else 1
+        self.full_results.add_key("samples", num_of_samples)
 
         accepted_creation_deviation_percent = 50
         accepted_deletion_deviation_percent = 50
@@ -124,16 +217,31 @@ class TestPVCCreationDeletionPerformance(PASTest):
             accepted_creation_deviation_percent,
             msg_prefix,
         )
+        self.full_results.add_key("creation-time", creation_average)
         deletion_average = self.process_time_measurements(
             "deletion",
             deletion_time_measures,
             accepted_deletion_deviation_percent,
             msg_prefix,
         )
+        self.full_results.add_key("deletion-time", deletion_average)
+        self.full_results.all_results["creation"] = creation_time_measures
+        self.full_results.all_results["deletion"] = deletion_time_measures
+        self.end_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
+        self.full_results.add_key(
+            "test_time", {"start": self.start_time, "end": self.end_time}
+        )
+        self.full_results.es_write()
+        log.info(f"The Result can be found at : {self.full_results.results_link()}")
 
-        # all the results are OK, the test passes, push the results to the codespeed
-        push_to_pvc_time_dashboard(self.interface, "1-pvc-creation", creation_average)
-        push_to_pvc_time_dashboard(self.interface, "1-pvc-deletion", deletion_average)
+        if not self.dev_mode:
+            # all the results are OK, the test passes, push the results to the codespeed
+            push_to_pvc_time_dashboard(
+                self.interface, "1-pvc-creation", creation_average
+            )
+            push_to_pvc_time_dashboard(
+                self.interface, "1-pvc-deletion", deletion_average
+            )
 
     def process_time_measurements(
         self, action_name, time_measures, accepted_deviation_percent, msg_prefix
@@ -166,6 +274,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
                 f"and is greater than the allowed {accepted_deviation_percent}%."
             )
 
+        self.full_results.add_key(f"{action_name}_deviation_pct", st_deviation_percent)
         log.info(
             f"{msg_prefix} The standard deviation percent for {action_name} of {len(time_measures)} sampled "
             f"PVCs is {st_deviation_percent}%."
@@ -291,5 +400,5 @@ class TestPVCCreationDeletionPerformance(PASTest):
                 )
 
         logging.info(f"{msg_prefix} {number_of_pvcs} PVCs deletion times are:")
-        for name, time in pvc_deletion_time.items():
-            logging.info(f"{name} deletion time is: {time} seconds")
+        for name, a_time in pvc_deletion_time.items():
+            logging.info(f"{name} deletion time is: {a_time} seconds")
