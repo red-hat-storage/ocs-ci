@@ -172,4 +172,6 @@ class TestRGWAndKafkaNotifications(E2ETest):
             )
             raise ef
 
+        log.info(f"Timestamp event {event_time} matches the pattern {format_string}")
+
         # ToDo: To check from KafkaUI the messages are viewed
