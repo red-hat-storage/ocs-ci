@@ -21,6 +21,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install ovirt-engine-sdk-python dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y libcurl4-openssl-dev
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
