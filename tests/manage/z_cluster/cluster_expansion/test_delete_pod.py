@@ -9,7 +9,11 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.ocs.cluster import get_percent_used_capacity, CephCluster, is_flexible_scaling_enabled
+from ocs_ci.ocs.cluster import (
+    get_percent_used_capacity,
+    CephCluster,
+    is_flexible_scaling_enabled,
+)
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.helpers.disruption_helpers import Disruptions
 
@@ -69,7 +73,7 @@ class TestAddCapacityWithResourceDelete:
         else:
             replica_count = 3
         pod.wait_for_resource(
-            timeout=300,
+            timeout=420,
             condition=constants.STATUS_RUNNING,
             selector="app=rook-ceph-osd",
             resource_count=storagedeviceset_count * replica_count,

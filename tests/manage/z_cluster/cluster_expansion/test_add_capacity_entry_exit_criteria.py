@@ -199,7 +199,7 @@ class TestAddCapacity(ManageTest):
         else:
             replica_count = 3
         pod.wait_for_resource(
-            timeout=300,
+            timeout=1200,
             condition=constants.STATUS_RUNNING,
             selector="app=rook-ceph-osd",
             resource_count=result * replica_count,
