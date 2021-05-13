@@ -26,6 +26,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     convert_device_size,
     get_trim_mean,
+    ceph_health_check,
 )
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
@@ -1549,6 +1550,25 @@ def is_flexible_scaling_enabled():
     failure_domain = ocs_storage_cluster.get("status").get("failureDomain")
     flexible_scaling = ocs_storage_cluster.get("spec").get("flexibleScaling")
     return failure_domain == "host" and flexible_scaling
+
+
+def check_ceph_health_after_add_capacity():
+    ceph_health_tries = 80
+    ceph_rebalance_timeout = 1800
+    if config.RUN.get("io_in_bg") and config.RUN.get("io_load"):
+        addtional_ceph_health_tries = int(config.RUN.get("io_load") * 0.3)
+        ceph_health_tries += addtional_ceph_health_tries
+
+        addtional_ceph_rebalance_timeout = config.RUN.get("io_load") * 20
+        ceph_rebalance_timeout += addtional_ceph_rebalance_timeout
+
+    ceph_health_check(
+        namespace=config.ENV_DATA["cluster_namespace"], tries=ceph_health_tries
+    )
+    ceph_cluster_obj = CephCluster()
+    assert ceph_cluster_obj.wait_for_rebalance(
+        timeout=ceph_rebalance_timeout
+    ), "Data re-balance failed to complete"
 
 
 class CephClusterExternal(CephCluster):
