@@ -9,8 +9,10 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.ocs.cluster import get_percent_used_capacity, CephCluster
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs.cluster import (
+    get_percent_used_capacity,
+    check_ceph_health_after_add_capacity,
+)
 from ocs_ci.helpers.disruption_helpers import Disruptions
 
 
@@ -151,8 +153,4 @@ class TestAddCapacityWithResourceDelete:
             "Finished verifying add capacity when one of the pods gets deleted"
         )
         logging.info("Waiting for ceph health check to finished...")
-        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=90)
-        ceph_cluster_obj = CephCluster()
-        assert ceph_cluster_obj.wait_for_rebalance(
-            timeout=1800
-        ), "Data re-balance failed to complete"
+        check_ceph_health_after_add_capacity()
