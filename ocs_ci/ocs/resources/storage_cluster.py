@@ -191,6 +191,8 @@ def ocs_install_verification(
                 continue
         if "noobaa" in label and disable_noobaa:
             continue
+        if "mds" in label and disable_cephfs:
+            continue
 
         assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,

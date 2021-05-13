@@ -488,7 +488,6 @@ class Deployment(object):
                 create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         if not live_deployment:
             self.create_ocs_operator_source(image)
-            pass
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
@@ -574,6 +573,7 @@ class Deployment(object):
         if config.ENV_DATA.get("disable_components"):
             for component in config.ENV_DATA["disable_components"]:
                 config.COMPONENTS[f"disable_{component}"] = True
+                logger.warning(f"disabling: {component}")
 
         # Update cluster_data with respective component enable/disable
         for key in config.COMPONENTS.keys():
@@ -910,15 +910,16 @@ class Deployment(object):
                 timeout=600,
             )
 
-            # Check for CephFilesystem creation in ocp
-            cfs_data = cfs.get()
-            cfs_name = cfs_data["items"][0]["metadata"]["name"]
+            if not config.COMPONENTS["disable_cephfs"]:
+                # Check for CephFilesystem creation in ocp
+                cfs_data = cfs.get()
+                cfs_name = cfs_data["items"][0]["metadata"]["name"]
 
-            if helpers.validate_cephfilesystem(cfs_name):
-                logger.info("MDS deployment is successful!")
-                defaults.CEPHFILESYSTEM_NAME = cfs_name
-            else:
-                logger.error("MDS deployment Failed! Please check logs!")
+                if helpers.validate_cephfilesystem(cfs_name):
+                    logger.info("MDS deployment is successful!")
+                    defaults.CEPHFILESYSTEM_NAME = cfs_name
+                else:
+                    logger.error("MDS deployment Failed! Please check logs!")
 
         # Change monitoring backend to OCS
         if config.ENV_DATA.get("monitoring_enabled") and config.ENV_DATA.get(
@@ -934,8 +935,9 @@ class Deployment(object):
                 telemeter_server_url=config.ENV_DATA["telemeter_server_url"]
             )
 
-        # Change registry backend to OCS CEPHFS RWX PVC
-        registry.change_registry_backend_to_ocs()
+        if not config.COMPONENTS["disable_cephfs"]:
+            # Change registry backend to OCS CEPHFS RWX PVC
+            registry.change_registry_backend_to_ocs()
 
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")

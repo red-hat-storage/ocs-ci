@@ -1312,8 +1312,8 @@ WORKLOAD_STORAGE_TYPE_FS = "fs"
 # Components of OCS
 OCS_COMPONENTS = ["rgw", "cephfs", "noobaa", "blockpools"]
 OCS_COMPONENTS_MAP = {
-    "rgw": "CephObjectStores",
-    "cephfs": "CephFilesystems",
+    "rgw": "cephObjectStores",
+    "cephfs": "cephFilesystems",
     "noobaa": "multiCloudGateway",
-    "blockpools": "CephBlockPools",
+    "blockpools": "cephBlockPools",
 }
