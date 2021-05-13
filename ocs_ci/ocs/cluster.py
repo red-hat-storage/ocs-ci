@@ -1556,11 +1556,11 @@ def check_ceph_health_after_add_capacity():
     ceph_health_tries = 80
     ceph_rebalance_timeout = 1800
     if config.RUN.get("io_in_bg") and config.RUN.get("io_load"):
-        addtional_ceph_health_tries = int(config.RUN.get("io_load") * 0.3)
-        ceph_health_tries += addtional_ceph_health_tries
+        additional_ceph_health_tries = int(config.RUN.get("io_load") * 1.3)
+        ceph_health_tries += additional_ceph_health_tries
 
-        addtional_ceph_rebalance_timeout = config.RUN.get("io_load") * 20
-        ceph_rebalance_timeout += addtional_ceph_rebalance_timeout
+        additional_ceph_rebalance_timeout = config.RUN.get("io_load") * 20
+        ceph_rebalance_timeout += additional_ceph_rebalance_timeout
 
     ceph_health_check(
         namespace=config.ENV_DATA["cluster_namespace"], tries=ceph_health_tries
