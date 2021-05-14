@@ -270,22 +270,6 @@ class TestExpansionSnapshotClone(ManageTest):
             f"as {pvc_size_expand_2}Gi"
         )
 
-        # Verify thick provision or not
-        if pvc_create_sc_type == "thick":
-            self.verify_thick_provision(
-                pvc_objs=clone_objs, expected_usage=f"{pvc_size_expand_2}GiB"
-            )
-            log.info("Verified thick provision on cloned PVCs.")
-        elif pvc_create_sc_type == "thin" and (
-            "thick" in (pvc_create_sc_type, restore_sc_type)
-        ):
-            self.verify_thick_provision(
-                pvc_objs=clone_objs,
-                expected_usage=f"{pvc_size_expand_2}GiB",
-                expect_thick=False,
-            )
-            log.info("Verified: Cloned PVCs are not thick provisioned.")
-
         # Ensure restore size is not impacted by parent PVC expansion
         log.info("Verify restore size of snapshots")
         for snapshot_obj in snapshots:
@@ -316,7 +300,7 @@ class TestExpansionSnapshotClone(ManageTest):
             pvc_obj.reload()
         log.info("Verified: Restored PVCs are Bound.")
 
-        # Verify thick provision or not
+        # Verify restored PVCs are thick provision or not
         if restore_sc_type == "thick":
             self.verify_thick_provision(
                 pvc_objs=restore_objs, expected_usage=f"{pvc_size_expand_1}GiB"
@@ -331,6 +315,22 @@ class TestExpansionSnapshotClone(ManageTest):
                 expect_thick=False,
             )
             log.info("Verified: Restored PVCs are not thick provisioned.")
+
+        # Verify clones are thick provision or not
+        if pvc_create_sc_type == "thick":
+            self.verify_thick_provision(
+                pvc_objs=clone_objs, expected_usage=f"{pvc_size_expand_2}GiB"
+            )
+            log.info("Verified thick provision on cloned PVCs.")
+        elif pvc_create_sc_type == "thin" and (
+            "thick" in (pvc_create_sc_type, restore_sc_type)
+        ):
+            self.verify_thick_provision(
+                pvc_objs=clone_objs,
+                expected_usage=f"{pvc_size_expand_2}GiB",
+                expect_thick=False,
+            )
+            log.info("Verified: Cloned PVCs are not thick provisioned.")
 
         # Attach the restored and cloned PVCs to pods
         log.info("Attach the restored and cloned PVCs to pods")
