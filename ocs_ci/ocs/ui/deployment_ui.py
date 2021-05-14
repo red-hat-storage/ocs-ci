@@ -24,8 +24,8 @@ class DeploymentUI(PageNavigator):
 
     def __init__(self, driver):
         super().__init__(driver)
-        ocp_version = get_ocp_version()
-        self.dep_loc = locators[ocp_version]["deployment"]
+        self.ocp_version = get_ocp_version()
+        self.dep_loc = locators[self.ocp_version]["deployment"]
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
         """
@@ -119,14 +119,7 @@ class DeploymentUI(PageNavigator):
         Install Storage Cluster
 
         """
-        self.navigate_operatorhub_page()
-        self.navigate_installed_operators_page()
-
-        logger.info("Search OCS operator installed")
-        self.do_send_keys(
-            locator=self.dep_loc["search_ocs_installed"],
-            text="OpenShift Container Storage",
-        )
+        self.search_operator_installed_operators_page()
 
         logger.info("Click on ocs operator on Installed Operators")
         self.do_click(locator=self.dep_loc["ocs_operator_installed"])
@@ -214,10 +207,13 @@ class DeploymentUI(PageNavigator):
         logger.info("Select all worker nodes")
         self.select_checkbox_status(status=True, locator=self.dep_loc["all_nodes"])
 
-        logger.info("Next on step 'Select capacity and nodes'")
-        self.do_click(locator=self.dep_loc["next"])
+        if self.ocp_version == "4.6" and config.ENV_DATA.get("encryption_at_rest"):
+            self.do_click(locator=self.dep_loc["enable_encryption"])
 
-        self.configure_encryption()
+        if self.ocp_version == "4.7":
+            logger.info("Next on step 'Select capacity and nodes'")
+            self.do_click(locator=self.dep_loc["next"])
+            self.configure_encryption()
 
         self.create_storage_cluster()
 
@@ -260,13 +256,7 @@ class DeploymentUI(PageNavigator):
             sleep (int): Sampling time in seconds
 
         """
-        self.navigate_operatorhub_page()
-        self.navigate_installed_operators_page()
-
-        self.do_send_keys(
-            locator=self.dep_loc["search_operator_installed"],
-            text=operator,
-        )
+        self.search_operator_installed_operators_page(operator=operator)
         sample = TimeoutSampler(
             timeout=timeout_install,
             sleep=sleep,
@@ -278,6 +268,30 @@ class DeploymentUI(PageNavigator):
                 f"{operator} Installation status is not Succeeded after {timeout_install} seconds"
             )
             raise TimeoutExpiredError
+
+    def search_operator_installed_operators_page(
+        self, operator="OpenShift Container Storage"
+    ):
+        """
+        Search Operator on Installed Operators Page
+
+        Args:
+            operator (str): type of operator
+
+        """
+        self.navigate_operatorhub_page()
+        self.navigate_installed_operators_page()
+        logger.info(f"Search {operator} operator installed")
+
+        if self.ocp_version == "4.7":
+            self.do_send_keys(
+                locator=self.dep_loc["search_operator_installed"],
+                text=operator,
+            )
+        # https://bugzilla.redhat.com/show_bug.cgi?id=1899200
+        elif self.ocp_version == "4.6":
+            self.do_click(self.dep_loc["project_dropdown"])
+            self.do_click(self.dep_loc[operator])
 
     def install_ocs_ui(self):
         """
