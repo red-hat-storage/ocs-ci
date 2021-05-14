@@ -276,7 +276,9 @@ class TestExpansionSnapshotClone(ManageTest):
                 pvc_objs=clone_objs, expected_usage=f"{pvc_size_expand_2}GiB"
             )
             log.info("Verified thick provision on cloned PVCs.")
-        elif pvc_create_sc_type == "thin":
+        elif pvc_create_sc_type == "thin" and (
+            "thick" in (pvc_create_sc_type, restore_sc_type)
+        ):
             self.verify_thick_provision(
                 pvc_objs=clone_objs,
                 expected_usage=f"{pvc_size_expand_2}GiB",
@@ -320,7 +322,9 @@ class TestExpansionSnapshotClone(ManageTest):
                 pvc_objs=restore_objs, expected_usage=f"{pvc_size_expand_1}GiB"
             )
             log.info(f"Verified thick provision on restored PVCs")
-        elif restore_sc_type == "thin":
+        elif restore_sc_type == "thin" and (
+            "thick" in (pvc_create_sc_type, restore_sc_type)
+        ):
             self.verify_thick_provision(
                 pvc_objs=restore_objs,
                 expected_usage=f"{pvc_size_expand_1}GiB",
@@ -370,7 +374,9 @@ class TestExpansionSnapshotClone(ManageTest):
             log.info(
                 f"Verified thick provision after expanding cloned PVCs to {pvc_size_expand_3}GiB"
             )
-        elif pvc_create_sc_type == "thin":
+        elif pvc_create_sc_type == "thin" and (
+            "thick" in (pvc_create_sc_type, restore_sc_type)
+        ):
             self.verify_thick_provision(
                 pvc_objs=clone_objs,
                 expected_usage=f"{pvc_size_expand_3}GiB",
@@ -386,7 +392,9 @@ class TestExpansionSnapshotClone(ManageTest):
             log.info(
                 f"Verified thick provision after expanding restored PVCs to {pvc_size_expand_3}GiB"
             )
-        elif restore_sc_type == "thin":
+        elif restore_sc_type == "thin" and (
+            "thick" in (pvc_create_sc_type, restore_sc_type)
+        ):
             self.verify_thick_provision(
                 pvc_objs=restore_objs,
                 expected_usage=f"{pvc_size_expand_3}GiB",
@@ -472,7 +480,9 @@ class TestExpansionSnapshotClone(ManageTest):
             log.info(
                 "Verified that the PVCs cloned from restored PVCs are thick provisioned"
             )
-        if restore_sc_type == "thin":
+        if restore_sc_type == "thin" and (
+            "thick" in (pvc_create_sc_type, restore_sc_type)
+        ):
             self.verify_thick_provision(
                 pvc_objs=restored_clone_objs,
                 expected_usage=f"{pvc_size_expand_3}GiB",
@@ -531,7 +541,9 @@ class TestExpansionSnapshotClone(ManageTest):
                 pvc_objs=restore_objs_new, expected_usage=f"{pvc_size_expand_3}GiB"
             )
             log.info("Verified thick provision on PVCs restored from the snapshots.")
-        if restore_sc_type == "thin":
+        if restore_sc_type == "thin" and (
+            "thick" in (pvc_create_sc_type, restore_sc_type)
+        ):
             self.verify_thick_provision(
                 pvc_objs=restore_objs_new,
                 expected_usage=f"{pvc_size_expand_3}GiB",
