@@ -2841,7 +2841,10 @@ def set_registry_to_managed_state():
     Currently it has to be moved here to enable CA certificate to be
     properly propagated for the stage deployment as mentioned in BZ.
     """
-    if config.ENV_DATA["platform"] not in constants.CLOUD_PLATFORMS:
+    # In RHV platform config is already set to Managed and storage pre-configured
+    on_prem_platform_to_exclude = [constants.RHV_PLATFORM]
+    platform_list_to_exclude = constants.CLOUD_PLATFORMS + on_prem_platform_to_exclude
+    if config.ENV_DATA["platform"] not in platform_list_to_exclude:
         cluster_config = yaml.safe_load(
             exec_cmd(f"oc get {constants.IMAGE_REGISTRY_CONFIG} -o yaml").stdout
         )
