@@ -321,7 +321,7 @@ class TestExpansionSnapshotClone(ManageTest):
             self.verify_thick_provision(
                 pvc_objs=restore_objs, expected_usage=f"{pvc_size_expand_1}GiB"
             )
-            log.info(f"Verified thick provision on restored PVCs")
+            log.info("Verified thick provision on restored PVCs")
         elif restore_sc_type == "thin" and (
             "thick" in (pvc_create_sc_type, restore_sc_type)
         ):
