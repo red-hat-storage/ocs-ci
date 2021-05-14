@@ -131,6 +131,16 @@ class PVC(OCS):
             "volume.beta.kubernetes.io/storage-provisioner"
         ]
 
+    @property
+    def get_rbd_image_name(self):
+        """
+        Fetch image name associated with the RBD PVC
+
+        Returns:
+            str: Image name associated with the RBD PVC
+        """
+        return self.backed_pv_obj.get()["spec"]["csi"]["volumeAttributes"]["imageName"]
+
     def resize_pvc(self, new_size, verify=False):
         """
         Modify the capacity of PVC
