@@ -170,6 +170,9 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         # Wait for catalog source is ready
         catalog_source.wait_for_state("READY")
 
+        # ensure that newly created imageContentSourcePolicy is applied on all nodes
+        wait_for_machineconfigpool_status("all")
+
         return
 
     if config.DEPLOYMENT.get("stage_rh_osbs"):
