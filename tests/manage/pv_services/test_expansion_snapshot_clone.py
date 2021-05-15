@@ -44,7 +44,11 @@ log = logging.getLogger(__name__)
         ),
         pytest.param(
             *["thick", "thin"],
-            marks=[polarion_id("OCS-2508"), skipif_ocs_version("<4.8")],
+            marks=[
+                polarion_id("OCS-2508"),
+                skipif_ocs_version("<4.8"),
+                bugzilla("1959793"),
+            ],
         ),
     ],
 )
