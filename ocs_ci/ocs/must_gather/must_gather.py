@@ -189,7 +189,7 @@ class MustGather(object):
 
     def validate_must_gather(self):
         """
-        Validate must_gather
+        Validate must-gather
 
         """
         self.validate_file_size()
