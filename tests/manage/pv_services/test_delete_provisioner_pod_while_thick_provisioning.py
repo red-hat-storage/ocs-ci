@@ -59,7 +59,7 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
             access_mode=constants.ACCESS_MODE_RWO,
             status="",
         )
-
+        pvc_obj = pvc_create.result()
         # Ensure that the PVC is being created before deleting the rbd provisioner pod
         ret = helpers.wait_for_resource_count_change(
             get_all_pvcs, 0, self.proj_obj.namespace, "increase"
@@ -68,6 +68,7 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
         logger.info("PVC creation has started.")
         DISRUPTION_OPS.delete_resource()
         logger.info("Deleted RBD provisioner leader pod.")
+
         pvc_obj = pvc_create.result()
 
         # Confirm that the PVC is Bound
