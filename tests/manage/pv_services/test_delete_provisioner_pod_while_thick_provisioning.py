@@ -73,14 +73,14 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
 
         pvc_obj = pvc_create.result()
 
-        image_uid = pvc_obj.image_uuid
-
         # Confirm that the PVC is Bound
         helpers.wait_for_resource_state(
             resource=pvc_obj, state=constants.STATUS_BOUND, timeout=600
         )
         pvc_obj.reload()
-        logger.info("Verified: PVCs are Bound.")
+        logger.info(f"Verified: PVC {pvc_obj.name} reached Bound state.")
+
+        image_uid = pvc_obj.image_uuid
 
         # Create pod
         pod_obj = pod_factory(
