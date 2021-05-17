@@ -44,7 +44,7 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
         Test to delete RBD provisioner leader pod while creating a PVC using thick provision enabled storage class
         """
         pvc_size = 5
-        executor = ThreadPoolExecutor()
+        executor = ThreadPoolExecutor(max_workers=1)
         DISRUPTION_OPS.set_resource(
             resource="rbdplugin_provisioner", leader_type="provisioner"
         )
