@@ -3,7 +3,10 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from ocs_ci.framework.testlib import ManageTest, tier4, tier4a, polarion_id
-from ocs_ci.helpers.helpers import verify_volume_deleted_in_backend, default_thick_storage_class
+from ocs_ci.helpers.helpers import (
+    verify_volume_deleted_in_backend,
+    default_thick_storage_class,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
@@ -42,7 +45,9 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
         """
         pvc_size = 5
         executor = ThreadPoolExecutor()
-        DISRUPTION_OPS.set_resource(resource="rbdplugin_provisioner", leader_type="provisioner")
+        DISRUPTION_OPS.set_resource(
+            resource="rbdplugin_provisioner", leader_type="provisioner"
+        )
 
         # Start creation of PVC
         pvc_create = executor.submit(
@@ -96,14 +101,14 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
 
         logger.info(f"Deleting PVC {pvc_obj.name}")
         pvc_obj.delete()
-        pvc_obj.ocp.wait_for_delete(
-            pvc_obj.name
-        ), f"PVC {pvc_obj.name} is not deleted"
+        pvc_obj.ocp.wait_for_delete(pvc_obj.name), f"PVC {pvc_obj.name} is not deleted"
         logger.info(f"Verified: PVC {pvc_obj.name} is deleted.")
 
         # Verify the rbd image is deleted
         verify_volume_deleted_in_backend(
-            interface=constants.CEPHBLOCKPOOL, image_uuid=image_uid, pool_name=constants.DEFAULT_BLOCKPOOL,
-            timeout=300
+            interface=constants.CEPHBLOCKPOOL,
+            image_uuid=image_uid,
+            pool_name=constants.DEFAULT_BLOCKPOOL,
+            timeout=300,
         )
         logger.info("Verified: RBD image is deleted")
