@@ -20,12 +20,12 @@ def cosbench(request):
 
 
 @workloads
+@pytest.mark.polarion_id("OCS-2529")
 class TestCosbenchWorkload(E2ETest):
     """
     Test cosbench workloads on MCG
     """
 
-    @pytest.mark.polarion_id("OCS-2529")
     def test_cosbench_workload_simple(self, cosbench):
         """
         Tests basic Cosbench workload.
@@ -48,7 +48,6 @@ class TestCosbenchWorkload(E2ETest):
             prefix=bucket_prefix, containers=buckets, objects=objects, validate=True
         )
 
-    @pytest.mark.polarion_id("OCS-2530")
     def test_cosbench_workload_operations(self, cosbench):
         """
         Test to perform reads and writes on objects.
