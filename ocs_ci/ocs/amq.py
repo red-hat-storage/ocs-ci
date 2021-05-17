@@ -434,7 +434,7 @@ class AMQ(object):
         cmd = f"oc logs -n {namespace} {pod} --since={since_time}s"
         msg = run_cmd(cmd)
         substring = f"Hello world - {int(value) - 1}"
-        if msg.find(substring) is -1:
+        if msg.find(substring) == -1:
             return False
         else:
             return True
