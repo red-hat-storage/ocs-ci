@@ -54,12 +54,12 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
             pvc_factory,
             interface=constants.CEPHBLOCKPOOL,
             project=self.proj_obj,
-            storageclass=default_thick_storage_class,
+            storageclass=default_thick_storage_class(),
             size=pvc_size,
             access_mode=constants.ACCESS_MODE_RWO,
             status="",
         )
-        pvc_obj = pvc_create.result()
+
         # Ensure that the PVC is being created before deleting the rbd provisioner pod
         ret = helpers.wait_for_resource_count_change(
             get_all_pvcs, 0, self.proj_obj.namespace, "increase"
