@@ -32,7 +32,7 @@ class Cosbench(object):
         """
         self.ns_obj = OCP(kind="namespace")
         self.namespace = constants.COSBENCH_PROJECT
-        self.configmap_obj = OCP(namespace=self.namespace, kind="ConfigMap")
+        self.configmap_obj = OCP(namespace=self.namespace, kind=constants.CONFIGMAP)
         self.pod_obj = OCP(kind=constants.POD, namespace=self.namespace)
         self.cosbench_config = None
         self.cosbench_pod = None
