@@ -149,6 +149,7 @@ class MustGather(object):
             r"ip-*",
             r"j-*",
             r"argo-*",
+            r"vmware-*",
         ]
         for regular_ex in regular_ex_list:
             if re.match(regular_ex, pod_name) is not None:
