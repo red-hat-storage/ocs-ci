@@ -7,6 +7,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.framework.pytest_customization.marks import skipif_rhel_os
 from ocs_ci.ocs.resources.pod import (
     get_pod_node,
     get_mon_pods,
@@ -50,9 +51,15 @@ class TestKillCephDaemon(ManageTest):
     @pytest.mark.parametrize(
         argnames=["daemon_type"],
         argvalues=[
-            pytest.param(*["mon"], marks=pytest.mark.polarion_id("OCS-2491")),
-            pytest.param(*["osd"], marks=pytest.mark.polarion_id("OCS-2492")),
-            pytest.param(*["mgr"], marks=pytest.mark.polarion_id("OCS-2493")),
+            pytest.param(
+                *["mon"], marks=[pytest.mark.polarion_id("OCS-2491"), skipif_rhel_os]
+            ),
+            pytest.param(
+                *["osd"], marks=[pytest.mark.polarion_id("OCS-2492"), skipif_rhel_os]
+            ),
+            pytest.param(
+                *["mgr"], marks=[pytest.mark.polarion_id("OCS-2493"), skipif_rhel_os]
+            ),
         ],
     )
     def test_coredump_check_for_ceph_daemon_crash(self, daemon_type):

@@ -222,6 +222,12 @@ skipif_no_lso = pytest.mark.skipif(
     reason="Test run only on LSO deployed cluster",
 )
 
+skipif_rhel_os = pytest.mark.skipif(
+    (config.ENV_DATA.get("rhel_workers", None) is True)
+    or (config.ENV_DATA.get("rhel_memory", None) is not None),
+    reason="Test will not run on cluster with rhel os",
+)
+
 skipif_vsphere_ipi = pytest.mark.skipif(
     (
         config.ENV_DATA["platform"].lower() == "vsphere"
