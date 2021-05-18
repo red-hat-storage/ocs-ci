@@ -79,7 +79,9 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
         logger.info(f"Verified: PVC {pvc_obj.name} reached Bound state.")
 
         # Verify thick provision
-        image_name = pvc_obj.backed_pv_obj.get()["spec"]["csi"]["volumeAttributes"]["imageName"]
+        image_name = pvc_obj.backed_pv_obj.get()["spec"]["csi"]["volumeAttributes"][
+            "imageName"
+        ]
         ct_pod = get_ceph_tools_pod()
         du_out = ct_pod.exec_ceph_cmd(
             ceph_cmd=f"rbd du -p {constants.DEFAULT_BLOCKPOOL} {image_name}",
