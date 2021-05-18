@@ -174,7 +174,7 @@ class MustGather(object):
 
     def verify_noobaa_diagnostics(self):
         """
-        Verify noobaa_diagnostics folder exist
+        Verify noobaa diagnostics folder exist
 
         """
         if self.type_log == "OTHERS" and get_ocs_parsed_version() >= 4.6:
