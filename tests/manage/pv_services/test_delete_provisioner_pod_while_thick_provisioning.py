@@ -8,7 +8,7 @@ from ocs_ci.helpers.helpers import (
     default_thick_storage_class,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_fio_rw_iops
+from ocs_ci.ocs.resources.pod import get_fio_rw_iops, get_ceph_tools_pod
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.helpers import helpers, disruption_helpers
 
@@ -43,7 +43,7 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
         """
         Test to delete RBD provisioner leader pod while creating a PVC using thick provision enabled storage class
         """
-        pvc_size = 5
+        pvc_size = 20
         executor = ThreadPoolExecutor(max_workers=1)
         DISRUPTION_OPS.set_resource(
             resource="rbdplugin_provisioner", leader_type="provisioner"
@@ -77,6 +77,19 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
         )
         pvc_obj.reload()
         logger.info(f"Verified: PVC {pvc_obj.name} reached Bound state.")
+
+        # Verify thick provision
+        image_name = pvc_obj.backed_pv_obj.get()["spec"]["csi"]["volumeAttributes"]["imageName"]
+        ct_pod = get_ceph_tools_pod()
+        du_out = ct_pod.exec_ceph_cmd(
+            ceph_cmd=f"rbd du -p {constants.DEFAULT_BLOCKPOOL} {image_name}",
+            format="",
+        )
+        used_size = "".join(du_out.strip().split()[-2:])
+        assert used_size == f"{pvc_size}GiB", (
+            f"PVC {pvc_obj.name} is not thick provisioned. Rbd image {image_name} expected used size: "
+            f"{pvc_size}GiB. Actual used size {used_size}. Rbd du out: {du_out}"
+        )
 
         # Create pod and run IO
         pod_obj = pod_factory(
