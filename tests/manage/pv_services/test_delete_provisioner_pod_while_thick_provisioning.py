@@ -123,6 +123,8 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
         pvc_obj.delete()
         pvc_obj.ocp.wait_for_delete(pvc_obj.name), f"PVC {pvc_obj.name} is not deleted"
         logger.info(f"Verified: PVC {pvc_obj.name} is deleted.")
+        pv_obj.ocp.wait_for_delete(pv_obj.name), f"PV {pv_obj.name} is not deleted"
+        logger.info(f"Verified: PV {pv_obj.name} is deleted.")
 
         # Verify the rbd image is deleted
         logger.info(f"Wait for the RBD image {image_name} to get deleted")
