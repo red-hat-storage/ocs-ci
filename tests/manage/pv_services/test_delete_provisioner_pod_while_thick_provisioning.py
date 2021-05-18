@@ -19,7 +19,7 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
 
 @tier4
 @tier4a
-@polarion_id("")
+@polarion_id("OCS-2531")
 class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
     """
     Test to delete rbd provisioner leader pod while thick provisioning is progressing
@@ -79,9 +79,8 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
         logger.info(f"Verified: PVC {pvc_obj.name} reached Bound state.")
 
         # Verify thick provision
-        image_name = pvc_obj.backed_pv_obj.get()["spec"]["csi"]["volumeAttributes"][
-            "imageName"
-        ]
+        pv_obj = pvc_obj.backed_pv_obj
+        image_name = pv_obj.get()["spec"]["csi"]["volumeAttributes"]["imageName"]
         ct_pod = get_ceph_tools_pod()
         du_out = ct_pod.exec_ceph_cmd(
             ceph_cmd=f"rbd du -p {constants.DEFAULT_BLOCKPOOL} {image_name}",
@@ -90,8 +89,10 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
         used_size = "".join(du_out.strip().split()[-2:])
         assert used_size == f"{pvc_size}GiB", (
             f"PVC {pvc_obj.name} is not thick provisioned. Rbd image {image_name} expected used size: "
-            f"{pvc_size}GiB. Actual used size {used_size}. Rbd du out: {du_out}"
+            f"{pvc_size}GiB. Actual used size {used_size}.\n Rbd du out: {du_out}"
+            f"\n PV describe :\n {pv_obj.describe()}"
         )
+        logger.info("Verified: The PVC is thick provisioned")
 
         # Create pod and run IO
         pod_obj = pod_factory(
@@ -100,7 +101,10 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
             status=constants.STATUS_RUNNING,
         )
         pod_obj.run_io(
-            storage_type="fs", size=f"{pvc_size-1}G", fio_filename=f"{pod_obj.name}_io"
+            storage_type="fs",
+            size=f"{pvc_size-1}G",
+            fio_filename=f"{pod_obj.name}_io",
+            end_fsync=1,
         )
 
         # Get IO result
@@ -121,10 +125,11 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
         logger.info(f"Verified: PVC {pvc_obj.name} is deleted.")
 
         # Verify the rbd image is deleted
-        verify_volume_deleted_in_backend(
+        logger.info(f"Wait for the RBD image {image_name} to get deleted")
+        assert verify_volume_deleted_in_backend(
             interface=constants.CEPHBLOCKPOOL,
             image_uuid=image_uid,
             pool_name=constants.DEFAULT_BLOCKPOOL,
             timeout=300,
-        )
-        logger.info("Verified: RBD image is deleted")
+        ), f"Wait timeout - RBD image {image_name} is not deleted"
+        logger.info(f"Verified: RBD image {image_name} is deleted")
