@@ -6,6 +6,7 @@ import logging
 import tempfile
 
 from jsonschema import validate
+from semantic_version import Version
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
@@ -201,6 +202,8 @@ def ocs_install_verification(
         f"{storage_cluster_name}-cephfs",
         f"{storage_cluster_name}-ceph-rbd",
     }
+    if Version.coerce(ocs_version) >= Version.coerce("4.8"):
+        required_storage_classes.update({f"{storage_cluster_name}-ceph-rbd-thick"})
     if config.DEPLOYMENT["external_mode"]:
         required_storage_classes.update(
             {
