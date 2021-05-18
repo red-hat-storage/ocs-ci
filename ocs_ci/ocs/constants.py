@@ -1192,7 +1192,7 @@ ROOK_OPERATOR = "operator"
 MON_DAEMON = "mon"
 
 # cluster expansion
-MAX_OSDS = 15
+MAX_OSDS = 18
 
 # Minimum cluster requirements in term of node specs
 MIN_NODE_CPU = 16
