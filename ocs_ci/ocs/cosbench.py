@@ -537,8 +537,8 @@ class Cosbench(object):
                         logger.info(f"Stage {row[0]} completed successfully")
                     else:
                         assert (
-                            row[16] == "completed"
-                        ), f"Failed: Stage {row[0]} did not complete. Status {row[16]}"
+                            f"Failed: Stage {row[0]} did not complete. Status {row[16]}"
+                        )
             else:
                 raise UnexpectedBehaviour(
                     f"Workload csv is incorrect/malformed. Dumping csv {reader}"
