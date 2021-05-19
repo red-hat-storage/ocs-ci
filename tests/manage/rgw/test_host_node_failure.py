@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import (
+    ignore_leftovers,
     ManageTest,
     tier4a,
     on_prem_platform_required,
@@ -12,7 +13,12 @@ from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs.bucket_utils import s3_put_object, s3_get_object
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.node import get_node_objs
+from ocs_ci.ocs.node import (
+    get_node_objs,
+    get_worker_nodes,
+    unschedule_nodes,
+    schedule_nodes,
+)
 from ocs_ci.ocs.resources.pod import (
     get_rgw_pods,
     get_pod_node,
@@ -25,6 +31,7 @@ log = logging.getLogger(__name__)
 
 
 @tier4a
+@ignore_leftovers
 @pytest.mark.polarion_id("OCS-2374")
 @pytest.mark.bugzilla("1852983")
 @on_prem_platform_required
@@ -43,6 +50,31 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
 
         """
         self.sanity_helpers = Sanity()
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        """
+        Restart nodes that are in status unschedulable,
+        for situations in which the test failed
+        in between before scheduling those nodes
+
+        """
+
+        def finalizer():
+
+            # Validate all nodes are schedulable
+            scheduling_disabled_nodes = [
+                n.name
+                for n in get_node_objs()
+                if n.ocp.get_resource_status(n.name)
+                == constants.NODE_READY_SCHEDULING_DISABLED
+            ]
+            if scheduling_disabled_nodes:
+                schedule_nodes(scheduling_disabled_nodes)
+
+            log.info("All nodes are in Ready status")
+
+        request.addfinalizer(finalizer)
 
     def create_obc_creation(self, bucket_factory, mcg_obj, key):
 
@@ -78,22 +110,21 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
             assert False, "Could not find the NooBaa DB pod"
 
         # Validate if RGW pod and noobaa-db are hosted on same node else skip test
-        log.info(
-            "Validate if RGW pod and noobaa-db are hosted on same node else skip test"
-        )
-        i = 0
-        skip = True
-        while i < 6:
-            rgw_pod_obj = get_rgw_pods()
-            rgw_pod_node_list = [
-                rgw_pod.get().get("spec").get("nodeName") for rgw_pod in rgw_pod_obj
-            ]
-            if set(rgw_pod_node_list).intersection(noobaa_pod_node.name):
-                skip = False
-                break
-            rgw_pod_obj[0].delete()
+        log.info("Validate if RGW pod and noobaa-db are hosted on same node")
+        rgw_pod_obj = get_rgw_pods()
+        rgw_pod_node_list = [
+            rgw_pod.get().get("spec").get("nodeName") for rgw_pod in rgw_pod_obj
+        ]
+        if not list(set(rgw_pod_node_list).intersection(noobaa_pod_node.name.split())):
+            log.info(
+                "Unschedule other two nodes such that RGW "
+                "pod moves to node where NooBaa DB pod hosted"
+            )
+            worker_node_list = get_worker_nodes()
+            node_names = list(set(worker_node_list) - set(noobaa_pod_node.name.split()))
+            unschedule_nodes(node_names=node_names)
             ocp_obj = OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-            ocp_obj.wait_for_delete(resource_name=rgw_pod_obj[0].name, timeout=120)
+            rgw_pod_obj[0].delete()
             ocp_obj.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 resource_count=len(rgw_pod_obj),
@@ -101,14 +132,11 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
                 timeout=300,
                 sleep=5,
             )
-            i += 1
+            log.info("Schedule those nodes again")
+            schedule_nodes(node_names=node_names)
 
-        if skip:
-            pytest.skip(
-                "RGW pod and NooBaa DB are not hosted on same node. "
-                f"RGW pod hosted on nodes: {rgw_pod_node_list} "
-                f"NooBaa DB pod hosted on node: {noobaa_pod_node.name}"
-            )
+            # Check the ceph health OK
+            ceph_health_check(tries=90, delay=15)
 
         log.info("RGW and noobaa-db are hosted on same node start the test execution")
         rgw_pod_obj = get_rgw_pods()
