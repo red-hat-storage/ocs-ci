@@ -557,8 +557,10 @@ class Cosbench(object):
 
         """
         archive_file = f"{workload_id}-{workload_name}"
-        cmd = f"cp {self.cosbench_pod.name}:/cos/archive/{archive_file}/{archive_file}.csv " \
-              f"{self.cosbench_dir}/{archive_file}.csv "
+        cmd = (
+            f"cp {self.cosbench_pod.name}:/cos/archive/{archive_file}/{archive_file}.csv "
+            f"{self.cosbench_dir}/{archive_file}.csv "
+        )
         self.ocp_obj.exec_oc_cmd(
             command=cmd,
             out_yaml_format=False,
