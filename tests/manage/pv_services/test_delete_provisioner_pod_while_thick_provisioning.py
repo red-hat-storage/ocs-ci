@@ -2,7 +2,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier4, tier4a, polarion_id
+from ocs_ci.framework.testlib import ManageTest, tier4, tier4a, polarion_id, bugzilla
 from ocs_ci.helpers.helpers import (
     verify_volume_deleted_in_backend,
     default_thick_storage_class,
@@ -19,7 +19,6 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
 
 @tier4
 @tier4a
-@polarion_id("OCS-2531")
 class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
     """
     Test to delete rbd provisioner leader pod while thick provisioning is progressing
@@ -35,6 +34,8 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
         """
         self.proj_obj = project_factory()
 
+    @polarion_id("OCS-2531")
+    @bugzilla("1961647")
     def test_delete_provisioner_pod_while_thick_provisioning(
         self,
         pvc_factory,
