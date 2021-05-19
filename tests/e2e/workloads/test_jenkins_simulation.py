@@ -1,7 +1,7 @@
 import pytest
 import logging
 
-from ocs_ci.framework.testlib import ManageTest, workloads, acceptance
+from ocs_ci.framework.testlib import ManageTest, workloads
 from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.pod import Pod
