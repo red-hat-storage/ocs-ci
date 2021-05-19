@@ -9,7 +9,7 @@ spec:
   serviceAccountName: default
   containers:
   - name: cosbench
-    image: quay.io/parikshith/noobaa  #need to push image to qe repo
+    image: quay.io/ocsci/cosbench:latest
     envFrom:
       - configMapRef:
           name: cosbench-config

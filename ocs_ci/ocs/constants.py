@@ -1211,7 +1211,7 @@ PLACEMENT_BUCKETCLASS = "placement-bucketclass"
 COSBENCH = "cosbench"
 COSBENCH_PROJECT = "cosbench-project"
 
-COSBENCH_DIR = os.path.join(TEMPLATE_DIR, "cosbench")
+COSBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "cosbench")
 COSBENCH_POD = os.path.join(COSBENCH_DIR, "cosbench_pod.yaml")
 COSBENCH_CONFIGMAP = os.path.join(COSBENCH_DIR, "cosbench_configmap.yaml")
 

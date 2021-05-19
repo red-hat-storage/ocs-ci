@@ -13,7 +13,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_pod_logs
+from ocs_ci.ocs.resources.pod import get_pod_logs, get_pod_obj
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 
 logger = logging.getLogger(__name__)
@@ -33,20 +33,20 @@ class Cosbench(object):
         self.ns_obj = OCP(kind="namespace")
         self.namespace = constants.COSBENCH_PROJECT
         self.configmap_obj = OCP(namespace=self.namespace, kind=constants.CONFIGMAP)
-        self.pod_obj = OCP(kind=constants.POD, namespace=self.namespace)
+        self.ocp_obj = OCP(namespace=self.namespace)
         self.cosbench_config = None
         self.cosbench_pod = None
-        self.cosbench_dir = mkdtemp(prefix="Cosbench-Tool-")
+        self.cosbench_dir = mkdtemp(prefix="cosbench-tool-")
         self.xml_file = ""
         self.workload_id = ""
         self.init_container = 1
         self.range_selector = "r"
         self.init_object = 1
-        self.mcg_obj = MCG()
-        self.access_key_id = self.mcg_obj.access_key_id
-        self.access_key = self.mcg_obj.access_key
+        mcg_obj = MCG()
+        self.access_key_id = mcg_obj.access_key_id
+        self.access_key = mcg_obj.access_key
         self.endpoint = (
-            "http://" + self.mcg_obj.s3_internal_endpoint.split("/")[2].split(":")[0]
+            "http://" + mcg_obj.s3_internal_endpoint.split("/")[2].split(":")[0]
         )
 
     def setup_cosbench(self):
@@ -59,7 +59,6 @@ class Cosbench(object):
 
         # Create configmap
         config_data = templating.load_yaml(file=constants.COSBENCH_CONFIGMAP)
-        logger.info(config_data)
         cosbench_configmap_name = create_unique_resource_name(
             constants.COSBENCH, "configmap"
         )
@@ -74,7 +73,6 @@ class Cosbench(object):
 
         # Create Cosbench pod
         cosbench_pod_data = templating.load_yaml(file=constants.COSBENCH_POD)
-        logger.info(cosbench_pod_data)
         cosbench_pod_data["spec"]["containers"][0]["envFrom"][0]["configMapRef"][
             "name"
         ] = self.cosbench_config.name
@@ -86,10 +84,6 @@ class Cosbench(object):
         self.cosbench_pod.create()
         helpers.wait_for_resource_state(
             resource=self.cosbench_pod, state=constants.STATUS_RUNNING, timeout=300
-        )
-        self.pod_obj.exec_oc_cmd(
-            command=f"exec {self.cosbench_pod.name} -- bash -c 'apt-get update; apt-get install -y curl'",
-            out_yaml_format=False,
         )
 
     def _apply_mcg_auth(self, xml_root):
@@ -109,13 +103,13 @@ class Cosbench(object):
     def run_init_workload(
         self,
         prefix,
-        containers=5,
-        objects=10,
+        containers,
+        objects,
         start_container=None,
         start_object=None,
         size=64,
         size_unit="KB",
-        sleep=1,
+        sleep=15,
         timeout=60,
         validate=True,
     ):
@@ -188,11 +182,11 @@ class Cosbench(object):
     def run_cleanup_workload(
         self,
         prefix,
-        containers=5,
+        containers,
+        objects,
         start_container=None,
         start_object=None,
-        objects=10,
-        sleep=1,
+        sleep=15,
         timeout=60,
         validate=True,
     ):
@@ -265,15 +259,15 @@ class Cosbench(object):
         self,
         operation_type,
         prefix,
+        containers,
+        objects,
         workers=4,
         selector="s",
-        containers=5,
-        objects=10,
         start_container=None,
         start_object=None,
         size=64,
         size_unit="KB",
-        sleep=1,
+        sleep=15,
         timeout=60,
         extend_objects=None,
         validate=True,
@@ -286,10 +280,10 @@ class Cosbench(object):
                                    Operation (str): Supported ops are read, write, list and delete.
                                    Ratio (int): Percentage of each operation. Should add up to 100.
             workers (int): Number of threads to be used.
-            selector (str): The way object is accessed/selected. u=uniform, r=range, s=sequential.
-            prefix (str): Prefix of bucket name.
             containers (int): Number of containers/buckets to be created.
             objects (int): Number of objects to be created on each bucket.
+            selector (str): The way object is accessed/selected. u=uniform, r=range, s=sequential.
+            prefix (str): Prefix of bucket name.
             start_container (int): Start of containers. Default: 1.
             start_object (int): Start of objects. Default: 1.
             size (int): Size of each objects.
@@ -447,7 +441,7 @@ class Cosbench(object):
             workload_path (str): Absolute path of xml to copy
 
         """
-        self.pod_obj.exec_oc_cmd(
+        self.ocp_obj.exec_oc_cmd(
             command=f"cp {workload_path} {self.cosbench_pod.name}:/cos",
             out_yaml_format=False,
             timeout=180,
@@ -462,19 +456,20 @@ class Cosbench(object):
 
         """
         self._copy_workload(workload_path=workload_path)
+        cobench_pod_obj = get_pod_obj(
+            name=self.cosbench_pod.name, namespace=self.namespace
+        )
         workload = os.path.split(workload_path)[1]
-        submit = self.cosbench_pod.exec_cmd_on_pod(
+        submit = cobench_pod_obj.exec_cmd_on_pod(
             command=f"/cos/cli.sh submit /cos/{workload}",
             out_yaml_format=True,
             timeout=180,
         )
-        logger.info(submit)
         submit_key = "Accepted with ID"
         if submit_key in submit.keys():
             self.workload_id = submit[submit_key]
-            logger.info(self.workload_id)
         else:
-            assert f"Failed to submit the workload, ID not found. Stdout: {submit}"
+            assert f"Failed to submit the workload, ID not found. stdout: {submit}"
 
     def wait_for_workload(self, workload_id, sleep=1, timeout=60):
         """
@@ -538,8 +533,6 @@ class Cosbench(object):
                     f"Verifying whether each stage of workload {workload_id} completed"
                 )
                 for row in reader:
-                    logger.info(row)
-
                     if row[16] == "completed":
                         logger.info(f"Stage {row[0]} completed successfully")
                     else:
@@ -564,8 +557,9 @@ class Cosbench(object):
 
         """
         archive_file = f"{workload_id}-{workload_name}"
-        cmd = f"cp {self.cosbench_pod.name}:/cos/archive/{archive_file}/{archive_file}.csv {self.cosbench_dir}/ "
-        self.pod_obj.exec_oc_cmd(
+        cmd = f"cp {self.cosbench_pod.name}:/cos/archive/{archive_file}/{archive_file}.csv " \
+              f"{self.cosbench_dir}/{archive_file}.csv "
+        self.ocp_obj.exec_oc_cmd(
             command=cmd,
             out_yaml_format=False,
             timeout=300,
