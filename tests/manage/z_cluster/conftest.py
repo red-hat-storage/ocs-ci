@@ -46,8 +46,7 @@ def workload_storageutilization_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        # target_percentage=target_percentage,
-        target_size=30,
+        target_percentage=target_percentage,
         keep_fio_data=keep_fio_data,
         minimal_time=minimal_time,
     )
