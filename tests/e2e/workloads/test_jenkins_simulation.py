@@ -37,7 +37,6 @@ class TestJenkinsSimulation(ManageTest):
     Run simulation for "Jenkins" - git clone
     """
 
-    @acceptance
     @workloads
     def test_git_clone(self, pod):
         """
