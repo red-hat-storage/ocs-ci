@@ -6,7 +6,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
     tier4,
-    tier4a,
     polarion_id,
     skipif_ocs_version,
 )
@@ -36,7 +35,7 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
         ),
         pytest.param(
             *["rbdplugin_provisioner"],
-            marks=[polarion_id(""), tier4, tier4a],
+            marks=[polarion_id(""), tier4, pytest.mark.tier4a],
         ),
     ],
 )
