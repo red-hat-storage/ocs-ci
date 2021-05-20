@@ -421,6 +421,16 @@ def login_ui():
     wait = WebDriverWait(driver, 60)
     driver.maximize_window()
     driver.get(console_url)
+    if config.ENV_DATA["flexy_deployment"]:
+        try:
+            element = wait.until(
+                ec.element_to_be_clickable(
+                    (login_loc["flexy_kubeadmin"][1], login_loc["flexy_kubeadmin"][0])
+                )
+            )
+            element.click()
+        except Exception as e:
+            logger.error(e)
     element = wait.until(
         ec.element_to_be_clickable((login_loc["username"][1], login_loc["username"][0]))
     )

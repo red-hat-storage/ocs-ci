@@ -3,6 +3,7 @@ from selenium.webdriver.common.by import By
 osd_sizes = ("512", "2048", "4096")
 
 login = {
+    "flexy_kubeadmin": ('a[title="Log in with kube:admin"]', By.CSS_SELECTOR),
     "ocp_page": "Overview · Red Hat OpenShift Container Platform",
     "username": ("inputUsername", By.ID),
     "password": ("inputPassword", By.ID),
