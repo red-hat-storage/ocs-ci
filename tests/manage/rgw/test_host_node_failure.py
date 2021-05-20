@@ -51,31 +51,6 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
-    @pytest.fixture(autouse=True)
-    def teardown(self, request):
-        """
-        Restart nodes that are in status unschedulable,
-        for situations in which the test failed
-        in between before scheduling those nodes
-
-        """
-
-        def finalizer():
-
-            # Validate all nodes are schedulable
-            scheduling_disabled_nodes = [
-                n.name
-                for n in get_node_objs()
-                if n.ocp.get_resource_status(n.name)
-                == constants.NODE_READY_SCHEDULING_DISABLED
-            ]
-            if scheduling_disabled_nodes:
-                schedule_nodes(scheduling_disabled_nodes)
-
-            log.info("All nodes are in Ready status")
-
-        request.addfinalizer(finalizer)
-
     def create_obc_creation(self, bucket_factory, mcg_obj, key):
 
         # Create a bucket then read & write
@@ -87,7 +62,7 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
         assert s3_get_object(mcg_obj, bucket_name, key), f"Failed: Get object, {key}"
 
     def test_rgw_host_node_failure(
-        self, nodes, node_restart_teardown, mcg_obj, bucket_factory
+        self, nodes, node_restart_teardown, node_drain_teardown, mcg_obj, bucket_factory
     ):
         """
         Test case to fail node where RGW and the NooBaa DB are hosted
@@ -109,7 +84,8 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
         if noobaa_pod_node is None:
             assert False, "Could not find the NooBaa DB pod"
 
-        # Validate if RGW pod and noobaa-db are hosted on same node else skip test
+        # Validate if RGW pod and noobaa-db are hosted on same node
+        # If not, make sure both pods are hosted on same node
         log.info("Validate if RGW pod and noobaa-db are hosted on same node")
         rgw_pod_obj = get_rgw_pods()
         rgw_pod_node_list = [
@@ -137,6 +113,22 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
 
             # Check the ceph health OK
             ceph_health_check(tries=90, delay=15)
+
+            # Check again the rgw pod move to node where NooBaa DB pod hosted
+            rgw_pod_obj_list = get_rgw_pods()
+            rgw_pod_node_list = [
+                get_pod_node(rgw_pod_obj) for rgw_pod_obj in rgw_pod_obj_list
+            ]
+            value = [
+                True if rgw_pod_node == noobaa_pod_node.name else False
+                for rgw_pod_node in rgw_pod_node_list
+            ]
+            assert value, (
+                "RGW Pod didn't move to node where NooBaa DB pod"
+                " hosted even after cordoned and uncordoned nodes"
+                f"RGW pod hosted: {rgw_pod_node_list}"
+                f"NooBaa DB pod hosted: {noobaa_pod_node.name}"
+            )
 
         log.info("RGW and noobaa-db are hosted on same node start the test execution")
         rgw_pod_obj = get_rgw_pods()
