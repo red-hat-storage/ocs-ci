@@ -35,7 +35,7 @@ def add_capacity_test():
     osd_size = storage_cluster.get_osd_size()
     existing_osd_pods = get_osd_pods()
     existing_osd_pod_names = [pod.name for pod in existing_osd_pods]
-    result = storage_cluster.add_capacity(osd_size)
+    result = storage_cluster.add_capacity_ui(osd_size)
     osd_pods_post_expansion = get_osd_pods()
     osd_pod_names_post_expansion = [pod.name for pod in osd_pods_post_expansion]
     restarted_osds = list()

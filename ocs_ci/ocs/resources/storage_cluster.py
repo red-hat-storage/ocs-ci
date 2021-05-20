@@ -521,59 +521,41 @@ def add_capacity(osd_size_capacity_requested):
         device_sets_required + old_storage_devices_sets_count
     )
     lvpresent = localstorage.check_local_volume()
-    ocp_version = get_ocp_version()
-    platform = config.ENV_DATA.get("platform", "").lower()
-    is_lso = config.DEPLOYMENT.get("local_storage")
-    if (
-        ocp_version == "4.7"
-        and (
-            platform == constants.AWS_PLATFORM or platform == constants.VSPHERE_PLATFORM
+    if lvpresent:
+        ocp_obj = OCP(
+            kind="localvolume", namespace=config.ENV_DATA["local_storage_namespace"]
         )
-        and (not is_lso)
-    ):
-        logging.info("Add capacity via UI")
-        setup_ui = login_ui()
-        add_ui_obj = AddReplaceDeviceUI(setup_ui)
-        add_ui_obj.add_capacity_ui()
-        close_browser(setup_ui)
-    else:
-        if lvpresent:
-            ocp_obj = OCP(
-                kind="localvolume", namespace=config.ENV_DATA["local_storage_namespace"]
-            )
-            localvolume_data = ocp_obj.get(resource_name="local-block")
-            device_list = localvolume_data["spec"]["storageClassDevices"][0][
-                "devicePaths"
-            ]
-            final_device_list = localstorage.get_new_device_paths(
-                device_sets_required, osd_size_capacity_requested
-            )
-            device_list.sort()
-            final_device_list.sort()
-            if device_list == final_device_list:
-                raise ResourceNotFoundError("No Extra device found")
-            param = f"""[{{ "op": "replace", "path": "/spec/storageClassDevices/0/devicePaths",
-                                                     "value": {final_device_list}}}]"""
-            log.info(f"Final device list : {final_device_list}")
-            lvcr = localstorage.get_local_volume_cr()
-            log.info("Patching Local Volume CR...")
-            lvcr.patch(
-                resource_name=lvcr.get()["items"][0]["metadata"]["name"],
-                params=param.strip("\n"),
-                format_type="json",
-            )
-            localstorage.check_pvs_created(
-                int(len(final_device_list) / new_storage_devices_sets_count)
-            )
-        sc = get_storage_cluster()
-        # adding the storage capacity to the cluster
-        params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
-                    "value": {new_storage_devices_sets_count}}}]"""
-        sc.patch(
-            resource_name=sc.get()["items"][0]["metadata"]["name"],
-            params=params.strip("\n"),
+        localvolume_data = ocp_obj.get(resource_name="local-block")
+        device_list = localvolume_data["spec"]["storageClassDevices"][0]["devicePaths"]
+        final_device_list = localstorage.get_new_device_paths(
+            device_sets_required, osd_size_capacity_requested
+        )
+        device_list.sort()
+        final_device_list.sort()
+        if device_list == final_device_list:
+            raise ResourceNotFoundError("No Extra device found")
+        param = f"""[{{ "op": "replace", "path": "/spec/storageClassDevices/0/devicePaths",
+                                                 "value": {final_device_list}}}]"""
+        log.info(f"Final device list : {final_device_list}")
+        lvcr = localstorage.get_local_volume_cr()
+        log.info("Patching Local Volume CR...")
+        lvcr.patch(
+            resource_name=lvcr.get()["items"][0]["metadata"]["name"],
+            params=param.strip("\n"),
             format_type="json",
         )
+        localstorage.check_pvs_created(
+            int(len(final_device_list) / new_storage_devices_sets_count)
+        )
+    sc = get_storage_cluster()
+    # adding the storage capacity to the cluster
+    params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
+                "value": {new_storage_devices_sets_count}}}]"""
+    sc.patch(
+        resource_name=sc.get()["items"][0]["metadata"]["name"],
+        params=params.strip("\n"),
+        format_type="json",
+    )
     return new_storage_devices_sets_count
 
 
@@ -699,3 +681,34 @@ def setup_ceph_debug():
     )
     log.info("Setting Ceph to work in debug log level using a new ConfigMap resource")
     run_cmd(f"oc create -f {ceph_configmap_yaml.name}")
+
+
+def add_capacity_ui(osd_size_capacity_requested):
+    """
+    Add storage capacity to the cluster
+
+    Args:
+        osd_size_capacity_requested(int): Requested osd size capacity
+
+    """
+    ocp_version = get_ocp_version()
+    platform = config.ENV_DATA.get("platform", "").lower()
+    is_lso = config.DEPLOYMENT.get("local_storage")
+    if (
+        ocp_version == "4.7"
+        and (
+            platform == constants.AWS_PLATFORM or platform == constants.VSPHERE_PLATFORM
+        )
+        and (not is_lso)
+    ):
+        try:
+            logging.info("Add capacity via UI")
+            setup_ui = login_ui()
+            add_ui_obj = AddReplaceDeviceUI(setup_ui)
+            add_ui_obj.add_capacity_ui()
+            close_browser(setup_ui)
+        except Exception as e:
+            logging.error(e)
+            add_capacity(osd_size_capacity_requested)
+    else:
+        add_capacity(osd_size_capacity_requested)

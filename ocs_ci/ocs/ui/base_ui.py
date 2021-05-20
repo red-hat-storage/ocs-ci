@@ -9,12 +9,14 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.common.exceptions import TimeoutException, WebDriverException
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.utility.utils import run_cmd, get_kubeadmin_password, get_ocp_version
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.utility.retry import retry
 
 
 logger = logging.getLogger(__name__)
@@ -367,6 +369,8 @@ class PageNavigator(BaseUI):
         self.do_click(locator=self.page_nav["Pods"])
 
 
+@retry(TimeoutException, tries=4, delay=3, backoff=2)
+@retry(WebDriverException, tries=4, delay=3, backoff=2)
 def login_ui():
     """
     Login to OpenShift Console
