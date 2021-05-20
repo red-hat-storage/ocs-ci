@@ -279,7 +279,7 @@ class Cosbench(object):
             operation_type (dict): Cosbench operation and its ratio.
                                    Operation (str): Supported ops are read, write, list and delete.
                                    Ratio (int): Percentage of each operation. Should add up to 100.
-            workers (int): Number of threads to be used.
+            workers (int): Number of users to perform operations.
             containers (int): Number of containers/buckets to be created.
             objects (int): Number of objects to be created on each bucket.
             selector (str): The way object is accessed/selected. u=uniform, r=range, s=sequential.
