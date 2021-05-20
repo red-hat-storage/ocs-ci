@@ -268,7 +268,7 @@ class Cosbench(object):
         size=64,
         size_unit="KB",
         sleep=15,
-        timeout=180,
+        timeout=300,
         extend_objects=None,
         validate=True,
     ):
