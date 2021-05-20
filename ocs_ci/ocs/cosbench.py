@@ -11,6 +11,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_pod_logs, get_pod_obj
@@ -110,7 +111,7 @@ class Cosbench(object):
         size=64,
         size_unit="KB",
         sleep=15,
-        timeout=180,
+        timeout=300,
         validate=True,
     ):
         """
@@ -168,7 +169,7 @@ class Cosbench(object):
                     f"cprefix={prefix};{init_config};sizes=c({str(size)}){size_unit}",
                 )
         self._create_tmp_xml(xml_tree=xml_tree, xml_file_prefix=workload_name)
-        self._submit_workload(workload_path=self.xml_file)
+        self.submit_workload(workload_path=self.xml_file)
         self.wait_for_workload(
             workload_id=self.workload_id, sleep=sleep, timeout=timeout
         )
@@ -187,7 +188,7 @@ class Cosbench(object):
         start_container=None,
         start_object=None,
         sleep=15,
-        timeout=180,
+        timeout=300,
         validate=True,
     ):
         """
@@ -244,7 +245,7 @@ class Cosbench(object):
                 stage.set("config", f"cprefix={prefix};{cleanuo_config}")
 
         self._create_tmp_xml(xml_tree=xml_tree, xml_file_prefix=workload_name)
-        self._submit_workload(workload_path=self.xml_file)
+        self.submit_workload(workload_path=self.xml_file)
         self.wait_for_workload(
             workload_id=self.workload_id, sleep=sleep, timeout=timeout
         )
@@ -364,7 +365,7 @@ class Cosbench(object):
                     ElementTree.SubElement(stage, "operation", attributes)
 
         self._create_tmp_xml(xml_tree=xml_tree, xml_file_prefix=workload_name)
-        self._submit_workload(workload_path=self.xml_file)
+        self.submit_workload(workload_path=self.xml_file)
         self.wait_for_workload(
             workload_id=self.workload_id, sleep=sleep, timeout=timeout
         )
@@ -447,7 +448,7 @@ class Cosbench(object):
             timeout=180,
         )
 
-    def _submit_workload(self, workload_path):
+    def submit_workload(self, workload_path):
         """
         Submits Cosbench xml to initiate workload
 
@@ -456,16 +457,27 @@ class Cosbench(object):
 
         """
         self._copy_workload(workload_path=workload_path)
+        workload = os.path.split(workload_path)[1]
+        self._cosbench_cli(workload)
+
+    @retry(AttributeError, tries=15, delay=5, backoff=1)
+    def _cosbench_cli(self, workload):
+        """
+        Runs Cosbench cli to initiate workload
+
+        Args:
+            workload (str): Workload file
+
+        """
+        submit_key = "Accepted with ID"
         cobench_pod_obj = get_pod_obj(
             name=self.cosbench_pod.name, namespace=self.namespace
         )
-        workload = os.path.split(workload_path)[1]
         submit = cobench_pod_obj.exec_cmd_on_pod(
             command=f"/cos/cli.sh submit /cos/{workload}",
             out_yaml_format=True,
             timeout=180,
         )
-        submit_key = "Accepted with ID"
         if submit_key in submit.keys():
             self.workload_id = submit[submit_key]
         else:

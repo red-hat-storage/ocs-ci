@@ -74,7 +74,6 @@ class TestCosbenchWorkload(E2ETest):
             prefix=bucket_prefix,
             containers=buckets,
             objects=objects,
-            timeout=120,
             validate=True,
         )
 
