@@ -110,7 +110,7 @@ class Cosbench(object):
         size=64,
         size_unit="KB",
         sleep=15,
-        timeout=60,
+        timeout=180,
         validate=True,
     ):
         """
@@ -187,7 +187,7 @@ class Cosbench(object):
         start_container=None,
         start_object=None,
         sleep=15,
-        timeout=60,
+        timeout=180,
         validate=True,
     ):
         """
@@ -268,7 +268,7 @@ class Cosbench(object):
         size=64,
         size_unit="KB",
         sleep=15,
-        timeout=60,
+        timeout=180,
         extend_objects=None,
         validate=True,
     ):
