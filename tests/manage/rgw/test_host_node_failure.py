@@ -114,6 +114,9 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
             # Check the ceph health OK
             ceph_health_check(tries=90, delay=15)
 
+            # Verify all storage pods are running
+            wait_for_storage_pods()
+
             # Check again the rgw pod move to node where NooBaa DB pod hosted
             rgw_pod_obj_list = get_rgw_pods()
             rgw_pod_node_list = [
