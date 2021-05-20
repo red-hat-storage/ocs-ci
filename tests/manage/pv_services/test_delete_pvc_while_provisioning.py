@@ -32,11 +32,11 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
     argvalues=[
         pytest.param(
             *[""],
-            marks=[polarion_id(""), skipif_ocs_version("<4.8"), tier2],
+            marks=[polarion_id(""), tier2],
         ),
         pytest.param(
             *["rbdplugin_provisioner"],
-            marks=[polarion_id(""), skipif_ocs_version("<4.8"), tier4, tier4a],
+            marks=[polarion_id(""), tier4, tier4a],
         ),
     ],
 )
@@ -55,6 +55,7 @@ class TestDeletePvcWhileProvisioning(ManageTest):
         """
         self.proj_obj = project_factory()
 
+    @skipif_ocs_version("<4.8")
     def test_delete_rbd_pvc_while_thick_provisioning(
         self,
         resource_to_delete,
