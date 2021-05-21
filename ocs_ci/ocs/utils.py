@@ -780,6 +780,13 @@ def setup_ceph_toolbox(force_setup=False):
             'json --patch  \'[{ "op": "replace", "path": '
             '"/spec/enableCephTools", "value": true }]\''
         )
+        toolbox_pod = OCP(kind=constants.POD, namespace=namespace)
+        toolbox_pod.wait_for_resource(
+            condition="Running",
+            selector="app=rook-ceph-tools",
+            resource_count=1,
+            timeout=120,
+        )
 
 
 def apply_oc_resource(
