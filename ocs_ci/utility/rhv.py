@@ -251,8 +251,8 @@ class RHV(object):
         size,
         disk_format=RHV_DISK_FORMAT_RAW,
         disk_interface=RHV_DISK_INTERFACE_VIRTIO_SCSI,
-        sparse=True,
-        pass_discard=False,
+        sparse=None,
+        pass_discard=None,
         storage_domain_id=None,
         timeout=120,
     ):
@@ -266,9 +266,9 @@ class RHV(object):
             disk_interface (str): underlying storage interface of disks
                 communication with controller (default: 'VIRTIO_SCSI')
             sparse (bool): disk allocation policy. True for sparse,
-                false for preallocated (default: True)
-            pass_discard (bool): True if  the virtual machine passes discard
-                commands to the storage (default: False)
+                false for preallocated (default: None)
+            pass_discard (bool): True if the virtual machine passes discard
+                commands to the storage, False otherwise (default: None)
             storage_domain_id (str): A unique identifier for the storage domain
             timeout (int): The timeout in seconds for disk status OK (default: 120)
 
@@ -321,8 +321,8 @@ class RHV(object):
         size,
         disk_format=RHV_DISK_FORMAT_RAW,
         disk_interface=RHV_DISK_INTERFACE_VIRTIO_SCSI,
-        sparse=True,
-        pass_discard=False,
+        sparse=None,
+        pass_discard=None,
         storage_domain_id=None,
         timeout=120,
     ):
@@ -337,9 +337,9 @@ class RHV(object):
             disk_interface (str): underlying storage interface of disks
                 communication with controller (default: 'VIRTIO_SCSI')
             sparse (bool): disk allocation policy. True for sparse,
-                false for preallocated (default: True)
-            pass_discard (bool): True if  the virtual machine passes discard
-                commands to the storage (default: False)
+                false for preallocated (default: None)
+            pass_discard (bool): True if the virtual machine passes discard
+                commands to the storage, False otherwise (default: None)
             storage_domain_id (str): A unique identifier for the storage domain
             timeout (int): The timeout in seconds for disk status OK (default: 120)
 

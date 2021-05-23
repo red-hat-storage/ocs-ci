@@ -376,6 +376,6 @@ def add_disk_for_rhv_platform():
             config.ENV_DATA.get(
                 "disk_interface", constants.RHV_DISK_INTERFACE_VIRTIO_SCSI
             ),
-            config.ENV_DATA.get("sparse", False),
-            config.ENV_DATA.get("pass_discard", True),
+            config.ENV_DATA.get("sparse"),
+            config.ENV_DATA.get("pass_discard"),
         )

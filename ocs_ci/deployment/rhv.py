@@ -61,15 +61,12 @@ class RHVBASE(OnPremDeploymentBase):
         size=100,
         disk_format=RHV_DISK_FORMAT_RAW,
         disk_interface=RHV_DISK_INTERFACE_VIRTIO_SCSI,
-        sparse=False,
-        pass_discard=True,
+        sparse=None,
+        pass_discard=None,
         storage_domain_id=None,
     ):
         """
         Add a new disk to all the workers nodes
-
-        Args:
-            size (int): Size of disk in GB (default: 100)
 
         """
         storage_domain_id = storage_domain_id or self.ovirt_storage_domain_id

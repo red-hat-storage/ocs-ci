@@ -13,11 +13,11 @@ ENV_DATA:
   compute_memory: '65536'
   local_storage_allow_rotational_disks: true
   # Following optional values can be passed to ocs-ci which will used when
-  # attaching the disks
+  # attaching the disks to the VMs
   # disk_format: 'RAW'
   # disk_interface: 'VIRTIO_SCSI'
-  # sparse: false
-  # pass_discard: True
+  # sparse: True
+  # pass_discard: False
 
   # Following values needs to be set in separate config and passed to ocs-ci in
   # order to connect to RHVM and/or deploy OCP/OCS cluster on RHV
