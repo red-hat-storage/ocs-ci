@@ -196,7 +196,6 @@ UI_SELENIUM:
   screenshot: True
   ignore_ssl: True
 
-<<<<<<< HEAD
 # This section is related to performance tests which need Elasticsearch server
 PERF:
   # deploy new ES (elastic-search) server in the tested cluster
@@ -214,7 +213,6 @@ PERF:
   # The Dev. Lab ES information:  IP / Port
   dev_es_server: "10.0.144.152"
   dev_es_port: 9200
-=======
 
 # Specific component to be enabled/disabled
 # like RGW, NOOBAA, CephFS, RBD
@@ -224,4 +222,3 @@ COMPONENTS:
   disable_cephfs: False
   disable_blockpools: False
 
->>>>>>> Flexible component deployment
