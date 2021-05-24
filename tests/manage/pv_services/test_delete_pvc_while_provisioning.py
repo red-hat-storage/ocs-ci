@@ -8,7 +8,7 @@ from ocs_ci.framework.testlib import (
     tier4,
     polarion_id,
     skipif_ocs_version,
-    bugzilla
+    bugzilla,
 )
 from ocs_ci.helpers.helpers import (
     verify_volume_deleted_in_backend,
@@ -36,7 +36,12 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
         ),
         pytest.param(
             *["rbdplugin_provisioner"],
-            marks=[polarion_id("OCS-2534"), tier4, pytest.mark.tier4a, bugzilla("1962956")],
+            marks=[
+                polarion_id("OCS-2534"),
+                tier4,
+                pytest.mark.tier4a,
+                bugzilla("1962956"),
+            ],
         ),
     ],
 )
