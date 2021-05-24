@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     tier4,
     polarion_id,
     skipif_ocs_version,
+    bugzilla
 )
 from ocs_ci.helpers.helpers import (
     verify_volume_deleted_in_backend,
@@ -31,11 +32,11 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
     argvalues=[
         pytest.param(
             *[""],
-            marks=[polarion_id(""), tier2],
+            marks=[polarion_id("OCS-2533"), tier2],
         ),
         pytest.param(
             *["rbdplugin_provisioner"],
-            marks=[polarion_id(""), tier4, pytest.mark.tier4a],
+            marks=[polarion_id("OCS-2534"), tier4, pytest.mark.tier4a, bugzilla("1962956")],
         ),
     ],
 )
@@ -143,8 +144,8 @@ class TestDeletePvcWhileProvisioning(ManageTest):
                 pool_name=default_ceph_block_pool(),
                 timeout=300,
             ), (
-                f"Wait timeout: RBD image {stale_images} is not deleted. Check the logs to ensure that"
-                f"this is the stale image of the deleted PVC"
+                f"Wait timeout: RBD image {stale_image} is not deleted. Check the logs to ensure that"
+                f" this is the stale image of the deleted PVC"
             )
             log.info(f"Image {stale_image} deleted within the wait time period")
         else:
