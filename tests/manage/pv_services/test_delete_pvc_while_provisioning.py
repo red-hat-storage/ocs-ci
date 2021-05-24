@@ -137,20 +137,21 @@ class TestDeletePvcWhileProvisioning(ManageTest):
 
         if stale_images:
             stale_image = stale_images[0].strip()
-            du_out = ct_pod.exec_ceph_cmd(
-                ceph_cmd=f"rbd du -p {default_ceph_block_pool()} {stale_image}",
-                format="",
-            )
-            log.info(f"rbd du output of the image {stale_image}: {du_out}")
             # Wait for the image to get deleted
-            assert verify_volume_deleted_in_backend(
+            image_deleted = verify_volume_deleted_in_backend(
                 constants.CEPHBLOCKPOOL,
                 image_uuid=stale_image.split("csi-vol-")[1],
                 pool_name=default_ceph_block_pool(),
                 timeout=300,
-            ), (
+            )
+            if not image_deleted:
+                du_out = ct_pod.exec_ceph_cmd(
+                    ceph_cmd=f"rbd du -p {default_ceph_block_pool()} {stale_image}",
+                    format=""
+                )
+            assert image_deleted, (
                 f"Wait timeout: RBD image {stale_image} is not deleted. Check the logs to ensure that"
-                f" this is the stale image of the deleted PVC"
+                f" this is the stale image of the deleted PVC. rbd du output of the image : {du_out}"
             )
             log.info(f"Image {stale_image} deleted within the wait time period")
         else:
