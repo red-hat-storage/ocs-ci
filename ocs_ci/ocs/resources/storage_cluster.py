@@ -534,8 +534,10 @@ def add_capacity(osd_size_capacity_requested):
         final_device_list.sort()
         if device_list == final_device_list:
             raise ResourceNotFoundError("No Extra device found")
-        param = f"""[{{ "op": "replace", "path": "/spec/storageClassDevices/0/devicePaths",
-                                                 "value": {final_device_list}}}]"""
+        param = (
+            '[{{ "op": "replace", "path": "/spec/storageClassDevices/0/devicePaths",'
+            f' "value": {final_device_list}}}]'
+        )
         log.info(f"Final device list : {final_device_list}")
         lvcr = localstorage.get_local_volume_cr()
         log.info("Patching Local Volume CR...")
@@ -549,8 +551,10 @@ def add_capacity(osd_size_capacity_requested):
         )
     sc = get_storage_cluster()
     # adding the storage capacity to the cluster
-    params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
-                "value": {new_storage_devices_sets_count}}}]"""
+    params = (
+        '[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count", '
+        f'"value": {new_storage_devices_sets_count}}}]'
+    )
     sc.patch(
         resource_name=sc.get()["items"][0]["metadata"]["name"],
         params=params.strip("\n"),
@@ -709,6 +713,7 @@ def add_capacity_ui(osd_size_capacity_requested):
             close_browser(setup_ui)
         except Exception as e:
             logging.error(e)
+            logging.info("Add capacity via UI failed, try to add capacity via cli")
             add_capacity(osd_size_capacity_requested)
     else:
         add_capacity(osd_size_capacity_requested)
