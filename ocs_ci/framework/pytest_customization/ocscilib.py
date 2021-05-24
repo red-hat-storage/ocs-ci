@@ -248,6 +248,13 @@ def pytest_addoption(parser):
         default=False,
         help="Skip the openshift client download step or not",
     )
+    parser.addoption(
+        "--disable-components",
+        dest="disable_components",
+        action="append",
+        choices=["rgw", "cephfs", "noobaa", "blockpools"],
+        help=("disable deployment of ocs component:rgw, cephfs, noobaa, blockpools."),
+    )
 
 
 def pytest_configure(config):
