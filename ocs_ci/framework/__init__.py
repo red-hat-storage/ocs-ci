@@ -28,6 +28,7 @@ class Config:
     UPGRADE: dict = field(default_factory=dict)
     FLEXY: dict = field(default_factory=dict)
     UI_SELENIUM: dict = field(default_factory=dict)
+    PERF: dict = field(default_factory=dict)
 
     def __post_init__(self):
         self.reset()
