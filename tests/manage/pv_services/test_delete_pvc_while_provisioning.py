@@ -147,7 +147,7 @@ class TestDeletePvcWhileProvisioning(ManageTest):
             if not image_deleted:
                 du_out = ct_pod.exec_ceph_cmd(
                     ceph_cmd=f"rbd du -p {default_ceph_block_pool()} {stale_image}",
-                    format=""
+                    format="",
                 )
             assert image_deleted, (
                 f"Wait timeout: RBD image {stale_image} is not deleted. Check the logs to ensure that"
