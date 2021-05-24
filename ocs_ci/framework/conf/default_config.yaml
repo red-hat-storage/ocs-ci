@@ -90,6 +90,7 @@ DEPLOYMENT:
   # Ignition version used for chrony
   ignition_version: "3.2.0"
 
+
 # Section for reporting configuration
 REPORTING:
   email:
@@ -212,3 +213,12 @@ PERF:
   # The Dev. Lab ES information:  IP / Port
   dev_es_server: "10.0.144.152"
   dev_es_port: 9200
+
+# Specific component to be enabled/disabled
+# like RGW, NOOBAA, CephFS, RBD
+COMPONENTS:
+  disable_rgw: False
+  disable_noobaa: False
+  disable_cephfs: False
+  disable_blockpools: False
+

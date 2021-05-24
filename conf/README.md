@@ -248,6 +248,15 @@ Configuration specific to ui testing with selenium
 * `screenshot` - A Screenshot in Selenium Webdriver is used for bug analysis.
 * `ignore_ssl` - Ignore the ssl certificate
 
+#### COMPONENTS
+
+Configurations specific to disable/enable OCS components
+
+* `disable_rgw` - Disable RGW component deployment (Default: False)
+* `disable_noobaa` - Disable noobaa component deployment (Default: False)
+* `disable_cephfs` - Disable cephfs component deployment (Default: False)
+* `disable_blockpools` - Disable blockpools (rbd) component deployment (Default: False)
+
 ## Example of accessing config/default data
 
 ```python
