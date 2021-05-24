@@ -197,6 +197,11 @@ infra = {
 }
 
 locators = {
+    "4.8": {
+        "login": login,
+        "page": page_nav,
+        "deployment": {**deployment, **deployment_4_7},
+    },
     "4.7": {
         "login": login,
         "page": page_nav,

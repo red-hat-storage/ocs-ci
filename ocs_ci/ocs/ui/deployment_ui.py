@@ -210,7 +210,7 @@ class DeploymentUI(PageNavigator):
         if self.ocp_version == "4.6" and config.ENV_DATA.get("encryption_at_rest"):
             self.do_click(locator=self.dep_loc["enable_encryption"])
 
-        if self.ocp_version == "4.7":
+        if self.ocp_version in ("4.7", "4.8"):
             logger.info("Next on step 'Select capacity and nodes'")
             self.do_click(locator=self.dep_loc["next"])
             self.configure_encryption()
@@ -283,7 +283,7 @@ class DeploymentUI(PageNavigator):
         self.navigate_installed_operators_page()
         logger.info(f"Search {operator} operator installed")
 
-        if self.ocp_version == "4.7":
+        if self.ocp_version in ("4.7", "4.8"):
             self.do_send_keys(
                 locator=self.dep_loc["search_operator_installed"],
                 text=operator,
