@@ -179,7 +179,7 @@ def pytest_collection_modifyitems(session, items):
                 try:
                     if not is_kms_enabled():
                         log.info(
-                            f"Test: {item} will be skipped because the OCS cluster"
+                            f"Test: {item} it will be skipped because the OCS cluster"
                             f" has not configured cluster-wide encryption with KMS"
                         )
                         items.remove(item)
