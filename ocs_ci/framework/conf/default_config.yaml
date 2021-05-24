@@ -87,6 +87,8 @@ DEPLOYMENT:
   arbiter_deployment: False
   # Ceph in debug log level
   ceph_debug: False
+  # Ignition version used for chrony
+  ignition_version: "3.2.0"
 
 # Section for reporting configuration
 REPORTING:
