@@ -478,8 +478,10 @@ def default_storage_class(
 def default_thick_storage_class():
     """
     Return default RBD thick storage class
+
     Returns:
         OCS: Existing RBD thick StorageClass instance
+
     """
     external = config.DEPLOYMENT["external_mode"]
     if external:
