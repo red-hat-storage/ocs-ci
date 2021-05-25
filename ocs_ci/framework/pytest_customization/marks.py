@@ -224,7 +224,7 @@ skipif_no_lso = pytest.mark.skipif(
 
 skipif_rhel_os = pytest.mark.skipif(
     (config.ENV_DATA.get("rhel_workers", None) is True)
-    or (config.ENV_DATA.get("rhel_memory", None) is not None),
+    or (config.ENV_DATA.get("rhel_user", None) is not None),
     reason="Test will not run on cluster with rhel os",
 )
 
