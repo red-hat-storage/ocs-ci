@@ -1256,6 +1256,28 @@ def get_child_nodes_osd_tree(node_id, osd_tree):
             return osd_tree["nodes"][i]["children"]
 
 
+def get_nodes_osd_tree(osd_tree, node_ids=None):
+    """
+    This function gets the 'ceph osd tree' nodes, which have the ids 'node_ids', and returns
+    them as a list. If 'node_ids' are not passed, it returns all the 'ceph osd tree' nodes.
+
+    Args:
+        osd_tree (dict): Dictionary containing the output of 'ceph osd tree'
+        node_ids (list): The ids of the nodes for which we want to retrieve
+
+    Returns:
+        list: The nodes of a given 'node_ids'. If 'node_ids' are not passed,
+            it returns all the nodes.
+
+    """
+    if not node_ids:
+        return osd_tree["nodes"]
+
+    # Convert to set to reduce complexity
+    node_ids = set(node_ids)
+    return [node for node in osd_tree["nodes"] if node["id"] in node_ids]
+
+
 def check_osds_in_hosts_osd_tree(hosts, osd_tree):
     """
     Checks if osds are formed correctly after cluster expansion
@@ -1388,6 +1410,68 @@ def check_osd_tree_1az_cloud(osd_tree, number_of_osds):
     return check_osds_in_hosts_osd_tree(all_hosts_flatten, osd_tree)
 
 
+def check_osd_tree_1az_vmware_flex(osd_tree, number_of_osds):
+    """
+    Checks whether an OSD tree is created/modified correctly. This can be used as a verification step for
+    deployment and cluster expansion tests.
+    This function is specifically for ocs cluster created on 1 AZ VMWare LSO setup
+
+    Args:
+        osd_tree (dict): Dictionary of the values which represent 'osd tree'.
+        number_of_osds (int): total number of osds in the cluster
+
+    Returns:
+        bool: True, if the ceph osd tree is formed correctly. Else False
+
+    """
+    # in case of vmware, there will be only one zone as of now.
+    # If it's also an lso we use failure domain 'host'. The OSDs are arranged as follows:
+    # ID CLASS WEIGHT  TYPE NAME          STATUS REWEIGHT PRI-AFF
+    # -1       0.29306 root default
+    # -7       0.09769     host compute-0
+    #  2   hdd 0.09769         osd.2          up  1.00000 1.00000
+    # -3       0.09769     host compute-1
+    #  0   hdd 0.09769         osd.0          up  1.00000 1.00000
+    # -5       0.09769     host compute-2
+    #  1   hdd 0.09769         osd.1          up  1.00000 1.00000
+    # There will be no racks, and we will have a failure domain 'host'.
+    # When cluster expansion is successfully done, an osd are added in each host.
+    # Each host will have one or multiple osds under it
+    hosts = osd_tree["nodes"][0]["children"]
+    host_nodes = get_nodes_osd_tree(osd_tree, hosts)
+    osd_ids = []
+
+    for node in host_nodes:
+        node_name = node["name"]
+        node_type = node["type"]
+        expected_node_type = "host"
+        if node_type != expected_node_type:
+            logger.warning(
+                f"The node with the name '{node_name}' is with type '{node_type}' instead of "
+                f"the expected type '{expected_node_type}'"
+            )
+            return False
+
+        node_osd_ids = get_child_nodes_osd_tree(node["id"], osd_tree)
+        if len(node_osd_ids) <= 0:
+            logger.warning(
+                f"Error. Ceph osd tree is NOT formed correctly. "
+                f"The node with the name '{node_name}' has no osds"
+            )
+            return False
+        osd_ids.extend(node_osd_ids)
+
+    if len(osd_ids) != number_of_osds:
+        logger.warning(
+            f"The number of osd ids in the ceph osd tree is {len(osd_ids)} instead of "
+            f"the expected number {number_of_osds}"
+        )
+        return False
+
+    logger.info("Ceph osd tree is formed correctly")
+    return True
+
+
 def check_osds_in_hosts_are_up(osd_tree):
     """
     Check if all the OSD's in status 'up'
@@ -1419,12 +1503,16 @@ def check_ceph_osd_tree():
 
     """
     osd_pods = pod.get_osd_pods()
+    number_of_osds = len(osd_pods)
     # 'ceph osd tree' should show the new osds under right nodes/hosts
     #  Verification is different for 3 AZ and 1 AZ configs
     ct_pod = pod.get_ceph_tools_pod()
     tree_output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
     if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-        return check_osd_tree_1az_vmware(tree_output, len(osd_pods))
+        if is_flexible_scaling_enabled():
+            return check_osd_tree_1az_vmware_flex(tree_output, number_of_osds)
+        else:
+            return check_osd_tree_1az_vmware(tree_output, number_of_osds)
 
     number_of_zones = 3
     if config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS:
@@ -1434,9 +1522,9 @@ def check_ceph_osd_tree():
             if tree_output["nodes"][i]["name"] in "rack0":
                 number_of_zones = 1
         if number_of_zones == 1:
-            return check_osd_tree_1az_cloud(tree_output, len(osd_pods))
+            return check_osd_tree_1az_cloud(tree_output, number_of_osds)
         else:
-            return check_osd_tree_3az_cloud(tree_output, len(osd_pods))
+            return check_osd_tree_3az_cloud(tree_output, number_of_osds)
 
 
 def check_ceph_osd_tree_after_node_replacement():
