@@ -1538,13 +1538,9 @@ def check_ceph_osd_tree_after_node_replacement():
     """
     ct_pod = pod.get_ceph_tools_pod()
     osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
-    # We need to add a function to check the ceph osd tree when flexible scaling is enabled.
-    # So currently, when flexible scaling is enabled don't check the Ceph osd tree.
-    # The issue for tracking is https://github.com/red-hat-storage/ocs-ci/issues/4052
-    if not is_flexible_scaling_enabled():
-        if not check_ceph_osd_tree():
-            logger.warning("Incorrect ceph osd tree formation found")
-            return False
+    if not check_ceph_osd_tree():
+        logger.warning("Incorrect ceph osd tree formation found")
+        return False
 
     if not check_osds_in_hosts_are_up(osd_tree):
         logger.warning("Not all the osd's are in status 'up'")
