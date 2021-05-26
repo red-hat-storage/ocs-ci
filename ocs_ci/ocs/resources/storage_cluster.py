@@ -220,7 +220,10 @@ def ocs_install_verification(
         f"{storage_cluster_name}-ceph-rbd",
     }
     if Version.coerce(ocs_version) >= Version.coerce("4.8"):
-        required_storage_classes.update({f"{storage_cluster_name}-ceph-rbd-thick"})
+        # TODO: Add rbd-thick storage class verification in external mode once the bug 1964426 is fixed
+        # Skip rbd-thick storage class verification in external mode. This is blocked by bug 1964426
+        if not config.DEPLOYMENT["external_mode"]:
+            required_storage_classes.update({f"{storage_cluster_name}-ceph-rbd-thick"})
     skip_storage_classes = set()
     if disable_cephfs:
         skip_storage_classes.update(
