@@ -1,5 +1,4 @@
 import logging
-import os
 
 import pytest
 
@@ -10,6 +9,8 @@ from ocs_ci.ocs.bucket_utils import (
 
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2
 from ocs_ci.ocs.resources.objectbucket import OBC
+from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
+from ocs_ci.helpers.helpers import setup_pod_directories
 
 logger = logging.getLogger(__name__)
 
@@ -21,18 +22,16 @@ class TestObjectIntegrity(ManageTest):
 
     @tier1
     @pytest.mark.polarion_id("OCS-2246")
-    def test_check_object_integrity(self, awscli_pod_session, rgw_bucket_factory):
+    def test_check_object_integrity(
+        self, awscli_pod_session, rgw_bucket_factory, test_directory_setup
+    ):
         """
         Test object integrity using md5sum
         """
         bucketname = rgw_bucket_factory(1, "rgw-oc")[0].name
         obc_obj = OBC(bucketname)
-        original_dir = "/test_objects"
-        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
-        result_dir = f"{test_name}/result"
-        awscli_pod_session.exec_cmd_on_pod(
-            command=f'sh -c "mkdir {test_name}; ' f"mkdir {result_dir}; "
-        )
+        original_dir = AWSCLI_TEST_OBJ_DIR
+        result_dir = test_directory_setup.result_dir
         full_object_path = f"s3://{bucketname}"
         downloaded_files = awscli_pod_session.exec_cmd_on_pod(
             f"ls -A1 {original_dir}"
@@ -55,17 +54,15 @@ class TestObjectIntegrity(ManageTest):
 
     @pytest.mark.polarion_id("OCS-2243")
     @tier2
-    def test_empty_file_integrity(self, awscli_pod_session, rgw_bucket_factory):
+    def test_empty_file_integrity(
+        self, awscli_pod_session, rgw_bucket_factory, test_directory_setup
+    ):
         """
         Test write empty files to bucket and check integrity
         """
-        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
-        original_dir = f"{test_name}/data"
-        result_dir = f"{test_name}/result"
-        awscli_pod_session.exec_cmd_on_pod(
-            command=f'sh -c "mkdir {test_name}; '
-            f'mkdir {original_dir}; mkdir {result_dir}; "'
-        )
+
+        original_dir = test_directory_setup.origin_dir
+        result_dir = test_directory_setup.result_dir
         bucketname = rgw_bucket_factory(1, "rgw-oc")[0].name
         obc_obj = OBC(bucketname)
         full_object_path = f"s3://{bucketname}"

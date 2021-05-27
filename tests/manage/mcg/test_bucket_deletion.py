@@ -17,7 +17,7 @@ from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     rm_object_recursive,
 )
-from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
+from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD, AWSCLI_TEST_OBJ_DIR
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
@@ -183,7 +183,7 @@ class TestBucketDeletion(MCGTest):
         """
         bucketname = bucket_factory(bucketclass=bucketclass_dict)[0].name
 
-        data_dir = "/test_objects"
+        data_dir = AWSCLI_TEST_OBJ_DIR
         full_object_path = f"s3://{bucketname}"
         sync_object_directory(awscli_pod_session, data_dir, full_object_path, mcg_obj)
 
@@ -252,7 +252,7 @@ class TestBucketDeletion(MCGTest):
             bucket = MCGS3Bucket(bucketname, mcg_obj)
             logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
             logger.info(f"aws region is {mcg_obj.region}")
-            data_dir = "/test_objects"
+            data_dir = AWSCLI_TEST_OBJ_DIR
 
             # Sync downloaded objects dir to the new bucket, sync to 3175
             # virtual dirs. With each dir around 315MB, and 3175 dirs will
