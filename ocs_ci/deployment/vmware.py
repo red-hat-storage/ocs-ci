@@ -89,7 +89,7 @@ class VSPHEREBASE(Deployment):
             constants.EXTERNAL_DIR, "openshift-misc"
         )
         self.cluster_launcer_repo_path = os.path.join(
-            constants.EXTERNAL_DIR, "cluster-launcher"
+            constants.EXTERNAL_DIR, "v4-scaleup"
         )
         os.environ["TF_LOG"] = config.ENV_DATA.get("TF_LOG_LEVEL", "TRACE")
         os.environ["TF_LOG_PATH"] = os.path.join(
@@ -141,7 +141,7 @@ class VSPHEREBASE(Deployment):
         # git clone repo from openshift-misc
         clone_repo(constants.VSPHERE_SCALEUP_REPO, self.upi_scale_up_repo_path)
 
-        # git clone repo from cluster-launcher
+        # git clone repo from v4-scaleup
         clone_repo(constants.VSPHERE_CLUSTER_LAUNCHER, self.cluster_launcer_repo_path)
 
         helpers = VSPHEREHELPERS()
@@ -770,7 +770,7 @@ class VSPHEREUPI(VSPHEREBASE):
 
         """
         clone_repo(constants.VSPHERE_SCALEUP_REPO, self.upi_scale_up_repo_path)
-        # git clone repo from cluster-launcher
+        # git clone repo from v4-scaleup
         clone_repo(constants.VSPHERE_CLUSTER_LAUNCHER, self.cluster_launcer_repo_path)
 
         # modify scale-up repo
