@@ -145,6 +145,11 @@ to the pytest.
 * `--dev-mode` - Runs in development mode. Skip the checks like collecting
    cluster versions, collection ocs versions, health checks etc.
 * `--ceph-debug` - Deploy with Ceph in debug log level. This option is available starting OCS 4.7
+* `--re-trigger-failed-tests` - Path to the xunit file for xml junit report from the
+    previous execution. If the file is provided, the execution will remove all the test cases
+    which passed and will run only those test cases which were skipped / failed / or had error
+    in the provided report.
+
 ## Examples
 
 Deployment and teardown of the test cluster can be done automatically with
