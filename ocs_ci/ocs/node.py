@@ -710,7 +710,11 @@ def get_compute_node_names(no_replace=False):
     """
     platform = config.ENV_DATA.get("platform").lower()
     compute_node_objs = get_nodes()
-    if platform in [constants.VSPHERE_PLATFORM, constants.AWS_PLATFORM]:
+    if platform in [
+        constants.VSPHERE_PLATFORM,
+        constants.AWS_PLATFORM,
+        constants.RHV_PLATFORM,
+    ]:
         return [
             compute_obj.get()["metadata"]["labels"][constants.HOSTNAME_LABEL]
             for compute_obj in compute_node_objs
