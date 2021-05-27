@@ -80,7 +80,7 @@ class TestKillCephDaemon(ManageTest):
             osd_pod_node_names, mon_pod_node_names
         )
         node_mgr_osd_names = set(mgr_pod_node_names).intersection(osd_pod_node_names)
-        node_mgr_mon_names = set(mgr_pod_node_names).intersection(osd_pod_node_names)
+        node_mgr_mon_names = set(mgr_pod_node_names).intersection(mon_pod_node_names)
 
         if len(node_mgr_mon_osd_names) > 0:
             daemon_types = ["mgr", "osd", "mon"]
