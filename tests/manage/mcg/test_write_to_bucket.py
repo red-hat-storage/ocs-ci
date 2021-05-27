@@ -1,5 +1,4 @@
 import logging
-import os
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -12,7 +11,6 @@ from ocs_ci.framework.testlib import (
     MCGTest,
     tier1,
     tier2,
-    tier3,
     acceptance,
     performance,
 )
@@ -20,7 +18,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     retrieve_test_objects_to_pod,
-    retrieve_anon_s3_resource,
     craft_s3_command,
 )
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
