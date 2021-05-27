@@ -1213,6 +1213,12 @@ BM_STATUS_PRESENT = "PRESENT"
 BM_STATUS_RESPONSE_UPDATED = "UPDATED"
 BM_METAL_IMAGE = "rhcos-metal.x86_64.raw.gz"
 
+# RHV related constants
+RHV_CONFIG_FILEPATH = os.path.expanduser("~/.ovirt/ovirt-config.yaml")
+RHV_DISK_FORMAT_COW = "COW"
+RHV_DISK_FORMAT_RAW = "RAW"
+RHV_DISK_INTERFACE_VIRTIO_SCSI = "VIRTIO_SCSI"
+
 # MCG constants
 PLACEMENT_BUCKETCLASS = "placement-bucketclass"
 

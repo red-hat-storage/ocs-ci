@@ -111,10 +111,16 @@ def setup_local_storage(storageclass):
         timeout=600,
     ), "Local storage operator did not reach running phase"
 
-    # Add RDM disk for vSphere platform
+    # Add disks for vSphere/RHV platform
     platform = config.ENV_DATA.get("platform").lower()
     lso_type = config.DEPLOYMENT.get("type")
-    add_disk_for_vsphere_platform()
+
+    if platform == constants.VSPHERE_PLATFORM:
+        add_disk_for_vsphere_platform()
+
+    if platform == constants.RHV_PLATFORM:
+        add_disk_for_rhv_platform()
+
     if (ocp_version >= "4.6") and (ocs_version >= "4.6"):
         # Pull local volume discovery yaml data
         logger.info("Pulling LocalVolumeDiscovery CR data from yaml")
@@ -214,7 +220,8 @@ def setup_local_storage(storageclass):
     if platform == constants.IBM_POWER_PLATFORM:
         numberofstoragedisks = config.ENV_DATA.get("number_of_storage_disks", 1)
         storage_class_device_count = numberofstoragedisks
-    verify_pvs_created(len(worker_names) * storage_class_device_count)
+    expected_pvs = len(worker_names) * storage_class_device_count
+    verify_pvs_created(expected_pvs, storageclass)
 
 
 def get_device_paths(worker_names):
@@ -280,7 +287,7 @@ def _get_disk_by_id(worker):
 
 
 @retry(AssertionError, 120, 10, 1)
-def verify_pvs_created(expected_pvs):
+def verify_pvs_created(expected_pvs, storageclass):
     """
     Verify that PVs were created and are in the Available state
 
@@ -297,20 +304,26 @@ def verify_pvs_created(expected_pvs):
     pv_json = json.loads(out)
     assert pv_json["items"], f"No PVs created but we are expecting {expected_pvs}"
 
-    # check number of PVs created
-    num_pvs = len(pv_json["items"])
-    assert (
-        num_pvs == expected_pvs
-    ), f"{num_pvs} PVs created but we are expecting {expected_pvs}"
-
     # checks the state of PV
+    available_pvs = []
     for pv in pv_json["items"]:
         pv_state = pv["status"]["phase"]
         pv_name = pv["metadata"]["name"]
+        sc_name = pv["spec"]["storageClassName"]
+        if sc_name != storageclass:
+            logger.info(f"Skipping check for {pv_name}")
+            continue
         logger.info(f"{pv_name} is in {pv_state} state")
+        available_pvs.append(pv_name)
         assert (
             pv_state == "Available"
         ), f"{pv_name} not in 'Available' state. Current state is {pv_state}"
+
+    # check number of PVs created
+    num_pvs = len(available_pvs)
+    assert (
+        num_pvs == expected_pvs
+    ), f"{num_pvs} PVs created but we are expecting {expected_pvs}"
 
     logger.debug("PVs, Workers: %s, %s", num_pvs, expected_pvs)
 
@@ -344,3 +357,25 @@ def add_disk_for_vsphere_platform():
             raise NotImplementedError(
                 "LSO Deployment for VMDirectPath is not implemented"
             )
+
+
+def add_disk_for_rhv_platform():
+    """
+    Add disk for RHV platform
+
+    """
+    platform = config.ENV_DATA.get("platform").lower()
+    if platform == constants.RHV_PLATFORM:
+        # Importing here to avoid circular dependency
+        from ocs_ci.deployment.rhv import RHVBASE
+
+        rhv_base = RHVBASE()
+        rhv_base.attach_disks(
+            config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
+            config.ENV_DATA.get("disk_format", constants.RHV_DISK_FORMAT_RAW),
+            config.ENV_DATA.get(
+                "disk_interface", constants.RHV_DISK_INTERFACE_VIRTIO_SCSI
+            ),
+            config.ENV_DATA.get("sparse"),
+            config.ENV_DATA.get("pass_discard"),
+        )
