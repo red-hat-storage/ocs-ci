@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import acceptance, tier1, tier3
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import OBC
+from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ class TestBucketDeletion:
         bucketname = bucket.name
         obc_obj = OBC(bucketname)
         try:
-            data_dir = "/test_objects"
+            data_dir = AWSCLI_TEST_OBJ_DIR
             full_object_path = f"s3://{bucketname}"
             sync_object_directory(
                 awscli_pod_session, data_dir, full_object_path, obc_obj

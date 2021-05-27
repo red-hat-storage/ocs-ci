@@ -36,8 +36,6 @@ class TestNamespace(MCGTest):
     Test creation of a namespace resources and buckets via RPC calls.
     """
 
-    MCG_NS_RESULT_DIR = "/result"
-    MCG_NS_ORIGINAL_DIR = "/original"
     # TODO: fix this when https://github.com/red-hat-storage/ocs-ci/issues/3338
     # is resolved
     DEFAULT_REGION = "us-east-2"
@@ -102,7 +100,13 @@ class TestNamespace(MCGTest):
     @pytest.mark.polarion_id("OCS-2257")
     @tier1
     def test_write_to_aws_read_from_ns_rpc(
-        self, mcg_obj, cld_mgr, awscli_pod_session, ns_resource_factory, bucket_factory
+        self,
+        mcg_obj,
+        cld_mgr,
+        awscli_pod_session,
+        ns_resource_factory,
+        bucket_factory,
+        test_directory_setup,
     ):
         """
         Test Write to AWS and read from ns bucket using MCG RPC.
@@ -111,6 +115,9 @@ class TestNamespace(MCGTest):
         result = ns_resource_factory()
         target_bucket_name = result[0]
         ns_resource_name = result[1]
+
+        original_folder = test_directory_setup.origin_dir
+        result_folder = test_directory_setup.result_dir
 
         # Create the namespace bucket on top of the namespace resource
         rand_ns_bucket = bucket_factory(
@@ -132,18 +139,35 @@ class TestNamespace(MCGTest):
             awscli_pod_session,
             bucket_to_write=target_bucket_name,
             amount=3,
+            original_folder=original_folder,
             s3_creds=s3_creds,
         )
         # Read files from ns bucket
-        self.download_files(mcg_obj, awscli_pod_session, bucket_to_read=rand_ns_bucket)
+        self.download_files(
+            mcg_obj,
+            awscli_pod_session,
+            result_folder=result_folder,
+            bucket_to_read=rand_ns_bucket,
+        )
 
         # Compare between uploaded files and downloaded files
-        assert self.compare_dirs(awscli_pod_session, amount=3)
+        assert self.compare_dirs(
+            awscli_pod_session,
+            original_folder=original_folder,
+            result_folder=result_folder,
+            amount=3,
+        )
 
     @pytest.mark.polarion_id("OCS-2258")
     @tier1
     def test_write_to_ns_read_from_aws_rpc(
-        self, mcg_obj, cld_mgr, awscli_pod_session, ns_resource_factory, bucket_factory
+        self,
+        mcg_obj,
+        cld_mgr,
+        awscli_pod_session,
+        ns_resource_factory,
+        bucket_factory,
+        test_directory_setup,
     ):
         """
         Test Write to ns bucket using MCG RPC and read directly from AWS.
@@ -153,6 +177,9 @@ class TestNamespace(MCGTest):
         result = ns_resource_factory()
         target_bucket_name = result[0]
         ns_resource_name = result[1]
+
+        original_folder = test_directory_setup.origin_dir
+        result_folder = test_directory_setup.result_dir
 
         # Create the namespace bucket on top of the namespace resource
         rand_ns_bucket = bucket_factory(
@@ -170,18 +197,28 @@ class TestNamespace(MCGTest):
         }
         # Upload files to NS bucket
         self.write_files_to_pod_and_upload(
-            mcg_obj, awscli_pod_session, bucket_to_write=rand_ns_bucket, amount=3
+            mcg_obj,
+            awscli_pod_session,
+            bucket_to_write=rand_ns_bucket,
+            original_folder=original_folder,
+            amount=3,
         )
         # Read files directly from AWS
         self.download_files(
             mcg_obj,
             awscli_pod_session,
             bucket_to_read=target_bucket_name,
+            result_folder=result_folder,
             s3_creds=s3_creds,
         )
 
         # Compare between uploaded files and downloaded files
-        assert self.compare_dirs(awscli_pod_session, amount=3)
+        assert self.compare_dirs(
+            awscli_pod_session,
+            original_folder=original_folder,
+            result_folder=result_folder,
+            amount=3,
+        )
 
     @pytest.mark.polarion_id("OCS-2292")
     @tier2
@@ -193,6 +230,7 @@ class TestNamespace(MCGTest):
         awscli_pod_session,
         ns_resource_factory,
         bucket_factory,
+        test_directory_setup,
     ):
         """
         Test that uploaded objects into resources were correctly uploaded even
@@ -201,6 +239,9 @@ class TestNamespace(MCGTest):
         logger.info("Create the namespace resources and verify health")
         target_bucket1, resource1 = ns_resource_factory(platform=constants.RGW_PLATFORM)
         target_bucket2, resource2 = ns_resource_factory(platform=constants.AWS_PLATFORM)
+
+        original_folder = test_directory_setup.origin_dir
+        result_folder = test_directory_setup.result_dir
 
         logger.info("Upload files directly to first target bucket")
         rgw_creds = {
@@ -213,6 +254,7 @@ class TestNamespace(MCGTest):
             awscli_pod_session,
             bucket_to_write=target_bucket1,
             amount=4,
+            original_folder=original_folder,
             s3_creds=rgw_creds,
         )
 
@@ -236,14 +278,25 @@ class TestNamespace(MCGTest):
             awscli_pod_session,
             bucket_to_write=target_bucket2,
             amount=3,
+            original_folder=original_folder,
             s3_creds=aws_creds,
         )
 
         logger.info("Read files from ns bucket")
-        self.download_files(mcg_obj, awscli_pod_session, bucket_to_read=rand_ns_bucket)
+        self.download_files(
+            mcg_obj,
+            awscli_pod_session,
+            result_folder=result_folder,
+            bucket_to_read=rand_ns_bucket,
+        )
 
         logger.info("Compare between uploaded files and downloaded files")
-        assert self.compare_dirs(awscli_pod_session, amount=4)
+        assert self.compare_dirs(
+            awscli_pod_session,
+            original_folder=original_folder,
+            result_folder=result_folder,
+            amount=4,
+        )
 
     @pytest.mark.polarion_id("OCS-2290")
     @tier2
@@ -255,6 +308,7 @@ class TestNamespace(MCGTest):
         awscli_pod_session,
         ns_resource_factory,
         bucket_factory,
+        test_directory_setup,
     ):
         """
         Test Write to 2 resources, create bucket from them and read from the NS bucket.
@@ -262,6 +316,9 @@ class TestNamespace(MCGTest):
         logger.info("Create the namespace resources and verify health")
         target_bucket1, resource1 = ns_resource_factory(platform=constants.RGW_PLATFORM)
         target_bucket2, resource2 = ns_resource_factory(platform=constants.AWS_PLATFORM)
+
+        original_folder = test_directory_setup.origin_dir
+        result_folder = test_directory_setup.result_dir
 
         logger.info("Upload files directly to cloud target buckets")
         rgw_creds = {
@@ -287,6 +344,7 @@ class TestNamespace(MCGTest):
             awscli_pod_session,
             bucket_to_write=target_bucket2,
             amount=3,
+            original_folder=original_folder,
             s3_creds=aws_creds,
         )
 
@@ -299,10 +357,20 @@ class TestNamespace(MCGTest):
         )[0].name
 
         logger.info("Read files from ns bucket")
-        self.download_files(mcg_obj, awscli_pod_session, bucket_to_read=rand_ns_bucket)
+        self.download_files(
+            mcg_obj,
+            awscli_pod_session,
+            result_folder=result_folder,
+            bucket_to_read=rand_ns_bucket,
+        )
 
         logger.info("Compare between uploaded files and downloaded files")
-        assert self.compare_dirs(awscli_pod_session, amount=3)
+        assert self.compare_dirs(
+            awscli_pod_session,
+            original_folder=original_folder,
+            result_folder=result_folder,
+            amount=3,
+        )
 
     @tier2
     @pytest.mark.parametrize(
@@ -386,7 +454,7 @@ class TestNamespace(MCGTest):
     @pytest.mark.polarion_id("OCS-2282")
     @tier3
     def test_delete_resource_used_in_ns_bucket_rpc(
-        self, mcg_obj, cld_mgr, awscli_pod_session, ns_resource_factory, bucket_factory
+        self, mcg_obj, cld_mgr, ns_resource_factory, bucket_factory
     ):
         """
         Test that a proper error message is reported when invalid target
@@ -439,6 +507,7 @@ class TestNamespace(MCGTest):
         awscli_pod_session,
         ns_resource_factory,
         bucket_factory,
+        test_directory_setup,
         mcg_pod,
     ):
         """
@@ -450,6 +519,10 @@ class TestNamespace(MCGTest):
         resource = ns_resource_factory()
         target_bucket_name = resource[0]
         ns_resource_name = resource[1]
+
+        original_folder = test_directory_setup.origin_dir
+        result_folder = test_directory_setup.result_dir
+
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
@@ -467,7 +540,11 @@ class TestNamespace(MCGTest):
 
         logger.info("Upload files to NS bucket")
         self.write_files_to_pod_and_upload(
-            mcg_obj, awscli_pod_session, bucket_to_write=rand_ns_bucket, amount=3
+            mcg_obj,
+            awscli_pod_session,
+            bucket_to_write=rand_ns_bucket,
+            original_folder=original_folder,
+            amount=3,
         )
 
         logger.info(f"Respin mcg resource {mcg_pod}")
@@ -490,11 +567,17 @@ class TestNamespace(MCGTest):
             mcg_obj,
             awscli_pod_session,
             bucket_to_read=target_bucket_name,
+            result_folder=result_folder,
             s3_creds=s3_creds,
         )
 
         logger.info("Compare between uploaded files and downloaded files")
-        assert self.compare_dirs(awscli_pod_session, amount=3)
+        assert self.compare_dirs(
+            awscli_pod_session,
+            original_folder=original_folder,
+            result_folder=result_folder,
+            amount=3,
+        )
 
     @pytest.mark.polarion_id("OCS-2293")
     @tier4
@@ -521,7 +604,13 @@ class TestNamespace(MCGTest):
     @tier4
     @tier4a
     def test_block_read_resource_in_namespace_bucket_rpc(
-        self, mcg_obj, awscli_pod_session, ns_resource_factory, bucket_factory, cld_mgr
+        self,
+        mcg_obj,
+        awscli_pod_session,
+        ns_resource_factory,
+        bucket_factory,
+        cld_mgr,
+        test_directory_setup,
     ):
         """
         Test blocking namespace resource in namespace bucket.
@@ -539,12 +628,16 @@ class TestNamespace(MCGTest):
         resource1 = ns_resource_factory()
         resource2 = ns_resource_factory()
 
+        original_folder = test_directory_setup.origin_dir
+        result_folder = test_directory_setup.result_dir
+
         logger.info("Upload files to NS resources")
         self.write_files_to_pod_and_upload(
             mcg_obj,
             awscli_pod_session,
             bucket_to_write=resource1[0],
             amount=3,
+            original_folder=original_folder,
             s3_creds=s3_creds,
         )
         self.write_files_to_pod_and_upload(
@@ -552,6 +645,7 @@ class TestNamespace(MCGTest):
             awscli_pod_session,
             bucket_to_write=resource2[0],
             amount=2,
+            original_folder=original_folder,
             s3_creds=s3_creds,
         )
 
@@ -569,7 +663,10 @@ class TestNamespace(MCGTest):
         logger.info("Read files directly from AWS")
         try:
             self.download_files(
-                mcg_obj, awscli_pod_session, bucket_to_read=rand_ns_bucket
+                mcg_obj,
+                awscli_pod_session,
+                bucket_to_read=rand_ns_bucket,
+                result_folder=result_folder,
             )
         except CommandFailed:
             logger.info("Attempt to read files failed as expected")
@@ -587,15 +684,17 @@ class TestNamespace(MCGTest):
             assert False, msg
 
     def write_files_to_pod_and_upload(
-        self, mcg_obj, awscli_pod, bucket_to_write, amount=1, s3_creds=None
+        self,
+        mcg_obj,
+        awscli_pod,
+        bucket_to_write,
+        original_folder,
+        amount=1,
+        s3_creds=None,
     ):
         """
         Upload files to bucket (NS or uls)
         """
-        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
-        awscli_pod.exec_cmd_on_pod(command=f"mkdir -p {test_name}")
-        original_folder = f"{test_name}/{self.MCG_NS_ORIGINAL_DIR}"
-        awscli_pod.exec_cmd_on_pod(command=f"mkdir -p {original_folder}")
         full_object_path = f"s3://{bucket_to_write}"
         object_list = []
 
@@ -620,14 +719,12 @@ class TestNamespace(MCGTest):
             )
         return object_list
 
-    def download_files(self, mcg_obj, awscli_pod, bucket_to_read, s3_creds=None):
+    def download_files(
+        self, mcg_obj, awscli_pod, bucket_to_read, result_folder, s3_creds=None
+    ):
         """
         Download files from bucket (NS or uls)
         """
-        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
-        awscli_pod.exec_cmd_on_pod(command=f"mkdir -p {test_name}")
-        result_folder = f"{test_name}/{self.MCG_NS_RESULT_DIR}"
-        awscli_pod.exec_cmd_on_pod(command=f"mkdir -p {result_folder}")
         ns_bucket_path = f"s3://{bucket_to_read}"
 
         if s3_creds:
@@ -642,12 +739,9 @@ class TestNamespace(MCGTest):
             # Read data from NS bucket to result dir
             sync_object_directory(awscli_pod, ns_bucket_path, result_folder, mcg_obj)
 
-    def compare_dirs(self, awscli_pod, amount=1):
+    def compare_dirs(self, awscli_pod, original_folder, result_folder, amount=1):
         # Checksum is compared between original and result object
         result = True
-        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
-        original_folder = f"{test_name}/{self.MCG_NS_ORIGINAL_DIR}"
-        result_folder = f"{test_name}/{self.MCG_NS_RESULT_DIR}"
         for i in range(amount):
             file_name = f"testfile{i}.txt"
             original_object_path = f"{original_folder}/{file_name}"

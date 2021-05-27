@@ -1,5 +1,4 @@
 import logging
-import os
 
 import pytest
 
@@ -17,7 +16,7 @@ from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     verify_s3_object_integrity,
 )
-from ocs_ci.ocs.constants import BS_AUTH_FAILED, BS_OPTIMAL
+from ocs_ci.ocs.constants import BS_AUTH_FAILED, BS_OPTIMAL, AWSCLI_TEST_OBJ_DIR
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -81,7 +80,12 @@ class TestMultiRegion(MCGTest):
     @skipif_ocs_version("==4.4")
     @pytest.mark.polarion_id("OCS-1784")
     def test_multiregion_mirror(
-        self, cld_mgr, mcg_obj, awscli_pod_session, multiregion_mirror_setup
+        self,
+        cld_mgr,
+        mcg_obj,
+        awscli_pod_session,
+        multiregion_mirror_setup,
+        test_directory_setup,
     ):
         """
         Test multi-region bucket creation using the S3 SDK
@@ -94,16 +98,13 @@ class TestMultiRegion(MCGTest):
         bucket_name = bucket.name
         aws_client = cld_mgr.aws_client
 
-        local_testobjs_dir_path = "/test_objects"
+        local_testobjs_dir_path = AWSCLI_TEST_OBJ_DIR
         downloaded_objs = awscli_pod_session.exec_cmd_on_pod(
             f"ls -A1 {local_testobjs_dir_path}"
         ).split(" ")
 
         logger.info("Uploading all pod objects to MCG bucket")
-        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
-        awscli_pod_session.exec_cmd_on_pod(command=f"mkdir -p {test_name}")
-        local_temp_path = f"{test_name}/temp"
-        awscli_pod_session.exec_cmd_on_pod(command=f"mkdir -p {local_temp_path}")
+        local_temp_path = test_directory_setup.result_dir
         mcg_bucket_path = f"s3://{bucket_name}"
 
         # Upload test objects to the NooBucket

@@ -1,11 +1,10 @@
 import logging
-import os
 
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 from ocs_ci.framework.testlib import MCGTest, tier1, tier2
-from ocs_ci.ocs import constants
+from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BACKINGSTORE, AWSCLI_TEST_OBJ_DIR
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     verify_s3_object_integrity,
@@ -59,9 +58,7 @@ class TestObjectIntegrity(MCGTest):
                         },
                     },
                     "placement_policy": {
-                        "tiers": [
-                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
-                        ]
+                        "tiers": [{"backingStores": [DEFAULT_NOOBAA_BACKINGSTORE]}]
                     },
                 },
                 marks=[tier1],
@@ -76,18 +73,19 @@ class TestObjectIntegrity(MCGTest):
         ],
     )
     def test_check_object_integrity(
-        self, mcg_obj, awscli_pod_session, bucket_factory, bucketclass_dict
+        self,
+        mcg_obj,
+        awscli_pod_session,
+        bucket_factory,
+        test_directory_setup,
+        bucketclass_dict,
     ):
         """
         Test object integrity using md5sum
         """
         bucketname = bucket_factory(1, bucketclass=bucketclass_dict)[0].name
-        original_dir = "/test_objects"
-        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
-        result_dir = f"{test_name}/result"
-        awscli_pod_session.exec_cmd_on_pod(
-            command=f'sh -c "mkdir {test_name}; ' f'mkdir {result_dir}; "'
-        )
+        original_dir = AWSCLI_TEST_OBJ_DIR
+        result_dir = test_directory_setup.result_dir
         full_object_path = f"s3://{bucketname}"
         downloaded_files = awscli_pod_session.exec_cmd_on_pod(
             f"ls -A1 {original_dir}"
@@ -111,17 +109,14 @@ class TestObjectIntegrity(MCGTest):
 
     @pytest.mark.polarion_id("OCS-1945")
     @tier2
-    def test_empty_file_integrity(self, mcg_obj, awscli_pod_session, bucket_factory):
+    def test_empty_file_integrity(
+        self, mcg_obj, awscli_pod_session, bucket_factory, test_directory_setup
+    ):
         """
         Test write empty files to bucket and check integrity
         """
-        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
-        original_dir = f"{test_name}/data"
-        result_dir = f"{test_name}/result"
-        awscli_pod_session.exec_cmd_on_pod(
-            command=f'sh -c "mkdir {test_name}; '
-            f'mkdir {original_dir}; mkdir {result_dir}; "'
-        )
+        original_dir = test_directory_setup.origin_dir
+        result_dir = test_directory_setup.result_dir
         bucketname = bucket_factory(1)[0].name
         full_object_path = f"s3://{bucketname}"
 

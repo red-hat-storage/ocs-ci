@@ -1994,6 +1994,17 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
     return f"{base_command}{cmd}{string_wrapper}"
 
 
+def setup_pod_directories(pod_obj, dir_names):
+    full_dirs_path = []
+    test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+    pod_obj.exec_cmd_on_pod(command=f"mkdir -p {test_name}")
+    for cur_dir in dir_names:
+        current = f"{test_name}/{cur_dir}"
+        pod_obj.exec_cmd_on_pod(command=f"mkdir -p {current}")
+        full_dirs_path.append(current)
+    return full_dirs_path
+
+
 def wait_for_resource_count_change(
     func_to_use,
     previous_num,
