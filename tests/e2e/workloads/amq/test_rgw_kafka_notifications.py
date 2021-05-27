@@ -3,7 +3,13 @@ import logging
 import pytest
 import re
 
-from ocs_ci.framework.testlib import E2ETest, tier1, on_prem_platform_required, bugzilla
+from ocs_ci.framework.testlib import (
+    E2ETest,
+    tier1,
+    on_prem_platform_required,
+    bugzilla,
+    skipif_external_mode,
+)
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
@@ -20,6 +26,7 @@ log = logging.getLogger(__name__)
 @tier1
 @bugzilla("1937187")
 @on_prem_platform_required
+@skipif_external_mode
 @pytest.mark.polarion_id("OCS-2514")
 class TestRGWAndKafkaNotifications(E2ETest):
     """

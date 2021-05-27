@@ -51,7 +51,6 @@ class HsBench(object):
         # Create test pvc+pod
         log.info(f"Create Golang pod to generate S3 workload... {self.namespace}")
         pvc_size = "50Gi"
-        node_name = "compute-0"
         self.pod_name = "hsbench-pod"
         self.pvc_obj = helpers.create_pvc(
             sc_name=constants.DEFAULT_STORAGECLASS_RBD,
@@ -63,7 +62,6 @@ class HsBench(object):
             namespace=self.namespace,
             pod_name=self.pod_name,
             pvc_name=self.pvc_obj.name,
-            node_name=node_name,
             sa_name=self.sa_name,
             pod_dict_path=self.pod_dic_path,
             dc_deployment=True,

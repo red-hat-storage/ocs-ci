@@ -16,7 +16,7 @@ import yaml
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
-from ocs_ci.framework import config
+from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
     validate_cluster_on_pvc,
@@ -567,6 +567,39 @@ class Deployment(object):
             kms.deploy()
         cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
 
+        # Figure out all the OCS modules enabled/disabled
+        # CLI parameter --disable-components takes the precedence over
+        # anything which comes from config file
+        if config.ENV_DATA.get("disable_components"):
+            for component in config.ENV_DATA["disable_components"]:
+                config.COMPONENTS[f"disable_{component}"] = True
+                logger.warning(f"disabling: {component}")
+
+        # Update cluster_data with respective component enable/disable
+        for key in config.COMPONENTS.keys():
+            comp_name = constants.OCS_COMPONENTS_MAP[key.split("_")[1]]
+            if config.COMPONENTS[key]:
+                if "noobaa" in key:
+                    merge_dict(
+                        cluster_data,
+                        {
+                            "spec": {
+                                "multiCloudGateway": {"reconcileStrategy": "ignore"}
+                            }
+                        },
+                    )
+                else:
+                    merge_dict(
+                        cluster_data,
+                        {
+                            "spec": {
+                                "managedResources": {
+                                    f"{comp_name}": {"reconcileStrategy": "ignore"}
+                                }
+                            }
+                        },
+                    )
+
         if arbiter_deployment:
             cluster_data["spec"]["arbiter"] = {}
             cluster_data["spec"]["nodeTopologies"] = {}
@@ -877,15 +910,16 @@ class Deployment(object):
                 timeout=600,
             )
 
-            # Check for CephFilesystem creation in ocp
-            cfs_data = cfs.get()
-            cfs_name = cfs_data["items"][0]["metadata"]["name"]
+            if not config.COMPONENTS["disable_cephfs"]:
+                # Check for CephFilesystem creation in ocp
+                cfs_data = cfs.get()
+                cfs_name = cfs_data["items"][0]["metadata"]["name"]
 
-            if helpers.validate_cephfilesystem(cfs_name):
-                logger.info("MDS deployment is successful!")
-                defaults.CEPHFILESYSTEM_NAME = cfs_name
-            else:
-                logger.error("MDS deployment Failed! Please check logs!")
+                if helpers.validate_cephfilesystem(cfs_name):
+                    logger.info("MDS deployment is successful!")
+                    defaults.CEPHFILESYSTEM_NAME = cfs_name
+                else:
+                    logger.error("MDS deployment Failed! Please check logs!")
 
         # Change monitoring backend to OCS
         if config.ENV_DATA.get("monitoring_enabled") and config.ENV_DATA.get(
@@ -901,8 +935,9 @@ class Deployment(object):
                 telemeter_server_url=config.ENV_DATA["telemeter_server_url"]
             )
 
-        # Change registry backend to OCS CEPHFS RWX PVC
-        registry.change_registry_backend_to_ocs()
+        if not config.COMPONENTS["disable_cephfs"]:
+            # Change registry backend to OCS CEPHFS RWX PVC
+            registry.change_registry_backend_to_ocs()
 
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")

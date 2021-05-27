@@ -7,6 +7,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
 
 from ocs_ci.framework import config as ocsci_config
@@ -126,7 +127,7 @@ class BaseUI:
         if status != current_status:
             self.do_click(locator=locator)
 
-    def check_element_text(self, expected_text):
+    def check_element_text(self, expected_text, element="*"):
         """
         Check if the text matches the expected text.
 
@@ -138,7 +139,7 @@ class BaseUI:
 
         """
         element_list = self.driver.find_elements_by_xpath(
-            f"//*[contains(text(), '{expected_text}')]"
+            f"//{element}[contains(text(), '{expected_text}')]"
         )
         return len(element_list) > 0
 
@@ -148,6 +149,15 @@ class BaseUI:
 
         """
         self.driver.refresh()
+
+    def scroll_into_view(self, locator):
+        """
+        Scroll element into view
+
+        """
+        actions = ActionChains(self.driver)
+        element = self.driver.find_element(locator[1], locator[0])
+        actions.move_to_element(element).perform()
 
     def take_screenshot(self):
         """
@@ -183,6 +193,16 @@ class PageNavigator(BaseUI):
         logger.info("Navigate to Overview Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
         self.do_click(locator=self.page_nav["overview_page"])
+
+    def navigate_quickstarts_page(self):
+        """
+        Navigate to Quickstarts Page
+
+        """
+        self.navigate_overview_page()
+        logger.info("Navigate to Quickstarts Page")
+        self.scroll_into_view(self.page_nav["quickstarts"])
+        self.do_click(locator=self.page_nav["quickstarts"])
 
     def navigate_projects_page(self):
         """
@@ -376,11 +396,15 @@ def login_ui():
         if ignore_ssl:
             chrome_options.add_argument("--ignore-ssl-errors=yes")
             chrome_options.add_argument("--ignore-certificate-errors")
+            chrome_options.add_argument("--allow-insecure-localhost")
+            capabilities = chrome_options.to_capabilities()
+            capabilities["acceptInsecureCerts"] = True
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
         if headless:
             chrome_options.add_argument("--headless")
+            chrome_options.add_argument("window-size=1920,1400")
 
         chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
         driver = webdriver.Chrome(
@@ -390,7 +414,7 @@ def login_ui():
     else:
         raise ValueError(f"Not Support on {browser}")
 
-    wait = WebDriverWait(driver, 30)
+    wait = WebDriverWait(driver, 60)
     driver.maximize_window()
     driver.get(console_url)
     element = wait.until(
@@ -407,7 +431,7 @@ def login_ui():
         )
     )
     element.click()
-    WebDriverWait(driver, 30).until(ec.title_is(login_loc["ocp_page"]))
+    WebDriverWait(driver, 60).until(ec.title_is(login_loc["ocp_page"]))
     return driver
 
 

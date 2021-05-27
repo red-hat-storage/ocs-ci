@@ -21,6 +21,7 @@ from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pending_csr
 from ocs_ci.utility.templating import Templating
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     run_cmd,
     upload_file,
@@ -493,6 +494,7 @@ class BAREMETALUPI(Deployment):
                 f"--dir {self.cluster_path} "
             )
 
+        @retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
         def configure_storage_for_image_registry(self, kubeconfig):
             """
             Configures storage for the image registry

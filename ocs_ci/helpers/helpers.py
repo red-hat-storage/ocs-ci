@@ -14,6 +14,7 @@ import threading
 import time
 import inspect
 from concurrent.futures import ThreadPoolExecutor
+from itertools import cycle
 from subprocess import PIPE, TimeoutExpired, run
 from uuid import uuid4
 
@@ -997,7 +998,9 @@ def validate_pv_delete(pv_name):
         return True
 
 
-def create_pods(pvc_objs, pod_factory, interface, pods_for_rwx=1, status=""):
+def create_pods(
+    pvc_objs, pod_factory, interface, pods_for_rwx=1, status="", nodes=None
+):
     """
     Create pods
 
@@ -1009,11 +1012,13 @@ def create_pods(pvc_objs, pod_factory, interface, pods_for_rwx=1, status=""):
             PVC is RWX
         status (str): If provided, wait for desired state of each pod before
             creating next one
+        nodes (list): Node name for each pod will be selected from this list.
 
     Returns:
         list: list of Pod objects
     """
     pod_objs = []
+    nodes_iter = cycle(nodes) if nodes else None
 
     for pvc_obj in pvc_objs:
         volume_mode = getattr(
@@ -1032,6 +1037,7 @@ def create_pods(pvc_objs, pod_factory, interface, pods_for_rwx=1, status=""):
                     interface=interface,
                     pvc=pvc_obj,
                     status=status,
+                    node_name=next(nodes_iter) if nodes_iter else None,
                     pod_dict_path=pod_dict,
                     raw_block_pv=raw_block_pv,
                 )
@@ -1042,6 +1048,7 @@ def create_pods(pvc_objs, pod_factory, interface, pods_for_rwx=1, status=""):
             interface=interface,
             pvc=pvc_obj,
             status=status,
+            node_name=next(nodes_iter) if nodes_iter else None,
             pod_dict_path=pod_dict,
             raw_block_pv=raw_block_pv,
         )
@@ -2965,6 +2972,7 @@ def get_mon_pdb():
     Returns:
         disruptions_allowed (int): Count of mon allowed disruption
         min_available_mon (int): Count of minimum mon available
+        max_unavailable_mon (int): Count of maximun mon unavailable
 
     """
 
@@ -2976,7 +2984,8 @@ def get_mon_pdb():
 
     disruptions_allowed = pdb_obj.get().get("status").get("disruptionsAllowed")
     min_available_mon = pdb_obj.get().get("spec").get("minAvailable")
-    return disruptions_allowed, min_available_mon
+    max_unavailable_mon = pdb_obj.get().get("spec").get("maxUnavailable")
+    return disruptions_allowed, min_available_mon, max_unavailable_mon
 
 
 @retry(CommandFailed, tries=10, delay=30, backoff=1)
