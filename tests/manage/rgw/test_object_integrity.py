@@ -10,7 +10,6 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
-from ocs_ci.helpers.helpers import setup_pod_directories
 
 logger = logging.getLogger(__name__)
 

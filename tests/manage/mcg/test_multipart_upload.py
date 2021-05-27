@@ -15,7 +15,6 @@ from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
 )
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
-from ocs_ci.helpers.helpers import setup_pod_directories
 
 logger = logging.getLogger(__name__)
 

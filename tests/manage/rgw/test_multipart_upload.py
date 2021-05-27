@@ -15,7 +15,6 @@ from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
 )
 from ocs_ci.ocs.resources.objectbucket import OBC
-from ocs_ci.helpers.helpers import setup_pod_directories
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +27,8 @@ def setup(pod_obj, rgw_bucket_factory, test_directory_setup):
      Args:
         pod_obj (Pod): A pod running the AWS CLI tools
         rgw_bucket_factory: Calling this fixture creates a new bucket(s)
+        test_directory_setup: Calling this fixture will create origin and result
+                              directories under the test directory of awscli pod
 
     Returns:
         Tuple: Returns tuple containing the params used in this test case

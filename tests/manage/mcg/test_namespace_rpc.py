@@ -4,7 +4,6 @@ Most of these tests are valid only for OCS version lesser than 4.7
 because in later versions are for Namespace bucket creation used CRDs.
 """
 import logging
-import os
 
 import pytest
 
