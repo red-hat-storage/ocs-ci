@@ -4,9 +4,6 @@ metadata:
   name: fio-benchmark
   namespace: my-ripsaw
 spec:
-  elasticsearch:
-    server: 10.0.78.167
-    port: 9200
   clustername: env_ocpversion_ocsversion
   test_user: interface_iopattern
   workload:

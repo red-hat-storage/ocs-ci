@@ -6,6 +6,7 @@ import logging
 import tempfile
 
 from jsonschema import validate
+from semantic_version import Version
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
@@ -76,6 +77,13 @@ def ocs_install_verification(
     number_of_worker_nodes = len(get_nodes())
     namespace = config.ENV_DATA["cluster_namespace"]
     log.info("Verifying OCS installation")
+    if config.ENV_DATA.get("disable_components"):
+        for component in config.ENV_DATA["disable_components"]:
+            config.COMPONENTS[f"disable_{component}"] = True
+    disable_noobaa = config.COMPONENTS["disable_noobaa"]
+    disable_rgw = config.COMPONENTS["disable_rgw"]
+    disable_blockpools = config.COMPONENTS["disable_blockpools"]
+    disable_cephfs = config.COMPONENTS["disable_cephfs"]
 
     # Verify OCS CSV is in Succeeded phase
     log.info("verifying ocs csv")
@@ -130,9 +138,10 @@ def ocs_install_verification(
         ) * int(storage_cluster.data["spec"]["storageDeviceSets"][0]["replica"])
     rgw_count = None
     if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
-        rgw_count = get_rgw_count(
-            ocs_version, post_upgrade_verification, version_before_upgrade
-        )
+        if not disable_rgw:
+            rgw_count = get_rgw_count(
+                ocs_version, post_upgrade_verification, version_before_upgrade
+            )
 
     min_eps = constants.MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT
     max_eps = (
@@ -175,8 +184,16 @@ def ocs_install_verification(
 
     for label, count in resources_dict.items():
         if label == constants.RGW_APP_LABEL:
-            if not config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
+            if (
+                not config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS
+                or disable_rgw
+            ):
                 continue
+        if "noobaa" in label and disable_noobaa:
+            continue
+        if "mds" in label and disable_cephfs:
+            continue
+
         assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=label,
@@ -184,14 +201,15 @@ def ocs_install_verification(
             timeout=timeout,
         )
 
-    nb_ep_pods = get_pods_having_label(
-        label=constants.NOOBAA_ENDPOINT_POD_LABEL,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-    )
-    assert len(nb_ep_pods) <= max_eps, (
-        f"The number of running NooBaa endpoint pods ({len(nb_ep_pods)}) "
-        f"is greater than the maximum defined in the NooBaa CR ({max_eps})"
-    )
+    if not disable_noobaa:
+        nb_ep_pods = get_pods_having_label(
+            label=constants.NOOBAA_ENDPOINT_POD_LABEL,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        )
+        assert len(nb_ep_pods) <= max_eps, (
+            f"The number of running NooBaa endpoint pods ({len(nb_ep_pods)}) "
+            f"is greater than the maximum defined in the NooBaa CR ({max_eps})"
+        )
 
     # Verify StorageClasses (1 ceph-fs, 1 ceph-rbd)
     log.info("Verifying storage classes")
@@ -201,6 +219,23 @@ def ocs_install_verification(
         f"{storage_cluster_name}-cephfs",
         f"{storage_cluster_name}-ceph-rbd",
     }
+    if Version.coerce(ocs_version) >= Version.coerce("4.8"):
+        required_storage_classes.update({f"{storage_cluster_name}-ceph-rbd-thick"})
+    skip_storage_classes = set()
+    if disable_cephfs:
+        skip_storage_classes.update(
+            {
+                f"{storage_cluster_name}-cephfs",
+            }
+        )
+    if disable_blockpools:
+        skip_storage_classes.update(
+            {
+                f"{storage_cluster_name}-ceph-rbd",
+            }
+        )
+    required_storage_classes = required_storage_classes.difference(skip_storage_classes)
+
     if config.DEPLOYMENT["external_mode"]:
         required_storage_classes.update(
             {
@@ -243,26 +278,30 @@ def ocs_install_verification(
             resource_name=(constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS)
         )
     else:
-        sc_rbd = storage_class.get(resource_name=constants.DEFAULT_STORAGECLASS_RBD)
-        sc_cephfs = storage_class.get(
-            resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
+        if not disable_blockpools:
+            sc_rbd = storage_class.get(resource_name=constants.DEFAULT_STORAGECLASS_RBD)
+        if not disable_cephfs:
+            sc_cephfs = storage_class.get(
+                resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
+            )
+    if not disable_blockpools:
+        assert (
+            sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+            == constants.RBD_NODE_SECRET
         )
-    assert (
-        sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-        == constants.RBD_NODE_SECRET
-    )
-    assert (
-        sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
-        == constants.RBD_PROVISIONER_SECRET
-    )
-    assert (
-        sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-        == constants.CEPHFS_NODE_SECRET
-    )
-    assert (
-        sc_cephfs["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
-        == constants.CEPHFS_PROVISIONER_SECRET
-    )
+        assert (
+            sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+            == constants.RBD_PROVISIONER_SECRET
+        )
+    if not disable_cephfs:
+        assert (
+            sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+            == constants.CEPHFS_NODE_SECRET
+        )
+        assert (
+            sc_cephfs["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+            == constants.CEPHFS_PROVISIONER_SECRET
+        )
     log.info("Verified node and provisioner secret names in storage class.")
 
     ct_pod = get_ceph_tools_pod()
@@ -555,14 +594,17 @@ def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
 
 def get_osd_count():
     """
-    Get osd count from Storage cluster
+    Get osd count from Storage cluster.
 
     Returns:
-        int: osd count
+        int: osd count (In the case of external mode it returns 0)
 
     """
     sc = get_storage_cluster()
-    return int(sc.get().get("items")[0]["spec"]["storageDeviceSets"][0]["count"]) * int(
+    sc_data = sc.get().get("items")[0]
+    if sc_data["spec"].get("externalStorage", {}).get("enable"):
+        return 0
+    return int(sc_data["spec"]["storageDeviceSets"][0]["count"]) * int(
         sc.get().get("items")[0]["spec"]["storageDeviceSets"][0]["replica"]
     )
 

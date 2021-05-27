@@ -45,6 +45,7 @@ TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_AMQ_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "amq")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(TEMPLATE_DIR, "openshift-infra/")
 TEMPLATE_HSBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "hsbench")
+TEMPLATE_BDI_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "bdi")
 TEMPLATE_CONFIGURE_PVC_MONITORING_POD = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "monitoring/"
 )
@@ -85,6 +86,7 @@ STATUS_COMPLETED = "Completed"
 STATUS_ERROR = "Error"
 STATUS_CLBO = "CrashLoopBackOff"
 STATUS_READYTOUSE = "READYTOUSE"
+STATUS_FAILED = "Failed"
 
 # NooBaa statuses
 BS_AUTH_FAILED = "AUTH_FAILED"
@@ -455,6 +457,18 @@ NGINX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "nginx.yaml")
 PERF_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance.yaml")
 
 HSBENCH_OBJ_YAML = os.path.join(TEMPLATE_HSBENCH_DIR, "hsbench_obj.yaml")
+
+IBM_BDI_SCC_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "ibm_bdi_scc.yaml")
+
+TILLER_YAML = os.path.join(TEMPLATE_BDI_DIR, "temp_tiller.yaml")
+
+IBM_BDI_CONFIGURE_WORKLOAD_YAML = os.path.join(
+    TEMPLATE_BDI_DIR, "configure-workload.yaml"
+)
+
+IBM_BDI_DATA_LOAD_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "data-load-job.yaml")
+
+IBM_BDI_RUN_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "run-workload.yaml")
 
 AWSCLI_SERVICE_CA_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "aws-cli-service-ca-configmap.yaml"
@@ -1147,11 +1161,6 @@ SCALE_MAX_PVCS_PER_NODE = 500
 AWS_PRODUCTION_INSTANCE_TYPE = "m5.4xlarge"
 AZURE_PRODUCTION_INSTANCE_TYPE = "Standard_D16s_v3"
 
-# Elasticsearch and codespeed constants
-ES_SERVER_IP = "10.0.78.167"
-ES_SERVER_PORT = "9200"
-ES_SERVER_URL = "https://10.0.78.167:9200"
-
 # Cluster metrics
 THROUGHPUT_QUERY = "(sum(rate(ceph_pool_wr_bytes[1m]) + rate(ceph_pool_rd_bytes[1m])))"
 LATENCY_QUERY = "cluster:ceph_disk_latency:join_ceph_node_disk_irate1m"
@@ -1184,7 +1193,7 @@ ROOK_OPERATOR = "operator"
 MON_DAEMON = "mon"
 
 # cluster expansion
-MAX_OSDS = 15
+MAX_OSDS = 18
 
 # Minimum cluster requirements in term of node specs
 MIN_NODE_CPU = 16
@@ -1301,3 +1310,11 @@ debug_crush = 20
 
 WORKLOAD_STORAGE_TYPE_BLOCK = "block"
 WORKLOAD_STORAGE_TYPE_FS = "fs"
+# Components of OCS
+OCS_COMPONENTS = ["rgw", "cephfs", "noobaa", "blockpools"]
+OCS_COMPONENTS_MAP = {
+    "rgw": "cephObjectStores",
+    "cephfs": "cephFilesystems",
+    "noobaa": "multiCloudGateway",
+    "blockpools": "cephBlockPools",
+}
