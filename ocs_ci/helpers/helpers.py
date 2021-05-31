@@ -475,6 +475,24 @@ def default_storage_class(
     return sc
 
 
+def default_thick_storage_class():
+    """
+    Return default RBD thick storage class
+
+    Returns:
+        OCS: Existing RBD thick StorageClass instance
+
+    """
+    external = config.DEPLOYMENT["external_mode"]
+    if external:
+        resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_THICK
+    else:
+        resource_name = constants.DEFAULT_STORAGECLASS_RBD_THICK
+    base_sc = OCP(kind="storageclass", resource_name=resource_name)
+    sc = OCS(**base_sc.data)
+    return sc
+
+
 def create_storage_class(
     interface_type,
     interface_name,
