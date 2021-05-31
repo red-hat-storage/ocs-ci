@@ -37,7 +37,6 @@ log = logging.getLogger(__name__)
 @pytest.mark.bugzilla("1852983")
 @on_prem_platform_required
 @skipif_external_mode
-@vsphere_platform_required
 @skipif_vsphere_ipi
 class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
     """
