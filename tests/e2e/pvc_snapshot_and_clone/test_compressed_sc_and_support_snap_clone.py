@@ -15,13 +15,11 @@ log = logging.getLogger(__name__)
 @tier2
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
-@pytest.mark.polarion_id("2305")
 @pytest.mark.parametrize(
     argnames=["replica", "compression"],
     argvalues=[
-        pytest.param(*[3, "aggressive"]),
-        pytest.param(*[2, "aggressive"]),
-        pytest.param(*[2, "none"]),
+        pytest.param(*[3, "aggressive"], marks=pytest.mark.polarion_id("OCS-2536")),
+        pytest.param(*[2, "aggressive"], marks=pytest.mark.polarion_id("OCS-2305")),
     ],
 )
 class TestCompressedSCAndSupportSnapClone(E2ETest):
