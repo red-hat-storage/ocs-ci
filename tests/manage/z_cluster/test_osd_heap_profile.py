@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 
 @tier2
 @bugzilla("1938049")
-@skipif_ocs_version("<4.7")
+@skipif_ocs_version("<4.6")
 @pytest.mark.polarion_id("OCS-2512")
 class TestOSDHeapProfile(ManageTest):
     """
