@@ -72,9 +72,6 @@ def add_nodes():
             dt = config.ENV_DATA["deployment_type"]
             if dt == "ipi":
                 machines = machine_utils.get_machinesets()
-                log.info(
-                    f"The worker nodes number before expansion {len(get_worker_nodes())}"
-                )
                 for machine in machines:
                     new_nodes.append(
                         add_new_node_and_label_it(machine, mark_for_ocs_label=ocs_nodes)
