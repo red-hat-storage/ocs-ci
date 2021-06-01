@@ -988,11 +988,7 @@ def obc_io_create_delete(mcg_obj, awscli_pod, bucket_factory):
 
 
 def retrieve_verification_mode():
-    if config.ENV_DATA["platform"].lower() == "ibm_cloud":
-        verify = True
-    else:
-        verify = constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
-    return verify
+    return True
 
 
 def namespace_bucket_update(mcg_obj, bucket_name, read_resource, write_resource):
