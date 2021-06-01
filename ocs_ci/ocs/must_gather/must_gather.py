@@ -6,11 +6,13 @@ import re
 from pathlib import Path
 
 from ocs_ci.helpers.helpers import storagecluster_independent_check
-from ocs_ci.ocs.resources.pod import get_all_pods
-from ocs_ci.ocs.utils import collect_ocs_logs
+from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_node, get_pod_obj
+from ocs_ci.ocs.utils import collect_ocs_logs, get_pod_name_by_pattern
 from ocs_ci.ocs.must_gather.const_must_gather import GATHER_COMMANDS_VERSION
 from ocs_ci.ocs.ocp import get_ocs_parsed_version
-from ocs_ci.ocs.constants import OPENSHIFT_STORAGE_NAMESPACE
+from ocs_ci.ocs.constants import OPENSHIFT_STORAGE_NAMESPACE, must_gather_pod_label
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
 
 logger = logging.getLogger(__name__)
@@ -187,6 +189,39 @@ class MustGather(object):
             if not flag:
                 logger.error("noobaa_diagnostics.tar.gz does not exist")
                 self.files_not_exist.append("noobaa_diagnostics.tar.gz")
+
+    def get_must_gather_pod(self):
+        """
+
+        :return:
+        """
+        self.mg_pod = get_pod_name_by_pattern(
+            pattern=must_gather_pod_label, namespace=OPENSHIFT_STORAGE_NAMESPACE
+        )
+        if len(self.mg_pod) > 0:
+            return True
+        else:
+            return False
+
+    def restart_node_where_must_gather_pod_running(self, nodes):
+        """
+        Restart node where must-gather pod running
+
+
+        """
+        sample = TimeoutSampler(
+            timeout=20,
+            sleep=2,
+            func=self.get_must_gather_pod,
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise TimeoutExpiredError("must gather pod does not found after 20 seconds")
+
+        logger.info(f"Find the worker node where the {self.mg_pod} is running")
+        mg_pod_obj = get_pod_obj(self.mg_pod[0], namespace=OPENSHIFT_STORAGE_NAMESPACE)
+        node = get_pod_node(mg_pod_obj)
+        logger.info(f"Stop and start the worker node: {node}")
+        nodes.restart_nodes_by_stop_and_start([node])
 
     def validate_must_gather(self):
         """
