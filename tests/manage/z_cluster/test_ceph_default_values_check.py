@@ -78,7 +78,7 @@ class TestCephDefaultValuesCheck(ManageTest):
             max_pg_per_osd = get_mon_config_value(key="mon_max_pg_per_osd")
             assert (
                 max_pg_per_osd == 600
-            ), f"Failed: actual value:{max_pg_per_osd} not matching expected value: 600"
+            ), f"Failed, actual value:{max_pg_per_osd} not matching expected value: 600"
 
     @tier1
     @pytest.mark.skipif(
