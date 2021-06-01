@@ -41,6 +41,7 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         Test to verify storage utilization of RBD thick provisioned PVC
         """
         pvc_size = 15
+        replica_size = 3
         file1 = "fio_file1"
         file2 = "fio_file2"
 
@@ -58,7 +59,7 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         )
 
         size_after_pvc = fetch_used_size(
-            constants.DEFAULT_BLOCKPOOL, size_before_pvc + pvc_size
+            constants.DEFAULT_BLOCKPOOL, size_before_pvc + (pvc_size * replica_size)
         )
         log.info(
             f"Verified: Storage pool used size after creating the PVC is {size_after_pvc}"
@@ -81,7 +82,7 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         pod_obj.get_fio_results()
 
         # Verify the used size after IO
-        fetch_used_size(constants.DEFAULT_BLOCKPOOL, size_before_pvc + pvc_size)
+        fetch_used_size(constants.DEFAULT_BLOCKPOOL, size_before_pvc + (pvc_size * replica_size))
 
         # Create another 5GB file
         pod_obj.run_io(
@@ -94,7 +95,7 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         pod_obj.get_fio_results()
 
         # Verify the used size after IO
-        fetch_used_size(constants.DEFAULT_BLOCKPOOL, size_before_pvc + pvc_size)
+        fetch_used_size(constants.DEFAULT_BLOCKPOOL, size_before_pvc + (pvc_size * replica_size))
 
         # Delete the files created by fio
         mount_point = pod_obj.get_storage_path()
@@ -102,7 +103,7 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         pod_obj.exec_cmd_on_pod(command=rm_cmd, out_yaml_format=False)
 
         # Verify the used size after deleting the files
-        fetch_used_size(constants.DEFAULT_BLOCKPOOL, size_before_pvc + pvc_size)
+        fetch_used_size(constants.DEFAULT_BLOCKPOOL, size_before_pvc + (pvc_size * replica_size))
 
         # Delete the pod
         pod_obj.delete()
