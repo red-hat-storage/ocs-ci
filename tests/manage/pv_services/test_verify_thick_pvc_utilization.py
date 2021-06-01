@@ -15,6 +15,7 @@ from ocs_ci.ocs import constants
 log = logging.getLogger(__name__)
 
 
+@skipif_ocs_version("<4.8")
 class TestVerifyRbdThickPvcUtilization(ManageTest):
     """
     Tests to verify storage utilization of RBD thick provisioned PVC
@@ -23,22 +24,23 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
     @pytest.fixture(autouse=True)
     def setup(self, project_factory):
         """
-        Create Project for the test
+        Create project for the test
+
         Returns:
             OCP: An OCP instance of project
+
         """
         self.proj_obj = project_factory()
 
-    @skipif_ocs_version("<4.8")
     @tier2
-    @polarion_id("")
+    @polarion_id("OCS-2537")
     def test_verify_rbd_thick_pvc_utilization(
         self,
         pvc_factory,
         pod_factory,
     ):
         """
-        Test to verify storage utilization of RBD thick provisioned PVC
+        Test to verify the storage utilization of RBD thick provisioned PVC
         """
         pvc_size = 15
         replica_size = 3
@@ -48,7 +50,7 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         size_before_pvc = fetch_used_size(constants.DEFAULT_BLOCKPOOL)
         log.info(f"Storage pool used size before creating the PVC is {size_before_pvc}")
 
-        # Create PVC
+        # Create RBD thick PVC
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             project=self.proj_obj,
@@ -82,7 +84,9 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         pod_obj.get_fio_results()
 
         # Verify the used size after IO
-        fetch_used_size(constants.DEFAULT_BLOCKPOOL, size_before_pvc + (pvc_size * replica_size))
+        fetch_used_size(
+            constants.DEFAULT_BLOCKPOOL, size_before_pvc + (pvc_size * replica_size)
+        )
 
         # Create another 5GB file
         pod_obj.run_io(
@@ -95,7 +99,9 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         pod_obj.get_fio_results()
 
         # Verify the used size after IO
-        fetch_used_size(constants.DEFAULT_BLOCKPOOL, size_before_pvc + (pvc_size * replica_size))
+        fetch_used_size(
+            constants.DEFAULT_BLOCKPOOL, size_before_pvc + (pvc_size * replica_size)
+        )
 
         # Delete the files created by fio
         mount_point = pod_obj.get_storage_path()
@@ -103,7 +109,9 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         pod_obj.exec_cmd_on_pod(command=rm_cmd, out_yaml_format=False)
 
         # Verify the used size after deleting the files
-        fetch_used_size(constants.DEFAULT_BLOCKPOOL, size_before_pvc + (pvc_size * replica_size))
+        fetch_used_size(
+            constants.DEFAULT_BLOCKPOOL, size_before_pvc + (pvc_size * replica_size)
+        )
 
         # Delete the pod
         pod_obj.delete()
