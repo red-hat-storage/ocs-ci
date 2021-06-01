@@ -3302,7 +3302,7 @@ def select_unique_pvcs(pvcs):
     for pvc_obj in pvcs:
         pvc_data = pvc_obj.get()
         access_mode_volume_mode = (
-            pvc_data["spec"]["accessModes"],
+            pvc_data["spec"]["accessModes"][0],
             pvc_data["spec"].get("volumeMode"),
         )
         pvc_dict[access_mode_volume_mode] = pvc_dict.get(
