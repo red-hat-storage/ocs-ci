@@ -22,7 +22,9 @@ class RHV(object):
 
     _engine_connection = None
 
-    def __init__(self, url, username, password, insecure=True, ca_file=None):
+    def __init__(
+        self, url=None, username=None, password=None, insecure=True, ca_file=None
+    ):
         """
         Initialize the variables required to connection to the Red Hat Virtualization
         Manager
@@ -39,9 +41,9 @@ class RHV(object):
                  (default: None)
 
         """
-        self._ovirt_url = url
-        self._ovirt_username = username
-        self._ovirt_password = password
+        self._ovirt_url = url or config.ENV_DATA["ovirt_url"]
+        self._ovirt_username = username or config.ENV_DATA["ovirt_username"]
+        self._ovirt_password = password or config.ENV_DATA["ovirt_password"]
         self._insecure = insecure
         self._ca_file = ca_file
 
