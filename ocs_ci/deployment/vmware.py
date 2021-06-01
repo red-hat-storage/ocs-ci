@@ -928,6 +928,17 @@ class VSPHEREIPI(VSPHEREBASE):
         except CommandFailed as e:
             logger.error(e)
 
+            # Delete DNS records
+            self.delete_dns_records()
+
+            # release the IP's
+            ipam = IPAM(appiapp="address")
+            hosts = [
+                f"{config.ENV_DATA.get('cluster_name')}-{i}"
+                for i in range(self.num_of_vips)
+            ]
+            ipam.release_ips(hosts)
+
         def assign_ips(self):
             """
             Assign IPs to hosts
@@ -975,6 +986,27 @@ class VSPHEREIPI(VSPHEREBASE):
             logger.info("Waiting for record response")
             self.aws.wait_for_record_set(response_list=responses)
             logger.info("Records created successfully")
+
+        def delete_dns_records(self):
+            """
+            Deletes DNS records
+            """
+            logger.info("Deleting DNS records")
+            # get the record sets
+            record_sets = self.aws.get_record_sets()
+
+            # form the record sets to delete
+            records_to_delete = [
+                f"api.{self.cluster_domain}.",
+                f"\\052.apps.{self.cluster_domain}.",
+            ]
+
+            # delete the records
+            hosted_zone_id = self.aws.get_hosted_zone_id_for_domain()
+            logger.info(f"hosted zone id: {hosted_zone_id}")
+            for record in record_sets:
+                if record["Name"] in records_to_delete:
+                    self.aws.delete_record(record, hosted_zone_id)
 
 
 def change_vm_root_disk_size(machine_file):
