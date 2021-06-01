@@ -465,3 +465,34 @@ class RHV(object):
             except TimeoutExpiredError:
                 logger.error(f"RHV VM {vm.name} is still Running")
                 raise
+
+    def start_rhv_vms(self, vms, wait=True, timeout=600):
+        """
+         Run the RHV virtual machines
+
+        Args:
+            vms (list): list of RHV vm instances
+            wait (bool): Wait for RHV VMs to start
+            timeout (int): time in seconds to wait for VM to reach 'up' status.
+
+        """
+        for vm in vms:
+            # Find the virtual machine
+            vm_service = self.get_vm_service(vm.id)
+            vm_service.start()
+
+        if wait:
+            # Wait till the virtual machine is UP:
+            for vm in vms:
+                try:
+                    for status in TimeoutSampler(timeout, 5, self.get_vm_status, vm):
+                        logger.info(
+                            f"Waiting for RHV Machine {vm} to Power ON"
+                            f"Current status is : {status}"
+                        )
+                        if status == types.VmStatus.UP:
+                            logger.info(f"RHV Machine {vm} reached UP status")
+                            break
+                except TimeoutExpiredError:
+                    logger.error(f"RHV VM {vm} is not UP")
+                    raise
