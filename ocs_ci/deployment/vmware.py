@@ -29,8 +29,10 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.utility import templating
 from ocs_ci.ocs.openshift_ops import OCP
+from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.csr import approve_pending_csr, wait_for_all_nodes_csr_and_approve
+from ocs_ci.utility.ipam import IPAM
 from ocs_ci.utility.load_balancer import LoadBalancer
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.templating import (
@@ -807,6 +809,16 @@ class VSPHEREIPI(VSPHEREBASE):
         def __init__(self):
             super(VSPHEREIPI.OCPDeployment, self).__init__()
             self.ipi_details = load_auth_config()["vmware_ipi"]
+            self.cluster_domain = (
+                f"{config.ENV_DATA.get('cluster_name')}."
+                f"{config.ENV_DATA.get('base_domain')}"
+            )
+            self.num_of_vips = 2
+            self.dns_record_names = [
+                f"api.{config.ENV_DATA.get('cluster_name')}",
+                f"*.apps.{config.ENV_DATA.get('cluster_name')}",
+            ]
+            self.aws = AWS()
 
         def deploy_prereq(self):
             """
@@ -814,6 +826,12 @@ class VSPHEREIPI(VSPHEREBASE):
             prerequisites for VSPHEREIPI here.
             """
             super(VSPHEREIPI.OCPDeployment, self).deploy_prereq()
+
+            #  Assign IPs from IPAM server
+            ips = self.assign_ips()
+
+            # create DNS records
+            self.create_dns_records(ips)
 
         def create_config(self):
             """
@@ -909,6 +927,54 @@ class VSPHEREIPI(VSPHEREBASE):
             )
         except CommandFailed as e:
             logger.error(e)
+
+        def assign_ips(self):
+            """
+            Assign IPs to hosts
+            """
+            ipam = IPAM(appiapp="address")
+            subnet = config.ENV_DATA["machine_cidr"].split("/")[0]
+            hosts = [
+                f"{config.ENV_DATA.get('cluster_name')}-{i}"
+                for i in range(self.num_of_vips)
+            ]
+            ips = ipam.assign_ips(hosts, subnet)
+            logger.debug(f"IPs reserved for hosts {hosts} are {ips}")
+            return ips
+
+        def create_dns_records(self, ips):
+            """
+            Create DNS records
+
+            Args:
+                ips (list): List if IPs for creating DNS records
+
+            """
+            responses = []
+            dns_record_mapping = {}
+            logger.info("creating DNS records")
+            for index, record in enumerate(self.dns_record_names):
+                dns_record_mapping[record] = ips[index]
+            logger.debug(f"dns_record_mapping: {dns_record_mapping}")
+            zone_id = self.aws.get_hosted_zone_id_for_domain(
+                config.ENV_DATA["base_domain"]
+            )
+
+            for record in self.dns_record_names:
+                responses.append(
+                    self.aws.update_hosted_zone_record(
+                        zone_id=zone_id,
+                        record_name=record,
+                        data=dns_record_mapping[record],
+                        type="A",
+                        operation_type="Add",
+                    )
+                )
+
+            # wait for records to create
+            logger.info("Waiting for record response")
+            self.aws.wait_for_record_set(response_list=responses)
+            logger.info("Records created successfully")
 
 
 def change_vm_root_disk_size(machine_file):
