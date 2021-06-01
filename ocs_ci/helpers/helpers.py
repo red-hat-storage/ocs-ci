@@ -3285,3 +3285,27 @@ def get_noobaa_url():
     ocp_obj = OCP(kind=constants.ROUTE, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     route_obj = ocp_obj.get(resource_name="noobaa-mgmt")
     return route_obj["spec"]["host"]
+
+
+def select_unique_pvcs(pvcs):
+    """
+    Get the PVCs with unique access mode and volume mode combination.
+
+    Args:
+        pvcs(list): List of PVC objects
+
+    Returns:
+        list: List of selected PVC objects
+
+    """
+    pvc_dict = {}
+    for pvc_obj in pvcs:
+        pvc_data = pvc_obj.get()
+        access_mode_volume_mode = (
+            pvc_data["spec"]["accessModes"],
+            pvc_data["spec"].get("volumeMode"),
+        )
+        pvc_dict[access_mode_volume_mode] = pvc_dict.get(
+            access_mode_volume_mode, pvc_obj
+        )
+    return pvc_dict.values()

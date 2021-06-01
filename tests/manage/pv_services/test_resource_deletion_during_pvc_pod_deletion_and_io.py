@@ -29,6 +29,7 @@ from ocs_ci.helpers.helpers import (
     wait_for_resource_count_change,
     verify_pv_mounted_on_node,
     default_ceph_block_pool,
+    select_unique_pvcs,
 )
 from ocs_ci.helpers import disruption_helpers
 
@@ -252,15 +253,20 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
             ]
         )
 
+        io_pods = [
+            pod_obj
+            for pod_obj in io_pods
+            if pod_obj.pvc in select_unique_pvcs([pod_obj.pvc for pod_obj in io_pods])
+        ]
+
         log.info(
             f"{len(pods_to_delete)} pods selected for deletion in which "
             f"{len(pods_to_delete) - num_of_pods_to_delete} pairs of pod "
             f"share same RWX PVC"
         )
         log.info(
-            f"{len(io_pods)} pods selected for running IO in which "
-            f"{len(io_pods) - num_of_io_pods} pairs of pod share same "
-            f"RWX PVC"
+            f"{len(io_pods)} pods selected for running IO in which one "
+            f"pair of pod share same RWX PVC"
         )
         no_of_rwx_pvcs_delete = len(pods_for_pvc) - len(pvcs_to_delete)
         log.info(
@@ -342,12 +348,18 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         log.info("Setup for running IO is completed on all pods.")
 
         # Start IO on pods having PVCs to delete to load data
+        pods_for_pvc_io = [
+            pod_obj
+            for pod_obj in pods_for_pvc
+            if pod_obj.pvc
+            in select_unique_pvcs([pod_obj.pvc for pod_obj in pods_for_pvc])
+        ]
         log.info("Starting IO on pods having PVCs to delete.")
-        self.run_io_on_pods(pods_for_pvc)
+        self.run_io_on_pods(pods_for_pvc_io)
         log.info("IO started on pods having PVCs to delete.")
 
         log.info("Fetching IO results from the pods having PVCs to delete.")
-        for pod_obj in pods_for_pvc:
+        for pod_obj in pods_for_pvc_io:
             get_fio_rw_iops(pod_obj)
         log.info("Verified IO result on pods having PVCs to delete.")
 
