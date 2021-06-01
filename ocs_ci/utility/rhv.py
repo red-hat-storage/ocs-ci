@@ -155,7 +155,6 @@ class RHV(object):
             vm_id (str): unique identifier of the vm
             disk_id (str): unique identifier of the disk
 
-
         """
         return self.get_disk_attachments_service(vm_id).attachment_service(disk_id)
 
@@ -247,6 +246,18 @@ class RHV(object):
         """
         vms = self.get_vms_by_pattern(filter_by_cluster_name=True)
         return [vm for vm in vms if "worker" in vm.name]
+
+    def get_rhv_vm_instance(self, vm_name):
+        """
+        Get RHV VM instance
+
+        args:
+            vm_name: name of RHV VM
+
+        Returns:
+            vm (types.Vm): Vm instance
+        """
+        return self.get_vms_by_pattern(pattern=vm_name)[0]
 
     def add_disk(
         self,
@@ -411,47 +422,46 @@ class RHV(object):
                     vm=vm, identifier=disk.id, key="id", detach_only=detach_only
                 )
 
-    def get_vm_status(self, vm_name):
+    def get_vm_status(self, vm):
         """
         Get the power status of RHV VM
 
         Args:
-           vm_name (str): RHV VM name
+           vm (str): RHV VM instance
 
         Returns :
            str: Power status of RHV VM
 
         """
-        vm = self.get_vms_by_pattern(pattern=vm_name)[0]
-        vm_service = self.vms_service.vm_service(vm.id)
+        vm_service = self.get_vm_service(vm.id)
         vm_info = vm_service.get()
         return vm_info.status
 
-    def stop_rhv_vms(self, vm_names, force=False):
+    def stop_rhv_vms(self, vms, timeout=600, force=False):
         """
-         Shutdown the RHV virtual machines
+        Shutdown the RHV virtual machines
 
         Args:
-            vm_names (list): Names of RHV vms
+            vms (list): list of RHV vm instances
             force (bool): True for non-graceful VM shutdown, False for
                 graceful VM shutdown.
+            timeout (int): time in seconds to wait for VM to reach 'down' status.
 
         """
-        for vm_name in vm_names:
+        for vm in vms:
             # Find the virtual machine
-            vm = self.get_vms_by_pattern(pattern=vm_name)[0]
-            vm_service = self.vms_service.vm_service(vm.id)
-            vm_service.stop(force)
+            vm_service = self.get_vm_service(vm.id)
+            vm_service.stop(force=force)
             # Wait till the virtual machine is down:
             try:
-                for status in TimeoutSampler(600, 5, self.get_vm_status, vm_name):
+                for status in TimeoutSampler(timeout, 5, self.get_vm_status, vm):
                     logger.info(
-                        f"Waiting for RHV Machine {vm_name} to shutdown"
+                        f"Waiting for RHV Machine {vm.name} to shutdown"
                         f"Current status is : {status}"
                     )
                     if status == types.VmStatus.DOWN:
-                        logger.info(f"RHV Machine {vm_name} reached down status")
+                        logger.info(f"RHV Machine {vm.name} reached down status")
                         break
             except TimeoutExpiredError:
-                logger.error(f"RHV VM {vm_name} is still Running")
+                logger.error(f"RHV VM {vm.name} is still Running")
                 raise
