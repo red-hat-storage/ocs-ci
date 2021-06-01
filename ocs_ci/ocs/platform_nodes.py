@@ -2216,7 +2216,6 @@ class RHVNodes(NodesBase):
 
         vms = self.get_rhv_vm_instances(nodes)
         node_names = [n.name for n in nodes]
-
         self.rhv.stop_rhv_vms(vms, timeout=timeout, force=force)
         logger.info(f"node names are: {node_names} ")
         if wait:
