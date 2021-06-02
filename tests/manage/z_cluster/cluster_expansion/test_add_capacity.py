@@ -23,7 +23,10 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.ocs.cluster import check_ceph_health_after_add_capacity, is_flexible_scaling_enabled
+from ocs_ci.ocs.cluster import (
+    check_ceph_health_after_add_capacity,
+    is_flexible_scaling_enabled,
+)
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 

@@ -326,3 +326,7 @@ class NotAllNodesCreated(Exception):
 
 class TemplateNotFound(Exception):
     pass
+
+
+class PVNotSufficientException(Exception):
+    pass
