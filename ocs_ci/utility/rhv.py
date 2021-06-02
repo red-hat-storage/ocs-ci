@@ -487,12 +487,60 @@ class RHV(object):
                 try:
                     for status in TimeoutSampler(timeout, 5, self.get_vm_status, vm):
                         logger.info(
-                            f"Waiting for RHV Machine {vm} to Power ON"
+                            f"Waiting for RHV Machine {vm.name} to Power ON "
                             f"Current status is : {status}"
                         )
                         if status == types.VmStatus.UP:
-                            logger.info(f"RHV Machine {vm} reached UP status")
+                            logger.info(f"RHV Machine {vm.name} reached UP status")
                             break
                 except TimeoutExpiredError:
-                    logger.error(f"RHV VM {vm} is not UP")
+                    logger.error(f"RHV VM {vm.name} is not UP")
+                    raise
+
+    def reboot_rhv_vms(self, vm_names, timeout=600, wait=True, force=True):
+        """
+        Reboot the RHV virtual machines
+
+        Args:
+            vm_names (list): Names of RHV vms
+            timeout (int): time in seconds to wait for VM to reboot
+            wait (bool): Wait for RHV VMs to reboot
+            force (bool): True to reboot vm forcibly False otherwise
+
+        """
+        for vm in vm_names:
+            # Find the virtual machine
+            vm_service = self.get_vm_service(vm.id)
+            vm_service.reboot(force=force)
+
+            if wait:
+                # Wait till the virtual machine will start rebooting and then UP
+                try:
+                    expc_status = types.VmStatus.REBOOT_IN_PROGRESS
+                    look_up = False
+                    for status in TimeoutSampler(timeout, 5, self.get_vm_status, vm):
+                        if not look_up and status != expc_status:
+                            logger.info(
+                                f"Waiting for RHV Machine {vm.name} to {expc_status}"
+                                f" Current status is : {status}"
+                            )
+                            continue
+                        elif not look_up and status == expc_status:
+                            expc_status = types.VmStatus.UP
+                            look_up = True
+                            logger.info(f"RHV Machine {vm} is now {expc_status} status")
+                            continue
+                        else:
+                            logger.info(
+                                f"Waiting for RHV Machine {vm.name} to Power ON"
+                                f" Current status is : {status}"
+                            )
+                            if status == types.VmStatus.UP:
+                                logger.info(f"RHV Machine {vm.name} reached UP status")
+                                break
+                except TimeoutExpiredError:
+                    logger.error(
+                        f"RHV VM {vm.name} is still not {expc_status} after "
+                        f"initiating reboot"
+                    )
                     raise
