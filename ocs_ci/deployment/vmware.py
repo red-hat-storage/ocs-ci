@@ -809,29 +809,21 @@ class VSPHEREIPI(VSPHEREBASE):
         def __init__(self):
             super(VSPHEREIPI.OCPDeployment, self).__init__()
             self.ipi_details = load_auth_config()["vmware_ipi"]
-            self.cluster_domain = (
-                f"{config.ENV_DATA.get('cluster_name')}."
-                f"{config.ENV_DATA.get('base_domain')}"
-            )
             self.num_of_vips = 2
-            self.dns_record_names = [
-                f"api.{config.ENV_DATA.get('cluster_name')}",
-                f"*.apps.{config.ENV_DATA.get('cluster_name')}",
-            ]
-            self.aws = AWS()
 
         def deploy_prereq(self):
             """
             Overriding deploy_prereq from parent. Perform all necessary
             prerequisites for VSPHEREIPI here.
             """
+            #  Assign IPs from IPAM server
+            ips = assign_ips(self.num_of_vips)
+            config.ENV_DATA["vips"] = ips
+
             super(VSPHEREIPI.OCPDeployment, self).deploy_prereq()
 
-            #  Assign IPs from IPAM server
-            ips = self.assign_ips()
-
             # create DNS records
-            self.create_dns_records(ips)
+            create_dns_records(ips)
 
         def create_config(self):
             """
@@ -852,18 +844,14 @@ class VSPHEREIPI(VSPHEREBASE):
             install_config_obj = yaml.safe_load(install_config_str)
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
-            install_config_obj["platform"]["vsphere"]["apiVIP"] = self.ipi_details.get(
-                "vmware_ipi_api_vip"
-            )
-            install_config_obj["platform"]["vsphere"][
-                "ingressVIP"
-            ] = self.ipi_details.get("vmware_ipi_ingress_vip")
-            install_config_obj["metadata"]["name"] = self.ipi_details.get(
-                "vmware_ipi_default_cluster_name"
-            )
-            install_config_obj["baseDomain"] = self.ipi_details.get(
-                "vmware_ipi_default_base_domain"
-            )
+            install_config_obj["platform"]["vsphere"]["apiVIP"] = config.ENV_DATA[
+                "vips"
+            ][0]
+            install_config_obj["platform"]["vsphere"]["ingressVIP"] = config.ENV_DATA[
+                "vips"
+            ][1]
+            install_config_obj["metadata"]["name"] = config.ENV_DATA.get("cluster_name")
+            install_config_obj["baseDomain"] = config.ENV_DATA.get("base_domain")
             install_config_str = yaml.safe_dump(install_config_obj)
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
 
@@ -928,85 +916,16 @@ class VSPHEREIPI(VSPHEREBASE):
         except CommandFailed as e:
             logger.error(e)
 
-            # Delete DNS records
-            self.delete_dns_records()
+        # Delete DNS records
+        delete_dns_records()
 
-            # release the IP's
-            ipam = IPAM(appiapp="address")
-            hosts = [
-                f"{config.ENV_DATA.get('cluster_name')}-{i}"
-                for i in range(self.num_of_vips)
-            ]
-            ipam.release_ips(hosts)
-
-        def assign_ips(self):
-            """
-            Assign IPs to hosts
-            """
-            ipam = IPAM(appiapp="address")
-            subnet = config.ENV_DATA["machine_cidr"].split("/")[0]
-            hosts = [
-                f"{config.ENV_DATA.get('cluster_name')}-{i}"
-                for i in range(self.num_of_vips)
-            ]
-            ips = ipam.assign_ips(hosts, subnet)
-            logger.debug(f"IPs reserved for hosts {hosts} are {ips}")
-            return ips
-
-        def create_dns_records(self, ips):
-            """
-            Create DNS records
-
-            Args:
-                ips (list): List if IPs for creating DNS records
-
-            """
-            responses = []
-            dns_record_mapping = {}
-            logger.info("creating DNS records")
-            for index, record in enumerate(self.dns_record_names):
-                dns_record_mapping[record] = ips[index]
-            logger.debug(f"dns_record_mapping: {dns_record_mapping}")
-            zone_id = self.aws.get_hosted_zone_id_for_domain(
-                config.ENV_DATA["base_domain"]
-            )
-
-            for record in self.dns_record_names:
-                responses.append(
-                    self.aws.update_hosted_zone_record(
-                        zone_id=zone_id,
-                        record_name=record,
-                        data=dns_record_mapping[record],
-                        type="A",
-                        operation_type="Add",
-                    )
-                )
-
-            # wait for records to create
-            logger.info("Waiting for record response")
-            self.aws.wait_for_record_set(response_list=responses)
-            logger.info("Records created successfully")
-
-        def delete_dns_records(self):
-            """
-            Deletes DNS records
-            """
-            logger.info("Deleting DNS records")
-            # get the record sets
-            record_sets = self.aws.get_record_sets()
-
-            # form the record sets to delete
-            records_to_delete = [
-                f"api.{self.cluster_domain}.",
-                f"\\052.apps.{self.cluster_domain}.",
-            ]
-
-            # delete the records
-            hosted_zone_id = self.aws.get_hosted_zone_id_for_domain()
-            logger.info(f"hosted zone id: {hosted_zone_id}")
-            for record in record_sets:
-                if record["Name"] in records_to_delete:
-                    self.aws.delete_record(record, hosted_zone_id)
+        # release the IP's
+        ipam = IPAM(appiapp="address")
+        hosts = [
+            f"{config.ENV_DATA.get('cluster_name')}-{i}"
+            for i in range(self.num_of_vips)
+        ]
+        ipam.release_ips(hosts)
 
 
 def change_vm_root_disk_size(machine_file):
@@ -1383,3 +1302,84 @@ def modify_haproxyservice():
     execstop = f"{to_change}\nExecStop=/bin/podman rm -f haproxy"
 
     replace_content_in_file(constants.TERRAFORM_HAPROXY_SERVICE, to_change, execstop)
+
+
+def assign_ips(num_of_vips):
+    """
+    Assign IPs to hosts
+
+    Args:
+        num_of_vips (int): Number of IPs to assign
+
+    """
+    ipam = IPAM(appiapp="address")
+    subnet = config.ENV_DATA["machine_cidr"].split("/")[0]
+    hosts = [f"{config.ENV_DATA.get('cluster_name')}-{i}" for i in range(num_of_vips)]
+    ips = ipam.assign_ips(hosts, subnet)
+    logger.debug(f"IPs reserved for hosts {hosts} are {ips}")
+    return ips
+
+
+def create_dns_records(ips):
+    """
+    Create DNS records
+
+    Args:
+        ips (list): List if IPs for creating DNS records
+
+    """
+    logger.info("creating DNS records")
+    aws = AWS()
+    dns_record_names = [
+        f"api.{config.ENV_DATA.get('cluster_name')}",
+        f"*.apps.{config.ENV_DATA.get('cluster_name')}",
+    ]
+    responses = []
+    dns_record_mapping = {}
+    for index, record in enumerate(dns_record_names):
+        dns_record_mapping[record] = ips[index]
+    logger.debug(f"dns_record_mapping: {dns_record_mapping}")
+    zone_id = aws.get_hosted_zone_id_for_domain(config.ENV_DATA["base_domain"])
+
+    for record in dns_record_names:
+        responses.append(
+            aws.update_hosted_zone_record(
+                zone_id=zone_id,
+                record_name=record,
+                data=dns_record_mapping[record],
+                type="A",
+                operation_type="Add",
+            )
+        )
+
+    # wait for records to create
+    logger.info("Waiting for record response")
+    aws.wait_for_record_set(response_list=responses)
+    logger.info("Records created successfully")
+
+
+def delete_dns_records():
+    """
+    Deletes DNS records
+    """
+    logger.info("Deleting DNS records")
+    aws = AWS()
+    cluster_domain = (
+        f"{config.ENV_DATA.get('cluster_name')}."
+        f"{config.ENV_DATA.get('base_domain')}"
+    )
+    # get the record sets
+    record_sets = aws.get_record_sets()
+
+    # form the record sets to delete
+    records_to_delete = [
+        f"api.{cluster_domain}.",
+        f"\\052.apps.{cluster_domain}.",
+    ]
+
+    # delete the records
+    hosted_zone_id = aws.get_hosted_zone_id_for_domain()
+    logger.info(f"hosted zone id: {hosted_zone_id}")
+    for record in record_sets:
+        if record["Name"] in records_to_delete:
+            aws.delete_record(record, hosted_zone_id)

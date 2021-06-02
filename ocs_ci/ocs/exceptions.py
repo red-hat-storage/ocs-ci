@@ -326,3 +326,11 @@ class NotAllNodesCreated(Exception):
 
 class TemplateNotFound(Exception):
     pass
+
+
+class IPAMReleaseUpdateFailed(Exception):
+    pass
+
+
+class IPAMAssignUpdateFailed(Exception):
+    pass
