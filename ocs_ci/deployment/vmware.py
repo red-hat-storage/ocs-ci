@@ -394,7 +394,6 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # create chrony resource
             if Version.coerce(get_ocp_version()) >= Version.coerce("4.4"):
-                logger.ino("Skipping chrony configuration during OCP deployment due OCP version less than 4.4")
                 add_chrony_to_ocp_deployment()
 
             # create ignitions
