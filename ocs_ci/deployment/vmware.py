@@ -391,8 +391,12 @@ class VSPHEREUPI(VSPHEREBASE):
             super(VSPHEREUPI.OCPDeployment, self).deploy_prereq()
             # generate manifests
             self.generate_manifests()
+
             # create chrony resource
-            add_chrony_to_ocp_deployment()
+            if Version.coerce(get_ocp_version()) >= Version.coerce("4.4"):
+                logger.ino("Skipping chrony configuration during OCP deployment due OCP version less than 4.4")
+                add_chrony_to_ocp_deployment()
+
             # create ignitions
             self.create_ignitions()
             self.kubeconfig = os.path.join(
