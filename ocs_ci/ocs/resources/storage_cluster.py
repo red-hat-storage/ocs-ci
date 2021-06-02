@@ -14,6 +14,7 @@ from ocs_ci.ocs.exceptions import ResourceNotFoundError, UnsupportedFeatureError
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
+from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.utility import localstorage, utils, templating, kms as KMS
@@ -514,13 +515,22 @@ def add_capacity(osd_size_capacity_requested):
     storageDeviceSets->count = (capacity reqested / osd capacity ) + existing count storageDeviceSets
 
     """
+    lvpresent = None
+    lv_set_present = None
     osd_size_existing = get_osd_size()
     device_sets_required = int(osd_size_capacity_requested / osd_size_existing)
     old_storage_devices_sets_count = get_deviceset_count()
     new_storage_devices_sets_count = int(
         device_sets_required + old_storage_devices_sets_count
     )
-    lvpresent = localstorage.check_local_volume()
+    lv_lvs_data = localstorage.check_local_volume_local_volume_set()
+    if lv_lvs_data.get("localvolume"):
+        lvpresent = True
+    elif lv_lvs_data.get("localvolumeset"):
+        lv_set_present = True
+    else:
+        log.info(lv_lvs_data)
+        raise ResourceNotFoundError("No LocalVolume and LocalVolume Set found")
     ocp_version = get_ocp_version()
     platform = config.ENV_DATA.get("platform", "").lower()
     is_lso = config.DEPLOYMENT.get("local_storage")
@@ -565,6 +575,8 @@ def add_capacity(osd_size_capacity_requested):
             localstorage.check_pvs_created(
                 int(len(final_device_list) / new_storage_devices_sets_count)
             )
+        if lv_set_present:
+            check_pvs_present_for_ocs_expansion()
         sc = get_storage_cluster()
         # adding the storage capacity to the cluster
         params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",

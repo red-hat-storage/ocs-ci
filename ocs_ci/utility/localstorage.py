@@ -105,14 +105,17 @@ def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
     return cur_device_list
 
 
-def check_local_volume():
+def check_local_volume_local_volume_set():
     """
-    Function to check if Local-volume is present or not
+    Function to check if Local-volume and Local volume set is present or not
 
     Returns:
-        bool: True if LV present, False if LV not present
+        dict: dict for localvolume and localvolumeset
 
     """
+
+    lv_or_lvs_dict = {}
+    logger.info("Checking if Local Volume is Present")
 
     if csv.get_csvs_start_with_prefix(
         csv_prefix=defaults.LOCAL_STORAGE_OPERATOR_NAME,
@@ -121,11 +124,31 @@ def check_local_volume():
         ocp_obj = OCP()
         command = f"get localvolume local-block -n {config.ENV_DATA['local_storage_namespace']} "
         try:
-            status = ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
+            ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
+            lv_or_lvs_dict["localvolume"] = True
         except CommandFailed as ex:
             logger.debug(f"Local volume does not exists! Exception: {ex}")
-            return False
-        return "No resources found" not in status
+            logger.info("No Local volume found")
+            lv_or_lvs_dict["localvolume"] = False
+
+        logger.info("Checking if Local Volume Set is Present")
+        if csv.get_csvs_start_with_prefix(
+            csv_prefix=defaults.LOCAL_STORAGE_OPERATOR_NAME,
+            namespace=config.ENV_DATA["local_storage_namespace"],
+        ):
+            ocp_obj = OCP()
+            command = (
+                f"get {constants.LOCAL_VOLUME_SET} {constants.LOCAL_BLOCK_RESOURCE} "
+                f"-n {config.ENV_DATA['local_storage_namespace']} "
+            )
+            try:
+                ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
+                lv_or_lvs_dict["localvolumeset"] = True
+            except CommandFailed as ex:
+                logger.debug(f"Local volume Set does not exists! Exception: {ex}")
+                lv_or_lvs_dict["localvolumeset"] = False
+
+        return lv_or_lvs_dict
 
 
 @retry(AssertionError, 12, 10, 1)

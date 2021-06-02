@@ -11,7 +11,8 @@ from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.cluster import (
     get_percent_used_capacity,
-    check_ceph_health_after_add_capacity, is_flexible_scaling_enabled,
+    check_ceph_health_after_add_capacity,
+    is_flexible_scaling_enabled,
 )
 from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.ocs import node

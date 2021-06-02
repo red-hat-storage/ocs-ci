@@ -9,7 +9,10 @@ from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.node import get_ocs_nodes
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
-from ocs_ci.ocs.cluster import check_ceph_health_after_add_capacity, is_flexible_scaling_enabled
+from ocs_ci.ocs.cluster import (
+    check_ceph_health_after_add_capacity,
+    is_flexible_scaling_enabled,
+)
 
 
 @pytest.mark.parametrize(
