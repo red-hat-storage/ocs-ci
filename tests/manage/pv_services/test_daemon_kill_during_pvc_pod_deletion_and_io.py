@@ -354,9 +354,15 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         disruption.select_daemon()
 
         # Start IO on pods to be deleted
-        log.info("Starting IO on pods to be deleted.")
-        self.run_io_on_pods(pods_to_delete)
-        log.info("IO started on pods to be deleted.")
+        pods_to_delete_io = [
+            pod_obj
+            for pod_obj in pods_to_delete
+            if pod_obj.pvc
+            in select_unique_pvcs([pod_obj.pvc for pod_obj in pods_to_delete])
+        ]
+        log.info("Starting IO on selected pods to be deleted.")
+        self.run_io_on_pods(pods_to_delete_io)
+        log.info("IO started on selected pods to be deleted.")
 
         # Start deleting PVCs
         pvc_bulk_delete = executor.submit(delete_pvcs, pvcs_to_delete)
