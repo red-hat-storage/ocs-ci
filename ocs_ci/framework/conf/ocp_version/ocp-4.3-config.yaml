@@ -5,6 +5,7 @@ RUN:
 DEPLOYMENT:
   installer_version: "4.3.0-0.nightly"
   terraform_version: "0.11.15"
+  ignition_version: "2.2.0"
 ENV_DATA:
   vm_template: 'rhcos-43.82.202008010953.0-vmware.x86_64'
   # rhcos_ami: 'ami-06c85f9d106577272'
