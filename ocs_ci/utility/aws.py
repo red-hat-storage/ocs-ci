@@ -1500,7 +1500,7 @@ class AWS(object):
         Args:
             zone_id (str): Zone id of DNS record
             record_name (str): Record Name without domain
-                 eg: api.apps.ocp-baremetal-auto
+                eg: api.apps.ocp-baremetal-auto
             data (str): Data to be added for DNS Record
             type (str): DNS record type
             operation_type (str): Operation Type (Allowed Values:- Add, Delete)
