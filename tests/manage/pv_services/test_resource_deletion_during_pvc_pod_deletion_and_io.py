@@ -443,6 +443,15 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
             "Verified: mount points are removed from nodes after deleting " "the pods"
         )
 
+        log.info("Fetching IO results from the pods.")
+        for pod_obj in io_pods:
+            fio_result = pod_obj.get_fio_results()
+            err_count = fio_result.get("jobs")[0].get("error")
+            assert (
+                err_count == 0
+            ), f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
+        log.info("Verified IO result on pods.")
+
         pvcs_deleted = pvc_bulk_delete.result()
         assert pvcs_deleted, "Deletion of PVCs failed."
 
@@ -470,15 +479,6 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
             assert ret, (
                 f"Volume associated with PVC {pvc_name} still exists " f"in backend"
             )
-
-        log.info("Fetching IO results from the pods.")
-        for pod_obj in io_pods:
-            fio_result = pod_obj.get_fio_results()
-            err_count = fio_result.get("jobs")[0].get("error")
-            assert (
-                err_count == 0
-            ), f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
-        log.info("Verified IO result on pods.")
 
         # Verify number of pods of type 'resource_to_delete'
         final_num_resource_to_delete = len(pod_functions[resource_to_delete]())
