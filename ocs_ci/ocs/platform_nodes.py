@@ -8,6 +8,7 @@ import time
 
 import boto3
 import yaml
+import ovirtsdk4.types as types
 
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.deployment.vmware import (
@@ -59,6 +60,7 @@ from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.utility.vsphere_nodes import VSPHERENode
 from paramiko.ssh_exception import NoValidConnectionsError, AuthenticationException
 from semantic_version import Version
+from ovirtsdk4.types import VmStatus
 
 logger = logging.getLogger(__name__)
 
@@ -2275,3 +2277,33 @@ class RHVNodes(NodesBase):
             wait_for_nodes_status(
                 node_names=node_names, status=constants.NODE_READY, timeout=timeout
             )
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Make sure all RHV VMs are up by the end of the test
+
+        """
+        vm_names = self.rhv.get_vm_names()
+        assert vm_names, "Failed to get VM list"
+        vms = [self.rhv.get_rhv_vm_instance(vm) for vm in vm_names]
+
+        stopping_vms = [
+            vm for vm in vms if self.rhv.get_vm_status(vm) == VmStatus.POWERING_DOWN
+        ]
+        for vm in stopping_vms:
+            # wait untill VM with powering down status changed to down status
+            for status in TimeoutSampler(600, 5, self.rhv.get_vm_status, vm):
+                logger.info(
+                    f"Waiting for RHV Machine {vm.name} to shutdown "
+                    f"Current status is : {status}"
+                )
+                if status == types.VmStatus.DOWN:
+                    logger.info(f"RHV Machine {vm.name} reached down status")
+                    break
+        # Get all down Vms
+        stopped_vms = [vm for vm in vms if self.rhv.get_vm_status(vm) == VmStatus.DOWN]
+
+        # Start the VMs
+        if stopped_vms:
+            logger.info(f"The following VMs are powered off: {stopped_vms}")
+            self.rhv.start_rhv_vms(stopped_vms)
