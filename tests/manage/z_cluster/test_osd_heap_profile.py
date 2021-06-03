@@ -3,7 +3,13 @@ import pytest
 import time
 import random
 
-from ocs_ci.framework.testlib import ManageTest, tier2, skipif_ocs_version, bugzilla
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier2,
+    skipif_ocs_version,
+    bugzilla,
+    skipif_external_mode,
+)
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods, get_osd_pod_id
 
 log = logging.getLogger(__name__)
@@ -13,6 +19,7 @@ log = logging.getLogger(__name__)
 @bugzilla("1938049")
 @skipif_ocs_version("<4.6")
 @pytest.mark.polarion_id("OCS-2512")
+@skipif_external_mode
 class TestOSDHeapProfile(ManageTest):
     """
     1.Start heap profiler for osd
