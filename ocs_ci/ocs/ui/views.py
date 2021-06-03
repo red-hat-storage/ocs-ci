@@ -9,9 +9,8 @@ login = {
     "click_login": ("//button[text()='Log in']", By.XPATH),
 }
 
-deployment_4_7 = {
+deployment = {
     "click_install_ocs": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
-    "click_install_ocs_page": ('button[data-test="install-operator"]', By.CSS_SELECTOR),
     "choose_ocs_version": (
         'a[data-test="ocs-operator-ocs-catalogsource-openshift-marketplace"]',
         By.CSS_SELECTOR,
@@ -29,12 +28,6 @@ deployment_4_7 = {
         By.CSS_SELECTOR,
     ),
     "search_operator_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
-    "create_storage_cluster": ('button[data-test="item-create"]', By.CSS_SELECTOR),
-    "internal_mode": ('input[data-test="Internal-radio-input"]', By.CSS_SELECTOR),
-    "storage_class_dropdown": (
-        'button[data-test="storage-class-dropdown"]',
-        By.CSS_SELECTOR,
-    ),
     "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
     "osd_size_dropdown": ('button[data-test-id="dropdown-button"]', By.CSS_SELECTOR),
@@ -42,7 +35,6 @@ deployment_4_7 = {
     "2048": ('button[data-test-dropdown-menu="2Ti"]', By.CSS_SELECTOR),
     "4096": ('button[data-test-dropdown-menu="4Ti"]', By.CSS_SELECTOR),
     "all_nodes": ('input[aria-label="Select all rows"]', By.CSS_SELECTOR),
-    "enable_encryption": ('input[data-test="encryption-checkbox"]', By.CSS_SELECTOR),
     "wide_encryption": ('//*[@id="cluster-wide-encryption"]', By.XPATH),
     "class_encryption": ('//*[@id="storage-class-encryption"]', By.XPATH),
     "advanced_encryption": ('//*[@id="advanced-encryption"]', By.XPATH),
@@ -52,10 +44,6 @@ deployment_4_7 = {
     "kms_token": ('//*[@id="kms-token"]', By.XPATH),
     "create_on_review": ("//button[text()='Create']", By.XPATH),
     "search_ocs_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
-    "internal-attached_devices": (
-        'input[data-test="Internal - Attached Devices-radio-input"]',
-        By.CSS_SELECTOR,
-    ),
     "all_nodes_lso": (
         'input[id="auto-detect-volume-radio-all-nodes"]',
         By.CSS_SELECTOR,
@@ -73,9 +61,46 @@ deployment_4_7 = {
         By.CSS_SELECTOR,
     ),
     "click_install_lso": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
-    "click_install_lso_page": ('button[data-test="install-operator"]', By.CSS_SELECTOR),
     "yes": ("//*[contains(text(), 'Yes')]", By.XPATH),
     "next": ("//*[contains(text(), 'Next')]", By.XPATH),
+}
+
+deployment_4_6 = {
+    "click_install_ocs_page": ("//button[text()='Install']", By.XPATH),
+    "create_storage_cluster": ("//button[text()='Create Storage Cluster']", By.XPATH),
+    "internal_mode": ('input[value="Internal"]', By.CSS_SELECTOR),
+    "internal-attached_devices": (
+        'input[value="Internal - Attached Devices"]',
+        By.CSS_SELECTOR,
+    ),
+    "storage_class_dropdown": (
+        'button[id="ceph-sc-dropdown"]',
+        By.CSS_SELECTOR,
+    ),
+    "enable_encryption": ('//span[@class="pf-c-switch__toggle"]', By.XPATH),
+    "click_install_lso_page": ("//button[text()='Install']", By.XPATH),
+    "project_dropdown": (
+        'button[class="pf-c-dropdown__toggle pf-m-plain"]',
+        By.CSS_SELECTOR,
+    ),
+    "OpenShift Container Storage": ('a[id="openshift-storage-link"]', By.CSS_SELECTOR),
+    "Local Storage": ('a[id="openshift-local-storage-link"]', By.CSS_SELECTOR),
+}
+
+deployment_4_7 = {
+    "click_install_ocs_page": ('button[data-test="install-operator"]', By.CSS_SELECTOR),
+    "create_storage_cluster": ('button[data-test="item-create"]', By.CSS_SELECTOR),
+    "internal_mode": ('input[data-test="Internal-radio-input"]', By.CSS_SELECTOR),
+    "internal-attached_devices": (
+        'input[data-test="Internal - Attached Devices-radio-input"]',
+        By.CSS_SELECTOR,
+    ),
+    "storage_class_dropdown": (
+        'button[data-test="storage-class-dropdown"]',
+        By.CSS_SELECTOR,
+    ),
+    "enable_encryption": ('input[data-test="encryption-checkbox"]', By.CSS_SELECTOR),
+    "click_install_lso_page": ('button[data-test="install-operator"]', By.CSS_SELECTOR),
 }
 
 pvc = {
@@ -172,16 +197,22 @@ infra = {
 }
 
 locators = {
+    "4.8": {
+        "login": login,
+        "page": page_nav,
+        "deployment": {**deployment, **deployment_4_7},
+    },
     "4.7": {
         "login": login,
         "page": page_nav,
-        "deployment": deployment_4_7,
+        "deployment": {**deployment, **deployment_4_7},
         "pvc": pvc,
         "infra": infra,
     },
     "4.6": {
         "login": login,
         "page": page_nav,
+        "deployment": {**deployment, **deployment_4_6},
         "pvc": pvc,
         "infra": infra,
     },
