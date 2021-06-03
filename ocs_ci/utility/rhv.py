@@ -485,6 +485,7 @@ class RHV(object):
          Run the RHV virtual machines
 
         Args:
+
             vms (list): list of RHV vm instances
             wait (bool): Wait for RHV VMs to start
             timeout (int): time in seconds to wait for VM to reach 'up' status.
@@ -511,18 +512,18 @@ class RHV(object):
                     logger.error(f"RHV VM {vm.name} is not UP")
                     raise
 
-    def reboot_rhv_vms(self, vm_names, timeout=600, wait=True, force=True):
+    def reboot_rhv_vms(self, vms, timeout=600, wait=True, force=True):
         """
         Reboot the RHV virtual machines
 
         Args:
-            vm_names (list): Names of RHV vms
+            vms (list): Names of RHV vms
             timeout (int): time in seconds to wait for VM to reboot
             wait (bool): Wait for RHV VMs to reboot
             force (bool): True to reboot vm forcibly False otherwise
 
         """
-        for vm in vm_names:
+        for vm in vms:
             # Find the virtual machine
             vm_service = self.get_vm_service(vm.id)
             vm_service.reboot(force=force)
@@ -558,3 +559,17 @@ class RHV(object):
                         f"initiating reboot"
                     )
                     raise
+
+    def restart_rhv_vms_by_stop_and_start(self, vms, wait=True, force=False):
+        """
+        Stop and Start RHV virtual machines
+
+        Args:
+            vms (list): list of RHV vm instances
+            force (bool): True for non-graceful VM shutdown, False for
+                graceful VM shutdown.
+            wait (bool): Wait for RHV VMs to start
+
+        """
+        self.stop_rhv_vms(vms, force=force)
+        self.start_rhv_vms(vms, wait=wait)
