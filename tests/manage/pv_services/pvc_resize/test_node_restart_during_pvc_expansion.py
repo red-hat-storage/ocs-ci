@@ -118,9 +118,7 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
 
         # Verify PVC expansion status
         for pvc_obj in self.pvcs:
-            assert (
-                pvc_obj.expand_proc.result()
-            ), (
+            assert pvc_obj.expand_proc.result(), (
                 f"Expansion failed for PVC {pvc_obj.name}\nDescribe output "
                 f"of PVC and PV:\n{pvc_obj.describe()}\n"
                 f"{pvc_obj.backed_pv_obj.describe()}"
