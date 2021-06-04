@@ -247,6 +247,18 @@ class RHV(object):
         vms = self.get_vms_by_pattern(filter_by_cluster_name=True)
         return [vm for vm in vms if "worker" in vm.name]
 
+    def get_rhv_vm_instance(self, vm_name):
+        """
+        Get RHV VM instance
+
+        args:
+            vm_name: name of RHV VM
+
+        Returns:
+            vm (types.Vm): Vm instance
+        """
+        return self.get_vms_by_pattern(pattern=vm_name)[0]
+
     def add_disk(
         self,
         vm,
@@ -409,3 +421,47 @@ class RHV(object):
                 self.remove_disk(
                     vm=vm, identifier=disk.id, key="id", detach_only=detach_only
                 )
+
+    def get_vm_status(self, vm):
+        """
+        Get the power status of RHV VM
+
+        Args:
+           vm (str): RHV VM instance
+
+        Returns :
+           str: Power status of RHV VM
+
+        """
+        vm_service = self.get_vm_service(vm.id)
+        vm_info = vm_service.get()
+        return vm_info.status
+
+    def stop_rhv_vms(self, vms, timeout=600, force=False):
+        """
+        Shutdown the RHV virtual machines
+
+        Args:
+            vms (list): list of RHV vm instances
+            force (bool): True for non-graceful VM shutdown, False for
+                graceful VM shutdown.
+            timeout (int): time in seconds to wait for VM to reach 'down' status.
+
+        """
+        for vm in vms:
+            # Find the virtual machine
+            vm_service = self.get_vm_service(vm.id)
+            vm_service.stop(force=force)
+            # Wait till the virtual machine is down:
+            try:
+                for status in TimeoutSampler(timeout, 5, self.get_vm_status, vm):
+                    logger.info(
+                        f"Waiting for RHV Machine {vm.name} to shutdown"
+                        f"Current status is : {status}"
+                    )
+                    if status == types.VmStatus.DOWN:
+                        logger.info(f"RHV Machine {vm.name} reached down status")
+                        break
+            except TimeoutExpiredError:
+                logger.error(f"RHV VM {vm.name} is still Running")
+                raise
