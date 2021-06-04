@@ -1226,6 +1226,14 @@ RHV_DISK_INTERFACE_VIRTIO_SCSI = "VIRTIO_SCSI"
 # MCG constants
 PLACEMENT_BUCKETCLASS = "placement-bucketclass"
 
+# Cosbench constants
+COSBENCH = "cosbench"
+COSBENCH_PROJECT = "cosbench-project"
+
+COSBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "cosbench")
+COSBENCH_POD = os.path.join(COSBENCH_DIR, "cosbench_pod.yaml")
+COSBENCH_CONFIGMAP = os.path.join(COSBENCH_DIR, "cosbench_configmap.yaml")
+
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
 MCG_NS_AZURE_ENDPOINT = "https://blob.core.windows.net"
