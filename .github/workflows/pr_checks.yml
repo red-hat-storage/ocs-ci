@@ -5,26 +5,10 @@ on: pull_request
 jobs:
   pr_checks:
     runs-on: fedora34
-    strategy:
-      matrix:
-        python-version:
-          - 3.7.10
-          - 3.8.10
-          - 3.9.5
     steps:
       - uses: actions/checkout@v2
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install ovirt-engine-sdk-python dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y libcurl4-openssl-dev
 
       - name: Install dependencies
         run: |
