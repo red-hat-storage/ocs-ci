@@ -11,6 +11,7 @@ ENV_DATA:
   master_num_cpus: '4'
   scale_up: True
   nodes_scaleup_count: '3'
+  rhel_workers: true
   rhel_template: 'rhel77_ocs4qe'
   rhel_worker_prefix: 'rhel1'
   rhel_user: 'test'

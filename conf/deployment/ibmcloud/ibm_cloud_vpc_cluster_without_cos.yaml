@@ -12,6 +12,7 @@ ENV_DATA:
   worker_instance_type: "mx2.16x128"
   master_replicas: 0
   worker_replicas: 3
+  rhel_workers: true
   # Following values needs to be set in separate config and passed to ocs-ci in
   # order to deploy OCP/OCS cluster on IBM Cloud
   # vpc_id: VPC ID PLACEHOLDER
