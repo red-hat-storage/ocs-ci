@@ -4,7 +4,7 @@ on: pull_request
 
 jobs:
   pr_checks:
-    runs-on: [quay.io/centos/centos:8, ubuntu-latest]
+    runs-on: [ "quay.io/centos/centos:8" , ubuntu-latest]
     strategy:
       matrix:
         python-version:
