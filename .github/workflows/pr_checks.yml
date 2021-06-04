@@ -4,7 +4,7 @@ on: pull_request
 
 jobs:
   pr_checks:
-    runs-on: [fedora34, ubuntu-latest]
+    runs-on: fedora34
     strategy:
       matrix:
         python-version:
