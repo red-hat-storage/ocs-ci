@@ -168,6 +168,10 @@ vsphere_platform_required = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() != "vsphere",
     reason="Test runs ONLY on VSPHERE deployed cluster",
 )
+rhv_platform_required = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() != "rhv",
+    reason="Test runs ONLY on RHV deployed cluster",
+)
 
 ipi_deployment_required = pytest.mark.skipif(
     config.ENV_DATA["deployment_type"].lower() != "ipi",
