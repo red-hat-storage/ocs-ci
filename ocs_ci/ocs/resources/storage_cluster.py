@@ -706,7 +706,7 @@ def add_capacity_ui(osd_size_capacity_requested):
         and (not is_lso)
     ):
         try:
-            logging.info("Add capacity via UI")
+            logging.info("Add capacity via User Interface")
             setup_ui = login_ui()
             add_ui_obj = AddReplaceDeviceUI(setup_ui)
             add_ui_obj.add_capacity_ui()
