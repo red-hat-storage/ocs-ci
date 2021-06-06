@@ -202,6 +202,7 @@ locators = {
         "login": login,
         "page": page_nav,
         "deployment": {**deployment, **deployment_4_7},
+        "infra": infra,
     },
     "4.7": {
         "login": login,

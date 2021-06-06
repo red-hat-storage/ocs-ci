@@ -694,23 +694,31 @@ def add_capacity_ui(osd_size_capacity_requested):
     Args:
         osd_size_capacity_requested(int): Requested osd size capacity
 
+    Returns:
+        new storage device set count (int) : Returns True if all OSDs are in Running state
+
     """
     ocp_version = get_ocp_version()
     platform = config.ENV_DATA.get("platform", "").lower()
     is_lso = config.DEPLOYMENT.get("local_storage")
     if (
-        ocp_version == "4.7"
-        and (
-            platform == constants.AWS_PLATFORM or platform == constants.VSPHERE_PLATFORM
-        )
+        ocp_version in ("4.7", "4.8")
+        and platform in (constants.AWS_PLATFORM, constants.VSPHERE_PLATFORM)
         and (not is_lso)
     ):
         try:
+            osd_size_existing = get_osd_size()
+            device_sets_required = int(osd_size_capacity_requested / osd_size_existing)
+            old_storage_devices_sets_count = get_deviceset_count()
+            new_storage_devices_sets_count = int(
+                device_sets_required + old_storage_devices_sets_count
+            )
             logging.info("Add capacity via User Interface")
             setup_ui = login_ui()
             add_ui_obj = AddReplaceDeviceUI(setup_ui)
             add_ui_obj.add_capacity_ui()
             close_browser(setup_ui)
+            return new_storage_devices_sets_count
         except Exception as e:
             logging.error(e)
             logging.info("Add capacity via UI failed, try to add capacity via cli")
