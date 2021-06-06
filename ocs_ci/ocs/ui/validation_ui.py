@@ -30,7 +30,7 @@ class ValidationUI(PageNavigator):
         self.navigate_overview_page()
         self.do_click(self.validation_loc["object_service_tab"])
         platform = config.ENV_DATA.get("platform").lower()
-        if platform == constants.VSPHERE_PLATFORM:
+        if platform in constants.ON_PREM_PLATFORMS:
             logger.info("Click on Object Service button")
             self.do_click(self.validation_loc["object_service_button"])
             logger.info("Click on Data Resiliency button")
