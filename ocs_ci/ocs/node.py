@@ -1594,3 +1594,18 @@ def add_new_nodes_and_label_upi_lso(
             add_node_to_lvd_and_lvs(node_obj.name)
 
     return new_node_names
+
+
+def get_nodes_in_statuses(statuses):
+    """
+    Get all nodes in specific statuses
+
+    Args:
+        statuses (list): List of the statuses to search for the nodes
+
+    Returns:
+        list: OCP objects representing the nodes in the specific statuses
+
+    """
+    nodes = get_node_objs()
+    return [n for n in nodes if n.ocp.get_resource_status(n.name) in statuses]

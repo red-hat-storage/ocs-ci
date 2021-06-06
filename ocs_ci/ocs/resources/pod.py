@@ -1563,16 +1563,23 @@ def get_pod_restarts_count(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     return restart_dict
 
 
-def check_pods_in_running_state(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def check_pods_in_running_state(
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE, pods_to_check=None
+):
     """
     checks whether all the pods in a given namespace are in Running state or not
+
+    Args:
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        pods_to_check (list): List of the Pod objects to check.
+            If not provided, it will check all the pods in the given namespace
 
     Returns:
         Boolean: True, if all pods in Running state. False, otherwise
 
     """
     ret_val = True
-    list_of_pods = get_all_pods(namespace)
+    list_of_pods = pods_to_check or get_all_pods(namespace)
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     for p in list_of_pods:
         # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
@@ -1615,13 +1622,15 @@ def get_running_state_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
 
 
 def wait_for_pods_to_be_running(
-    namespace=defaults.ROOK_CLUSTER_NAMESPACE, timeout=200, sleep=10
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE, pods_to_check=None, timeout=200, sleep=10
 ):
     """
     Wait for all the pods in a specific namespace to be running.
 
     Args:
         namespace (str): the namespace ot the pods
+        pods_to_check (list): List of the Pod objects to check.
+            If not provided, it will check all the pods in the given namespace
         timeout (int): time to wait for pods to be running
         sleep (int): Time in seconds to sleep between attempts
 
@@ -1635,6 +1644,7 @@ def wait_for_pods_to_be_running(
             sleep=sleep,
             func=check_pods_in_running_state,
             namespace=namespace,
+            pods_to_check=pods_to_check,
         ):
             # Check if all the pods in running state
             if pods_running:
