@@ -2016,3 +2016,22 @@ def get_osd_pods_having_ids(osd_ids):
             osd_pods_having_ids.append(osd_pod)
 
     return osd_pods_having_ids
+
+
+def get_pod_objs(pod_names, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Get the pod objects of the specified pod names
+
+    Args:
+        pod_names (list): The list of the pod names to get their pod objects
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list: The pod objects of the specified pod names
+
+    """
+    # Convert it to set to reduce complexity
+    pod_names = set(pod_names)
+    pods = get_all_pods(namespace=namespace)
+
+    return [p for p in pods if p.name in pod_names]
