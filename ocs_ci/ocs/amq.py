@@ -7,6 +7,8 @@ import tempfile
 import time
 import json
 from subprocess import run, CalledProcessError
+
+import pytest
 from prettytable import PrettyTable
 from concurrent.futures import ThreadPoolExecutor
 
@@ -57,6 +59,9 @@ class AMQ(object):
         self.amq_is_setup = False
         self.messaging = False
         self.benchmark = False
+        self.consumer_pod = self.producer_pod = None
+        self.kafka_topic = self.kafka_user = None
+        self.kafka_connect = self.kafka_bridge = self.kafka_persistent = None
         self.dir = tempfile.mkdtemp(prefix="amq_")
         self._clone_amq()
 
@@ -136,10 +141,19 @@ class AMQ(object):
             crds.append(crd)
         self.crd_objects = []
         for adm_yaml in crds:
-            adm_data = templating.load_yaml(self.strimzi_kafka_operator + adm_yaml)
-            adm_obj = OCS(**adm_data)
-            adm_obj.create()
-            self.crd_objects.append(adm_obj)
+            try:
+                adm_data = templating.load_yaml(self.strimzi_kafka_operator + adm_yaml)
+                adm_obj = OCS(**adm_data)
+                adm_obj.create()
+                self.crd_objects.append(adm_obj)
+            except (CommandFailed, CalledProcessError) as cfe:
+                if "Error is Error from server (AlreadyExists):" in str(cfe):
+                    log.warn(
+                        "Some amq leftovers are present, please cleanup the cluster"
+                    )
+                    pytest.skip(
+                        "AMQ leftovers are present needs to cleanup the cluster"
+                    )
         time.sleep(30)
         #  Check strimzi-cluster-operator pod created
         if self.is_amq_pod_running(pod_pattern="cluster-operator", expected_pods=1):
@@ -953,40 +967,51 @@ class AMQ(object):
             tiller_namespace (str): Created namespace for benchmark
 
         """
-        ocs_pvc_obj = get_all_pvc_objs(namespace=kafka_namespace)
-        if self.amq_is_setup:
-            if self.messaging:
-                self.consumer_pod.delete()
-                self.producer_pod.delete()
-                self.kafka_user.delete()
-                self.kafka_topic.delete()
-            if self.benchmark:
-                # Delete the helm app
-                try:
-                    purge_cmd = f"linux-amd64/helm delete benchmark --purge --tiller-namespace {tiller_namespace}"
-                    run(purge_cmd, shell=True, cwd=self.dir, check=True)
-                except (CommandFailed, CalledProcessError) as cf:
-                    log.error("Failed to delete help app")
-                    raise cf
 
-                # Delete the pods and namespace created
-                self.sa_tiller.delete()
-                self.crb_tiller.delete()
-                run_cmd(f"oc delete project {tiller_namespace}")
-                self.ns_obj.wait_for_delete(resource_name=tiller_namespace)
+        if self.consumer_pod:
+            self.consumer_pod.delete()
+        if self.producer_pod:
+            self.producer_pod.delete()
+        if self.kafka_user:
+            self.kafka_user.delete()
+        if self.kafka_topic:
+            self.kafka_topic.delete()
 
+        if self.benchmark:
+            # Delete the helm app
+            try:
+                purge_cmd = f"linux-amd64/helm delete benchmark --purge --tiller-namespace {tiller_namespace}"
+                run(purge_cmd, shell=True, cwd=self.dir, check=True)
+            except (CommandFailed, CalledProcessError) as cf:
+                log.error("Failed to delete help app")
+                raise cf
+            # Delete the pods and namespace created
+            self.sa_tiller.delete()
+            self.crb_tiller.delete()
+            run_cmd(f"oc delete project {tiller_namespace}")
+            self.ns_obj.wait_for_delete(resource_name=tiller_namespace)
+
+        if self.kafka_connect:
             self.kafka_connect.delete()
+        if self.kafka_bridge:
             self.kafka_bridge.delete()
+        if self.kafka_persistent:
             self.kafka_persistent.delete()
-            delete_pvcs(pvc_objs=ocs_pvc_obj)
+            log.info("Waiting for 20 seconds to delete persistent")
+            time.sleep(20)
+            ocs_pvc_obj = get_all_pvc_objs(namespace=kafka_namespace)
+            if ocs_pvc_obj:
+                delete_pvcs(ocs_pvc_obj)
+            for pvc in ocs_pvc_obj:
+                logging.info(pvc.name)
+                validate_pv_delete(pvc.backed_pv)
+
+        if self.crd_objects:
             for adm_obj in self.crd_objects:
                 adm_obj.delete()
-            time.sleep(20)
-        for pvc in ocs_pvc_obj:
-            logging.info(pvc.name)
-            validate_pv_delete(pvc.backed_pv)
-        run_cmd(f"oc delete project {kafka_namespace}")
+        time.sleep(20)
 
-        self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
         # Reset namespace to default
         switch_to_default_rook_cluster_project()
+        run_cmd(f"oc delete project {kafka_namespace}")
+        self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
