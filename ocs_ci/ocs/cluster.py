@@ -1611,6 +1611,26 @@ def wait_for_silence_ceph_osd_crash_warning(osd_pod_name, timeout=900):
         return False
 
 
+def get_mon_config_value(key):
+    """
+    Gets the default value of a specific ceph monitor config
+
+    Args:
+        key (str): Configuration key. Ex: mon_max_pg_per_osd
+
+    Returns:
+        any: Ceph monitor configuration value
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    mon_dump_dict = ct_pod.exec_ceph_cmd("ceph mon dump")
+    ceph_mon_name = mon_dump_dict.get("mons")[0].get("name")
+    mon_config_value = ct_pod.exec_ceph_cmd(
+        f"ceph config show mon.{ceph_mon_name} {key}"
+    )
+    return mon_config_value
+
+
 def is_lso_cluster():
     """
     Check if the cluster is an lso cluster
