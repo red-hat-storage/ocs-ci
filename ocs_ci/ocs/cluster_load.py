@@ -271,21 +271,20 @@ class ClusterLoad:
                 )
                 break
 
-            elif time.time() > time_before + time_to_wait:
-                logger.warning(
-                    wrap_msg(
-                        "Could not determine the cluster IOPS limit within"
-                        f"the given {time_to_wait} seconds timeout. Breaking"
-                    )
-                )
-                break
-
             elif cluster_used_space > 60:
                 logger.warning(
                     wrap_msg(
                         f"Cluster used space is {cluster_used_space}%. Could "
                         "not reach the cluster IOPS limit before the "
                         "used spaced reached 60%. Breaking"
+                    )
+                )
+                break
+            if time.time() > time_before + time_to_wait:
+                logger.warning(
+                    wrap_msg(
+                        "Could not determine the cluster IOPS limit within"
+                        f"the given {time_to_wait} seconds timeout. Breaking"
                     )
                 )
                 break
