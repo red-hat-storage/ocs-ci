@@ -2420,6 +2420,28 @@ def skipif_ocs_version(expressions):
     return any(eval(config.ENV_DATA["ocs_version"] + expr) for expr in expr_list)
 
 
+def skipif_ui(ui_test):
+    """
+    This function evaluates the condition for ui test skip
+    based on ui_test expression
+
+    Args:
+        ui_test (str): condition for which we need to check,
+
+    Return:
+        'True' if test needs to be skipped else 'False'
+
+    """
+    from ocs_ci.ocs.ui.views import locators
+
+    ocp_version = get_running_ocp_version()
+    try:
+        locators.get(ocp_version).get(ui_test)
+    except KeyError:
+        return True
+    return False
+
+
 def get_ocs_version_from_image(image):
     """
     Parse major.minor version from OCS image tag.
