@@ -103,6 +103,43 @@ deployment_4_7 = {
     "click_install_lso_page": ('button[data-test="install-operator"]', By.CSS_SELECTOR),
 }
 
+generic_locators = {
+    "project_selector": (
+        'button[class="pf-c-dropdown__toggle pf-m-plain"]',
+        By.CSS_SELECTOR,
+    ),
+    "select_openshift-storage_project": (
+        'a[id="openshift-storage-link"]',
+        By.CSS_SELECTOR,
+    ),
+    "create_resource_button": ("yaml-create", By.ID),
+    "search_resource_field": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
+    "first_dropdown_option": (
+        'a[data-test="dropdown-menu-item-link"]',
+        By.CSS_SELECTOR,
+    ),
+    "actions": ('button[data-test-id="actions-menu-button"]', By.CSS_SELECTOR),
+    "confirm_action": ("confirm-action", By.ID),
+    "submit_form": ('button[type="submit"]', By.CSS_SELECTOR),
+}
+
+obc = {
+    "storageclass_dropdown": ("sc-dropdown", By.ID),
+    "storageclass_text_field": (
+        'input[placeholder="Select StorageClass"]',
+        By.CSS_SELECTOR,
+    ),
+    "bucketclass_dropdown": ("bc-dropdown", By.ID),
+    "bucketclass_text_field": (
+        'input[placeholder="Select BucketClass"]',
+        By.CSS_SELECTOR,
+    ),
+    "default_bucketclass": ("noobaa-default-bucket-class-link", By.ID),
+    "obc_name": ("obc-name", By.ID),
+    "first_obc_link": ('a[class="co-resource-item__resource-name"]', By.CSS_SELECTOR),
+    "delete_obc": ('data-test-action="Delete Object Bucket Claim"', By.CSS_SELECTOR),
+}
+
 pvc = {
     "pvc_project_selector": (
         'button[class="pf-c-dropdown__toggle pf-m-plain"]',
@@ -201,6 +238,8 @@ locators = {
         "login": login,
         "page": page_nav,
         "deployment": {**deployment, **deployment_4_7},
+        "generic": generic_locators,
+        "obc": obc,
     },
     "4.7": {
         "login": login,

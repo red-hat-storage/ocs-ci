@@ -1,21 +1,21 @@
+import datetime
 import logging
 import os
 import time
-import datetime
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.support.ui import WebDriverWait
+from semantic_version.base import Version
 from webdriver_manager.chrome import ChromeDriverManager
 
-from ocs_ci.framework import config as ocsci_config
-from ocs_ci.utility.utils import run_cmd, get_kubeadmin_password, get_ocp_version
-from ocs_ci.ocs.ui.views import locators
 from ocs_ci.framework import config
+from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs import constants
-
+from ocs_ci.ocs.ui.views import locators
+from ocs_ci.utility.utils import get_kubeadmin_password, get_ocp_version, run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +184,8 @@ class PageNavigator(BaseUI):
         super().__init__(driver)
         ocp_version = get_ocp_version()
         self.page_nav = locators[ocp_version]["page"]
+        if Version.coerce(ocp_version) >= Version.coerce("4.8"):
+            self.generic_loc = locators[ocp_version]["generic"]
 
     def navigate_overview_page(self):
         """
@@ -409,7 +411,7 @@ def login_ui():
         chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
         driver = webdriver.Chrome(
             ChromeDriverManager(chrome_type=chrome_browser_type).install(),
-            chrome_options=chrome_options,
+            options=chrome_options,
         )
     else:
         raise ValueError(f"Not Support on {browser}")

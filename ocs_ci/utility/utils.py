@@ -3349,3 +3349,12 @@ def add_chrony_to_ocp_deployment():
         )
         with open(chrony_file, "w") as f:
             f.write(chrony_template_str)
+
+
+def check_resource_existence(ocp_obj):
+    try:
+        ocp_obj.get()
+        return True
+    except CommandFailed:
+        log.warning(f"Resource {ocp_obj.resource_name} was not found.")
+        return False
