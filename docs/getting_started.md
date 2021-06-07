@@ -1,18 +1,21 @@
 
+
 # Getting Started
 
 ## Prerequisites
 
-1. Python >= 3.7
-2. Configure AWS Account credentials when testing with AWS platforms,
+1. Python version >= 3.7 
+2. Following dependency packages for fedora/centos for successfully installing modules in virtualenv
+   - gcc, git, openssl-devel, python3-devel (or similar packages for ubuntu).
+3. Configure AWS Account credentials when testing with AWS platforms,
    check default section in `~/.aws/credentials` for access/secret key
    [check aws-configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
-3. oc client binary is installed on your localhost and binary is listed in $PATH
+4. oc client binary is installed on your localhost and binary is listed in $PATH
    (running oc version on terminal should display version > 3.11).
    Latest client can be downloaded from [oc-client](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/).
-4. For vSphere based installations, [terraform](https://learn.hashicorp.com/terraform/getting-started/install.html)
+5. For vSphere based installations, [terraform](https://learn.hashicorp.com/terraform/getting-started/install.html)
    and [jq]( https://stedolan.github.io/jq/download/) should be installed ( terraform version should be 0.11.13  )
-5. Installation of ovirt-engine-sdk-python requires `curl-config` and
+6. Installation of ovirt-engine-sdk-python requires `curl-config` and
    `libxml/xmlreader.h` (they are on Fedora, RHEL or CentOS provided by
    packages `libcurl-devel` and `libxml2-devel` respectively).
 
