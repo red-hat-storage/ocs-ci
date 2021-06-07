@@ -442,7 +442,7 @@ class TestNamespace(MCGTest):
                     "interface": "OC",
                     "namespace_policy_dict": {
                         "type": "Cache",
-                        "ttl": 60000,
+                        "ttl": 300000,
                         "namespacestore_dict": {
                             "aws": [(1, "eu-central-1")],
                         },
