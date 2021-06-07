@@ -18,11 +18,11 @@ log = logging.getLogger(__name__)
 @tier2
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
-@polarion_id("")
+@polarion_id("OCS-2540")
 class TestSnapshotRestoreWithDifferentVolumeMode(ManageTest):
     """
-    Tests to verify RBD PVC snapshot restore with volume mode different than
-    parent PVC
+    Tests to verify RBD PVC snapshot restore with volume mode - access mode combination
+    different from that of the parent PVC
 
     """
 
@@ -54,7 +54,7 @@ class TestSnapshotRestoreWithDifferentVolumeMode(ManageTest):
         self, pod_factory, snapshot_factory, snapshot_restore_factory
     ):
         """
-        Restore snapshot with a volume mode different than parent PVC
+        Restore snapshot with volume mode - access mode combination different than the parent PVC
 
         """
         file_name = "fio_test"
