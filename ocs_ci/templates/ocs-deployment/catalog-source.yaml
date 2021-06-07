@@ -14,3 +14,8 @@ spec:
   image: quay.io/rhceph-dev/ocs-registry:latest
   publisher: Red Hat
   sourceType: grpc
+  # If the registry image still have the same tag (latest-stable-4.6, or for stage testing)
+  # we need to have this updateStrategy, otherwise we will not see new pushed content.
+  updateStrategy:
+    registryPoll:
+      interval: 15m
