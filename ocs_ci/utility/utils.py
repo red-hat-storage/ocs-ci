@@ -3352,6 +3352,15 @@ def add_chrony_to_ocp_deployment():
 
 
 def check_resource_existence(ocp_obj):
+    """
+    Checks whether an OCP() resource exists
+
+    Args:
+        ocp_obj (OCP): The OCP object to check
+
+    Returns:
+        bool: True if the resource was found, False otherwise
+    """
     try:
         ocp_obj.get()
         return True

@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class ObcUI(PageNavigator):
     """
-    User Interface Selenium
+    A class representation of OBC-related OpenShift UI elements
 
     """
 
