@@ -209,6 +209,7 @@ OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
 DEFAULT_STORAGECLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 DEFAULT_STORAGECLASS_RGW = f"{DEFAULT_CLUSTERNAME}-ceph-rgw"
+DEFAULT_STORAGECLASS_RBD_THICK = f"{DEFAULT_CLUSTERNAME}-ceph-rbd-thick"
 
 # Independent mode default StorageClasses
 DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW = f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rgw"
@@ -218,6 +219,9 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS = (
     f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephfs"
 )
 DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rbd"
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_THICK = (
+    f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rbd-thick"
+)
 
 # Default VolumeSnapshotClass
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfsplugin-snapclass"
@@ -707,7 +711,7 @@ VSPHERE_NODE_USER = "core"
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
 VSPHERE_SCALEUP_REPO = "https://code.engineering.redhat.com/gerrit/openshift-misc"
-VSPHERE_CLUSTER_LAUNCHER = "https://gitlab.cee.redhat.com/aosqe/cluster-launcher.git"
+VSPHERE_CLUSTER_LAUNCHER = "https://gitlab.cee.redhat.com/aosqe/v4-scaleup.git"
 VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
 INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
 VM_IFCFG = os.path.join(VSPHERE_DIR, "vm/ifcfg.tmpl")
@@ -735,9 +739,9 @@ SCALEUP_VSPHERE_MACHINE_CONF = os.path.join(
     SCALEUP_VSPHERE_DIR, "machines/vsphere-rhel-machine.tf"
 )
 
-# cluster-launcher
+# v4-scaleup
 CLUSTER_LAUNCHER_VSPHERE_DIR = os.path.join(
-    EXTERNAL_DIR, "cluster-launcher/v4-scaleup/ocp4-rhel-scaleup/"
+    EXTERNAL_DIR, "v4-scaleup/ocp4-rhel-scaleup/"
 )
 CLUSTER_LAUNCHER_MACHINE_CONF = "vsphere/machines/vsphere-rhel-machine.tf"
 
@@ -1160,11 +1164,6 @@ SCALE_MAX_PVCS_PER_NODE = 500
 AWS_PRODUCTION_INSTANCE_TYPE = "m5.4xlarge"
 AZURE_PRODUCTION_INSTANCE_TYPE = "Standard_D16s_v3"
 
-# Elasticsearch and codespeed constants
-ES_SERVER_IP = "10.0.78.167"
-ES_SERVER_PORT = "9200"
-ES_SERVER_URL = "https://10.0.78.167:9200"
-
 # Cluster metrics
 THROUGHPUT_QUERY = "(sum(rate(ceph_pool_wr_bytes[1m]) + rate(ceph_pool_rd_bytes[1m])))"
 LATENCY_QUERY = "cluster:ceph_disk_latency:join_ceph_node_disk_irate1m"
@@ -1197,7 +1196,7 @@ ROOK_OPERATOR = "operator"
 MON_DAEMON = "mon"
 
 # cluster expansion
-MAX_OSDS = 15
+MAX_OSDS = 18
 
 # Minimum cluster requirements in term of node specs
 MIN_NODE_CPU = 16
@@ -1218,8 +1217,22 @@ BM_STATUS_PRESENT = "PRESENT"
 BM_STATUS_RESPONSE_UPDATED = "UPDATED"
 BM_METAL_IMAGE = "rhcos-metal.x86_64.raw.gz"
 
+# RHV related constants
+RHV_CONFIG_FILEPATH = os.path.expanduser("~/.ovirt/ovirt-config.yaml")
+RHV_DISK_FORMAT_COW = "COW"
+RHV_DISK_FORMAT_RAW = "RAW"
+RHV_DISK_INTERFACE_VIRTIO_SCSI = "VIRTIO_SCSI"
+
 # MCG constants
 PLACEMENT_BUCKETCLASS = "placement-bucketclass"
+
+# Cosbench constants
+COSBENCH = "cosbench"
+COSBENCH_PROJECT = "cosbench-project"
+
+COSBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "cosbench")
+COSBENCH_POD = os.path.join(COSBENCH_DIR, "cosbench_pod.yaml")
+COSBENCH_CONFIGMAP = os.path.join(COSBENCH_DIR, "cosbench_configmap.yaml")
 
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
@@ -1314,3 +1327,11 @@ debug_crush = 20
 
 WORKLOAD_STORAGE_TYPE_BLOCK = "block"
 WORKLOAD_STORAGE_TYPE_FS = "fs"
+# Components of OCS
+OCS_COMPONENTS = ["rgw", "cephfs", "noobaa", "blockpools"]
+OCS_COMPONENTS_MAP = {
+    "rgw": "cephObjectStores",
+    "cephfs": "cephFilesystems",
+    "noobaa": "multiCloudGateway",
+    "blockpools": "cephBlockPools",
+}

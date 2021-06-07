@@ -66,6 +66,12 @@ def init_ocsci_conf(arguments=None):
     )
     parser.add_argument("--ocs-registry-image")
     parser.add_argument("--flexy-env-file", default="", help="Path to flexy env file")
+    parser.add_argument(
+        "--disable-components",
+        action="append",
+        choices=["rgw", "cephfs", "noobaa", "blockpools"],
+        help=("disable deployment of ocs components:rgw, cephfs, noobaa, blockpools."),
+    )
     args, unknown = parser.parse_known_args(args=arguments)
     ocs_version = args.ocs_version
     load_config(args.ocsci_conf)
@@ -101,6 +107,8 @@ def init_ocsci_conf(arguments=None):
             os.path.expanduser(framework.config.RUN["bin_dir"])
         )
         utils.add_path_to_env_path(framework.config.RUN["bin_dir"])
+    if args.disable_components:
+        framework.config.ENV_DATA["disable_components"] = args.disable_components
     check_config_requirements()
 
 

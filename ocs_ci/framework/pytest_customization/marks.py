@@ -168,6 +168,10 @@ vsphere_platform_required = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() != "vsphere",
     reason="Test runs ONLY on VSPHERE deployed cluster",
 )
+rhv_platform_required = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() != "rhv",
+    reason="Test runs ONLY on RHV deployed cluster",
+)
 
 ipi_deployment_required = pytest.mark.skipif(
     config.ENV_DATA["deployment_type"].lower() != "ipi",
@@ -222,6 +226,12 @@ skipif_no_lso = pytest.mark.skipif(
     reason="Test run only on LSO deployed cluster",
 )
 
+skipif_rhel_os = pytest.mark.skipif(
+    (config.ENV_DATA.get("rhel_workers", None) is True)
+    or (config.ENV_DATA.get("rhel_user", None) is not None),
+    reason="Test will not run on cluster with RHEL OS",
+)
+
 skipif_vsphere_ipi = pytest.mark.skipif(
     (
         config.ENV_DATA["platform"].lower() == "vsphere"
@@ -253,6 +263,9 @@ skipif_ocp_version = pytest.mark.skipif_ocp_version
 
 # Marker for skipping tests based on OCS version
 skipif_ocs_version = pytest.mark.skipif_ocs_version
+
+# Marker for skipping tests based on UI
+skipif_ui = pytest.mark.skipif_ui
 
 # Marker for skipping tests if the cluster is upgraded from a particular
 # OCS version

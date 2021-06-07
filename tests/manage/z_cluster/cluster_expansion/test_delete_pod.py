@@ -9,9 +9,12 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.ocs.cluster import get_percent_used_capacity, CephCluster
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs.cluster import (
+    get_percent_used_capacity,
+    check_ceph_health_after_add_capacity,
+)
 from ocs_ci.helpers.disruption_helpers import Disruptions
+from ocs_ci.ocs import node
 
 
 @ignore_leftovers
@@ -23,6 +26,41 @@ class TestAddCapacityWithResourceDelete:
     """
 
     new_pods_in_status_running = False
+
+    @pytest.fixture(autouse=True)
+    def setup(self, add_nodes):
+        """
+        Check that we have the right configurations before we start the test
+        """
+        osd_pods_before = pod_helpers.get_osd_pods()
+        number_of_osd_pods_before = len(osd_pods_before)
+        if number_of_osd_pods_before >= constants.MAX_OSDS:
+            pytest.skip("We have maximum of OSDs in the cluster")
+
+        # If we use vSphere we may need to add more worker nodes
+        # to the cluster before starting the test
+        if (
+            config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+            and number_of_osd_pods_before >= 9
+        ):
+            num_of_expected_wnodes = 6
+            wnodes = node.get_worker_nodes()
+            num_of_wnodes = len(wnodes)
+            logging.info(
+                f"We have {number_of_osd_pods_before} OSDs in the cluster, "
+                f"and {num_of_wnodes} worker nodes in the cluster"
+            )
+            if num_of_wnodes < num_of_expected_wnodes:
+                num_of_wnodes_to_add = num_of_expected_wnodes - num_of_wnodes
+                logging.info(
+                    f"Adding more {num_of_wnodes_to_add} worker nodes to the cluster"
+                )
+                add_nodes(ocs_nodes=False, node_count=num_of_wnodes_to_add)
+
+            wnodes_not_in_ocs = node.get_worker_nodes_not_in_ocs()
+            if wnodes_not_in_ocs:
+                logging.info("Label the worker nodes that are not in OCS")
+                node.label_nodes(wnodes_not_in_ocs)
 
     def kill_resource_repeatedly(self, resource_name, resource_id, max_iterations=30):
         """
@@ -116,8 +154,6 @@ class TestAddCapacityWithResourceDelete:
 
         osd_pods_before = pod_helpers.get_osd_pods()
         number_of_osd_pods_before = len(osd_pods_before)
-        if number_of_osd_pods_before >= constants.MAX_OSDS:
-            pytest.skip("We have maximum of OSDs in the cluster")
 
         d = Disruptions()
         d.set_resource(resource_name)
@@ -151,8 +187,4 @@ class TestAddCapacityWithResourceDelete:
             "Finished verifying add capacity when one of the pods gets deleted"
         )
         logging.info("Waiting for ceph health check to finished...")
-        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=90)
-        ceph_cluster_obj = CephCluster()
-        assert ceph_cluster_obj.wait_for_rebalance(
-            timeout=1800
-        ), "Data re-balance failed to complete"
+        check_ceph_health_after_add_capacity()

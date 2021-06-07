@@ -12,9 +12,9 @@
    Latest client can be downloaded from [oc-client](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/).
 4. For vSphere based installations, [terraform](https://learn.hashicorp.com/terraform/getting-started/install.html)
    and [jq]( https://stedolan.github.io/jq/download/) should be installed ( terraform version should be 0.11.13  )
-5. For UI testing follow the instructions in [openshift console](https://github.com/openshift/console#dependencies) repository.
-   After clone of repository and setting all dependencies please create configuration file with RUN section with `openshift_console_path`
-   parameter pointing to your local clone of openshift console repo. See example in `conf/ocsci/ui-testing.yaml`.
+5. Installation of ovirt-engine-sdk-python requires `curl-config` and
+   `libxml/xmlreader.h` (they are on Fedora, RHEL or CentOS provided by
+   packages `libcurl-devel` and `libxml2-devel` respectively).
 
 #### AWS UPI
 There are additional prerequisites if you plan to execute AWS UPI deployments
@@ -78,6 +78,16 @@ Values for report portal or polarion are only required if you plan on posting to
 Move a copy of the template to your conf directory and edit it from there with
 the proper values and pass it with --ocsci-conf parameter to pytest.
 
+### Performance Tests
+The OCS performance tests need to have an elastic-search server for running benchmarks and for storing the results.
+If an elastic-search server is not available, the tests can deploy ES in the system under test for the benchmark, and it will
+dump all results in JSON file.
+
+The support for automated deployment of the Elastic-search server is available only for x86_64 architecture
+for other architecture (e.g. PPC / s390), since the benchmark can not deploy ES server on the OCP cluster,
+an ES server need to be deployed in the LAB, and the IP/Port need to be configured in the configuration file.
+
+All elasticsearch configuration done in the `ocs_ci/framework/conf/default_config.yaml` at the `PERF:` section.
 
 ### Pull Secret
 

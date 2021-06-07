@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.cluster import is_lso_cluster
 from ocs_ci.ocs.ocp import OCP, get_services_by_label
 from ocs_ci.ocs.resources.pod import (
     get_mon_pods,
@@ -95,7 +96,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             # Validate rook-ceph-operator pod not running
             POD_OBJ.wait_for_delete(resource_name=operator_name)
 
-            pvc_name = svc["metadata"]["labels"]["pvc_name"]
+            svc_name = svc["metadata"]["name"]
             cluster_ip = svc["spec"]["clusterIP"]
             port = svc["spec"]["ports"][0]["port"]
             mon_endpoint = f"{cluster_ip}:{port}"
@@ -108,21 +109,33 @@ class TestPvcCreationAfterDelMonService(E2ETest):
                 kind=constants.DEPLOYMENT,
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             )
-            del_obj.delete(resource_name=pvc_name)
+            mon_info = del_obj.get(resource_name=svc_name)
+            del_obj.delete(resource_name=svc_name)
 
             # Delete pvc
-            log.info("Delete mon PVC")
-            pvc_obj = OCP(
-                kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-            )
-            pvc_obj.delete(resource_name=pvc_name)
+            if is_lso_cluster():
+                mon_data_path = f"/var/lib/rook/mon-{mon_id}"
+                mon_node = mon_info["spec"]["template"]["spec"]["nodeSelector"][
+                    "kubernetes.io/hostname"
+                ]
+                log.info(f"Delete the directory `{mon_data_path}` from {mon_node}")
+                cmd = f"rm -rf {mon_data_path}"
+                ocp_obj = OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+                ocp_obj.exec_oc_debug_cmd(node=mon_node, cmd_list=[cmd])
+            else:
+                log.info("Delete mon PVC")
+                pvc_name = svc["metadata"]["labels"]["pvc_name"]
+                pvc_obj = OCP(
+                    kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+                )
+                pvc_obj.delete(resource_name=pvc_name)
 
             # Delete the mon service
             log.info("Delete mon service")
             svc_obj = OCP(
                 kind=constants.SERVICE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
             )
-            svc_obj.delete(resource_name=pvc_name)
+            svc_obj.delete(resource_name=svc_name)
 
             # Edit the cm
             log.info(f"Edit the configmap {constants.ROOK_CEPH_MON_ENDPOINTS}")

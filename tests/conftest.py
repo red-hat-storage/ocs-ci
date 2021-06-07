@@ -92,6 +92,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     skipif_upgraded_from,
     update_container_with_mirrored_image,
+    skipif_ui,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -147,6 +148,7 @@ def pytest_collection_modifyitems(session, items):
                 "skipif_upgraded_from"
             )
             skipif_no_kms_marker = item.get_closest_marker("skipif_no_kms")
+            skipif_ui_marker = item.get_closest_marker("skipif_ui")
             if skipif_ocp_version_marker:
                 skip_condition = skipif_ocp_version_marker.args
                 # skip_condition will be a tuple
@@ -185,6 +187,14 @@ def pytest_collection_modifyitems(session, items):
                     log.warning(
                         "Cluster is not yet installed. Skipping skipif_no_kms check."
                     )
+            if skipif_ui_marker:
+                skip_condition = skipif_ui_marker
+                if skipif_ui(skip_condition.args[0]):
+                    log.info(
+                        f"Test: {item} will be skipped due to UI test {skip_condition} is not avalible"
+                    )
+                    items.remove(item)
+                    continue
 
 
 @pytest.fixture()
@@ -684,13 +694,7 @@ def pvc_factory_fixture(request, project_factory):
                 pv_obj.delete()
                 pv_obj.ocp.wait_for_delete(pv_obj.name)
             else:
-                # Workaround for bug 1915706, increasing timeout from 180 to 720
-                timeout = (
-                    720
-                    if config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM
-                    else 180
-                )
-                pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=timeout)
+                pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     request.addfinalizer(finalizer)
     return factory

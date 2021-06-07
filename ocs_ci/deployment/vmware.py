@@ -89,7 +89,7 @@ class VSPHEREBASE(Deployment):
             constants.EXTERNAL_DIR, "openshift-misc"
         )
         self.cluster_launcer_repo_path = os.path.join(
-            constants.EXTERNAL_DIR, "cluster-launcher"
+            constants.EXTERNAL_DIR, "v4-scaleup"
         )
         os.environ["TF_LOG"] = config.ENV_DATA.get("TF_LOG_LEVEL", "TRACE")
         os.environ["TF_LOG_PATH"] = os.path.join(
@@ -141,7 +141,7 @@ class VSPHEREBASE(Deployment):
         # git clone repo from openshift-misc
         clone_repo(constants.VSPHERE_SCALEUP_REPO, self.upi_scale_up_repo_path)
 
-        # git clone repo from cluster-launcher
+        # git clone repo from v4-scaleup
         clone_repo(constants.VSPHERE_CLUSTER_LAUNCHER, self.cluster_launcer_repo_path)
 
         helpers = VSPHEREHELPERS()
@@ -391,8 +391,11 @@ class VSPHEREUPI(VSPHEREBASE):
             super(VSPHEREUPI.OCPDeployment, self).deploy_prereq()
             # generate manifests
             self.generate_manifests()
+
             # create chrony resource
-            add_chrony_to_ocp_deployment()
+            if Version.coerce(get_ocp_version()) >= Version.coerce("4.4"):
+                add_chrony_to_ocp_deployment()
+
             # create ignitions
             self.create_ignitions()
             self.kubeconfig = os.path.join(
@@ -555,7 +558,7 @@ class VSPHEREUPI(VSPHEREBASE):
             # for all the nodes
             ocp_version = get_ocp_version()
             if Version.coerce(ocp_version) >= Version.coerce("4.4"):
-                wait_for_all_nodes_csr_and_approve(timeout=1200, sleep=30)
+                wait_for_all_nodes_csr_and_approve(timeout=1500, sleep=30)
 
             # wait for image registry to show-up
             co = "image-registry"
@@ -770,7 +773,7 @@ class VSPHEREUPI(VSPHEREBASE):
 
         """
         clone_repo(constants.VSPHERE_SCALEUP_REPO, self.upi_scale_up_repo_path)
-        # git clone repo from cluster-launcher
+        # git clone repo from v4-scaleup
         clone_repo(constants.VSPHERE_CLUSTER_LAUNCHER, self.cluster_launcer_repo_path)
 
         # modify scale-up repo

@@ -6,6 +6,7 @@ import pytest
 import time
 import json
 
+from ocs_ci.framework import config
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import constants
@@ -16,6 +17,8 @@ from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.cluster import CephCluster, calculate_compression_ratio
 from ocs_ci.helpers.performance_lib import run_command
+from ocs_ci.ocs.elasticsearch import ElasticSearch
+from ocs_ci.ocs.ripsaw import RipSaw
 
 log = logging.getLogger(__name__)
 
@@ -71,15 +74,22 @@ class FIOResultsAnalyse(PerfResult):
                     break
         return full_data
 
-    def analyze_results(self):
+    def analyze_results(self, tst):
         """
         Analyzing the results of the test and creating one record with all test
         information
 
-        """
-        results = self.read_results_from_file()
+        Args:
+            tst (FIOResultsAnalyse obj): the full results object
 
-        log.info("Test Results are :")
+        """
+        if config.PERF.get("deploy_internal_es"):
+            results = self.read_results_from_file()
+        else:
+            log.info("Going to read data from The Lab ES server")
+            results = tst.read_from_es(tst.es, "ripsaw-fio-analyzed-result", self.uuid)
+
+        log.info("The Results are :")
         for result in results:
             test_data = result["ceph_benchmark_test"]["test_data"]
             object_size = test_data["object_size"]
@@ -158,9 +168,30 @@ class TestFIOBenchmark(PASTest):
         Setting up test parameters
         """
         log.info("Starting the test setup")
-        super(TestFIOBenchmark, self).setup()
         self.benchmark_name = "FIO"
         self.client_pod_name = "fio-client"
+        if config.PERF.get("deploy_internal_es"):
+            self.es = ElasticSearch()
+        else:
+            if config.PERF.get("internal_es_server") == "":
+                self.es = None
+                return
+            else:
+                self.es = {
+                    "server": config.PERF.get("internal_es_server"),
+                    "port": config.PERF.get("internal_es_port"),
+                    "url": f"http://{config.PERF.get('internal_es_server')}:{config.PERF.get('internal_es_port')}",
+                    "parallel": True,
+                }
+                # verify that the connection to the elasticsearch server is OK
+                if not super(TestFIOBenchmark, self).es_connect():
+                    self.es = None
+                    return
+
+        super(TestFIOBenchmark, self).setup()
+        # deploy the benchmark-operator (ripsaw)
+        self.ripsaw = RipSaw()
+        self.ripsaw_deploy(self.ripsaw)
 
     def setting_storage_usage(self):
         """
@@ -312,11 +343,14 @@ class TestFIOBenchmark(PASTest):
         log.info(f"list of all PVs :{pvs_list}")
 
         for line in pvs_list:
-            pv, ns = line.split(" ")
-            pv = pv.replace("'", "")
-            if ns == constants.RIPSAW_NAMESPACE:
-                log.info(f"Going to delete {pv}")
-                run_command(f"oc delete pv {pv}")
+            try:
+                pv, ns = line.split(" ")
+                pv = pv.replace("'", "")
+                if ns == constants.RIPSAW_NAMESPACE:
+                    log.info(f"Going to delete {pv}")
+                    run_command(f"oc delete pv {pv}")
+            except Exception:
+                pass
 
     def run(self):
         """
@@ -327,22 +361,37 @@ class TestFIOBenchmark(PASTest):
         # Getting the UUID from inside the benchmark pod
         self.uuid = self.ripsaw.get_uuid(self.client_pod)
         # Setting back the original elastic-search information
-        if self.backup_es:
+        if hasattr(self, "backup_es"):
             self.crd_data["spec"]["elasticsearch"] = self.backup_es
         if self.dev_mode:
-            timeout = 600
             sleeptime = 30
         else:
-            timeout = 18000
             sleeptime = 300
 
-        self.wait_for_wl_to_finish(timeout=timeout, sleep=sleeptime)
+        self.wait_for_wl_to_finish(sleep=sleeptime)
 
         try:
             if "Fio failed to execute" not in self.test_logs:
                 log.info("FIO has completed successfully")
         except IOError:
             log.warning("FIO failed to complete")
+
+    def teardown(self):
+        """
+        The teardown of the test environment in the end.
+
+        """
+        log.info("cleanup the environment")
+        if hasattr(self, "ripsaw"):
+            self.ripsaw.cleanup()
+        if isinstance(self.es, ElasticSearch):
+            self.es.cleanup()
+
+        sleep_time = 5
+        log.info(
+            f"Going to sleep for {sleep_time} Minute, for background cleanup to complete"
+        )
+        time.sleep(sleep_time * 60)
 
     @pytest.mark.parametrize(
         argnames=["interface", "io_pattern"],
@@ -365,7 +414,7 @@ class TestFIOBenchmark(PASTest):
             ),
         ],
     )
-    def test_fio_workload_simple(self, ripsaw, es, interface, io_pattern):
+    def test_fio_workload_simple(self, interface, io_pattern):
         """
         This is a basic fio perf test - non-compressed volumes
 
@@ -375,20 +424,21 @@ class TestFIOBenchmark(PASTest):
 
         """
 
+        # verify that there is an elasticsearch server for the benchmark
+        if not self.es:
+            log.error("This test must have an Elasticsearch server")
+            return False
+
         # Getting the full path for the test logs
         self.full_log_path = get_full_test_logs_path(cname=self)
         self.full_log_path += f"-{interface}-{io_pattern}"
         log.info(f"Logs file path name is : {self.full_log_path}")
 
-        # deploy the benchmark-operator (ripsaw)
-        self.ripsaw = ripsaw
-        self.ripsaw_deploy(self.ripsaw)
-
         log.info("Create resource file for fio workload")
         self.crd_data = templating.load_yaml(constants.FIO_CR_YAML)
 
         # Saving the Original elastic-search IP and PORT - if defined in yaml
-        self.es_info_backup(es)
+        self.es_info_backup(self.es)
 
         self.set_storageclass(interface=interface)
 
@@ -415,17 +465,23 @@ class TestFIOBenchmark(PASTest):
         self.cleanup()
 
         log.debug(f"Full results is : {full_results.results}")
-        self.copy_es_data(es)
+        if isinstance(self.es, ElasticSearch):
+            # Using internal deployed elasticsearch
+            # if self.es:
+            log.info("Getting data from internal ES")
+            if self.main_es:
+                self.copy_es_data(self.es)
+            else:
+                log.info("Dumping data from the Internal ES to tar ball file")
+                self.es.dumping_all_data(self.full_log_path)
 
-        full_results.analyze_results()  # Analyze the results
+        full_results.analyze_results(self)  # Analyze the results
+        full_results.add_key(
+            "test_time", {"start": self.start_time, "end": self.end_time}
+        )
 
         # Writing the analyzed test results to the Elastic-Search server
-        if self.main_es is not None:
-            full_results.es_write()
-            full_results.codespeed_push(
-                dev_mode=self.dev_mode
-            )  # Push results to codespeed
-            # Creating full link to the results on the ES server
+        if full_results.es_write():
             log.info(f"The Result can be found at : {full_results.results_link()}")
 
     @skipif_ocs_version("<4.6")
@@ -441,7 +497,7 @@ class TestFIOBenchmark(PASTest):
         ],
     )
     def test_fio_compressed_workload(
-        self, ripsaw, es, storageclass_factory, io_pattern, bs, cmp_ratio
+        self, storageclass_factory, io_pattern, bs, cmp_ratio
     ):
         """
         This is a basic fio perf test which run on compression enabled volume
@@ -458,17 +514,13 @@ class TestFIOBenchmark(PASTest):
         self.full_log_path += f"-{io_pattern}-{bs}-{cmp_ratio}"
         log.info(f"Logs file path name is : {self.full_log_path}")
 
-        # deploy the benchmark-operator (ripsaw)
-        self.ripsaw = ripsaw
-        self.ripsaw_deploy(self.ripsaw)
-
         log.info("Create resource file for fio workload")
         self.crd_data = templating.load_yaml(
             "ocs_ci/templates/workloads/fio/benchmark_fio_cmp.yaml"
         )
 
         # Saving the Original elastic-search IP and PORT - if defined in yaml
-        self.es_info_backup(es)
+        self.es_info_backup(self.es)
 
         log.info("Creating compressed pool & SC")
         sc_obj = storageclass_factory(
@@ -482,11 +534,13 @@ class TestFIOBenchmark(PASTest):
         pool_name = run_cmd(f"oc get sc {sc} -o jsonpath={{'.parameters.pool'}}")
         # Create fio benchmark
         self.crd_data["spec"]["workload"]["args"]["bs"] = [bs]
-        self.crd_data["spec"]["workload"]["args"]["prefill_bs"] = bs
         self.crd_data["spec"]["workload"]["args"]["cmp_ratio"] = cmp_ratio
 
         # Setting the data set to 40% of the total storage capacity
         self.setting_storage_usage()
+        self.crd_data["spec"]["workload"]["args"]["prefill_bs"] = self.crd_data["spec"][
+            "workload"
+        ]["args"]["bs"][0]
 
         self.get_env_info()
 
@@ -504,15 +558,22 @@ class TestFIOBenchmark(PASTest):
         # Setting the global parameters of the test
         full_results.add_key("io_pattern", io_pattern)
 
-        # Clean up fio benchmark
-        self.copy_es_data(es)
+        if isinstance(self.es, ElasticSearch):
+            # Using internal deployed elasticsearch
+            # if self.es:
+            log.info("Getting data from internal ES")
+            if self.main_es:
+                self.copy_es_data(self.es)
+            else:
+                log.info("Dumping data from the Internal ES to tar ball file")
+                self.es.dumping_all_data(self.full_log_path)
 
         log.info("verifying compression ratio")
         ratio = calculate_compression_ratio(pool_name)
 
         full_results.add_key("cmp_ratio", {"expected": cmp_ratio, "actual": ratio})
         log.debug(f"Full results is : {full_results.results}")
-        full_results.analyze_results()  # Analyze the results
+        full_results.analyze_results(self)  # Analyze the results
         if (cmp_ratio + 5) < ratio or ratio < (cmp_ratio - 5):
             log.warning(
                 f"The compression ratio is {ratio}% "
@@ -520,13 +581,15 @@ class TestFIOBenchmark(PASTest):
             )
         else:
             log.info(f"The compression ratio is {ratio}%")
+        full_results.add_key(
+            "test_time", {"start": self.start_time, "end": self.end_time}
+        )
 
         # Writing the analyzed test results to the Elastic-Search server
-        if self.main_es is not None:
-            full_results.es_write()
-            # Creating full link to the results on the ES server
+        if full_results.es_write():
             log.info(f"The Result can be found at : {full_results.results_link()}")
 
+        # Clean up fio benchmark
         self.cleanup()
         sc_obj.delete()
         sc_obj.ocp.wait_for_delete(resource_name=sc, timeout=300, sleep=5)

@@ -1,12 +1,28 @@
 ---
 DEPLOYMENT:
   allow_lower_instance_requirements: false
-  local_storage: true
 ENV_DATA:
   platform: 'rhv'
   deployment_type: 'ipi'
   worker_replicas: 3
   master_replicas: 3
-  mon_type: 'hostpath'
-  osd_type: 'hdd'
-  disk_pattern: 'scsi' 
+  worker_num_cpus: '16'
+  master_num_cpus: '4'
+  master_memory: '16384'
+  compute_memory: '65536'
+  # Following values needs to be set in separate config and passed to ocs-ci in
+  # order to connect to RHVM and/or deploy OCP/OCS cluster on RHV
+  # default_cluster_name: PLACEHOLDER
+  # ovirt_url: PLACEHOLDER
+  # ovirt_username: PLACEHOLDER
+  # ovirt_password: PLACEHOLDER
+  # base_domain: PLACEHOLDER
+  # api_vip: PLACEHOLDER
+  # ingress_vip: PLACEHOLDER
+  # ovirt_cluster_id: PLACEHOLDER
+  # ovirt_network_name: PLACEHOLDER
+  # ovirt_storage_domain_id: PLACEHOLDER
+  # vnic_profile_id: PLACEHOLDER
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-2521'

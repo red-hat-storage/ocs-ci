@@ -42,6 +42,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedImage,
     UnsupportedOSType,
 )
+from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
 
 
@@ -679,9 +680,7 @@ def get_ocm_cli(
 
 
 def get_openshift_client(
-    version=None,
-    bin_dir=None,
-    force_download=False,
+    version=None, bin_dir=None, force_download=False, skip_comparison=False
 ):
     """
     Download the OpenShift client binary, if not already present.
@@ -692,22 +691,30 @@ def get_openshift_client(
             (default: config.RUN['client_version'])
         bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
         force_download (bool): Force client download even if already present
+        skip_comparison (bool): Skip the comparison between the existing OCP client
+            version and the configured one.
 
     Returns:
         str: Path to the client binary
 
     """
     version = version or config.RUN["client_version"]
-    version = expose_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     client_binary_path = os.path.join(bin_dir, "oc")
     kubectl_binary_path = os.path.join(bin_dir, "kubectl")
     download_client = True
     client_version = None
+    try:
+        version = expose_ocp_version(version)
+    except Exception:
+        log.exception("Unable to expose OCP version, skipping client download.")
+        skip_comparison = True
+        download_client = False
+        force_download = False
 
     if force_download:
         log.info("Forcing client download.")
-    elif os.path.isfile(client_binary_path):
+    elif os.path.isfile(client_binary_path) and not skip_comparison:
         current_client_version = get_client_version(client_binary_path)
         if current_client_version != version:
             log.info(
@@ -770,7 +777,6 @@ def get_openshift_client(
         os.chdir(previous_dir)
 
     log.info(f"OpenShift Client version: {client_version}")
-
     return client_binary_path
 
 
@@ -2414,6 +2420,28 @@ def skipif_ocs_version(expressions):
     return any(eval(config.ENV_DATA["ocs_version"] + expr) for expr in expr_list)
 
 
+def skipif_ui(ui_test):
+    """
+    This function evaluates the condition for ui test skip
+    based on ui_test expression
+
+    Args:
+        ui_test (str): condition for which we need to check,
+
+    Return:
+        'True' if test needs to be skipped else 'False'
+
+    """
+    from ocs_ci.ocs.ui.views import locators
+
+    ocp_version = get_running_ocp_version()
+    try:
+        locators.get(ocp_version).get(ui_test)
+    except KeyError:
+        return True
+    return False
+
+
 def get_ocs_version_from_image(image):
     """
     Parse major.minor version from OCS image tag.
@@ -2692,6 +2720,9 @@ def login_to_mirror_registry(authfile):
         authfile (str): authfile (pull-secret) path
 
     """
+    # load cluster info
+    load_cluster_info()
+
     mirror_registry = config.DEPLOYMENT["mirror_registry"]
     mirror_registry_user = config.DEPLOYMENT["mirror_registry_user"]
     mirror_registry_password = config.DEPLOYMENT["mirror_registry_password"]
@@ -2832,7 +2863,10 @@ def set_registry_to_managed_state():
     Currently it has to be moved here to enable CA certificate to be
     properly propagated for the stage deployment as mentioned in BZ.
     """
-    if config.ENV_DATA["platform"] not in constants.CLOUD_PLATFORMS:
+    # In RHV platform config is already set to Managed and storage pre-configured
+    on_prem_platform_to_exclude = [constants.RHV_PLATFORM]
+    platform_list_to_exclude = constants.CLOUD_PLATFORMS + on_prem_platform_to_exclude
+    if config.ENV_DATA["platform"] not in platform_list_to_exclude:
         cluster_config = yaml.safe_load(
             exec_cmd(f"oc get {constants.IMAGE_REGISTRY_CONFIG} -o yaml").stdout
         )
