@@ -2,9 +2,10 @@ import collections
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import bugzilla
 from ocs_ci.framework.testlib import ManageTest, tier1, skipif_external_mode
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.cluster import get_pg_balancer_status
+from ocs_ci.ocs.cluster import get_pg_balancer_status, get_mon_config_value
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants, defaults
@@ -16,6 +17,7 @@ log = logging.getLogger(__name__)
 @tier1
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-2231")
+@bugzilla("1908414")
 class TestCephDefaultValuesCheck(ManageTest):
     def test_ceph_default_values_check(self):
         """
@@ -70,6 +72,13 @@ class TestCephDefaultValuesCheck(ManageTest):
 
         # Check if PG balancer is active
         assert get_pg_balancer_status(), "PG balancer is not active"
+
+        # Validates the default value of mon_max_pg_per_osd, BZ1908414.
+        if float(config.ENV_DATA["ocs_version"]) >= 4.7:
+            max_pg_per_osd = get_mon_config_value(key="mon_max_pg_per_osd")
+            assert (
+                max_pg_per_osd == 600
+            ), f"Failed, actual value:{max_pg_per_osd} not matching expected value: 600"
 
     @tier1
     @pytest.mark.skipif(
