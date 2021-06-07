@@ -343,11 +343,14 @@ class TestFIOBenchmark(PASTest):
         log.info(f"list of all PVs :{pvs_list}")
 
         for line in pvs_list:
-            pv, ns = line.split(" ")
-            pv = pv.replace("'", "")
-            if ns == constants.RIPSAW_NAMESPACE:
-                log.info(f"Going to delete {pv}")
-                run_command(f"oc delete pv {pv}")
+            try:
+                pv, ns = line.split(" ")
+                pv = pv.replace("'", "")
+                if ns == constants.RIPSAW_NAMESPACE:
+                    log.info(f"Going to delete {pv}")
+                    run_command(f"oc delete pv {pv}")
+            except Exception:
+                pass
 
     def run(self):
         """
