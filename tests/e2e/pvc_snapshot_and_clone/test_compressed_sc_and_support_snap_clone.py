@@ -7,7 +7,12 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     tier2,
 )
-from ocs_ci.ocs.constants import VOLUME_MODE_FILESYSTEM, CEPHBLOCKPOOL
+from ocs_ci.ocs.constants import (
+    VOLUME_MODE_FILESYSTEM,
+    CEPHBLOCKPOOL,
+    STATUS_READYTOUSE,
+)
+from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
@@ -89,8 +94,17 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
         postgres_pvcs_obj = pgsql.get_postgres_pvc()
 
         snapshots = multi_snapshot_factory(
-            pvc_obj=postgres_pvcs_obj, snapshot_name_suffix="snap"
+            pvc_obj=postgres_pvcs_obj, snapshot_name_suffix="snap", wait=False
         )
+        for snap_obj in snapshots:
+            ocs_obj = OCP(kind=snap_obj.kind, namespace=snap_obj.namespace)
+            # Increase time because of the bz1969427, should be removed later
+            ocs_obj.wait_for_resource(
+                condition="true",
+                resource_name=snap_obj.name,
+                column=STATUS_READYTOUSE,
+                timeout=600,
+            )
         log.info("Created snapshots from all the PVCs and snapshots are in Ready state")
 
         restored_pvc_objs = multi_snapshot_restore_factory(
