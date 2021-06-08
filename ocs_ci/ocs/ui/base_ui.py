@@ -9,12 +9,14 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.common.exceptions import TimeoutException, WebDriverException
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.utility.utils import run_cmd, get_kubeadmin_password, get_ocp_version
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.utility.retry import retry
 
 
 logger = logging.getLogger(__name__)
@@ -367,6 +369,8 @@ class PageNavigator(BaseUI):
         self.do_click(locator=self.page_nav["Pods"])
 
 
+@retry(TimeoutException, tries=3, delay=3, backoff=2)
+@retry(WebDriverException, tries=3, delay=3, backoff=2)
 def login_ui():
     """
     Login to OpenShift Console
@@ -417,6 +421,16 @@ def login_ui():
     wait = WebDriverWait(driver, 60)
     driver.maximize_window()
     driver.get(console_url)
+    if config.ENV_DATA["flexy_deployment"]:
+        try:
+            element = wait.until(
+                ec.element_to_be_clickable(
+                    (login_loc["flexy_kubeadmin"][1], login_loc["flexy_kubeadmin"][0])
+                )
+            )
+            element.click()
+        except TimeoutException as e:
+            logger.error(e)
     element = wait.until(
         ec.element_to_be_clickable((login_loc["username"][1], login_loc["username"][0]))
     )

@@ -7,6 +7,7 @@ login = {
     "username": ("inputUsername", By.ID),
     "password": ("inputPassword", By.ID),
     "click_login": ("//button[text()='Log in']", By.XPATH),
+    "flexy_kubeadmin": ('a[title="Log in with kube:admin"]', By.CSS_SELECTOR),
 }
 
 deployment = {
