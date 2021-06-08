@@ -1105,7 +1105,8 @@ MIRRORED_INDEX_IMAGE_NAME = "redhat-operator-index"
 # following packages are required for live disconnected cluster installation
 # (all images related to those packages will be mirrored to the mirror registry)
 DISCON_CL_REQUIRED_PACKAGES = [
-    # "elasticsearch-operator",
+    "cluster-logging",
+    "elasticsearch-operator",
     "local-storage-operator",
     "ocs-operator",
 ]
