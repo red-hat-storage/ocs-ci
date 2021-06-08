@@ -26,6 +26,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     TimeoutExpiredError,
     UnavailableResourceException,
+    ResourceNotFoundError,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
 from ocs_ci.ocs.resources.ocs import OCS, get_job_obj
@@ -1564,22 +1565,32 @@ def get_pod_restarts_count(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
 
 
 def check_pods_in_running_state(
-    namespace=defaults.ROOK_CLUSTER_NAMESPACE, pods_to_check=None
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    pod_names=None,
+    raise_pod_not_found_error=False,
 ):
     """
     checks whether all the pods in a given namespace are in Running state or not
 
     Args:
         namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
-        pods_to_check (list): List of the Pod objects to check.
+        pod_names (list): List of the pod names to check.
             If not provided, it will check all the pods in the given namespace
+        raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
+            in the pod names are not found. If False, it ignores the case of pod not found and
+            returns the pod objects of the rest of the pod names. The default value is False
 
     Returns:
         Boolean: True, if all pods in Running state. False, otherwise
 
     """
     ret_val = True
-    list_of_pods = pods_to_check or get_all_pods(namespace)
+
+    if pod_names:
+        list_of_pods = get_pod_objs(pod_names, raise_pod_not_found_error)
+    else:
+        list_of_pods = get_all_pods(namespace)
+
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     for p in list_of_pods:
         # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
@@ -1622,15 +1633,23 @@ def get_running_state_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
 
 
 def wait_for_pods_to_be_running(
-    namespace=defaults.ROOK_CLUSTER_NAMESPACE, pods_to_check=None, timeout=200, sleep=10
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    pod_names=None,
+    raise_pod_not_found_error=False,
+    timeout=200,
+    sleep=10,
 ):
     """
     Wait for all the pods in a specific namespace to be running.
 
     Args:
         namespace (str): the namespace ot the pods
-        pods_to_check (list): List of the Pod objects to check.
+        pod_names (list): List of the pod names to check.
             If not provided, it will check all the pods in the given namespace
+        raise_pod_not_found_error (bool): If True, it raises an exception(in the function
+            'check_pods_in_running_state'), if one of the pods in the pod names are not found.
+            If False, it ignores the case of pod not found and returns the pod objects of
+            the rest of the pod names. The default value is False
         timeout (int): time to wait for pods to be running
         sleep (int): Time in seconds to sleep between attempts
 
@@ -1644,12 +1663,14 @@ def wait_for_pods_to_be_running(
             sleep=sleep,
             func=check_pods_in_running_state,
             namespace=namespace,
-            pods_to_check=pods_to_check,
+            pod_names=pod_names,
+            raise_pod_not_found_error=raise_pod_not_found_error,
         ):
             # Check if all the pods in running state
             if pods_running:
                 logging.info("All the pods reached status running!")
                 return True
+
     except TimeoutExpiredError:
         logging.warning(
             f"Not all the pods reached status running " f"after {timeout} seconds"
@@ -2018,20 +2039,41 @@ def get_osd_pods_having_ids(osd_ids):
     return osd_pods_having_ids
 
 
-def get_pod_objs(pod_names, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def get_pod_objs(
+    pod_names,
+    raise_pod_not_found_error=False,
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+):
     """
     Get the pod objects of the specified pod names
 
     Args:
         pod_names (list): The list of the pod names to get their pod objects
         namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
+            in the pod names are not found. If False, it ignores the case of pod not found and
+            returns the pod objects of the rest of the pod names. The default value is False
 
     Returns:
         list: The pod objects of the specified pod names
 
+    Raises:
+        ResourceNotFoundError: If 'raise_pod_not_found_error' is True,
+            and not all the pod names were found
+
     """
     # Convert it to set to reduce complexity
-    pod_names = set(pod_names)
+    pod_names_set = set(pod_names)
     pods = get_all_pods(namespace=namespace)
+    pod_objs_found = [p for p in pods if p.name in pod_names_set]
 
-    return [p for p in pods if p.name in pod_names]
+    if len(pod_names) > len(pod_objs_found):
+        pod_names_found_set = {p.name for p in pod_objs_found}
+        pod_names_not_found = list(pod_names_set - pod_names_found_set)
+        error_message = f"Did not find the following pod names: {pod_names_not_found}"
+        if raise_pod_not_found_error:
+            raise ResourceNotFoundError(error_message)
+        else:
+            logger.info(error_message)
+
+    return pod_objs_found

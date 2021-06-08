@@ -14,21 +14,20 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
     get_pod_name_by_pattern,
-    get_pod_objs,
 )
 
 log = logging.getLogger(__name__)
 
 
-def get_rook_ceph_pods_not_in_node(node_name):
+def get_rook_ceph_pod_names_not_in_node(node_name):
     """
-    Get all the rook ceph pods that are not running on the node
+    Get all the rook ceph pod names that are not running on the node
 
     Args:
         node_name (str): The node name
 
     Returns:
-        list: List of the rook ceph pod objects that are not running on the node 'node_name'
+        list: List of the rook ceph pod names that are not running on the node 'node_name'
 
     """
     rook_ceph_pod_names_set = set(get_pod_name_by_pattern("rook-ceph-"))
@@ -36,7 +35,7 @@ def get_rook_ceph_pods_not_in_node(node_name):
     node_pod_names_set = set([p.name for p in node_pods])
     rook_ceph_pod_names_not_in_node = list(rook_ceph_pod_names_set - node_pod_names_set)
 
-    return get_pod_objs(pod_names=rook_ceph_pod_names_not_in_node)
+    return rook_ceph_pod_names_not_in_node
 
 
 @ignore_leftovers
@@ -93,7 +92,7 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
         node_name = ocs_node.name
         log.info(f"Selected node is '{node_name}'")
         # Save the rook ceph pods before shutting down the node
-        rook_ceph_pods_not_in_node = get_rook_ceph_pods_not_in_node(node_name)
+        rook_ceph_pod_names_not_in_node = get_rook_ceph_pod_names_not_in_node(node_name)
 
         log.info(f"Shutting down node '{node_name}'")
         nodes.stop_nodes([ocs_node])
@@ -103,7 +102,7 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
         timeout = 1800
         log.info("Check the rook pods are in 'Running' or 'Completed' state")
         are_pods_running = wait_for_pods_to_be_running(
-            pods_to_check=rook_ceph_pods_not_in_node, timeout=timeout, sleep=30
+            pod_names=rook_ceph_pod_names_not_in_node, timeout=timeout, sleep=30
         )
         assert are_pods_running, f"The pods are not 'Running' after {timeout} seconds"
 
