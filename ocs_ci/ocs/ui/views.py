@@ -121,6 +121,48 @@ generic_locators = {
     "actions": ('button[data-test-id="actions-menu-button"]', By.CSS_SELECTOR),
     "confirm_action": ("confirm-action", By.ID),
     "submit_form": ('button[type="submit"]', By.CSS_SELECTOR),
+    "ocs_operator": ('//h1[text()="OpenShift Container Storage"]', By.XPATH),
+    "kebab_button": ('button[data-test-id="kebab-button"', By.CSS_SELECTOR),
+    "resource_status": ('span[data-test="status-text"]', By.CSS_SELECTOR),
+}
+
+ocs_operator_locators = {
+    "backingstore_page": (
+        'a[data-test-id="horizontal-link-Backing Store"]',
+        By.CSS_SELECTOR,
+    ),
+    "namespacestore_page": (
+        'a[data-test-id="horizontal-link-Namespace Store"]',
+        By.CSS_SELECTOR,
+    ),
+    "bucketclass_page": (
+        'a[data-test-id="horizontal-link-Bucket Class"]',
+        By.CSS_SELECTOR,
+    ),
+}
+
+backingstore = {
+    "backingstore_name": ('input[data-test="backingstore-name"]', By.CSS_SELECTOR),
+    "provider_dropdown": ('button[data-test="backingstore-provider"]', By.CSS_SELECTOR),
+    "aws_provider": ("AWS S3-link", By.ID),
+    "aws_region_dropdown": ("region", By.ID),
+    "us_east_2_region": ("us-east-2-link", By.ID),
+    "aws_secret_dropdown": ("secret-dropdown", By.ID),
+    "aws_secret_search_field": (
+        'input[data-test-id="dropdown-text-filter"]',
+        By.CSS_SELECTOR,
+    ),
+    "target_bucket": ("target-bucket", By.ID),
+    "delete_button": (
+        'button[data-test-action="Delete Backing Store"]',
+        By.CSS_SELECTOR,
+    ),
+}
+
+bucketclass = {
+    "standard_type": ("Standard", By.ID),
+    "namespace_type": ("Namespace", By.ID),
+    "bucketclass_name": ("bucketclassname-input", By.ID),
 }
 
 obc = {
@@ -137,7 +179,10 @@ obc = {
     "default_bucketclass": ("noobaa-default-bucket-class-link", By.ID),
     "obc_name": ("obc-name", By.ID),
     "first_obc_link": ('a[class="co-resource-item__resource-name"]', By.CSS_SELECTOR),
-    "delete_obc": ('data-test-action="Delete Object Bucket Claim"', By.CSS_SELECTOR),
+    "delete_obc": (
+        'button[data-test-action="Delete Object Bucket Claim"]',
+        By.CSS_SELECTOR,
+    ),
 }
 
 pvc = {
@@ -239,7 +284,10 @@ locators = {
         "page": page_nav,
         "deployment": {**deployment, **deployment_4_7},
         "generic": generic_locators,
+        "ocs_operator": ocs_operator_locators,
         "obc": obc,
+        "bucketclass": bucketclass,
+        "backingstore": backingstore,
     },
     "4.7": {
         "login": login,

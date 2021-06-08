@@ -260,6 +260,15 @@ class PageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
         self.do_click(self.page_nav["installed_operators_page"])
 
+    def navigate_to_ocs_operator_page(self):
+        self.navigate_installed_operators_page()
+        logger.info("Select openshift-storage project")
+        self.do_click(self.generic_loc["project_selector"])
+        self.do_click(self.generic_loc["select_openshift-storage_project"])
+
+        logger.info("Enter the OCS operator page")
+        self.do_click(self.generic_loc["ocs_operator"])
+
     def navigate_persistentvolumes_page(self):
         """
         Navigate to Persistent Volumes Page
@@ -367,6 +376,16 @@ class PageNavigator(BaseUI):
         logger.info("Navigate to Pods Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Workloads"])
         self.do_click(locator=self.page_nav["Pods"])
+
+    def verify_current_page_resource_status(self, status_to_check, timeout=30):
+        logger.info(
+            f"Verifying that the resource has reached a {status_to_check} status"
+        )
+        resource_status = WebDriverWait(self.driver, timeout).until(
+            ec.visibility_of_element_located(self.generic_loc["resource_status"][::-1])
+        )
+        logger.info(f"Resource status is {resource_status.text}")
+        return resource_status.text.lower() == status_to_check.lower()
 
 
 def login_ui():

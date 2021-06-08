@@ -1,10 +1,89 @@
 import logging
 
+from selenium.webdriver.support.wait import WebDriverWait
+
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version
 
 logger = logging.getLogger(__name__)
+
+
+class BackingstoreUI(PageNavigator):
+    """
+    A class representation of BS-related OpenShift UI elements
+
+    """
+
+    def __init__(self, driver):
+        super().__init__(driver)
+        self.wait = WebDriverWait(self.driver, 30)
+        ocp_version = get_ocp_version()
+        self.ocs_loc = locators[ocp_version]["ocs_operator"]
+        self.backingstore = locators[ocp_version]["backingstore"]
+
+    def create_backingstore_ui(self, bs_name, secret_name, target_bucket):
+        """
+        Create a BC via the UI
+
+        bc_name (str): The name to grant the OBC
+
+        """
+        self.navigate_to_ocs_operator_page()
+
+        logger.info("Enter the BS section")
+        self.do_click(self.ocs_loc["backingstore_page"])
+
+        logger.info("Create a new BS")
+        self.do_click(self.generic_loc["create_resource_button"])
+
+        logger.info("Enter backingstore name")
+        self.do_send_keys(self.backingstore["backingstore_name"], bs_name)
+
+        logger.info("Pick AWS as the provider")
+        self.do_click(self.backingstore["provider_dropdown"])
+        self.do_click(self.backingstore["aws_provider"])
+
+        logger.info("Pick the us-east-2 region")
+        self.do_click(self.backingstore["aws_region_dropdown"])
+        self.do_click(self.backingstore["us_east_2_region"])
+
+        logger.info("Pick secret")
+        self.do_click(self.backingstore["aws_secret_dropdown"])
+        self.do_send_keys(self.backingstore["aws_secret_search_field"], secret_name)
+        self.do_click(self.generic_loc["first_dropdown_option"])
+
+        logger.info("Enter target bucket name")
+        self.do_send_keys(self.backingstore["target_bucket"], target_bucket)
+
+        logger.info("Submit form")
+        self.do_click(self.generic_loc["submit_form"])
+
+        print(5)
+
+    def delete_backingstore_ui(self, bs_name):
+        """
+        Delete an OBC via the UI
+
+        obc_name (str): Name of the OBC to be deleted
+
+        """
+        self.navigate_to_ocs_operator_page()
+
+        logger.info("Enter the BS section")
+        self.do_click(self.ocs_loc["backingstore_page"])
+
+        logger.info("Search for the BS")
+        self.do_send_keys(self.generic_loc["search_resource_field"], bs_name)
+
+        logger.info("Open BS kebab menu")
+        self.do_click(self.generic_loc["kebab_button"])
+
+        logger.info("Click on 'Delete Backingstore'")
+        self.do_click(self.backingstore["delete_button"])
+
+        logger.info("Confirm BS Deletion")
+        self.do_click(self.generic_loc["confirm_action"])
 
 
 class ObcUI(PageNavigator):

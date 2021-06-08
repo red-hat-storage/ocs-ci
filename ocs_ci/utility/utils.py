@@ -3356,7 +3356,7 @@ def check_resource_existence(ocp_obj):
     Checks whether an OCP() resource exists
 
     Args:
-        ocp_obj (OCP): The OCP object to check
+        ocp_obj (ocs_ci.ocs.ocp.OCP): The OCP object to check
 
     Returns:
         bool: True if the resource was found, False otherwise
