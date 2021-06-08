@@ -93,7 +93,7 @@ class TestMustGather(ManageTest):
         logging.info("Starting must gather thread")
         must_gather_thread.start()
 
-        logging.info("Starting network restart thread")
+        logging.info("Starting node restart thread")
         restart_thread.start()
 
         logging.info("wait until restart thread is completely executed")
@@ -102,11 +102,5 @@ class TestMustGather(ManageTest):
         logging.info("wait until must_gather thread is completely executed")
         must_gather_thread.join()
 
-        mustgather_restart.log_type = "OTHERS"
-        mustgather_restart.validate_must_gather()
-
-        mustgather_restart.log_type = "CEPH"
-        mustgather_restart.validate_must_gather()
-
-        mustgather_restart.log_type = "JSON"
-        mustgather_restart.validate_must_gather()
+        logging.info("Validate must-gather after restart")
+        mustgather_restart.validate_must_gather_restart()

@@ -233,6 +233,17 @@ class MustGather(object):
         self.print_invalid_files()
         self.compare_running_pods()
 
+    def validate_must_gather_restart(self):
+        """
+        Validate must-gather restart
+
+        """
+        self.validate_file_size()
+        for self.type_log in ("OTHERS", "CEPH", "JSON"):
+            self.validate_expected_files()
+        self.print_invalid_files()
+        self.compare_running_pods()
+
     def cleanup(self):
         """
         Delete temporary folder.
