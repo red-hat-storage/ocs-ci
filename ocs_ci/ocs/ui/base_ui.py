@@ -417,7 +417,7 @@ class PageNavigator(BaseUI):
                 3,
                 _retrieve_current_status_from_ui,
             ):
-                if resource_ui_status.lower() == status_to_check.lower():
+                if resource_ui_status.text.lower() == status_to_check.lower():
                     return True
         except TimeoutExpiredError:
             logger.error(
