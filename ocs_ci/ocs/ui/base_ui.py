@@ -421,7 +421,7 @@ class PageNavigator(BaseUI):
                     return True
         except TimeoutExpiredError:
             logger.error(
-                f"The resource did not reach the expected state within the time limit."
+                "The resource did not reach the expected state within the time limit."
             )
             return False
 
