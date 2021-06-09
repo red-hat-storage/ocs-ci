@@ -50,12 +50,17 @@ class BaseUI:
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         """
-        wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
-        screenshot = ocsci_config.UI_SELENIUM.get("screenshot")
-        if screenshot:
+        try:
+            wait = WebDriverWait(self.driver, timeout)
+            element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+            screenshot = ocsci_config.UI_SELENIUM.get("screenshot")
+            if screenshot:
+                self.take_screenshot()
+            element.click()
+        except TimeoutException as e:
             self.take_screenshot()
-        element.click()
+            logger.error(e)
+            raise TimeoutException
 
     def do_send_keys(self, locator, text, timeout=30):
         """
@@ -66,12 +71,17 @@ class BaseUI:
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         """
-        wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
-        element.send_keys(text)
-        screenshot = ocsci_config.UI_SELENIUM.get("screenshot")
-        if screenshot:
+        try:
+            wait = WebDriverWait(self.driver, timeout)
+            element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+            element.send_keys(text)
+            screenshot = ocsci_config.UI_SELENIUM.get("screenshot")
+            if screenshot:
+                self.take_screenshot()
+        except TimeoutException as e:
             self.take_screenshot()
+            logger.error(e)
+            raise TimeoutException
 
     def is_expanded(self, locator, timeout=30):
         """
@@ -369,6 +379,30 @@ class PageNavigator(BaseUI):
         self.do_click(locator=self.page_nav["Pods"])
 
 
+def take_screenshot(driver):
+    """
+    Take screenshot using python code
+
+    Args:
+        driver (Selenium WebDriver)
+
+    """
+    screenshots_folder = os.path.join(
+        os.path.expanduser(ocsci_config.RUN["log_dir"]),
+        f"screenshots_ui_{ocsci_config.RUN['run_id']}",
+    )
+    if not os.path.isdir(screenshots_folder):
+        os.mkdir(screenshots_folder)
+    time.sleep(1)
+    filename = os.path.join(
+        screenshots_folder,
+        f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
+    )
+    logger.info(f"Creating snapshot: {filename}")
+    driver.save_screenshot(filename)
+    time.sleep(0.5)
+
+
 @retry(TimeoutException, tries=3, delay=3, backoff=2)
 @retry(WebDriverException, tries=3, delay=3, backoff=2)
 def login_ui():
@@ -430,10 +464,12 @@ def login_ui():
             )
             element.click()
         except TimeoutException as e:
+            take_screenshot(driver)
             logger.error(e)
     element = wait.until(
         ec.element_to_be_clickable((login_loc["username"][1], login_loc["username"][0]))
     )
+    take_screenshot(driver)
     element.send_keys("kubeadmin")
     element = wait.until(
         ec.element_to_be_clickable((login_loc["password"][1], login_loc["password"][0]))
@@ -457,4 +493,5 @@ def close_browser(driver):
         driver (Selenium WebDriver)
 
     """
+    take_screenshot(driver)
     driver.close()
