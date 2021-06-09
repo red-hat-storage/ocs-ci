@@ -80,7 +80,7 @@ class TestStoreUserInterface(object):
 
         time.sleep(5)
 
-        assert check_resource_existence(test_bs) is False
+        assert check_resource_existence(test_bs, should_exist=False)
 
 
 @ui
@@ -144,7 +144,7 @@ class TestBucketclassUserInterface(object):
 
         time.sleep(5)
 
-        assert check_resource_existence(test_bs) is False
+        assert check_resource_existence(test_bs, should_exist=False)
 
     @pytest.mark.parametrize(
         argnames=["policy", "amount"],
@@ -200,7 +200,7 @@ class TestBucketclassUserInterface(object):
 
         time.sleep(5)
 
-        assert check_resource_existence(test_bs) is False
+        assert check_resource_existence(test_bs, should_exist=False)
 
 
 class TestObcUserInterface(object):
@@ -268,4 +268,4 @@ class TestObcUserInterface(object):
 
         time.sleep(5)
 
-        assert check_resource_existence(test_obc) is False
+        assert check_resource_existence(test_obc, should_exist=False)

@@ -190,8 +190,8 @@ class BucketClassUI(PageNavigator):
         logger.info("Create a new BC")
         self.do_click(self.generic_locators["create_resource_button"])
 
-        logger.info(f"Pick type")
-        self.do_click(self.bucketclass[f"namespace_type"])
+        logger.info("Pick type")
+        self.do_click(self.bucketclass["namespace_type"])
 
         logger.info("Enter BC name")
         self.do_send_keys(self.bucketclass["bucketclass_name"], bc_name)
