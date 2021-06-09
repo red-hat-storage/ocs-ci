@@ -3382,4 +3382,4 @@ def check_resource_existence(ocp_obj, should_exist, timeout=60):
         log.error(
             f"{ocp_obj.resource_name} did not reach the expected state within the time limit."
         )
-        raise
+        return False

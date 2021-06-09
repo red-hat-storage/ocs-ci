@@ -1,5 +1,6 @@
 import datetime
 import logging
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 import os
 import time
 
@@ -16,7 +17,12 @@ from ocs_ci.framework import config
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.utility.utils import get_kubeadmin_password, get_ocp_version, run_cmd
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    get_kubeadmin_password,
+    get_ocp_version,
+    run_cmd,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -382,16 +388,41 @@ class PageNavigator(BaseUI):
         self.do_click(locator=self.page_nav["Pods"])
 
     def verify_current_page_resource_status(self, status_to_check, timeout=30):
+        """
+        Compares a given status string to the one shown in the resource's UI page
+
+        Args:
+            status_to_check (str): The status that will be compared with the one in the UI
+            timeout (int): How long should the check run before moving on
+
+        Returns:
+            bool: True if the resource was found, False otherwise
+        """
+
+        def _retrieve_current_status_from_ui():
+            resource_status = WebDriverWait(self.driver, timeout).until(
+                ec.visibility_of_element_located(
+                    self.generic_locators["resource_status"][::-1]
+                )
+            )
+            logger.info(f"Resource status is {resource_status.text}")
+
         logger.info(
             f"Verifying that the resource has reached a {status_to_check} status"
         )
-        resource_status = WebDriverWait(self.driver, timeout).until(
-            ec.visibility_of_element_located(
-                self.generic_locators["resource_status"][::-1]
+        try:
+            for resource_ui_status in TimeoutSampler(
+                timeout,
+                3,
+                _retrieve_current_status_from_ui,
+            ):
+                if resource_ui_status.lower() == status_to_check.lower():
+                    return True
+        except TimeoutExpiredError:
+            logger.error(
+                f"The resource did not reach the expected state within the time limit."
             )
-        )
-        logger.info(f"Resource status is {resource_status.text}")
-        return resource_status.text.lower() == status_to_check.lower()
+            return False
 
 
 def login_ui():
