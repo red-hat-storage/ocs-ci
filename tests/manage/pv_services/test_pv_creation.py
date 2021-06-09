@@ -40,9 +40,10 @@ def teardown(self):
     """
     Tearing down the environment
     """
-    assert delete_pv(self.pv_name)
-    assert not verify_pv_exist(self.pv_name)
-    utils.delete_file(TEMP_YAML_FILE)
+    if os.path.exists(TEMP_YAML_FILE):
+        assert delete_pv(self.pv_name)
+        assert not verify_pv_exist(self.pv_name)
+        utils.delete_file(TEMP_YAML_FILE)
 
 
 def create_pv(pv_data):
