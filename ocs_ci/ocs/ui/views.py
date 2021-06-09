@@ -124,6 +124,9 @@ generic_locators = {
     "ocs_operator": ('//h1[text()="OpenShift Container Storage"]', By.XPATH),
     "kebab_button": ('button[data-test-id="kebab-button"', By.CSS_SELECTOR),
     "resource_status": ('span[data-test="status-text"]', By.CSS_SELECTOR),
+    "check_first_row_checkbox": ('input[name="checkrow0"]', By.CSS_SELECTOR),
+    "remove_search_filter": ('button[aria-label="close"]', By.CSS_SELECTOR),
+    "delete_resource_kebab_button": ('//*[contains(text(), "Delete")]', By.XPATH),
 }
 
 ocs_operator_locators = {
@@ -163,6 +166,21 @@ bucketclass = {
     "standard_type": ("Standard", By.ID),
     "namespace_type": ("Namespace", By.ID),
     "bucketclass_name": ("bucketclassname-input", By.ID),
+    "spread_policy": ('input[data-test="placement-policy-spread1"]', By.CSS_SELECTOR),
+    "mirror_policy": ('input[data-test="placement-policy-mirror1"]', By.CSS_SELECTOR),
+    "single_policy": ("Single", By.ID),
+    "multi_policy": ("Multi", By.ID),
+    "cache_policy": ("Cache", By.ID),
+    "nss_dropdown": ('button[data-test="nns-dropdown-toggle"]', By.CSS_SELECTOR),
+    "nss_option_template": ('button[data-test="{}"]', By.CSS_SELECTOR),
+    "bs_dropdown": ('button[data-test="nbs-dropdown-toggle"]', By.CSS_SELECTOR),
+    "first_bs_dropdown_option": (
+        'button[data-test="mybs-dropdown-item"]',
+        By.CSS_SELECTOR,
+    ),
+    "ttl_input": ("ttl-input", By.ID),
+    "ttl_time_unit_dropdown": ("timetolive-input", By.ID),
+    "ttl_minute_time_unit_button": ("MIN-link", By.ID),
 }
 
 obc = {

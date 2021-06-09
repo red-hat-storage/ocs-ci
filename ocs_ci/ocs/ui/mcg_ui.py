@@ -80,9 +80,153 @@ class BackingstoreUI(PageNavigator):
         self.do_click(self.generic_loc["kebab_button"])
 
         logger.info("Click on 'Delete Backingstore'")
-        self.do_click(self.backingstore["delete_button"])
+        self.do_click(self.generic_loc["delete_resource_kebab_button"])
 
         logger.info("Confirm BS Deletion")
+        self.do_click(self.generic_loc["confirm_action"])
+
+
+class BucketClassUI(PageNavigator):
+    """
+    A class representation of BC-related OpenShift UI elements
+
+    """
+
+    def __init__(self, driver):
+        super().__init__(driver)
+        ocp_version = get_ocp_version()
+        self.ocs_loc = locators[ocp_version]["ocs_operator"]
+        self.bucketclass = locators[ocp_version]["bucketclass"]
+
+    def create_standard_bucketclass_ui(self, bc_name, policy, store_list):
+        """
+        Create a BC via the UI
+
+        bc_name (str): The name to grant the OBC
+
+        """
+        self.navigate_to_ocs_operator_page()
+
+        logger.info("Enter the BC section")
+        self.do_click(self.ocs_loc["bucketclass_page"])
+
+        logger.info("Create a new BC")
+        self.do_click(self.generic_loc["create_resource_button"])
+
+        logger.info(f"Pick type")
+        self.do_click(self.bucketclass[f"standard_type"])
+
+        logger.info("Enter BC name")
+        self.do_send_keys(self.bucketclass["bucketclass_name"], bc_name)
+        self.do_click(self.generic_loc["submit_form"])
+
+        logger.info(f"Pick policy ({policy})")
+        self.do_click(self.bucketclass[f"{policy}_policy"])
+        self.do_click(self.generic_loc["submit_form"])
+
+        logger.info("Pick store(s)")
+        for backingstore_name in store_list:
+            self.do_send_keys(
+                self.generic_loc["search_resource_field"], backingstore_name
+            )
+            self.do_click(self.generic_loc["check_first_row_checkbox"])
+            self.do_click(self.generic_loc["remove_search_filter"])
+
+        self.do_click(self.generic_loc["submit_form"])
+
+        logger.info("Submit")
+        self.do_click(self.generic_loc["submit_form"])
+
+    def set_single_namespacestore_policy(self, nss_name_lst):
+        self.do_click(self.bucketclass["nss_dropdown"])
+        self.do_click_by_id(nss_name_lst[0])
+
+    def set_multi_namespacestore_policy(self, nss_name_lst):
+        for nss_name in nss_name_lst:
+            self.do_send_keys(self.generic_loc["search_resource_field"], nss_name)
+            self.do_click(self.generic_loc["check_first_row_checkbox"])
+            self.do_click(self.generic_loc["remove_search_filter"])
+
+        self.do_click(self.bucketclass["nss_dropdown"])
+        self.do_click_by_id(nss_name_lst[0])
+
+    def set_cache_namespacestore_policy(self, nss_name_lst, bs_name_lst):
+        self.do_click(self.bucketclass["nss_dropdown"])
+        self.do_click_by_id(nss_name_lst[0])
+
+        self.do_click(self.bucketclass["bs_dropdown"])
+        self.do_click_by_id(bs_name_lst[0])
+
+        self.do_send_keys(self.bucketclass["ttl_input"], "5")
+        self.do_click(self.bucketclass["ttl_time_unit_dropdown"])
+        self.do_click(self.bucketclass["ttl_minute_time_unit_button"])
+
+    set_namespacestore_policy = {
+        "single": set_single_namespacestore_policy,
+        "multi": set_multi_namespacestore_policy,
+        "cache": set_cache_namespacestore_policy,
+    }
+
+    def create_namespace_bucketclass_ui(
+        self, bc_name, policy, nss_name_lst, bs_name_lst
+    ):
+        """
+        Create a BC via the UI
+
+        bc_name (str): The name to grant the OBC
+
+        """
+        self.navigate_to_ocs_operator_page()
+
+        logger.info("Enter the BC section")
+        self.do_click(self.ocs_loc["bucketclass_page"])
+
+        logger.info("Create a new BC")
+        self.do_click(self.generic_loc["create_resource_button"])
+
+        logger.info(f"Pick type")
+        self.do_click(self.bucketclass[f"namespace_type"])
+
+        logger.info("Enter BC name")
+        self.do_send_keys(self.bucketclass["bucketclass_name"], bc_name)
+        self.do_click(self.generic_loc["submit_form"])
+
+        logger.info(f"Pick policy ({policy})")
+        self.do_click(self.bucketclass[f"{policy}_policy"])
+        self.do_click(self.generic_loc["submit_form"])
+
+        logger.info("Pick resources")
+        if policy == "cache":
+            self.set_namespacestore_policy[policy](self, nss_name_lst, bs_name_lst)
+        else:
+            self.set_namespacestore_policy[policy](self, nss_name_lst)
+        self.do_click(self.generic_loc["submit_form"])
+
+        logger.info("Submit")
+        self.do_click(self.generic_loc["submit_form"])
+
+    def delete_bucketclass_ui(self, bc_name):
+        """
+        Delete an OBC via the UI
+
+        obc_name (str): Name of the OBC to be deleted
+
+        """
+        self.navigate_to_ocs_operator_page()
+
+        logger.info("Enter the BC section")
+        self.do_click(self.ocs_loc["bucketclass_page"])
+
+        logger.info("Search for the BS")
+        self.do_send_keys(self.generic_loc["search_resource_field"], bc_name)
+
+        logger.info("Open BC kebab menu")
+        self.do_click(self.generic_loc["kebab_button"])
+
+        logger.info("Click on 'Delete Bucket Class'")
+        self.do_click(self.generic_loc["delete_resource_kebab_button"])
+
+        logger.info("Confirm BC Deletion")
         self.do_click(self.generic_loc["confirm_action"])
 
 

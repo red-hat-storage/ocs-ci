@@ -6,6 +6,7 @@ import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 from semantic_version.base import Version
@@ -54,6 +55,9 @@ class BaseUI:
         if screenshot:
             self.take_screenshot()
         element.click()
+
+    def do_click_by_id(self, id, timeout=30):
+        return self.do_click((id, By.ID), timeout)
 
     def do_send_keys(self, locator, text, timeout=30):
         """
