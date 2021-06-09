@@ -578,7 +578,10 @@ def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=
                 int(len(final_device_list) / new_storage_devices_sets_count)
             )
         if lv_set_present:
-            if platform == constants.VSPHERE_PLATFORM and add_extra_disk_to_existing_worker:
+            if (
+                platform == constants.VSPHERE_PLATFORM
+                and add_extra_disk_to_existing_worker
+            ):
                 log.info("Adding Extra Disk to existing VSphere Worker nodes")
                 add_disk_for_vsphere_platform()
             check_pvs_present_for_ocs_expansion()
