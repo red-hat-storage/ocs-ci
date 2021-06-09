@@ -48,6 +48,7 @@ from ocs_ci.utility.utils import (
     upload_file,
     wait_for_co,
     get_ocp_version,
+    get_openshift_installer,
     get_terraform,
     set_aws_region,
     get_terraform_ignition_provider,
@@ -895,9 +896,13 @@ class VSPHEREIPI(VSPHEREBASE):
         Args:
             log_level (str): log level openshift-installer (default: DEBUG)
         """
+        force_download = config.DEPLOYMENT["force_download_installer"]
+        installer = get_openshift_installer(
+            config.DEPLOYMENT["installer_version"], force_download=force_download
+        )
         try:
             run_cmd(
-                f"{self.installer} destroy cluster "
+                f"{installer} destroy cluster "
                 f"--dir {self.cluster_path} "
                 f"--log-level {log_level}",
                 timeout=3600,
