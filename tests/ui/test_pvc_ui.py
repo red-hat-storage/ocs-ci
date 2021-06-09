@@ -25,18 +25,18 @@ class TestPvcUserInterface(object):
     @pytest.mark.parametrize(
         argnames=["sc_type", "pvc_name", "access_mode", "pvc_size", "vol_mode"],
         argvalues=[
-            # pytest.param(
-            #     *["ocs-storagecluster-cephfs", "test-pvc-fs", "ReadWriteMany", "2", None]
-            # ),
-            # pytest.param(
-            #     *["ocs-storagecluster-ceph-rbd", "test-pvc-rbd", "ReadWriteMany", "3", "Filesystem"]
-            # ),
-            # pytest.param(
-            #     *["ocs-storagecluster-ceph-rbd-thick", "test-pvc-rbd-thick", "ReadWriteMany", "4", "Filesystem"]
-            # ),
-            # pytest.param(
-            #     *["ocs-storagecluster-cephfs", "test-pvc-fs", "ReadWriteOnce", "10", None]
-            # ),
+            pytest.param(
+                *["ocs-storagecluster-cephfs", "test-pvc-fs", "ReadWriteMany", "2", None]
+            ),
+            pytest.param(
+                *["ocs-storagecluster-ceph-rbd", "test-pvc-rbd", "ReadWriteMany", "3", "Filesystem"]
+            ),
+            pytest.param(
+                *["ocs-storagecluster-ceph-rbd-thick", "test-pvc-rbd-thick", "ReadWriteMany", "4", "Filesystem"]
+            ),
+            pytest.param(
+                *["ocs-storagecluster-cephfs", "test-pvc-fs", "ReadWriteOnce", "10", None]
+            ),
             pytest.param(
                 *["ocs-storagecluster-ceph-rbd", "test-pvc-rbd", "ReadWriteOnce", "11", "Block"]
             ),
