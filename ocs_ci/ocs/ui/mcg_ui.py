@@ -62,8 +62,6 @@ class MCGStoreUI(PageNavigator):
         logger.info("Submit form")
         self.do_click(self.generic_loc["submit_form"])
 
-        print(5)
-
     def delete_store_ui(self, kind, store_name):
         """
         Delete an MCG store via the UI

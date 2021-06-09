@@ -77,6 +77,7 @@ class TestStoreUserInterface(object):
 
         logger.info(f"Delete {store_name}")
         bs_ui_obj.delete_store_ui(kind, store_name)
+
         time.sleep(5)
 
         assert check_resource_existence(test_bs) is False
@@ -140,6 +141,7 @@ class TestBucketclassUserInterface(object):
 
         logger.info(f"Delete {bc_name}")
         bc_ui_obj.delete_bucketclass_ui(bc_name)
+
         time.sleep(5)
 
         assert check_resource_existence(test_bs) is False
@@ -195,6 +197,7 @@ class TestBucketclassUserInterface(object):
 
         logger.info(f"Delete {bc_name}")
         bc_ui_obj.delete_bucketclass_ui(bc_name)
+
         time.sleep(5)
 
         assert check_resource_existence(test_bs) is False
@@ -236,7 +239,10 @@ class TestObcUserInterface(object):
 
         obc_ui_obj = ObcUI(setup_ui)
         obc_ui_obj.create_obc_ui(obc_name, storageclass, bucketclass)
-        time.sleep(5)
+
+        assert obc_ui_obj.verify_current_page_resource_status(
+            constants.STATUS_BOUND
+        ), "Created OBC was not ready in time"
 
         test_obc = OCP(
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -257,12 +263,9 @@ class TestObcUserInterface(object):
             obc_bucketclass == bucketclass
         ), f"BucketClass mismatch. Expected: {bucketclass}, found: {obc_bucketclass}"
 
-        assert obc_ui_obj.verify_current_page_resource_status(
-            constants.STATUS_BOUND
-        ), "Created OBC was not ready in time"
-
         logger.info(f"Delete {obc_name}")
         obc_ui_obj.delete_obc_ui(obc_name)
+
         time.sleep(5)
 
         assert check_resource_existence(test_obc) is False
