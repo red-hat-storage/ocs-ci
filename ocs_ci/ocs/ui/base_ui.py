@@ -406,6 +406,7 @@ class PageNavigator(BaseUI):
                 )
             )
             logger.info(f"Resource status is {resource_status.text}")
+            return resource_status
 
         logger.info(
             f"Verifying that the resource has reached a {status_to_check} status"
