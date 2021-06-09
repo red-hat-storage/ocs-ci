@@ -82,6 +82,9 @@ class TestStoreUserInterface(object):
         assert check_resource_existence(test_bs) is False
 
 
+@ui
+@skipif_ocs_version("<4.8")
+@skipif_disconnected_cluster
 class TestBucketclassUserInterface(object):
     """
     Test the bucketclass UI
@@ -96,9 +99,6 @@ class TestBucketclassUserInterface(object):
         for bc_name in test_bucketclasses:
             OCP(kind="bucketclass").delete(resource_name=bc_name)
 
-    @ui
-    @skipif_ocs_version("<4.8")
-    @skipif_disconnected_cluster
     @pytest.mark.parametrize(
         argnames=["policy", "bs_amount"],
         argvalues=[
@@ -144,9 +144,6 @@ class TestBucketclassUserInterface(object):
 
         assert check_resource_existence(test_bs) is False
 
-    @ui
-    @skipif_ocs_version("<4.8")
-    @skipif_disconnected_cluster
     @pytest.mark.parametrize(
         argnames=["policy", "amount"],
         argvalues=[
