@@ -38,7 +38,7 @@ class MCGStoreUI(PageNavigator):
         self.do_click(self.ocs_loc[f"{kind}_page"])
 
         logger.info("Create a new store")
-        self.do_click(self.generic_loc["create_resource_button"])
+        self.do_click(self.generic_locators["create_resource_button"])
 
         logger.info("Enter store name")
         self.do_send_keys(self.mcg_stores["store_name"], store_name)
@@ -54,13 +54,13 @@ class MCGStoreUI(PageNavigator):
         logger.info("Pick secret")
         self.do_click(self.mcg_stores["aws_secret_dropdown"])
         self.do_send_keys(self.mcg_stores["aws_secret_search_field"], secret_name)
-        self.do_click(self.generic_loc["first_dropdown_option"])
+        self.do_click(self.generic_locators["first_dropdown_option"])
 
         logger.info("Enter target bucket name")
         self.do_send_keys(self.mcg_stores["target_bucket"], target_bucket)
 
         logger.info("Submit form")
-        self.do_click(self.generic_loc["submit_form"])
+        self.do_click(self.generic_locators["submit_form"])
 
     def delete_store_ui(self, kind, store_name):
         """
@@ -75,16 +75,16 @@ class MCGStoreUI(PageNavigator):
         self.do_click(self.ocs_loc[f"{kind}_page"])
 
         logger.info("Search for the store")
-        self.do_send_keys(self.generic_loc["search_resource_field"], store_name)
+        self.do_send_keys(self.generic_locators["search_resource_field"], store_name)
 
         logger.info("Open BS kebab menu")
-        self.do_click(self.generic_loc["kebab_button"])
+        self.do_click(self.generic_locators["kebab_button"])
 
         logger.info(f"Click on 'Delete {kind}'")
-        self.do_click(self.generic_loc["delete_resource_kebab_button"])
+        self.do_click(self.generic_locators["delete_resource_kebab_button"])
 
         logger.info("Confirm store Deletion")
-        self.do_click(self.generic_loc["confirm_action"])
+        self.do_click(self.generic_locators["confirm_action"])
 
 
 class BucketClassUI(PageNavigator):
@@ -114,31 +114,31 @@ class BucketClassUI(PageNavigator):
         self.do_click(self.ocs_loc["bucketclass_page"])
 
         logger.info("Create a new BC")
-        self.do_click(self.generic_loc["create_resource_button"])
+        self.do_click(self.generic_locators["create_resource_button"])
 
         logger.info("Pick type")
         self.do_click(self.bucketclass["standard_type"])
 
         logger.info("Enter BC name")
         self.do_send_keys(self.bucketclass["bucketclass_name"], bc_name)
-        self.do_click(self.generic_loc["submit_form"])
+        self.do_click(self.generic_locators["submit_form"])
 
         logger.info("Pick policy ({policy})")
         self.do_click(self.bucketclass[f"{policy}_policy"])
-        self.do_click(self.generic_loc["submit_form"])
+        self.do_click(self.generic_locators["submit_form"])
 
         logger.info("Pick backingstore(s)")
         for backingstore_name in store_list:
             self.do_send_keys(
-                self.generic_loc["search_resource_field"], backingstore_name
+                self.generic_locators["search_resource_field"], backingstore_name
             )
-            self.do_click(self.generic_loc["check_first_row_checkbox"])
-            self.do_click(self.generic_loc["remove_search_filter"])
+            self.do_click(self.generic_locators["check_first_row_checkbox"])
+            self.do_click(self.generic_locators["remove_search_filter"])
 
-        self.do_click(self.generic_loc["submit_form"])
+        self.do_click(self.generic_locators["submit_form"])
 
         logger.info("Submit")
-        self.do_click(self.generic_loc["submit_form"])
+        self.do_click(self.generic_locators["submit_form"])
 
     def set_single_namespacestore_policy(self, nss_name_lst):
         self.do_click(self.bucketclass["nss_dropdown"])
@@ -146,9 +146,9 @@ class BucketClassUI(PageNavigator):
 
     def set_multi_namespacestore_policy(self, nss_name_lst):
         for nss_name in nss_name_lst:
-            self.do_send_keys(self.generic_loc["search_resource_field"], nss_name)
-            self.do_click(self.generic_loc["check_first_row_checkbox"])
-            self.do_click(self.generic_loc["remove_search_filter"])
+            self.do_send_keys(self.generic_locators["search_resource_field"], nss_name)
+            self.do_click(self.generic_locators["check_first_row_checkbox"])
+            self.do_click(self.generic_locators["remove_search_filter"])
 
         self.do_click(self.bucketclass["nss_dropdown"])
         self.do_click_by_id(nss_name_lst[0])
@@ -188,28 +188,28 @@ class BucketClassUI(PageNavigator):
         self.do_click(self.ocs_loc["bucketclass_page"])
 
         logger.info("Create a new BC")
-        self.do_click(self.generic_loc["create_resource_button"])
+        self.do_click(self.generic_locators["create_resource_button"])
 
         logger.info(f"Pick type")
         self.do_click(self.bucketclass[f"namespace_type"])
 
         logger.info("Enter BC name")
         self.do_send_keys(self.bucketclass["bucketclass_name"], bc_name)
-        self.do_click(self.generic_loc["submit_form"])
+        self.do_click(self.generic_locators["submit_form"])
 
         logger.info(f"Pick policy ({policy})")
         self.do_click(self.bucketclass[f"{policy}_policy"])
-        self.do_click(self.generic_loc["submit_form"])
+        self.do_click(self.generic_locators["submit_form"])
 
         logger.info("Pick resources")
         if policy == "cache":
             self.set_namespacestore_policy[policy](self, nss_name_lst, bs_name_lst)
         else:
             self.set_namespacestore_policy[policy](self, nss_name_lst)
-        self.do_click(self.generic_loc["submit_form"])
+        self.do_click(self.generic_locators["submit_form"])
 
         logger.info("Submit")
-        self.do_click(self.generic_loc["submit_form"])
+        self.do_click(self.generic_locators["submit_form"])
 
     def delete_bucketclass_ui(self, bc_name):
         """
@@ -224,16 +224,16 @@ class BucketClassUI(PageNavigator):
         self.do_click(self.ocs_loc["bucketclass_page"])
 
         logger.info("Search for the BS")
-        self.do_send_keys(self.generic_loc["search_resource_field"], bc_name)
+        self.do_send_keys(self.generic_locators["search_resource_field"], bc_name)
 
         logger.info("Open BC kebab menu")
-        self.do_click(self.generic_loc["kebab_button"])
+        self.do_click(self.generic_locators["kebab_button"])
 
         logger.info("Click on 'Delete Bucket Class'")
-        self.do_click(self.generic_loc["delete_resource_kebab_button"])
+        self.do_click(self.generic_locators["delete_resource_kebab_button"])
 
         logger.info("Confirm BC Deletion")
-        self.do_click(self.generic_loc["confirm_action"])
+        self.do_click(self.generic_locators["confirm_action"])
 
 
 class ObcUI(PageNavigator):
@@ -259,11 +259,11 @@ class ObcUI(PageNavigator):
         self.navigate_object_bucket_claims_page()
 
         logger.info("Select openshift-storage project")
-        self.do_click(self.generic_loc["project_selector"])
-        self.do_click(self.generic_loc["select_openshift-storage_project"])
+        self.do_click(self.generic_locators["project_selector"])
+        self.do_click(self.generic_locators["select_openshift-storage_project"])
 
         logger.info("Click on 'Create Object Bucket Claim'")
-        self.do_click(self.generic_loc["create_resource_button"])
+        self.do_click(self.generic_locators["create_resource_button"])
 
         logger.info("Enter OBC name")
         self.do_send_keys(self.obc_loc["obc_name"], obc_name)
@@ -271,16 +271,16 @@ class ObcUI(PageNavigator):
         logger.info("Select Storage Class")
         self.do_click(self.obc_loc["storageclass_dropdown"])
         self.do_send_keys(self.obc_loc["storageclass_text_field"], storageclass)
-        self.do_click(self.generic_loc["first_dropdown_option"])
+        self.do_click(self.generic_locators["first_dropdown_option"])
 
         if bucketclass:
             logger.info("Select BucketClass")
             self.do_click(self.obc_loc["bucketclass_dropdown"])
             self.do_send_keys(self.obc_loc["bucketclass_text_field"], bucketclass)
-            self.do_click(self.generic_loc["first_dropdown_option"])
+            self.do_click(self.generic_locators["first_dropdown_option"])
 
         logger.info("Create OBC")
-        self.do_click(self.generic_loc["submit_form"])
+        self.do_click(self.generic_locators["submit_form"])
 
     def delete_obc_ui(self, obc_name):
         """
@@ -292,19 +292,19 @@ class ObcUI(PageNavigator):
         self.navigate_object_bucket_claims_page()
 
         logger.info("Select openshift-storage project")
-        self.do_click(self.generic_loc["project_selector"])
-        self.do_click(self.generic_loc["select_openshift-storage_project"])
+        self.do_click(self.generic_locators["project_selector"])
+        self.do_click(self.generic_locators["select_openshift-storage_project"])
 
-        self.do_send_keys(self.generic_loc["search_resource_field"], text=obc_name)
+        self.do_send_keys(self.generic_locators["search_resource_field"], text=obc_name)
 
         logger.info(f"Go to OBC {obc_name} Page")
         self.do_click(self.obc_loc["first_obc_link"])
 
         logger.info("Click on Actions")
-        self.do_click(self.generic_loc["actions"])
+        self.do_click(self.generic_locators["actions"])
 
         logger.info("Click on 'Delete OBC'")
         self.do_click(self.obc_loc["delete_obc"])
 
         logger.info("Confirm OBC Deletion")
-        self.do_click(self.generic_loc["confirm_action"])
+        self.do_click(self.generic_locators["confirm_action"])

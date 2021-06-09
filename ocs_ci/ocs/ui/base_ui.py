@@ -1,6 +1,7 @@
 import datetime
 import logging
 import os
+import time
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -167,12 +168,14 @@ class BaseUI:
         Take screenshot using python code
 
         """
+        time.sleep(1)
         filename = os.path.join(
             self.screenshots_folder,
             f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
         )
         logger.info(f"Creating snapshot: {filename}")
         self.driver.save_screenshot(filename)
+        time.sleep(0.5)
 
 
 class PageNavigator(BaseUI):
@@ -186,7 +189,7 @@ class PageNavigator(BaseUI):
         ocp_version = get_ocp_version()
         self.page_nav = locators[ocp_version]["page"]
         if Version.coerce(ocp_version) >= Version.coerce("4.8"):
-            self.generic_loc = locators[ocp_version]["generic"]
+            self.generic_locators = locators[ocp_version]["generic"]
 
     def navigate_overview_page(self):
         """
@@ -264,11 +267,11 @@ class PageNavigator(BaseUI):
     def navigate_to_ocs_operator_page(self):
         self.navigate_installed_operators_page()
         logger.info("Select openshift-storage project")
-        self.do_click(self.generic_loc["project_selector"])
-        self.do_click(self.generic_loc["select_openshift-storage_project"])
+        self.do_click(self.generic_locators["project_selector"])
+        self.do_click(self.generic_locators["select_openshift-storage_project"])
 
         logger.info("Enter the OCS operator page")
-        self.do_click(self.generic_loc["ocs_operator"])
+        self.do_click(self.generic_locators["ocs_operator"])
 
     def navigate_persistentvolumes_page(self):
         """
@@ -383,7 +386,9 @@ class PageNavigator(BaseUI):
             f"Verifying that the resource has reached a {status_to_check} status"
         )
         resource_status = WebDriverWait(self.driver, timeout).until(
-            ec.visibility_of_element_located(self.generic_loc["resource_status"][::-1])
+            ec.visibility_of_element_located(
+                self.generic_locators["resource_status"][::-1]
+            )
         )
         logger.info(f"Resource status is {resource_status.text}")
         return resource_status.text.lower() == status_to_check.lower()

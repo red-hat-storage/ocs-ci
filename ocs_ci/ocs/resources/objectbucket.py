@@ -17,7 +17,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError, UnhealthyB
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler, check_resource_existence
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(name=__file__)
 
@@ -532,9 +532,3 @@ BUCKET_MAP = {
     "rgw-oc": RGWOCBucket,
     "mcg-namespace": MCGNamespaceBucket,
 }
-
-
-def get_all_obcs():
-    obcs = OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="obc")
-    if check_resource_existence(obcs):
-        return obcs.get().get("items")
