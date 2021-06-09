@@ -1373,7 +1373,11 @@ def email_reports(session):
     # total = passed + failed + error
     # percentage_passed = (passed / total) * 100
 
-    build_id = get_ocs_build_number()
+    try:
+        build_id = get_ocs_build_number()
+    except Exception as e:
+        build_id = ""
+        log.exception(e)
     build_str = f"BUILD ID: {build_id} " if build_id else ""
     mailids = config.RUN["cli_params"]["email"]
     recipients = []
