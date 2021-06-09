@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import (
-    MCGTest,
+    E2ETest,
     skipif_ocs_version,
     scale,
 )
@@ -13,8 +13,10 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture(scope="function")
 def s3bench(request):
-
+    # Create hs s3 benchmark
     s3bench = hsbench.HsBench()
+    s3bench.create_resource_hsbench()
+    s3bench.install_hsbench()
 
     def teardown():
         s3bench.cleanup()
@@ -24,7 +26,7 @@ def s3bench(request):
 
 
 @scale
-class TestScaleNamespace(MCGTest):
+class TestScaleNamespace(E2ETest):
     """
     Test creation of a namespace scale resource
     """
@@ -58,18 +60,16 @@ class TestScaleNamespace(MCGTest):
         For each namespace resource, create namespace bucket and start hsbench benchmark
 
         """
-        num_s3_obj = 100000
-
-        # Create hs s3 benchmark
-        s3bench.create_resource_hsbench()
-        s3bench.install_hsbench()
-
-        # Create the namespace bucket on top of the namespace resource
-        ns_bucket_list = bucket_factory(
-            amount=50,
-            interface=bucketclass_dict["interface"],
-            bucketclass=bucketclass_dict,
-        )
+        num_s3_obj = 10000
+        ns_bucket_list = []
+        for _ in range(50):
+            ns_bucket_list.append(
+                bucket_factory(
+                    amount=1,
+                    interface=bucketclass_dict["interface"],
+                    bucketclass=bucketclass_dict,
+                )[0]
+            )
 
         for ns_bucket in ns_bucket_list:
             s3bench.run_benchmark(

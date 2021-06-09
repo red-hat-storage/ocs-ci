@@ -2,9 +2,9 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import (
-    MCGTest,
+    E2ETest,
     skipif_ocs_version,
-    vsphere_platform_required,
+    on_prem_platform_required,
     scale,
 )
 from ocs_ci.ocs import constants
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @scale
-class TestScaleNamespace(MCGTest):
+class TestScaleNamespace(E2ETest):
     """
     Test creation of a namespace scale resource
     """
@@ -49,7 +49,7 @@ class TestScaleNamespace(MCGTest):
 
     @skipif_ocs_version("<4.6")
     @pytest.mark.polarion_id("OCS-2517")
-    @vsphere_platform_required
+    @on_prem_platform_required
     def test_scale_namespace_bucket_creation_with_rgw(
         self, ns_resource_factory, bucket_factory, rgw_deployments
     ):
