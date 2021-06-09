@@ -5,12 +5,10 @@ platforms like AWS, VMWare, Baremetal etc.
 
 from copy import deepcopy
 from semantic_version import Version
-import json
 import logging
 import tempfile
 import time
 
-import requests
 import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
@@ -293,72 +291,6 @@ class Deployment(object):
             )
             _ocp.exec_oc_cmd(command=taint_cmd)
 
-    def create_stage_operator_source(self):
-        """
-        This prepare operator source for OCS deployment from stage.
-        """
-        logger.info("Adding Stage Secret")
-        # generate quay token
-        credentials = {
-            "user": {
-                "username": config.DEPLOYMENT["stage_quay_username"],
-                "password": config.DEPLOYMENT["stage_quay_password"],
-            }
-        }
-        token = requests.post(
-            url="https://quay.io/cnr/api/v1/users/login",
-            data=json.dumps(credentials),
-            headers={"Content-Type": "application/json"},
-        ).json()["token"]
-        stage_ns = config.DEPLOYMENT["stage_namespace"]
-
-        # create Secret
-        stage_os_secret = templating.load_yaml(constants.OPERATOR_SOURCE_SECRET_YAML)
-        stage_os_secret["metadata"]["name"] = constants.OPERATOR_SOURCE_SECRET_NAME
-        stage_os_secret["stringData"]["token"] = token
-        stage_secret_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+",
-            prefix=constants.OPERATOR_SOURCE_SECRET_NAME,
-            delete=False,
-        )
-        templating.dump_data_to_temp_yaml(stage_os_secret, stage_secret_data_yaml.name)
-        run_cmd(f"oc create -f {stage_secret_data_yaml.name}")
-        logger.info("Waiting 10 secs after secret is created")
-        time.sleep(10)
-
-        logger.info("Adding Stage Operator Source")
-        # create Operator Source
-        stage_os = templating.load_yaml(constants.OPERATOR_SOURCE_YAML)
-        stage_os["spec"]["registryNamespace"] = stage_ns
-        stage_os["spec"]["authorizationToken"][
-            "secretName"
-        ] = constants.OPERATOR_SOURCE_SECRET_NAME
-        stage_os_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix=constants.OPERATOR_SOURCE_NAME, delete=False
-        )
-        templating.dump_data_to_temp_yaml(stage_os, stage_os_data_yaml.name)
-        run_cmd(f"oc create -f {stage_os_data_yaml.name}")
-        catalog_source = CatalogSource(
-            resource_name=constants.OPERATOR_SOURCE_NAME,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
-        # Wait for catalog source is ready
-        catalog_source.wait_for_state("READY")
-
-    def create_ocs_operator_source(self, image=None):
-        """
-        This prepare catalog or operator source for OCS deployment.
-
-        Args:
-            image (str): Image of ocs registry.
-
-        """
-        if config.DEPLOYMENT.get("stage"):
-            # deployment from stage
-            self.create_stage_operator_source()
-        else:
-            create_catalog_source(image)
-
     def subscribe_ocs(self):
         """
         This method subscription manifest and subscribe to OCS operator.
@@ -487,7 +419,7 @@ class Deployment(object):
                 create_ocs_secret(self.namespace)
                 create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         if not live_deployment:
-            self.create_ocs_operator_source(image)
+            create_catalog_source(image)
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
@@ -798,7 +730,7 @@ class Deployment(object):
             logger.info("Creating namespace and operator group.")
             run_cmd(f"oc create -f {constants.OLM_YAML}")
         if not live_deployment:
-            self.create_ocs_operator_source()
+            create_catalog_source()
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
