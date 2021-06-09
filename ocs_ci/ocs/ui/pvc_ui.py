@@ -1,7 +1,7 @@
 import logging
-
+import time
 from ocs_ci.ocs.ui.base_ui import PageNavigator
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.views import locators, pvc_4_8a, pvc_4_8b
 from ocs_ci.utility.utils import get_ocp_version
 
 
@@ -19,7 +19,7 @@ class PvcUI(PageNavigator):
         ocp_version = get_ocp_version()
         self.pvc_loc = locators[ocp_version]["pvc"]
 
-    def create_pvc_ui(self, sc_type, pvc_name, access_mode, pvc_size):
+    def create_pvc_ui(self, sc_type, pvc_name, access_mode, pvc_size, vol_mode):
         """
         Create PVC via UI.
 
@@ -51,8 +51,13 @@ class PvcUI(PageNavigator):
         logger.info("Select PVC size")
         self.do_send_keys(self.pvc_loc["pvc_size"], text=pvc_size)
 
+        logger.info(f"Select Volume Mode {vol_mode}")
+        self.do_click(self.pvc_loc[vol_mode])
+
         logger.info("Create PVC")
         self.do_click(self.pvc_loc["pvc_create"])
+
+        time.sleep(2)
 
     def delete_pvc_ui(self, pvc_name):
         """
@@ -70,7 +75,7 @@ class PvcUI(PageNavigator):
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
         logger.info(f"Go to PVC {pvc_name} Page")
-        self.do_click(self.pvc_loc["pvc_test"])
+        self.do_click(pvc_4_8b[pvc_name])
 
         logger.info("Click on Actions")
         self.do_click(self.pvc_loc["pvc_actions"])
@@ -80,3 +85,7 @@ class PvcUI(PageNavigator):
 
         logger.info("Confirm PVC Deletion")
         self.do_click(self.pvc_loc["confirm_pvc_deletion"])
+
+        time.sleep(2)
+
+

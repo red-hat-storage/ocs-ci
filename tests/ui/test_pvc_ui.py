@@ -23,22 +23,37 @@ class TestPvcUserInterface(object):
     @ui
     @skipif_ocs_version("<4.6")
     @pytest.mark.parametrize(
-        argnames=["sc_type", "pvc_name", "access_mode", "pvc_size"],
+        argnames=["sc_type", "pvc_name", "access_mode", "pvc_size", "vol_mode"],
         argvalues=[
+            # pytest.param(
+            #     *["ocs-storagecluster-cephfs", "test-pvc-fs", "ReadWriteMany", "2", None]
+            # ),
+            # pytest.param(
+            #     *["ocs-storagecluster-ceph-rbd", "test-pvc-rbd", "ReadWriteMany", "3", "Filesystem"]
+            # ),
+            # pytest.param(
+            #     *["ocs-storagecluster-ceph-rbd-thick", "test-pvc-rbd-thick", "ReadWriteMany", "4", "Filesystem"]
+            # ),
+            # pytest.param(
+            #     *["ocs-storagecluster-cephfs", "test-pvc-fs", "ReadWriteOnce", "10", None]
+            # ),
             pytest.param(
-                *["ocs-storagecluster-cephfs", "test-pvc-fs", "ReadWriteMany", "2"]
+                *["ocs-storagecluster-ceph-rbd", "test-pvc-rbd", "ReadWriteOnce", "11", "Block"]
+            ),
+            pytest.param(
+                *["ocs-storagecluster-ceph-rbd-thick", "test-pvc-rbd-thick", "ReadWriteOnce", "12", "Block"]
             )
         ],
     )
     def test_create_delete_pvc(
-        self, setup_ui, sc_type, pvc_name, access_mode, pvc_size
+        self, setup_ui, sc_type, pvc_name, access_mode, pvc_size, vol_mode
     ):
         """
         Test create and delete pvc via UI
 
         """
         pvc_ui_obj = PvcUI(setup_ui)
-        pvc_ui_obj.create_pvc_ui(sc_type, pvc_name, access_mode, pvc_size)
+        pvc_ui_obj.create_pvc_ui(sc_type, pvc_name, access_mode, pvc_size, vol_mode)
         time.sleep(2)
 
         pvc_objs = get_all_pvc_objs(namespace="openshift-storage")
