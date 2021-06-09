@@ -8,6 +8,7 @@ import tempfile
 from jsonschema import validate
 from semantic_version import Version
 
+from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.exceptions import ResourceNotFoundError, UnsupportedFeatureError
@@ -485,12 +486,13 @@ def osd_encryption_verification():
                 )
 
 
-def add_capacity(osd_size_capacity_requested):
+def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=True):
     """
     Add storage capacity to the cluster
 
     Args:
         osd_size_capacity_requested(int): Requested osd size capacity
+        add_extra_disk_to_existing_worker(bool): Add Disk if True
 
     Returns:
         new storage device set count (int) : Returns True if all OSDs are in Running state
@@ -576,6 +578,9 @@ def add_capacity(osd_size_capacity_requested):
                 int(len(final_device_list) / new_storage_devices_sets_count)
             )
         if lv_set_present:
+            if platform == constants.VSPHERE_PLATFORM and add_extra_disk_to_existing_worker:
+                log.info("Adding Extra Disk to existing VSphere Worker nodes")
+                add_disk_for_vsphere_platform()
             check_pvs_present_for_ocs_expansion()
         sc = get_storage_cluster()
         # adding the storage capacity to the cluster
