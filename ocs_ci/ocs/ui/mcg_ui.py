@@ -9,9 +9,9 @@ from ocs_ci.utility.utils import get_ocp_version
 logger = logging.getLogger(__name__)
 
 
-class BackingstoreUI(PageNavigator):
+class MCGStoreUI(PageNavigator):
     """
-    A class representation of BS-related OpenShift UI elements
+    A class representation for abstraction of BS-related OpenShift UI actions
 
     """
 
@@ -20,75 +20,78 @@ class BackingstoreUI(PageNavigator):
         self.wait = WebDriverWait(self.driver, 30)
         ocp_version = get_ocp_version()
         self.ocs_loc = locators[ocp_version]["ocs_operator"]
-        self.backingstore = locators[ocp_version]["backingstore"]
+        self.mcg_stores = locators[ocp_version]["mcg_stores"]
 
-    def create_backingstore_ui(self, bs_name, secret_name, target_bucket):
+    def create_store_ui(self, kind, store_name, secret_name, target_bucket):
         """
-        Create a BC via the UI
+        Create an MCG store via the UI
 
-        bc_name (str): The name to grant the OBC
+        kind (str): The store kind - backing | namespace
+        store_name (str): The name to grant to the store
+        secret_name (str): The name of the secret to used to connect the store to AWS
+        target_bucket (str): The AWS S3 bucket to use as a host for the store
 
         """
         self.navigate_to_ocs_operator_page()
 
-        logger.info("Enter the BS section")
-        self.do_click(self.ocs_loc["backingstore_page"])
+        logger.info("Enter the store section")
+        self.do_click(self.ocs_loc[f"{kind}_page"])
 
-        logger.info("Create a new BS")
+        logger.info("Create a new store")
         self.do_click(self.generic_loc["create_resource_button"])
 
-        logger.info("Enter backingstore name")
-        self.do_send_keys(self.backingstore["backingstore_name"], bs_name)
+        logger.info("Enter store name")
+        self.do_send_keys(self.mcg_stores["store_name"], store_name)
 
         logger.info("Pick AWS as the provider")
-        self.do_click(self.backingstore["provider_dropdown"])
-        self.do_click(self.backingstore["aws_provider"])
+        self.do_click(self.mcg_stores["provider_dropdown"])
+        self.do_click(self.mcg_stores["aws_provider"])
 
         logger.info("Pick the us-east-2 region")
-        self.do_click(self.backingstore["aws_region_dropdown"])
-        self.do_click(self.backingstore["us_east_2_region"])
+        self.do_click(self.mcg_stores["aws_region_dropdown"])
+        self.do_click(self.mcg_stores["us_east_2_region"])
 
         logger.info("Pick secret")
-        self.do_click(self.backingstore["aws_secret_dropdown"])
-        self.do_send_keys(self.backingstore["aws_secret_search_field"], secret_name)
+        self.do_click(self.mcg_stores["aws_secret_dropdown"])
+        self.do_send_keys(self.mcg_stores["aws_secret_search_field"], secret_name)
         self.do_click(self.generic_loc["first_dropdown_option"])
 
         logger.info("Enter target bucket name")
-        self.do_send_keys(self.backingstore["target_bucket"], target_bucket)
+        self.do_send_keys(self.mcg_stores["target_bucket"], target_bucket)
 
         logger.info("Submit form")
         self.do_click(self.generic_loc["submit_form"])
 
         print(5)
 
-    def delete_backingstore_ui(self, bs_name):
+    def delete_store_ui(self, kind, store_name):
         """
-        Delete an OBC via the UI
+        Delete an MCG store via the UI
 
-        obc_name (str): Name of the OBC to be deleted
+        store_name (str): Name of the store to be deleted
 
         """
         self.navigate_to_ocs_operator_page()
 
-        logger.info("Enter the BS section")
-        self.do_click(self.ocs_loc["backingstore_page"])
+        logger.info("Enter the store section")
+        self.do_click(self.ocs_loc[f"{kind}_page"])
 
-        logger.info("Search for the BS")
-        self.do_send_keys(self.generic_loc["search_resource_field"], bs_name)
+        logger.info("Search for the store")
+        self.do_send_keys(self.generic_loc["search_resource_field"], store_name)
 
         logger.info("Open BS kebab menu")
         self.do_click(self.generic_loc["kebab_button"])
 
-        logger.info("Click on 'Delete Backingstore'")
+        logger.info(f"Click on 'Delete {kind}'")
         self.do_click(self.generic_loc["delete_resource_kebab_button"])
 
-        logger.info("Confirm BS Deletion")
+        logger.info("Confirm store Deletion")
         self.do_click(self.generic_loc["confirm_action"])
 
 
 class BucketClassUI(PageNavigator):
     """
-    A class representation of BC-related OpenShift UI elements
+    A class representation for abstraction of BC-related OpenShift UI actions
 
     """
 
@@ -100,9 +103,11 @@ class BucketClassUI(PageNavigator):
 
     def create_standard_bucketclass_ui(self, bc_name, policy, store_list):
         """
-        Create a BC via the UI
+        Create a standard BC via the UI
 
         bc_name (str): The name to grant the OBC
+        policy (str): The policy type to use. Spread/Mirror
+        store_list (list[str]): A list of backingstore names to be used by the bucketclass
 
         """
         self.navigate_to_ocs_operator_page()
@@ -124,7 +129,7 @@ class BucketClassUI(PageNavigator):
         self.do_click(self.bucketclass[f"{policy}_policy"])
         self.do_click(self.generic_loc["submit_form"])
 
-        logger.info("Pick store(s)")
+        logger.info("Pick backingstore(s)")
         for backingstore_name in store_list:
             self.do_send_keys(
                 self.generic_loc["search_resource_field"], backingstore_name
@@ -171,9 +176,12 @@ class BucketClassUI(PageNavigator):
         self, bc_name, policy, nss_name_lst, bs_name_lst
     ):
         """
-        Create a BC via the UI
+        Create a namespace BC via the UI
 
         bc_name (str): The name to grant the OBC
+        policy (str): The policy type to use. Single/Multi/Cache
+        nss_name_lst (list[str]): A list of namespacestore names to be used by the bucketclass
+        bs_name_lst (list[str]): A list of namespacestore names to be used by the bucketclass
 
         """
         self.navigate_to_ocs_operator_page()
@@ -207,9 +215,9 @@ class BucketClassUI(PageNavigator):
 
     def delete_bucketclass_ui(self, bc_name):
         """
-        Delete an OBC via the UI
+        Delete a BC via the UI
 
-        obc_name (str): Name of the OBC to be deleted
+        bc_name (str): Name of the BC to be deleted
 
         """
         self.navigate_to_ocs_operator_page()
@@ -232,7 +240,7 @@ class BucketClassUI(PageNavigator):
 
 class ObcUI(PageNavigator):
     """
-    A class representation of OBC-related OpenShift UI elements
+    A class representation for abstraction of OBC-related OpenShift UI actions
 
     """
 

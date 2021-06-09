@@ -144,9 +144,9 @@ ocs_operator_locators = {
     ),
 }
 
-backingstore = {
-    "backingstore_name": ('input[data-test="backingstore-name"]', By.CSS_SELECTOR),
-    "provider_dropdown": ('button[data-test="backingstore-provider"]', By.CSS_SELECTOR),
+mcg_stores = {
+    "store_name": ('input[data-test*="store-name"]', By.CSS_SELECTOR),
+    "provider_dropdown": ('button[data-test*="store-provider"]', By.CSS_SELECTOR),
     "aws_provider": ("AWS S3-link", By.ID),
     "aws_region_dropdown": ("region", By.ID),
     "us_east_2_region": ("us-east-2-link", By.ID),
@@ -156,10 +156,6 @@ backingstore = {
         By.CSS_SELECTOR,
     ),
     "target_bucket": ("target-bucket", By.ID),
-    "delete_button": (
-        'button[data-test-action="Delete Backing Store"]',
-        By.CSS_SELECTOR,
-    ),
 }
 
 bucketclass = {
@@ -305,7 +301,7 @@ locators = {
         "ocs_operator": ocs_operator_locators,
         "obc": obc,
         "bucketclass": bucketclass,
-        "backingstore": backingstore,
+        "mcg_stores": mcg_stores,
     },
     "4.7": {
         "login": login,

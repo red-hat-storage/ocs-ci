@@ -1,7 +1,6 @@
 import datetime
 import logging
 import os
-import time
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -168,14 +167,12 @@ class BaseUI:
         Take screenshot using python code
 
         """
-        time.sleep(1)
         filename = os.path.join(
             self.screenshots_folder,
             f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
         )
         logger.info(f"Creating snapshot: {filename}")
         self.driver.save_screenshot(filename)
-        time.sleep(0.5)
 
 
 class PageNavigator(BaseUI):
