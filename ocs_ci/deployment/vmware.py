@@ -48,6 +48,7 @@ from ocs_ci.utility.utils import (
     upload_file,
     wait_for_co,
     get_ocp_version,
+    get_openshift_installer,
     get_terraform,
     set_aws_region,
     get_terraform_ignition_provider,
@@ -878,32 +879,36 @@ class VSPHEREIPI(VSPHEREBASE):
                 raise e
             self.test_cluster()
 
-        def deploy_ocp(self, log_cli_level="DEBUG"):
-            """
-            Deployment specific to OCP cluster on this platform
+    def deploy_ocp(self, log_cli_level="DEBUG"):
+        """
+        Deployment specific to OCP cluster on this platform
 
-            Args:
-                log_cli_level (str): openshift installer's log level
-                    (default: "DEBUG")
-            """
-            super(VSPHEREIPI, self).deploy_ocp(log_cli_level)
+        Args:
+            log_cli_level (str): openshift installer's log level
+                (default: "DEBUG")
+        """
+        super(VSPHEREIPI, self).deploy_ocp(log_cli_level)
 
-        def destroy_cluster(self, log_level="DEBUG"):
-            """
-            Destroy OCP cluster specific to vSphere IPI
+    def destroy_cluster(self, log_level="DEBUG"):
+        """
+        Destroy OCP cluster specific to vSphere IPI
 
-            Args:
-                log_level (str): log level openshift-installer (default: DEBUG)
-            """
-            try:
-                run_cmd(
-                    f"{self.installer} destroy cluster "
-                    f"--dir {self.cluster_path} "
-                    f"--log-level {log_level}",
-                    timeout=3600,
-                )
-            except CommandFailed as e:
-                logger.error(e)
+        Args:
+            log_level (str): log level openshift-installer (default: DEBUG)
+        """
+        force_download = config.DEPLOYMENT["force_download_installer"]
+        installer = get_openshift_installer(
+            config.DEPLOYMENT["installer_version"], force_download=force_download
+        )
+        try:
+            run_cmd(
+                f"{installer} destroy cluster "
+                f"--dir {self.cluster_path} "
+                f"--log-level {log_level}",
+                timeout=3600,
+            )
+        except CommandFailed as e:
+            logger.error(e)
 
 
 def change_vm_root_disk_size(machine_file):
