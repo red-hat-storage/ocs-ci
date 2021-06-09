@@ -603,7 +603,7 @@ def get_openshift_installer(
 
     """
     version = version or config.DEPLOYMENT["installer_version"]
-    version = expose_ocp_version(version)
+
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
@@ -613,6 +613,7 @@ def get_openshift_installer(
         log.debug(f"Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
+        version = expose_ocp_version(version)
         log.info(f"Downloading openshift installer ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
@@ -628,7 +629,6 @@ def get_openshift_installer(
 
     installer_version = run_cmd(f"{installer_binary_path} version")
     log.info(f"OpenShift Installer version: {installer_version}")
-
     return installer_binary_path
 
 
