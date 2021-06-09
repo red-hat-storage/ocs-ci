@@ -78,10 +78,9 @@ class TestBucketclassUserInterface(object):
     """
 
     def teardown(self):
-        return True
         bc_lst = oc_get_all_resource_names_of_a_kind("bucketclass")
         test_bucketclasses = [
-            bc_name for bc_name in bc_lst if "bucketclass-aws" in bc_name
+            bc_name for bc_name in bc_lst if "bucketclass-test" in bc_name
         ]
         for bc_name in test_bucketclasses:
             OCP(kind="backingstore").delete(resource_name=bc_name)
@@ -110,7 +109,7 @@ class TestBucketclassUserInterface(object):
         test_stores = backingstore_factory("oc", {"aws": [(bs_amount, "us-east-2")]})
 
         bc_name = create_unique_resource_name(
-            resource_description="aws", resource_type="bucketclass"
+            resource_description="test", resource_type="bucketclass"
         )
 
         bc_ui_obj = BucketClassUI(setup_ui)
