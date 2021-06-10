@@ -1375,9 +1375,9 @@ def email_reports(session):
 
     try:
         build_id = get_ocs_build_number()
-    except Exception as e:
+    except Exception:
         build_id = ""
-        log.exception(e)
+        log.exception("Getting OCS operator build number failed!")
     build_str = f"BUILD ID: {build_id} " if build_id else ""
     mailids = config.RUN["cli_params"]["email"]
     recipients = []
@@ -1409,8 +1409,8 @@ def email_reports(session):
         s.sendmail(sender, recipients, msg.as_string())
         s.quit()
         log.info(f"Results have been emailed to {recipients}")
-    except Exception as e:
-        log.exception(e)
+    except Exception:
+        log.exception("Sending email with results failed!")
 
 
 def get_cluster_version_info():
