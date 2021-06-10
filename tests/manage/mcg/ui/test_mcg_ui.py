@@ -40,8 +40,14 @@ class TestStoreUserInterface(object):
     @pytest.mark.parametrize(
         argnames=["kind"],
         argvalues=[
-            pytest.param("backingstore"),
-            pytest.param("namespacestore"),
+            pytest.param(
+                "backingstore",
+                marks=pytest.mark.polarion_id("OCS-2549"),
+            ),
+            pytest.param(
+                "namespacestore",
+                marks=pytest.mark.polarion_id("OCS-2547"),
+            ),
         ],
     )
     def test_store_creation_and_deletion(
@@ -100,8 +106,14 @@ class TestBucketclassUserInterface(object):
     @pytest.mark.parametrize(
         argnames=["policy", "bs_amount"],
         argvalues=[
-            pytest.param(*["spread", 2]),
-            pytest.param(*["mirror", 2]),
+            pytest.param(
+                *["spread", 2],
+                marks=pytest.mark.polarion_id("OCS-2548"),
+            ),
+            pytest.param(
+                *["mirror", 2],
+                marks=pytest.mark.polarion_id("OCS-2543"),
+            ),
         ],
     )
     def test_standard_bc_creation_and_deletion(
@@ -144,9 +156,18 @@ class TestBucketclassUserInterface(object):
     @pytest.mark.parametrize(
         argnames=["policy", "amount"],
         argvalues=[
-            pytest.param(*["single", 1]),
-            pytest.param(*["multi", 2]),
-            pytest.param(*["cache", 1]),
+            pytest.param(
+                *["single", 1],
+                marks=pytest.mark.polarion_id("OCS-2544"),
+            ),
+            pytest.param(
+                *["multi", 2],
+                marks=pytest.mark.polarion_id("OCS-2545"),
+            ),
+            pytest.param(
+                *["cache", 1],
+                marks=pytest.mark.polarion_id("OCS-2546"),
+            ),
         ],
     )
     def test_namespace_bc_creation_and_deletion(
@@ -219,7 +240,8 @@ class TestObcUserInterface(object):
                 *[
                     "openshift-storage.noobaa.io",
                     "noobaa-default-bucket-class",
-                ]
+                ],
+                marks=pytest.mark.polarion_id("OCS-2542"),
             )
         ],
     )
