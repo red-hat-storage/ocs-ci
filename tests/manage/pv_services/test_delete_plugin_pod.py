@@ -45,7 +45,7 @@ class TestDeletePluginPod(ManageTest):
             interface=interface, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
         )
 
-    def test_delete_plugin_pod(self, interface, resource_to_delete):
+    def test_delete_plugin_pod(self, resource_to_delete):
         """
         Test case to verify the impact of plugin pod deletion on app pod
 
