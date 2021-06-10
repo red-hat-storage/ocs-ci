@@ -34,7 +34,9 @@ class TestStoreUserInterface(object):
                 if f"{store_kind}-aws" in store_name
             ]
             for store_name in test_stores:
-                OCP(kind=store_kind).delete(resource_name=store_name)
+                OCP(
+                    kind=store_kind, namespace=config.ENV_DATA["cluster_namespace"]
+                ).delete(resource_name=store_name)
 
     @tier1
     @skipif_ocs_version("<4.8")
@@ -74,9 +76,9 @@ class TestStoreUserInterface(object):
             resource_name=store_name,
         )
 
-        OCP(kind=kind).wait_for_resource(
-            condition="Ready", resource_name=store_name, column="PHASE"
-        )
+        OCP(
+            kind=kind, namespace=config.ENV_DATA["cluster_namespace"]
+        ).wait_for_resource(condition="Ready", resource_name=store_name, column="PHASE")
 
         logger.info(f"Delete {store_name}")
         bs_ui_obj.delete_store_ui(kind, store_name)
@@ -101,7 +103,9 @@ class TestBucketclassUserInterface(object):
             bc_name for bc_name in bc_lst if "bucketclass-test" in bc_name
         ]
         for bc_name in test_bucketclasses:
-            OCP(kind="bucketclass").delete(resource_name=bc_name)
+            OCP(
+                kind="bucketclass", namespace=config.ENV_DATA["cluster_namespace"]
+            ).delete(resource_name=bc_name)
 
     @pytest.mark.parametrize(
         argnames=["policy", "bs_amount"],
@@ -216,7 +220,9 @@ class TestObcUserInterface(object):
         obc_lst = oc_get_all_resource_names_of_a_kind("obc")
         test_obcs = [obc_name for obc_name in obc_lst if "obc-testing" in obc_name]
         for obc_name in test_obcs:
-            OCP(kind="obc").delete(resource_name=obc_name)
+            OCP(kind="obc", namespace=config.ENV_DATA["cluster_namespace"]).delete(
+                resource_name=obc_name
+            )
 
     @tier1
     @skipif_ocs_version("<4.8")
