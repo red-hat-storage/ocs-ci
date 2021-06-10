@@ -170,7 +170,7 @@ def create_pod(
         AssertionError: In case of any failure
 
     """
-    if interface_type == constants.CEPHBLOCKPOOL:
+    if interface_type == constants.CEPHBLOCKPOOL or interface_type == constants.CEPHBLOCKPOOL_THICK:
         pod_dict = pod_dict_path if pod_dict_path else constants.CSI_RBD_POD_YAML
         interface = constants.RBD_INTERFACE
     else:
