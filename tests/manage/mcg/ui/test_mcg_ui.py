@@ -6,13 +6,16 @@ import time
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import skipif_ocs_version, skipif_disconnected_cluster, ui
+from ocs_ci.framework.testlib import (
+    skipif_ocs_version,
+    skipif_disconnected_cluster,
+    tier1,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.mcg_ui import BucketClassUI, MCGStoreUI, ObcUI
 from ocs_ci.ocs.utils import (
     oc_get_all_resource_names_of_a_kind,
 )
-from ocs_ci.utility.utils import check_resource_existence
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +36,7 @@ class TestStoreUserInterface(object):
             for store_name in test_stores:
                 OCP(kind=store_kind).delete(resource_name=store_name)
 
-    @ui
+    @tier1
     @skipif_ocs_version("<4.8")
     @skipif_disconnected_cluster
     @pytest.mark.parametrize(
@@ -80,10 +83,10 @@ class TestStoreUserInterface(object):
 
         time.sleep(5)
 
-        assert check_resource_existence(test_bs, should_exist=False)
+        assert test_bs.check_resource_existence(should_exist=False)
 
 
-@ui
+@tier1
 @skipif_ocs_version("<4.8")
 @skipif_disconnected_cluster
 class TestBucketclassUserInterface(object):
@@ -133,7 +136,7 @@ class TestBucketclassUserInterface(object):
             constants.STATUS_READY
         ), "Created bucketclass was not ready in time"
 
-        test_bs = OCP(
+        test_bc = OCP(
             namespace=config.ENV_DATA["cluster_namespace"],
             kind="bucketclass",
             resource_name=bc_name,
@@ -144,7 +147,7 @@ class TestBucketclassUserInterface(object):
 
         time.sleep(5)
 
-        assert check_resource_existence(test_bs, should_exist=False)
+        assert test_bc.check_resource_existence(should_exist=False)
 
     @pytest.mark.parametrize(
         argnames=["policy", "amount"],
@@ -189,7 +192,7 @@ class TestBucketclassUserInterface(object):
             constants.STATUS_READY
         ), "Created bucketclass was not ready in time"
 
-        test_bs = OCP(
+        test_bc = OCP(
             namespace=config.ENV_DATA["cluster_namespace"],
             kind="bucketclass",
             resource_name=bc_name,
@@ -200,7 +203,7 @@ class TestBucketclassUserInterface(object):
 
         time.sleep(5)
 
-        assert check_resource_existence(test_bs, should_exist=False)
+        assert test_bc.check_resource_existence(should_exist=False)
 
 
 class TestObcUserInterface(object):
@@ -215,7 +218,7 @@ class TestObcUserInterface(object):
         for obc_name in test_obcs:
             OCP(kind="obc").delete(resource_name=obc_name)
 
-    @ui
+    @tier1
     @skipif_ocs_version("<4.8")
     @pytest.mark.parametrize(
         argnames=["storageclass", "bucketclass"],
@@ -268,4 +271,4 @@ class TestObcUserInterface(object):
 
         time.sleep(5)
 
-        assert check_resource_existence(test_obc, should_exist=False)
+        assert test_obc.check_resource_existence(should_exist=False)

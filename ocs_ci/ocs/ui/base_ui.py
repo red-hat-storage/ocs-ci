@@ -271,6 +271,9 @@ class PageNavigator(BaseUI):
         self.do_click(self.page_nav["installed_operators_page"])
 
     def navigate_to_ocs_operator_page(self):
+        """
+        Navigate to the OCS Operator management page
+        """
         self.navigate_installed_operators_page()
         logger.info("Select openshift-storage project")
         self.do_click(self.generic_locators["project_selector"])

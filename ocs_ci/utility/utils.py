@@ -3349,37 +3349,3 @@ def add_chrony_to_ocp_deployment():
         )
         with open(chrony_file, "w") as f:
             f.write(chrony_template_str)
-
-
-def check_resource_existence(ocp_obj, should_exist, timeout=60):
-    """
-    Checks whether an OCP() resource exists
-
-    Args:
-        ocp_obj (ocs_ci.ocs.ocp.OCP): The OCP object to check
-        should_exist (bool): Whether the resource should or shouldn't be found
-        timeout (int): How long should the check run before moving on
-
-    Returns:
-        bool: True if the resource was found, False otherwise
-    """
-
-    def _check_existence(ocp_obj, should_exist):
-        try:
-            ocp_obj.get()
-            return True if should_exist else False
-        except CommandFailed:
-            log.warning(f"Resource {ocp_obj.resource_name} was not found.")
-            return False if should_exist else True
-
-    try:
-        for expected_state in TimeoutSampler(
-            timeout, 3, _check_existence, ocp_obj, should_exist
-        ):
-            if expected_state:
-                return True
-    except TimeoutExpiredError:
-        log.error(
-            f"{ocp_obj.resource_name} did not reach the expected state within the time limit."
-        )
-        return False

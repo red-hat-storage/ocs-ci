@@ -26,10 +26,11 @@ class MCGStoreUI(PageNavigator):
         """
         Create an MCG store via the UI
 
-        kind (str): The store kind - backing | namespace
-        store_name (str): The name to grant to the store
-        secret_name (str): The name of the secret to used to connect the store to AWS
-        target_bucket (str): The AWS S3 bucket to use as a host for the store
+        Args:
+            kind (str): The store kind - backing | namespace
+            store_name (str): The name to grant to the store
+            secret_name (str): The name of the secret to used to connect the store to AWS
+            target_bucket (str): The AWS S3 bucket to use as a host for the store
 
         """
         self.navigate_to_ocs_operator_page()
@@ -103,9 +104,10 @@ class BucketClassUI(PageNavigator):
         """
         Create a standard BC via the UI
 
-        bc_name (str): The name to grant the OBC
-        policy (str): The policy type to use. Spread/Mirror
-        store_list (list[str]): A list of backingstore names to be used by the bucketclass
+        Args:
+            bc_name (str): The name to grant the OBC
+            policy (str): The policy type to use. Spread/Mirror
+            store_list (list[str]): A list of backingstore names to be used by the bucketclass
 
         """
         self.navigate_to_ocs_operator_page()
@@ -176,10 +178,11 @@ class BucketClassUI(PageNavigator):
         """
         Create a namespace BC via the UI
 
-        bc_name (str): The name to grant the OBC
-        policy (str): The policy type to use. Single/Multi/Cache
-        nss_name_lst (list[str]): A list of namespacestore names to be used by the bucketclass
-        bs_name_lst (list[str]): A list of namespacestore names to be used by the bucketclass
+        Args:
+            bc_name (str): The name to grant the OBC
+            policy (str): The policy type to use. Single/Multi/Cache
+            nss_name_lst (list[str]): A list of namespacestore names to be used by the bucketclass
+            bs_name_lst (list[str]): A list of namespacestore names to be used by the bucketclass
 
         """
         self.navigate_to_ocs_operator_page()
@@ -251,9 +254,10 @@ class ObcUI(PageNavigator):
         """
         Create an OBC via the UI
 
-        obc_name (str): The name to grant the OBC
-        storageclass (str): The storageclass to be used by the OBC
-        bucketclass (str): The bucketclass to be used by the OBC
+        Args:
+            obc_name (str): The name to grant the OBC
+            storageclass (str): The storageclass to be used by the OBC
+            bucketclass (str): The bucketclass to be used by the OBC
 
         """
         self.navigate_object_bucket_claims_page()
