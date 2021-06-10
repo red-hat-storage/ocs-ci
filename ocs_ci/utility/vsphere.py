@@ -1301,22 +1301,31 @@ class VSPHERE(object):
         )
         return vm.summary.guest.ipAddress
 
-    def find_vms_without_ip_and_restart(self):
+    def find_vms_without_ip(self, name, datacenter_name, cluster_name):
         """
-        Find all VMs from current cluster and restart those without IP
+        Find all VMs without IP from resource pool
+
+        Args:
+            name (str): Resource pool name
+            datacenter_name (str): Datacenter name
+            cluster_name (str): vSphere Cluster name
+
+        Returns:
+            list: VM instances (vim.VirtualMachine)
+
         """
         all_vms = self.get_all_vms_in_pool(
-            config.ENV_DATA.get("cluster_name"),
-            config.ENV_DATA["vsphere_datacenter"],
-            config.ENV_DATA["vsphere_cluster"],
+            name,
+            datacenter_name,
+            cluster_name,
         )
         for vm in all_vms:
             logger.info(f"vm name: {vm.name} , IP: {vm.summary.guest.ipAddress}")
         vms_without_ip = [vm for vm in all_vms if not vm.summary.guest.ipAddress]
         for vm in vms_without_ip:
-            logger.info(f"VM: {vm.name} doesn't have IP, it will be restarted!")
+            logger.info(f"VM: {vm.name} doesn't have IP")
         if vms_without_ip:
-            self.restart_vms(vms_without_ip, force=True)
+            return vms_without_ip
 
     def get_device_by_key(self, vm, identifier, key="unit_number"):
         """
