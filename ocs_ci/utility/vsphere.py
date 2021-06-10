@@ -12,7 +12,6 @@ from pyVmomi import vim, vmodl
 from pyVim.task import WaitForTask, WaitForTasks
 from pyVim.connect import Disconnect, SmartStubAdapter, VimSessionOrientedStub
 from ocs_ci.ocs.exceptions import VMMaxDisksReachedException, ResourcePoolNotFound
-from ocs_ci.framework import config
 from ocs_ci.ocs.constants import (
     GB2KB,
     VM_DISK_TYPE,
