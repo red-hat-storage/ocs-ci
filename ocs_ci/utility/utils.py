@@ -569,7 +569,7 @@ def expose_ocp_version(version):
     """
     if version.endswith(".nightly"):
         latest_nightly_url = (
-            f"https://openshift-release.svc.ci.openshift.org/api/v1/"
+            f"https://amd64.ocp.releases.ci.openshift.org/api/v1/"
             f"releasestream/{version}/latest"
         )
         version_url_content = get_url_content(latest_nightly_url)
@@ -854,7 +854,7 @@ def get_openshift_mirror_url(file_name, version):
         raise UnsupportedOSType
     url_template = config.DEPLOYMENT.get(
         "ocp_url_template",
-        "https://openshift-release-artifacts.svc.ci.openshift.org/"
+        "https://openshift-release-artifacts.apps.ci.l2s4.p1.openshiftapps.com/"
         "{version}/{file_name}-{os_type}-{version}.tar.gz",
     )
     url = url_template.format(
