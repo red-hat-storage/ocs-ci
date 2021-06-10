@@ -2216,7 +2216,6 @@ class RHVNodes(NodesBase):
 
         vms = self.get_rhv_vm_instances(nodes)
         node_names = [n.name for n in nodes]
-
         self.rhv.stop_rhv_vms(vms, timeout=timeout, force=force)
         logger.info(f"node names are: {node_names} ")
         if wait:
@@ -2224,4 +2223,27 @@ class RHVNodes(NodesBase):
             logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
             wait_for_nodes_status(
                 node_names=node_names, status=constants.NODE_NOT_READY, timeout=timeout
+            )
+
+    def start_nodes(self, nodes, timeout=600, wait=True):
+        """
+        Start RHV VM
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to start, False otherwise
+            timeout (int): time in seconds to wait for node to reach 'ready' state.
+
+        """
+        if not nodes:
+            raise ValueError("No nodes found to start")
+        vms = self.get_rhv_vm_instances(nodes)
+        node_names = [n.name for n in nodes]
+        self.rhv.start_rhv_vms(vms, wait=wait, timeout=timeout)
+
+        if wait:
+            # When the node is reachable then the node reaches status Ready.
+            logger.info(f"Waiting for nodes: {node_names} to reach ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY, timeout=timeout
             )
