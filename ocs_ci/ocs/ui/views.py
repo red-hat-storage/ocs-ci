@@ -7,6 +7,7 @@ login = {
     "username": ("inputUsername", By.ID),
     "password": ("inputPassword", By.ID),
     "click_login": ("//button[text()='Log in']", By.XPATH),
+    "flexy_kubeadmin": ('a[title="Log in with kube:admin"]', By.CSS_SELECTOR),
 }
 
 deployment = {
@@ -292,6 +293,44 @@ infra = {
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
 }
 
+validation = {
+    "object_service_tab": (
+        'a[data-test-id="horizontal-link-Object Service"]',
+        By.CSS_SELECTOR,
+    ),
+    "persistent_storage_tab": (
+        'a[data-test-id="horizontal-link-Persistent Storage"]',
+        By.CSS_SELECTOR,
+    ),
+    "object_service_button": ("//button[text()='Object Service']", By.XPATH),
+    "data_resiliency_button": ("//button[text()='Data Resiliency']", By.XPATH),
+    "search_ocs_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
+    "ocs_operator_installed": (
+        'a[data-test-operator-row="OpenShift Container Storage"]',
+        By.CSS_SELECTOR,
+    ),
+    "osc_subscription_tab": (
+        'a[data-test-id="horizontal-link-olm~Subscription"]',
+        By.CSS_SELECTOR,
+    ),
+    "osc_all_instances_tab": (
+        'a[data-test-id="horizontal-link-olm~All instances"]',
+        By.CSS_SELECTOR,
+    ),
+    "osc_storage_cluster_tab": (
+        'a[data-test-id="horizontal-link-Storage Cluster"]',
+        By.CSS_SELECTOR,
+    ),
+    "osc_backing_store_tab": (
+        'a[data-test-id="horizontal-link-Backing Store"]',
+        By.CSS_SELECTOR,
+    ),
+    "osc_bucket_class_tab": (
+        'a[data-test-id="horizontal-link-Bucket Class"]',
+        By.CSS_SELECTOR,
+    ),
+}
+
 locators = {
     "4.8": {
         "login": login,
@@ -309,6 +348,7 @@ locators = {
         "deployment": {**deployment, **deployment_4_7},
         "pvc": pvc,
         "infra": infra,
+        "validation": validation,
     },
     "4.6": {
         "login": login,

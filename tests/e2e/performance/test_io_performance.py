@@ -5,16 +5,12 @@ import pytest
 import logging
 
 from ocs_ci.utility.performance_dashboard import push_perf_dashboard
-from ocs_ci.framework.testlib import (
-    ManageTest,
-    performance,
-)
+from ocs_ci.framework.testlib import ManageTest
 
 
 logger = logging.getLogger(__name__)
 
 
-@performance
 class TestIOPerformance(ManageTest):
     """
     Test IO performance

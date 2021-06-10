@@ -1449,8 +1449,8 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
             logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
             logs = logs.split("\n")
             loop_counter += 1
-            if loop_counter >= 3:
-                logging.info("Waited for more than 3mins still no data")
+            if loop_counter >= 6:
+                logging.info("Waited for more than 6mins still no data")
                 raise UnexpectedBehaviour(
                     f"There is no pvc creation data in CSI logs for {no_data_list}"
                 )
@@ -1518,8 +1518,8 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
             logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
             logs = logs.split("\n")
             loop_counter += 1
-            if loop_counter >= 3:
-                logging.info("Waited for more than 3mins still no data")
+            if loop_counter >= 6:
+                logging.info("Waited for more than 6mins still no data")
                 raise UnexpectedBehaviour(
                     f"There is no pv deletion data in CSI logs for {no_data_list}"
                 )

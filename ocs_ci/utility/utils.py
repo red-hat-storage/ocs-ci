@@ -569,7 +569,7 @@ def expose_ocp_version(version):
     """
     if version.endswith(".nightly"):
         latest_nightly_url = (
-            f"https://openshift-release.svc.ci.openshift.org/api/v1/"
+            f"https://amd64.ocp.releases.ci.openshift.org/api/v1/"
             f"releasestream/{version}/latest"
         )
         version_url_content = get_url_content(latest_nightly_url)
@@ -603,7 +603,6 @@ def get_openshift_installer(
 
     """
     version = version or config.DEPLOYMENT["installer_version"]
-    version = expose_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
@@ -613,6 +612,7 @@ def get_openshift_installer(
         log.debug(f"Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
+        version = expose_ocp_version(version)
         log.info(f"Downloading openshift installer ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
@@ -628,7 +628,6 @@ def get_openshift_installer(
 
     installer_version = run_cmd(f"{installer_binary_path} version")
     log.info(f"OpenShift Installer version: {installer_version}")
-
     return installer_binary_path
 
 
@@ -854,7 +853,7 @@ def get_openshift_mirror_url(file_name, version):
         raise UnsupportedOSType
     url_template = config.DEPLOYMENT.get(
         "ocp_url_template",
-        "https://openshift-release-artifacts.svc.ci.openshift.org/"
+        "https://openshift-release-artifacts.apps.ci.l2s4.p1.openshiftapps.com/"
         "{version}/{file_name}-{os_type}-{version}.tar.gz",
     )
     url = url_template.format(
@@ -2418,6 +2417,28 @@ def skipif_ocs_version(expressions):
     """
     expr_list = [expressions] if isinstance(expressions, str) else expressions
     return any(eval(config.ENV_DATA["ocs_version"] + expr) for expr in expr_list)
+
+
+def skipif_ui(ui_test):
+    """
+    This function evaluates the condition for ui test skip
+    based on ui_test expression
+
+    Args:
+        ui_test (str): condition for which we need to check,
+
+    Return:
+        'True' if test needs to be skipped else 'False'
+
+    """
+    from ocs_ci.ocs.ui.views import locators
+
+    ocp_version = get_running_ocp_version()
+    try:
+        locators.get(ocp_version).get(ui_test)
+    except KeyError:
+        return True
+    return False
 
 
 def get_ocs_version_from_image(image):

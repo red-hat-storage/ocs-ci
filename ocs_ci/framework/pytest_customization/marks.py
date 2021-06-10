@@ -269,6 +269,9 @@ skipif_ocp_version = pytest.mark.skipif_ocp_version
 # Marker for skipping tests based on OCS version
 skipif_ocs_version = pytest.mark.skipif_ocs_version
 
+# Marker for skipping tests based on UI
+skipif_ui = pytest.mark.skipif_ui
+
 # Marker for skipping tests if the cluster is upgraded from a particular
 # OCS version
 skipif_upgraded_from = pytest.mark.skipif_upgraded_from

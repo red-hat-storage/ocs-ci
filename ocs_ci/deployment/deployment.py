@@ -485,7 +485,6 @@ class Deployment(object):
             ibmcloud.add_deployment_dependencies()
             if not live_deployment:
                 create_ocs_secret(self.namespace)
-                create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         if not live_deployment:
             self.create_ocs_operator_source(image)
         self.subscribe_ocs()
@@ -1066,8 +1065,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         ignore_upgrade (bool): Ignore upgrade parameter.
 
     """
-    if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
-        link_all_sa_and_secret(constants.OCS_SECRET, constants.MARKETPLACE_NAMESPACE)
     logger.info("Adding CatalogSource")
     if not image:
         image = config.DEPLOYMENT.get("ocs_registry_image", "")
@@ -1099,6 +1096,9 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         )
 
     catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
+    if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+        create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
+        catalog_source_data["spec"]["secrets"] = [constants.OCS_SECRET]
     cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
     change_cs_condition = (
         (image or image_tag)

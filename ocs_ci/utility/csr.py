@@ -5,7 +5,8 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp
 from ocs_ci.utility.vsphere import VSPHERE
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler, get_ocp_version
+from semantic_version import Version
 
 logger = logging.getLogger(__name__)
 
@@ -162,9 +163,14 @@ def wait_for_all_nodes_csr_and_approve(timeout=900, sleep=10, expected_node_num=
     if not expected_node_num:
         # expected number of nodes is total of master, worker nodes and
         # bootstrapper node
+        # In OCP 4.8, an extra CSR (openshift-authenticator) is added
+        ocp_version = get_ocp_version()
         expected_node_num = (
             config.ENV_DATA["master_replicas"] + config.ENV_DATA["worker_replicas"] + 1
         )
+        if Version.coerce(ocp_version) >= Version.coerce("4.8"):
+            expected_node_num += 1
+
     for csr_nodes in TimeoutSampler(timeout=timeout, sleep=sleep, func=get_nodes_csr):
         logger.debug(f"CSR data: {csr_nodes}")
         if len(csr_nodes.keys()) == expected_node_num:

@@ -1,6 +1,6 @@
 # Coding guidelines for OCS-CI project
 
-Lets follow the following guidelines for the Core Libraries and Test Scripts
+Let's follow the following guidelines for the Core Libraries and Test Scripts
 
 * Follow pep8 or use autopep8 to automagically conform to pep8 style.
 * Each Python Class is well documented for inheritance, methods and
@@ -19,11 +19,16 @@ Lets follow the following guidelines for the Core Libraries and Test Scripts
  and will follow [pytest](https://docs.pytest.org/en/latest/) conventions.
 * Do not use backslashes in the code for line breaker!
 * Line length should be maximum 79 characters!
-* Try to follow this convention for brackets and indentions like in example
+* Try to follow this convention for brackets and indentation like in example
     below if the line doesn't fit in 79 chars!  (This makes code much more
     readable):
 * If you are introducing a workaround, follow rules noted in
   [Tracking of workarounds](./workarounds.md) page.
+* We use [black](https://black.readthedocs.io/en/stable/index.html) in our pre-commit hooks
+  to automatically format code before it hits code review. Our PR checks are also using
+  black to verify that code that has made it to review complies with our guidelines. If
+  black will take any action on the code (if reformatting is necessary) then the PR check
+  will fail.
 
 ```python
 def function(
