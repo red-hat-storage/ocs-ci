@@ -195,7 +195,11 @@ def wait_for_all_nodes_csr_and_approve(timeout=900, sleep=10, expected_node_num=
         if vsphere_object and time.time() - start_time >= reboot_timeout:
             start_time = time.time()
             if not is_vms_without_ip:
-                vms_without_ip = vsphere_object.find_vms_without_ip()
+                vms_without_ip = vsphere_object.find_vms_without_ip(
+                    config.ENV_DATA.get("cluster_name"),
+                    config.ENV_DATA["vsphere_datacenter"],
+                    config.ENV_DATA["vsphere_cluster"],
+                )
                 if vms_without_ip:
                     vsphere_object.restart_vms(vms_without_ip, force=True)
                 else:
