@@ -105,7 +105,7 @@ class BucketClassUI(PageNavigator):
         Create a standard BC via the UI
 
         Args:
-            bc_name (str): The name to grant the OBC
+            bc_name (str): The name to grant the BC
             policy (str): The policy type to use. Spread/Mirror
             store_list (list[str]): A list of backingstore names to be used by the bucketclass
 
@@ -179,7 +179,7 @@ class BucketClassUI(PageNavigator):
         Create a namespace BC via the UI
 
         Args:
-            bc_name (str): The name to grant the OBC
+            bc_name (str): The name to grant the BC
             policy (str): The policy type to use. Single/Multi/Cache
             nss_name_lst (list[str]): A list of namespacestore names to be used by the bucketclass
             bs_name_lst (list[str]): A list of namespacestore names to be used by the bucketclass
