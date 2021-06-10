@@ -667,11 +667,6 @@ class Deployment(object):
                 and not lso_type == constants.AWS_EBS
             ):
                 deviceset_data["count"] = 2
-            if ocs_version >= 4.5:
-                deviceset_data["resources"] = {
-                    "limits": {"cpu": 2, "memory": "5Gi"},
-                    "requests": {"cpu": 1, "memory": "5Gi"},
-                }
             if (ocp_version >= 4.6) and (ocs_version >= 4.6):
                 cluster_data["metadata"]["annotations"] = {
                     "cluster.ocs.openshift.io/local-devices": "true"
