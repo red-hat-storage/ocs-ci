@@ -141,7 +141,7 @@ def get_logfile_names(interface):
         raise Exception("Can not get csi controller pod")
 
     provisioning_name = "csi-cephfsplugin-provisioner"
-    if interface == constants.CEPHBLOCKPOOL:
+    if interface == constants.CEPHBLOCKPOOL or interface == constants.CEPHBLOCKPOOL_THICK:
         provisioning_name = "csi-rbdplugin-provisioner"
 
     for line in pods:

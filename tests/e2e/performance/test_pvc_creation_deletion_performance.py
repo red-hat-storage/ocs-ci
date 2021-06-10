@@ -83,18 +83,24 @@ class TestPVCCreationDeletionPerformance(PASTest):
             }
 
     @pytest.fixture()
-    def base_setup(self, interface_iterate, storageclass_factory, pod_factory):
+    def base_setup(self, interface_type, storageclass_factory, pod_factory):
         """
         A setup phase for the test
 
         Args:
-            interface_iterate: A fixture to iterate over ceph interfaces
+            interface_type: A fixture to iterate over ceph interfaces
             storageclass_factory: A fixture to create everything needed for a
                 storageclass
             pod_factory: A fixture to create new pod
         """
-        self.interface = interface_iterate
-        self.sc_obj = storageclass_factory(self.interface)
+        self.interface = interface_type
+        if self.interface == constants.CEPHBLOCKPOOL_THICK:
+            self.sc_obj = storageclass_factory(
+                interface=constants.CEPHBLOCKPOOL,
+                new_rbd_pool=True,
+                rbd_thick_provision=True)
+        else:
+            self.sc_obj = storageclass_factory(self.interface)
         self.pod_factory = pod_factory
 
     def init_full_results(self, full_results):
@@ -114,12 +120,53 @@ class TestPVCCreationDeletionPerformance(PASTest):
         full_results.add_key("index", full_results.new_index)
         return full_results
 
+    # @pytest.mark.parametrize(
+    #     argnames=["pvc_size"],
+    #     argvalues=[
+    #         pytest.param(*["1Gi"], marks=pytest.mark.polarion_id("OCS-2007")),
+    #         pytest.param(*["50Gi"], marks=pytest.mark.polarion_id("OCS-2007")),
+    #         pytest.param(*["100Gi"], marks=pytest.mark.polarion_id("OCS-2007")),
+    #     ],
+    # )
     @pytest.mark.parametrize(
-        argnames=["pvc_size"],
+        argnames=["interface_type", "pvc_size"],
         argvalues=[
-            pytest.param(*["25Gi"], marks=pytest.mark.polarion_id("OCS-2007")),
-            pytest.param(*["50Gi"], marks=pytest.mark.polarion_id("OCS-2007")),
-            pytest.param(*["100Gi"], marks=pytest.mark.polarion_id("OCS-2007")),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL, "25Gi"],
+                marks=pytest.mark.performance,
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM, "25Gi"],
+                marks=pytest.mark.performance,
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL_THICK, "1Gi"],
+                marks=pytest.mark.performance_new_feature,
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL, "50Gi"],
+                marks=pytest.mark.performance,
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM, "50Gi"],
+                marks=pytest.mark.performance,
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL_THICK, "50Gi"],
+                marks=pytest.mark.performance_new_feature,
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL, "100Gi"],
+                marks=pytest.mark.performance,
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM, "100Gi"],
+                marks=pytest.mark.performance,
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL_THICK, "100Gi"],
+                marks=pytest.mark.performance_new_feature,
+            ),
         ],
     )
     @pytest.mark.usefixtures(base_setup.__name__)
@@ -135,8 +182,10 @@ class TestPVCCreationDeletionPerformance(PASTest):
         self.full_log_path = get_full_test_logs_path(cname=self)
         if self.interface == constants.CEPHBLOCKPOOL:
             self.sc = "RBD"
-        if self.interface == constants.CEPHFILESYSTEM:
+        elif self.interface == constants.CEPHFILESYSTEM:
             self.sc = "CephFS"
+        elif self.interface == constants.CEPHBLOCKPOOL_THICK:
+            self.sc = "RBD-Thick"
         self.full_log_path += f"-{self.sc}-{pvc_size}"
         log.info(f"Logs file path name is : {self.full_log_path}")
 
@@ -150,8 +199,14 @@ class TestPVCCreationDeletionPerformance(PASTest):
         )
         self.full_results.add_key("pvc_size", pvc_size)
         num_of_samples = 5
-        accepted_creation_time = 1
-        accepted_deletion_time = 2 if self.interface == constants.CEPHFILESYSTEM else 1
+        accepted_creation_time = 1000 if self.interface == constants.CEPHBLOCKPOOL_THICK else 1
+        if self.interface == constants.CEPHFILESYSTEM:
+            accepted_deletion_time = 2
+        elif self.interface == constants.CEPHBLOCKPOOL:
+            accepted_deletion_time = 1
+        else:
+            accepted_deletion_time = 1000 # constants.CEPHBLOCKPOOL_THICK
+        #accepted_deletion_time = 2 if self.interface == constants.CEPHFILESYSTEM else 1
         self.full_results.add_key("samples", num_of_samples)
 
         accepted_creation_deviation_percent = 50
@@ -165,7 +220,8 @@ class TestPVCCreationDeletionPerformance(PASTest):
             logging.info(f"{msg_prefix} Start creating PVC number {i + 1}.")
             start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             pvc_obj = helpers.create_pvc(sc_name=self.sc_obj.name, size=pvc_size)
-            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+            timeout = 600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
+            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND, timeout=timeout)
             pvc_obj.reload()
 
             creation_time = performance_lib.measure_pvc_creation_time(
