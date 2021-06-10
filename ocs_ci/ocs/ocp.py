@@ -952,6 +952,8 @@ class OCP(object):
         Args:
             should_exist (bool): Whether the resource should or shouldn't be found
             timeout (int): How long should the check run before moving on
+            resource_name (str): Name of the resource.
+            selector (str): Selector of the resource.
 
         Returns:
             bool: True if the resource was found, False otherwise
@@ -977,6 +979,24 @@ class OCP(object):
                 f"{self.resource_name} did not reach the expected state within the time limit."
             )
             return False
+
+
+def get_all_resource_names_of_a_kind(kind):
+    """
+    Returns all the resource names of a particular type
+
+    Args:
+        kind (str): The resource type to look for
+
+    Returns:
+        (list): A list of strings
+    """
+    return [
+        resource.get("metadata").get("name")
+        for resource in OCP(namespace=config.ENV_DATA["cluster_namespace"], kind=kind)
+        .get()
+        .get("items")
+    ]
 
 
 def get_clustername():

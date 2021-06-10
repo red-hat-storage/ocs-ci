@@ -1,7 +1,6 @@
 import logging
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
-import time
 
 import pytest
 
@@ -11,11 +10,8 @@ from ocs_ci.framework.testlib import (
     skipif_disconnected_cluster,
     tier1,
 )
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
 from ocs_ci.ocs.ui.mcg_ui import BucketClassUI, MCGStoreUI, ObcUI
-from ocs_ci.ocs.utils import (
-    oc_get_all_resource_names_of_a_kind,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +26,8 @@ class TestStoreUserInterface(object):
         for store_kind in ["namespacestore", "backingstore"]:
             test_stores = [
                 store_name
-                for store_name in oc_get_all_resource_names_of_a_kind(store_kind)
-                if f"{store_kind}-aws" in store_name
+                for store_name in get_all_resource_names_of_a_kind(store_kind)
+                if f"{store_kind}-ui" in store_name
             ]
             for store_name in test_stores:
                 OCP(
@@ -58,34 +54,28 @@ class TestStoreUserInterface(object):
         uls_name = list(cloud_uls_factory({"aws": [(1, "us-east-2")]})["aws"])[0]
 
         store_name = create_unique_resource_name(
-            resource_description="aws", resource_type=kind
+            resource_description="ui", resource_type=kind
         )
 
-        bs_ui_obj = MCGStoreUI(setup_ui)
-        bs_ui_obj.create_store_ui(
+        store_ui_obj = MCGStoreUI(setup_ui)
+        store_ui_obj.create_store_ui(
             kind, store_name, cld_mgr.aws_client.secret.name, uls_name
         )
 
-        assert bs_ui_obj.verify_current_page_resource_status(
+        assert store_ui_obj.verify_current_page_resource_status(
             constants.STATUS_READY
         ), f"Created {kind} was not ready in time"
 
-        test_bs = OCP(
+        logger.info(f"Delete {store_name}")
+        store_ui_obj.delete_store_ui(kind, store_name)
+
+        test_store = OCP(
             namespace=config.ENV_DATA["cluster_namespace"],
             kind=kind,
             resource_name=store_name,
         )
 
-        OCP(
-            kind=kind, namespace=config.ENV_DATA["cluster_namespace"]
-        ).wait_for_resource(condition="Ready", resource_name=store_name, column="PHASE")
-
-        logger.info(f"Delete {store_name}")
-        bs_ui_obj.delete_store_ui(kind, store_name)
-
-        time.sleep(5)
-
-        assert test_bs.check_resource_existence(should_exist=False)
+        assert test_store.check_resource_existence(should_exist=False)
 
 
 @tier1
@@ -98,9 +88,9 @@ class TestBucketclassUserInterface(object):
     """
 
     def teardown(self):
-        bc_lst = oc_get_all_resource_names_of_a_kind("bucketclass")
+        bc_lst = get_all_resource_names_of_a_kind("bucketclass")
         test_bucketclasses = [
-            bc_name for bc_name in bc_lst if "bucketclass-test" in bc_name
+            bc_name for bc_name in bc_lst if "bucketclass-ui" in bc_name
         ]
         for bc_name in test_bucketclasses:
             OCP(
@@ -128,7 +118,7 @@ class TestBucketclassUserInterface(object):
         test_stores = backingstore_factory("oc", {"aws": [(bs_amount, "us-east-2")]})
 
         bc_name = create_unique_resource_name(
-            resource_description="test", resource_type="bucketclass"
+            resource_description="ui", resource_type="bucketclass"
         )
 
         bc_ui_obj = BucketClassUI(setup_ui)
@@ -140,16 +130,14 @@ class TestBucketclassUserInterface(object):
             constants.STATUS_READY
         ), "Created bucketclass was not ready in time"
 
+        logger.info(f"Delete {bc_name}")
+        bc_ui_obj.delete_bucketclass_ui(bc_name)
+
         test_bc = OCP(
             namespace=config.ENV_DATA["cluster_namespace"],
             kind="bucketclass",
             resource_name=bc_name,
         )
-
-        logger.info(f"Delete {bc_name}")
-        bc_ui_obj.delete_bucketclass_ui(bc_name)
-
-        time.sleep(5)
 
         assert test_bc.check_resource_existence(should_exist=False)
 
@@ -186,7 +174,7 @@ class TestBucketclassUserInterface(object):
             ]
 
         bc_name = create_unique_resource_name(
-            resource_description="aws", resource_type="bucketclass"
+            resource_description="ui", resource_type="bucketclass"
         )
 
         bc_ui_obj = BucketClassUI(setup_ui)
@@ -196,16 +184,14 @@ class TestBucketclassUserInterface(object):
             constants.STATUS_READY
         ), "Created bucketclass was not ready in time"
 
+        logger.info(f"Delete {bc_name}")
+        bc_ui_obj.delete_bucketclass_ui(bc_name)
+
         test_bc = OCP(
             namespace=config.ENV_DATA["cluster_namespace"],
             kind="bucketclass",
             resource_name=bc_name,
         )
-
-        logger.info(f"Delete {bc_name}")
-        bc_ui_obj.delete_bucketclass_ui(bc_name)
-
-        time.sleep(5)
 
         assert test_bc.check_resource_existence(should_exist=False)
 
@@ -217,7 +203,7 @@ class TestObcUserInterface(object):
     """
 
     def teardown(self):
-        obc_lst = oc_get_all_resource_names_of_a_kind("obc")
+        obc_lst = get_all_resource_names_of_a_kind("obc")
         test_obcs = [obc_name for obc_name in obc_lst if "obc-testing" in obc_name]
         for obc_name in test_obcs:
             OCP(kind="obc", namespace=config.ENV_DATA["cluster_namespace"]).delete(
@@ -243,7 +229,7 @@ class TestObcUserInterface(object):
 
         """
         obc_name = create_unique_resource_name(
-            resource_description="testing", resource_type="obc"
+            resource_description="ui", resource_type="obc"
         )
 
         obc_ui_obj = ObcUI(setup_ui)
@@ -274,7 +260,5 @@ class TestObcUserInterface(object):
 
         logger.info(f"Delete {obc_name}")
         obc_ui_obj.delete_obc_ui(obc_name)
-
-        time.sleep(5)
 
         assert test_obc.check_resource_existence(should_exist=False)

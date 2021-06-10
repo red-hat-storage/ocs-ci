@@ -1024,17 +1024,6 @@ def oc_get_all_obc_names():
     return {obc.get("metadata").get("name") for obc in all_obcs_in_namespace}
 
 
-def oc_get_all_resource_names_of_a_kind(kind):
-    return [
-        resource.get("metadata").get("name")
-        for resource in OCP(
-            namespace=ocsci_config.ENV_DATA["cluster_namespace"], kind=kind
-        )
-        .get()
-        .get("items")
-    ]
-
-
 def get_external_mode_rhcs():
     """
     Get external cluster info from config and obtain

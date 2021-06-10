@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class MCGStoreUI(PageNavigator):
     """
-    A class representation for abstraction of BS-related OpenShift UI actions
+    A class representation for abstraction of MCG store related OpenShift UI actions
 
     """
 
@@ -27,7 +27,7 @@ class MCGStoreUI(PageNavigator):
         Create an MCG store via the UI
 
         Args:
-            kind (str): The store kind - backing | namespace
+            kind (str): The store kind - backingstore | namespacestore
             store_name (str): The name to grant to the store
             secret_name (str): The name of the secret to used to connect the store to AWS
             target_bucket (str): The AWS S3 bucket to use as a host for the store
@@ -59,7 +59,6 @@ class MCGStoreUI(PageNavigator):
 
         logger.info("Enter target bucket name")
         self.do_send_keys(self.mcg_stores["target_bucket"], target_bucket)
-
         logger.info("Submit form")
         self.do_click(self.generic_locators["submit_form"])
 
@@ -78,7 +77,7 @@ class MCGStoreUI(PageNavigator):
         logger.info("Search for the store")
         self.do_send_keys(self.generic_locators["search_resource_field"], store_name)
 
-        logger.info("Open BS kebab menu")
+        logger.info("Open store kebab menu")
         self.do_click(self.generic_locators["kebab_button"])
 
         logger.info(f"Click on 'Delete {kind}'")
@@ -182,7 +181,7 @@ class BucketClassUI(PageNavigator):
             bc_name (str): The name to grant the BC
             policy (str): The policy type to use. Single/Multi/Cache
             nss_name_lst (list[str]): A list of namespacestore names to be used by the bucketclass
-            bs_name_lst (list[str]): A list of namespacestore names to be used by the bucketclass
+            bs_name_lst (list[str]): A list of backingstore names to be used by the bucketclass
 
         """
         self.navigate_to_ocs_operator_page()
@@ -226,7 +225,7 @@ class BucketClassUI(PageNavigator):
         logger.info("Enter the BC section")
         self.do_click(self.ocs_loc["bucketclass_page"])
 
-        logger.info("Search for the BS")
+        logger.info("Search for the BC")
         self.do_send_keys(self.generic_locators["search_resource_field"], bc_name)
 
         logger.info("Open BC kebab menu")
