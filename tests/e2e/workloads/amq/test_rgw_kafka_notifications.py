@@ -4,7 +4,9 @@ import pytest
 import re
 
 from datetime import datetime
+from semantic_version import Version
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     E2ETest,
     tier1,
@@ -152,26 +154,32 @@ class TestRGWAndKafkaNotifications(E2ETest):
             )
 
         # Validate the timestamp events
-        cmd = (
-            f"bin/kafka-console-consumer.sh --bootstrap-server {constants.KAFKA_ENDPOINT} "
-            f"--topic {self.kafka_topic.name} --from-beginning --timeout-ms 20000"
-        )
-        pod_list = get_pod_name_by_pattern(
-            pattern="my-cluster-zookeeper", namespace=constants.AMQ_NAMESPACE
-        )
-        zookeeper_obj = get_pod_obj(name=pod_list[0], namespace=constants.AMQ_NAMESPACE)
-        event_obj = zookeeper_obj.exec_cmd_on_pod(command=cmd)
-        log.info(f"Event obj: {event_obj}")
-        event_time = event_obj.get("Records")[0].get("eventTime")
-        format_string = "%Y-%m-%dT%H:%M:%S.%fZ"
-        try:
-            datetime.strptime(event_time, format_string)
-        except ValueError as ef:
-            log.error(
-                f"Timestamp event {event_time} doesnt match the pattern {format_string}"
+        ocs_version = config.ENV_DATA["ocs_version"]
+        if Version.coerce(ocs_version) >= Version.coerce("4.8"):
+            cmd = (
+                f"bin/kafka-console-consumer.sh --bootstrap-server {constants.KAFKA_ENDPOINT} "
+                f"--topic {self.kafka_topic.name} --from-beginning --timeout-ms 20000"
             )
-            raise ef
+            pod_list = get_pod_name_by_pattern(
+                pattern="my-cluster-zookeeper", namespace=constants.AMQ_NAMESPACE
+            )
+            zookeeper_obj = get_pod_obj(
+                name=pod_list[0], namespace=constants.AMQ_NAMESPACE
+            )
+            event_obj = zookeeper_obj.exec_cmd_on_pod(command=cmd)
+            log.info(f"Event obj: {event_obj}")
+            event_time = event_obj.get("Records")[0].get("eventTime")
+            format_string = "%Y-%m-%dT%H:%M:%S.%fZ"
+            try:
+                datetime.strptime(event_time, format_string)
+            except ValueError as ef:
+                log.error(
+                    f"Timestamp event {event_time} doesnt match the pattern {format_string}"
+                )
+                raise ef
 
-        log.info(f"Timestamp event {event_time} matches the pattern {format_string}")
+            log.info(
+                f"Timestamp event {event_time} matches the pattern {format_string}"
+            )
 
         # ToDo: To check from KafkaUI the messages are viewed
