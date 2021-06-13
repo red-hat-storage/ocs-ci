@@ -1,10 +1,8 @@
 import logging
-from itertools import cycle
 import pytest
 
 from ocs_ci.framework.testlib import ManageTest, tier4, tier4a
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import disruption_helpers
 
@@ -21,11 +19,11 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
     argvalues=[
         pytest.param(
             *[constants.CEPHFILESYSTEM, "cephfsplugin"],
-            marks=pytest.mark.polarion_id(""),
+            marks=pytest.mark.polarion_id("OCS-2550"),
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "rbdplugin"],
-            marks=pytest.mark.polarion_id(""),
+            marks=pytest.mark.polarion_id("OCS-2551"),
         ),
     ],
 )
@@ -35,42 +33,53 @@ class TestDeletePluginPod(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, interface, multi_pvc_factory, pod_factory):
+    def setup(self, interface, pod_factory):
         """
         Create PVC and pod
 
         """
-        self.pvc_objs = multi_pvc_factory(
-            interface=interface, size=3, status=constants.STATUS_BOUND, num_of_pvc=3
+        self.pod_obj = pod_factory(
+            interface=interface,
+            pvc=None,
+            status=constants.STATUS_RUNNING,
         )
-
-        nodes_iter = cycle(get_worker_nodes())
-        self.pod_objs = []
-        for pvc_obj in self.pvc_objs:
-            pod_obj = pod_factory(
-                interface=interface,
-                pvc=pvc_obj,
-                node_name=next(nodes_iter),
-                status=constants.STATUS_RUNNING,
-            )
-            self.pod_objs.append(pod_obj)
 
     def test_delete_plugin_pod(self, resource_to_delete):
         """
-        Test case to verify the impact of plugin pod deletion on app pod
-
+        Test case to verify the impact of plugin pod deletion on app pod.
+        Verifies bug 1970352.
         """
+        resource_id = None
+
         DISRUPTION_OPS.set_resource(resource=resource_to_delete)
-        log.info(f"Deleting a {resource_to_delete} pod")
-        DISRUPTION_OPS.delete_resource()
+        pod_node = self.pod_obj.get_node()
+
         log.info(
-            f"Deleted {resource_to_delete} pod and new {resource_to_delete} reached Running state"
+            f"Selecting {resource_to_delete} pod which is running on the same "
+            f"node as that of the app pod"
+        )
+        for index, res_obj in enumerate(DISRUPTION_OPS.resource_obj):
+            if res_obj.get_node() == pod_node:
+                resource_id = index
+                log.info(f"Selected the pod {res_obj.name}")
+                break
+        assert (
+            resource_id
+        ), f"No {resource_to_delete} pod is running on the node {pod_node}"
+
+        log.info(
+            f"Deleting the pod {DISRUPTION_OPS.resource_obj[resource_id].name}"
+            f" which is running on the node {pod_node}"
+        )
+        DISRUPTION_OPS.delete_resource(resource_id=resource_id)
+        log.info(
+            f"Deleted {DISRUPTION_OPS.resource_obj[resource_id].name} pod and "
+            f"new {resource_to_delete} pod reached Running state"
         )
 
-        for pod_obj in self.pod_objs:
-            pod_obj.run_io(storage_type="fs", size="1G", runtime=20)
-        log.info("FIO started on all pod")
-        log.info("Waiting for fio results")
-        for pod_obj in self.pod_objs:
-            pod.get_fio_rw_iops(pod_obj)
-        log.info("Fio completed")
+        # Run IO
+        self.pod_obj.run_io(storage_type="fs", size="1G", runtime=20)
+        log.info("FIO started on pod")
+        log.info("Waiting for fio result")
+        pod.get_fio_rw_iops(self.pod_obj)
+        log.info("Fio completed on pod")
