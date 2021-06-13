@@ -64,7 +64,7 @@ class TestDeletePluginPod(ManageTest):
                 log.info(f"Selected the pod {res_obj.name}")
                 break
         assert (
-            resource_id
+            resource_id is not None
         ), f"No {resource_to_delete} pod is running on the node {pod_node}"
 
         log.info(
