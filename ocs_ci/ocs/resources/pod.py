@@ -2077,3 +2077,56 @@ def get_pod_objs(
             logger.info(error_message)
 
     return pod_objs_found
+
+
+def wait_for_change_in_pods_statuses(
+    pod_names,
+    current_statuses=None,
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    timeout=300,
+    sleep=20,
+):
+    """
+    Wait for the pod statuses in a specific namespace to change.
+
+    Args:
+        pod_names (list): List of the pod names to check if their status changed.
+        namespace (str): the namespace ot the pods
+        current_statuses (list): The current pod statuses. These are the pod statuses
+            to check if they changed during each iteration.
+        timeout (int): time to wait for pod statuses to change
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        bool: True, if the pod statuses have changed. False, otherwise
+
+    """
+    if current_statuses is None:
+        # If 'current_statuses' is None the default value will be the ready statues
+        current_statuses = [constants.STATUS_RUNNING, constants.STATUS_COMPLETED]
+
+    try:
+        for pod_objs in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_pod_objs,
+            namespace=namespace,
+            pod_names=pod_names,
+        ):
+            ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+            if len(pod_objs) < len(pod_names):
+                pod_names_found_set = {p.name for p in pod_objs}
+                pod_names_not_found = list(set(pod_names) - pod_names_found_set)
+                logger.info(f"Some of the pods have not found: {pod_names_not_found}")
+                return True
+
+            for p in pod_objs:
+                pod_status = ocp_pod_obj.get_resource_status(p.name)
+                if pod_status not in current_statuses:
+                    logger.info(
+                        f"The status of the pod '{p.name}' has changed to '{pod_status}'"
+                    )
+                    return True
+    except TimeoutExpiredError:
+        logging.info(f"The status of the pods did not change after {timeout} seconds")
+        return False
