@@ -57,6 +57,7 @@ monitoring = pytest.mark.monitoring
 workloads = pytest.mark.workloads
 flowtests = pytest.mark.flowtests
 performance = pytest.mark.performance
+performance_regression = pytest.mark.performance_regression
 performance_new_feature = pytest.mark.performance_new_feature
 scale = pytest.mark.scale
 deployment = pytest.mark.deployment
