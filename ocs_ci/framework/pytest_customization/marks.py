@@ -211,6 +211,11 @@ skipif_ibm_power = pytest.mark.skipif(
     reason="Test will not run on IBM Power",
 )
 
+skipif_disconnected_cluster = pytest.mark.skipif(
+    config.DEPLOYMENT.get("disconnected") is True,
+    reason="Test will not run on disconnected clusters",
+)
+
 skipif_external_mode = pytest.mark.skipif(
     config.DEPLOYMENT.get("external_mode") is True,
     reason="Test will not run on External Mode cluster",

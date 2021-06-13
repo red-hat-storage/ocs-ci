@@ -104,6 +104,102 @@ deployment_4_7 = {
     "click_install_lso_page": ('button[data-test="install-operator"]', By.CSS_SELECTOR),
 }
 
+generic_locators = {
+    "project_selector": (
+        'button[class="pf-c-dropdown__toggle pf-m-plain"]',
+        By.CSS_SELECTOR,
+    ),
+    "select_openshift-storage_project": (
+        'a[id="openshift-storage-link"]',
+        By.CSS_SELECTOR,
+    ),
+    "create_resource_button": ("yaml-create", By.ID),
+    "search_resource_field": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
+    "first_dropdown_option": (
+        'a[data-test="dropdown-menu-item-link"]',
+        By.CSS_SELECTOR,
+    ),
+    "actions": ('button[data-test-id="actions-menu-button"]', By.CSS_SELECTOR),
+    "confirm_action": ("confirm-action", By.ID),
+    "submit_form": ('button[type="submit"]', By.CSS_SELECTOR),
+    "ocs_operator": ('//h1[text()="OpenShift Container Storage"]', By.XPATH),
+    "kebab_button": ('button[data-test-id="kebab-button"', By.CSS_SELECTOR),
+    "resource_status": ('span[data-test="status-text"]', By.CSS_SELECTOR),
+    "check_first_row_checkbox": ('input[name="checkrow0"]', By.CSS_SELECTOR),
+    "remove_search_filter": ('button[aria-label="close"]', By.CSS_SELECTOR),
+    "delete_resource_kebab_button": ('//*[contains(text(), "Delete")]', By.XPATH),
+}
+
+ocs_operator_locators = {
+    "backingstore_page": (
+        'a[data-test-id="horizontal-link-Backing Store"]',
+        By.CSS_SELECTOR,
+    ),
+    "namespacestore_page": (
+        'a[data-test-id="horizontal-link-Namespace Store"]',
+        By.CSS_SELECTOR,
+    ),
+    "bucketclass_page": (
+        'a[data-test-id="horizontal-link-Bucket Class"]',
+        By.CSS_SELECTOR,
+    ),
+}
+
+mcg_stores = {
+    "store_name": ('input[data-test*="store-name"]', By.CSS_SELECTOR),
+    "provider_dropdown": ('button[data-test*="store-provider"]', By.CSS_SELECTOR),
+    "aws_provider": ("AWS S3-link", By.ID),
+    "aws_region_dropdown": ("region", By.ID),
+    "us_east_2_region": ("us-east-2-link", By.ID),
+    "aws_secret_dropdown": ("secret-dropdown", By.ID),
+    "aws_secret_search_field": (
+        'input[data-test-id="dropdown-text-filter"]',
+        By.CSS_SELECTOR,
+    ),
+    "target_bucket": ("target-bucket", By.ID),
+}
+
+bucketclass = {
+    "standard_type": ("Standard", By.ID),
+    "namespace_type": ("Namespace", By.ID),
+    "bucketclass_name": ("bucketclassname-input", By.ID),
+    "spread_policy": ('input[data-test="placement-policy-spread1"]', By.CSS_SELECTOR),
+    "mirror_policy": ('input[data-test="placement-policy-mirror1"]', By.CSS_SELECTOR),
+    "single_policy": ("Single", By.ID),
+    "multi_policy": ("Multi", By.ID),
+    "cache_policy": ("Cache", By.ID),
+    "nss_dropdown": ('button[data-test="nns-dropdown-toggle"]', By.CSS_SELECTOR),
+    "nss_option_template": ('button[data-test="{}"]', By.CSS_SELECTOR),
+    "bs_dropdown": ('button[data-test="nbs-dropdown-toggle"]', By.CSS_SELECTOR),
+    "first_bs_dropdown_option": (
+        'button[data-test="mybs-dropdown-item"]',
+        By.CSS_SELECTOR,
+    ),
+    "ttl_input": ("ttl-input", By.ID),
+    "ttl_time_unit_dropdown": ("timetolive-input", By.ID),
+    "ttl_minute_time_unit_button": ("MIN-link", By.ID),
+}
+
+obc = {
+    "storageclass_dropdown": ("sc-dropdown", By.ID),
+    "storageclass_text_field": (
+        'input[placeholder="Select StorageClass"]',
+        By.CSS_SELECTOR,
+    ),
+    "bucketclass_dropdown": ("bc-dropdown", By.ID),
+    "bucketclass_text_field": (
+        'input[placeholder="Select BucketClass"]',
+        By.CSS_SELECTOR,
+    ),
+    "default_bucketclass": ("noobaa-default-bucket-class-link", By.ID),
+    "obc_name": ("obc-name", By.ID),
+    "first_obc_link": ('a[class="co-resource-item__resource-name"]', By.CSS_SELECTOR),
+    "delete_obc": (
+        'button[data-test-action="Delete Object Bucket Claim"]',
+        By.CSS_SELECTOR,
+    ),
+}
+
 pvc = {
     "pvc_project_selector": (
         'button[class="pf-c-dropdown__toggle pf-m-plain"]',
@@ -240,6 +336,11 @@ locators = {
         "login": login,
         "page": page_nav,
         "deployment": {**deployment, **deployment_4_7},
+        "generic": generic_locators,
+        "ocs_operator": ocs_operator_locators,
+        "obc": obc,
+        "bucketclass": bucketclass,
+        "mcg_stores": mcg_stores,
     },
     "4.7": {
         "login": login,
