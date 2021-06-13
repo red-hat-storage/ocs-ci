@@ -1021,7 +1021,7 @@ def oc_get_all_obc_names():
         .get()
         .get("items")
     )
-    return {obc.get("spec").get("bucketName") for obc in all_obcs_in_namespace}
+    return {obc.get("metadata").get("name") for obc in all_obcs_in_namespace}
 
 
 def get_external_mode_rhcs():

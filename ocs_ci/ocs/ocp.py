@@ -943,6 +943,61 @@ class OCP(object):
         )
         return output
 
+    def check_resource_existence(
+        self, should_exist, timeout=60, resource_name="", selector=None
+    ):
+        """
+        Checks whether an OCP() resource exists
+
+        Args:
+            should_exist (bool): Whether the resource should or shouldn't be found
+            timeout (int): How long should the check run before moving on
+            resource_name (str): Name of the resource.
+            selector (str): Selector of the resource.
+
+        Returns:
+            bool: True if the resource was found, False otherwise
+        """
+
+        def _check_existence(ocp_obj, should_exist, resource_name, selector):
+            return ocp_obj.is_exist(resource_name, selector) == should_exist
+
+        try:
+            for expected_state in TimeoutSampler(
+                timeout,
+                3,
+                _check_existence,
+                self,
+                should_exist,
+                resource_name,
+                selector,
+            ):
+                if expected_state:
+                    return True
+        except TimeoutExpiredError:
+            log.error(
+                f"{self.resource_name} did not reach the expected state within the time limit."
+            )
+            return False
+
+
+def get_all_resource_names_of_a_kind(kind):
+    """
+    Returns all the resource names of a particular type
+
+    Args:
+        kind (str): The resource type to look for
+
+    Returns:
+        (list): A list of strings
+    """
+    return [
+        resource.get("metadata").get("name")
+        for resource in OCP(namespace=config.ENV_DATA["cluster_namespace"], kind=kind)
+        .get()
+        .get("items")
+    ]
+
 
 def get_clustername():
     """

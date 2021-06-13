@@ -1,23 +1,30 @@
+import datetime
 import logging
 import os
 import time
-import datetime
 
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as ec
-from selenium.webdriver.common.action_chains import ActionChains
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.support.ui import WebDriverWait
+from semantic_version.base import Version
+from webdriver_manager.chrome import ChromeDriverManager
 
-from ocs_ci.framework import config as ocsci_config
-from ocs_ci.utility.utils import run_cmd, get_kubeadmin_password, get_ocp_version
-from ocs_ci.ocs.ui.views import locators
 from ocs_ci.framework import config
+from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.retry import retry
-
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    get_kubeadmin_password,
+    get_ocp_version,
+    run_cmd,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +68,9 @@ class BaseUI:
             self.take_screenshot()
             logger.error(e)
             raise TimeoutException
+
+    def do_click_by_id(self, id, timeout=30):
+        return self.do_click((id, By.ID), timeout)
 
     def do_send_keys(self, locator, text, timeout=30):
         """
@@ -196,6 +206,8 @@ class PageNavigator(BaseUI):
         super().__init__(driver)
         ocp_version = get_ocp_version()
         self.page_nav = locators[ocp_version]["page"]
+        if Version.coerce(ocp_version) >= Version.coerce("4.8"):
+            self.generic_locators = locators[ocp_version]["generic"]
 
     def navigate_overview_page(self):
         """
@@ -269,6 +281,18 @@ class PageNavigator(BaseUI):
         logger.info("Navigate to Installed Operators Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
         self.do_click(self.page_nav["installed_operators_page"])
+
+    def navigate_to_ocs_operator_page(self):
+        """
+        Navigate to the OCS Operator management page
+        """
+        self.navigate_installed_operators_page()
+        logger.info("Select openshift-storage project")
+        self.do_click(self.generic_locators["project_selector"])
+        self.do_click(self.generic_locators["select_openshift-storage_project"])
+
+        logger.info("Enter the OCS operator page")
+        self.do_click(self.generic_locators["ocs_operator"])
 
     def navigate_persistentvolumes_page(self):
         """
@@ -378,6 +402,44 @@ class PageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Workloads"])
         self.do_click(locator=self.page_nav["Pods"])
 
+    def verify_current_page_resource_status(self, status_to_check, timeout=30):
+        """
+        Compares a given status string to the one shown in the resource's UI page
+
+        Args:
+            status_to_check (str): The status that will be compared with the one in the UI
+            timeout (int): How long should the check run before moving on
+
+        Returns:
+            bool: True if the resource was found, False otherwise
+        """
+
+        def _retrieve_current_status_from_ui():
+            resource_status = WebDriverWait(self.driver, timeout).until(
+                ec.visibility_of_element_located(
+                    self.generic_locators["resource_status"][::-1]
+                )
+            )
+            logger.info(f"Resource status is {resource_status.text}")
+            return resource_status
+
+        logger.info(
+            f"Verifying that the resource has reached a {status_to_check} status"
+        )
+        try:
+            for resource_ui_status in TimeoutSampler(
+                timeout,
+                3,
+                _retrieve_current_status_from_ui,
+            ):
+                if resource_ui_status.text.lower() == status_to_check.lower():
+                    return True
+        except TimeoutExpiredError:
+            logger.error(
+                "The resource did not reach the expected state within the time limit."
+            )
+            return False
+
 
 def take_screenshot(driver):
     """
@@ -447,7 +509,7 @@ def login_ui():
         chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
         driver = webdriver.Chrome(
             ChromeDriverManager(chrome_type=chrome_browser_type).install(),
-            chrome_options=chrome_options,
+            options=chrome_options,
         )
     else:
         raise ValueError(f"Not Support on {browser}")
