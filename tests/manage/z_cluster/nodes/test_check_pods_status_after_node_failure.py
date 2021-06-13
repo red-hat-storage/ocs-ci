@@ -14,6 +14,9 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
     get_pod_name_by_pattern,
+    get_osd_pods,
+    get_osd_pod_id,
+    wait_for_change_in_pods_statuses,
 )
 
 log = logging.getLogger(__name__)
@@ -30,12 +33,54 @@ def get_rook_ceph_pod_names_not_in_node(node_name):
         list: List of the rook ceph pod names that are not running on the node 'node_name'
 
     """
-    rook_ceph_pod_names_set = set(get_pod_name_by_pattern("rook-ceph-"))
+    rook_ceph_pod_names = get_pod_name_by_pattern("rook-ceph-")
+    # Exclude the rook ceph pod tools because it creates by OCS and not rook ceph operator
+    rook_ceph_pod_names_set = {
+        pod_name
+        for pod_name in rook_ceph_pod_names
+        if not pod_name.startswith("rook-ceph-tools-")
+    }
     node_pods = get_node_pods(node_name)
     node_pod_names_set = set([p.name for p in node_pods])
     rook_ceph_pod_names_not_in_node = list(rook_ceph_pod_names_set - node_pod_names_set)
 
     return rook_ceph_pod_names_not_in_node
+
+
+def get_node_osd_ids(node_name):
+    """
+    Get the node osd ids
+
+    Args:
+        node_name (str): The node name to get the osd ids
+
+    Returns:
+        list: The list of the osd ids
+
+    """
+    osd_pods = get_osd_pods()
+    node_osd_pods = get_node_pods(node_name, pods_to_search=osd_pods)
+    return [get_osd_pod_id(osd_pod) for osd_pod in node_osd_pods]
+
+
+def wait_for_change_in_rook_ceph_pods(node_name, timeout=300, sleep=20):
+    """
+    Wait for change in the rook ceph pod statuses
+
+    Args:
+        node_name (str): The node name
+        timeout (int): Time to wait for the rook ceph pod statuses to change
+        sleep (int): Time to wait between iterations
+
+    Returns:
+        bool: True, if the rook ceph pods statuses have changed. False, otherwise
+
+    """
+    rook_ceph_pod_names_not_in_node = get_rook_ceph_pod_names_not_in_node(node_name)
+    is_rook_ceph_pods_status_changed = wait_for_change_in_pods_statuses(
+        rook_ceph_pod_names_not_in_node, timeout=timeout, sleep=sleep
+    )
+    return is_rook_ceph_pods_status_changed
 
 
 @ignore_leftovers
@@ -91,20 +136,52 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
         ocs_node = random.choice(ocs_nodes)
         node_name = ocs_node.name
         log.info(f"Selected node is '{node_name}'")
-        # Save the rook ceph pods before shutting down the node
+        # Save the rook ceph pods and osd ids before shutting down the node
         rook_ceph_pod_names_not_in_node = get_rook_ceph_pod_names_not_in_node(node_name)
+        node_osd_ids = get_node_osd_ids(node_name)
 
         log.info(f"Shutting down node '{node_name}'")
         nodes.stop_nodes([ocs_node])
         wait_for_nodes_status(node_names=[node_name], status=constants.NODE_NOT_READY)
         log.info(f"The node '{node_name}' reached '{constants.NODE_NOT_READY}' status")
 
-        timeout = 1800
-        log.info("Check the rook pods are in 'Running' or 'Completed' state")
+        timeout = 300
+        is_rook_ceph_pods_status_changed = wait_for_change_in_rook_ceph_pods(
+            node_name, timeout=timeout
+        )
+        assert (
+            is_rook_ceph_pods_status_changed
+        ), f"Rook Ceph pods status didn't change after {timeout} seconds"
+
+        log.info("Check the rook ceph pods are in 'Running' or 'Completed' state")
+        timeout = 480
         are_pods_running = wait_for_pods_to_be_running(
             pod_names=rook_ceph_pod_names_not_in_node, timeout=timeout, sleep=30
         )
         assert are_pods_running, f"The pods are not 'Running' after {timeout} seconds"
+
+        # Get the rook ceph pods without the osd pods have the old node ids
+        osd_pods = get_osd_pods()
+        new_node_osd_id_names = [
+            p.name for p in osd_pods if get_osd_pod_id(p) in node_osd_ids
+        ]
+        rook_ceph_pod_names_not_in_node = get_rook_ceph_pod_names_not_in_node(node_name)
+        new_rook_ceph_pod_names = [
+            pod_name
+            for pod_name in rook_ceph_pod_names_not_in_node
+            if pod_name not in new_node_osd_id_names
+        ]
+
+        log.info(
+            "Verify that the new rook ceph pods are in 'Running' or 'Completed' state"
+        )
+        timeout = 300
+        are_new_pods_running = wait_for_pods_to_be_running(
+            pod_names=new_rook_ceph_pod_names, timeout=timeout, sleep=20
+        )
+        assert (
+            are_new_pods_running
+        ), f"The new pods are not 'Running' after {timeout} seconds"
 
         log.info("All the pods are in 'Running' or 'Completed' state")
         log.info(f"Starting the node '{node_name}' again...")
