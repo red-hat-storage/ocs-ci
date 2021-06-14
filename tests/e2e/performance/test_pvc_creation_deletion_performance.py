@@ -99,7 +99,8 @@ class TestPVCCreationDeletionPerformance(PASTest):
             self.sc_obj = storageclass_factory(
                 interface=constants.CEPHBLOCKPOOL,
                 new_rbd_pool=True,
-                rbd_thick_provision=True)
+                rbd_thick_provision=True,
+            )
         else:
             self.sc_obj = storageclass_factory(self.interface)
         self.pod_factory = pod_factory
@@ -192,7 +193,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
         )
         self.full_results.add_key("pvc_size", pvc_size)
         num_of_samples = 5
-        accepted_creation_time = 3600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 1
+        accepted_creation_time = (
+            3600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 1
+        )
 
         # accepted deletion time for RBD is 1 sec, for CephFS is 2 secs and for RBD Thick is 5 secs
         if self.interface == constants.CEPHFILESYSTEM:
@@ -216,7 +219,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
             start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             pvc_obj = helpers.create_pvc(sc_name=self.sc_obj.name, size=pvc_size)
             timeout = 3600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
-            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND, timeout=timeout)
+            helpers.wait_for_resource_state(
+                pvc_obj, constants.STATUS_BOUND, timeout=timeout
+            )
             pvc_obj.reload()
 
             creation_time = performance_lib.measure_pvc_creation_time(
