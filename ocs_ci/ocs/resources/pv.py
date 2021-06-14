@@ -160,10 +160,12 @@ def get_pv_size(pv_obj):
 def check_pvs_present_for_ocs_expansion(sc=constants.LOCALSTORAGE_SC):
     """
     Check for pvs present for OCS cluster expansion
+
     Args:
         sc (str): Name of SC
-    Raises:
-        Assertion if PVS not present
+
+    Return:
+        bool: True if pv present false if not
     """
     from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
 
@@ -190,11 +192,9 @@ def check_pvs_present_for_ocs_expansion(sc=constants.LOCALSTORAGE_SC):
                             pv_check_list.append(pv["metadata"]["name"])
             logger.info(pv_check_list)
             if pv_check_list:
-                pass
+                return True
             else:
-                raise PVNotSufficientException(
-                    f"No Extra PV found in {constants.TOPOLOGY_ROOK_LABEL}=rack{rack_no} "
-                )
+                return False
     elif flexible_scaling and not arbiter_deployment:
         pv_check_list = list()
         nodes_obj = ocp.OCP(
@@ -214,11 +214,9 @@ def check_pvs_present_for_ocs_expansion(sc=constants.LOCALSTORAGE_SC):
                         pv_check_list.append(pv["metadata"]["name"])
         logger.info(pv_check_list)
         if pv_check_list:
-            pass
+            return True
         else:
-            raise PVNotSufficientException(
-                f"No Extra PV found in {constants.OPERATOR_NODE_LABEL}"
-            )
+            return False
 
     # TODO: need to handle it for arbiter_deployment
     # elif not flexible_scaling and arbiter_deployment:

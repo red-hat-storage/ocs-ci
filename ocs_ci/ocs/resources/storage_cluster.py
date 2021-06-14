@@ -578,17 +578,19 @@ def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=
                 int(len(final_device_list) / new_storage_devices_sets_count)
             )
         if lv_set_present:
-            if not (
-                check_pvs_present_for_ocs_expansion()
-                and platform == constants.VSPHERE_PLATFORM
-                and add_extra_disk_to_existing_worker
-            ):
-                log.info("Adding Extra Disk to existing VSphere Worker nodes")
-                add_disk_for_vsphere_platform()
+            if check_pvs_present_for_ocs_expansion():
+                log.info("Found Extra PV")
             else:
-                raise PVNotSufficientException(
-                    f"No Extra PV found in {constants.OPERATOR_NODE_LABEL}"
-                )
+                if (
+                    platform == constants.VSPHERE_PLATFORM and add_extra_disk_to_existing_worker
+                ):
+                    log.info("No Extra PV found")
+                    log.info("Adding Extra Disk to existing VSphere Worker nodes")
+                    add_disk_for_vsphere_platform()
+                else:
+                    raise PVNotSufficientException(
+                        f"No Extra PV found in {constants.OPERATOR_NODE_LABEL}"
+                    )
         sc = get_storage_cluster()
         # adding the storage capacity to the cluster
         params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
