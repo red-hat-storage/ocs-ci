@@ -85,6 +85,7 @@ def wait_for_change_in_rook_ceph_pods(node_name, timeout=300, sleep=20):
 
 @ignore_leftovers
 @tier4a
+@pytest.mark.polarion_id("OCS-2552")
 class TestCheckPodsAfterNodeFailure(ManageTest):
     """
     Test check pods status after a node failure event.
