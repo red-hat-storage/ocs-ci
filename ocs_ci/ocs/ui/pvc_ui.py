@@ -28,6 +28,7 @@ class PvcUI(PageNavigator):
         pvc_name (str): the name of pvc
         access_mode (str): access mode
         pvc_size (str): the size of pvc (GB)
+        vol_mode (str): volume mode type
 
         """
         self.navigate_persistentvolumeclaims_page()
@@ -90,5 +91,3 @@ class PvcUI(PageNavigator):
         self.do_click(self.pvc_loc["confirm_pvc_deletion"])
 
         time.sleep(2)
-
-
