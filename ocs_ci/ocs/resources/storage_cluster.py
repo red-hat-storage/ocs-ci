@@ -11,7 +11,11 @@ from semantic_version import Version
 from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.exceptions import ResourceNotFoundError, UnsupportedFeatureError, PVNotSufficientException
+from ocs_ci.ocs.exceptions import (
+    ResourceNotFoundError,
+    UnsupportedFeatureError,
+    PVNotSufficientException,
+)
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
@@ -582,7 +586,8 @@ def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=
                 log.info("Found Extra PV")
             else:
                 if (
-                    platform == constants.VSPHERE_PLATFORM and add_extra_disk_to_existing_worker
+                    platform == constants.VSPHERE_PLATFORM
+                    and add_extra_disk_to_existing_worker
                 ):
                     log.info("No Extra PV found")
                     log.info("Adding Extra Disk to existing VSphere Worker nodes")
