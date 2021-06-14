@@ -3,7 +3,6 @@ from subprocess import TimeoutExpired
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.exceptions import PVNotSufficientException
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 
 logger = logging.getLogger(__name__)
