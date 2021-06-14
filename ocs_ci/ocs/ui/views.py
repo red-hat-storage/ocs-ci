@@ -238,7 +238,7 @@ pvc = {
     "ReadOnlyMany": ('input[data-test="Read Only (ROX)-radio-input"]', By.CSS_SELECTOR),
     "pvc_size": ('input[data-test="pvc-size"]', By.CSS_SELECTOR),
     "pvc_create": ('button[data-test="create-pvc"]', By.CSS_SELECTOR),
-
+    "pvc_actions": ('button[data-test-id="actions-menu-button"]', By.CSS_SELECTOR),
     "pvc_delete": (
         'button[data-test-action="Delete PersistentVolumeClaim"]',
         By.CSS_SELECTOR,
