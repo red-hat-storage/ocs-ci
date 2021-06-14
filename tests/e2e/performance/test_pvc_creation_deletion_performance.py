@@ -1,5 +1,6 @@
 """
-Test to verify PVC deletion performance
+Test to verify performance of PVC creation and deletion
+for RBD, CephFS and RBD-Thick interfaces
 """
 import time
 import logging
@@ -27,7 +28,7 @@ log = logging.getLogger(__name__)
 class ResultsAnalyse(PerfResult):
     """
     This class generates results for all tests as one unit
-    and save them to an elasticsearch server
+    and saves them to an elastic search server on the cluster
 
     """
 
@@ -53,7 +54,7 @@ class ResultsAnalyse(PerfResult):
 @performance
 class TestPVCCreationDeletionPerformance(PASTest):
     """
-    Test to verify PVC creation and deletion performance
+    Test to verify performance of PVC creation and deletion
     """
 
     def setup(self):
@@ -120,17 +121,33 @@ class TestPVCCreationDeletionPerformance(PASTest):
         full_results.add_key("index", full_results.new_index)
         return full_results
 
-    # @pytest.mark.parametrize(
-    #     argnames=["pvc_size"],
-    #     argvalues=[
-    #         pytest.param(*["1Gi"], marks=pytest.mark.polarion_id("OCS-2007")),
-    #         pytest.param(*["50Gi"], marks=pytest.mark.polarion_id("OCS-2007")),
-    #         pytest.param(*["100Gi"], marks=pytest.mark.polarion_id("OCS-2007")),
-    #     ],
-    # )
     @pytest.mark.parametrize(
         argnames=["interface_type", "pvc_size"],
         argvalues=[
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL, "5Gi"],
+                marks=[pytest.mark.performance, pytest.mark.performance_regression],
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM, "5Gi"],
+                marks=[pytest.mark.performance, pytest.mark.performance_regression],
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL_THICK, "5Gi"],
+                marks=[pytest.mark.performance, pytest.mark.performance_new_feature],
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL, "15Gi"],
+                marks=[pytest.mark.performance, pytest.mark.performance_regression],
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM, "15Gi"],
+                marks=[pytest.mark.performance, pytest.mark.performance_regression],
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL_THICK, "15Gi"],
+                marks=[pytest.mark.performance, pytest.mark.performance_new_feature],
+            ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL, "25Gi"],
                 marks=[pytest.mark.performance, pytest.mark.performance_regression],
@@ -143,30 +160,6 @@ class TestPVCCreationDeletionPerformance(PASTest):
                 *[constants.CEPHBLOCKPOOL_THICK, "25Gi"],
                 marks=[pytest.mark.performance, pytest.mark.performance_new_feature],
             ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL, "50Gi"],
-                marks=[pytest.mark.performance, pytest.mark.performance_regression],
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEM, "50Gi"],
-                marks=[pytest.mark.performance, pytest.mark.performance_regression],
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL_THICK, "50Gi"],
-                marks=[pytest.mark.performance, pytest.mark.performance_new_feature],
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL, "100Gi"],
-                marks=[pytest.mark.performance, pytest.mark.performance_regression],
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEM, "100Gi"],
-                marks=[pytest.mark.performance, pytest.mark.performance_regression],
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL_THICK, "100Gi"],
-                marks=[pytest.mark.performance, pytest.mark.performance_new_feature],
-            ),
         ],
     )
     @pytest.mark.usefixtures(base_setup.__name__)
@@ -175,7 +168,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
     ):
         """
         Measuring PVC creation and deletion times for pvc samples
-        Verifying that those times are within required limits
+        Verifying that those times are within the required limits
         """
 
         # Getting the full path for the test logs
@@ -200,17 +193,19 @@ class TestPVCCreationDeletionPerformance(PASTest):
         self.full_results.add_key("pvc_size", pvc_size)
         num_of_samples = 5
         accepted_creation_time = 3600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 1
+
+        # accepted deletion time for RBD is 1 sec, for CephFS is 2 secs and for RBD Thick is 5 secs
         if self.interface == constants.CEPHFILESYSTEM:
             accepted_deletion_time = 2
         elif self.interface == constants.CEPHBLOCKPOOL:
             accepted_deletion_time = 1
         else:
-            accepted_deletion_time = 3600 # constants.CEPHBLOCKPOOL_THICK
-        #accepted_deletion_time = 2 if self.interface == constants.CEPHFILESYSTEM else 1
+            accepted_deletion_time = 5
+
         self.full_results.add_key("samples", num_of_samples)
 
-        accepted_creation_deviation_percent = 50
-        accepted_deletion_deviation_percent = 50
+        accepted_creation_deviation_percent = 80
+        accepted_deletion_deviation_percent = 80
 
         creation_time_measures = []
         deletion_time_measures = []
@@ -340,12 +335,12 @@ class TestPVCCreationDeletionPerformance(PASTest):
 
         return average
 
-    def write_file_on_pvc(self, pvc_obj, filesize=10):
+    def write_file_on_pvc(self, pvc_obj, filesize=1):
         """
         Writes a file on given PVC
         Args:
             pvc_obj: PVC object to write a file on
-            filesize: size of file to write (in GB)
+            filesize: size of file to write (in GB - default is 1GB)
 
         Returns:
             Pod on this pvc on which the file was written
@@ -354,14 +349,14 @@ class TestPVCCreationDeletionPerformance(PASTest):
             interface=self.interface, pvc=pvc_obj, status=constants.STATUS_RUNNING
         )
 
-        # filesize to be written is always 10 GB
+        # filesize to be written is always 1 GB
         file_size = f"{int(filesize * 1024)}M"
 
         log.info(f"Starting IO on the POD {pod_obj.name}")
         # Going to run only write IO
         pod_obj.fillup_fs(size=file_size, fio_filename=f"{pod_obj.name}_file")
 
-        # Wait for fio to finish
+        # Wait for the fio to finish
         fio_result = pod_obj.get_fio_results()
         err_count = fio_result.get("jobs")[0].get("error")
         assert (
