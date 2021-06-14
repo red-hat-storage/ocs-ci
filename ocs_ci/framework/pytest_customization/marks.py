@@ -245,6 +245,12 @@ skipif_vsphere_ipi = pytest.mark.skipif(
     reason="Test will not run on vSphere IPI cluster",
 )
 
+skipif_tainted_nodes = pytest.mark.skipif(
+    config.DEPLOYMENT.get("infra_nodes") is True
+    or config.DEPLOYMENT.get("ocs_operator_nodes_to_taint") > 0,
+    reason="Test will not run if nodes are tainted",
+)
+
 metrics_for_external_mode_required = pytest.mark.skipif(
     float(config.ENV_DATA["ocs_version"]) < 4.6
     and config.DEPLOYMENT.get("external_mode") is True,
