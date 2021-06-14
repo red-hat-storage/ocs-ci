@@ -28,7 +28,7 @@ class PvcUI(PageNavigator):
         pvc_name (str): the name of pvc
         access_mode (str): access mode
         pvc_size (str): the size of pvc (GB)
-        vol_mode (str): volume mode type
+        vol_mode (str): volume mode types
 
         """
         self.navigate_persistentvolumeclaims_page()
