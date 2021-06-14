@@ -1,9 +1,10 @@
 import logging
 import time
+
+from semantic_version import Version
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators, pvc_4_8a, pvc_4_8b
-from ocs_ci.utility.utils import get_ocp_version
-
+from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +52,10 @@ class PvcUI(PageNavigator):
         logger.info("Select PVC size")
         self.do_send_keys(self.pvc_loc["pvc_size"], text=pvc_size)
 
-        logger.info(f"Select Volume Mode {vol_mode}")
-        self.do_click(self.pvc_loc[vol_mode])
+        if Version.coerce(get_running_ocp_version()) >= Version.coerce("4.8"):
+            logger.info(f"Test running on OCP version" + ":" + str({get_running_ocp_version()}))
+            logger.info(f"Selecting Volume Mode of type {vol_mode}")
+            self.do_click(self.pvc_loc[vol_mode])
 
         logger.info("Create PVC")
         self.do_click(self.pvc_loc["pvc_create"])
