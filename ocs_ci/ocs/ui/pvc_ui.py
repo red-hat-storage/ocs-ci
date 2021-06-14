@@ -28,7 +28,7 @@ class PvcUI(PageNavigator):
         pvc_name (str): the name of pvc
         access_mode (str): access mode
         pvc_size (str): the size of pvc (GB)
-        vol_mode (str): volume mode types
+        vol_mode (str): volume mode type
 
         """
         self.navigate_persistentvolumeclaims_page()
@@ -54,7 +54,9 @@ class PvcUI(PageNavigator):
         self.do_send_keys(self.pvc_loc["pvc_size"], text=pvc_size)
 
         if Version.coerce(get_running_ocp_version()) >= Version.coerce("4.8"):
-            logger.info("Test running on OCP version" + ":" + str({get_running_ocp_version()}))
+            logger.info(
+                "Test running on OCP version" + ":" + str({get_running_ocp_version()})
+            )
             logger.info(f"Selecting Volume Mode of type {vol_mode}")
             self.do_click(self.pvc_loc[vol_mode])
 
