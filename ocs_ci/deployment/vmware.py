@@ -394,7 +394,7 @@ class VSPHEREUPI(VSPHEREBASE):
             self.generate_manifests()
 
             # create chrony resource
-            if Version.coerce(get_ocp_version()) >= Version.coerce("4.4"):
+            if Version.coerce(get_ocp_version()) >= Version.coerce("4.5"):
                 add_chrony_to_ocp_deployment()
 
             # create ignitions
