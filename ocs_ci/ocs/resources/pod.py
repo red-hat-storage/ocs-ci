@@ -2121,7 +2121,14 @@ def wait_for_change_in_pods_statuses(
                 return True
 
             for p in pod_objs:
-                pod_status = ocp_pod_obj.get_resource_status(p.name)
+                try:
+                    pod_status = ocp_pod_obj.get_resource_status(p.name)
+                except CommandFailed as ex:
+                    logger.info(
+                        f"Can't get the status of the pod {p.name} due to the error: {ex}"
+                    )
+                    continue
+
                 if pod_status not in current_statuses:
                     logger.info(
                         f"The status of the pod '{p.name}' has changed to '{pod_status}'"
@@ -2130,3 +2137,34 @@ def wait_for_change_in_pods_statuses(
     except TimeoutExpiredError:
         logging.info(f"The status of the pods did not change after {timeout} seconds")
         return False
+
+
+def get_rook_ceph_pod_names():
+    """
+    Get all the rook ceph pod names
+
+    Returns:
+        list: List of the rook ceph pod names
+
+    """
+    rook_ceph_pod_names = get_pod_name_by_pattern("rook-ceph-")
+    # Exclude the rook ceph pod tools because it creates by OCS and not rook ceph operator
+    return [
+        pod_name
+        for pod_name in rook_ceph_pod_names
+        if not pod_name.startswith("rook-ceph-tools-")
+    ]
+
+
+def get_mon_pod_id(mon_pod):
+    """
+    Get the mon pod id
+
+    Args:
+        mon_pod (ocs_ci.ocs.resources.pod.Pod): The mon pod object
+
+    Returns:
+        str: The mon pod id
+
+    """
+    return mon_pod.get().get("metadata").get("labels").get("ceph_daemon_id")
