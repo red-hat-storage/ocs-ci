@@ -3363,9 +3363,14 @@ def add_chrony_to_ocp_deployment():
             "machineconfiguration.openshift.io/role"
         ] = role
         chrony_template_obj["metadata"]["name"] = f"99-{role}-chrony-configuration"
-        chrony_template_obj["spec"]["config"]["ignition"][
-            "version"
-        ] = config.DEPLOYMENT["ignition_version"]
+        ignition_version = config.DEPLOYMENT["ignition_version"]
+        chrony_template_obj["spec"]["config"]["ignition"]["version"] = ignition_version
+
+        if Version.coerce(ignition_version) < Version.coerce("3.0"):
+            chrony_template_obj["spec"]["config"]["storage"]["files"][0][
+                "filesystem"
+            ] = "root"
+
         chrony_template_str = yaml.safe_dump(chrony_template_obj)
         chrony_file = os.path.join(
             config.ENV_DATA["cluster_path"],
