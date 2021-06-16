@@ -47,10 +47,6 @@ def setup_local_storage(storageclass):
         optional_operators_data = templating.load_yaml(
             constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
         )
-        logger.info(
-            "Creating temp yaml file with optional operators data:\n %s",
-            optional_operators_data,
-        )
         optional_operators_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="optional_operators", delete=False
         )
