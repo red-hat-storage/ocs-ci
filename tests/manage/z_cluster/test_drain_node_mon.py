@@ -1,13 +1,10 @@
 import logging
-import pytest
 
-from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
-from ocs_ci.ocs.resources.pod import get_mon_pods
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import drain_nodes, schedule_nodes, get_node_objs
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.ocs.resources.pod import get_mon_pods, wait_for_storage_pods, get_pod_obj
+from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.helpers.helpers import get_mon_pdb
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -37,27 +34,7 @@ class TestDrainNodeMon(ManageTest):
 
     """
 
-    @pytest.fixture(scope="function", autouse=True)
-    def teardown(self, request):
-        def finalizer():
-            """
-            Make sure that all cluster's nodes are in 'Ready' state and if not,
-            change them back to 'Ready' state by marking them as schedulable
-
-            """
-            scheduling_disabled_nodes = [
-                n.name
-                for n in get_node_objs()
-                if n.ocp.get_resource_status(n.name)
-                == constants.NODE_READY_SCHEDULING_DISABLED
-            ]
-            if scheduling_disabled_nodes:
-                schedule_nodes(scheduling_disabled_nodes)
-            ceph_health_check(tries=60)
-
-        request.addfinalizer(finalizer)
-
-    def test_drain_node_mon(self):
+    def test_drain_node_mon(self, node_drain_teardown):
         """
         Verify the number of monitoring pod is three when drain node
 
@@ -73,23 +50,23 @@ class TestDrainNodeMon(ManageTest):
         self.verify_pdb_mon(disruptions_allowed=0, max_unavailable_mon=1)
 
         log.info("Verify the number of mon pods is 3")
-        sample = TimeoutSampler(timeout=1400, sleep=30, func=self.get_num_mon_pods)
+        sample = TimeoutSampler(timeout=1400, sleep=10, func=self.check_mon_pods_eq_3)
         if sample.wait_for_func_status(result=True):
             assert "There are more than 3 mon pods."
 
+        log.info("Respin pod rook-ceph operator pod")
+        rook_ceph_operator_name = get_pod_name_by_pattern("rook-ceph-operator")
+        rook_ceph_operator_obj = get_pod_obj(name=rook_ceph_operator_name[0])
+        rook_ceph_operator_obj.delete()
+
         schedule_nodes([node_name])
 
-        logging.info("Wait for mon pods to be on running state")
-        pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
-        assert pod.wait_for_resource(
-            condition="Running",
-            selector=constants.MON_APP_LABEL,
-            resource_count=3,
-            timeout=100,
-        )
+        logging.info("Check all OCS pods status")
+        wait_for_storage_pods()
+
         self.verify_pdb_mon(disruptions_allowed=1, max_unavailable_mon=1)
 
-    def get_num_mon_pods(self):
+    def check_mon_pods_eq_3(self):
         """
         Get number of monitoring pods
 
@@ -98,6 +75,7 @@ class TestDrainNodeMon(ManageTest):
         if len(mon_pod_list) == 3:
             return False
         else:
+            log.info(f"There are {len(mon_pod_list)} mon pods")
             for mon_pod in mon_pod_list:
                 log.info(f"{mon_pod.name}")
             return True
