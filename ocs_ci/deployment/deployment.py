@@ -72,7 +72,7 @@ from ocs_ci.utility.utils import (
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
-from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
+from ocs_ci.ocs.ui.deployment_ui import DeploymentUI, ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
 
 logger = logging.getLogger(__name__)
@@ -397,10 +397,11 @@ class Deployment(object):
 
         """
         ui_deployment = config.DEPLOYMENT.get("ui_deployment")
+        ui_deployment_cond = ui_deployment_conditions()
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 
-        if ui_deployment:
+        if ui_deployment and ui_deployment_cond:
             self.deployment_with_ui()
             # Skip the rest of the deployment when deploy via UI
             return
