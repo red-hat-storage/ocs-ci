@@ -1594,3 +1594,50 @@ def add_new_nodes_and_label_upi_lso(
             add_node_to_lvd_and_lvs(node_obj.name)
 
     return new_node_names
+
+
+def get_nodes_in_statuses(statuses):
+    """
+    Get all nodes in specific statuses
+
+    Args:
+        statuses (list): List of the statuses to search for the nodes
+
+    Returns:
+        list: OCP objects representing the nodes in the specific statuses
+
+    """
+    nodes = get_node_objs()
+    return [n for n in nodes if n.ocp.get_resource_status(n.name) in statuses]
+
+
+def get_node_osd_ids(node_name):
+    """
+    Get the node osd ids
+
+    Args:
+        node_name (str): The node name to get the osd ids
+
+    Returns:
+        list: The list of the osd ids
+
+    """
+    osd_pods = pod.get_osd_pods()
+    node_osd_pods = get_node_pods(node_name, pods_to_search=osd_pods)
+    return [pod.get_osd_pod_id(osd_pod) for osd_pod in node_osd_pods]
+
+
+def get_node_mon_ids(node_name):
+    """
+    Get the node mon ids
+
+    Args:
+        node_name (str): The node name to get the mon ids
+
+    Returns:
+        list: The list of the mon ids
+
+    """
+    mon_pods = pod.get_mon_pods()
+    node_mon_pods = get_node_pods(node_name, pods_to_search=mon_pods)
+    return [pod.get_mon_pod_id(mon_pod) for mon_pod in node_mon_pods]
