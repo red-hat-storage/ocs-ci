@@ -581,7 +581,10 @@ def get_csi_provisioner_pod(interface):
     )
     selector = (
         "app=csi-rbdplugin-provisioner"
-        if (interface == constants.CEPHBLOCKPOOL or interface == constants.CEPHBLOCKPOOL_THICK)
+        if (
+            interface == constants.CEPHBLOCKPOOL
+            or interface == constants.CEPHBLOCKPOOL_THICK
+        )
         else "app=csi-cephfsplugin-provisioner"
     )
     provision_pod_items = ocp_pod_obj.get(selector=selector)["items"]
