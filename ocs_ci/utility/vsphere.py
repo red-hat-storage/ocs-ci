@@ -1072,10 +1072,9 @@ class VSPHERE(object):
 
         """
         dc = self.find_datacenter_by_name(datacenter_name)
-        folder = dc.datastoreFolder
-        return self.find_object_by_name(
-            self.get_content, datastore_name, [vim.Datastore], folder=folder
-        )
+        for ds in dc.datastore:
+            if ds.name == datastore_name:
+                return ds
 
     def find_datacenter_by_name(self, datacenter_name):
         """

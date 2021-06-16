@@ -60,6 +60,12 @@ class VSpherePreChecks(PreChecks):
         self.datastore = config.ENV_DATA["vsphere_datastore"]
         self.vsphere = VSPHEREUtil(self.server, self.user, self.password)
 
+    def pre_req(self):
+        """
+        Pre-Requisites for vSphere checks
+        """
+        self.ds = self.vsphere.find_datastore_by_name(self.datastore, self.datacenter)
+
     def storage_check(self):
         """
         Checks for storage capacity in the datastore
@@ -69,12 +75,11 @@ class VSpherePreChecks(PreChecks):
                 storage in Datastore.
 
         """
-        logger.debug(f"Checking for datastore {self.datastore} free capacity")
-        datastore_free_capacity = self.vsphere.get_datastore_free_capacity(
-            self.datastore, self.datacenter
-        )
-        if datastore_free_capacity < MIN_STORAGE_FOR_DATASTORE:
+        logger.info(f"Checking for datastore {self.datastore} free capacity")
+        free_space = self.ds.summary.freeSpace
+        if free_space < MIN_STORAGE_FOR_DATASTORE:
             raise StorageNotSufficientException
+        logger.debug(f"Available free space in bytes: {free_space}")
 
     def memory_check(self):
         """
@@ -105,10 +110,16 @@ class VSpherePreChecks(PreChecks):
             TemplateNotFound: If template not found in Datacenter.
 
         """
-        logger.debug(f"Checking for template existence in datacenter {self.datacenter}")
-        if not self.vsphere.is_template_exist(
-            config.ENV_DATA["vm_template"], self.datacenter
-        ):
+        is_template_found = False
+        logger.info(f"Checking for template existence in datacenter {self.datacenter}")
+        for vm in self.ds.vm:
+            if vm.name == config.ENV_DATA["vm_template"]:
+                is_template_found = True
+                logger.info(
+                    f"Template {config.ENV_DATA['vm_template']} exists in Datacenter"
+                )
+                break
+        if not is_template_found:
             # TODO: Upload template instead of raising exception
             raise TemplateNotFound(
                 f"Template {config.ENV_DATA['vm_template']} not found in Datacenter {self.datacenter}"
@@ -118,6 +129,7 @@ class VSpherePreChecks(PreChecks):
         """
         Aggregate all the checks needed for vSphere platform
         """
+        self.pre_req()
         self.storage_check()
         self.memory_check()
         self.cpu_check()
