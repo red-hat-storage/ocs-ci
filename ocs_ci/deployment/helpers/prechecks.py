@@ -64,7 +64,7 @@ class VSpherePreChecks(PreChecks):
         """
         Pre-Requisites for vSphere checks
         """
-        self.ds = self.vsphere.find_datastore_by_name(self.datastore, self.datacenter)
+        self.dc = self.vsphere.find_datacenter_by_name(self.datacenter)
 
     def storage_check(self):
         """
@@ -76,10 +76,12 @@ class VSpherePreChecks(PreChecks):
 
         """
         logger.info(f"Checking for datastore {self.datastore} free capacity")
-        free_space = self.ds.summary.freeSpace
-        if free_space < MIN_STORAGE_FOR_DATASTORE:
-            raise StorageNotSufficientException
-        logger.debug(f"Available free space in bytes: {free_space}")
+        for ds in self.dc.datastore:
+            if ds.name == self.datastore:
+                free_space = ds.summary.freeSpace
+                if free_space < MIN_STORAGE_FOR_DATASTORE:
+                    raise StorageNotSufficientException
+                logger.debug(f"Available free space in bytes: {free_space}")
 
     def memory_check(self):
         """
@@ -112,7 +114,7 @@ class VSpherePreChecks(PreChecks):
         """
         is_template_found = False
         logger.info(f"Checking for template existence in datacenter {self.datacenter}")
-        for vm in self.ds.vm:
+        for vm in self.dc.vmFolder.childEntity:
             if vm.name == config.ENV_DATA["vm_template"]:
                 is_template_found = True
                 logger.info(
