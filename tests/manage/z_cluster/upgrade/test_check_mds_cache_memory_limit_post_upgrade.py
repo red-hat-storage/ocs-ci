@@ -31,17 +31,27 @@ class TestToCheckMDSCacheMemoryLimit(ManageTest):
         pod_obj = get_ceph_tools_pod()
         ceph_cmd = "ceph config dump"
         ceph_config = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
-        if (ceph_config[11]["value"] and ceph_config[12]["value"]) == "4294967296":
+        mds_a_dict = next(
+            item
+            for item in ceph_config
+            if item["section"] == "mds.ocs-storagecluster-cephfilesystem-a"
+        )
+        mds_b_dict = next(
+            item
+            for item in ceph_config
+            if item["section"] == "mds.ocs-storagecluster-cephfilesystem-b"
+        )
+        if (mds_a_dict["value"] and mds_b_dict["value"]) == "4294967296":
             log.info(
-                f"{ceph_config[11]['section']} set value {ceph_config[11]['value']} and"
-                f" {ceph_config[12]['section']} set value {ceph_config[12]['value']}"
+                f"{mds_a_dict['section']} set value {mds_a_dict['value']} and"
+                f" {mds_b_dict['section']} set value {mds_b_dict['value']}"
             )
             log.info("mds_cache_memory_limit is set with a value of 4GB")
         else:
             log.error(f"Ceph config dump output: {ceph_config}")
             log.error(
-                f"{ceph_config[11]['section']} set value {ceph_config[11]['value']} and"
-                f"{ceph_config[12]['section']} set value {ceph_config[12]['value']}"
+                f"{mds_a_dict['section']} set value {mds_a_dict['value']} and"
+                f"{mds_b_dict['section']} set value {mds_b_dict['value']}"
             )
             log.error("mds_cache_memory_limit is not set with a value of 4GB")
             raise Exception("mds_cache_memory_limit is not set with a value of 4GB")
