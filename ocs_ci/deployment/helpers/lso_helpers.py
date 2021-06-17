@@ -8,6 +8,7 @@ import logging
 import tempfile
 import time
 
+from ocs_ci.deployment.disconnected import prune_and_mirror_index_image
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.exceptions import CommandFailed, UnsupportedPlatformError
@@ -58,6 +59,22 @@ def setup_local_storage(storageclass):
                     _dict["spec"]["image"] = config.DEPLOYMENT.get(
                         "optional_operators_image"
                     )
+        if config.DEPLOYMENT.get("disconnected"):
+            # in case of disconnected environment, we have to mirror all the
+            # optional_operators images
+            for _dict in optional_operators_data:
+                if _dict.get("kind").lower() == "catalogsource":
+                    index_image = _dict["spec"]["image"]
+                    mirrored_index_image = (
+                        f"{config.DEPLOYMENT['mirror_registry']}/"
+                        f"{index_image.split('/', 1)[-1]}"
+                    )
+                    prune_and_mirror_index_image(
+                        index_image,
+                        mirrored_index_image,
+                        constants.DISCON_CL_REQUIRED_PACKAGES,
+                    )
+                    _dict["spec"]["image"] = mirrored_index_image
         templating.dump_data_to_temp_yaml(
             optional_operators_data, optional_operators_yaml.name
         )
