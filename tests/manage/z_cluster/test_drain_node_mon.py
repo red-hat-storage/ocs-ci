@@ -27,10 +27,10 @@ class TestDrainNodeMon(ManageTest):
     3.Drain node where monitoring pod run
     4.Verify pdb status, disruptions_allowed=0, max_unavailable_mon=1
     5.Verify the number of mon pods is 3 for (1400 seconds)
-    6.Change node to be scheduled
-    7.Wait for mon pods to be on running state
-    8.Verify pdb status, disruptions_allowed=1, max_unavailable_mon=1
-    9.Check ceph status
+    6.Respin  rook-ceph operator pod
+    7.Change node to be scheduled
+    8.Wait for mon pods to be on running state
+    9.Verify pdb status, disruptions_allowed=1, max_unavailable_mon=1
 
     """
 
