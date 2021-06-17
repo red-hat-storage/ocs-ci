@@ -397,11 +397,10 @@ class Deployment(object):
 
         """
         ui_deployment = config.DEPLOYMENT.get("ui_deployment")
-        ui_deployment_cond = ui_deployment_conditions()
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 
-        if ui_deployment and ui_deployment_cond:
+        if ui_deployment and ui_deployment_conditions():
             self.deployment_with_ui()
             # Skip the rest of the deployment when deploy via UI
             return

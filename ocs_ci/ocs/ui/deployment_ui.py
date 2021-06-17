@@ -328,25 +328,25 @@ def ui_deployment_conditions():
         locators[ocp_version]["deployment"]
     except KeyError as e:
         logger.info(
-            f"OCS deployment via UI doesn't supported on ocp version {ocp_version}"
+            f"OCS deployment via UI is not supported on ocp version {ocp_version}"
         )
         logger.error(e)
         return False
 
     if platform not in (constants.AWS_PLATFORM, constants.VSPHERE_PLATFORM):
-        logger.info(f"OCS deployment via UI doesn't supported on platform {platform}")
+        logger.info(f"OCS deployment via UI is not supported on platform {platform}")
         return False
     elif is_external or is_disconnected or is_proxy or is_kms or is_arbiter:
         logger.info(
-            "OCS deployment via UI doesn't supported on "
-            "external/disconnected/proxy/kms/arbiter"
+            "OCS deployment via UI is not supported on "
+            "external/disconnected/proxy/kms/arbiter cluster"
         )
         return False
     elif platform == constants.AWS_PLATFORM and is_lso is True:
-        logger.info("OCS deployment via UI doesn't supported on AWS-LSO")
+        logger.info("OCS deployment via UI is not supported on AWS-LSO")
         return False
     elif ocp_version == "4.6" and is_lso is True:
-        logger.info("OCS deployment via UI doesn't supported on LSO-OCP4.6")
+        logger.info("OCS deployment via UI is not supported on LSO-OCP4.6")
         return False
     else:
         return True
