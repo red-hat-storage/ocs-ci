@@ -311,14 +311,6 @@ infra = {
 }
 
 validation = {
-    "object_service_tab": (
-        'a[data-test-id="horizontal-link-Object Service"]',
-        By.CSS_SELECTOR,
-    ),
-    "persistent_storage_tab": (
-        'a[data-test-id="horizontal-link-Persistent Storage"]',
-        By.CSS_SELECTOR,
-    ),
     "object_service_button": ("//button[text()='Object Service']", By.XPATH),
     "data_resiliency_button": ("//button[text()='Data Resiliency']", By.XPATH),
     "search_ocs_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
@@ -348,6 +340,28 @@ validation = {
     ),
 }
 
+validation_4_7 = {
+    "object_service_tab": (
+        'a[data-test-id="horizontal-link-Object Service"]',
+        By.CSS_SELECTOR,
+    ),
+    "persistent_storage_tab": (
+        'a[data-test-id="horizontal-link-Persistent Storage"]',
+        By.CSS_SELECTOR,
+    ),
+}
+
+validation_4_8 = {
+    "object_service_tab": (
+        'a[data-test-id="horizontal-link-Object"]',
+        By.CSS_SELECTOR,
+    ),
+    "persistent_storage_tab": (
+        'a[data-test-id="horizontal-link-Block and File"]',
+        By.CSS_SELECTOR,
+    ),
+}
+
 locators = {
     "4.8": {
         "login": login,
@@ -360,6 +374,7 @@ locators = {
         "mcg_stores": mcg_stores,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8},
         "infra": infra,
+        "validation": {**validation, **validation_4_8},
     },
     "4.7": {
         "login": login,
@@ -367,7 +382,7 @@ locators = {
         "deployment": {**deployment, **deployment_4_7},
         "pvc": {**pvc, **pvc_4_7},
         "infra": infra,
-        "validation": validation,
+        "validation": {**validation, **validation_4_7},
     },
     "4.6": {
         "login": login,
