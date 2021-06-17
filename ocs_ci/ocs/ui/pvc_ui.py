@@ -3,7 +3,7 @@ import time
 
 from semantic_version import Version
 from ocs_ci.ocs.ui.base_ui import PageNavigator
-from ocs_ci.ocs.ui.views import locators, pvc_4_8b
+from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
 
 logger = logging.getLogger(__name__)
@@ -54,16 +54,54 @@ class PvcUI(PageNavigator):
         self.do_send_keys(self.pvc_loc["pvc_size"], text=pvc_size)
 
         if Version.coerce(get_running_ocp_version()) >= Version.coerce("4.8"):
-            logger.info(
-                "Test running on OCP version" + ":" + str({get_running_ocp_version()})
-            )
-            logger.info(f"Selecting Volume Mode of type {vol_mode}")
-            self.do_click(self.pvc_loc[vol_mode])
+            if (
+                sc_type
+                in ("ocs-storagecluster-ceph-rbd-thick", "ocs-storagecluster-ceph-rbd")
+                and access_mode == "ReadWriteOnce"
+            ):
+                logger.info(
+                    "Test running on OCP version"
+                    + ":"
+                    + str({get_running_ocp_version()})
+                )
+                logger.info(f"Selecting Volume Mode of type {vol_mode}")
+                self.do_click(self.pvc_loc[vol_mode])
 
         logger.info("Create PVC")
         self.do_click(self.pvc_loc["pvc_create"])
 
         time.sleep(2)
+
+    def verify_pvc_ui(self, pvc_size, access_mode, vol_mode, sc_type):
+        """
+        Verifying PVC details via UI
+
+        pvc_size (str): the size of pvc (GB)
+        access_mode (str): access mode
+        vol_mode (str): volume mode type
+        sc_type (str): storage class type
+
+        """
+        pvc_size_new = f"{pvc_size} GiB"
+        self.check_element_text(expected_text=pvc_size_new)
+        logger.info(f"Verifying pvc size : {pvc_size_new}")
+
+        pvc_access_mode_new = f"{access_mode}"
+        self.check_element_text(expected_text=pvc_access_mode_new)
+        logger.info(f"Verifying access mode : {pvc_access_mode_new}")
+
+        if Version.coerce(get_running_ocp_version()) >= Version.coerce("4.8"):
+            if (
+                sc_type
+                in (
+                    "ocs-storagecluster-ceph-rbd-thick",
+                    "ocs-storagecluster-ceph-rbd",
+                )
+                and (vol_mode == "ReadWriteOnce")
+            ):
+                pvc_vol_mode_new = f"{vol_mode}"
+                self.check_element_text(expected_text=pvc_vol_mode_new)
+                logger.info(f"Verifying volume mode : {pvc_vol_mode_new}")
 
     def delete_pvc_ui(self, pvc_name):
         """
@@ -81,7 +119,7 @@ class PvcUI(PageNavigator):
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
         logger.info(f"Go to PVC {pvc_name} Page")
-        self.do_click(pvc_4_8b[pvc_name])
+        self.do_click(self.pvc_loc[pvc_name])
 
         logger.info("Click on Actions")
         self.do_click(self.pvc_loc["pvc_actions"])

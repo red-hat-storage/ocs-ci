@@ -32,7 +32,7 @@ class TestPvcUserInterface(object):
                     "test-pvc-fs",
                     "ReadWriteMany",
                     "2",
-                    None,
+                    "Filesystem",
                 ]
             ),
             pytest.param(
@@ -41,7 +41,7 @@ class TestPvcUserInterface(object):
                     "test-pvc-rbd",
                     "ReadWriteMany",
                     "3",
-                    "Filesystem",
+                    "Block",
                 ]
             ),
             pytest.param(
@@ -50,7 +50,7 @@ class TestPvcUserInterface(object):
                     "test-pvc-rbd-thick",
                     "ReadWriteMany",
                     "4",
-                    "Filesystem",
+                    "Block",
                 ]
             ),
             pytest.param(
@@ -59,7 +59,7 @@ class TestPvcUserInterface(object):
                     "test-pvc-fs",
                     "ReadWriteOnce",
                     "10",
-                    None,
+                    "Filesystem",
                 ]
             ),
             pytest.param(
@@ -85,7 +85,16 @@ class TestPvcUserInterface(object):
                     "ocs-storagecluster-ceph-rbd",
                     "test-pvc-rbd",
                     "ReadWriteOnce",
-                    "11",
+                    "13",
+                    "Filesystem",
+                ]
+            ),
+            pytest.param(
+                *[
+                    "ocs-storagecluster-ceph-rbd-thick",
+                    "test-pvc-rbd-thick",
+                    "ReadWriteOnce",
+                    "4",
                     "Filesystem",
                 ]
             ),
@@ -124,6 +133,15 @@ class TestPvcUserInterface(object):
             f"volume mode error| expected volume mode:{vol_mode} "
             f"\n actual volume mode:{pvc[0].get_pvc_vol_mode}"
         )
+
+        logger.info("Verifying PVC Details via UI")
+        pvc_ui_obj.verify_pvc_ui(
+            pvc_size=pvc_size,
+            access_mode=access_mode,
+            vol_mode=vol_mode,
+            sc_type=sc_type,
+        )
+        logger.info("PVC Details Verified via UI..!!")
 
         logger.info(f"Delete {pvc_name} pvc")
         pvc_ui_obj.delete_pvc_ui(pvc_name)
