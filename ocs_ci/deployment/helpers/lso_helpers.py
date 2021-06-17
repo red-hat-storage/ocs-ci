@@ -44,12 +44,20 @@ def setup_local_storage(storageclass):
     ocs_version = config.ENV_DATA.get("ocs_version")
     ocp_ga_version = get_ocp_ga_version(ocp_version)
     if not ocp_ga_version:
-        optional_operators_data = templating.load_yaml(
-            constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
+        optional_operators_data = list(
+            templating.load_yaml(
+                constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
+            )
         )
         optional_operators_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="optional_operators", delete=False
         )
+        if config.DEPLOYMENT.get("optional_operators_image"):
+            for _dict in optional_operators_data:
+                if _dict.get("kind").lower() == "catalogsource":
+                    _dict["spec"]["image"] = config.DEPLOYMENT.get(
+                        "optional_operators_image"
+                    )
         templating.dump_data_to_temp_yaml(
             optional_operators_data, optional_operators_yaml.name
         )
