@@ -299,7 +299,6 @@ def pytest_configure(config):
             set_rp_client_log_level()
             set_report_portal_config(config)
 
-        set_report_portal_config(config)
         # Add OCS related versions to the html report and remove
         # extraneous metadata
         markers_arg = config.getoption("-m")
