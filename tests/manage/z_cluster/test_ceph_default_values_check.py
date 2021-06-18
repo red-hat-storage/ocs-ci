@@ -3,12 +3,19 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import bugzilla
-from ocs_ci.framework.testlib import ManageTest, tier1, skipif_external_mode
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier1,
+    skipif_external_mode,
+    skipif_ocs_version,
+    post_ocs_upgrade,
+)
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.cluster import get_pg_balancer_status, get_mon_config_value
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.cluster import get_mds_config_value
 
 
 log = logging.getLogger(__name__)
@@ -109,3 +116,31 @@ class TestCephDefaultValuesCheck(ManageTest):
             f"The expected values are:\n{stored_values}\n"
             f"The cluster's Ceph values are:{config_data}"
         )
+
+    @post_ocs_upgrade
+    @skipif_ocs_version("<4.7")
+    @bugzilla("1951348")
+    @bugzilla("1944148")
+    @pytest.mark.polarion_id("OCS-2554")
+    def test_check_mds_cache_memory_limit(self):
+        """
+        Testcase to check mds cache memory limit post ocs upgrade
+
+        """
+        mds_a_dict, mds_b_dict = get_mds_config_value()
+        if (mds_a_dict["value"] and mds_b_dict["value"]) == "4294967296":
+            log.info(
+                f"{mds_a_dict['section']} set value {mds_a_dict['value']} and"
+                f" {mds_b_dict['section']} set value {mds_b_dict['value']}"
+            )
+            log.info("mds_cache_memory_limit is set with a value of 4GB")
+        else:
+            log.error(
+                f"mds_a_dict value: {mds_a_dict} and mds_b_dict value: {mds_b_dict}"
+            )
+            log.error(
+                f"{mds_a_dict['section']} set value {mds_a_dict['value']} and"
+                f"{mds_b_dict['section']} set value {mds_b_dict['value']}"
+            )
+            log.error("mds_cache_memory_limit is not set with a value of 4GB")
+            raise Exception("mds_cache_memory_limit is not set with a value of 4GB")

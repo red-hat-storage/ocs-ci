@@ -1631,6 +1631,29 @@ def get_mon_config_value(key):
     return mon_config_value
 
 
+def get_mds_config_value():
+    """
+    Get the default value of mds
+
+    Returns:
+        tuple: Returns tuple which contains mds_a and mds_b dict value
+    """
+    pod_obj = pod.get_ceph_tools_pod()
+    ceph_cmd = "ceph config dump"
+    ceph_config = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    mds_a_dict = next(
+        item
+        for item in ceph_config
+        if item["section"] == "mds.ocs-storagecluster-cephfilesystem-a"
+    )
+    mds_b_dict = next(
+        item
+        for item in ceph_config
+        if item["section"] == "mds.ocs-storagecluster-cephfilesystem-b"
+    )
+    return mds_a_dict, mds_b_dict
+
+
 def is_lso_cluster():
     """
     Check if the cluster is an lso cluster
