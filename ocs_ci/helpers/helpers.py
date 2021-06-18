@@ -3050,8 +3050,7 @@ def check_rbd_image_used_size(
     for pvc_obj in pvc_objs:
         rbd_image_name = pvc_obj.get_rbd_image_name
         du_out = ct_pod.exec_ceph_cmd(
-            ceph_cmd=f"rbd du -p {rbd_pool} {rbd_image_name}",
-            format="",
+            ceph_cmd=f"rbd du -p {rbd_pool} {rbd_image_name}", format="",
         )
         used_size = "".join(du_out.strip().split()[-2:])
         if expect_match:
