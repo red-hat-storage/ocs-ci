@@ -79,10 +79,10 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
         )
         pvc_obj.reload()
         logger.info(f"Verified: PVC {pvc_obj.name} reached Bound state.")
+        image_name = pvc_obj.get_rbd_image_name
+        pv_obj = pvc_obj.backed_pv_obj
 
         # Verify thick provision by checking the image used size
-        pv_obj = pvc_obj.backed_pv_obj
-        image_name = pv_obj.get()["spec"]["csi"]["volumeAttributes"]["imageName"]
         assert check_rbd_image_used_size(
             pvc_objs=[pvc_obj],
             usage_to_compare=f"{pvc_size}GiB",
