@@ -61,15 +61,21 @@ def get_csv_from_image(bundle_image):
         raise
 
 
-def prune_and_mirror_index_image(index_image, mirrored_index_image, packages):
+def prune_and_mirror_index_image(
+    index_image, mirrored_index_image, packages, icsp=None
+):
     """
     Prune given index image and push it to mirror registry, mirror all related
     images to mirror registry and create relevant imageContentSourcePolicy
 
     Args:
-        index_image(str): index image which will be pruned and mirrored
-        mirrored_index_image(str): mirrored index image which will be pushed to
+        index_image (str): index image which will be pruned and mirrored
+        mirrored_index_image (str): mirrored index image which will be pushed to
             mirror registry
+        packages (list): list of packages to keep
+        icsp (dict): ImageContentSourcePolicy used for mirroring (workaround for
+            stage images, which are pointing to different registry than they
+            really are)
 
     Returns:
         str: path to generated catalogSource.yaml file
@@ -118,6 +124,46 @@ def prune_and_mirror_index_image(index_image, mirrored_index_image, packages):
         )
     mirroring_manifests_dir = line.replace("wrote mirroring manifests to ", "")
     logger.debug(f"Mirrored manifests directory: {mirroring_manifests_dir}")
+
+    if icsp:
+        # update mapping.txt file with urls updated based on provided
+        # imageContentSourcePolicy
+        mapping_file = os.path.join(
+            f"{mirroring_manifests_dir}",
+            "mapping.txt",
+        )
+        with open(mapping_file) as mf:
+            mapping_file_content = []
+            for line in mf:
+                # exclude mirrored_index_image
+                if mirrored_index_image in line:
+                    continue
+                # apply any matching policy to all lines from mapping file
+                for policy in icsp["spec"]["repositoryDigestMirrors"]:
+                    # we use only first defined mirror for particular source,
+                    # because we don't use any ICSP with more mirrors for one
+                    # source and it will make the logic wery complex and
+                    # confusing
+                    line = line.replace(policy["source"], policy["mirrors"][0])
+                mapping_file_content.append(line)
+        # write mapping file to disk
+        mapping_file_updated = os.path.join(
+            f"{mirroring_manifests_dir}",
+            "mapping_updated.txt",
+        )
+        with open(mapping_file_updated, "w") as f:
+            f.writelines(mapping_file_content)
+        # mirror images based on the updated mapping file
+        # ignore errors, because some of the images might be already mirrored
+        # via the `oc adm catalog mirror ...` command and not available on the
+        # mirror
+        exec_cmd(
+            f"oc image mirror --filter-by-os='.*' -f {mapping_file_updated} "
+            f"--insecure --registry-config={pull_secret_path} "
+            "--max-per-registry=2",
+            timeout=3600,
+            ignore_error=True,
+        )
 
     # create ImageContentSourcePolicy
     icsp_file = os.path.join(
