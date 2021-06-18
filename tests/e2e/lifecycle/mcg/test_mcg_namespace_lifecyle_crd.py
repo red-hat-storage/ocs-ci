@@ -328,7 +328,6 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         6. Recreate the cache buckets on ns store(with existing data) then read.
 
         """
-
         data = "Sample string content to write to a S3 object"
         object_key = "ObjKey-" + str(uuid.uuid4().hex)
         if (
