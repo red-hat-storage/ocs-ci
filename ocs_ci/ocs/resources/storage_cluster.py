@@ -712,10 +712,13 @@ def verify_sc_images(storage_cluster):
     Args:
         storage_cluster (obj): storage_cluster ocp object
     """
-    images_set = set()
+    images_list = list()
     images = storage_cluster.get().get("status").get("images")
     for component, images_dict in images.items():
-        for image, image_name in images_dict.items():
-            log.info(f"{component} has {image}:{image_name}")
-            images_set.add(image_name)
-    assert len(images_set) == 3, "actualImage and desiredImage are different"
+        if len(images_dict) > 1:
+            for image, image_name in images_dict.items():
+                log.info(f"{component} has {image}:{image_name}")
+                images_list.append(image_name)
+    assert (
+        len(set(images_list)) == len(images_list) / 2
+    ), "actualImage and desiredImage are different"
