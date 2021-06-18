@@ -69,6 +69,7 @@ setup(
         "ovirt-engine-sdk-python==4.4.11",
         "junitparser",
         "flaky==3.7.0",
+        "ocp-network-split",
     ],
     entry_points={
         "console_scripts": [

@@ -9,6 +9,7 @@ import json
 import logging
 import tempfile
 import time
+from pathlib import Path
 
 import yaml
 
@@ -30,6 +31,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedFeatureError,
 )
 from ocs_ci.deployment.zones import create_dummy_zone_labels
+from ocs_ci.deployment.netsplit import setup_netsplit
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
@@ -140,6 +142,31 @@ class Deployment(object):
                     if config.REPORTING["gather_on_deploy_failure"]:
                         collect_ocs_logs("deployment", ocs=False)
                     raise
+
+        # Deployment of network split scripts via machineconfig API happens
+        # before OCS deployment.
+        if config.DEPLOYMENT.get("network_split_setup"):
+            master_zones = config.ENV_DATA.get("master_availability_zones")
+            worker_zones = config.ENV_DATA.get("worker_availability_zones")
+            # special external zone, which is directly defined by ip addr list,
+            # such zone could represent external services, which we could block
+            # access to via ax-bx-cx network split
+            if config.DEPLOYMENT.get("network_split_zonex_addrs") is not None:
+                x_addr_list = config.DEPLOYMENT["network_split_zonex_addrs"].split(",")
+            else:
+                x_addr_list = None
+            if config.DEPLOYMENT.get("arbiter_deployment"):
+                arbiter_zone = self.get_arbiter_location()
+                logger.debug("detected arbiter zone: %s", arbiter_zone)
+            else:
+                arbiter_zone = None
+            # TODO: use temporary directory for all temporary files of
+            # ocs-deployment, not just here in this particular case
+            tmp_path = Path(tempfile.mkdtemp(prefix="ocs-ci-deployment-"))
+            logger.debug("created temporary directory %s", tmp_path)
+            setup_netsplit(
+                tmp_path, master_zones, worker_zones, x_addr_list, arbiter_zone
+            )
 
         if not config.ENV_DATA["skip_ocs_deployment"]:
             try:

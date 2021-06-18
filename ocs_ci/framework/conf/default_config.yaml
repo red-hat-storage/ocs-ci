@@ -91,6 +91,10 @@ DEPLOYMENT:
   ignition_version: "3.2.0"
   # Label all nodes with "dummy" zone labels? Assumes zone lables are missing.
   dummy_zone_node_labels: False
+  # Network split setup. When enabled, network split scripts will be deployed
+  # on all master and worker nodes via MachineConfig during deployment.
+  # See also: https://mbukatov.gitlab.io/ocp-network-split/
+  network_split_setup: False
 
 
 # Section for reporting configuration
