@@ -3069,8 +3069,7 @@ def check_rbd_image_used_size(
                     f"Expected the used size to be diferent than {usage_to_compare}. "
                     f"Actual used size: {used_size}. Rbd du out: {du_out}"
                 )
-
-            no_match_list.append(pvc_obj.name)
+                no_match_list.append(pvc_obj.name)
 
     if no_match_list:
         logger.error(
