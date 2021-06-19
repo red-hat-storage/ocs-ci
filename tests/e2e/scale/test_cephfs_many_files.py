@@ -85,7 +85,7 @@ class MillionFilesOnCephfs(object):
             size=SIZE,
         )
         helpers.wait_for_resource_state(
-            self.cephfs_pvc, constants.STATUS_BOUND, timeout=300
+            self.cephfs_pvc, constants.STATUS_BOUND, timeout=1200
         )
         self.cephfs_pod = helpers.create_pod(
             interface_type=constants.CEPHFILESYSTEM,
