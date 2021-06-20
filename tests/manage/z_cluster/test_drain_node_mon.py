@@ -2,9 +2,12 @@ import logging
 
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.ocs.resources.pod import get_mon_pods, wait_for_storage_pods, get_pod_obj
+from ocs_ci.ocs.resources.pod import get_mon_pods, get_pod_obj
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.helpers.helpers import get_mon_pdb
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -29,7 +32,7 @@ class TestDrainNodeMon(ManageTest):
     5.Verify the number of mon pods is 3 for (1400 seconds)
     6.Respin  rook-ceph operator pod
     7.Change node to be scheduled
-    8.Wait for mon pods to be on running state
+    8.Wait for mon and osd pods to be on running state
     9.Verify pdb status, disruptions_allowed=1, max_unavailable_mon=1
 
     """
@@ -61,8 +64,20 @@ class TestDrainNodeMon(ManageTest):
 
         schedule_nodes([node_name])
 
-        logging.info("Check all OCS pods status")
-        wait_for_storage_pods()
+        logging.info("Wait for mon and osd pods to be on running state")
+        pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=constants.MON_APP_LABEL,
+            resource_count=3,
+            timeout=100,
+        )
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=constants.OSD_APP_LABEL,
+            resource_count=3,
+            timeout=100,
+        )
 
         self.verify_pdb_mon(disruptions_allowed=1, max_unavailable_mon=1)
 
