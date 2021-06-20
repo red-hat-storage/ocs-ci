@@ -19,5 +19,5 @@ def test_rgw_restart_counts():
     pod_obj = OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     for pod in rgw_pods:
         rgw_restarts_count = int(pod_obj.get_resource(pod.name, "RESTARTS"))
-        log.info(f"Restart Count for {pod} is {rgw_restarts_count}")
+        log.info(f"Restart Count for {pod.name} is {rgw_restarts_count}")
         assert rgw_restarts_count == 0, "RGW Pod restart detected"
