@@ -5,6 +5,7 @@ import time
 from ocs_ci.ocs.ui.views import locators, osd_sizes
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler, run_cmd
+from ocs_ci.ocs.ocp import get_ocs_version
 from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
@@ -316,6 +317,7 @@ def ui_deployment_conditions():
     """
     platform = config.ENV_DATA["platform"]
     ocp_version = get_ocp_version()
+    ocs_version = get_ocs_version()
     is_arbiter = config.DEPLOYMENT.get("arbiter_deployment")
     is_lso = config.DEPLOYMENT.get("local_storage")
     is_external = config.DEPLOYMENT["external_mode"]
@@ -335,6 +337,12 @@ def ui_deployment_conditions():
 
     if platform not in (constants.AWS_PLATFORM, constants.VSPHERE_PLATFORM):
         logger.info(f"OCS deployment via UI is not supported on platform {platform}")
+        return False
+    elif ocs_version != ocp_version and ocp_version == "4.6":
+        logger.info(
+            f"OCS deployment via UI is not supported when the OCS version [{ocs_version}]"
+            f" is different from the OCP version [{ocp_version}]"
+        )
         return False
     elif is_external or is_disconnected or is_proxy or is_kms or is_arbiter:
         logger.info(
