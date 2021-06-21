@@ -3026,3 +3026,54 @@ def run_cmd_verify_cli_output(
         if expected_output not in out:
             return False
     return True
+
+
+def check_rbd_image_used_size(
+    pvc_objs, usage_to_compare, rbd_pool=constants.DEFAULT_BLOCKPOOL, expect_match=True
+):
+    """
+    Check if RBD image used size of the PVCs are matching with the given value
+
+    Args:
+        pvc_objs (list): List of PVC objects
+        usage_to_compare (str): Value of image used size to be compared with actual value. eg: "5GiB"
+        rbd_pool (str): Name of the pool
+        expect_match (bool): True to verify the used size is equal to 'usage_to_compare' value.
+            False to verify the used size is not equal to 'usage_to_compare' value.
+
+    Returns:
+        bool: True if the verification is success for all the PVCs, False otherwise
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    no_match_list = []
+    for pvc_obj in pvc_objs:
+        rbd_image_name = pvc_obj.get_rbd_image_name
+        du_out = ct_pod.exec_ceph_cmd(
+            ceph_cmd=f"rbd du -p {rbd_pool} {rbd_image_name}",
+            format="",
+        )
+        used_size = "".join(du_out.strip().split()[-2:])
+        if expect_match:
+            if usage_to_compare != used_size:
+                logger.error(
+                    f"Rbd image {rbd_image_name} of PVC {pvc_obj.name} did not meet the expectation."
+                    f" Expected used size: {usage_to_compare}. Actual used size: {used_size}. "
+                    f"Rbd du out: {du_out}"
+                )
+                no_match_list.append(pvc_obj.name)
+        else:
+            if usage_to_compare == used_size:
+                logger.error(
+                    f"Rbd image {rbd_image_name} of PVC {pvc_obj.name} did not meet the expectation. "
+                    f"Expected the used size to be diferent than {usage_to_compare}. "
+                    f"Actual used size: {used_size}. Rbd du out: {du_out}"
+                )
+                no_match_list.append(pvc_obj.name)
+
+    if no_match_list:
+        logger.error(
+            f"RBD image used size of these PVCs did not meet the expectation - {no_match_list}"
+        )
+        return False
+    return True
