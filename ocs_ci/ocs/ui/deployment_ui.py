@@ -338,7 +338,7 @@ def ui_deployment_conditions():
     if platform not in (constants.AWS_PLATFORM, constants.VSPHERE_PLATFORM):
         logger.info(f"OCS deployment via UI is not supported on platform {platform}")
         return False
-    elif ocs_version != ocp_version and ocp_version == "4.6":
+    elif ocs_version != ocp_version or ocp_version == "4.6":
         logger.info(
             f"OCS deployment via UI is not supported when the OCS version [{ocs_version}]"
             f" is different from the OCP version [{ocp_version}]"
