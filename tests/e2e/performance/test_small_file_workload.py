@@ -452,11 +452,6 @@ class TestSmallFileWorkload(PASTest):
         self.c_drop = cache_drop.OSDCashDrop()
         self.c_drop.deploy()
 
-    def teardown(self):
-
-        # Deleting the OSD cache drop pod
-        self.c_drop.cleanup()
-
     @pytest.mark.parametrize(
         argnames=["file_size", "files", "threads", "samples", "interface"],
         argvalues=[
