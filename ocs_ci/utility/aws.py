@@ -1788,9 +1788,8 @@ def delete_cluster_buckets(cluster_name):
         r = re.compile(pattern)
         filtered_buckets = list(filter(r.search, bucket_names))
         logger.info(f"Found buckets: {filtered_buckets}")
-        if len(filtered_buckets) == 1:
-            s3_resource = boto3.resource("s3", region_name=region)
-            bucket_name = filtered_buckets[0]
+        s3_resource = boto3.resource("s3", region_name=region)
+        for bucket_name in filtered_buckets:
             logger.info("Deleting all files in bucket %s", bucket_name)
             try:
                 bucket = s3_resource.Bucket(bucket_name)
@@ -1799,8 +1798,6 @@ def delete_cluster_buckets(cluster_name):
                 bucket.delete()
             except ClientError as e:
                 logger.error(e)
-        else:
-            logger.info("No matches found for pattern %s", pattern)
 
 
 def get_stack_name_from_instance_dict(instance_dict):
