@@ -5,12 +5,14 @@ ENV_DATA:
   flexy_deployment: true
   flexy_template: 'upi-on-aws/versioned-installer-disconnected'
   skip_ntp_configuration: true
+  availability_zone_count: 1
+  master_replicas: 3
+  worker_replicas: 3
+  master_instance_type: 'm4.xlarge'
+  worker_instance_type: 'm5.4xlarge'
 
 # Override flexy params here
 FLEXY:
-  LAUNCHER_VARS: {"num_nodes": 3,"num_workers": 3,"vm_type_masters":"m4.xlarge","vm_type_workers":"m5.4xlarge","ssh_key_name":"openshift-dev"}
-  OPENSHIFT_SSHKEY_PATH: "~/.ssh/openshift-dev.pem"
-  AVAILABILITY_ZONE_COUNT: 1
 
 DEPLOYMENT:
   disconnected: true
