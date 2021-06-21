@@ -5,7 +5,6 @@ import time
 from ocs_ci.ocs.ui.views import locators, osd_sizes
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler, run_cmd
-from ocs_ci.ocs.ocp import get_ocs_version
 from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
@@ -317,7 +316,7 @@ def ui_deployment_conditions():
     """
     platform = config.ENV_DATA["platform"]
     ocp_version = get_ocp_version()
-    ocs_version = get_ocs_version()
+    ocs_version = config.ENV_DATA.get("ocs_version")
     is_arbiter = config.DEPLOYMENT.get("arbiter_deployment")
     is_lso = config.DEPLOYMENT.get("local_storage")
     is_external = config.DEPLOYMENT["external_mode"]
