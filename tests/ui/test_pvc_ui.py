@@ -4,7 +4,7 @@ import time
 
 from ocs_ci.framework.pytest_customization.marks import tier1
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
-from ocs_ci.framework.testlib import skipif_ocs_version
+from ocs_ci.framework.testlib import skipif_ocs_version, skipif_ocp_version
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, delete_pvcs
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,8 @@ class TestPvcUserInterface(object):
                     "ReadWriteMany",
                     "4",
                     "Block",
-                ]
+                ],
+                marks=[skipif_ocp_version("<4.8")],
             ),
             pytest.param(
                 *[
@@ -78,7 +79,8 @@ class TestPvcUserInterface(object):
                     "ReadWriteOnce",
                     "12",
                     "Block",
-                ]
+                ],
+                marks=[skipif_ocp_version("<4.8")],
             ),
             pytest.param(
                 *[
@@ -96,7 +98,8 @@ class TestPvcUserInterface(object):
                     "ReadWriteOnce",
                     "4",
                     "Filesystem",
-                ]
+                ],
+                marks=[skipif_ocp_version("<4.8")],
             ),
         ],
     )

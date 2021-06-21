@@ -247,7 +247,12 @@ pvc = {
     "search_pvc": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
 }
 
-pvc_4_7 = {"test-pvc-fs": ('a[data-test-id="test-pvc-fs"]', By.CSS_SELECTOR)}
+pvc_4_7 = {
+    "test-pvc-fs": ('a[data-test-id="test-pvc-fs"]', By.CSS_SELECTOR),
+    "test-pvc-rbd": ("a[title='test-pvc-rbd']", By.CSS_SELECTOR),
+    "Block": ("input[value='Block']", By.CSS_SELECTOR),
+    "Filesystem": ("input[value='Filesystem']", By.CSS_SELECTOR),
+}
 
 pvc_4_8 = {
     "ReadWriteMany": ("input[value='ReadWriteMany']", By.CSS_SELECTOR),
@@ -363,7 +368,7 @@ locators = {
         "login": login,
         "page": page_nav,
         "deployment": {**deployment, **deployment_4_7},
-        "pvc": pvc,
+        "pvc": {**pvc, **pvc_4_7},
         "infra": infra,
         "validation": validation,
     },
