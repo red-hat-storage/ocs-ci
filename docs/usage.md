@@ -203,7 +203,7 @@ run-ci -m deployment --ocsci-conf conf/ocsci/vsphere_upi.yaml \
 #### Deployment via UI
 
 To enable UI deployment please pass `--ocsci-conf conf/ocsci/ui_deployment.yaml`
-In addition, the function `ui_deployment_conditions` checks if the cluster type is supported for installation via UI
+In addition, the function `ui_deployment_conditions` checks if the deployment type, OCP/OCS version or platform is supported for installation via UI, and if not it will back off and deploy OCS via CLI.
 At the moment, UI deployment is possible for the following platforms:
 - AWS
 - vSphere
