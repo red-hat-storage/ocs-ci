@@ -27,78 +27,62 @@ class TestPvcUserInterface(object):
         argnames=["sc_type", "pvc_name", "access_mode", "pvc_size", "vol_mode"],
         argvalues=[
             pytest.param(
-                *[
-                    "ocs-storagecluster-cephfs",
-                    "test-pvc-fs",
-                    "ReadWriteMany",
-                    "2",
-                    "Filesystem",
-                ]
+                "ocs-storagecluster-cephfs",
+                "test-pvc-fs",
+                "ReadWriteMany",
+                "2",
+                "Filesystem",
             ),
             pytest.param(
-                *[
-                    "ocs-storagecluster-ceph-rbd",
-                    "test-pvc-rbd",
-                    "ReadWriteMany",
-                    "3",
-                    "Block",
-                ]
+                "ocs-storagecluster-ceph-rbd",
+                "test-pvc-rbd",
+                "ReadWriteMany",
+                "3",
+                "Block",
             ),
             pytest.param(
-                *[
-                    "ocs-storagecluster-ceph-rbd-thick",
-                    "test-pvc-rbd-thick",
-                    "ReadWriteMany",
-                    "4",
-                    "Block",
-                ],
+                "ocs-storagecluster-ceph-rbd-thick",
+                "test-pvc-rbd-thick",
+                "ReadWriteMany",
+                "4",
+                "Block",
                 marks=[skipif_ocp_version("<4.8")],
             ),
             pytest.param(
-                *[
-                    "ocs-storagecluster-cephfs",
-                    "test-pvc-fs",
-                    "ReadWriteOnce",
-                    "10",
-                    "Filesystem",
-                ]
+                "ocs-storagecluster-cephfs",
+                "test-pvc-fs",
+                "ReadWriteOnce",
+                "10",
+                "Filesystem",
             ),
             pytest.param(
-                *[
-                    "ocs-storagecluster-ceph-rbd",
-                    "test-pvc-rbd",
-                    "ReadWriteOnce",
-                    "11",
-                    "Block",
-                ]
+                "ocs-storagecluster-ceph-rbd",
+                "test-pvc-rbd",
+                "ReadWriteOnce",
+                "11",
+                "Block",
             ),
             pytest.param(
-                *[
-                    "ocs-storagecluster-ceph-rbd-thick",
-                    "test-pvc-rbd-thick",
-                    "ReadWriteOnce",
-                    "12",
-                    "Block",
-                ],
+                "ocs-storagecluster-ceph-rbd-thick",
+                "test-pvc-rbd-thick",
+                "ReadWriteOnce",
+                "12",
+                "Block",
                 marks=[skipif_ocp_version("<4.8")],
             ),
             pytest.param(
-                *[
-                    "ocs-storagecluster-ceph-rbd",
-                    "test-pvc-rbd",
-                    "ReadWriteOnce",
-                    "13",
-                    "Filesystem",
-                ]
+                "ocs-storagecluster-ceph-rbd",
+                "test-pvc-rbd",
+                "ReadWriteOnce",
+                "13",
+                "Filesystem",
             ),
             pytest.param(
-                *[
-                    "ocs-storagecluster-ceph-rbd-thick",
-                    "test-pvc-rbd-thick",
-                    "ReadWriteOnce",
-                    "4",
-                    "Filesystem",
-                ],
+                "ocs-storagecluster-ceph-rbd-thick",
+                "test-pvc-rbd-thick",
+                "ReadWriteOnce",
+                "4",
+                "Filesystem",
                 marks=[skipif_ocp_version("<4.8")],
             ),
         ],
