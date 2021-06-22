@@ -7,7 +7,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     skipif_external_mode,
-    skipif_ocs_version,
     post_ocs_upgrade,
 )
 from ocs_ci.ocs.resources import pod
@@ -118,7 +117,7 @@ class TestCephDefaultValuesCheck(ManageTest):
         )
 
     @post_ocs_upgrade
-    @skipif_ocs_version("<4.7")
+    @skipif_external_mode
     @bugzilla("1951348")
     @bugzilla("1944148")
     @pytest.mark.polarion_id("OCS-2554")
@@ -127,20 +126,13 @@ class TestCephDefaultValuesCheck(ManageTest):
         Testcase to check mds cache memory limit post ocs upgrade
 
         """
-        mds_a_dict, mds_b_dict = get_mds_config_value()
-        if (mds_a_dict["value"] and mds_b_dict["value"]) == "4294967296":
-            log.info(
-                f"{mds_a_dict['section']} set value {mds_a_dict['value']} and"
-                f" {mds_b_dict['section']} set value {mds_b_dict['value']}"
-            )
-            log.info("mds_cache_memory_limit is set with a value of 4GB")
-        else:
-            log.error(
-                f"mds_a_dict value: {mds_a_dict} and mds_b_dict value: {mds_b_dict}"
-            )
-            log.error(
-                f"{mds_a_dict['section']} set value {mds_a_dict['value']} and"
-                f"{mds_b_dict['section']} set value {mds_b_dict['value']}"
-            )
-            log.error("mds_cache_memory_limit is not set with a value of 4GB")
-            raise Exception("mds_cache_memory_limit is not set with a value of 4GB")
+        mds_cache_memory_limit = get_mds_config_value()
+        expected_mds_value = 4294967296
+        expected_mds_value_in_GB = int(expected_mds_value / 1073741274)
+        assert mds_cache_memory_limit == expected_mds_value, (
+            f"mds_cache_memory_limit is not set with a value of {expected_mds_value_in_GB}GB. "
+            f"MDS cache memory limit is set : {mds_cache_memory_limit}B "
+        )
+        log.info(
+            f"mds_cache_memory_limit is set with a value of {expected_mds_value_in_GB}GB"
+        )

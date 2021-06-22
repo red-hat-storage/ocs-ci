@@ -1631,27 +1631,24 @@ def get_mon_config_value(key):
     return mon_config_value
 
 
-def get_mds_config_value():
+def get_mds_cache_memory_limit():
     """
     Get the default value of mds
 
     Returns:
-        tuple: Returns tuple which contains mds_a and mds_b dict value
+        int: Value of mds cache memory limit
+
     """
     pod_obj = pod.get_ceph_tools_pod()
-    ceph_cmd = "ceph config dump"
-    ceph_config = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
-    mds_a_dict = next(
-        item
-        for item in ceph_config
-        if item["section"] == "mds.ocs-storagecluster-cephfilesystem-a"
+    ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-a mds_cache_memory_limit"
+    mds_a_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-b mds_cache_memory_limit"
+    mds_b_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    assert mds_a_cache_memory_limit == mds_b_cache_memory_limit, (
+        f"mds_a_cache_memory_limit: {mds_a_cache_memory_limit}. "
+        f"mds_b_cache_memory_limit: {mds_b_cache_memory_limit}"
     )
-    mds_b_dict = next(
-        item
-        for item in ceph_config
-        if item["section"] == "mds.ocs-storagecluster-cephfilesystem-b"
-    )
-    return mds_a_dict, mds_b_dict
+    return mds_a_cache_memory_limit
 
 
 def is_lso_cluster():
