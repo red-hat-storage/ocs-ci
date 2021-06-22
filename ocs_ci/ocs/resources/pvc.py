@@ -121,7 +121,7 @@ class PVC(OCS):
         Function to get pvc volume_mode
 
         Returns:
-            (str): The volumeMode Value of pvc_obj
+            str: The volumeMode Value of pvc_obj
         """
         return self.data.get("spec").get("volumeMode")
 

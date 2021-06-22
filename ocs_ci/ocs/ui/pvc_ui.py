@@ -57,9 +57,7 @@ class PvcUI(PageNavigator):
             in ("ocs-storagecluster-ceph-rbd-thick", "ocs-storagecluster-ceph-rbd")
             and access_mode == "ReadWriteOnce"
         ):
-            logger.info(
-                "Test running on OCP version" + ":" + str({get_running_ocp_version()})
-            )
+            logger.info(f"Test running on OCP version: {get_running_ocp_version()}")
 
             logger.info(f"Selecting Volume Mode of type {vol_mode}")
             self.do_click(self.pvc_loc[vol_mode])
