@@ -127,39 +127,39 @@ class TestPVCCreationDeletionPerformance(PASTest):
         argvalues=[
             pytest.param(
                 *[constants.CEPHBLOCKPOOL, "5Gi"],
-                marks=[pytest.mark.performance, pytest.mark.performance_regression],
+                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, "5Gi"],
-                marks=[pytest.mark.performance, pytest.mark.performance_regression],
+                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL_THICK, "5Gi"],
-                marks=[pytest.mark.performance, pytest.mark.performance_new_feature],
+                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL, "15Gi"],
-                marks=[pytest.mark.performance, pytest.mark.performance_regression],
+                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, "15Gi"],
-                marks=[pytest.mark.performance, pytest.mark.performance_regression],
+                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL_THICK, "15Gi"],
-                marks=[pytest.mark.performance, pytest.mark.performance_new_feature],
+                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL, "25Gi"],
-                marks=[pytest.mark.performance, pytest.mark.performance_regression],
+                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, "25Gi"],
-                marks=[pytest.mark.performance, pytest.mark.performance_regression],
+                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL_THICK, "25Gi"],
-                marks=[pytest.mark.performance, pytest.mark.performance_new_feature],
+                marks=[pytest.mark.performance],
             ),
         ],
     )
@@ -194,7 +194,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         self.full_results.add_key("pvc_size", pvc_size)
         num_of_samples = 5
         accepted_creation_time = (
-            3600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 1
+            600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 1
         )
 
         # accepted deletion time for RBD is 1 sec, for CephFS is 2 secs and for RBD Thick is 5 secs
@@ -207,8 +207,8 @@ class TestPVCCreationDeletionPerformance(PASTest):
 
         self.full_results.add_key("samples", num_of_samples)
 
-        accepted_creation_deviation_percent = 80
-        accepted_deletion_deviation_percent = 80
+        accepted_creation_deviation_percent = 50
+        accepted_deletion_deviation_percent = 50
 
         creation_time_measures = []
         deletion_time_measures = []
@@ -218,7 +218,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             logging.info(f"{msg_prefix} Start creating PVC number {i + 1}.")
             start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             pvc_obj = helpers.create_pvc(sc_name=self.sc_obj.name, size=pvc_size)
-            timeout = 3600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
+            timeout = 600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
             helpers.wait_for_resource_state(
                 pvc_obj, constants.STATUS_BOUND, timeout=timeout
             )
@@ -309,8 +309,8 @@ class TestPVCCreationDeletionPerformance(PASTest):
         Args:
             action_name (str): Name of the action for which these measurements were collected; used for the logging
             time_measures (list of floats): A list of time measurements
-            accepted_deviation_percent (int): Accepted deviation percent,
-                if the standard  deviation of the provided time measurements is bigger than this value, the test fails
+            accepted_deviation_percent (int): Accepted deviation percent to which computed standard deviation may be
+                    compared
             msg_prefix (str) : A string for comprehensive logging
 
         Returns:
@@ -322,21 +322,22 @@ class TestPVCCreationDeletionPerformance(PASTest):
             f"PVCs is {average} seconds."
         )
 
-        st_deviation = statistics.stdev(time_measures)
-        st_deviation_percent = st_deviation / average * 100.0
-
-        log.info(
-            f"{msg_prefix} The standard deviation percent for {action_name} of {len(time_measures)} sampled "
-            f"PVCs is {st_deviation_percent}%."
-        )
-
-        if st_deviation_percent > accepted_deviation_percent:
-            raise ex.PerformanceException(
-                f"{msg_prefix} PVC ${action_name} time deviation is {st_deviation_percent}% "
-                f"and is greater than the allowed {accepted_deviation_percent}%."
+        if self.interface == constants.CEPHBLOCKPOOL_THICK:
+            st_deviation = statistics.stdev(time_measures)
+            st_deviation_percent = st_deviation / average * 100.0
+            if st_deviation_percent > accepted_deviation_percent:
+                log.error(
+                    f"{msg_prefix} The standard deviation percent for {action_name} of {len(time_measures)} sampled "
+                    f"PVCs is {st_deviation_percent}% which is bigger than accepted {accepted_deviation_percent}."
+                )
+            else:
+                log.info(
+                    f"{msg_prefix} The standard deviation percent for {action_name} of {len(time_measures)} sampled "
+                    f"PVCs is {st_deviation_percent}% and is within the accepted range."
+                )
+            self.full_results.add_key(
+                f"{action_name}_deviation_pct", st_deviation_percent
             )
-
-        self.full_results.add_key(f"{action_name}_deviation_pct", st_deviation_percent)
 
         return average
 
