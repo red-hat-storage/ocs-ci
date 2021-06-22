@@ -14,7 +14,7 @@ from ocs_ci.ocs.cluster import get_pg_balancer_status, get_mon_config_value
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.cluster import get_mds_config_value
+from ocs_ci.ocs.cluster import get_mds_cache_memory_limit
 
 
 log = logging.getLogger(__name__)
@@ -126,7 +126,7 @@ class TestCephDefaultValuesCheck(ManageTest):
         Testcase to check mds cache memory limit post ocs upgrade
 
         """
-        mds_cache_memory_limit = get_mds_config_value()
+        mds_cache_memory_limit = get_mds_cache_memory_limit()
         expected_mds_value = 4294967296
         expected_mds_value_in_GB = int(expected_mds_value / 1073741274)
         assert mds_cache_memory_limit == expected_mds_value, (
