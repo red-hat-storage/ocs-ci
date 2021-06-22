@@ -295,7 +295,10 @@ def pytest_configure(config):
         log.info(
             f"Dump of the consolidated config file is located here: " f"{config_file}"
         )
-        set_report_portal_config(config)
+        if config.getoption("--reportportal"):
+            set_rp_client_log_level()
+            set_report_portal_config(config)
+
         # Add OCS related versions to the html report and remove
         # extraneous metadata
         markers_arg = config.getoption("-m")
