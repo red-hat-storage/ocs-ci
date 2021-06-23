@@ -58,6 +58,7 @@ from ocs_ci.utility import (
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
+    enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
     get_ocp_version,
@@ -180,6 +181,8 @@ class Deployment(object):
         set_selinux_permissions()
         set_registry_to_managed_state()
         add_stage_cert()
+        if config.ENV_DATA.get("huge_pages"):
+            enable_huge_pages()
 
     def label_and_taint_nodes(self):
         """
