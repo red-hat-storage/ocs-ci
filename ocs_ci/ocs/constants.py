@@ -695,6 +695,9 @@ ON_PREM_PLATFORMS = [
 ]
 CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
 
+# AWS i3 worker instance for LSO
+AWS_LSO_WORKER_INSTANCE = "i3en.2xlarge"
+
 # ignition files
 BOOTSTRAP_IGN = "bootstrap.ign"
 MASTER_IGN = "master.ign"
