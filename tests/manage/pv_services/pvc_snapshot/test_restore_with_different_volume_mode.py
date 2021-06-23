@@ -50,7 +50,7 @@ class TestSnapshotRestoreWithDifferentVolumeMode(ManageTest):
             num_of_cephfs_pvc=0,
         )
 
-    def test_snapshot_restore_with_different_access_mode(
+    def test_snapshot_restore_with_different_volume_mode(
         self, pod_factory, snapshot_factory, snapshot_restore_factory
     ):
         """
