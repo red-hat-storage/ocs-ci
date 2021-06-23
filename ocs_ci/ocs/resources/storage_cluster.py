@@ -435,6 +435,10 @@ def ocs_install_verification(
             f" the actaul failure domain is {failure_domain}"
         )
 
+    if Version.coerce(ocs_version) >= Version.coerce("4.7"):
+        log.info("Verifying images in storage cluster")
+        verify_sc_images(storage_cluster)
+
 
 def osd_encryption_verification():
     """
@@ -699,3 +703,22 @@ def setup_ceph_debug():
     )
     log.info("Setting Ceph to work in debug log level using a new ConfigMap resource")
     run_cmd(f"oc create -f {ceph_configmap_yaml.name}")
+
+
+def verify_sc_images(storage_cluster):
+    """
+    Verifying images in storage cluster such as ceph, noobaaDB and noobaaCore
+
+    Args:
+        storage_cluster (obj): storage_cluster ocp object
+    """
+    images_list = list()
+    images = storage_cluster.get().get("status").get("images")
+    for component, images_dict in images.items():
+        if len(images_dict) > 1:
+            for image, image_name in images_dict.items():
+                log.info(f"{component} has {image}:{image_name}")
+                images_list.append(image_name)
+    assert (
+        len(set(images_list)) == len(images_list) / 2
+    ), "actualImage and desiredImage are different"
