@@ -44,6 +44,7 @@ from ocs_ci.utility.utils import (
     ocsci_log_path,
     run_cmd,
     update_container_with_mirrored_image,
+    get_encryption_kmsid,
 )
 
 logger = logging.getLogger(__name__)
@@ -504,6 +505,7 @@ def create_storage_class(
     sc_name=None,
     provisioner=None,
     rbd_thick_provision=False,
+    encrypted=False,
 ):
     """
     Create a storage class
@@ -538,6 +540,9 @@ def create_storage_class(
         )
         if rbd_thick_provision:
             sc_data["parameters"]["thickProvision"] = "true"
+        if encrypted:
+            sc_data["parameters"]["encrypted"] = "true"
+            sc_data["parameters"]["encryptionKMSID"] = get_encryption_kmsid()
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = templating.load_yaml(constants.CSI_CEPHFS_STORAGECLASS_YAML)
         sc_data["parameters"]["csi.storage.k8s.io/node-stage-secret-name"] = secret_name

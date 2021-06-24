@@ -53,6 +53,9 @@ class KMS(object):
     def post_deploy_verification(self):
         raise NotImplementedError("Child class should implement this method")
 
+    def create_csi_kms_resources(self):
+        raise NotImplementedError("Child class should implement this method")
+
 
 class Vault(KMS):
     """
@@ -687,6 +690,57 @@ class Vault(KMS):
         if not is_kms_enabled():
             logger.error("KMS not enabled on storage cluster")
             raise NotFoundError("KMS flag not found")
+
+    def create_csi_kms_resource(self):
+        """
+        Create vault specific OCP resources to be consumed by
+        storage class.
+
+        Currently we have to create 'ceph-csi-kms-token' and
+        'csi-kms-connection-details '
+
+        """
+        self.create_vault_csi_kms_connection_details()
+        self.create_vault_csi_kms_token()
+
+    def create_vault_csi_kms_token(self):
+        """
+        create vault specific csi kms secret resource
+
+        """
+        csi_kms_token = templating.load_yaml(
+            constants.EXTERNAL_VAULT_CSI_KMS_TOKEN
+        )
+        csi_kms_token["data"]["token"] = base64.b64encode(
+            self.vault_path_token.encode()
+        ).decode()
+        self.create_resource(csi_kms_token, prefix="csikmstoken")
+
+
+    def create_vault_csi_kms_connection_details(self):
+        """
+        Create vault specific csi kms connection details
+        configmap resource
+
+        """
+        csi_kms_conn_details = templating.load_yaml(
+            constants.EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS
+        )
+        conn_str = csi_kms_conn_details["data"]["1-vault"]
+        buf = json.loads(conn_str)
+        buf["VAULT_ADDR"] = f"https://{self.vault_server}:{self.port}"
+        buf["VAULT_BACKEND_PATH"] = self.vault_backend_path
+        buf["VAULT_CACERT"] = get_default_if_keyval_empty(
+            config.ENV_DATA, "VAULT_CACERT", defaults.VAULT_DEFAULT_CA_CERT
+        )
+        buf["VAULT_NAMESPACE"] = self.vault_namespace
+        buf["VAULT_TOKEN_NAME"] = get_default_if_keyval_empty(
+            config.ENV_DATA,
+            "VAULT_TOKEN_NAME",
+            constants.EXTERNAL_VAULT_CSI_KMS_TOKEN
+        )
+        csi_kms_conn_details["data"]["1-vault"] = str(buf)
+        self.create_resource(csi_kms_conn_details, prefix="csikmsconn")
 
 
 kms_map = {"vault": Vault}
