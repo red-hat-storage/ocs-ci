@@ -116,6 +116,17 @@ class PVC(OCS):
         return self.data.get("spec").get("storageClassName")
 
     @property
+    def get_pvc_vol_mode(self):
+        """
+        Function to get pvc volume_mode
+
+        Returns:
+            str: The volumeMode Value of pvc_obj
+
+        """
+        return self.data.get("spec").get("volumeMode")
+
+    @property
     def reclaim_policy(self):
         """
         Get the reclaim policy of PV associated with the PVC
