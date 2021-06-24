@@ -96,6 +96,41 @@ class PvcUI(PageNavigator):
             self.check_element_text(expected_text=pvc_vol_mode_new)
             logger.info(f"Verifying volume mode : {pvc_vol_mode_new}")
 
+    def pvc_resize_ui(self, pvc_name, new_pvc_size, pvc_size):
+        """
+        Resizing pvc via UI
+
+        """
+        self.navigate_persistentvolumeclaims_page()
+
+        logger.info("Select openshift-storage project")
+        self.do_click(self.pvc_loc["pvc_project_selector"])
+        self.do_click(self.pvc_loc["select_openshift-storage_project"])
+
+        self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
+
+        logger.info(f"Go to PVC {pvc_name} Page")
+        self.do_click(self.pvc_loc[pvc_name])
+
+        logger.info("Click on Actions")
+        self.do_click(self.pvc_loc["pvc_actions"])
+
+        logger.info("Click on Expand PVC")
+        self.do_click(self.pvc_loc["expand_pvc"])
+
+        logger.info("Clearing the existing pvc value")
+        self.do_clear(self.pvc_loc["resize-value"])
+        logger.info("Enter the new pvc size")
+        self.do_send_keys(self.pvc_loc["resize-value"])
+
+        new_pvc_size = self.pvc_loc["resize-value"]
+        if new_pvc_size > pvc_size:
+            logger.info("Click on Expand Button")
+            self.do_click(self.pvc_loc["expand-btn"])
+        else:
+            logger.info("New pvc size can not be less than existing pvc size")
+            raise Exception
+
     def delete_pvc_ui(self, pvc_name):
         """
         Delete pvc via UI

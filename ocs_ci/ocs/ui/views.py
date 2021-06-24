@@ -260,6 +260,9 @@ pvc_4_8 = {
     "ReadWriteOnce": ("input[value='ReadWriteOnce']", By.CSS_SELECTOR),
     "test-pvc-fs": ("a[title='test-pvc-fs']", By.CSS_SELECTOR),
     "test-pvc-rbd-thick": ("a[title='test-pvc-rbd-thick']", By.CSS_SELECTOR),
+    "expand_pvc": ("button[data-test-action='Expand PVC']", By.CSS_SELECTOR),
+    "resize-value": ("//input[@name='requestSizeValue']", By.XPATH),
+    "expand-btn": ("#confirm-action", By.CSS_SELECTOR),
 }
 page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
