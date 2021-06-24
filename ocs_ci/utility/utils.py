@@ -2439,7 +2439,7 @@ def skipif_ui(ui_test):
 
     ocp_version = get_running_ocp_version()
     try:
-        locators.get(ocp_version).get(ui_test)
+        locators[ocp_version][ui_test]
     except KeyError:
         return True
     return False
