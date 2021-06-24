@@ -3379,3 +3379,11 @@ def add_chrony_to_ocp_deployment():
         )
         with open(chrony_file, "w") as f:
             f.write(chrony_template_str)
+
+
+def enable_huge_pages():
+    log.info("Enabling huge pages.")
+    exec_cmd(f"oc apply -f {constants.HUGE_PAGES_TEMPLATE}")
+    time.sleep(10)
+    log.info("Waiting for machine config will be applied with huge pages")
+    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE)

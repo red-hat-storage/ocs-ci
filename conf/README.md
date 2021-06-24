@@ -188,6 +188,7 @@ higher priority).
 * `VAULT_SKIP_VERIFY` - Skip SSL check (Default: false)
 * `VAULT_BACKEND_PATH` - Vault path name used in ocs cluster
 * `VAULT_POLICY` - Vault policy name used in ocs cluster
+* `huge_pages` - True if you would like to enable HUGE PAGES.
 
 #### UPGRADE
 
