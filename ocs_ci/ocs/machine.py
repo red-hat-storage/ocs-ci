@@ -482,7 +482,7 @@ def create_custom_machineset(
                 .get("providerSpec")
                 .get("value")
                 .get("cpu")
-                .get('sockets')
+                .get("sockets")
             )
 
             machineset_yaml = templating.load_yaml(constants.MACHINESET_YAML_RHV)
@@ -516,9 +516,9 @@ def create_custom_machineset(
             machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                 "template_name"
             ] = template_name
-            machineset_yaml["spec"]["template"]['spec']["providerSpec"]["value"][
-                "cpu"
-            ]["sockets"] = socket
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"]["cpu"][
+                "sockets"
+            ] = socket
 
             # Apply the labels
             if labels:
