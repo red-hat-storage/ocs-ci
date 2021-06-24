@@ -160,7 +160,7 @@ def prune_and_mirror_index_image(
         exec_cmd(
             f"oc image mirror --filter-by-os='.*' -f {mapping_file_updated} "
             f"--insecure --registry-config={pull_secret_path} "
-            "--max-per-registry=2",
+            "--max-per-registry=2 --continue-on-error=true --skip-missing=true",
             timeout=3600,
             ignore_error=True,
         )
