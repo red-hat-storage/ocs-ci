@@ -351,6 +351,10 @@ class TestSmallFileWorkload(PASTest):
         self.ripsaw = RipSaw()
         self.ripsaw_deploy(self.ripsaw)
 
+        # Deploying OSD cache drop pod
+        self.c_drop = cache_drop.OSDCashDrop()
+        self.c_drop.deploy()
+
     def setting_storage_usage(self, file_size, files, threads, samples):
         """
         Getting the storage capacity, calculate the usage of the storage and
@@ -447,10 +451,6 @@ class TestSmallFileWorkload(PASTest):
             f"Going to sleep for {sleep_time} Minute, for background cleanup to complete"
         )
         time.sleep(sleep_time * 60)
-
-        # Deploying OSD cache drop pod
-        self.c_drop = cache_drop.OSDCashDrop()
-        self.c_drop.deploy()
 
     @pytest.mark.parametrize(
         argnames=["file_size", "files", "threads", "samples", "interface"],
