@@ -1766,7 +1766,7 @@ def run_osd_removal_job(osd_ids=None):
     Run the ocs-osd-removal job
 
     Args:
-        osd_ids (list): The osd ids.
+        osd_ids (list): The osd IDs.
 
     Returns:
         ocs_ci.ocs.resources.ocs.OCS: The ocs-osd-removal job object
