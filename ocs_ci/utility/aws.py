@@ -1783,6 +1783,7 @@ def delete_cluster_buckets(cluster_name):
         f"{cluster_name}-(\\w+)-image-registry-{region}-(\\w+)",
         f"{cluster_name}-(\\d{{4}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})",
         f"{cluster_name}-(\\w+)-oidc",
+        f"{cluster_name}-(\\d{{8}})",
     ]
     for pattern in patterns:
         r = re.compile(pattern)
