@@ -559,6 +559,7 @@ MACHINESET_YAML = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "machine-set.yaml")
 MACHINESET_YAML_AZURE = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-azure.yaml"
 )
+MACHINESET_YAML_RHV = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-rhv.yaml")
 PODS_PER_NODE_COUNT_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "max-pods-per-node.yaml"
 )
@@ -1153,11 +1154,11 @@ SCALE_LABEL = "scale-label=app-scale"
 # bm dict value is based on each worker BM machine of config 40CPU and 256G/184G RAM
 # azure dict value is based on assumption similar to vmware vms min worker config of 12CPU and 64G RAM
 SCALE_WORKER_DICT = {
-    1500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3},
-    3000: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3},
-    4500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3},
-    6000: {"aws": 6, "vmware": 6, "bm": 4, "azure": 6},
-    9000: {"aws": 6, "vmware": 6, "bm": 4, "azure": 6},
+    1500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
+    3000: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
+    4500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
+    6000: {"aws": 6, "vmware": 6, "bm": 4, "azure": 6, "rhv": 6},
+    9000: {"aws": 6, "vmware": 6, "bm": 4, "azure": 6, "rhv": 6},
 }
 SCALE_MAX_PVCS_PER_NODE = 500
 

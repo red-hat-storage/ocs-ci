@@ -445,6 +445,93 @@ def create_custom_machineset(
                 else:
                     raise ResourceNotFoundError("Machineset resource not found")
 
+    # check for RHV and IPI platform
+    elif config.ENV_DATA["platform"] == "rhv":
+        machinesets_obj = OCP(
+            kind=constants.MACHINESETS,
+            namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
+        )
+        for machine in machinesets_obj.get()["items"]:
+            # Get inputs from existing machineset config.
+            cls_uuid = (
+                machine.get("spec")
+                .get("template")
+                .get("spec")
+                .get("providerSpec")
+                .get("value")
+                .get("cluster_id")
+            )
+            template_name = (
+                machine.get("spec")
+                .get("template")
+                .get("spec")
+                .get("providerSpec")
+                .get("value")
+                .get("template_name")
+            )
+            cls_id = (
+                machine.get("spec")
+                .get("selector")
+                .get("matchLabels")
+                .get("machine.openshift.io/cluster-api-cluster")
+            )
+
+            machineset_yaml = templating.load_yaml(constants.MACHINESET_YAML_RHV)
+
+            # Update machineset_yaml with required values.
+            machineset_yaml["metadata"]["labels"][
+                "machine.openshift.io/cluster-api-cluster"
+            ] = cls_id
+            machineset_yaml["metadata"]["name"] = f"{cls_id}-{role}-{zone}"
+            machineset_yaml["spec"]["selector"]["matchLabels"][
+                "machine.openshift.io/cluster-api-cluster"
+            ] = cls_id
+            machineset_yaml["spec"]["selector"]["matchLabels"][
+                "machine.openshift.io/cluster-api-machineset"
+            ] = f"{cls_id}-{role}-{zone}"
+            machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                "machine.openshift.io/cluster-api-cluster"
+            ] = cls_id
+            machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                "machine.openshift.io/cluster-api-machine-role"
+            ] = role
+            machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                "machine.openshift.io/cluster-api-machine-type"
+            ] = role
+            machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                "machine.openshift.io/cluster-api-machineset"
+            ] = f"{cls_id}-{role}-{zone}"
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "cluster_id"
+            ] = cls_uuid
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "template_name"
+            ] = template_name
+
+            # Apply the labels
+            if labels:
+                for label in labels:
+                    machineset_yaml["spec"]["template"]["spec"]["metadata"]["labels"][
+                        label[0]
+                    ] = label[1]
+                # Remove app label in case of infra nodes
+                if role == "infra":
+                    machineset_yaml["spec"]["template"]["spec"]["metadata"][
+                        "labels"
+                    ].pop(constants.APP_LABEL, None)
+
+            if taints:
+                machineset_yaml["spec"]["template"]["spec"].update({"taints": taints})
+
+            # Create new custom machineset
+            ms_obj = OCS(**machineset_yaml)
+            ms_obj.create()
+            if check_machineset_exists(f"{cls_id}-{role}-{zone}"):
+                logging.info(f"Machineset {cls_id}-{role}-{zone} created")
+                return f"{cls_id}-{role}-{zone}"
+            else:
+                raise ResourceNotFoundError("Machineset resource not found")
+
     else:
         raise UnsupportedPlatformError("Functionality not supported in this platform")
 
