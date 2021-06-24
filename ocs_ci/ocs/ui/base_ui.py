@@ -196,6 +196,13 @@ class BaseUI:
         self.driver.save_screenshot(filename)
         time.sleep(0.5)
 
+    def do_clear(self, locator):
+        """
+        Clear the existing text from UI
+
+        """
+        self.driver.clear(locator)
+
 
 class PageNavigator(BaseUI):
     """
@@ -535,7 +542,7 @@ def login_ui():
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if headless:
+        if not headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 
