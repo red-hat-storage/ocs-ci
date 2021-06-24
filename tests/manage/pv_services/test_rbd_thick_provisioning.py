@@ -65,7 +65,7 @@ class TestRbdThickProvisioning(ManageTest):
                 access_modes=access_modes_rbd,
                 status=constants.STATUS_BOUND,
                 num_of_pvc=3,
-                timeout=150,
+                timeout=300,
             )
             for pvc_obj in pvc_objs:
                 pvc_obj.io_file_size = pvc_and_file_sizes[pvc_size]
