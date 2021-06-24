@@ -1638,16 +1638,20 @@ def get_mds_cache_memory_limit():
     Returns:
         int: Value of mds cache memory limit
 
+    Raises:
+        UnexpectedBehaviour: if MDS-a and MDS-b cache memory limit doesn't match
+
     """
     pod_obj = pod.get_ceph_tools_pod()
     ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-a mds_cache_memory_limit"
     mds_a_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
     ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-b mds_cache_memory_limit"
     mds_b_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
-    assert mds_a_cache_memory_limit == mds_b_cache_memory_limit, (
-        f"mds_a_cache_memory_limit: {mds_a_cache_memory_limit}. "
-        f"mds_b_cache_memory_limit: {mds_b_cache_memory_limit}"
-    )
+    if mds_a_cache_memory_limit == mds_b_cache_memory_limit:
+        raise UnexpectedBehaviour(
+            f"mds_a_cache_memory_limit: {mds_a_cache_memory_limit}. "
+            f"mds_b_cache_memory_limit: {mds_b_cache_memory_limit}"
+        )
     return mds_a_cache_memory_limit
 
 
