@@ -1707,12 +1707,11 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
         str: The osd removal pod name
 
     """
-    ocp_version = get_ocp_version()
     ocs_version = config.ENV_DATA["ocs_version"]
-    if Version.coerce(ocp_version) >= Version.coerce("4.6") and Version.coerce(
-        ocs_version
-    ) >= Version.coerce("4.7"):
+    if Version.coerce(ocs_version) == Version.coerce("4.7"):
         pattern = "ocs-osd-removal-job"
+    elif Version.coerce(ocs_version) == Version.coerce("4.8"):
+        pattern = "ocs-osd-removal-"
     else:
         pattern = f"ocs-osd-removal-{osd_id}"
 
@@ -1876,12 +1875,11 @@ def delete_osd_removal_job(osd_id):
         bool: True, if the ocs-osd-removal job deleted successfully. False, otherwise
 
     """
-    ocp_version = get_ocp_version()
     ocs_version = config.ENV_DATA["ocs_version"]
-    if Version.coerce(ocp_version) >= Version.coerce("4.6") and Version.coerce(
-        ocs_version
-    ) >= Version.coerce("4.7"):
+    if Version.coerce(ocs_version) == Version.coerce("4.7"):
         job_name = "ocs-osd-removal-job"
+    elif Version.coerce(ocs_version) == Version.coerce("4.8"):
+        job_name = "ocs-osd-removal"
     else:
         job_name = f"ocs-osd-removal-{osd_id}"
 
