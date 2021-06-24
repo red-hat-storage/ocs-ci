@@ -475,6 +475,15 @@ def create_custom_machineset(
                 .get("matchLabels")
                 .get("machine.openshift.io/cluster-api-cluster")
             )
+            socket = (
+                machine.get("spec")
+                .get("template")
+                .get("spec")
+                .get("providerSpec")
+                .get("value")
+                .get("cpu")
+                .get('sockets')
+            )
 
             machineset_yaml = templating.load_yaml(constants.MACHINESET_YAML_RHV)
 
@@ -507,6 +516,9 @@ def create_custom_machineset(
             machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                 "template_name"
             ] = template_name
+            machineset_yaml["spec"]["template"]['spec']["providerSpec"]["value"][
+                "cpu"
+            ]["sockets"] = socket
 
             # Apply the labels
             if labels:
