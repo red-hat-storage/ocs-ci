@@ -306,8 +306,8 @@ class VMWareNodes(NodesBase):
             When the reboot operation is completed and the VM is reachable the
             OCP node reaches status Ready and a Reboot event is logged.
             """
-            logger.info("Waiting for 30 seconds for reboot to complete...")
-            time.sleep(30)
+            logger.info("Waiting for 60 seconds for reboot to complete...")
+            time.sleep(60)
 
             nodes_names = [n.name for n in nodes]
 
