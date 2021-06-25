@@ -15,6 +15,7 @@ from ocs_ci.ocs.bucket_utils import BucketPolicyOps, ObcIOs
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility.kms import noobaa_kms_validation, is_kms_enabled
+from ocs_ci.ocs.osd_operations import osd_device_replacement
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +46,12 @@ class TestBaseOperationNodeRestart(E2ETest):
         """
         Test covers following flow operations while running workloads in the background:
         1. Node reboot
-        2. Device replacement
-        3. Bucket policy: put, modify, delete
-        4. Node drain
-        5. Node n/w failure
-        6. nooba core pod delete with obc IO
+        2. Add capacity
+        3. Device replacement
+        4. Bucket policy: put, modify, delete
+        5. Node drain
+        6. Node n/w failure
+        7. nooba core pod delete with obc IO
         """
         logger.info("nooba kms validation..")
         if is_kms_enabled():
@@ -110,9 +112,7 @@ class TestBaseOperationNodeRestart(E2ETest):
         logger.info("Verifying exit criteria for operation 1: Node Restart")
         flow_ops.validate_cluster(node_status=True, operation_name="Node Restart")
 
-        logger.info("TODO: Starting operation 2: Device replacement")
-
-        logger.info("Starting operation 3: Add Capacity")
+        logger.info("Starting operation 2: Add Capacity")
         # Add capacity
         osd_size = storage_cluster.get_osd_size()
         result = storage_cluster.add_capacity(osd_size)
@@ -123,7 +123,10 @@ class TestBaseOperationNodeRestart(E2ETest):
             selector="app=rook-ceph-osd",
             resource_count=result * 3,
         )
-        logger.info("Verifying exit criteria for operation 3: Add Capacity")
+        logger.info("Verifying exit criteria for operation 2: Add Capacity")
+
+        logger.info("Starting operation 3: Device replacement")
+        osd_device_replacement(nodes)
 
         logger.info("Starting operation 4: Bucket policy Put")
 
