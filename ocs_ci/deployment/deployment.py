@@ -218,7 +218,7 @@ class Deployment(object):
                     node_names = az_node_list[:2]
                     distributed_worker_nodes += node_names
         elif arbiter_deployment and not config.DEPLOYMENT.get("arbiter_autodetect"):
-            for az in list(config.DEPLOYMENT.get("worker_zones")):
+            for az in list(config.ENV_DATA.get("worker_availability_zones")):
                 az_node_list = az_worker_nodes.get(az)
                 if az_node_list and len(az_node_list) > 1:
                     node_names = az_node_list[:2]
