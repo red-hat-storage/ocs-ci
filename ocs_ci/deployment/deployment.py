@@ -190,6 +190,10 @@ class Deployment(object):
         Label and taint worker nodes to be used by OCS operator
         """
 
+        # TODO: remove this "heuristics", it doesn't belong there, the process
+        # should be explicit and simple, this is asking for trouble, bugs and
+        # silently invalid deployments ...
+        # See https://github.com/red-hat-storage/ocs-ci/issues/4470
         arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 
         nodes = ocp.OCP(kind="node").get().get("items", [])
