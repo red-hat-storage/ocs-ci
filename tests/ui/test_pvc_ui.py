@@ -135,6 +135,16 @@ class TestPvcUserInterface(object):
         )
         logger.info("PVC Details Verified via UI..!!")
 
+        logger.info("Verifying Pvc Resize")
+        new_size = int(pvc_size) + 1
+        pvc_ui_obj.pvc_resize_ui(
+            pvc_name=pvc_name, pvc_size=pvc_size, new_size=new_size, sc_type=sc_type
+        )
+
+        logger.info("Verifying New PVC Size via UI")
+        pvc_ui_obj.verify_resize_pvc_ui(pvc_name=pvc_name, new_size=new_size)
+        logger.info(f"New PVC Size Verified via UI..!! : New size is {new_size} GiB")
+
         logger.info(f"Delete {pvc_name} pvc")
         pvc_ui_obj.delete_pvc_ui(pvc_name)
         time.sleep(5)

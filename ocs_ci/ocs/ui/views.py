@@ -263,6 +263,10 @@ pvc_4_8 = {
     "expand_pvc": ("button[data-test-action='Expand PVC']", By.CSS_SELECTOR),
     "resize-value": ("//input[@name='requestSizeValue']", By.XPATH),
     "expand-btn": ("#confirm-action", By.CSS_SELECTOR),
+    "pvc-status": (
+        "//dd[@data-test-id='pvc-status']//span[@data-test='status-text'][normalize-space()='Bound']",
+        By.XPATH,
+    ),
 }
 page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
