@@ -371,6 +371,23 @@ class TestPVCCreationDeletionPerformance(PASTest):
         log.info("IO on the PVC has finished")
         return pod_obj
 
+    @pytest.mark.parametrize(
+        argnames=["interface_type"],
+        argvalues=[
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                marks=[pytest.mark.performance],
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM],
+                marks=[pytest.mark.performance],
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL_THICK],
+                marks=[pytest.mark.performance],
+            ),
+        ],
+    )
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_multiple_pvc_deletion_measurement_performance(self, teardown_factory):
         """
@@ -399,12 +416,16 @@ class TestPVCCreationDeletionPerformance(PASTest):
         for pvc_obj in pvc_objs:
             pvc_obj.reload()
             teardown_factory(pvc_obj)
+
+        timeout = 600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
         with ThreadPoolExecutor(max_workers=5) as executor:
             for pvc_obj in pvc_objs:
                 executor.submit(
-                    helpers.wait_for_resource_state, pvc_obj, constants.STATUS_BOUND
+                    helpers.wait_for_resource_state,
+                    pvc_obj,
+                    constants.STATUS_BOUND,
+                    timeout=timeout,
                 )
-
                 executor.submit(pvc_obj.reload)
 
         pod_objs = []
