@@ -5,7 +5,13 @@ import os
 import time
 
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.common.exceptions import (
+    TimeoutException,
+    WebDriverException,
+    NoSuchElementException,
+    ElementNotVisibleException,
+    ElementNotSelectableException,
+)
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
@@ -196,12 +202,44 @@ class BaseUI:
         self.driver.save_screenshot(filename)
         time.sleep(0.5)
 
-    def do_clear(self, locator):
+    def do_clear(self, locator, timeout=30):
         """
         Clear the existing text from UI
 
+        locator (set): (GUI element needs to operate on (str), type (By))
+        timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
+
         """
-        self.driver.clear(locator)
+        wait = WebDriverWait(self.driver, timeout)
+        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        element.clear()
+
+    def wait_for_element(self, locator, text_):
+        """
+        Method to wait for a web element to be found
+
+        locator (set): (GUI element needs to operate on (str), type (By))
+
+        Args:
+            text_ (string): The expected text.
+
+        return:
+            str: Returns the text_ (string) if element is found
+
+        """
+        wait = WebDriverWait(
+            self.driver,
+            timeout=30,
+            poll_frequency=1,
+            ignored_exceptions=[
+                NoSuchElementException,
+                ElementNotVisibleException,
+                ElementNotSelectableException,
+                TimeoutException,
+            ],
+        )
+        wait.until(ec.text_to_be_present_in_element((locator[1], locator[0]), text_))
+        return logger.info(f"Element found: {text_}")
 
 
 class PageNavigator(BaseUI):
@@ -542,7 +580,7 @@ def login_ui():
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if not headless:
+        if headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 

@@ -4,6 +4,7 @@ import time
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
+from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -96,9 +97,15 @@ class PvcUI(PageNavigator):
             self.check_element_text(expected_text=pvc_vol_mode_new)
             logger.info(f"Verifying volume mode : {pvc_vol_mode_new}")
 
-    def pvc_resize_ui(self, pvc_name, new_pvc_size, pvc_size):
+    def pvc_resize_ui(self, pvc_name, pvc_size, new_size, sc_type):
         """
         Resizing pvc via UI
+
+
+        pvc_name (str): the name of pvc
+        pvc_size (str): the size of pvc (GB)
+        new_size (int): the new size of pvc (GB)
+        sc_type (str): storage class type
 
         """
         self.navigate_persistentvolumeclaims_page()
@@ -112,24 +119,58 @@ class PvcUI(PageNavigator):
         logger.info(f"Go to PVC {pvc_name} Page")
         self.do_click(self.pvc_loc[pvc_name])
 
+        if sc_type in "ocs-storagecluster-ceph-rbd":
+            helpers.create_pod()
+
+        logger.info("Checking status of Pvc")
+        self.wait_for_element(self.pvc_loc["pvc-status"], text_="Bound")
+
         logger.info("Click on Actions")
         self.do_click(self.pvc_loc["pvc_actions"])
 
         logger.info("Click on Expand PVC")
         self.do_click(self.pvc_loc["expand_pvc"])
 
-        logger.info("Clearing the existing pvc value")
+        logger.info("Clearing the size of existing pvc")
         self.do_clear(self.pvc_loc["resize-value"])
-        logger.info("Enter the new pvc size")
-        self.do_send_keys(self.pvc_loc["resize-value"])
 
-        new_pvc_size = self.pvc_loc["resize-value"]
-        if new_pvc_size > pvc_size:
-            logger.info("Click on Expand Button")
-            self.do_click(self.pvc_loc["expand-btn"])
+        if new_size > int(pvc_size):
+            logger.info("Enter the new pvc size")
+            self.do_send_keys(self.pvc_loc["resize-value"], text=new_size)
         else:
-            logger.info("New pvc size can not be less than existing pvc size")
+            logger.info(
+                f"New pvc size can not be less than existing pvc size: {new_size}"
+            )
             raise Exception
+
+        logger.info("Click on Expand Button")
+        self.do_click(self.pvc_loc["expand-btn"])
+
+        time.sleep(3)
+
+    def verify_resize_pvc_ui(self, pvc_name, new_size):
+        """
+        Verifying PVC resize via UI
+
+        pvc_name (str): the name of pvc
+        new_size (int): the new size of pvc (GB)
+
+        """
+
+        self.navigate_persistentvolumeclaims_page()
+
+        logger.info("Select openshift-storage project")
+        self.do_click(self.pvc_loc["pvc_project_selector"])
+        self.do_click(self.pvc_loc["select_openshift-storage_project"])
+
+        self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
+
+        logger.info(f"Go to PVC {pvc_name} Page")
+        self.do_click(self.pvc_loc[pvc_name])
+
+        resized_pvc = f"{new_size} GiB"
+
+        self.check_element_text(expected_text=resized_pvc)
 
     def delete_pvc_ui(self, pvc_name):
         """
