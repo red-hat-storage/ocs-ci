@@ -148,7 +148,7 @@ class PvcUI(PageNavigator):
 
         time.sleep(3)
 
-    def verify_resize_pvc_ui(self, pvc_name, new_size):
+    def verify_pvc_resize_ui(self, pvc_name, new_size):
         """
         Verifying PVC resize via UI
 
