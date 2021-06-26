@@ -913,7 +913,7 @@ def get_node_az(node):
 
     """
     labels = node.get().get("metadata", {}).get("labels", {})
-    return labels.get("topology.kubernetes.io/zone")
+    return labels.get(constants.ZONE_LABEL)
 
 
 def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=False):

@@ -197,7 +197,6 @@ class Deployment(object):
         arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 
         nodes = ocp.OCP(kind="node").get().get("items", [])
-        zone_label = self.get_zone_label()
 
         worker_nodes = [
             node
@@ -208,7 +207,7 @@ class Deployment(object):
             raise UnavailableResourceException("No worker node found!")
         az_worker_nodes = {}
         for node in worker_nodes:
-            az = node["metadata"]["labels"].get(zone_label)
+            az = node["metadata"]["labels"].get(constants.ZONE_LABEL)
             az_node_list = az_worker_nodes.get(az, [])
             az_node_list.append(node["metadata"]["name"])
             az_worker_nodes[az] = az_node_list
@@ -350,16 +349,6 @@ class Deployment(object):
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
 
-    def get_zone_label(self):
-        nodes = ocp.OCP(kind="node").get().get("items", [])
-
-        # Check which zone label is present
-        return (
-            constants.ZONE_LABEL
-            if nodes[0]["metadata"]["labels"].get(constants.ZONE_LABEL, False)
-            else constants.ZONE_LABEL_NEW
-        )
-
     def get_arbiter_location(self):
         """
         Get arbiter mon location for storage cluster
@@ -372,17 +361,15 @@ class Deployment(object):
         # below logic will autodetect arbiter_zone
         nodes = ocp.OCP(kind="node").get().get("items", [])
 
-        zone_label = self.get_zone_label()
-
         worker_nodes_zones = {
-            node["metadata"]["labels"].get(zone_label)
+            node["metadata"]["labels"].get(constants.ZONE_LABEL)
             for node in nodes
             if constants.WORKER_LABEL in node["metadata"]["labels"]
             and str(constants.OPERATOR_NODE_LABEL)[:-3] in node["metadata"]["labels"]
         }
 
         master_nodes_zones = {
-            node["metadata"]["labels"].get(zone_label)
+            node["metadata"]["labels"].get(constants.ZONE_LABEL)
             for node in nodes
             if constants.MASTER_LABEL in node["metadata"]["labels"]
         }
