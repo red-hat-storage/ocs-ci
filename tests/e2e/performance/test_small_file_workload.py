@@ -445,6 +445,7 @@ class TestSmallFileWorkload(PASTest):
             self.ripsaw.cleanup()
         if isinstance(self.es, ElasticSearch):
             self.es.cleanup()
+        self.c_drop.cleanup()
 
         sleep_time = 5
         log.info(
