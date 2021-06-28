@@ -1877,10 +1877,8 @@ def delete_osd_removal_job(osd_id):
 
     """
     ocs_version = config.ENV_DATA["ocs_version"]
-    if Version.coerce(ocs_version) == Version.coerce("4.7"):
+    if Version.coerce(ocs_version) >= Version.coerce("4.7"):
         job_name = "ocs-osd-removal-job"
-    elif Version.coerce(ocs_version) == Version.coerce("4.8"):
-        job_name = "ocs-osd-removal"
     else:
         job_name = f"ocs-osd-removal-{osd_id}"
 
