@@ -1083,7 +1083,7 @@ def update_machine_conf(folder_structure=True):
         change_mem_and_cpu()
 
     else:
-        if Version.coerce(get_ocp_version()) >= Version.coerce("4.8"):
+        if Version.coerce(get_ocp_version()) >= Version.coerce("4.7"):
             gw_string = "${cidrhost(var.machine_cidr, 1)}"
             gw_conf_file = constants.VM_MAIN
         else:
