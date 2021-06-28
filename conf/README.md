@@ -101,6 +101,12 @@ anywhere else.
   Cloud deployment.
 * `ceph_dubg` - Deploy OCS with Ceph in debug log level. Available starting OCS 4.7 (Default: false)
 * `ignition_version` - Ignition Version is the version used in MachineConfigs.
+* `dummy_zone_node_labels`: When set to `True`, ocs-ci will try to label all
+  master and worker nodes based on values of `worker_availability_zones` and
+  `master_availability_zones` options, but only if there are no zone labels
+  already defined. Labeling happens during post OCP deployment procedures.
+  If proper labeling is not possible, an exception (which will fail OCP
+  deployment) is raised. The default is False.
 
 
 #### REPORTING

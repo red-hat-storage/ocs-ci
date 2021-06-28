@@ -29,6 +29,7 @@ from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     UnsupportedFeatureError,
 )
+from ocs_ci.deployment.zones import create_dummy_zone_labels
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
@@ -184,6 +185,8 @@ class Deployment(object):
         add_stage_cert()
         if config.ENV_DATA.get("huge_pages"):
             enable_huge_pages()
+        if config.DEPLOYMENT.get("dummy_zone_node_labels"):
+            create_dummy_zone_labels()
 
     def label_and_taint_nodes(self):
         """
