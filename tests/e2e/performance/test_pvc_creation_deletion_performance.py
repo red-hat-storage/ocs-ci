@@ -130,23 +130,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
                 marks=[pytest.mark.performance],
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, "5Gi"],
-                marks=[pytest.mark.performance],
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL_THICK, "5Gi"],
-                marks=[pytest.mark.performance],
-            ),
-            pytest.param(
                 *[constants.CEPHBLOCKPOOL, "15Gi"],
-                marks=[pytest.mark.performance],
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEM, "15Gi"],
-                marks=[pytest.mark.performance],
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL_THICK, "15Gi"],
                 marks=[pytest.mark.performance],
             ),
             pytest.param(
@@ -154,7 +138,23 @@ class TestPVCCreationDeletionPerformance(PASTest):
                 marks=[pytest.mark.performance],
             ),
             pytest.param(
+                *[constants.CEPHFILESYSTEM, "5Gi"],
+                marks=[pytest.mark.performance],
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM, "15Gi"],
+                marks=[pytest.mark.performance],
+            ),
+            pytest.param(
                 *[constants.CEPHFILESYSTEM, "25Gi"],
+                marks=[pytest.mark.performance],
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL_THICK, "5Gi"],
+                marks=[pytest.mark.performance],
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL_THICK, "15Gi"],
                 marks=[pytest.mark.performance],
             ),
             pytest.param(
