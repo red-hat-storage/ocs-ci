@@ -2,6 +2,10 @@ class CommandFailed(Exception):
     pass
 
 
+class UnexpectedDeploymentConfiguration(Exception):
+    pass
+
+
 class UnsupportedOSType(Exception):
     pass
 
