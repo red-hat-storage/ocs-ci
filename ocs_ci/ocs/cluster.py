@@ -1647,12 +1647,12 @@ def get_mds_cache_memory_limit():
     mds_a_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
     ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-b mds_cache_memory_limit"
     mds_b_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
-    if mds_a_cache_memory_limit == mds_b_cache_memory_limit:
+    if mds_a_cache_memory_limit != mds_b_cache_memory_limit:
         raise UnexpectedBehaviour(
             f"mds_a_cache_memory_limit: {mds_a_cache_memory_limit}. "
             f"mds_b_cache_memory_limit: {mds_b_cache_memory_limit}"
         )
-    return mds_a_cache_memory_limit
+    return int(mds_a_cache_memory_limit)
 
 
 def is_lso_cluster():
