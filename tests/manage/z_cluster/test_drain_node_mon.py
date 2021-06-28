@@ -4,13 +4,13 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.resources.pod import get_mon_pods, get_pod_obj
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
-from ocs_ci.helpers.helpers import get_mon_pdb
+from ocs_ci.helpers.helpers import verify_pdb_mon
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     ManageTest,
-    tier2,
+    tier4a,
     bugzilla,
     skipif_ocs_version,
     skipif_external_mode,
@@ -20,7 +20,7 @@ from ocs_ci.framework.testlib import (
 log = logging.getLogger(__name__)
 
 
-@tier2
+@tier4a
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
 @bugzilla("1959983")
@@ -44,7 +44,7 @@ class TestDrainNodeMon(ManageTest):
         Verify the number of monitoring pod is three when drain node
 
         """
-        self.verify_pdb_mon(disruptions_allowed=1, max_unavailable_mon=1)
+        verify_pdb_mon(disruptions_allowed=1, max_unavailable_mon=1)
 
         log.info("Get worker node name where monitoring pod run")
         mon_pod_objs = get_mon_pods()
@@ -52,7 +52,7 @@ class TestDrainNodeMon(ManageTest):
 
         drain_nodes([node_name])
 
-        self.verify_pdb_mon(disruptions_allowed=0, max_unavailable_mon=1)
+        verify_pdb_mon(disruptions_allowed=0, max_unavailable_mon=1)
 
         log.info("Verify the number of mon pods is 3")
         sample = TimeoutSampler(timeout=1400, sleep=10, func=self.check_mon_pods_eq_3)
@@ -80,8 +80,7 @@ class TestDrainNodeMon(ManageTest):
             resource_count=3,
             timeout=100,
         )
-
-        self.verify_pdb_mon(disruptions_allowed=1, max_unavailable_mon=1)
+        verify_pdb_mon(disruptions_allowed=1, max_unavailable_mon=1)
 
     def check_mon_pods_eq_3(self):
         """
@@ -96,21 +95,3 @@ class TestDrainNodeMon(ManageTest):
             for mon_pod in mon_pod_list:
                 log.info(f"{mon_pod.name}")
             return True
-
-    def verify_pdb_mon(self, disruptions_allowed, max_unavailable_mon):
-        """
-        Verify PDB mon
-
-        Args:
-            disruptions_allowed (int): the expected number of disruptions_allowed
-            max_unavailable_mon (int): the expected number of max_unavailable_mon
-
-        """
-        logging.info("Check mon pdb status")
-        mon_pdb = get_mon_pdb()
-        assert (
-            disruptions_allowed == mon_pdb[0]
-        ), f"disruptions_allowed expected is {disruptions_allowed} actual is {mon_pdb[0]}"
-        assert (
-            max_unavailable_mon == mon_pdb[2]
-        ), f"disruptions_allowed expected is {max_unavailable_mon} actual is {mon_pdb[2]}"

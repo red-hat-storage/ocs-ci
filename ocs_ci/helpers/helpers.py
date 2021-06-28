@@ -3019,6 +3019,25 @@ def get_mon_pdb():
     return disruptions_allowed, min_available_mon, max_unavailable_mon
 
 
+def verify_pdb_mon(disruptions_allowed, max_unavailable_mon):
+    """
+    Verify PDB mon
+
+    Args:
+        disruptions_allowed (int): the expected number of disruptions_allowed
+        max_unavailable_mon (int): the expected number of max_unavailable_mon
+
+    """
+    logging.info("Check mon pdb status")
+    mon_pdb = get_mon_pdb()
+    assert (
+        disruptions_allowed == mon_pdb[0]
+    ), f"disruptions_allowed expected is {disruptions_allowed} actual is {mon_pdb[0]}"
+    assert (
+        max_unavailable_mon == mon_pdb[2]
+    ), f"disruptions_allowed expected is {max_unavailable_mon} actual is {mon_pdb[2]}"
+
+
 @retry(CommandFailed, tries=10, delay=30, backoff=1)
 def run_cmd_verify_cli_output(
     cmd=None, expected_output_lst=(), cephtool_cmd=False, debug_node=None
