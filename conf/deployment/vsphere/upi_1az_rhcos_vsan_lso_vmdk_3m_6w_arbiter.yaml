@@ -1,0 +1,30 @@
+---
+# This config is suppose to work on most of DCs we have.
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+  type: 'VMDK'
+  provision_type: 'thick'
+  ocs_operator_nodes_to_label: 6
+  arbiter_deployment: true
+  arbiter_zone: 'arbiter'
+  arbiter_autodetect: false
+  dummy_zone_node_labels: true
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  worker_replicas: 6
+  master_replicas: 3
+  worker_availability_zones:
+    - 'data-1'
+    - 'data-2'
+  master_availability_zones:
+    - 'arbiter'
+    - 'data-1'
+    - 'data-2'
+  worker_num_cpus: '16'
+  master_num_cpus: '4'
+  master_memory: '16384'
+  compute_memory: '65536'
+  extra_disks: 2
+  fio_storageutilization_min_mbps: 10.0
