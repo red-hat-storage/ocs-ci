@@ -4,7 +4,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.ocs.ocp import get_ocs_parsed_version
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +18,9 @@ class MCGStoreUI(PageNavigator):
     def __init__(self, driver):
         super().__init__(driver)
         self.wait = WebDriverWait(self.driver, 30)
-        ocp_version = get_ocp_version()
-        self.ocs_loc = locators[ocp_version]["ocs_operator"]
-        self.mcg_stores = locators[ocp_version]["mcg_stores"]
+        ocs_version = str(get_ocs_parsed_version())
+        self.ocs_loc = locators[ocs_version]["ocs_operator"]
+        self.mcg_stores = locators[ocs_version]["mcg_stores"]
 
     def create_store_ui(self, kind, store_name, secret_name, target_bucket):
         """
@@ -95,9 +95,9 @@ class BucketClassUI(PageNavigator):
 
     def __init__(self, driver):
         super().__init__(driver)
-        ocp_version = get_ocp_version()
-        self.ocs_loc = locators[ocp_version]["ocs_operator"]
-        self.bucketclass = locators[ocp_version]["bucketclass"]
+        ocs_version = str(get_ocs_parsed_version())
+        self.ocs_loc = locators[ocs_version]["ocs_operator"]
+        self.bucketclass = locators[ocs_version]["bucketclass"]
 
     def create_standard_bucketclass_ui(self, bc_name, policy, store_list):
         """
@@ -246,8 +246,8 @@ class ObcUI(PageNavigator):
 
     def __init__(self, driver):
         super().__init__(driver)
-        ocp_version = get_ocp_version()
-        self.obc_loc = locators[ocp_version]["obc"]
+        ocs_version = str(get_ocs_parsed_version())
+        self.obc_loc = locators[ocs_version]["obc"]
 
     def create_obc_ui(self, obc_name, storageclass, bucketclass=None):
         """
