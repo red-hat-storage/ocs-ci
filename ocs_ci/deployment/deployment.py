@@ -602,6 +602,17 @@ class Deployment(object):
                 and not lso_type == constants.AWS_EBS
             ):
                 deviceset_data["count"] = 2
+            # setting resource limits for AWS i3
+            # https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.6/html-single/deploying_openshift_container_storage_using_amazon_web_services/index#creating-openshift-container-storage-cluster-on-amazon-ec2_local-storage
+            if (
+                ocs_version >= 4.5
+                and config.ENV_DATA.get("worker_instance_type")
+                == constants.AWS_LSO_WORKER_INSTANCE
+            ):
+                deviceset_data["resources"] = {
+                    "limits": {"cpu": 2, "memory": "5Gi"},
+                    "requests": {"cpu": 1, "memory": "5Gi"},
+                }
             if (ocp_version >= 4.6) and (ocs_version >= 4.6):
                 cluster_data["metadata"]["annotations"] = {
                     "cluster.ocs.openshift.io/local-devices": "true"
