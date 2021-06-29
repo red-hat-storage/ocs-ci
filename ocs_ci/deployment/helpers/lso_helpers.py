@@ -8,6 +8,7 @@ import logging
 import tempfile
 import time
 
+from ocs_ci.deployment.disconnected import prune_and_mirror_index_image
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.exceptions import CommandFailed, UnsupportedPlatformError
@@ -44,19 +45,47 @@ def setup_local_storage(storageclass):
     ocs_version = config.ENV_DATA.get("ocs_version")
     ocp_ga_version = get_ocp_ga_version(ocp_version)
     if not ocp_ga_version:
-        optional_operators_data = templating.load_yaml(
-            constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
+        optional_operators_data = list(
+            templating.load_yaml(
+                constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
+            )
         )
         optional_operators_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="optional_operators", delete=False
         )
+        if config.DEPLOYMENT.get("optional_operators_image"):
+            for _dict in optional_operators_data:
+                if _dict.get("kind").lower() == "catalogsource":
+                    _dict["spec"]["image"] = config.DEPLOYMENT.get(
+                        "optional_operators_image"
+                    )
+        if config.DEPLOYMENT.get("disconnected"):
+            # in case of disconnected environment, we have to mirror all the
+            # optional_operators images
+            icsp = None
+            for _dict in optional_operators_data:
+                if _dict.get("kind").lower() == "catalogsource":
+                    index_image = _dict["spec"]["image"]
+                if _dict.get("kind").lower() == "imagecontentsourcepolicy":
+                    icsp = _dict
+            mirrored_index_image = (
+                f"{config.DEPLOYMENT['mirror_registry']}/"
+                f"{index_image.split('/', 1)[-1]}"
+            )
+            prune_and_mirror_index_image(
+                index_image,
+                mirrored_index_image,
+                constants.DISCON_CL_REQUIRED_PACKAGES,
+                icsp,
+            )
+            _dict["spec"]["image"] = mirrored_index_image
         templating.dump_data_to_temp_yaml(
             optional_operators_data, optional_operators_yaml.name
         )
         with open(optional_operators_yaml.name, "r") as f:
             logger.info(f.read())
         logger.info(
-            "Creating optional operators CatalogSource and" " ImageContentSourcePolicy"
+            "Creating optional operators CatalogSource and ImageContentSourcePolicy"
         )
         run_cmd(f"oc create -f {optional_operators_yaml.name}")
         logger.info("Sleeping for 60 sec to start update machineconfigpool status")
