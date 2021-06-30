@@ -45,7 +45,6 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.ocp import OCP
 
 
 log = logging.getLogger(__name__)
@@ -3364,6 +3363,10 @@ def get_encryption_kmsid():
         KMSConnectionDetailsError: if csi kms connection detail doesn't exist
 
     """
+
+    # To avoid circular imports
+    from ocs_ci.ocs.ocp import OCP
+
     csi_kms_conf = OCP(
         resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
         kind="ConfigMap",
@@ -3371,9 +3374,7 @@ def get_encryption_kmsid():
     try:
         csi_kms_conf.get()
     except CommandFailed:
-        raise KMSConnectionDetailsError(
-            "CSI kms resource doesn't exist"
-        )
+        raise KMSConnectionDetailsError("CSI kms resource doesn't exist")
 
     for key in csi_kms_conf["data"].iterkeys():
         if constants.VAULT_KMS_PROVIDER in key:

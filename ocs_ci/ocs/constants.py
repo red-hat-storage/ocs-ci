@@ -584,9 +584,7 @@ EXTERNAL_VAULT_KMS_TOKEN = os.path.join(EXTERNAL_VAULT_TEMPLATES, "ocs-kms-token
 EXTERNAL_VAULT_KMS_CONNECTION_DETAILS = os.path.join(
     EXTERNAL_VAULT_TEMPLATES, "ocs-kms-connection-details.yaml"
 )
-EXTERNAL_VAULT_CSI_KMS_TOKEN = os.path.join(
-   TEMPLATE_CSI_RBD_DIR, "csi-kms-secret.yaml"
-)
+EXTERNAL_VAULT_CSI_KMS_TOKEN = os.path.join(TEMPLATE_CSI_RBD_DIR, "csi-kms-secret.yaml")
 EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "csi-kms-connection-details.yaml"
 )

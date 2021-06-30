@@ -708,14 +708,11 @@ class Vault(KMS):
         create vault specific csi kms secret resource
 
         """
-        csi_kms_token = templating.load_yaml(
-            constants.EXTERNAL_VAULT_CSI_KMS_TOKEN
-        )
+        csi_kms_token = templating.load_yaml(constants.EXTERNAL_VAULT_CSI_KMS_TOKEN)
         csi_kms_token["data"]["token"] = base64.b64encode(
             self.vault_path_token.encode()
         ).decode()
         self.create_resource(csi_kms_token, prefix="csikmstoken")
-
 
     def create_vault_csi_kms_connection_details(self):
         """
@@ -735,9 +732,7 @@ class Vault(KMS):
         )
         buf["VAULT_NAMESPACE"] = self.vault_namespace
         buf["VAULT_TOKEN_NAME"] = get_default_if_keyval_empty(
-            config.ENV_DATA,
-            "VAULT_TOKEN_NAME",
-            constants.EXTERNAL_VAULT_CSI_KMS_TOKEN
+            config.ENV_DATA, "VAULT_TOKEN_NAME", constants.EXTERNAL_VAULT_CSI_KMS_TOKEN
         )
         csi_kms_conn_details["data"]["1-vault"] = str(buf)
         self.create_resource(csi_kms_conn_details, prefix="csikmsconn")
