@@ -9,7 +9,7 @@ from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.framework.pytest_customization.marks import skipif_rhel_os
 from ocs_ci.framework.testlib import (
     ManageTest,
-    tier1,
+    tier2,
     bugzilla,
     skipif_ocs_version,
     skipif_external_mode,
@@ -25,7 +25,7 @@ from ocs_ci.ocs.resources.pod import (
 log = logging.getLogger(__name__)
 
 
-@tier1
+@tier2
 @skipif_external_mode
 @skipif_ocs_version("<4.7")
 @bugzilla("1904917")
