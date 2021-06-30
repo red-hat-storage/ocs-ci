@@ -10,6 +10,8 @@ from ocs_ci.framework.testlib import (
     skipif_ibm_cloud,
 )
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, delete_pvcs
+from ocs_ci.ocs.ui.base_ui import PageNavigator
+from selenium.webdriver.common.by import By
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +23,7 @@ class TestPvcUserInterface(object):
     """
 
     def teardown(self):
+
         pvc_objs = get_all_pvc_objs(namespace="openshift-storage")
         pvcs = [pvc_obj for pvc_obj in pvc_objs if "test-pvc" in pvc_obj.name]
         delete_pvcs(pvc_objs=pvcs)
@@ -31,6 +34,50 @@ class TestPvcUserInterface(object):
     @pytest.mark.parametrize(
         argnames=["sc_type", "pvc_name", "access_mode", "pvc_size", "vol_mode"],
         argvalues=[
+            # pytest.param(
+            #     "ocs-storagecluster-cephfs",
+            #     "test-pvc-fs",
+            #     "ReadWriteMany",
+            #     "2",
+            #     "Filesystem",
+            # ),
+            # pytest.param(
+            #     "ocs-storagecluster-ceph-rbd",
+            #     "test-pvc-rbd",
+            #     "ReadWriteMany",
+            #     "3",
+            #     "Block",
+            # ),
+            # pytest.param(
+            #     "ocs-storagecluster-ceph-rbd-thick",
+            #     "test-pvc-rbd-thick",
+            #     "ReadWriteMany",
+            #     "4",
+            #     "Block",
+            #     marks=[skipif_ocp_version("<4.8")],
+            # ),
+            # pytest.param(
+            #     "ocs-storagecluster-cephfs",
+            #     "test-pvc-fs",
+            #     "ReadWriteOnce",
+            #     "10",
+            #     "Filesystem",
+            # ),
+            # pytest.param(
+            #     "ocs-storagecluster-ceph-rbd",
+            #     "test-pvc-rbd",
+            #     "ReadWriteOnce",
+            #     "11",
+            #     "Block",
+            # ),
+            # pytest.param(
+            #     "ocs-storagecluster-ceph-rbd-thick",
+            #     "test-pvc-rbd-thick",
+            #     "ReadWriteOnce",
+            #     "12",
+            #     "Block",
+            #     marks=[skipif_ocp_version("<4.8")],
+            # ),
             pytest.param(
                 "ocs-storagecluster-cephfs",
                 "test-pvc-fs",
@@ -82,6 +129,14 @@ class TestPvcUserInterface(object):
                 "13",
                 "Filesystem",
             ),
+            # pytest.param(
+            #     "ocs-storagecluster-ceph-rbd-thick",
+            #     "test-pvc-rbd-thick",
+            #     "ReadWriteOnce",
+            #     "4",
+            #     "Filesystem",
+            #     marks=[skipif_ocp_version("<4.8")],
+            # ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd-thick",
                 "test-pvc-rbd-thick",
@@ -141,9 +196,19 @@ class TestPvcUserInterface(object):
             pvc_name=pvc_name, pvc_size=pvc_size, new_size=new_size, sc_type=sc_type
         )
 
-        logger.info("Verifying New PVC Size via UI")
-        pvc_ui_obj.verify_pvc_resize_ui(pvc_name=pvc_name, new_size=new_size)
-        logger.info(f"New PVC Size Verified via UI..!! : New size is {new_size} GiB")
+        logger.info("Verifying New Pvc Size")
+
+        if pvc_ui_obj.wait_for_element(("div[data-test='FileSystemResizePending']", By.CSS_SELECTOR)):
+            expected_amount = 2
+        else:
+            expected_amount = 3
+
+        from pdb import set_trace
+        set_trace()
+
+        assert pvc_ui_obj.get_element_count(By.XPATH, f'//*[text()="{new_size} GiB"]', expected_amount), (
+            f"Pvc resize error| actual count:{expected_amount} "
+        )
 
         logger.info(f"Delete {pvc_name} pvc")
         pvc_ui_obj.delete_pvc_ui(pvc_name)

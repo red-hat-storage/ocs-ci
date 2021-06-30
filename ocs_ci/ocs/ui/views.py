@@ -265,8 +265,8 @@ pvc_4_8 = {
     "expand-btn": ("#confirm-action", By.CSS_SELECTOR),
     "pvc-status": (
         "//dd[@data-test-id='pvc-status']//span[@data-test='status-text'][normalize-space()='Bound']",
-        By.XPATH,
-    ),
+        By.XPATH),
+    "resize-pending": ("div[class ='col-xs-4 col-sm-2 col-md-2'] span", By.CSS_SELECTOR),
 }
 page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),

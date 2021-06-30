@@ -206,30 +206,29 @@ class BaseUI:
         """
         Clear the existing text from UI
 
-        locator (set): (GUI element needs to operate on (str), type (By))
-        timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
+        Args:
+            locator (tuple): (GUI element needs to operate on (str), type (By))
+            timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         """
         wait = WebDriverWait(self.driver, timeout)
         element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
         element.clear()
 
-    def wait_for_element(self, locator, text_):
+    def wait_for_element(self, locator, timeout=300):
         """
-        Method to wait for a web element to be found
-
-        locator (set): (GUI element needs to operate on (str), type (By))
+        Method to wait for a web element text to be found (use of explicit wait type)
 
         Args:
-            text_ (string): The expected text.
+            locator (tuple): (GUI element needs to operate on (str), type (By))
 
         return:
-            str: Returns the text_ (string) if element is found
+            str: Returns the text (string) when found
 
         """
         wait = WebDriverWait(
             self.driver,
-            timeout=30,
+            timeout=timeout,
             poll_frequency=1,
             ignored_exceptions=[
                 NoSuchElementException,
@@ -238,9 +237,31 @@ class BaseUI:
                 TimeoutException,
             ],
         )
-        wait.until(ec.text_to_be_present_in_element((locator[1], locator[0]), text_))
-        return logger.info(f"Element found: {text_}")
+        try:
+            wait.until(ec.visibility_of_element_located(locator[::-1]))
+            logger.info(f"Element found: {locator[0]}")
+            return True
+        except TimeoutException:
+            logger.error(f"Could not find element: {locator[0]}")
+            return False
 
+    def get_element_count(self,  locator_type, locator, expected_amount, timeout= 300):
+
+        def _get_elements(locator_type, locator):
+            return len(self.driver.find_elements(locator_type, locator))
+
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=10,
+            func=_get_elements,
+            locator_type=locator_type,
+            locator=locator,
+        )
+        if sample.wait_for_func_status(result=expected_amount):
+            return True
+        else:
+            logger.error(f" after {timeout} seconds")
+            raise TimeoutExpiredError
 
 class PageNavigator(BaseUI):
     """
@@ -580,7 +601,7 @@ def login_ui():
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if headless:
+        if not headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 
