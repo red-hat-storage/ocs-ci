@@ -216,6 +216,11 @@ class Deployment(object):
             az_worker_nodes[az] = az_node_list
         logger.debug(f"Found the worker nodes in AZ: {az_worker_nodes}")
 
+        if arbiter_deployment:
+            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
+        else:
+            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label")
+
         distributed_worker_nodes = []
         if arbiter_deployment and config.DEPLOYMENT.get("arbiter_autodetect"):
             for az in list(az_worker_nodes.keys()):
@@ -224,10 +229,13 @@ class Deployment(object):
                     node_names = az_node_list[:2]
                     distributed_worker_nodes += node_names
         elif arbiter_deployment and not config.DEPLOYMENT.get("arbiter_autodetect"):
+            to_label_per_az = int(
+                to_label / len(config.ENV_DATA.get("worker_availability_zones"))
+            )
             for az in list(config.ENV_DATA.get("worker_availability_zones")):
                 az_node_list = az_worker_nodes.get(az)
                 if az_node_list and len(az_node_list) > 1:
-                    node_names = az_node_list[:2]
+                    node_names = az_node_list[:to_label_per_az]
                     distributed_worker_nodes += node_names
                 else:
                     raise UnavailableResourceException(
@@ -244,11 +252,6 @@ class Deployment(object):
                     else:
                         del az_worker_nodes[az]
         logger.info(f"Distributed worker nodes for AZ: {distributed_worker_nodes}")
-
-        if arbiter_deployment:
-            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
-        else:
-            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 3)
 
         to_taint = config.DEPLOYMENT.get("ocs_operator_nodes_to_taint", 0)
 
