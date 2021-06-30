@@ -75,6 +75,10 @@ class Vault(KMS):
         self.vault_namespace = None
         self.vault_deploy_mode = config.ENV_DATA.get("vault_deploy_mode")
         self.vault_backend_path = None
+        self.vault_backend_version = config.ENV_DATA.get(
+            "VAULT_BACKEND",
+            defaults.VAULT_DEFAULT_BACKEND_VERSION
+        )
         # Base64 encoded (with padding) token
         self.vault_path_token = None
         self.vault_policy_name = None
@@ -283,6 +287,7 @@ class Vault(KMS):
         connection_data["data"]["VAULT_CLIENT_KEY"] = self.client_key_name
         connection_data["data"]["VAULT_NAMESPACE"] = self.vault_namespace
         connection_data["data"]["VAULT_TLS_SERVER_NAME"] = self.vault_tls_server
+        connection_data["data"]["VAULT_BACKEND"] = self.vault_backend_version
         self.create_resource(connection_data, prefix="kmsconnection")
 
     def create_resource(self, resource_data, prefix=None):
@@ -361,7 +366,10 @@ class Vault(KMS):
                 f"{constants.VAULT_DEFAULT_PATH_PREFIX}-{self.cluster_id}-"
                 f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
             )
-        cmd = f"vault secrets enable -path={self.vault_backend_path} kv"
+        cmd = (
+            f"vault secrets enable -path={self.vault_backend_path}" 
+            f"kv-{self.vault_backend_version}"
+        )
         out = subprocess.check_output(shlex.split(cmd))
         if "Success" in out.decode():
             logger.info(f"vault path {self.vault_backend_path} created")

@@ -9,6 +9,7 @@ data:
   VAULT_CLIENT_KEY: ocs-kms-client-key
   VAULT_NAMESPACE: ""
   VAULT_TLS_SERVER_NAME: ""
+  VAULT_BACKEND: ""
 kind: ConfigMap
 metadata:
   name: ocs-kms-connection-details
