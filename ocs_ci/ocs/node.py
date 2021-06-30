@@ -987,12 +987,12 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     assert osd_ids, f"The node {osd_node_name} does not have osd pods"
 
     ocs_version = config.ENV_DATA["ocs_version"]
-    if len(osd_ids) > 1 and Version.coerce(ocs_version) <= Version.coerce("4.6"):
-        log.warning(
-            f"We have {len(osd_ids)} osd ids, and ocs version is {ocs_version}. "
-            f"The ocs-osd-removal job works with multiple ids only from ocs version 4.7"
-        )
-        assert False
+    assert not (
+        len(osd_ids) > 1 and Version.coerce(ocs_version) <= Version.coerce("4.6")
+    ), (
+        f"We have {len(osd_ids)} osd ids, and ocs version is {ocs_version}. "
+        f"The ocs-osd-removal job works with multiple ids only from ocs version 4.7"
+    )
 
     osd_id = osd_ids[0]
     log.info(f"osd ids to remove = {osd_ids}")
@@ -1026,7 +1026,7 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     )
     assert res, "Failed to add the new node to LVD and LVS"
 
-    log.info("Verify new pvs is available...")
+    log.info("Verify new pvs are available...")
     is_new_pvs_available = verify_new_pvs_available_in_sc(
         old_pv_objs, sc_name, num_of_new_pvs=num_of_new_pvs
     )
