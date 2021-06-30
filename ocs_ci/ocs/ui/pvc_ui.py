@@ -1,10 +1,17 @@
 import logging
 import time
 
+from selenium.webdriver.common.by import By
+
+from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.ocs.constants import VOLUME_MODE_BLOCK
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
 from ocs_ci.helpers import helpers
+from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.resources.ocs import OCS
+
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +31,12 @@ class PvcUI(PageNavigator):
         """
         Create PVC via UI.
 
-        sc_type (str): storage class type
-        pvc_name (str): the name of pvc
-        access_mode (str): access mode
-        pvc_size (str): the size of pvc (GB)
-        vol_mode (str): volume mode type
+        Args:
+            sc_type (str): storage class type
+            pvc_name (str): the name of pvc
+            access_mode (str): access mode
+            pvc_size (str): the size of pvc (GB)
+            vol_mode (str): volume mode type
 
         """
         self.navigate_persistentvolumeclaims_page()
@@ -55,7 +63,7 @@ class PvcUI(PageNavigator):
 
         if (
             sc_type
-            in ("ocs-storagecluster-ceph-rbd-thick", "ocs-storagecluster-ceph-rbd")
+            in (constants.DEFAULT_STORAGECLASS_RBD_THICK, constants.DEFAULT_STORAGECLASS_RBD)
             and access_mode == "ReadWriteOnce"
         ):
             logger.info(f"Test running on OCP version: {get_running_ocp_version()}")
@@ -72,9 +80,10 @@ class PvcUI(PageNavigator):
         """
         Verifying PVC details via UI
 
-        pvc_size (str): the size of pvc (GB)
-        access_mode (str): access mode
-        vol_mode (str): volume mode type
+        Args:
+            pvc_size (str): the size of pvc (GB)
+            access_mode (str): access mode
+            vol_mode (str): volume mode type
 
         """
         pvc_size_new = f"{pvc_size} GiB"
@@ -88,26 +97,26 @@ class PvcUI(PageNavigator):
         if (
             sc_type
             in (
-                "ocs-storagecluster-ceph-rbd-thick",
-                "ocs-storagecluster-ceph-rbd",
-            )
+            constants.DEFAULT_STORAGECLASS_RBD_THICK, constants.DEFAULT_STORAGECLASS_RBD
+        )
             and (access_mode == "ReadWriteOnce")
         ):
             pvc_vol_mode_new = f"{vol_mode}"
             self.check_element_text(expected_text=pvc_vol_mode_new)
             logger.info(f"Verifying volume mode : {pvc_vol_mode_new}")
 
-    def pvc_resize_ui(self, pvc_name, pvc_size, new_size, sc_type):
+    def pvc_resize_ui(self, pvc_name, pvc_size, new_size, sc_type, timeout=300, interface_type=None, vol_mode=None):
         """
         Resizing pvc via UI
 
-
-        pvc_name (str): the name of pvc
-        pvc_size (str): the size of pvc (GB)
-        new_size (int): the new size of pvc (GB)
-        sc_type (str): storage class type
+        Args:
+            pvc_name (str): the name of pvc
+            pvc_size (str): the size of pvc (GB)
+            new_size (int): the new size of pvc (GB)
+            sc_type (str): storage class type
 
         """
+
         self.navigate_persistentvolumeclaims_page()
 
         logger.info("Select openshift-storage project")
@@ -119,11 +128,21 @@ class PvcUI(PageNavigator):
         logger.info(f"Go to PVC {pvc_name} Page")
         self.do_click(self.pvc_loc[pvc_name])
 
-        if sc_type in "ocs-storagecluster-ceph-rbd":
-            helpers.create_pod()
-
         logger.info("Checking status of Pvc")
-        self.wait_for_element(self.pvc_loc["pvc-status"], text_="Bound")
+        self.wait_for_element(("dd[data-test-id='pvc-status'] span[data-test='status-text']", By.CSS_SELECTOR))
+
+        logger.info("Creating Pod")
+        if sc_type in (constants.DEFAULT_STORAGECLASS_RBD_THICK, constants.DEFAULT_STORAGECLASS_RBD):
+            interface_type = constants.CEPHBLOCKPOOL
+        else:
+            interface_type = constants.CEPHFILESYSTEM
+        new_pod = helpers.create_pod(interface_type=interface_type,
+                                        pvc_name=pvc_name,
+                                        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                                        raw_block_pv=vol_mode == VOLUME_MODE_BLOCK)
+
+        logger.info(f"Waiting for Pod: state= {constants.STATUS_RUNNING}")
+        wait_for_resource_state(resource=new_pod, state=constants.STATUS_RUNNING)
 
         logger.info("Click on Actions")
         self.do_click(self.pvc_loc["pvc_actions"])
@@ -134,28 +153,23 @@ class PvcUI(PageNavigator):
         logger.info("Clearing the size of existing pvc")
         self.do_clear(self.pvc_loc["resize-value"])
 
-        if new_size > int(pvc_size):
-            logger.info("Enter the new pvc size")
-            self.do_send_keys(self.pvc_loc["resize-value"], text=new_size)
-        else:
-            logger.info(
-                f"New pvc size can not be less than existing pvc size: {new_size}"
-            )
-            raise Exception
+        logger.info("Enter the new pvc size")
+        self.do_send_keys(self.pvc_loc["resize-value"], text=new_size)
 
         logger.info("Click on Expand Button")
         self.do_click(self.pvc_loc["expand-btn"])
 
-        time.sleep(3)
-
-    def verify_pvc_resize_ui(self, pvc_name, new_size):
+    def verify_pvc_resize_ui(self, pvc_name, new_size, pvc_size, new_pod):
         """
         Verifying PVC resize via UI
 
-        pvc_name (str): the name of pvc
-        new_size (int): the new size of pvc (GB)
+        Args:
+            pvc_name (str): the name of pvc
+            new_size (int): the new size of pvc (GB)
 
         """
+        assert new_size > int(pvc_size), (
+            f"New size of the PVC cannot be less than existing size: {new_size})")
 
         self.navigate_persistentvolumeclaims_page()
 
@@ -172,11 +186,15 @@ class PvcUI(PageNavigator):
 
         self.check_element_text(expected_text=resized_pvc)
 
+        logger.info("Deleting the Pod")
+        new_pod.delete()
+
     def delete_pvc_ui(self, pvc_name):
         """
         Delete pvc via UI
 
-        pvc_name (str): Name of the pvc
+        Args:
+            pvc_name (str): Name of the pvc
 
         """
         self.navigate_persistentvolumeclaims_page()
