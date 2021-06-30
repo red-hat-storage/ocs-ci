@@ -76,8 +76,7 @@ class Vault(KMS):
         self.vault_deploy_mode = config.ENV_DATA.get("vault_deploy_mode")
         self.vault_backend_path = None
         self.vault_backend_version = config.ENV_DATA.get(
-            "VAULT_BACKEND",
-            defaults.VAULT_DEFAULT_BACKEND_VERSION
+            "VAULT_BACKEND", defaults.VAULT_DEFAULT_BACKEND_VERSION
         )
         # Base64 encoded (with padding) token
         self.vault_path_token = None
@@ -367,7 +366,7 @@ class Vault(KMS):
                 f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
             )
         cmd = (
-            f"vault secrets enable -path={self.vault_backend_path}" 
+            f"vault secrets enable -path={self.vault_backend_path}"
             f"kv-{self.vault_backend_version}"
         )
         out = subprocess.check_output(shlex.split(cmd))
