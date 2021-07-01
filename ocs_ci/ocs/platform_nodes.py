@@ -2278,6 +2278,33 @@ class RHVNodes(NodesBase):
                 node_names=node_names, status=constants.NODE_READY, timeout=timeout
             )
 
+    def restart_nodes_by_stop_and_start(
+        self, nodes, timeout=900, wait=True, force=True
+    ):
+        """
+        Restart RHV vms by stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True if need to wait till the restarted node reaches
+                READY state. False otherwise
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+            force (bool): True for force VM stop, False otherwise
+
+        """
+        if not nodes:
+            raise ValueError("No nodes found for restarting")
+        node_names = [n.name for n in nodes]
+        vms = self.get_rhv_vm_instances(nodes)
+        self.rhv.restart_rhv_vms_by_stop_and_start(vms, wait=wait, force=force)
+
+        if wait:
+            logger.info(f"Waiting for nodes: {node_names} to reach ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY, timeout=timeout
+            )
+
     def restart_nodes_by_stop_and_start_teardown(self):
         """
         Make sure all RHV VMs are up by the end of the test
