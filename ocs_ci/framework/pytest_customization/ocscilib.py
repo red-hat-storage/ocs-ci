@@ -23,6 +23,7 @@ from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MIN_CHARACTERS,
     LOG_FORMAT,
     OCP_VERSION_CONF_DIR,
+    SQUADS,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -565,6 +566,14 @@ def pytest_collection_modifyitems(session, config, items):
                 f"{item.name} in {item.fspath}",
                 exc_info=True,
             )
+
+        # Add squad markers to each test item based on filepath
+        for squad, paths in SQUADS.items():
+            for _path in paths:
+                if _path in item.fspath.strpath:
+                    item.add_marker(f"{squad}_Squad")
+                    item.user_properties.append(("squad", squad))
+                    break
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
