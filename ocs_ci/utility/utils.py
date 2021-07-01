@@ -3370,13 +3370,14 @@ def get_encryption_kmsid():
     csi_kms_conf = OCP(
         resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
         kind="ConfigMap",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     )
     try:
         csi_kms_conf.get()
     except CommandFailed:
         raise KMSConnectionDetailsError("CSI kms resource doesn't exist")
 
-    for key in csi_kms_conf["data"].iterkeys():
+    for key in csi_kms_conf.get().get("data").keys():
         if constants.VAULT_KMS_PROVIDER in key:
             return key
 
