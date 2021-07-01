@@ -1764,24 +1764,25 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
             )
 
 
-def run_osd_removal_job(osd_id):
+def run_osd_removal_job(osd_ids=None):
     """
     Run the ocs-osd-removal job
 
     Args:
-        osd_id (str): The osd id
+        osd_ids (list): The osd IDs.
 
     Returns:
         ocs_ci.ocs.resources.ocs.OCS: The ocs-osd-removal job object
 
     """
+    osd_ids_str = ",".join(map(str, osd_ids))
     ocp_version = get_ocp_version()
     if Version.coerce(ocp_version) >= Version.coerce("4.6"):
-        cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_id} -o yaml"
+        cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
     else:
-        cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_id} -o yaml"
+        cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_ids_str} -o yaml"
 
-    logger.info(f"Executing OSD removal job on OSD-{osd_id}")
+    logger.info(f"Executing OSD removal job on OSD ids: {osd_ids_str}")
     ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     osd_removal_job_yaml = ocp_obj.exec_oc_cmd(cmd)
     # Add the namespace param, so that the ocs-osd-removal job will be created in the correct namespace
@@ -1879,10 +1880,8 @@ def delete_osd_removal_job(osd_id):
 
     """
     ocs_version = config.ENV_DATA["ocs_version"]
-    if Version.coerce(ocs_version) == Version.coerce("4.7"):
+    if Version.coerce(ocs_version) >= Version.coerce("4.7"):
         job_name = "ocs-osd-removal-job"
-    elif Version.coerce(ocs_version) == Version.coerce("4.8"):
-        job_name = "ocs-osd-removal"
     else:
         job_name = f"ocs-osd-removal-{osd_id}"
 

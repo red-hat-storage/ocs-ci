@@ -5,6 +5,7 @@ from prettytable import PrettyTable
 from collections import defaultdict
 
 from subprocess import TimeoutExpired
+from semantic_version import Version
 
 from ocs_ci.ocs.machine import get_machine_objs
 
@@ -19,7 +20,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions
 from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
-    verify_new_pv_available_in_sc,
+    verify_new_pvs_available_in_sc,
     delete_released_pvs_in_sc,
     get_pv_size,
 )
@@ -982,9 +983,19 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     old_pv_objs = get_pv_objs_in_sc(sc_name)
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
-    osd_pod = get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())[0]
-    osd_id = pod.get_osd_pod_id(osd_pod)
-    log.info(f"osd id to remove = {osd_id}")
+    osd_ids = get_node_osd_ids(osd_node_name)
+    assert osd_ids, f"The node {osd_node_name} does not have osd pods"
+
+    ocs_version = config.ENV_DATA["ocs_version"]
+    assert not (
+        len(osd_ids) > 1 and Version.coerce(ocs_version) <= Version.coerce("4.6")
+    ), (
+        f"We have {len(osd_ids)} osd ids, and ocs version is {ocs_version}. "
+        f"The ocs-osd-removal job works with multiple ids only from ocs version 4.7"
+    )
+
+    osd_id = osd_ids[0]
+    log.info(f"osd ids to remove = {osd_ids}")
     # Save the node hostname before deleting the node
     osd_node_hostname_label = get_node_hostname_label(osd_node)
 
@@ -998,9 +1009,12 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     assert new_node_name, "Failed to create a new node"
     log.info(f"New node created successfully. Node name: {new_node_name}")
 
+    num_of_new_pvs = len(osd_ids)
+    log.info(f"Number of the expected new pvs = {num_of_new_pvs}")
     # If we use LSO, we need to create and attach a new disk manually
     new_node = get_node_objs(node_names=[new_node_name])[0]
-    add_disk_to_node(new_node)
+    for i in range(num_of_new_pvs):
+        add_disk_to_node(new_node)
 
     new_node_hostname_label = get_node_hostname_label(new_node)
     log.info(
@@ -1012,25 +1026,27 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     )
     assert res, "Failed to add the new node to LVD and LVS"
 
-    log.info("Verify new pv is available...")
-    is_new_pv_available = verify_new_pv_available_in_sc(old_pv_objs, sc_name)
-    assert is_new_pv_available, "New pv is not available"
+    log.info("Verify new pvs are available...")
+    is_new_pvs_available = verify_new_pvs_available_in_sc(
+        old_pv_objs, sc_name, num_of_new_pvs=num_of_new_pvs
+    )
+    assert is_new_pvs_available, "New pvs are not available"
     log.info("Finished verifying that the new pv is available")
 
-    osd_removal_job = pod.run_osd_removal_job(osd_id)
+    osd_removal_job = pod.run_osd_removal_job(osd_ids)
     assert osd_removal_job, "ocs-osd-removal failed to create"
     is_completed = (pod.verify_osd_removal_job_completed_successfully(osd_id),)
     assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
     log.info("ocs-osd-removal-job completed successfully")
 
-    expected_num_of_deleted_pvs = [0, 1]
+    expected_num_of_deleted_pvs = [0, num_of_new_pvs]
     num_of_deleted_pvs = delete_released_pvs_in_sc(sc_name)
     assert num_of_deleted_pvs in expected_num_of_deleted_pvs, (
         f"num of deleted PVs is {num_of_deleted_pvs} "
         f"instead of the expected values {expected_num_of_deleted_pvs}"
     )
     log.info(f"num of deleted PVs is {num_of_deleted_pvs}")
-    log.info("Successfully deleted old pv")
+    log.info("Successfully deleted old pvs")
 
     is_deleted = pod.delete_osd_removal_job(osd_id)
     assert is_deleted, "Failed to delete ocs-osd-removal-job"

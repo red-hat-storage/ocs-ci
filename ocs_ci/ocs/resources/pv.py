@@ -61,13 +61,14 @@ def get_pv_name(pv_obj):
     return pv_obj.get("metadata").get("name")
 
 
-def verify_new_pv_available_in_sc(old_pv_objs, sc_name, timeout=120):
+def verify_new_pvs_available_in_sc(old_pv_objs, sc_name, num_of_new_pvs=1, timeout=120):
     """
     Verify that the new pv, that has been created in a specific storage class, is available.
 
     Args:
         old_pv_objs (list): List of dictionaries of the pv objects
         sc_name (str): The name of the storage class
+        num_of_new_pvs (int): Number of the new pvs that should be available in the storage class
         timeout (int): time to wait for the new pv to come up
 
     Returns:
@@ -75,31 +76,33 @@ def verify_new_pv_available_in_sc(old_pv_objs, sc_name, timeout=120):
 
     """
     try:
-        for new_pv_objs in TimeoutSampler(
+        for total_pv_objs in TimeoutSampler(
             timeout=timeout,
             sleep=10,
             func=get_pv_objs_in_sc,
             sc_name=sc_name,
         ):
-            num_of_new_pv = len(new_pv_objs)
-            expected_num_of_new_pv = len(old_pv_objs) + 1
-            if num_of_new_pv == expected_num_of_new_pv:
-                logger.info(f"Found {expected_num_of_new_pv} PVs as expected")
+            num_of_total_pvs = len(total_pv_objs)
+            expected_num_of_total_pvs = len(old_pv_objs) + num_of_new_pvs
+            if num_of_total_pvs == expected_num_of_total_pvs:
+                logger.info(f"Found {expected_num_of_total_pvs} PVs as expected")
                 break
     except TimeoutError:
         logger.warning(
-            f"expected to find {expected_num_of_new_pv} PVs in sc {sc_name}, but find {num_of_new_pv} PVs"
+            f"expected to find {expected_num_of_total_pvs} PVs in sc {sc_name}, but find {num_of_total_pvs} PVs"
         )
         return False
 
     old_pv_names = [get_pv_name(pv) for pv in old_pv_objs]
-    new_pv_obj = [pv for pv in new_pv_objs if get_pv_name(pv) not in old_pv_names][0]
-    new_pv_status = get_pv_status(new_pv_obj)
-    if new_pv_status not in [constants.STATUS_AVAILABLE, constants.STATUS_BOUND]:
-        logger.warning(f"New pv is in status {new_pv_status}")
-        return False
+    new_pv_objs = [pv for pv in total_pv_objs if get_pv_name(pv) not in old_pv_names]
+    for new_pv_obj in new_pv_objs:
+        new_pv_status = get_pv_status(new_pv_obj)
+        new_pv_name = get_pv_name(new_pv_obj)
+        if new_pv_status not in [constants.STATUS_AVAILABLE, constants.STATUS_BOUND]:
+            logger.warning(f"New pv '{new_pv_name}' is in status {new_pv_status}")
+            return False
 
-    logger.info(f"new pv is ready with status {new_pv_status}")
+        logger.info(f"New pv '{new_pv_name}' is ready with status {new_pv_status}")
 
     return True
 
