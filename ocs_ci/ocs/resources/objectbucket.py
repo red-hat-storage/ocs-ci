@@ -1,20 +1,20 @@
 import base64
+import json
 import logging
 from abc import ABC, abstractmethod
-import json
 
 import boto3
+
+from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
     create_resource,
     create_unique_resource_name,
     storagecluster_independent_check,
 )
-
-from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError, UnhealthyBucket
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler

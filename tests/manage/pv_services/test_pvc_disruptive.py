@@ -5,7 +5,7 @@ from functools import partial
 
 from ocs_ci.framework.testlib import ManageTest, tier4, tier4a, ignore_leftover_label
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
@@ -216,20 +216,19 @@ class TestPVCDisruption(ManageTest):
         # Get number of pods of type 'resource_to_delete'
         num_of_resource_to_delete = len(pod_functions[resource_to_delete]())
 
-        num_of_pvc = 12
         namespace = self.proj_obj.namespace
 
         # Fetch the number of Pods and PVCs
         initial_num_of_pods = len(pod.get_all_pods(namespace=namespace))
         initial_num_of_pvc = len(get_all_pvcs(namespace=namespace)["items"])
 
-        executor = ThreadPoolExecutor(max_workers=(2 * num_of_pvc))
-
         DISRUPTION_OPS.set_resource(resource=resource_to_delete)
 
         access_modes = [constants.ACCESS_MODE_RWO]
         if interface == constants.CEPHFILESYSTEM:
             access_modes.append(constants.ACCESS_MODE_RWX)
+            num_of_pvc = 8
+            access_mode_dist_ratio = [6, 2]
 
         # Modify access_modes list to create rbd `block` type volume with
         # RWX access mode. RWX is not supported in non-block type rbd
@@ -240,6 +239,10 @@ class TestPVCDisruption(ManageTest):
                     f"{constants.ACCESS_MODE_RWX}-Block",
                 ]
             )
+            num_of_pvc = 9
+            access_mode_dist_ratio = [4, 3, 2]
+
+        executor = ThreadPoolExecutor(max_workers=(2 * num_of_pvc))
 
         # Start creation of PVCs
         bulk_pvc_create = executor.submit(
@@ -249,6 +252,7 @@ class TestPVCDisruption(ManageTest):
             size=5,
             access_modes=access_modes,
             access_modes_selection="distribute_random",
+            access_mode_dist_ratio=access_mode_dist_ratio,
             status=constants.STATUS_BOUND,
             num_of_pvc=num_of_pvc,
             wait_each=False,
@@ -276,7 +280,12 @@ class TestPVCDisruption(ManageTest):
 
         # Start creating pods
         bulk_pod_create = executor.submit(
-            helpers.create_pods, pvc_objs, pod_factory, interface, 2
+            helpers.create_pods,
+            pvc_objs,
+            pod_factory,
+            interface,
+            2,
+            nodes=node.get_worker_nodes(),
         )
 
         if operation_to_disrupt == "create_pod":
@@ -293,7 +302,7 @@ class TestPVCDisruption(ManageTest):
         # Verify pods are Running
         for pod_obj in pod_objs:
             helpers.wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=90
             )
             pod_obj.reload()
         logger.info("Verified: All pods are Running.")
@@ -353,12 +362,18 @@ class TestPVCDisruption(ManageTest):
             pod_obj.ocp.wait_for_delete(pod_obj.name)
 
         # Verify that PVCs are reusable by creating new pods
-        pod_objs = helpers.create_pods(pvc_objs, pod_factory, interface, 2)
+        pod_objs = helpers.create_pods(
+            pvc_objs,
+            pod_factory,
+            interface,
+            2,
+            nodes=node.get_worker_nodes(),
+        )
 
         # Verify new pods are Running
         for pod_obj in pod_objs:
             helpers.wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=90
             )
             pod_obj.reload()
         logging.info("Verified: All new pods are Running.")

@@ -10,6 +10,7 @@ from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.ocs.must_gather.const_must_gather import GATHER_COMMANDS_VERSION
 from ocs_ci.ocs.ocp import get_ocs_parsed_version
+from ocs_ci.ocs.constants import OPENSHIFT_STORAGE_NAMESPACE
 
 
 logger = logging.getLogger(__name__)
@@ -102,30 +103,60 @@ class MustGather(object):
         """
         if self.type_log != "OTHERS":
             return
-        must_gather_helper = re.compile(r"must-gather-.*.-helper")
-        pod_objs = get_all_pods(namespace="openshift-storage")
+        pod_objs = get_all_pods(namespace=OPENSHIFT_STORAGE_NAMESPACE)
         pod_names = []
+        logging.info("Get pod names on openshift-storage project")
         for pod in pod_objs:
-            if not must_gather_helper.match(pod.name):
+            pattern = self.check_pod_name_pattern(pod.name)
+            if pattern is False:
                 pod_names.append(pod.name)
 
         for dir_name, subdir_list, files_list in os.walk(self.root):
             if re.search("openshift-storage/pods$", dir_name):
                 pod_path = dir_name
+                break
 
         pod_files = []
+        logging.info("Get pod names on openshift-storage/pods directory")
         for pod_file in os.listdir(pod_path):
-            if (
-                not must_gather_helper.match(pod_file)
-                and (re.match(r"compute-*", pod_file) is None)
-                and (re.match(r"ip-*", pod_file) is None)
-            ):
+            pattern = self.check_pod_name_pattern(pod_file)
+            if pattern is False:
                 pod_files.append(pod_file)
 
-        assert set(sorted(pod_files)) == set(sorted(pod_names)), (
-            f"List of openshift-storage pods are not equal to list of logs "
-            f"directories list of pods: {pod_names} list of log directories: {pod_files}"
+        diff = list(set(pod_files) - set(pod_names)) + list(
+            set(pod_names) - set(pod_files)
         )
+        assert set(sorted(pod_files)) == set(sorted(pod_names)), (
+            f"List of openshift-storage pods are not equal to list of logs\n"
+            f"directories list of pods: {pod_names} list of log directories: {pod_files}\n"
+            f"The difference between pod files and actual pods is: {diff}\n"
+        )
+
+    def check_pod_name_pattern(self, pod_name):
+        """
+        check Pod Name Pattern
+
+        Args:
+            pod_name (str): pod name
+
+        return:
+            bool: True if match pattern, False otherwise
+
+        """
+        regular_ex_list = [
+            "must-gather-.*.-helper",
+            r"^compute-*",
+            r"^ip-*",
+            r"^j-*",
+            r"^argo-*",
+            r"^vmware-*",
+            "^must-gather",
+            r"-debug$",
+        ]
+        for regular_ex in regular_ex_list:
+            if re.search(regular_ex, pod_name) is not None:
+                return True
+        return False
 
     def print_invalid_files(self):
         """
@@ -145,7 +176,7 @@ class MustGather(object):
 
     def verify_noobaa_diagnostics(self):
         """
-        Verify noobaa_diagnostics folder exist
+        Verify noobaa diagnostics folder exist
 
         """
         if self.type_log == "OTHERS" and get_ocs_parsed_version() >= 4.6:
@@ -161,7 +192,7 @@ class MustGather(object):
 
     def validate_must_gather(self):
         """
-        Validate must_gather
+        Validate must-gather
 
         """
         self.validate_file_size()

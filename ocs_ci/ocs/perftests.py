@@ -1,6 +1,7 @@
 # import pytest
 import time
 import logging
+import re
 
 from elasticsearch import Elasticsearch
 
@@ -15,6 +16,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id
 from ocs_ci.ocs.elasticsearch import elasticsearch_load
 from ocs_ci.ocs.resources import pod
+from ocs_ci.helpers.performance_lib import run_oc_command
 
 log = logging.getLogger(__name__)
 
@@ -114,39 +116,64 @@ class PASTest(BaseTest):
 
         """
 
-        # for development mode use the Dev ES server
-        if self.dev_mode:
-            if "elasticsearch" in self.crd_data["spec"]:
-                log.info("Using the development ES server")
-                self.crd_data["spec"]["elasticsearch"] = {
-                    "server": defaults.ELASTICSEARCH_DEV_IP,
-                    "port": defaults.ELASTICSEARCE_PORT,
-                }
+        self.crd_data["spec"]["elasticsearch"] = {}
 
-        if "elasticsearch" in self.crd_data["spec"]:
-            self.crd_data["spec"]["elasticsearch"]["url"] = (
-                f"http://{self.crd_data['spec']['elasticsearch']['server']}:"
-                f"{self.crd_data['spec']['elasticsearch']['port']}"
-            )
+        # for development mode use the Dev ES server
+        if self.dev_mode and config.PERF.get("dev_lab_es"):
+            log.info("Using the development ES server")
+            self.crd_data["spec"]["elasticsearch"] = {
+                "server": config.PERF.get("dev_es_server"),
+                "port": config.PERF.get("dev_es_port"),
+                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
+                "parallel": True,
+            }
+
+        # for production mode use the Lab ES server
+        if not self.dev_mode and config.PERF.get("production_es"):
+            self.crd_data["spec"]["elasticsearch"] = {
+                "server": config.PERF.get("production_es_server"),
+                "port": config.PERF.get("production_es_port"),
+                "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
+                "parallel": True,
+            }
+
+        # backup the Main ES info (if exists)
+        if not self.crd_data["spec"]["elasticsearch"] == {}:
             self.backup_es = self.crd_data["spec"]["elasticsearch"]
             log.info(
                 f"Creating object for the Main ES server on {self.backup_es['url']}"
             )
             self.main_es = Elasticsearch([self.backup_es["url"]], verify_certs=True)
         else:
-            log.warning("Elastic Search information does not exists in YAML file")
-            self.crd_data["spec"]["elasticsearch"] = {}
+            log.warning("Elastic Search information does not exists for this test")
 
         # Use the internal define elastic-search server in the test - if exist
         if elasticsearch:
-            ip = elasticsearch.get_ip()
-            port = elasticsearch.get_port()
+
+            if not isinstance(elasticsearch, dict):
+                # elasticsearch is an internally deployed server (obj)
+                ip = elasticsearch.get_ip()
+                port = elasticsearch.get_port()
+            else:
+                # elasticsearch is an existing server (dict)
+                ip = elasticsearch.get("server")
+                port = elasticsearch.get("port")
+
             self.crd_data["spec"]["elasticsearch"] = {
                 "server": ip,
                 "port": port,
                 "url": f"http://{ip}:{port}",
+                "parallel": True,
             }
             log.info(f"Going to use the ES : {self.crd_data['spec']['elasticsearch']}")
+        elif config.PERF.get("internal_es_server"):
+            # use an in-cluster elastic-search (not deployed by the test)
+            self.crd_data["spec"]["elasticsearch"] = {
+                "server": config.PERF.get("internal_es_server"),
+                "port": config.PERF.get("internal_es_port"),
+                "url": f"http://{config.PERF.get('internal_es_server')}:{config.PERF.get('internal_es_port')}",
+                "parallel": True,
+            }
 
     def set_storageclass(self, interface):
         """
@@ -221,8 +248,48 @@ class PASTest(BaseTest):
             timeout (int): time in second to wait until the benchmark start
             sleep (int): Sleep interval seconds
 
+        Raise:
+            exception for too much restarts of the test.
+
         """
         log.info(f"Waiting for {self.client_pod_name} to complete")
+
+        Finished = 0
+        restarts = 0
+        while not Finished:
+            results = run_oc_command(
+                "get pod --no-headers -o custom-columns=:metadata.name,:status.phase",
+                namespace="my-ripsaw",
+            )
+            fname = ""
+            for name in results:
+                if re.search(self.client_pod_name, name):
+                    (fname, status) = name.split()
+                    continue
+            if not fname == self.client_pod:
+                log.info(
+                    f"The pod {self.client_pod} was restart. the new client pod is {fname}"
+                )
+                self.client_pod = fname
+                restarts += 1
+            if restarts > 3:
+                err_msg = f"Too much restarts of the benchmark ({restarts})"
+                log.error(err_msg)
+                raise Exception(err_msg)
+            if status == "Succeeded":
+                self.end_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
+                self.test_logs = self.pod_obj.exec_oc_cmd(
+                    f"logs {self.client_pod}", out_yaml_format=False
+                )
+                log.info(f"{self.client_pod} completed successfully")
+                Finished = 1
+            else:
+                log.info(
+                    f"{self.client_pod} is in {status} State, and wait to Succeeded State."
+                    f" wait another {sleep} sec. for benchmark to complete"
+                )
+                time.sleep(sleep)
+
         self.pod_obj.wait_for_resource(
             condition=constants.STATUS_COMPLETED,
             resource_name=self.client_pod,
@@ -272,3 +339,57 @@ class PASTest(BaseTest):
             else:
                 log.warning("Cannot upload data into the Main ES server")
                 return False
+
+    def read_from_es(self, es, index, uuid):
+        """
+        Reading all results from elasticsearch server
+
+        Args:
+            es (dict): dictionary with elasticsearch info  {server, port}
+            index (str): the index name to read from the elasticsearch server
+            uuid (str): the test UUID to find in the elasticsearch server
+
+        Returns:
+            list : list of all results
+
+        """
+
+        con = Elasticsearch([{"host": es["server"], "port": es["port"]}])
+        query = {"size": 1000, "query": {"match": {"uuid": uuid}}}
+
+        try:
+            results = con.search(index=index, body=query)
+            full_data = []
+            for res in results["hits"]["hits"]:
+                full_data.append(res["_source"])
+            return full_data
+
+        except Exception as e:
+            log.warning(f"{index} Not found in the Internal ES. ({e})")
+            return []
+
+    def es_connect(self):
+        """
+        Create elasticsearch connection to the server
+
+        Return:
+            bool : True if there is a connection to the ES, False if not.
+
+        """
+
+        OK = True  # the return value
+        try:
+            log.info(f"try to connect the ES : {self.es['server']}:{self.es['port']}")
+            self.es_con = Elasticsearch(
+                [{"host": self.es["server"], "port": self.es["port"]}]
+            )
+        except Exception:
+            log.error(f"Cannot connect to ES server {self.es}")
+            OK = False
+
+        # Testing the connection to the elastic-search
+        if not self.es_con.ping():
+            log.error(f"Cannot connect to ES server {self.es}")
+            OK = False
+
+        return OK

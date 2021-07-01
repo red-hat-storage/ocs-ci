@@ -16,9 +16,10 @@ import time
 # 3ed party modules
 import pytest
 import numpy as np
-from elasticsearch import exceptions as ESExp
+from elasticsearch import Elasticsearch, exceptions as ESExp
 
 # Local modules
+from ocs_ci.framework import config
 from ocs_ci.utility import templating
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
@@ -26,6 +27,7 @@ from ocs_ci.framework.testlib import performance
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs.perftests import PASTest
+from ocs_ci.ocs.elasticsearch import ElasticSearch
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +54,7 @@ class SmallFileResultsAnalyse(PerfResult):
         "records": {"name": "Rec-per-thread", "op": np.sum},
     }
 
-    def __init__(self, uuid, crd):
+    def __init__(self, uuid, crd, full_log_path, es_con):
         """
         Initialize the object by reading some of the data from the CRD file and
         by connecting to the ES server and read all results from it.
@@ -61,6 +63,8 @@ class SmallFileResultsAnalyse(PerfResult):
             uuid (str): the unique uid of the test
             crd (dict): dictionary with test parameters - the test yaml file
                         that modify it in the test itself.
+            full_log_path (str): the path of the results files to be found
+            es_con (elasticsearch): an elasticsearch connection
 
         """
 
@@ -68,12 +72,15 @@ class SmallFileResultsAnalyse(PerfResult):
 
         self.index = crd["spec"]["es_index"] + "-results"
         self.new_index = crd["spec"]["es_index"] + "-fullres"
+        self.full_log_path = full_log_path
+        # make sure we have connection to the elastic search server
+        self.es = es_con
 
         # WA for Cloud environment where pod can not send results to ES
         self.dont_check = False
 
         # make sure we have connection to the elastic search server
-        self.es_connect()
+        # self.es_connect()
 
         # Creating full results dictionary
         self.add_key("clients", crd["spec"]["workload"]["args"]["clients"])
@@ -299,19 +306,6 @@ class SmallFileResultsAnalyse(PerfResult):
                     )
 
 
-@pytest.fixture(scope="function")
-def ripsaw(request, storageclass_factory):
-    def teardown():
-        ripsaw.cleanup()
-        time.sleep(10)
-
-    request.addfinalizer(teardown)
-
-    ripsaw = RipSaw()
-
-    return ripsaw
-
-
 @performance
 class TestSmallFileWorkload(PASTest):
     """
@@ -323,9 +317,130 @@ class TestSmallFileWorkload(PASTest):
     """
 
     def setup(self):
-        super(TestSmallFileWorkload, self).setup()
+        """
+        Setting up test parameters
+        """
+        log.info("Starting the test setup")
         self.benchmark_name = "SmallFiles"
         self.client_pod_name = "smallfile-client"
+        if config.PERF.get("deploy_internal_es"):
+            self.es = ElasticSearch()
+        else:
+            if config.PERF.get("internal_es_server") == "":
+                self.es = None
+                return
+            else:
+                self.es = {
+                    "server": config.PERF.get("internal_es_server"),
+                    "port": config.PERF.get("internal_es_port"),
+                    "url": f"http://{config.PERF.get('internal_es_server')}:{config.PERF.get('internal_es_port')}",
+                }
+                # verify that the connection to the elasticsearch server is OK
+                if not super(TestSmallFileWorkload, self).es_connect():
+                    self.es = None
+                    return
+
+        super(TestSmallFileWorkload, self).setup()
+        # deploy the benchmark-operator (ripsaw)
+        self.ripsaw = RipSaw()
+        self.ripsaw_deploy(self.ripsaw)
+
+    def setting_storage_usage(self, file_size, files, threads, samples):
+        """
+        Getting the storage capacity, calculate the usage of the storage and
+        setting the workload CR rile parameters.
+
+        Args:
+            file_size (int) : the size of the file to be used
+            files (int) : number of files to use
+            threads (int) : number of threads to be use in the test
+            samples (int) : how meany samples to run for each test
+
+        """
+        self.crd_data["spec"]["workload"]["args"]["file_size"] = file_size
+        self.crd_data["spec"]["workload"]["args"]["files"] = files
+        self.crd_data["spec"]["workload"]["args"]["threads"] = threads
+        self.crd_data["spec"]["workload"]["args"]["samples"] = samples
+
+        # Calculating the size of the volume that need to be test, it should
+        # be at least twice in the size then the size of the files, and at
+        # least 100Gi.
+        # Since the file_size is in Kb and the vol_size need to be in Gb, more
+        # calculation is needed.
+        vol_size = int(files * threads * file_size * 3)
+        vol_size = int(vol_size / constants.GB2KB)
+        if vol_size < 100:
+            vol_size = 100
+        self.crd_data["spec"]["workload"]["args"]["storagesize"] = f"{vol_size}Gi"
+
+    def init_full_results(self, full_results):
+        """
+        Initialize the full results object which will send to the ES server
+
+        Args:
+            full_results (obj): an empty SmallFileResultsAnalyse object
+
+        Returns:
+            SmallFileResultsAnalyse (obj): the input object fill with data
+
+        """
+        for key in self.environment:
+            full_results.add_key(key, self.environment[key])
+
+        # Calculating the total size of the working data set - in GB
+        full_results.add_key(
+            "dataset",
+            self.crd_data["spec"]["workload"]["args"]["file_size"]
+            * self.crd_data["spec"]["workload"]["args"]["files"]
+            * self.crd_data["spec"]["workload"]["args"]["threads"]
+            * full_results.results["clients"]
+            / constants.GB2KB,
+        )
+
+        full_results.add_key(
+            "global_options",
+            {
+                "files": self.crd_data["spec"]["workload"]["args"]["files"],
+                "file_size": self.crd_data["spec"]["workload"]["args"]["file_size"],
+                "storageclass": self.crd_data["spec"]["workload"]["args"][
+                    "storageclass"
+                ],
+                "vol_size": self.crd_data["spec"]["workload"]["args"]["storagesize"],
+            },
+        )
+        return full_results
+
+    def run(self):
+        log.info("Running SmallFile bench")
+        self.deploy_and_wait_for_wl_to_start(timeout=240, sleep=10)
+
+        # Getting the UUID from inside the benchmark pod
+        self.uuid = self.ripsaw.get_uuid(self.client_pod)
+        self.wait_for_wl_to_finish(sleep=30)
+        try:
+            if "RUN STATUS DONE" in self.test_logs:
+                log.info("SmallFiles has completed successfully")
+                return True
+        except IOError:
+            log.warning("SmallFiles failed to complete")
+            return False
+
+    def teardown(self):
+        """
+        The teardown of the test environment in the end.
+
+        """
+        log.info("cleanup the environment")
+        if hasattr(self, "ripsaw"):
+            self.ripsaw.cleanup()
+        if isinstance(self.es, ElasticSearch):
+            self.es.cleanup()
+
+        sleep_time = 5
+        log.info(
+            f"Going to sleep for {sleep_time} Minute, for background cleanup to complete"
+        )
+        time.sleep(sleep_time * 60)
 
     @pytest.mark.parametrize(
         argnames=["file_size", "files", "threads", "samples", "interface"],
@@ -353,104 +468,90 @@ class TestSmallFileWorkload(PASTest):
         ],
     )
     @pytest.mark.polarion_id("OCS-1295")
-    def test_smallfile_workload(
-        self, ripsaw, es, file_size, files, threads, samples, interface
-    ):
+    def test_smallfile_workload(self, file_size, files, threads, samples, interface):
         """
         Run SmallFile Workload
+
+        Args:
+            file_size (int) : the size of the file to be used
+            files (int) : number of files to use
+            threads (int) : number of threads to be use in the test
+            samples (int) : how meany samples to run for each test
+            interface (str) : the volume type (rbd / cephfs)
+
         """
+        # verify that there is an elasticsearch server for the benchmark
+        if not self.es:
+            log.error("This test must have an Elasticsearch server")
+            return False
+
+        # Getting the full path for the test logs
         self.full_log_path = get_full_test_logs_path(cname=self)
         self.full_log_path += f"-{file_size}-{files}-{threads}-{samples}-{interface}"
         log.info(f"Logs file path name is : {self.full_log_path}")
 
         # Loading the main template yaml file for the benchmark
+        log.info("Create resource file for smallfiles workload")
         self.crd_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
 
-        self.es_info_backup(es)
+        # Saving the Original elastic-search IP and PORT - if defined in yaml
+        self.es_info_backup(self.es)
 
-        self.ripsaw_deploy(ripsaw)
         self.set_storageclass(interface=interface)
-        log.info("Running SmallFile bench")
 
-        """
-            Setting up the parameters for this test
-        """
-        self.crd_data["spec"]["workload"]["args"]["file_size"] = file_size
-        self.crd_data["spec"]["workload"]["args"]["files"] = files
-        self.crd_data["spec"]["workload"]["args"]["threads"] = threads
-        self.crd_data["spec"]["workload"]["args"]["samples"] = samples
-        """
-        Calculating the size of the volume that need to be test, it should
-        be at least twice in the size then the size of the files, and at
-        least 100Gi.
+        # Setting the data set to 40% of the total storage capacity
+        self.setting_storage_usage(file_size, files, threads, samples)
 
-        Since the file_size is in Kb and the vol_size need to be in Gb, more
-        calculation is needed.
-        """
-        vol_size = int(files * threads * file_size * 3)
-        vol_size = int(vol_size / constants.GB2KB)
-        if vol_size < 100:
-            vol_size = 100
-        self.crd_data["spec"]["workload"]["args"]["storagesize"] = f"{vol_size}Gi"
         self.get_env_info()
 
-        self.deploy_and_wait_for_wl_to_start(timeout=240, sleep=10)
-
-        # Getting the UUID from inside the benchmark pod
-        uuid = ripsaw.get_uuid(self.client_pod)
+        if not self.run():
+            log.error("The benchmark failed to run !")
+            return
 
         # Setting back the original elastic-search information
         if self.backup_es:
             self.crd_data["spec"]["elasticsearch"] = self.backup_es
 
-        full_results = SmallFileResultsAnalyse(uuid, self.crd_data)
-
         # Initialize the results doc file.
-        for key in self.environment:
-            full_results.add_key(key, self.environment[key])
-
-        # Calculating the total size of the working data set - in GB
-        full_results.add_key(
-            "dataset",
-            file_size
-            * files
-            * threads
-            * full_results.results["clients"]
-            / constants.GB2KB,
-        )
-
-        full_results.add_key(
-            "global_options",
-            {
-                "files": files,
-                "file_size": file_size,
-                "storageclass": self.crd_data["spec"]["workload"]["args"][
-                    "storageclass"
-                ],
-                "vol_size": self.crd_data["spec"]["workload"]["args"]["storagesize"],
-            },
-        )
-
-        self.wait_for_wl_to_finish(timeout=3600, sleep=30)
-
-        if "RUN STATUS DONE" in self.test_logs:
-            # Getting the end time of the test
-            full_results.add_key(
-                "test_time", {"start": self.start_time, "end": self.end_time}
+        full_results = self.init_full_results(
+            SmallFileResultsAnalyse(
+                self.uuid, self.crd_data, self.full_log_path, self.main_es
             )
-            # if Internal ES is exists, Copy all data from the Internal to main ES
-            self.copy_es_data(es)
-            full_results.read()
-            if not full_results.dont_check:
-                full_results.add_key("hosts", full_results.get_clients_list())
-                full_results.init_full_results()
-                full_results.aggregate_host_results()
-                test_status = full_results.aggregate_samples_results()
-                full_results.es_write()
+        )
 
-                # Creating full link to the results on the ES server
-                log.info(f"The Result can be found at : {full_results.results_link()}")
+        log.info(f"Full results is : {full_results.results}")
+        if isinstance(self.es, ElasticSearch):
+            # Using internal deployed elasticsearch
+            log.info("Getting data from internal ES")
+            if self.main_es:
+                self.copy_es_data(self.es)
+                full_results.read()
             else:
-                test_status = True
+                log.info("Dumping data from the Internal ES to tar ball file")
+                self.es.dumping_all_data(self.full_log_path)
+        else:
+            log.info(self.es)
+            self.es = Elasticsearch(
+                hosts=[{"host": self.es["server"], "port": self.es["port"]}]
+            )
+            full_results.read()
+
+        full_results.add_key(
+            "test_time", {"start": self.start_time, "end": self.end_time}
+        )
+
+        if self.main_es:
+            full_results.es = self.main_es
+
+        if not full_results.dont_check:
+            full_results.add_key("hosts", full_results.get_clients_list())
+            full_results.init_full_results()
+            full_results.aggregate_host_results()
+            test_status = full_results.aggregate_samples_results()
+            full_results.all_results = None
+            if full_results.es_write():
+                log.info(f"The Result can be found at : {full_results.results_link()}")
+        else:
+            test_status = True
 
         assert test_status, "Test Failed !"

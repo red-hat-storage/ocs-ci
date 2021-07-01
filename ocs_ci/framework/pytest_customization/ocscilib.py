@@ -10,6 +10,7 @@ import logging
 import os
 
 import pytest
+from junitparser import JUnitXml
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.exceptions import (
@@ -248,6 +249,23 @@ def pytest_addoption(parser):
         default=False,
         help="Skip the openshift client download step or not",
     )
+    parser.addoption(
+        "--disable-components",
+        dest="disable_components",
+        action="append",
+        choices=["rgw", "cephfs", "noobaa", "blockpools"],
+        help=("disable deployment of ocs component:rgw, cephfs, noobaa, blockpools."),
+    )
+    parser.addoption(
+        "--re-trigger-failed-tests",
+        dest="re_trigger_failed_tests",
+        help="""
+        Path to the xunit file for xml junit report from the previous execution.
+        If the file is provided, the execution will remove all the test cases
+        which passed and will run only those test cases which were skipped /
+        failed / or had error in the provided report.
+        """,
+    )
 
 
 def pytest_configure(config):
@@ -277,7 +295,10 @@ def pytest_configure(config):
         log.info(
             f"Dump of the consolidated config file is located here: " f"{config_file}"
         )
-        set_report_portal_config(config)
+        if config.getoption("--reportportal"):
+            set_rp_client_log_level()
+            set_report_portal_config(config)
+
         # Add OCS related versions to the html report and remove
         # extraneous metadata
         markers_arg = config.getoption("-m")
@@ -506,13 +527,32 @@ def process_cluster_cli_params(config):
     skip_download_client = get_cli_param(config, "skip_download_client")
     if skip_download_client:
         ocsci_config.DEPLOYMENT["skip_download_client"] = True
+    re_trigger_failed_tests = get_cli_param(config, "--re-trigger-failed-tests")
+    if re_trigger_failed_tests:
+        ocsci_config.RUN["re_trigger_failed_tests"] = os.path.expanduser(
+            re_trigger_failed_tests
+        )
 
 
 def pytest_collection_modifyitems(session, config, items):
     """
     Add Polarion ID property to test cases that are marked with one.
     """
-    for item in items:
+
+    re_trigger_failed_tests = ocsci_config.RUN.get("re_trigger_failed_tests")
+    if re_trigger_failed_tests:
+        junit_report = JUnitXml.fromfile(re_trigger_failed_tests)
+        cases_to_re_trigger = []
+        for suite in junit_report:
+            cases_to_re_trigger += [_case.name for _case in suite if _case.result]
+    for item in items[:]:
+        if re_trigger_failed_tests and item.name not in cases_to_re_trigger:
+            log.info(
+                f"Test case: {item.name} will be removed from execution, "
+                "because of you provided --re-trigger-failed-tests parameter "
+                "and this test passed in previous execution from the report!"
+            )
+            items.remove(item)
         try:
             marker = item.get_closest_marker(name="polarion_id")
             if marker:

@@ -4,6 +4,8 @@ from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicat
 
 
 # @pytest.mark.polarion_id("OCS-XXXX")
+# Skipped above 4.6 because of https://github.com/red-hat-storage/ocs-ci/issues/4129
+@skipif_ocs_version(["<4.5", ">4.6"])
 @skipif_openshift_dedicated
 @tier1
 class TestEndpointAutoScale(MCGTest):
@@ -17,7 +19,6 @@ class TestEndpointAutoScale(MCGTest):
     MIN_ENDPOINT_COUNT = 1
     MAX_ENDPOINT_COUNT = 2
 
-    @skipif_ocs_version("<4.5")
     def test_scaling_under_load(self, mcg_job_factory):
         self._assert_endpoint_count(1)
 
@@ -50,11 +51,13 @@ class TestEndpointAutoScale(MCGTest):
                 ("numjobs", "4"),
             ],
         }
-        job = mcg_job_factory(custom_options=options)
+        for i in range(10):
+            exec(f"job{i} = mcg_job_factory(custom_options={options})")
         self._assert_endpoint_count(2)
 
-        job.delete()
-        job.ocp.wait_for_delete(resource_name=job.name, timeout=60)
+        for i in range(10):
+            exec(f"job{i}.delete()")
+            exec(f"job{i}.ocp.wait_for_delete(resource_name=job{i}.name, timeout=60)")
         self._assert_endpoint_count(1)
 
     def _assert_endpoint_count(self, desired_count):
@@ -65,5 +68,5 @@ class TestEndpointAutoScale(MCGTest):
             condition=constants.STATUS_RUNNING,
             selector=constants.NOOBAA_ENDPOINT_POD_LABEL,
             dont_allow_other_resources=True,
-            timeout=500,
+            timeout=900,
         )

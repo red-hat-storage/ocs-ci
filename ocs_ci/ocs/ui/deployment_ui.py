@@ -11,6 +11,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
+from ocs_ci.helpers.proxy import get_cluster_proxies
 
 
 logger = logging.getLogger(__name__)
@@ -24,8 +25,8 @@ class DeploymentUI(PageNavigator):
 
     def __init__(self, driver):
         super().__init__(driver)
-        ocp_version = get_ocp_version()
-        self.dep_loc = locators[ocp_version]["deployment"]
+        self.ocp_version = get_ocp_version()
+        self.dep_loc = locators[self.ocp_version]["deployment"]
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
         """
@@ -119,14 +120,7 @@ class DeploymentUI(PageNavigator):
         Install Storage Cluster
 
         """
-        self.navigate_operatorhub_page()
-        self.navigate_installed_operators_page()
-
-        logger.info("Search OCS operator installed")
-        self.do_send_keys(
-            locator=self.dep_loc["search_ocs_installed"],
-            text="OpenShift Container Storage",
-        )
+        self.search_operator_installed_operators_page()
 
         logger.info("Click on ocs operator on Installed Operators")
         self.do_click(locator=self.dep_loc["ocs_operator_installed"])
@@ -214,10 +208,13 @@ class DeploymentUI(PageNavigator):
         logger.info("Select all worker nodes")
         self.select_checkbox_status(status=True, locator=self.dep_loc["all_nodes"])
 
-        logger.info("Next on step 'Select capacity and nodes'")
-        self.do_click(locator=self.dep_loc["next"])
+        if self.ocp_version == "4.6" and config.ENV_DATA.get("encryption_at_rest"):
+            self.do_click(locator=self.dep_loc["enable_encryption"])
 
-        self.configure_encryption()
+        if self.ocp_version in ("4.7", "4.8"):
+            logger.info("Next on step 'Select capacity and nodes'")
+            self.do_click(locator=self.dep_loc["next"])
+            self.configure_encryption()
 
         self.create_storage_cluster()
 
@@ -260,13 +257,7 @@ class DeploymentUI(PageNavigator):
             sleep (int): Sampling time in seconds
 
         """
-        self.navigate_operatorhub_page()
-        self.navigate_installed_operators_page()
-
-        self.do_send_keys(
-            locator=self.dep_loc["search_operator_installed"],
-            text=operator,
-        )
+        self.search_operator_installed_operators_page(operator=operator)
         sample = TimeoutSampler(
             timeout=timeout_install,
             sleep=sleep,
@@ -279,6 +270,30 @@ class DeploymentUI(PageNavigator):
             )
             raise TimeoutExpiredError
 
+    def search_operator_installed_operators_page(
+        self, operator="OpenShift Container Storage"
+    ):
+        """
+        Search Operator on Installed Operators Page
+
+        Args:
+            operator (str): type of operator
+
+        """
+        self.navigate_operatorhub_page()
+        self.navigate_installed_operators_page()
+        logger.info(f"Search {operator} operator installed")
+
+        if self.ocp_version in ("4.7", "4.8"):
+            self.do_send_keys(
+                locator=self.dep_loc["search_operator_installed"],
+                text=operator,
+            )
+        # https://bugzilla.redhat.com/show_bug.cgi?id=1899200
+        elif self.ocp_version == "4.6":
+            self.do_click(self.dep_loc["project_dropdown"])
+            self.do_click(self.dep_loc[operator])
+
     def install_ocs_ui(self):
         """
         Install OCS via UI
@@ -290,3 +305,55 @@ class DeploymentUI(PageNavigator):
         self.create_catalog_source_yaml()
         self.install_ocs_operator()
         self.install_storage_cluster()
+
+
+def ui_deployment_conditions():
+    """
+    Conditions for installing the OCS operator via UI
+
+    return:
+        bool: True if support UI deployment, False otherwise
+    """
+    platform = config.ENV_DATA["platform"]
+    ocp_version = get_ocp_version()
+    ocs_version = config.ENV_DATA.get("ocs_version")
+    is_arbiter = config.DEPLOYMENT.get("arbiter_deployment")
+    is_lso = config.DEPLOYMENT.get("local_storage")
+    is_external = config.DEPLOYMENT["external_mode"]
+    is_disconnected = config.DEPLOYMENT.get("disconnected")
+    is_kms = config.DEPLOYMENT.get("kms_deployment")
+    http_proxy, https_proxy, no_proxy = get_cluster_proxies()
+    is_proxy = True if http_proxy else False
+
+    try:
+        locators[ocp_version]["deployment"]
+    except KeyError as e:
+        logger.info(
+            f"OCS deployment via UI is not supported on ocp version {ocp_version}"
+        )
+        logger.error(e)
+        return False
+
+    if platform not in (constants.AWS_PLATFORM, constants.VSPHERE_PLATFORM):
+        logger.info(f"OCS deployment via UI is not supported on platform {platform}")
+        return False
+    elif ocs_version != ocp_version or ocp_version == "4.6":
+        logger.info(
+            f"OCS deployment via UI is not supported when the OCS version [{ocs_version}]"
+            f" is different from the OCP version [{ocp_version}]"
+        )
+        return False
+    elif is_external or is_disconnected or is_proxy or is_kms or is_arbiter:
+        logger.info(
+            "OCS deployment via UI is not supported on "
+            "external/disconnected/proxy/kms/arbiter cluster"
+        )
+        return False
+    elif platform == constants.AWS_PLATFORM and is_lso is True:
+        logger.info("OCS deployment via UI is not supported on AWS-LSO")
+        return False
+    elif ocp_version == "4.6" and is_lso is True:
+        logger.info("OCS deployment via UI is not supported on LSO-OCP4.6")
+        return False
+    else:
+        return True

@@ -780,6 +780,13 @@ def setup_ceph_toolbox(force_setup=False):
             'json --patch  \'[{ "op": "replace", "path": '
             '"/spec/enableCephTools", "value": true }]\''
         )
+        toolbox_pod = OCP(kind=constants.POD, namespace=namespace)
+        toolbox_pod.wait_for_resource(
+            condition="Running",
+            selector="app=rook-ceph-tools",
+            resource_count=1,
+            timeout=120,
+        )
 
 
 def apply_oc_resource(
@@ -1014,7 +1021,7 @@ def oc_get_all_obc_names():
         .get()
         .get("items")
     )
-    return {obc.get("spec").get("bucketName") for obc in all_obcs_in_namespace}
+    return {obc.get("metadata").get("name") for obc in all_obcs_in_namespace}
 
 
 def get_external_mode_rhcs():

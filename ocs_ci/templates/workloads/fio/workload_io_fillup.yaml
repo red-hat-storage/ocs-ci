@@ -8,3 +8,4 @@ time_based: 0
 runtime: 36000
 size: 100M
 ioengine: libaio
+end_fsync: 1

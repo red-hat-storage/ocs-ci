@@ -7,9 +7,9 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.node import get_ocs_nodes
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
+from ocs_ci.ocs.cluster import check_ceph_health_after_add_capacity
 
 
 @pytest.mark.parametrize(
@@ -87,4 +87,4 @@ class TestAddCapacityNodeRestart(ManageTest):
 
         logging.info("Finished verifying add capacity osd storage with node restart")
         logging.info("Waiting for ceph health check to finished...")
-        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=180)
+        check_ceph_health_after_add_capacity()

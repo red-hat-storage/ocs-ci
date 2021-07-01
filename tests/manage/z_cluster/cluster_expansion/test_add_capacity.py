@@ -23,8 +23,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.cluster import check_ceph_health_after_add_capacity
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
@@ -72,11 +71,7 @@ def add_capacity_test():
     if config.ENV_DATA.get("encryption_at_rest"):
         osd_encryption_verification()
 
-    ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=80)
-    ceph_cluster_obj = CephCluster()
-    assert ceph_cluster_obj.wait_for_rebalance(
-        timeout=5400
-    ), "Data re-balance failed to complete"
+    check_ceph_health_after_add_capacity(ceph_rebalance_timeout=3600)
 
 
 @ignore_leftovers

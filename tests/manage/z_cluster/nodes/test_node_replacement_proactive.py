@@ -8,6 +8,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
     tier4,
     tier4a,
+    tier4b,
     ManageTest,
     ignore_leftovers,
     aws_platform_required,
@@ -19,6 +20,7 @@ from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_openshift_dedicated,
     skipif_bmpsi,
+    bugzilla,
 )
 
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -41,7 +43,7 @@ def select_osd_node_name():
 
 
 def check_node_replacement_verification_steps(
-    old_node_name, new_node_name, old_osd_node_names, old_osd_id
+    old_node_name, new_node_name, old_osd_node_names, old_osd_ids
 ):
     """
     Check if the node replacement verification steps finished successfully.
@@ -50,7 +52,7 @@ def check_node_replacement_verification_steps(
         old_node_name (str): The name of the old node that has been deleted
         new_node_name (str): The name of the new node that has been created
         old_osd_node_names (list): The name of the new node that has been added to osd nodes
-        old_osd_id (str): The old osd id
+        old_osd_ids (list): List of the old osd ids
 
     Raises:
         AssertionError: If the node replacement verification steps failed.
@@ -63,7 +65,7 @@ def check_node_replacement_verification_steps(
         old_node_name, new_node_name, new_osd_node_name
     )
     assert node.node_replacement_verification_steps_user_side(
-        old_node_name, new_node_name, new_osd_node_name, old_osd_id
+        old_node_name, new_node_name, new_osd_node_name, old_osd_ids
     )
 
 
@@ -76,8 +78,8 @@ def delete_and_create_osd_node(osd_node_name):
 
     """
     new_node_name = None
-    osd_pod = node.get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())[0]
-    old_osd_id = pod.get_osd_pod_id(osd_pod)
+    osd_pods = node.get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())
+    old_osd_ids = [pod.get_osd_pod_id(osd_pod) for osd_pod in osd_pods]
 
     old_osd_node_names = node.get_osd_running_nodes()
 
@@ -116,7 +118,7 @@ def delete_and_create_osd_node(osd_node_name):
 
     log.info("Start node replacement verification steps...")
     check_node_replacement_verification_steps(
-        osd_node_name, new_node_name, old_osd_node_names, old_osd_id
+        osd_node_name, new_node_name, old_osd_node_names, old_osd_ids
     )
 
 
@@ -232,3 +234,36 @@ class TestNodeReplacement(ManageTest):
         assert ceph_cluster_obj.wait_for_rebalance(
             timeout=1800
         ), "Data re-balance failed to complete"
+
+
+@tier4b
+@ignore_leftovers
+@bugzilla("1840539")
+@pytest.mark.polarion_id("OCS-2535")
+class TestNodeReplacementTwice(ManageTest):
+    """
+    Node replacement twice:
+    node_x -> node_y
+    node_z -> node_x
+
+    After node_replacement, the deleted node (node_x) suppose to be removed from the ceph-osd-tree.
+    The BZ deals with the SECOND node_replacement.
+    The existence of the deleted node (node_x from previous replacement) in the crash-map ends with:
+      1. node is labeled for rack correctly
+      2. ceph side host still on the old rack
+    """
+
+    def test_nodereplacenet_twice(self):
+        for i in range(2):
+            # Get random node name for replacement
+            node_name_to_delete = select_osd_node_name()
+            log.info(f"Selected node for replacement: {node_name_to_delete}")
+            delete_and_create_osd_node(node_name_to_delete)
+            ct_pod = pod.get_ceph_tools_pod()
+            tree_output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
+            log.info("ceph osd tree output:")
+            log.info(tree_output)
+
+            assert not (
+                node_name_to_delete in str(tree_output)
+            ), f"Deleted host {node_name_to_delete} still exist in ceph osd tree after node replacement"

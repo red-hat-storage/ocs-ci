@@ -11,7 +11,8 @@ from ocs_ci.ocs.ocp import switch_to_default_rook_cluster_project
 from subprocess import run, CalledProcessError
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE
-
+from ocs_ci.ocs.node import get_nodes
+from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +52,10 @@ class RipSaw(object):
         self.pod_obj = OCP(namespace=RIPSAW_NAMESPACE, kind="pod")
         self._create_namespace()
         self._clone_ripsaw()
+        self.worker_nodes = [node.name for node in get_nodes()]
+        helpers.label_worker_node(
+            self.worker_nodes, label_key="kernel-cache-dropper", label_value="yes"
+        )
 
     def _create_namespace(self):
         """
@@ -84,6 +89,12 @@ class RipSaw(object):
         run("oc apply -f deploy", shell=True, check=True, cwd=self.dir)
         run(f"oc apply -f {crd}", shell=True, check=True, cwd=self.dir)
         run(f"oc apply -f {self.operator}", shell=True, check=True, cwd=self.dir)
+        run(
+            "oc create -f resources/kernel-cache-drop-clusterrole.yaml",
+            shell=True,
+            check=True,
+            cwd=self.dir,
+        )
 
     def get_uuid(self, benchmark):
         """
@@ -123,6 +134,15 @@ class RipSaw(object):
         run(f"oc delete -f {self.operator}", shell=True, cwd=self.dir)
         run("oc delete -f deploy", shell=True, cwd=self.dir)
         run_cmd(f"oc delete project {self.namespace}")
+        run(
+            "oc delete -f resources/kernel-cache-drop-clusterrole.yaml",
+            shell=True,
+            check=True,
+            cwd=self.dir,
+        )
         self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=180)
         # Reset namespace to default
         switch_to_default_rook_cluster_project()
+        helpers.remove_label_from_worker_node(
+            self.worker_nodes, label_key="kernel-cache-dropper"
+        )

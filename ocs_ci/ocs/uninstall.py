@@ -42,7 +42,10 @@ def remove_ocp_registry_from_ocs(platform):
         namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
     )
     params_list = list()
-    if platform.lower() == constants.AWS_PLATFORM:
+    if (
+        platform.lower() == constants.AWS_PLATFORM
+        or platform.lower() == constants.RHV_PLATFORM
+    ):
         params_list.append('[{"op": "remove", "path": "/spec/storage"}]')
         params_list.append('[{"op": "remove", "path": "/status/storage"}]')
 

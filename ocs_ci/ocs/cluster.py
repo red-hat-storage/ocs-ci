@@ -26,6 +26,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     convert_device_size,
     get_trim_mean,
+    ceph_health_check,
 )
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
@@ -258,6 +259,7 @@ class CephCluster(object):
         if (
             config.ENV_DATA["platform"].lower()
             != constants.OPENSHIFT_DEDICATED_PLATFORM
+            and not config.COMPONENTS["disable_noobaa"]
         ):
             self.wait_for_noobaa_health_ok()
 
@@ -1256,6 +1258,28 @@ def get_child_nodes_osd_tree(node_id, osd_tree):
             return osd_tree["nodes"][i]["children"]
 
 
+def get_nodes_osd_tree(osd_tree, node_ids=None):
+    """
+    This function gets the 'ceph osd tree' nodes, which have the ids 'node_ids', and returns
+    them as a list. If 'node_ids' are not passed, it returns all the 'ceph osd tree' nodes.
+
+    Args:
+        osd_tree (dict): Dictionary containing the output of 'ceph osd tree'
+        node_ids (list): The ids of the nodes for which we want to retrieve
+
+    Returns:
+        list: The nodes of a given 'node_ids'. If 'node_ids' are not passed,
+            it returns all the nodes.
+
+    """
+    if not node_ids:
+        return osd_tree["nodes"]
+
+    # Convert to set to reduce complexity
+    node_ids = set(node_ids)
+    return [node for node in osd_tree["nodes"] if node["id"] in node_ids]
+
+
 def check_osds_in_hosts_osd_tree(hosts, osd_tree):
     """
     Checks if osds are formed correctly after cluster expansion
@@ -1388,6 +1412,68 @@ def check_osd_tree_1az_cloud(osd_tree, number_of_osds):
     return check_osds_in_hosts_osd_tree(all_hosts_flatten, osd_tree)
 
 
+def check_osd_tree_1az_vmware_flex(osd_tree, number_of_osds):
+    """
+    Checks whether an OSD tree is created/modified correctly. This can be used as a verification step for
+    deployment and cluster expansion tests.
+    This function is specifically for ocs cluster created on 1 AZ VMWare LSO setup
+
+    Args:
+        osd_tree (dict): Dictionary of the values which represent 'osd tree'.
+        number_of_osds (int): total number of osds in the cluster
+
+    Returns:
+        bool: True, if the ceph osd tree is formed correctly. Else False
+
+    """
+    # in case of vmware, there will be only one zone as of now.
+    # If it's also an lso we use failure domain 'host'. The OSDs are arranged as follows:
+    # ID CLASS WEIGHT  TYPE NAME          STATUS REWEIGHT PRI-AFF
+    # -1       0.29306 root default
+    # -7       0.09769     host compute-0
+    #  2   hdd 0.09769         osd.2          up  1.00000 1.00000
+    # -3       0.09769     host compute-1
+    #  0   hdd 0.09769         osd.0          up  1.00000 1.00000
+    # -5       0.09769     host compute-2
+    #  1   hdd 0.09769         osd.1          up  1.00000 1.00000
+    # There will be no racks, and we will have a failure domain 'host'.
+    # When cluster expansion is successfully done, an osd are added in each host.
+    # Each host will have one or multiple osds under it
+    hosts = osd_tree["nodes"][0]["children"]
+    host_nodes = get_nodes_osd_tree(osd_tree, hosts)
+    osd_ids = []
+
+    for node in host_nodes:
+        node_name = node["name"]
+        node_type = node["type"]
+        expected_node_type = "host"
+        if node_type != expected_node_type:
+            logger.warning(
+                f"The node with the name '{node_name}' is with type '{node_type}' instead of "
+                f"the expected type '{expected_node_type}'"
+            )
+            return False
+
+        node_osd_ids = get_child_nodes_osd_tree(node["id"], osd_tree)
+        if len(node_osd_ids) <= 0:
+            logger.warning(
+                f"Error. Ceph osd tree is NOT formed correctly. "
+                f"The node with the name '{node_name}' has no osds"
+            )
+            return False
+        osd_ids.extend(node_osd_ids)
+
+    if len(osd_ids) != number_of_osds:
+        logger.warning(
+            f"The number of osd ids in the ceph osd tree is {len(osd_ids)} instead of "
+            f"the expected number {number_of_osds}"
+        )
+        return False
+
+    logger.info("Ceph osd tree is formed correctly")
+    return True
+
+
 def check_osds_in_hosts_are_up(osd_tree):
     """
     Check if all the OSD's in status 'up'
@@ -1419,12 +1505,16 @@ def check_ceph_osd_tree():
 
     """
     osd_pods = pod.get_osd_pods()
+    number_of_osds = len(osd_pods)
     # 'ceph osd tree' should show the new osds under right nodes/hosts
     #  Verification is different for 3 AZ and 1 AZ configs
     ct_pod = pod.get_ceph_tools_pod()
     tree_output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
     if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-        return check_osd_tree_1az_vmware(tree_output, len(osd_pods))
+        if is_flexible_scaling_enabled():
+            return check_osd_tree_1az_vmware_flex(tree_output, number_of_osds)
+        else:
+            return check_osd_tree_1az_vmware(tree_output, number_of_osds)
 
     number_of_zones = 3
     if config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS:
@@ -1434,9 +1524,9 @@ def check_ceph_osd_tree():
             if tree_output["nodes"][i]["name"] in "rack0":
                 number_of_zones = 1
         if number_of_zones == 1:
-            return check_osd_tree_1az_cloud(tree_output, len(osd_pods))
+            return check_osd_tree_1az_cloud(tree_output, number_of_osds)
         else:
-            return check_osd_tree_3az_cloud(tree_output, len(osd_pods))
+            return check_osd_tree_3az_cloud(tree_output, number_of_osds)
 
 
 def check_ceph_osd_tree_after_node_replacement():
@@ -1450,13 +1540,9 @@ def check_ceph_osd_tree_after_node_replacement():
     """
     ct_pod = pod.get_ceph_tools_pod()
     osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
-    # We need to add a function to check the ceph osd tree when flexible scaling is enabled.
-    # So currently, when flexible scaling is enabled don't check the Ceph osd tree.
-    # The issue for tracking is https://github.com/red-hat-storage/ocs-ci/issues/4052
-    if not is_flexible_scaling_enabled():
-        if not check_ceph_osd_tree():
-            logger.warning("Incorrect ceph osd tree formation found")
-            return False
+    if not check_ceph_osd_tree():
+        logger.warning("Incorrect ceph osd tree formation found")
+        return False
 
     if not check_osds_in_hosts_are_up(osd_tree):
         logger.warning("Not all the osd's are in status 'up'")
@@ -1525,6 +1611,50 @@ def wait_for_silence_ceph_osd_crash_warning(osd_pod_name, timeout=900):
         return False
 
 
+def get_mon_config_value(key):
+    """
+    Gets the default value of a specific ceph monitor config
+
+    Args:
+        key (str): Configuration key. Ex: mon_max_pg_per_osd
+
+    Returns:
+        any: Ceph monitor configuration value
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    mon_dump_dict = ct_pod.exec_ceph_cmd("ceph mon dump")
+    ceph_mon_name = mon_dump_dict.get("mons")[0].get("name")
+    mon_config_value = ct_pod.exec_ceph_cmd(
+        f"ceph config show mon.{ceph_mon_name} {key}"
+    )
+    return mon_config_value
+
+
+def get_mds_cache_memory_limit():
+    """
+    Get the default value of mds
+
+    Returns:
+        int: Value of mds cache memory limit
+
+    Raises:
+        UnexpectedBehaviour: if MDS-a and MDS-b cache memory limit doesn't match
+
+    """
+    pod_obj = pod.get_ceph_tools_pod()
+    ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-a mds_cache_memory_limit"
+    mds_a_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-b mds_cache_memory_limit"
+    mds_b_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    if mds_a_cache_memory_limit != mds_b_cache_memory_limit:
+        raise UnexpectedBehaviour(
+            f"mds_a_cache_memory_limit: {mds_a_cache_memory_limit}. "
+            f"mds_b_cache_memory_limit: {mds_b_cache_memory_limit}"
+        )
+    return int(mds_a_cache_memory_limit)
+
+
 def is_lso_cluster():
     """
     Check if the cluster is an lso cluster
@@ -1549,6 +1679,37 @@ def is_flexible_scaling_enabled():
     failure_domain = ocs_storage_cluster.get("status").get("failureDomain")
     flexible_scaling = ocs_storage_cluster.get("spec").get("flexibleScaling")
     return failure_domain == "host" and flexible_scaling
+
+
+def check_ceph_health_after_add_capacity(
+    ceph_health_tries=80, ceph_rebalance_timeout=1800
+):
+    """
+    Check Ceph health after adding capacity to the cluster
+
+    Args:
+        ceph_health_tries (int): The number of tries to wait for the Ceph health to be OK.
+        ceph_rebalance_timeout (int): The time to wait for the Ceph cluster rebalanced.
+
+    """
+    if config.RUN.get("io_in_bg"):
+        logger.info(
+            "Increase the time to wait for Ceph health to be health OK, "
+            "because we run IO in the background"
+        )
+        additional_ceph_health_tries = int(config.RUN.get("io_load") * 1.3)
+        ceph_health_tries += additional_ceph_health_tries
+
+        additional_ceph_rebalance_timeout = int(config.RUN.get("io_load") * 40)
+        ceph_rebalance_timeout += additional_ceph_rebalance_timeout
+
+    ceph_health_check(
+        namespace=config.ENV_DATA["cluster_namespace"], tries=ceph_health_tries
+    )
+    ceph_cluster_obj = CephCluster()
+    assert ceph_cluster_obj.wait_for_rebalance(
+        timeout=ceph_rebalance_timeout
+    ), "Data re-balance failed to complete"
 
 
 class CephClusterExternal(CephCluster):

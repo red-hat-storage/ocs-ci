@@ -1,11 +1,13 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from itertools import cycle
+
 import pytest
 from functools import partial
 
 from ocs_ci.framework.testlib import ManageTest, tier4, tier4b
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods,
@@ -69,7 +71,6 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
     Kill ceph daemon while deletion of PVCs, pods and IO are progressing
     """
 
-    num_of_pvcs = 30
     pvc_size = 3
 
     @pytest.fixture()
@@ -80,6 +81,8 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         access_modes = [constants.ACCESS_MODE_RWO]
         if interface == constants.CEPHFILESYSTEM:
             access_modes.append(constants.ACCESS_MODE_RWX)
+            self.num_of_pvcs = 10
+            access_mode_dist_ratio = [8, 2]
 
         # Modify access_modes list to create rbd `block` type volume with
         # RWX access mode. RWX is not supported in filesystem type rbd
@@ -90,6 +93,8 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
                     f"{constants.ACCESS_MODE_RWX}-Block",
                 ]
             )
+            self.num_of_pvcs = 12
+            access_mode_dist_ratio = [5, 5, 2]
 
         pvc_objs = multi_pvc_factory(
             interface=interface,
@@ -98,6 +103,7 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
             size=self.pvc_size,
             access_modes=access_modes,
             access_modes_selection="distribute_random",
+            access_mode_dist_ratio=access_mode_dist_ratio,
             status=constants.STATUS_BOUND,
             num_of_pvc=self.num_of_pvcs,
             wait_each=False,
@@ -105,6 +111,8 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
 
         pod_objs = []
         rwx_pod_objs = []
+
+        nodes_iter = cycle(node.get_worker_nodes())
 
         # Create one pod using each RWO PVC and two pods using each RWX PVC
         for pvc_obj in pvc_objs:
@@ -120,6 +128,7 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
                     interface=interface,
                     pvc=pvc_obj,
                     status="",
+                    node_name=next(nodes_iter),
                     pod_dict_path=pod_dict,
                     raw_block_pv=raw_block_pv,
                 )
@@ -128,6 +137,7 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
                 interface=interface,
                 pvc=pvc_obj,
                 status="",
+                node_name=next(nodes_iter),
                 pod_dict_path=pod_dict,
                 raw_block_pv=raw_block_pv,
             )
@@ -182,8 +192,8 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         pvc_objs, pod_objs, rwx_pod_objs = setup_base
         namespace = pvc_objs[0].project.namespace
 
-        num_of_pods_to_delete = 10
-        num_of_io_pods = 5
+        num_of_pods_to_delete = 3
+        num_of_io_pods = 1
 
         # Select pods to be deleted
         pods_to_delete = pod_objs[:num_of_pods_to_delete]

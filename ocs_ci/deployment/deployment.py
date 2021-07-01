@@ -5,18 +5,16 @@ platforms like AWS, VMWare, Baremetal etc.
 
 from copy import deepcopy
 from semantic_version import Version
-import json
 import logging
 import tempfile
 import time
 
-import requests
 import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
-from ocs_ci.framework import config
+from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
     validate_cluster_on_pvc,
@@ -60,6 +58,7 @@ from ocs_ci.utility import (
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
+    enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
     get_ocp_version,
@@ -74,7 +73,7 @@ from ocs_ci.utility.utils import (
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
-from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
+from ocs_ci.ocs.ui.deployment_ui import DeploymentUI, ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
 
 logger = logging.getLogger(__name__)
@@ -182,6 +181,8 @@ class Deployment(object):
         set_selinux_permissions()
         set_registry_to_managed_state()
         add_stage_cert()
+        if config.ENV_DATA.get("huge_pages"):
+            enable_huge_pages()
 
     def label_and_taint_nodes(self):
         """
@@ -293,72 +294,6 @@ class Deployment(object):
             )
             _ocp.exec_oc_cmd(command=taint_cmd)
 
-    def create_stage_operator_source(self):
-        """
-        This prepare operator source for OCS deployment from stage.
-        """
-        logger.info("Adding Stage Secret")
-        # generate quay token
-        credentials = {
-            "user": {
-                "username": config.DEPLOYMENT["stage_quay_username"],
-                "password": config.DEPLOYMENT["stage_quay_password"],
-            }
-        }
-        token = requests.post(
-            url="https://quay.io/cnr/api/v1/users/login",
-            data=json.dumps(credentials),
-            headers={"Content-Type": "application/json"},
-        ).json()["token"]
-        stage_ns = config.DEPLOYMENT["stage_namespace"]
-
-        # create Secret
-        stage_os_secret = templating.load_yaml(constants.OPERATOR_SOURCE_SECRET_YAML)
-        stage_os_secret["metadata"]["name"] = constants.OPERATOR_SOURCE_SECRET_NAME
-        stage_os_secret["stringData"]["token"] = token
-        stage_secret_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+",
-            prefix=constants.OPERATOR_SOURCE_SECRET_NAME,
-            delete=False,
-        )
-        templating.dump_data_to_temp_yaml(stage_os_secret, stage_secret_data_yaml.name)
-        run_cmd(f"oc create -f {stage_secret_data_yaml.name}")
-        logger.info("Waiting 10 secs after secret is created")
-        time.sleep(10)
-
-        logger.info("Adding Stage Operator Source")
-        # create Operator Source
-        stage_os = templating.load_yaml(constants.OPERATOR_SOURCE_YAML)
-        stage_os["spec"]["registryNamespace"] = stage_ns
-        stage_os["spec"]["authorizationToken"][
-            "secretName"
-        ] = constants.OPERATOR_SOURCE_SECRET_NAME
-        stage_os_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix=constants.OPERATOR_SOURCE_NAME, delete=False
-        )
-        templating.dump_data_to_temp_yaml(stage_os, stage_os_data_yaml.name)
-        run_cmd(f"oc create -f {stage_os_data_yaml.name}")
-        catalog_source = CatalogSource(
-            resource_name=constants.OPERATOR_SOURCE_NAME,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
-        # Wait for catalog source is ready
-        catalog_source.wait_for_state("READY")
-
-    def create_ocs_operator_source(self, image=None):
-        """
-        This prepare catalog or operator source for OCS deployment.
-
-        Args:
-            image (str): Image of ocs registry.
-
-        """
-        if config.DEPLOYMENT.get("stage"):
-            # deployment from stage
-            self.create_stage_operator_source()
-        else:
-            create_catalog_source(image)
-
     def subscribe_ocs(self):
         """
         This method subscription manifest and subscribe to OCS operator.
@@ -468,7 +403,7 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 
-        if ui_deployment:
+        if ui_deployment and ui_deployment_conditions():
             self.deployment_with_ui()
             # Skip the rest of the deployment when deploy via UI
             return
@@ -485,9 +420,8 @@ class Deployment(object):
             ibmcloud.add_deployment_dependencies()
             if not live_deployment:
                 create_ocs_secret(self.namespace)
-                create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         if not live_deployment:
-            self.create_ocs_operator_source(image)
+            create_catalog_source(image)
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
@@ -567,6 +501,39 @@ class Deployment(object):
             kms.deploy()
         cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
 
+        # Figure out all the OCS modules enabled/disabled
+        # CLI parameter --disable-components takes the precedence over
+        # anything which comes from config file
+        if config.ENV_DATA.get("disable_components"):
+            for component in config.ENV_DATA["disable_components"]:
+                config.COMPONENTS[f"disable_{component}"] = True
+                logger.warning(f"disabling: {component}")
+
+        # Update cluster_data with respective component enable/disable
+        for key in config.COMPONENTS.keys():
+            comp_name = constants.OCS_COMPONENTS_MAP[key.split("_")[1]]
+            if config.COMPONENTS[key]:
+                if "noobaa" in key:
+                    merge_dict(
+                        cluster_data,
+                        {
+                            "spec": {
+                                "multiCloudGateway": {"reconcileStrategy": "ignore"}
+                            }
+                        },
+                    )
+                else:
+                    merge_dict(
+                        cluster_data,
+                        {
+                            "spec": {
+                                "managedResources": {
+                                    f"{comp_name}": {"reconcileStrategy": "ignore"}
+                                }
+                            }
+                        },
+                    )
+
         if arbiter_deployment:
             cluster_data["spec"]["arbiter"] = {}
             cluster_data["spec"]["nodeTopologies"] = {}
@@ -635,7 +602,13 @@ class Deployment(object):
                 and not lso_type == constants.AWS_EBS
             ):
                 deviceset_data["count"] = 2
-            if ocs_version >= 4.5:
+            # setting resource limits for AWS i3
+            # https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.6/html-single/deploying_openshift_container_storage_using_amazon_web_services/index#creating-openshift-container-storage-cluster-on-amazon-ec2_local-storage
+            if (
+                ocs_version >= 4.5
+                and config.ENV_DATA.get("worker_instance_type")
+                == constants.AWS_LSO_WORKER_INSTANCE
+            ):
                 deviceset_data["resources"] = {
                     "limits": {"cpu": 2, "memory": "5Gi"},
                     "requests": {"cpu": 1, "memory": "5Gi"},
@@ -765,7 +738,7 @@ class Deployment(object):
             logger.info("Creating namespace and operator group.")
             run_cmd(f"oc create -f {constants.OLM_YAML}")
         if not live_deployment:
-            self.create_ocs_operator_source()
+            create_catalog_source()
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
@@ -877,15 +850,16 @@ class Deployment(object):
                 timeout=600,
             )
 
-            # Check for CephFilesystem creation in ocp
-            cfs_data = cfs.get()
-            cfs_name = cfs_data["items"][0]["metadata"]["name"]
+            if not config.COMPONENTS["disable_cephfs"]:
+                # Check for CephFilesystem creation in ocp
+                cfs_data = cfs.get()
+                cfs_name = cfs_data["items"][0]["metadata"]["name"]
 
-            if helpers.validate_cephfilesystem(cfs_name):
-                logger.info("MDS deployment is successful!")
-                defaults.CEPHFILESYSTEM_NAME = cfs_name
-            else:
-                logger.error("MDS deployment Failed! Please check logs!")
+                if helpers.validate_cephfilesystem(cfs_name):
+                    logger.info("MDS deployment is successful!")
+                    defaults.CEPHFILESYSTEM_NAME = cfs_name
+                else:
+                    logger.error("MDS deployment Failed! Please check logs!")
 
         # Change monitoring backend to OCS
         if config.ENV_DATA.get("monitoring_enabled") and config.ENV_DATA.get(
@@ -901,8 +875,9 @@ class Deployment(object):
                 telemeter_server_url=config.ENV_DATA["telemeter_server_url"]
             )
 
-        # Change registry backend to OCS CEPHFS RWX PVC
-        registry.change_registry_backend_to_ocs()
+        if not config.COMPONENTS["disable_cephfs"]:
+            # Change registry backend to OCS CEPHFS RWX PVC
+            registry.change_registry_backend_to_ocs()
 
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
@@ -1031,8 +1006,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         ignore_upgrade (bool): Ignore upgrade parameter.
 
     """
-    if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
-        link_all_sa_and_secret(constants.OCS_SECRET, constants.MARKETPLACE_NAMESPACE)
     logger.info("Adding CatalogSource")
     if not image:
         image = config.DEPLOYMENT.get("ocs_registry_image", "")
@@ -1064,6 +1037,9 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         )
 
     catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
+    if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+        create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
+        catalog_source_data["spec"]["secrets"] = [constants.OCS_SECRET]
     cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
     change_cs_condition = (
         (image or image_tag)

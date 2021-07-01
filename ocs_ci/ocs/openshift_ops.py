@@ -1,11 +1,12 @@
 import os
 import logging
+from shutil import which
 
 from kubernetes import config
 from openshift.dynamic import DynamicClient, exceptions
 
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import get_openshift_client, run_cmd
 import ocs_ci.ocs.defaults as default
 
 log = logging.getLogger(__name__)
@@ -143,6 +144,8 @@ class OCP(object):
             log.warning("The kubeconfig file %s doesn't exist!", kubeconfig_path)
             return False
         os.environ["KUBECONFIG"] = kubeconfig_path
+        if not which("oc"):
+            get_openshift_client()
         try:
             run_cmd("oc cluster-info")
         except CommandFailed as ex:

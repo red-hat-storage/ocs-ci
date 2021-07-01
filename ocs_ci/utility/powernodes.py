@@ -1,6 +1,7 @@
 import logging
 import time
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.node import wait_for_nodes_status, get_worker_nodes, get_master_nodes
@@ -29,6 +30,10 @@ class PowerNodes(object):
             self.isKVM = True
         else:
             self.isKVM = False
+
+        if "bastion_ip" in config.ENV_DATA:
+            self.isKVM = False
+
         logger.info(f"iskvm check: {self.isKVM}")
 
         self.service = KubeletService()

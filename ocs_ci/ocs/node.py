@@ -710,7 +710,11 @@ def get_compute_node_names(no_replace=False):
     """
     platform = config.ENV_DATA.get("platform").lower()
     compute_node_objs = get_nodes()
-    if platform in [constants.VSPHERE_PLATFORM, constants.AWS_PLATFORM]:
+    if platform in [
+        constants.VSPHERE_PLATFORM,
+        constants.AWS_PLATFORM,
+        constants.RHV_PLATFORM,
+    ]:
         return [
             compute_obj.get()["metadata"]["labels"][constants.HOSTNAME_LABEL]
             for compute_obj in compute_node_objs
@@ -1002,7 +1006,7 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     log.info(
         "Replace the old node with the new worker node in localVolumeDiscovery and localVolumeSet"
     )
-    res = add_new_node_to_lvd_and_lvs(
+    res = replace_old_node_in_lvd_and_lvs(
         old_node_name=osd_node_hostname_label,
         new_node_name=new_node_hostname_label,
     )
@@ -1109,7 +1113,7 @@ def get_worker_nodes_not_in_ocs():
 
 
 def node_replacement_verification_steps_user_side(
-    old_node_name, new_node_name, new_osd_node_name, old_osd_id
+    old_node_name, new_node_name, new_osd_node_name, old_osd_ids
 ):
     """
     Check the verification steps that the user should perform after the process
@@ -1119,7 +1123,7 @@ def node_replacement_verification_steps_user_side(
         old_node_name (str): The name of the old node that has been deleted
         new_node_name (str): The name of the new node that has been created
         new_osd_node_name (str): The name of the new node that has been added to osd nodes
-        old_osd_id (str): The old osd id
+        old_osd_ids (list): List of the old osd ids
 
     Returns:
         bool: True if all the verification steps passed. False otherwise
@@ -1147,18 +1151,31 @@ def node_replacement_verification_steps_user_side(
         log.warning("Not all the pods in running state")
         return False
 
-    new_osd_pod = get_node_pods(new_osd_node_name, pods_to_search=pod.get_osd_pods())[0]
-    if not new_osd_pod:
+    new_osd_node_pods = get_node_pods(
+        new_osd_node_name, pods_to_search=pod.get_osd_pods()
+    )
+    if not new_osd_node_pods:
         log.warning("Didn't find any osd pods running on the new node")
         return False
 
-    new_osd_id = pod.get_osd_pod_id(new_osd_pod)
-    if old_osd_id != new_osd_id:
-        log.warning(
-            f"The osd pod, that associated to the new node, has the id {new_osd_id} "
-            f"instead of the expected osd id {old_osd_id}"
-        )
+    log.info("Search for the old osd ids")
+    new_osd_pods = pod.get_osd_pods_having_ids(old_osd_ids)
+    if len(new_osd_pods) < len(old_osd_ids):
+        log.warning("Didn't find osd pods for all the osd ids")
         return False
+
+    for osd_pod in new_osd_pods:
+        osd_id = pod.get_osd_pod_id(osd_pod)
+        osd_pod_node = pod.get_pod_node(osd_pod)
+        if not osd_pod_node:
+            log.warning(
+                f"Didn't find osd node for the osd pod '{osd_pod.name}' with id '{osd_id}'"
+            )
+            return False
+
+        log.info(
+            f"Found new osd pod '{osd_pod.name}' with id '{osd_id}' on the node '{osd_pod_node.name}'"
+        )
 
     log.info("Verification steps from the user side finish successfully")
     return True
@@ -1387,7 +1404,7 @@ def get_node_index_in_local_block(node_name):
     return node_values.index(node_name)
 
 
-def add_new_node_to_lvd_and_lvs(old_node_name, new_node_name):
+def replace_old_node_in_lvd_and_lvs(old_node_name, new_node_name):
     """
     Replace the old node with the new node in localVolumeDiscovery and localVolumeSet,
     as described in the documents of node replacement with LSO
@@ -1506,3 +1523,121 @@ def verify_all_nodes_created():
         raise NotAllNodesCreated(
             f"Expected number of nodes is {expected_num_nodes} but created during deployment is {existing_num_nodes}"
         )
+
+
+def add_node_to_lvd_and_lvs(node_name):
+    """
+    Add a new node to localVolumeDiscovery and localVolumeSet
+
+    Args:
+        node_name (str): the new node name to add to localVolumeDiscovery and localVolumeSet
+
+    Returns:
+        bool: True in case the changes are applied successfully. False otherwise
+
+    """
+    path_to_nodes = "/spec/nodeSelector/nodeSelectorTerms/0/matchExpressions/0/values/-"
+    params = f"""[{{"op": "add", "path": "{path_to_nodes}", "value": "{node_name}"}}]"""
+
+    ocp_lvd_obj = OCP(
+        kind=constants.LOCAL_VOLUME_DISCOVERY,
+        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
+    )
+
+    ocp_lvs_obj = OCP(
+        kind=constants.LOCAL_VOLUME_SET,
+        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
+        resource_name=constants.LOCAL_BLOCK_RESOURCE,
+    )
+
+    lvd_result = ocp_lvd_obj.patch(params=params, format_type="json")
+    lvs_result = ocp_lvs_obj.patch(params=params, format_type="json")
+
+    return lvd_result and lvs_result
+
+
+def add_new_nodes_and_label_upi_lso(
+    node_type,
+    num_nodes,
+    mark_for_ocs_label=True,
+    node_conf=None,
+    add_disks=True,
+    add_nodes_to_lvs_and_lvd=True,
+):
+    """
+    Add a new node for aws/vmware upi lso platform and label it
+
+    Args:
+        node_type (str): Type of node, RHEL or RHCOS
+        num_nodes (int): number of nodes to add
+        mark_for_ocs_label (bool): True if label the new nodes
+        node_conf (dict): The node configurations.
+        add_disks (bool): True if add disks to the new nodes.
+        add_nodes_to_lvs_and_lvd (bool): True if add the new nodes to
+            localVolumeDiscovery and localVolumeSet.
+
+    Returns:
+        list: new spun node names
+
+    """
+    new_node_names = add_new_node_and_label_upi(
+        node_type, num_nodes, mark_for_ocs_label, node_conf
+    )
+    new_nodes = get_node_objs(new_node_names)
+
+    if add_disks:
+        for node_obj in new_nodes:
+            add_disk_to_node(node_obj)
+
+    if add_nodes_to_lvs_and_lvd:
+        for node_obj in new_nodes:
+            add_node_to_lvd_and_lvs(node_obj.name)
+
+    return new_node_names
+
+
+def get_nodes_in_statuses(statuses):
+    """
+    Get all nodes in specific statuses
+
+    Args:
+        statuses (list): List of the statuses to search for the nodes
+
+    Returns:
+        list: OCP objects representing the nodes in the specific statuses
+
+    """
+    nodes = get_node_objs()
+    return [n for n in nodes if n.ocp.get_resource_status(n.name) in statuses]
+
+
+def get_node_osd_ids(node_name):
+    """
+    Get the node osd ids
+
+    Args:
+        node_name (str): The node name to get the osd ids
+
+    Returns:
+        list: The list of the osd ids
+
+    """
+    osd_pods = pod.get_osd_pods()
+    node_osd_pods = get_node_pods(node_name, pods_to_search=osd_pods)
+    return [pod.get_osd_pod_id(osd_pod) for osd_pod in node_osd_pods]
+
+
+def get_node_mon_ids(node_name):
+    """
+    Get the node mon ids
+
+    Args:
+        node_name (str): The node name to get the mon ids
+
+    Returns:
+        list: The list of the mon ids
+
+    """
+    mon_pods = pod.get_mon_pods()
+    node_mon_pods = get_node_pods(node_name, pods_to_search=mon_pods)
+    return [pod.get_mon_pod_id(mon_pod) for mon_pod in node_mon_pods]

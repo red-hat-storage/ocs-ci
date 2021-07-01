@@ -168,6 +168,10 @@ vsphere_platform_required = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() != "vsphere",
     reason="Test runs ONLY on VSPHERE deployed cluster",
 )
+rhv_platform_required = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() != "rhv",
+    reason="Test runs ONLY on RHV deployed cluster",
+)
 
 ipi_deployment_required = pytest.mark.skipif(
     config.ENV_DATA["deployment_type"].lower() != "ipi",
@@ -207,6 +211,11 @@ skipif_ibm_power = pytest.mark.skipif(
     reason="Test will not run on IBM Power",
 )
 
+skipif_disconnected_cluster = pytest.mark.skipif(
+    config.DEPLOYMENT.get("disconnected") is True,
+    reason="Test will not run on disconnected clusters",
+)
+
 skipif_external_mode = pytest.mark.skipif(
     config.DEPLOYMENT.get("external_mode") is True,
     reason="Test will not run on External Mode cluster",
@@ -222,12 +231,24 @@ skipif_no_lso = pytest.mark.skipif(
     reason="Test run only on LSO deployed cluster",
 )
 
+skipif_rhel_os = pytest.mark.skipif(
+    (config.ENV_DATA.get("rhel_workers", None) is True)
+    or (config.ENV_DATA.get("rhel_user", None) is not None),
+    reason="Test will not run on cluster with RHEL OS",
+)
+
 skipif_vsphere_ipi = pytest.mark.skipif(
     (
         config.ENV_DATA["platform"].lower() == "vsphere"
         and config.ENV_DATA["deployment_type"].lower() == "ipi"
     ),
     reason="Test will not run on vSphere IPI cluster",
+)
+
+skipif_tainted_nodes = pytest.mark.skipif(
+    config.DEPLOYMENT.get("infra_nodes") is True
+    or config.DEPLOYMENT.get("ocs_operator_nodes_to_taint") > 0,
+    reason="Test will not run if nodes are tainted",
 )
 
 metrics_for_external_mode_required = pytest.mark.skipif(
@@ -253,6 +274,9 @@ skipif_ocp_version = pytest.mark.skipif_ocp_version
 
 # Marker for skipping tests based on OCS version
 skipif_ocs_version = pytest.mark.skipif_ocs_version
+
+# Marker for skipping tests based on UI
+skipif_ui = pytest.mark.skipif_ui
 
 # Marker for skipping tests if the cluster is upgraded from a particular
 # OCS version

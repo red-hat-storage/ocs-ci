@@ -66,6 +66,8 @@ setup(
         # greenlet 1.0.0 is broken on ppc64le
         # https://github.com/python-greenlet/greenlet/issues/230
         "greenlet<1.0.0",
+        "ovirt-engine-sdk-python==4.4.11",
+        "junitparser",
     ],
     entry_points={
         "console_scripts": [

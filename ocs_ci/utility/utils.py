@@ -42,6 +42,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedImage,
     UnsupportedOSType,
 )
+from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
 
 
@@ -568,7 +569,7 @@ def expose_ocp_version(version):
     """
     if version.endswith(".nightly"):
         latest_nightly_url = (
-            f"https://openshift-release.svc.ci.openshift.org/api/v1/"
+            f"https://amd64.ocp.releases.ci.openshift.org/api/v1/"
             f"releasestream/{version}/latest"
         )
         version_url_content = get_url_content(latest_nightly_url)
@@ -602,7 +603,6 @@ def get_openshift_installer(
 
     """
     version = version or config.DEPLOYMENT["installer_version"]
-    version = expose_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
@@ -612,6 +612,7 @@ def get_openshift_installer(
         log.debug(f"Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
+        version = expose_ocp_version(version)
         log.info(f"Downloading openshift installer ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
@@ -627,7 +628,6 @@ def get_openshift_installer(
 
     installer_version = run_cmd(f"{installer_binary_path} version")
     log.info(f"OpenShift Installer version: {installer_version}")
-
     return installer_binary_path
 
 
@@ -679,9 +679,7 @@ def get_ocm_cli(
 
 
 def get_openshift_client(
-    version=None,
-    bin_dir=None,
-    force_download=False,
+    version=None, bin_dir=None, force_download=False, skip_comparison=False
 ):
     """
     Download the OpenShift client binary, if not already present.
@@ -692,22 +690,30 @@ def get_openshift_client(
             (default: config.RUN['client_version'])
         bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
         force_download (bool): Force client download even if already present
+        skip_comparison (bool): Skip the comparison between the existing OCP client
+            version and the configured one.
 
     Returns:
         str: Path to the client binary
 
     """
     version = version or config.RUN["client_version"]
-    version = expose_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     client_binary_path = os.path.join(bin_dir, "oc")
     kubectl_binary_path = os.path.join(bin_dir, "kubectl")
     download_client = True
     client_version = None
+    try:
+        version = expose_ocp_version(version)
+    except Exception:
+        log.exception("Unable to expose OCP version, skipping client download.")
+        skip_comparison = True
+        download_client = False
+        force_download = False
 
     if force_download:
         log.info("Forcing client download.")
-    elif os.path.isfile(client_binary_path):
+    elif os.path.isfile(client_binary_path) and not skip_comparison:
         current_client_version = get_client_version(client_binary_path)
         if current_client_version != version:
             log.info(
@@ -770,7 +776,6 @@ def get_openshift_client(
         os.chdir(previous_dir)
 
     log.info(f"OpenShift Client version: {client_version}")
-
     return client_binary_path
 
 
@@ -848,7 +853,7 @@ def get_openshift_mirror_url(file_name, version):
         raise UnsupportedOSType
     url_template = config.DEPLOYMENT.get(
         "ocp_url_template",
-        "https://openshift-release-artifacts.svc.ci.openshift.org/"
+        "https://openshift-release-artifacts.apps.ci.l2s4.p1.openshiftapps.com/"
         "{version}/{file_name}-{os_type}-{version}.tar.gz",
     )
     url = url_template.format(
@@ -1367,7 +1372,11 @@ def email_reports(session):
     # total = passed + failed + error
     # percentage_passed = (passed / total) * 100
 
-    build_id = get_ocs_build_number()
+    try:
+        build_id = get_ocs_build_number()
+    except Exception:
+        build_id = ""
+        log.exception("Getting OCS operator build number failed!")
     build_str = f"BUILD ID: {build_id} " if build_id else ""
     mailids = config.RUN["cli_params"]["email"]
     recipients = []
@@ -1399,8 +1408,8 @@ def email_reports(session):
         s.sendmail(sender, recipients, msg.as_string())
         s.quit()
         log.info(f"Results have been emailed to {recipients}")
-    except Exception as e:
-        log.exception(e)
+    except Exception:
+        log.exception("Sending email with results failed!")
 
 
 def get_cluster_version_info():
@@ -2410,13 +2419,30 @@ def skipif_ocs_version(expressions):
     Return:
         'True' if test needs to be skipped else 'False'
     """
-    skip_this = True
     expr_list = [expressions] if isinstance(expressions, str) else expressions
-    for expr in expr_list:
-        comparision_str = config.ENV_DATA["ocs_version"] + expr
-        skip_this = skip_this and eval(comparision_str)
-    # skip_this will be either True or False after eval
-    return skip_this
+    return any(eval(config.ENV_DATA["ocs_version"] + expr) for expr in expr_list)
+
+
+def skipif_ui(ui_test):
+    """
+    This function evaluates the condition for ui test skip
+    based on ui_test expression
+
+    Args:
+        ui_test (str): condition for which we need to check,
+
+    Return:
+        'True' if test needs to be skipped else 'False'
+
+    """
+    from ocs_ci.ocs.ui.views import locators
+
+    ocp_version = get_running_ocp_version()
+    try:
+        locators[ocp_version][ui_test]
+    except KeyError:
+        return True
+    return False
 
 
 def get_ocs_version_from_image(image):
@@ -2697,6 +2723,9 @@ def login_to_mirror_registry(authfile):
         authfile (str): authfile (pull-secret) path
 
     """
+    # load cluster info
+    load_cluster_info()
+
     mirror_registry = config.DEPLOYMENT["mirror_registry"]
     mirror_registry_user = config.DEPLOYMENT["mirror_registry_user"]
     mirror_registry_password = config.DEPLOYMENT["mirror_registry_password"]
@@ -2837,7 +2866,10 @@ def set_registry_to_managed_state():
     Currently it has to be moved here to enable CA certificate to be
     properly propagated for the stage deployment as mentioned in BZ.
     """
-    if config.ENV_DATA["platform"] not in constants.CLOUD_PLATFORMS:
+    # In RHV platform config is already set to Managed and storage pre-configured
+    on_prem_platform_to_exclude = [constants.RHV_PLATFORM]
+    platform_list_to_exclude = constants.CLOUD_PLATFORMS + on_prem_platform_to_exclude
+    if config.ENV_DATA["platform"] not in platform_list_to_exclude:
         cluster_config = yaml.safe_load(
             exec_cmd(f"oc get {constants.IMAGE_REGISTRY_CONFIG} -o yaml").stdout
         )
@@ -3331,9 +3363,14 @@ def add_chrony_to_ocp_deployment():
             "machineconfiguration.openshift.io/role"
         ] = role
         chrony_template_obj["metadata"]["name"] = f"99-{role}-chrony-configuration"
-        chrony_template_obj["spec"]["config"]["ignition"][
-            "version"
-        ] = config.DEPLOYMENT["ignition_version"]
+        ignition_version = config.DEPLOYMENT["ignition_version"]
+        chrony_template_obj["spec"]["config"]["ignition"]["version"] = ignition_version
+
+        if Version.coerce(ignition_version) < Version.coerce("3.0"):
+            chrony_template_obj["spec"]["config"]["storage"]["files"][0][
+                "filesystem"
+            ] = "root"
+
         chrony_template_str = yaml.safe_dump(chrony_template_obj)
         chrony_file = os.path.join(
             config.ENV_DATA["cluster_path"],
@@ -3342,3 +3379,11 @@ def add_chrony_to_ocp_deployment():
         )
         with open(chrony_file, "w") as f:
             f.write(chrony_template_str)
+
+
+def enable_huge_pages():
+    log.info("Enabling huge pages.")
+    exec_cmd(f"oc apply -f {constants.HUGE_PAGES_TEMPLATE}")
+    time.sleep(10)
+    log.info("Waiting for machine config will be applied with huge pages")
+    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE)

@@ -1,20 +1,30 @@
+import datetime
 import logging
 import os
 import time
-import datetime
 
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.support.ui import WebDriverWait
+from semantic_version.base import Version
 from webdriver_manager.chrome import ChromeDriverManager
 
-from ocs_ci.framework import config as ocsci_config
-from ocs_ci.utility.utils import run_cmd, get_kubeadmin_password, get_ocp_version
-from ocs_ci.ocs.ui.views import locators
 from ocs_ci.framework import config
+from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs import constants
-
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.ui.views import locators
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    get_kubeadmin_password,
+    get_ocp_version,
+    run_cmd,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +41,8 @@ class BaseUI:
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
             f"screenshots_ui_{ocsci_config.RUN['run_id']}",
         )
-        os.mkdir(self.screenshots_folder)
+        if not os.path.isdir(self.screenshots_folder):
+            os.mkdir(self.screenshots_folder)
         logger.info(f"screenshots pictures:{self.screenshots_folder}")
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             self.storage_class = "thin_sc"
@@ -46,12 +57,20 @@ class BaseUI:
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         """
-        wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
-        screenshot = ocsci_config.UI_SELENIUM.get("screenshot")
-        if screenshot:
+        try:
+            wait = WebDriverWait(self.driver, timeout)
+            element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+            screenshot = ocsci_config.UI_SELENIUM.get("screenshot")
+            if screenshot:
+                self.take_screenshot()
+            element.click()
+        except TimeoutException as e:
             self.take_screenshot()
-        element.click()
+            logger.error(e)
+            raise TimeoutException
+
+    def do_click_by_id(self, id, timeout=30):
+        return self.do_click((id, By.ID), timeout)
 
     def do_send_keys(self, locator, text, timeout=30):
         """
@@ -62,12 +81,17 @@ class BaseUI:
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         """
-        wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
-        element.send_keys(text)
-        screenshot = ocsci_config.UI_SELENIUM.get("screenshot")
-        if screenshot:
+        try:
+            wait = WebDriverWait(self.driver, timeout)
+            element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+            element.send_keys(text)
+            screenshot = ocsci_config.UI_SELENIUM.get("screenshot")
+            if screenshot:
+                self.take_screenshot()
+        except TimeoutException as e:
             self.take_screenshot()
+            logger.error(e)
+            raise TimeoutException
 
     def is_expanded(self, locator, timeout=30):
         """
@@ -125,7 +149,7 @@ class BaseUI:
         if status != current_status:
             self.do_click(locator=locator)
 
-    def check_element_text(self, expected_text):
+    def check_element_text(self, expected_text, element="*"):
         """
         Check if the text matches the expected text.
 
@@ -137,7 +161,7 @@ class BaseUI:
 
         """
         element_list = self.driver.find_elements_by_xpath(
-            f"//*[contains(text(), '{expected_text}')]"
+            f"//{element}[contains(text(), '{expected_text}')]"
         )
         return len(element_list) > 0
 
@@ -147,6 +171,15 @@ class BaseUI:
 
         """
         self.driver.refresh()
+
+    def scroll_into_view(self, locator):
+        """
+        Scroll element into view
+
+        """
+        actions = ActionChains(self.driver)
+        element = self.driver.find_element(locator[1], locator[0])
+        actions.move_to_element(element).perform()
 
     def take_screenshot(self):
         """
@@ -173,6 +206,8 @@ class PageNavigator(BaseUI):
         super().__init__(driver)
         ocp_version = get_ocp_version()
         self.page_nav = locators[ocp_version]["page"]
+        if Version.coerce(ocp_version) >= Version.coerce("4.8"):
+            self.generic_locators = locators[ocp_version]["generic"]
 
     def navigate_overview_page(self):
         """
@@ -182,6 +217,16 @@ class PageNavigator(BaseUI):
         logger.info("Navigate to Overview Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
         self.do_click(locator=self.page_nav["overview_page"])
+
+    def navigate_quickstarts_page(self):
+        """
+        Navigate to Quickstarts Page
+
+        """
+        self.navigate_overview_page()
+        logger.info("Navigate to Quickstarts Page")
+        self.scroll_into_view(self.page_nav["quickstarts"])
+        self.do_click(locator=self.page_nav["quickstarts"])
 
     def navigate_projects_page(self):
         """
@@ -236,6 +281,18 @@ class PageNavigator(BaseUI):
         logger.info("Navigate to Installed Operators Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
         self.do_click(self.page_nav["installed_operators_page"])
+
+    def navigate_to_ocs_operator_page(self):
+        """
+        Navigate to the OCS Operator management page
+        """
+        self.navigate_installed_operators_page()
+        logger.info("Select openshift-storage project")
+        self.do_click(self.generic_locators["project_selector"])
+        self.do_click(self.generic_locators["select_openshift-storage_project"])
+
+        logger.info("Enter the OCS operator page")
+        self.do_click(self.generic_locators["ocs_operator"])
 
     def navigate_persistentvolumes_page(self):
         """
@@ -345,7 +402,71 @@ class PageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Workloads"])
         self.do_click(locator=self.page_nav["Pods"])
 
+    def verify_current_page_resource_status(self, status_to_check, timeout=30):
+        """
+        Compares a given status string to the one shown in the resource's UI page
 
+        Args:
+            status_to_check (str): The status that will be compared with the one in the UI
+            timeout (int): How long should the check run before moving on
+
+        Returns:
+            bool: True if the resource was found, False otherwise
+        """
+
+        def _retrieve_current_status_from_ui():
+            resource_status = WebDriverWait(self.driver, timeout).until(
+                ec.visibility_of_element_located(
+                    self.generic_locators["resource_status"][::-1]
+                )
+            )
+            logger.info(f"Resource status is {resource_status.text}")
+            return resource_status
+
+        logger.info(
+            f"Verifying that the resource has reached a {status_to_check} status"
+        )
+        try:
+            for resource_ui_status in TimeoutSampler(
+                timeout,
+                3,
+                _retrieve_current_status_from_ui,
+            ):
+                if resource_ui_status.text.lower() == status_to_check.lower():
+                    return True
+        except TimeoutExpiredError:
+            logger.error(
+                "The resource did not reach the expected state within the time limit."
+            )
+            return False
+
+
+def take_screenshot(driver):
+    """
+    Take screenshot using python code
+
+    Args:
+        driver (Selenium WebDriver)
+
+    """
+    screenshots_folder = os.path.join(
+        os.path.expanduser(ocsci_config.RUN["log_dir"]),
+        f"screenshots_ui_{ocsci_config.RUN['run_id']}",
+    )
+    if not os.path.isdir(screenshots_folder):
+        os.mkdir(screenshots_folder)
+    time.sleep(1)
+    filename = os.path.join(
+        screenshots_folder,
+        f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
+    )
+    logger.info(f"Creating snapshot: {filename}")
+    driver.save_screenshot(filename)
+    time.sleep(0.5)
+
+
+@retry(TimeoutException, tries=3, delay=3, backoff=2)
+@retry(WebDriverException, tries=3, delay=3, backoff=2)
 def login_ui():
     """
     Login to OpenShift Console
@@ -375,26 +496,42 @@ def login_ui():
         if ignore_ssl:
             chrome_options.add_argument("--ignore-ssl-errors=yes")
             chrome_options.add_argument("--ignore-certificate-errors")
+            chrome_options.add_argument("--allow-insecure-localhost")
+            capabilities = chrome_options.to_capabilities()
+            capabilities["acceptInsecureCerts"] = True
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
         if headless:
             chrome_options.add_argument("--headless")
+            chrome_options.add_argument("window-size=1920,1400")
 
         chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
         driver = webdriver.Chrome(
             ChromeDriverManager(chrome_type=chrome_browser_type).install(),
-            chrome_options=chrome_options,
+            options=chrome_options,
         )
     else:
         raise ValueError(f"Not Support on {browser}")
 
-    wait = WebDriverWait(driver, 30)
+    wait = WebDriverWait(driver, 60)
     driver.maximize_window()
     driver.get(console_url)
+    if config.ENV_DATA["flexy_deployment"]:
+        try:
+            element = wait.until(
+                ec.element_to_be_clickable(
+                    (login_loc["flexy_kubeadmin"][1], login_loc["flexy_kubeadmin"][0])
+                )
+            )
+            element.click()
+        except TimeoutException as e:
+            take_screenshot(driver)
+            logger.error(e)
     element = wait.until(
         ec.element_to_be_clickable((login_loc["username"][1], login_loc["username"][0]))
     )
+    take_screenshot(driver)
     element.send_keys("kubeadmin")
     element = wait.until(
         ec.element_to_be_clickable((login_loc["password"][1], login_loc["password"][0]))
@@ -406,7 +543,7 @@ def login_ui():
         )
     )
     element.click()
-    WebDriverWait(driver, 30).until(ec.title_is(login_loc["ocp_page"]))
+    WebDriverWait(driver, 60).until(ec.title_is(login_loc["ocp_page"]))
     return driver
 
 
@@ -418,4 +555,5 @@ def close_browser(driver):
         driver (Selenium WebDriver)
 
     """
+    take_screenshot(driver)
     driver.close()

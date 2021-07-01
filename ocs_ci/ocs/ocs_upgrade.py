@@ -85,7 +85,6 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
 
     """
     number_of_worker_nodes = len(get_nodes())
-    osd_count = get_osd_count()
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
     default_noobaa_pods = 3
@@ -136,29 +135,31 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     verify_pods_upgraded(
         old_images, selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL, count=2
     )
-    verify_pods_upgraded(
-        old_images,
-        selector=constants.MON_APP_LABEL,
-        count=3,
-    )
-    verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
-    osd_timeout = 600 if upgrade_version >= parse_version("4.5") else 750
-    verify_pods_upgraded(
-        old_images,
-        selector=constants.OSD_APP_LABEL,
-        count=osd_count,
-        timeout=osd_timeout * osd_count,
-    )
-    verify_pods_upgraded(old_images, selector=constants.MDS_APP_LABEL, count=2)
-    if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
-        rgw_count = get_rgw_count(
-            upgrade_version.base_version, True, version_before_upgrade
-        )
+    if not config.DEPLOYMENT.get("external_mode"):
         verify_pods_upgraded(
             old_images,
-            selector=constants.RGW_APP_LABEL,
-            count=rgw_count,
+            selector=constants.MON_APP_LABEL,
+            count=3,
         )
+        verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
+        osd_timeout = 600 if upgrade_version >= parse_version("4.5") else 750
+        osd_count = get_osd_count()
+        verify_pods_upgraded(
+            old_images,
+            selector=constants.OSD_APP_LABEL,
+            count=osd_count,
+            timeout=osd_timeout * osd_count,
+        )
+        verify_pods_upgraded(old_images, selector=constants.MDS_APP_LABEL, count=2)
+        if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
+            rgw_count = get_rgw_count(
+                upgrade_version.base_version, True, version_before_upgrade
+            )
+            verify_pods_upgraded(
+                old_images,
+                selector=constants.RGW_APP_LABEL,
+                count=rgw_count,
+            )
 
 
 class OCSUpgrade(object):
@@ -392,8 +393,11 @@ class OCSUpgrade(object):
             setup_ceph_toolbox(force_setup=True)
         # End of workaround
 
-        osd_count = get_osd_count()
-        csv_post_upgrade.wait_for_phase("Succeeded", timeout=200 * osd_count)
+        if config.DEPLOYMENT.get("external_mode"):
+            timeout = 200
+        else:
+            timeout = 200 * get_osd_count()
+        csv_post_upgrade.wait_for_phase("Succeeded", timeout=timeout)
         post_upgrade_images = get_images(csv_post_upgrade.get())
         old_images, _, _ = get_upgrade_image_info(
             pre_upgrade_images, post_upgrade_images

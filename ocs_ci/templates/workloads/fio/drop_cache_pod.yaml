@@ -6,17 +6,22 @@ metadata:
 spec:
   containers:
   - name: rook-ceph-osd-cache-drop
-    image: quay.io/cloud-bulldozer/ceph-cache-dropper:latest
+    image: quay.io/ocsci/osd_cache_drop:latest-4.8
     imagePullPolicy: Always
     command: [/bin/sh, -c]
     args:
-      - cd /opt/bohica/ceph-cache-dropper; python ./osd-cache-drop-websvc.py
+      - cd /opt/bohica/ceph-cache-dropper; python3 ./osd-cache-drop-websvc.py
     env:
-      - name: ROOK_ADMIN_SECRET
+      - name: ROOK_CEPH_USERNAME
         valueFrom:
           secretKeyRef:
-            key: admin-secret
             name: rook-ceph-mon
+            key: ceph-username
+      - name: ROOK_CEPH_SECRET
+        valueFrom:
+          secretKeyRef:
+            name: rook-ceph-mon
+            key: ceph-secret
     securityContext:
       privileged: true
     volumeMounts:

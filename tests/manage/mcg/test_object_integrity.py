@@ -11,7 +11,10 @@ from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity,
     retrieve_anon_s3_resource,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_openshift_dedicated,
+    skipif_ocs_version,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +69,7 @@ class TestObjectIntegrity(MCGTest):
                         ]
                     },
                 },
-                marks=[tier1],
+                marks=[tier1, skipif_ocs_version("<4.7")],
             ),
         ],
         ids=[

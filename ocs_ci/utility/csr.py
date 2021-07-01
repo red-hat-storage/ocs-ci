@@ -5,7 +5,8 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp
 from ocs_ci.utility.vsphere import VSPHERE
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler, get_ocp_version
+from semantic_version import Version
 
 logger = logging.getLogger(__name__)
 
@@ -150,8 +151,9 @@ def wait_for_all_nodes_csr_and_approve(timeout=900, sleep=10, expected_node_num=
 
     """
     start_time = time.time()
-    reboot_timeout = 120
+    reboot_timeout = 300
     vsphere_object = None
+    is_vms_without_ip = False
     if config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
         vsphere_object = VSPHERE(
             config.ENV_DATA["vsphere_server"],
@@ -162,9 +164,14 @@ def wait_for_all_nodes_csr_and_approve(timeout=900, sleep=10, expected_node_num=
     if not expected_node_num:
         # expected number of nodes is total of master, worker nodes and
         # bootstrapper node
+        # In OCP 4.8, an extra CSR (openshift-authenticator) is added
+        ocp_version = get_ocp_version()
         expected_node_num = (
             config.ENV_DATA["master_replicas"] + config.ENV_DATA["worker_replicas"] + 1
         )
+        if Version.coerce(ocp_version) >= Version.coerce("4.8"):
+            expected_node_num += 1
+
     for csr_nodes in TimeoutSampler(timeout=timeout, sleep=sleep, func=get_nodes_csr):
         logger.debug(f"CSR data: {csr_nodes}")
         if len(csr_nodes.keys()) == expected_node_num:
@@ -181,10 +188,22 @@ def wait_for_all_nodes_csr_and_approve(timeout=900, sleep=10, expected_node_num=
         pending_csrs = get_pending_csr()
         if pending_csrs:
             approve_csrs(pending_csrs)
-        # In vSphere deployment it sometime happes that VM doesn't get ip and
+        # In vSphere deployment it sometime happens that VM doesn't get ip and
         # then we need to restart it to make our CI more stable and let the VM
-        # to get IP and continue with loading ignition config. The rester of
-        # the VMs happens only once in reboot_timeout (120 seconds).
+        # to get IP and continue with loading ignition config. The restart of
+        # the VMs happens only once in reboot_timeout (300 seconds).
         if vsphere_object and time.time() - start_time >= reboot_timeout:
             start_time = time.time()
-            vsphere_object.find_vms_without_ip_and_restart()
+            if not is_vms_without_ip:
+                vms_without_ip = vsphere_object.find_vms_without_ip(
+                    config.ENV_DATA.get("cluster_name"),
+                    config.ENV_DATA["vsphere_datacenter"],
+                    config.ENV_DATA["vsphere_cluster"],
+                )
+                if vms_without_ip:
+                    vsphere_object.restart_vms(vms_without_ip, force=True)
+                    # over-writing start_time here so that we have actual reboot timeout
+                    # calculated from the point after restarting vms
+                    start_time = time.time()
+                else:
+                    is_vms_without_ip = True

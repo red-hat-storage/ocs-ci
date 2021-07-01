@@ -14,6 +14,7 @@ import threading
 import time
 import inspect
 from concurrent.futures import ThreadPoolExecutor
+from itertools import cycle
 from subprocess import PIPE, TimeoutExpired, run
 from uuid import uuid4
 
@@ -169,7 +170,10 @@ def create_pod(
         AssertionError: In case of any failure
 
     """
-    if interface_type == constants.CEPHBLOCKPOOL:
+    if (
+        interface_type == constants.CEPHBLOCKPOOL
+        or interface_type == constants.CEPHBLOCKPOOL_THICK
+    ):
         pod_dict = pod_dict_path if pod_dict_path else constants.CSI_RBD_POD_YAML
         interface = constants.RBD_INTERFACE
     else:
@@ -470,6 +474,24 @@ def default_storage_class(
         else:
             resource_name = constants.DEFAULT_STORAGECLASS_CEPHFS
         base_sc = OCP(kind="storageclass", resource_name=resource_name)
+    sc = OCS(**base_sc.data)
+    return sc
+
+
+def default_thick_storage_class():
+    """
+    Return default RBD thick storage class
+
+    Returns:
+        OCS: Existing RBD thick StorageClass instance
+
+    """
+    external = config.DEPLOYMENT["external_mode"]
+    if external:
+        resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_THICK
+    else:
+        resource_name = constants.DEFAULT_STORAGECLASS_RBD_THICK
+    base_sc = OCP(kind="storageclass", resource_name=resource_name)
     sc = OCS(**base_sc.data)
     return sc
 
@@ -997,7 +1019,9 @@ def validate_pv_delete(pv_name):
         return True
 
 
-def create_pods(pvc_objs, pod_factory, interface, pods_for_rwx=1, status=""):
+def create_pods(
+    pvc_objs, pod_factory, interface, pods_for_rwx=1, status="", nodes=None
+):
     """
     Create pods
 
@@ -1009,11 +1033,13 @@ def create_pods(pvc_objs, pod_factory, interface, pods_for_rwx=1, status=""):
             PVC is RWX
         status (str): If provided, wait for desired state of each pod before
             creating next one
+        nodes (list): Node name for each pod will be selected from this list.
 
     Returns:
         list: list of Pod objects
     """
     pod_objs = []
+    nodes_iter = cycle(nodes) if nodes else None
 
     for pvc_obj in pvc_objs:
         volume_mode = getattr(
@@ -1032,6 +1058,7 @@ def create_pods(pvc_objs, pod_factory, interface, pods_for_rwx=1, status=""):
                     interface=interface,
                     pvc=pvc_obj,
                     status=status,
+                    node_name=next(nodes_iter) if nodes_iter else None,
                     pod_dict_path=pod_dict,
                     raw_block_pv=raw_block_pv,
                 )
@@ -1042,6 +1069,7 @@ def create_pods(pvc_objs, pod_factory, interface, pods_for_rwx=1, status=""):
             interface=interface,
             pvc=pvc_obj,
             status=status,
+            node_name=next(nodes_iter) if nodes_iter else None,
             pod_dict_path=pod_dict,
             raw_block_pv=raw_block_pv,
         )
@@ -1424,8 +1452,8 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
             logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
             logs = logs.split("\n")
             loop_counter += 1
-            if loop_counter >= 3:
-                logging.info("Waited for more than 3mins still no data")
+            if loop_counter >= 6:
+                logging.info("Waited for more than 6mins still no data")
                 raise UnexpectedBehaviour(
                     f"There is no pvc creation data in CSI logs for {no_data_list}"
                 )
@@ -1493,8 +1521,8 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
             logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
             logs = logs.split("\n")
             loop_counter += 1
-            if loop_counter >= 3:
-                logging.info("Waited for more than 3mins still no data")
+            if loop_counter >= 6:
+                logging.info("Waited for more than 6mins still no data")
                 raise UnexpectedBehaviour(
                     f"There is no pv deletion data in CSI logs for {no_data_list}"
                 )
@@ -2954,6 +2982,7 @@ def get_mon_pdb():
     Returns:
         disruptions_allowed (int): Count of mon allowed disruption
         min_available_mon (int): Count of minimum mon available
+        max_unavailable_mon (int): Count of maximun mon unavailable
 
     """
 
@@ -2965,7 +2994,8 @@ def get_mon_pdb():
 
     disruptions_allowed = pdb_obj.get().get("status").get("disruptionsAllowed")
     min_available_mon = pdb_obj.get().get("spec").get("minAvailable")
-    return disruptions_allowed, min_available_mon
+    max_unavailable_mon = pdb_obj.get().get("spec").get("maxUnavailable")
+    return disruptions_allowed, min_available_mon, max_unavailable_mon
 
 
 @retry(CommandFailed, tries=10, delay=30, backoff=1)
@@ -2998,4 +3028,55 @@ def run_cmd_verify_cli_output(
     for expected_output in expected_output_lst:
         if expected_output not in out:
             return False
+    return True
+
+
+def check_rbd_image_used_size(
+    pvc_objs, usage_to_compare, rbd_pool=constants.DEFAULT_BLOCKPOOL, expect_match=True
+):
+    """
+    Check if RBD image used size of the PVCs are matching with the given value
+
+    Args:
+        pvc_objs (list): List of PVC objects
+        usage_to_compare (str): Value of image used size to be compared with actual value. eg: "5GiB"
+        rbd_pool (str): Name of the pool
+        expect_match (bool): True to verify the used size is equal to 'usage_to_compare' value.
+            False to verify the used size is not equal to 'usage_to_compare' value.
+
+    Returns:
+        bool: True if the verification is success for all the PVCs, False otherwise
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    no_match_list = []
+    for pvc_obj in pvc_objs:
+        rbd_image_name = pvc_obj.get_rbd_image_name
+        du_out = ct_pod.exec_ceph_cmd(
+            ceph_cmd=f"rbd du -p {rbd_pool} {rbd_image_name}",
+            format="",
+        )
+        used_size = "".join(du_out.strip().split()[-2:])
+        if expect_match:
+            if usage_to_compare != used_size:
+                logger.error(
+                    f"Rbd image {rbd_image_name} of PVC {pvc_obj.name} did not meet the expectation."
+                    f" Expected used size: {usage_to_compare}. Actual used size: {used_size}. "
+                    f"Rbd du out: {du_out}"
+                )
+                no_match_list.append(pvc_obj.name)
+        else:
+            if usage_to_compare == used_size:
+                logger.error(
+                    f"Rbd image {rbd_image_name} of PVC {pvc_obj.name} did not meet the expectation. "
+                    f"Expected the used size to be diferent than {usage_to_compare}. "
+                    f"Actual used size: {used_size}. Rbd du out: {du_out}"
+                )
+                no_match_list.append(pvc_obj.name)
+
+    if no_match_list:
+        logger.error(
+            f"RBD image used size of these PVCs did not meet the expectation - {no_match_list}"
+        )
+        return False
     return True

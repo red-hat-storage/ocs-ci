@@ -7,5 +7,3 @@ ENV_DATA:
 
 # Override flexy params here
 FLEXY:
-  LAUNCHER_VARS: {"num_nodes": 3,"num_workers": 3,"vm_type_masters":"m4.xlarge","vm_type_workers":"m5.4xlarge","ssh_key_name":"openshift-dev"}
-  OPENSHIFT_SSHKEY_PATH: "~/.ssh/openshift-dev.pem"

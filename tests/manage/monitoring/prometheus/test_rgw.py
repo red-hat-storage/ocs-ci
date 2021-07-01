@@ -13,6 +13,7 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4a
 @pytest.mark.polarion_id("OCS-2323")
+@pytest.mark.bugzilla("1953615")
 def test_rgw_unavailable(measure_stop_rgw):
     """
     Test that there is appropriate alert when RGW is unavailable and that

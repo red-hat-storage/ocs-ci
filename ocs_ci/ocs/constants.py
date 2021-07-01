@@ -45,6 +45,7 @@ TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_AMQ_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "amq")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(TEMPLATE_DIR, "openshift-infra/")
 TEMPLATE_HSBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "hsbench")
+TEMPLATE_BDI_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "bdi")
 TEMPLATE_CONFIGURE_PVC_MONITORING_POD = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "monitoring/"
 )
@@ -67,10 +68,12 @@ ROOK_CSI_RBD_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "rbd")
 ROOK_CSI_CEPHFS_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "cephfs")
 CLEANUP_YAML = "cleanup.yaml.j2"
 MANIFESTS_DIR = "manifests"
+
+# OCP Deployment constants
 CHRONY_TEMPLATE = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "99-role-chrony-configuration.yaml"
 )
-
+HUGE_PAGES_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "huge_pages.yaml")
 
 # Statuses
 STATUS_READY = "Ready"
@@ -85,6 +88,7 @@ STATUS_COMPLETED = "Completed"
 STATUS_ERROR = "Error"
 STATUS_CLBO = "CrashLoopBackOff"
 STATUS_READYTOUSE = "READYTOUSE"
+STATUS_FAILED = "Failed"
 
 # NooBaa statuses
 BS_AUTH_FAILED = "AUTH_FAILED"
@@ -98,6 +102,7 @@ HEALTHY_PV_BS = ["`OPTIMAL`", "`LOW_CAPACITY`"]
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
+CEPHBLOCKPOOL_THICK = "CephBlockPoolThick"
 CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
 CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
 NOOBAA_SC = "openshift-storage.noobaa.io"
@@ -127,7 +132,6 @@ VOLUMESNAPSHOTCLASS = "VolumeSnapshotClass"
 HPA = "horizontalpodautoscaler"
 VOLUMESNAPSHOTCONTENT = "VolumeSnapshotContent"
 POD_DISRUPTION_BUDGET = "PodDisruptionBudget"
-
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -202,11 +206,11 @@ RIPSAW_CRD = "resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml"
 RIPSAW_DROP_CACHE = os.path.join(TEMPLATE_FIO_DIR, "drop_cache_pod.yaml")
 OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
 
-
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 DEFAULT_STORAGECLASS_RGW = f"{DEFAULT_CLUSTERNAME}-ceph-rgw"
+DEFAULT_STORAGECLASS_RBD_THICK = f"{DEFAULT_CLUSTERNAME}-ceph-rbd-thick"
 
 # Independent mode default StorageClasses
 DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW = f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rgw"
@@ -216,6 +220,9 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS = (
     f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephfs"
 )
 DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rbd"
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_THICK = (
+    f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rbd-thick"
+)
 
 # Default VolumeSnapshotClass
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfsplugin-snapclass"
@@ -456,6 +463,18 @@ PERF_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance.yaml")
 
 HSBENCH_OBJ_YAML = os.path.join(TEMPLATE_HSBENCH_DIR, "hsbench_obj.yaml")
 
+IBM_BDI_SCC_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "ibm_bdi_scc.yaml")
+
+TILLER_YAML = os.path.join(TEMPLATE_BDI_DIR, "temp_tiller.yaml")
+
+IBM_BDI_CONFIGURE_WORKLOAD_YAML = os.path.join(
+    TEMPLATE_BDI_DIR, "configure-workload.yaml"
+)
+
+IBM_BDI_DATA_LOAD_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "data-load-job.yaml")
+
+IBM_BDI_RUN_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "run-workload.yaml")
+
 AWSCLI_SERVICE_CA_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "aws-cli-service-ca-configmap.yaml"
 )
@@ -538,6 +557,9 @@ FIO_S3 = os.path.join(TEMPLATE_FIO_DIR, "config_s3.fio")
 # Openshift infra yamls:
 RSYNC_POD_YAML = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "rsync-pod.yaml")
 MACHINESET_YAML = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "machine-set.yaml")
+MACHINESET_YAML_AZURE = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-azure.yaml"
+)
 PODS_PER_NODE_COUNT_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "max-pods-per-node.yaml"
 )
@@ -674,6 +696,9 @@ ON_PREM_PLATFORMS = [
 ]
 CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
 
+# AWS i3 worker instance for LSO
+AWS_LSO_WORKER_INSTANCE = "i3en.2xlarge"
+
 # ignition files
 BOOTSTRAP_IGN = "bootstrap.ign"
 MASTER_IGN = "master.ign"
@@ -690,7 +715,7 @@ VSPHERE_NODE_USER = "core"
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
 VSPHERE_SCALEUP_REPO = "https://code.engineering.redhat.com/gerrit/openshift-misc"
-VSPHERE_CLUSTER_LAUNCHER = "https://gitlab.cee.redhat.com/aosqe/cluster-launcher.git"
+VSPHERE_CLUSTER_LAUNCHER = "https://gitlab.cee.redhat.com/aosqe/v4-scaleup.git"
 VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
 INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
 VM_IFCFG = os.path.join(VSPHERE_DIR, "vm/ifcfg.tmpl")
@@ -718,9 +743,9 @@ SCALEUP_VSPHERE_MACHINE_CONF = os.path.join(
     SCALEUP_VSPHERE_DIR, "machines/vsphere-rhel-machine.tf"
 )
 
-# cluster-launcher
+# v4-scaleup
 CLUSTER_LAUNCHER_VSPHERE_DIR = os.path.join(
-    EXTERNAL_DIR, "cluster-launcher/v4-scaleup/ocp4-rhel-scaleup/"
+    EXTERNAL_DIR, "v4-scaleup/ocp4-rhel-scaleup/"
 )
 CLUSTER_LAUNCHER_MACHINE_CONF = "vsphere/machines/vsphere-rhel-machine.tf"
 
@@ -738,6 +763,9 @@ VSAN = "vsan"
 
 # terraform haproxy service
 TERRAFORM_HAPROXY_SERVICE = os.path.join(VSPHERE_DIR, "lb/haproxy.service")
+
+# vSphere IPI related constants
+NUM_OF_VIPS = 2
 
 # Config related constants
 config_keys_patterns_to_censor = ["passw", "token", "secret", "key", "credential"]
@@ -1084,11 +1112,11 @@ MIRRORED_INDEX_IMAGE_NAME = "redhat-operator-index"
 # following packages are required for live disconnected cluster installation
 # (all images related to those packages will be mirrored to the mirror registry)
 DISCON_CL_REQUIRED_PACKAGES = [
-    # "elasticsearch-operator",
+    "cluster-logging",
+    "elasticsearch-operator",
     "local-storage-operator",
     "ocs-operator",
 ]
-
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
@@ -1139,10 +1167,9 @@ SCALE_WORKER_DICT = {
 }
 SCALE_MAX_PVCS_PER_NODE = 500
 
-# Elasticsearch and codespeed constants
-ES_SERVER_IP = "10.0.78.167"
-ES_SERVER_PORT = "9200"
-ES_SERVER_URL = "https://10.0.78.167:9200"
+# Production config instance type
+AWS_PRODUCTION_INSTANCE_TYPE = "m5.4xlarge"
+AZURE_PRODUCTION_INSTANCE_TYPE = "Standard_D16s_v3"
 
 # Cluster metrics
 THROUGHPUT_QUERY = "(sum(rate(ceph_pool_wr_bytes[1m]) + rate(ceph_pool_rd_bytes[1m])))"
@@ -1176,7 +1203,7 @@ ROOK_OPERATOR = "operator"
 MON_DAEMON = "mon"
 
 # cluster expansion
-MAX_OSDS = 15
+MAX_OSDS = 18
 
 # Minimum cluster requirements in term of node specs
 MIN_NODE_CPU = 16
@@ -1197,8 +1224,22 @@ BM_STATUS_PRESENT = "PRESENT"
 BM_STATUS_RESPONSE_UPDATED = "UPDATED"
 BM_METAL_IMAGE = "rhcos-metal.x86_64.raw.gz"
 
+# RHV related constants
+RHV_CONFIG_FILEPATH = os.path.expanduser("~/.ovirt/ovirt-config.yaml")
+RHV_DISK_FORMAT_COW = "COW"
+RHV_DISK_FORMAT_RAW = "RAW"
+RHV_DISK_INTERFACE_VIRTIO_SCSI = "VIRTIO_SCSI"
+
 # MCG constants
 PLACEMENT_BUCKETCLASS = "placement-bucketclass"
+
+# Cosbench constants
+COSBENCH = "cosbench"
+COSBENCH_PROJECT = "cosbench-project"
+
+COSBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "cosbench")
+COSBENCH_POD = os.path.join(COSBENCH_DIR, "cosbench_pod.yaml")
+COSBENCH_CONFIGMAP = os.path.join(COSBENCH_DIR, "cosbench_configmap.yaml")
 
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
@@ -1253,7 +1294,6 @@ VAULT_VERSION_INFO_URL = "https://github.com/hashicorp/vault/releases/latest"
 VAULT_DOWNLOAD_BASE_URL = "https://releases.hashicorp.com/vault"
 
 # Vault related constants
-
 VAULT_DEFAULT_NAMESPACE = ""
 VAULT_DEFAULT_PATH_PREFIX = "ocs"
 VAULT_DEFAULT_POLICY_PREFIX = "rook"
@@ -1293,3 +1333,11 @@ debug_crush = 20
 
 WORKLOAD_STORAGE_TYPE_BLOCK = "block"
 WORKLOAD_STORAGE_TYPE_FS = "fs"
+# Components of OCS
+OCS_COMPONENTS = ["rgw", "cephfs", "noobaa", "blockpools"]
+OCS_COMPONENTS_MAP = {
+    "rgw": "cephObjectStores",
+    "cephfs": "cephFilesystems",
+    "noobaa": "multiCloudGateway",
+    "blockpools": "cephBlockPools",
+}

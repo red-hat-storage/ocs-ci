@@ -4,6 +4,7 @@ Basic Module to manage performance results
 """
 
 import logging
+import json
 
 from elasticsearch import Elasticsearch, exceptions as ESExp
 
@@ -45,7 +46,6 @@ class PerfResult:
         """
         Create Elastic-Search server connection
 
-
         """
 
         # Creating the connection to the elastic-search
@@ -80,21 +80,34 @@ class PerfResult:
         assert results["hits"]["hits"], "Results not found in Elasticsearch"
         return results["hits"]["hits"]
 
+    def dump_to_file(self):
+        """
+        Writing the test results data into a JSON file, which can be loaded
+        into the ElasticSearch server
+
+        """
+        json_file = f"{self.full_log_path}/full_results.json"
+        self.add_key("index_name", self.new_index)
+        log.info(f"Dumping data to {json_file}")
+        with open(json_file, "w") as outfile:
+            json.dump(self.results, outfile, indent=4)
+
     def es_write(self):
         """
-        Writing the results to the elastic-search server
-
-        Raise:
-            RequestError: in case of error writing data to the server
+        Writing the results to the elastic-search server, if data can not be
+        written to the elasticsearch server, it will be written to JSON file
 
         """
+
+        # Adding the results to the ES document / JSON file
+        self.add_key("all_results", self.all_results)
 
         if self.es is None:
             log.warning("No elasticsearch server to write data to")
+            self.dump_to_file()
             return False
 
         log.info(f"Writing all data to ES server {self.es}")
-        self.add_key("all_results", self.all_results)
         log.debug(
             f"Params : index={self.new_index}, "
             f"doc_type=_doc, body={self.results}, id={self.uuid}"
@@ -103,8 +116,9 @@ class PerfResult:
             self.es.index(
                 index=self.new_index, doc_type="_doc", body=self.results, id=self.uuid
             )
-        except ESExp.RequestError as e:
-            log.warning(f"Failed writhing data with {e}")
+        except Exception as e:
+            log.warning(f"Failed writing data with : {e}")
+            self.dump_to_file()
             return False
         return True
 

@@ -267,6 +267,7 @@ class AWSUPI(AWSBase):
                 "BASE_DOMAIN": config.ENV_DATA["base_domain"],
                 "remove_bootstrap": "yes",
                 "IAAS_PLATFORM": "aws",
+                "HOSTS_SCRIPT_DIR": self.upi_script_path,
             }
             if config.DEPLOYMENT["preserve_bootstrap_node"]:
                 logger.info("Setting ENV VAR to preserve bootstrap node")

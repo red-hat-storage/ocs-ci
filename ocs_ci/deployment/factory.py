@@ -10,6 +10,7 @@ from .gcp import GCPIPI
 from .vmware import VSPHEREUPI, VSPHEREIPI
 from .baremetal import BAREMETALUPI, BaremetalPSIUPI
 from .openshift_dedicated import OpenshiftDedicated
+from .rhv import RHVIPI
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class DeploymentFactory(object):
             "powervs_upi": IBMDeployment,
             "ibm_cloud_managed": IBMCloud,
             "openshiftdedicated_managed": OpenshiftDedicated,
+            "rhv_ipi": RHVIPI,
         }
 
     def get_deployment(self):

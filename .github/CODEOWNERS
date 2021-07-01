@@ -29,6 +29,20 @@
 # directory at the root of the repository and any of its
 # subdirectories.
 #/build/logs/ @doctocat
+/tests/manage/z_cluster/ @red-hat-storage/brown-squad
+/tests/manage/pv_services/ @red-hat-storage/green-squad
+/tests/manage/storageclass/ @red-hat-storage/green-squad
+/tests/manage/monitoring/ @red-hat-storage/blue-squad
+/tests/manage/mcg/ @red-hat-storage/red-squad
+/tests/manage/rgw/ @red-hat-storage/red-squad
+/tests/ecosystem/upgrade/ @red-hat-storage/purple-squad
+/tests/e2e/flowtest/ @red-hat-storage/magenta-squad
+/tests/e2e/lifecycle/ @red-hat-storage/magenta-squad
+/tests/e2e/logging/ @red-hat-storage/magenta-squad
+/tests/e2e/registry/ @red-hat-storage/magenta-squad
+/tests/e2e/workloads/ @red-hat-storage/magenta-squad
+/tests/e2e/performance/ @red-hat-storage/grey-squad
+/tests/e2e/scale/ @red-hat-storage/orange-squad
 
 # The `docs/*` pattern will match files like
 # `docs/getting-started.md` but not further nested files like
@@ -42,4 +56,3 @@
 # In this example, @doctocat owns any file in the `/docs`
 # directory in the root of your repository.
 #/docs/ @doctocat
-

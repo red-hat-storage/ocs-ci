@@ -7,20 +7,23 @@ from ocs_ci.framework.testlib import (
     bugzilla,
     skipif_ocs_version,
 )
-from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_openshift_dedicated,
+)
 from ocs_ci.ocs.bucket_utils import get_bucket_available_size
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour, NoobaaConditionException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import skipif_upgraded_from as upgraded_from
 
 logger = logging.getLogger(__name__)
 
 
-@retry(UnexpectedBehaviour, tries=30, delay=15, backoff=1)
+@retry((NoobaaConditionException, UnexpectedBehaviour), tries=30, delay=15, backoff=1)
 def compare_sizes(mcg_obj, ceph_obj, bucket_name):
     """
-    Adds bucket policy to a bucket
+    Compares the sizes
 
     Args:
         mcg_obj (obj): MCG object
@@ -36,8 +39,12 @@ def compare_sizes(mcg_obj, ceph_obj, bucket_name):
     )
     ceph_size_in_gb = float(format(ceph_size / constants.GB, ".3f"))
     bucket_size = get_bucket_available_size(mcg_obj, bucket_name)
-    bucket_size_in_gb = float(format(bucket_size / constants.GB, ".3f"))
-
+    try:
+        bucket_size_in_gb = float(format(bucket_size / constants.GB, ".3f"))
+    except TypeError:
+        raise NoobaaConditionException(
+            "Noobaa backingstore has not yet synced the backend size. Retrying."
+        )
     if not abs(ceph_size_in_gb - bucket_size_in_gb) <= 1.5:
         raise UnexpectedBehaviour(
             f"Available size in ceph cluster:{ceph_size_in_gb} and object bucket:{bucket_size_in_gb} are not "
@@ -60,6 +67,14 @@ def test_object_bucket_size(mcg_obj, bucket_factory, rgw_deployments):
     Test to verify object bucket(backed by RGW) available size
 
     """
+    # Checks if the cluster is upgraded from OCS 4.6 #bz 1952848
+    if upgraded_from(["4.6"]):
+        bs_obj = ocp.OCP(kind="backingstore", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        bs_obj.patch(
+            resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
+            params='{"metadata":{"annotations":{"rgw":""}}}',
+            format_type="merge",
+        )
     ceph_obj = OCP(
         namespace=config.ENV_DATA["cluster_namespace"],
         kind="CephCluster",
