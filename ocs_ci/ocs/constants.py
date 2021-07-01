@@ -694,7 +694,7 @@ ON_PREM_PLATFORMS = [
     IBM_POWER_PLATFORM,
     RHV_PLATFORM,
 ]
-CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
+CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM, IBMCLOUD_PLATFORM]
 
 # AWS i3 worker instance for LSO
 AWS_LSO_WORKER_INSTANCE = "i3en.2xlarge"
@@ -1341,3 +1341,6 @@ OCS_COMPONENTS_MAP = {
     "noobaa": "multiCloudGateway",
     "blockpools": "cephBlockPools",
 }
+
+# ibmcloud related constants
+IBMCLOUD_VOLUME_NAME = "ibmvolume"
