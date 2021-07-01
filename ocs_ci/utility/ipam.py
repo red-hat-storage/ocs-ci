@@ -112,7 +112,7 @@ class IPAM(object):
         endpoint = os.path.join("http://", self.ipam, "api/removeHost.php?")
         payload = {"apiapp": self.apiapp, "apitoken": self.token, "host": hostname}
         res = requests.post(endpoint, data=payload)
-        if res.status_code == "200":
+        if res.status_code == 200:
             logger.info(f"Successfully released {hostname} IP from IPAM server")
         else:
             raise IPAMReleaseUpdateFailed(

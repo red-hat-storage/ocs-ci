@@ -764,6 +764,9 @@ VSAN = "vsan"
 # terraform haproxy service
 TERRAFORM_HAPROXY_SERVICE = os.path.join(VSPHERE_DIR, "lb/haproxy.service")
 
+# vSphere IPI related constants
+NUM_OF_VIPS = 2
+
 # Config related constants
 config_keys_patterns_to_censor = ["passw", "token", "secret", "key", "credential"]
 

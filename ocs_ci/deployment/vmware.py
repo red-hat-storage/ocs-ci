@@ -809,7 +809,6 @@ class VSPHEREIPI(VSPHEREBASE):
         def __init__(self):
             super(VSPHEREIPI.OCPDeployment, self).__init__()
             self.ipi_details = load_auth_config()["vmware_ipi"]
-            self.num_of_vips = 2
 
         def deploy_prereq(self):
             """
@@ -817,7 +816,7 @@ class VSPHEREIPI(VSPHEREBASE):
             prerequisites for VSPHEREIPI here.
             """
             #  Assign IPs from IPAM server
-            ips = assign_ips(self.num_of_vips)
+            ips = assign_ips(constants.NUM_OF_VIPS)
             config.ENV_DATA["vips"] = ips
 
             super(VSPHEREIPI.OCPDeployment, self).deploy_prereq()
@@ -923,7 +922,7 @@ class VSPHEREIPI(VSPHEREBASE):
         ipam = IPAM(appiapp="address")
         hosts = [
             f"{config.ENV_DATA.get('cluster_name')}-{i}"
-            for i in range(self.num_of_vips)
+            for i in range(constants.NUM_OF_VIPS)
         ]
         ipam.release_ips(hosts)
 
