@@ -55,7 +55,7 @@ def create_external_secret(ocs_version=None):
          ocs_version (str): OCS version
 
     """
-    ocs_version = ocs_version or float(config.ENV_DATA["ocs_version"])
+    ocs_version = ocs_version or config.ENV_DATA["ocs_version"]
     secret_data = templating.load_yaml(constants.EXTERNAL_CLUSTER_SECRET_YAML)
     if Version.coerce(ocs_version) >= Version.coerce("4.8"):
         external_cluster_details = config.EXTERNAL_MODE.get(
