@@ -11,6 +11,7 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     get_node_resource_utilization_from_adm_top,
 )
+from ocs_ci.ocs.exceptions import ResourceNotFoundError
 
 
 log = logging.getLogger(__name__)
@@ -49,8 +50,8 @@ class TestPgSQLNodeReboot(E2ETest):
     @pytest.mark.parametrize(
         argnames=["transactions", "pod_name"],
         argvalues=[
-            pytest.param(*[600, "osd"], marks=pytest.mark.polarion_id("OCS-801")),
-            pytest.param(*[600, "postgres"], marks=pytest.mark.polarion_id("OCS-799")),
+            pytest.param(*[3600, "osd"], marks=pytest.mark.polarion_id("OCS-801")),
+            pytest.param(*[3600, "postgres"], marks=pytest.mark.polarion_id("OCS-799")),
         ],
     )
     @pytest.mark.usefixtures(pgsql_setup.__name__)
@@ -71,8 +72,12 @@ class TestPgSQLNodeReboot(E2ETest):
         if pod_name == "postgres":
             node_list = pgsql.get_pgsql_nodes()
         elif pod_name == "osd":
-            node_list = get_osd_running_nodes()
+            osd_nodes_list = get_osd_running_nodes()
+            # Select a node where pgbench is not running and reboot
+            node_list = pgsql.filter_pgbench_nodes_from_nodeslist(osd_nodes_list)
+
         node_1 = get_node_objs(node_list[random.randint(0, len(node_list) - 1)])
+        log.info(f"Selected node {node_1} for reboot operation")
 
         # Check worker node utilization (adm_top)
         get_node_resource_utilization_from_adm_top(node_type="worker", print_table=True)
@@ -81,7 +86,10 @@ class TestPgSQLNodeReboot(E2ETest):
         nodes.restart_nodes(node_1)
 
         # Wait for pg_bench pod to complete
-        pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
+        try:
+            pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
+        except ResourceNotFoundError as e:
+            log.info(f"Pgbench pod reached completed state and not found: {e}")
 
         # Calculate the time from running state to completed state
         end_time = datetime.now()

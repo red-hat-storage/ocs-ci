@@ -23,6 +23,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_obj,
     get_operator_pods,
     get_file_path,
+    get_pod_node,
 )
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.helpers.helpers import (
@@ -392,6 +393,36 @@ class Postgresql(RipSaw):
             )
             nodes_set.add(pod["spec"]["nodeName"])
         return list(nodes_set)
+
+    def get_pgbench_running_nodes(self):
+        """
+        get nodes that contains pgbench pods
+
+        Returns:
+            list: List of pgbench running nodes
+
+        """
+        pgbench_nodes = [
+            get_pod_node(pgbench_pod).name for pgbench_pod in self.get_pgbench_pods()
+        ]
+        return list(set(pgbench_nodes))
+
+    def filter_pgbench_nodes_from_nodeslist(self, nodes_list):
+        """
+        get nodes where pgbench pods are not running
+
+        Returns:
+            list: List of pgbench not running nodes from the given nodes list
+
+        """
+        log.info("Get pgbench running nodes")
+        pgbench_nodes = self.get_pgbench_running_nodes()
+        log.info("Select a node where pgbench is not running from the nodes list")
+        log.info(f"nodes list: {nodes_list}")
+        log.info(f"pgbench running nodes list: {pgbench_nodes}")
+        filtered_nodes_list = list(set(nodes_list) - set(pgbench_nodes))
+        log.info(f"pgbench is not running on nodes: {filtered_nodes_list}")
+        return filtered_nodes_list
 
     def respin_pgsql_app_pod(self):
         """

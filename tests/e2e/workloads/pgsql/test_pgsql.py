@@ -37,7 +37,7 @@ class TestPgSQLWorkload(E2ETest):
         pgsql.setup_postgresql(replicas=3)
 
         # Create pgbench benchmark
-        pgsql.create_pgbench_benchmark(replicas=3, clients=3, transactions=600)
+        pgsql.create_pgbench_benchmark(replicas=3, clients=3, transactions=1800)
 
         # Start measuring time
         start_time = datetime.now()
