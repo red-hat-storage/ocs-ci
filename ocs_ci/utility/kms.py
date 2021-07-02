@@ -704,19 +704,9 @@ class Vault(KMS):
             logger.error("KMS not enabled on storage cluster")
             raise NotFoundError("KMS flag not found")
 
-    def create_csi_kms_resources(self):
-        """
-        Create vault specific OCP resources to be consumed by
-        storage class.
-
-        Currently we have to create 'ceph-csi-kms-token' and
-        'csi-kms-connection-details '
-
-        """
-        self.create_vault_csi_kms_connection_details()
-        self.create_vault_csi_kms_token()
-
-    def create_vault_csi_kms_token(self):
+    def create_vault_csi_kms_token(
+        self, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    ):
         """
         create vault specific csi kms secret resource
 
@@ -725,9 +715,12 @@ class Vault(KMS):
         csi_kms_token["data"]["token"] = base64.b64encode(
             self.vault_path_token.encode()
         ).decode()
+        csi_kms_token["metadata"]["namespace"] = namespace
         self.create_resource(csi_kms_token, prefix="csikmstoken")
 
-    def create_vault_csi_kms_connection_details(self):
+    def create_vault_csi_kms_connection_details(
+        self, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    ):
         """
         Create vault specific csi kms connection details
         configmap resource
@@ -748,6 +741,7 @@ class Vault(KMS):
             config.ENV_DATA, "VAULT_TOKEN_NAME", constants.EXTERNAL_VAULT_CSI_KMS_TOKEN
         )
         csi_kms_conn_details["data"]["1-vault"] = json.dumps(buf)
+        csi_kms_conn_details["metadata"]["namespace"] = namespace
         self.create_resource(csi_kms_conn_details, prefix="csikmsconn")
 
 
