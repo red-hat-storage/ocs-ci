@@ -26,6 +26,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox
+from ocs_ci.utility.deployment import create_external_secret
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import (
     get_latest_ds_olm_tag,
@@ -469,6 +470,11 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         f"is not higher or equal to the version you currently running: "
         f"{upgrade_ocs.version_before_upgrade}"
     )
+
+    # For external cluster , create the secrets if upgraded version is >= 4.8
+    if config.DEPLOYMENT["external_mode"] and upgrade_version >= "4.8":
+        create_external_secret(ocs_version=upgrade_version)
+
     csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
     pre_upgrade_images = upgrade_ocs.get_pre_upgrade_image(csv_name_pre_upgrade)
     upgrade_ocs.load_version_config_file(upgrade_version)

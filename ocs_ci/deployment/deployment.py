@@ -26,7 +26,6 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceWrongStatusException,
     UnavailableResourceException,
-    ExternalClusterDetailsException,
     UnsupportedFeatureError,
 )
 from ocs_ci.ocs.monitoring import (
@@ -49,6 +48,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.storage_cluster import setup_ceph_debug
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
+from ocs_ci.utility.deployment import create_external_secret
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility import (
     templating,
@@ -754,19 +754,7 @@ class Deployment(object):
         csv.wait_for_phase("Succeeded", timeout=720)
 
         # Create secret for external cluster
-        secret_data = templating.load_yaml(constants.EXTERNAL_CLUSTER_SECRET_YAML)
-        external_cluster_details = config.EXTERNAL_MODE.get(
-            "external_cluster_details", ""
-        )
-        if not external_cluster_details:
-            raise ExternalClusterDetailsException("No external cluster data found")
-        secret_data["data"]["external_cluster_details"] = external_cluster_details
-        secret_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="external_cluster_secret", delete=False
-        )
-        templating.dump_data_to_temp_yaml(secret_data, secret_data_yaml.name)
-        logger.info("Creating external cluster secret")
-        run_cmd(f"oc create -f {secret_data_yaml.name}")
+        create_external_secret()
 
         cluster_data = templating.load_yaml(constants.EXTERNAL_STORAGE_CLUSTER_YAML)
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
