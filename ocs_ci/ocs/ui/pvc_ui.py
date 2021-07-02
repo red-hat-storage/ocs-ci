@@ -5,13 +5,14 @@ from selenium.webdriver.common.by import By
 
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs.constants import VOLUME_MODE_BLOCK
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.ocs import OCS
-
+from tests.conftest import pod_factory, pod_factory_fixture
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,7 @@ class PvcUI(PageNavigator):
             self.check_element_text(expected_text=pvc_vol_mode_new)
             logger.info(f"Verifying volume mode : {pvc_vol_mode_new}")
 
-    def pvc_resize_ui(self, pvc_name, pvc_size, new_size, sc_type, timeout=300, interface_type=None, vol_mode=None):
+    def pvc_resize_ui(self, pvc_name, pvc_size, new_size, sc_type):
         """
         Resizing pvc via UI
 
@@ -131,19 +132,6 @@ class PvcUI(PageNavigator):
         logger.info("Checking status of Pvc")
         self.wait_for_element(("dd[data-test-id='pvc-status'] span[data-test='status-text']", By.CSS_SELECTOR))
 
-        logger.info("Creating Pod")
-        if sc_type in (constants.DEFAULT_STORAGECLASS_RBD_THICK, constants.DEFAULT_STORAGECLASS_RBD):
-            interface_type = constants.CEPHBLOCKPOOL
-        else:
-            interface_type = constants.CEPHFILESYSTEM
-        new_pod = helpers.create_pod(interface_type=interface_type,
-                                        pvc_name=pvc_name,
-                                        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-                                        raw_block_pv=vol_mode == VOLUME_MODE_BLOCK)
-
-        logger.info(f"Waiting for Pod: state= {constants.STATUS_RUNNING}")
-        wait_for_resource_state(resource=new_pod, state=constants.STATUS_RUNNING)
-
         logger.info("Click on Actions")
         self.do_click(self.pvc_loc["pvc_actions"])
 
@@ -159,35 +147,28 @@ class PvcUI(PageNavigator):
         logger.info("Click on Expand Button")
         self.do_click(self.pvc_loc["expand-btn"])
 
-    def verify_pvc_resize_ui(self, pvc_name, new_size, pvc_size, new_pod):
-        """
-        Verifying PVC resize via UI
+    # def verify_pvc_resize_ui(self, pvc_name, new_size, pvc_size):
+    #     """
+    #     Verifying PVC resize via UI
+    #
+    #     Args:
+    #         pvc_name (str): the name of pvc
+    #         new_size (int): the new size of pvc (GB)
+    #
+    #     """
+    #
+    #     self.navigate_persistentvolumeclaims_page()
+    #
+    #     logger.info("Select openshift-storage project")
+    #     self.do_click(self.pvc_loc["pvc_project_selector"])
+    #     self.do_click(self.pvc_loc["select_openshift-storage_project"])
+    #
+    #     self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
+    #
+    #     logger.info(f"Go to PVC {pvc_name} Page")
+    #     self.do_click(self.pvc_loc[pvc_name])
 
-        Args:
-            pvc_name (str): the name of pvc
-            new_size (int): the new size of pvc (GB)
 
-        """
-        assert new_size > int(pvc_size), (
-            f"New size of the PVC cannot be less than existing size: {new_size})")
-
-        self.navigate_persistentvolumeclaims_page()
-
-        logger.info("Select openshift-storage project")
-        self.do_click(self.pvc_loc["pvc_project_selector"])
-        self.do_click(self.pvc_loc["select_openshift-storage_project"])
-
-        self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
-
-        logger.info(f"Go to PVC {pvc_name} Page")
-        self.do_click(self.pvc_loc[pvc_name])
-
-        resized_pvc = f"{new_size} GiB"
-
-        self.check_element_text(expected_text=resized_pvc)
-
-        logger.info("Deleting the Pod")
-        new_pod.delete()
 
     def delete_pvc_ui(self, pvc_name):
         """
@@ -197,6 +178,7 @@ class PvcUI(PageNavigator):
             pvc_name (str): Name of the pvc
 
         """
+
         self.navigate_persistentvolumeclaims_page()
 
         logger.info("Select openshift-storage project")

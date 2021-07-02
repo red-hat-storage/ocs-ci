@@ -42,8 +42,12 @@ class BaseUI:
 
     """
 
+
     def __init__(self, driver):
+
         self.driver = driver
+        print(type(self.driver))
+        logger.info(f"{type(self.driver)}from Base UI")
         self.screenshots_folder = os.path.join(
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
             f"screenshots_ui_{ocsci_config.RUN['run_id']}",
@@ -215,7 +219,7 @@ class BaseUI:
         element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
         element.clear()
 
-    def wait_for_element(self, locator, timeout=300):
+    def wait_for_element(self, locator, timeout=10):
         """
         Method to wait for a web element text to be found (use of explicit wait type)
 
@@ -239,29 +243,77 @@ class BaseUI:
         )
         try:
             wait.until(ec.visibility_of_element_located(locator[::-1]))
-            logger.info(f"Element found: {locator[0]}")
+            logger.info("Element found")
             return True
         except TimeoutException:
-            logger.error(f"Could not find element: {locator[0]}")
+            logger.error("Could not find element")
             return False
 
-    def get_element_count(self,  locator_type, locator, expected_amount, timeout= 300):
+    # def fetch_expected_text_from_ui(self, locator_type, locator, expected_text,
+    #                                 ignored_exceptions, timeout=300):
+    #
+    #     def _get_element(locator_type, locator):
+    #         return len(self.driver.find_element(locator_type, locator))
+    #
+    #         sample = TimeoutSampler(
+    #             timeout=timeout,
+    #             sleep=10,
+    #             func=_get_element,
+    #             locator_type=locator_type,
+    #             locator=locator,
+    #
+    #
+    #
+    #
+    #     """
+    #     Method to wait for a web element text to be found (use of explicit wait type)
+    #
+    #     Args:
+    #         locator (tuple): (GUI element needs to operate on (str), type (By))
+    #
+    #     return:
+    #         str: Returns the text (string) when found
+    #
+    #     """
+    #     wait = WebDriverWait(
+    #         self.driver,
+    #         timeout=timeout,
+    #         poll_frequency=1,
+    #
+    #         ],
+    #     )
+    #     try:
+    #         element_text = wait.until(self.driver.find_element(locator_type, locator)).text()
+    #         return element_text
+    #     except TimeoutException:
+    #         logger.error("Could not expected text")
 
-        def _get_elements(locator_type, locator):
-            return len(self.driver.find_elements(locator_type, locator))
+    def fetch_expected_text_from_ui(self, locator, locator_type, expected_text, timeout=300):
 
-        sample = TimeoutSampler(
+        def _get_element(locator, locator_type, driver):
+
+            return (driver.find_element(locator, locator_type)).text()
+
+        wait = TimeoutSampler(
             timeout=timeout,
-            sleep=10,
-            func=_get_elements,
+            sleep=5,
+            func=_get_element,
             locator_type=locator_type,
             locator=locator,
+            driver=self.driver
+            # ignored_exceptions=[
+            #     NoSuchElementException,
+            #     ElementNotVisibleException,
+            #     ElementNotSelectableException,
+            #     TimeoutException]
         )
-        if sample.wait_for_func_status(result=expected_amount):
+        if wait.wait_for_func_status(result=expected_text):
+            logger.info(f"Expected text found: {expected_text}")
             return True
         else:
             logger.error(f" after {timeout} seconds")
             raise TimeoutExpiredError
+
 
 class PageNavigator(BaseUI):
     """
@@ -271,6 +323,13 @@ class PageNavigator(BaseUI):
 
     def __init__(self, driver):
         super().__init__(driver)
+        print(type(driver))
+        print(type(self.driver))
+        logger.info(f"{type(self.driver)}from Page Nav")
+        ocp_version = get_ocp_version()
+        self.page_nav = locators[ocp_version]["page"]
+        if Version.coerce(ocp_version) >= Version.coerce("4.8"):
+            self.generic_locators = locators[ocp_version]["generic"]
         self.ocp_version = get_ocp_version()
         self.page_nav = locators[self.ocp_version]["page"]
         if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
@@ -609,6 +668,7 @@ def login_ui():
         driver = webdriver.Chrome(
             ChromeDriverManager(chrome_type=chrome_browser_type).install(),
             options=chrome_options,
+
         )
     else:
         raise ValueError(f"Not Support on {browser}")
