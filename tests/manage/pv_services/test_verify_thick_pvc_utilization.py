@@ -8,7 +8,11 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     skipif_ocs_version,
 )
-from ocs_ci.helpers.helpers import default_thick_storage_class, fetch_used_size
+from ocs_ci.helpers.helpers import (
+    default_thick_storage_class,
+    fetch_used_size,
+    default_ceph_block_pool,
+)
 from ocs_ci.ocs import constants
 
 
@@ -47,7 +51,7 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         file1 = "fio_file1"
         file2 = "fio_file2"
 
-        size_before_pvc = fetch_used_size(constants.DEFAULT_BLOCKPOOL)
+        size_before_pvc = fetch_used_size(default_ceph_block_pool())
         log.info(f"Storage pool used size before creating the PVC is {size_before_pvc}")
 
         # Create RBD thick PVC
