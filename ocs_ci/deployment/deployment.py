@@ -575,6 +575,7 @@ class Deployment(object):
             config.DEPLOYMENT.get("local_storage")
             and Version.coerce(ocs_version) >= Version.coerce("4.7")
             and zone_num < 3
+            and not config.DEPLOYMENT.get("arbiter_deployment")
         ):
             cluster_data["spec"]["flexibleScaling"] = True
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
