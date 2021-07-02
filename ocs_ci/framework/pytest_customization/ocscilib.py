@@ -574,7 +574,7 @@ def pytest_collection_modifyitems(session, config, items):
                 # Limit the test_path to the tests directory
                 test_path = item.fspath.strpath.lstrip(TOP_DIR)
                 if _path in test_path:
-                    item.add_marker(f"{squad}_Squad")
+                    item.add_marker(f"{squad.lower()}_squad")
                     item.user_properties.append(("squad", squad))
                     break
 
