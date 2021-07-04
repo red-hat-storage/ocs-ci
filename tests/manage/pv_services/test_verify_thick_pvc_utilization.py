@@ -50,8 +50,9 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         replica_size = 3
         file1 = "fio_file1"
         file2 = "fio_file2"
+        rbd_pool = default_ceph_block_pool()
 
-        size_before_pvc = fetch_used_size(default_ceph_block_pool())
+        size_before_pvc = fetch_used_size(rbd_pool)
         log.info(f"Storage pool used size before creating the PVC is {size_before_pvc}")
 
         # Create RBD thick PVC
@@ -65,7 +66,7 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         )
 
         size_after_pvc = fetch_used_size(
-            constants.DEFAULT_BLOCKPOOL, size_before_pvc + (pvc_size * replica_size)
+            rbd_pool, size_before_pvc + (pvc_size * replica_size)
         )
         log.info(
             f"Verified: Storage pool used size after creating the PVC is {size_after_pvc}"
@@ -88,9 +89,7 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         pod_obj.get_fio_results()
 
         # Verify the used size after IO
-        fetch_used_size(
-            constants.DEFAULT_BLOCKPOOL, size_before_pvc + (pvc_size * replica_size)
-        )
+        fetch_used_size(rbd_pool, size_before_pvc + (pvc_size * replica_size))
 
         # Create another 5GB file
         pod_obj.run_io(
@@ -103,9 +102,7 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         pod_obj.get_fio_results()
 
         # Verify the used size after IO
-        fetch_used_size(
-            constants.DEFAULT_BLOCKPOOL, size_before_pvc + (pvc_size * replica_size)
-        )
+        fetch_used_size(rbd_pool, size_before_pvc + (pvc_size * replica_size))
 
         # Delete the files created by fio
         mount_point = pod_obj.get_storage_path()
@@ -113,9 +110,7 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         pod_obj.exec_cmd_on_pod(command=rm_cmd, out_yaml_format=False)
 
         # Verify the used size after deleting the files
-        fetch_used_size(
-            constants.DEFAULT_BLOCKPOOL, size_before_pvc + (pvc_size * replica_size)
-        )
+        fetch_used_size(rbd_pool, size_before_pvc + (pvc_size * replica_size))
 
         # Delete the pod
         pod_obj.delete()
@@ -126,9 +121,7 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
 
         # Verify used size after deleting the PVC
-        size_after_pvc_delete = fetch_used_size(
-            constants.DEFAULT_BLOCKPOOL, size_before_pvc
-        )
+        size_after_pvc_delete = fetch_used_size(rbd_pool, size_before_pvc)
         log.info(
             f"Verified: Storage pool used size after deleting the PVC is {size_after_pvc_delete}"
         )
