@@ -84,6 +84,7 @@ anywhere else.
 * `infra_nodes` - Add infrastructure nodes to the cluster
 * `openshift_install_timeout` - Time (in seconds) to wait before timing out during OCP installation
 * `local_storage` - Deploy OCS with the local storage operator (Default: false)
+* `optional_operators_image` - If provided, it is used for LSO installation on unreleased OCP version
 * `disconnected` - Set if the cluster is deployed in a disconnected environment
 * `mirror_registry` - Hostname of the mirror registry
 * `mirror_registry_user` - Username for disconnected cluster mirror registry
@@ -188,6 +189,7 @@ higher priority).
 * `VAULT_SKIP_VERIFY` - Skip SSL check (Default: false)
 * `VAULT_BACKEND_PATH` - Vault path name used in ocs cluster
 * `VAULT_POLICY` - Vault policy name used in ocs cluster
+* `huge_pages` - True if you would like to enable HUGE PAGES.
 
 #### UPGRADE
 

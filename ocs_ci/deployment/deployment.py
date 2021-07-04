@@ -58,6 +58,7 @@ from ocs_ci.utility import (
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
+    enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
     get_ocp_version,
@@ -72,7 +73,7 @@ from ocs_ci.utility.utils import (
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
-from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
+from ocs_ci.ocs.ui.deployment_ui import DeploymentUI, ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
 
 logger = logging.getLogger(__name__)
@@ -180,6 +181,8 @@ class Deployment(object):
         set_selinux_permissions()
         set_registry_to_managed_state()
         add_stage_cert()
+        if config.ENV_DATA.get("huge_pages"):
+            enable_huge_pages()
 
     def label_and_taint_nodes(self):
         """
@@ -400,7 +403,7 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 
-        if ui_deployment:
+        if ui_deployment and ui_deployment_conditions():
             self.deployment_with_ui()
             # Skip the rest of the deployment when deploy via UI
             return
@@ -599,6 +602,17 @@ class Deployment(object):
                 and not lso_type == constants.AWS_EBS
             ):
                 deviceset_data["count"] = 2
+            # setting resource limits for AWS i3
+            # https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.6/html-single/deploying_openshift_container_storage_using_amazon_web_services/index#creating-openshift-container-storage-cluster-on-amazon-ec2_local-storage
+            if (
+                ocs_version >= 4.5
+                and config.ENV_DATA.get("worker_instance_type")
+                == constants.AWS_LSO_WORKER_INSTANCE
+            ):
+                deviceset_data["resources"] = {
+                    "limits": {"cpu": 2, "memory": "5Gi"},
+                    "requests": {"cpu": 1, "memory": "5Gi"},
+                }
             if (ocp_version >= 4.6) and (ocs_version >= 4.6):
                 cluster_data["metadata"]["annotations"] = {
                     "cluster.ocs.openshift.io/local-devices": "true"

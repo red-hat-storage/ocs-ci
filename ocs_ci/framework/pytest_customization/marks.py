@@ -20,6 +20,7 @@ from ocs_ci.ocs.constants import (
     CLOUD_PLATFORMS,
     ON_PREM_PLATFORMS,
     IBM_POWER_PLATFORM,
+    IBMCLOUD_PLATFORM,
 )
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
@@ -151,6 +152,11 @@ cloud_platform_required = pytest.mark.skipif(
     reason="Test runs ONLY on cloud based deployed cluster",
 )
 
+ibmcloud_platform_required = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() != IBMCLOUD_PLATFORM,
+    reason="Test runs ONLY on IBM cloud",
+)
+
 on_prem_platform_required = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() not in ON_PREM_PLATFORMS,
     reason="Test runs ONLY on on-prem based deployed cluster",
@@ -202,7 +208,7 @@ skipif_openshift_dedicated = pytest.mark.skipif(
 )
 
 skipif_ibm_cloud = pytest.mark.skipif(
-    config.ENV_DATA["platform"].lower() == "ibm_cloud",
+    config.ENV_DATA["platform"].lower() == IBMCLOUD_PLATFORM,
     reason="Test will not run on IBM cloud",
 )
 
@@ -243,6 +249,12 @@ skipif_vsphere_ipi = pytest.mark.skipif(
         and config.ENV_DATA["deployment_type"].lower() == "ipi"
     ),
     reason="Test will not run on vSphere IPI cluster",
+)
+
+skipif_tainted_nodes = pytest.mark.skipif(
+    config.DEPLOYMENT.get("infra_nodes") is True
+    or config.DEPLOYMENT.get("ocs_operator_nodes_to_taint") > 0,
+    reason="Test will not run if nodes are tainted",
 )
 
 metrics_for_external_mode_required = pytest.mark.skipif(

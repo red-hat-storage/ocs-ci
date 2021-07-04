@@ -8,6 +8,7 @@ import time
 
 import boto3
 import yaml
+import ovirtsdk4.types as types
 
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.deployment.vmware import (
@@ -24,6 +25,7 @@ from ocs_ci.utility import (
     azure_utils,
     powernodes,
     rhv,
+    ibmcloud,
 )
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.utility.load_balancer import LoadBalancer
@@ -59,6 +61,8 @@ from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.utility.vsphere_nodes import VSPHERENode
 from paramiko.ssh_exception import NoValidConnectionsError, AuthenticationException
 from semantic_version import Version
+from ovirtsdk4.types import VmStatus
+from ocs_ci.utility.ibmcloud import login
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +84,7 @@ class PlatformNodesFactory:
             "vsphere_lso": VMWareLSONodes,
             "powervs": IBMPowerNodes,
             "rhv": RHVNodes,
+            "ibm_cloud": IBMCloud,
         }
 
     def get_nodes_platform(self):
@@ -2225,6 +2230,34 @@ class RHVNodes(NodesBase):
                 node_names=node_names, status=constants.NODE_NOT_READY, timeout=timeout
             )
 
+    def restart_nodes(self, nodes, timeout=900, wait=True, force=True):
+        """
+        Restart RHV VM
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            timeout (int): time in seconds to wait for node to reach 'ready' state
+            wait (bool): True if need to wait till the restarted node reaches
+                READY state. False otherwise
+            force (bool): True for force VM reboot, False otherwise
+
+        Raises:
+            ValueError: Raises if No nodes found for restarting
+
+        """
+        if not nodes:
+            raise ValueError("No nodes found for restarting")
+        vms = self.get_rhv_vm_instances(nodes)
+        node_names = [n.name for n in nodes]
+        self.rhv.reboot_rhv_vms(vms, timeout=timeout, wait=wait, force=force)
+
+        if wait:
+            # When the node is reachable then the node reaches status Ready.
+            logger.info(f"Waiting for nodes: {node_names} to reach ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY, timeout=timeout
+            )
+
     def start_nodes(self, nodes, timeout=600, wait=True):
         """
         Start RHV VM
@@ -2247,3 +2280,143 @@ class RHVNodes(NodesBase):
             wait_for_nodes_status(
                 node_names=node_names, status=constants.NODE_READY, timeout=timeout
             )
+
+    def restart_nodes_by_stop_and_start(
+        self, nodes, timeout=900, wait=True, force=True
+    ):
+        """
+        Restart RHV vms by stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True if need to wait till the restarted node reaches
+                READY state. False otherwise
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+            force (bool): True for force VM stop, False otherwise
+
+        """
+        if not nodes:
+            raise ValueError("No nodes found for restarting")
+        node_names = [n.name for n in nodes]
+        vms = self.get_rhv_vm_instances(nodes)
+        self.rhv.restart_rhv_vms_by_stop_and_start(vms, wait=wait, force=force)
+
+        if wait:
+            logger.info(f"Waiting for nodes: {node_names} to reach ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY, timeout=timeout
+            )
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Make sure all RHV VMs are up by the end of the test
+
+        """
+        vm_names = self.rhv.get_vm_names()
+        assert vm_names, "Failed to get VM list"
+        vms = [self.rhv.get_rhv_vm_instance(vm) for vm in vm_names]
+
+        stopping_vms = [
+            vm for vm in vms if self.rhv.get_vm_status(vm) == VmStatus.POWERING_DOWN
+        ]
+        for vm in stopping_vms:
+            # wait untill VM with powering down status changed to down status
+            for status in TimeoutSampler(600, 5, self.rhv.get_vm_status, vm):
+                logger.info(
+                    f"Waiting for RHV Machine {vm.name} to shutdown "
+                    f"Current status is : {status}"
+                )
+                if status == types.VmStatus.DOWN:
+                    logger.info(f"RHV Machine {vm.name} reached down status")
+                    break
+        # Get all down Vms
+        stopped_vms = [vm for vm in vms if self.rhv.get_vm_status(vm) == VmStatus.DOWN]
+
+        # Start the VMs
+        if stopped_vms:
+            logger.info(f"The following VMs are powered off: {stopped_vms}")
+            self.rhv.start_rhv_vms(stopped_vms)
+
+
+class IBMCloud(NodesBase):
+    """
+    IBM Cloud class
+    """
+
+    def __init__(self):
+        super(IBMCloud, self).__init__()
+        self.ibmcloud = ibmcloud.IBMCloud()
+
+    def restart_nodes(self, nodes, timeout=900, wait=True):
+        """
+        Restart all the ibmcloud vm instances
+
+        Args:
+            nodes (list): The OCS objects of the nodes instance
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+            wait (bool): True if need to wait till the restarted node reaches
+                READY state. False otherwise
+
+        """
+        self.ibmcloud.restart_nodes(nodes, timeout=900, wait=True)
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        """
+        Make sure all the nodes which are not ready on IBM Cloud
+
+        Args:
+            nodes (list): The OCS objects of the nodes instance
+            force (bool): True for force node stop, False otherwise
+
+        """
+        self.ibmcloud.restart_nodes_by_stop_and_start(nodes, force=True)
+
+    def attach_volume(self, volume, node):
+        self.ibmcloud.attach_volume(volume, node)
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        self.ibmcloud.detach_volume(volume, node)
+
+    def get_node_by_attached_volume(self, volume):
+        return self.ibmcloud.get_node_by_attached_volume(volume)
+
+    def get_data_volumes(self):
+        return self.ibmcloud.get_data_volumes()
+
+    def wait_for_volume_attach(self, volume):
+        self.ibmcloud.wait_for_volume_attach(volume)
+
+    def get_volume_id(self):
+        return self.ibmcloud.get_volume_id()
+
+    def delete_volume_id(self, volume):
+        self.ibmcloud.delete_volume_id(volume)
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Make sure all nodes are up by the end of the test on IBM Cloud.
+
+        """
+        logger.info("restarting nodes by stop and start teardown")
+        login()
+        worker_nodes = get_nodes(node_type="worker")
+        provider_id = worker_nodes[0].get()["spec"]["providerID"]
+        cluster_id = provider_id.split("/")[5]
+
+        worker_nodes_not_ready = []
+        for worker_node in worker_nodes:
+            logger.info(f"status is : {worker_node.status()}")
+            if worker_node.status() != "Ready":
+                worker_nodes_not_ready.append(
+                    worker_node.get()["metadata"]["labels"][
+                        "ibm-cloud.kubernetes.io/worker-id"
+                    ]
+                )
+
+        if len(worker_nodes_not_ready) > 0:
+            for not_ready_node in worker_nodes_not_ready:
+                cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {not_ready_node} -f"
+                out = run_cmd(cmd)
+                logger.info(f"Node restart command output: {out}")

@@ -151,8 +151,9 @@ def wait_for_all_nodes_csr_and_approve(timeout=900, sleep=10, expected_node_num=
 
     """
     start_time = time.time()
-    reboot_timeout = 120
+    reboot_timeout = 300
     vsphere_object = None
+    is_vms_without_ip = False
     if config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
         vsphere_object = VSPHERE(
             config.ENV_DATA["vsphere_server"],
@@ -187,10 +188,22 @@ def wait_for_all_nodes_csr_and_approve(timeout=900, sleep=10, expected_node_num=
         pending_csrs = get_pending_csr()
         if pending_csrs:
             approve_csrs(pending_csrs)
-        # In vSphere deployment it sometime happes that VM doesn't get ip and
+        # In vSphere deployment it sometime happens that VM doesn't get ip and
         # then we need to restart it to make our CI more stable and let the VM
-        # to get IP and continue with loading ignition config. The rester of
-        # the VMs happens only once in reboot_timeout (120 seconds).
+        # to get IP and continue with loading ignition config. The restart of
+        # the VMs happens only once in reboot_timeout (300 seconds).
         if vsphere_object and time.time() - start_time >= reboot_timeout:
             start_time = time.time()
-            vsphere_object.find_vms_without_ip_and_restart()
+            if not is_vms_without_ip:
+                vms_without_ip = vsphere_object.find_vms_without_ip(
+                    config.ENV_DATA.get("cluster_name"),
+                    config.ENV_DATA["vsphere_datacenter"],
+                    config.ENV_DATA["vsphere_cluster"],
+                )
+                if vms_without_ip:
+                    vsphere_object.restart_vms(vms_without_ip, force=True)
+                    # over-writing start_time here so that we have actual reboot timeout
+                    # calculated from the point after restarting vms
+                    start_time = time.time()
+                else:
+                    is_vms_without_ip = True

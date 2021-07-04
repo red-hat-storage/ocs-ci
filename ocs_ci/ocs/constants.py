@@ -68,10 +68,12 @@ ROOK_CSI_RBD_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "rbd")
 ROOK_CSI_CEPHFS_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "cephfs")
 CLEANUP_YAML = "cleanup.yaml.j2"
 MANIFESTS_DIR = "manifests"
+
+# OCP Deployment constants
 CHRONY_TEMPLATE = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "99-role-chrony-configuration.yaml"
 )
-
+HUGE_PAGES_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "huge_pages.yaml")
 
 # Statuses
 STATUS_READY = "Ready"
@@ -100,6 +102,7 @@ HEALTHY_PV_BS = ["`OPTIMAL`", "`LOW_CAPACITY`"]
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
+CEPHBLOCKPOOL_THICK = "CephBlockPoolThick"
 CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
 CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
 NOOBAA_SC = "openshift-storage.noobaa.io"
@@ -130,7 +133,6 @@ VOLUMESNAPSHOTCLASS = "VolumeSnapshotClass"
 HPA = "horizontalpodautoscaler"
 VOLUMESNAPSHOTCONTENT = "VolumeSnapshotContent"
 POD_DISRUPTION_BUDGET = "PodDisruptionBudget"
-
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -204,7 +206,6 @@ JENKINS_BUILD_COMPLETE = "Complete"
 RIPSAW_CRD = "resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml"
 RIPSAW_DROP_CACHE = os.path.join(TEMPLATE_FIO_DIR, "drop_cache_pod.yaml")
 OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
-
 
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfs"
@@ -694,7 +695,10 @@ ON_PREM_PLATFORMS = [
     IBM_POWER_PLATFORM,
     RHV_PLATFORM,
 ]
-CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
+CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM, IBMCLOUD_PLATFORM]
+
+# AWS i3 worker instance for LSO
+AWS_LSO_WORKER_INSTANCE = "i3en.2xlarge"
 
 # ignition files
 BOOTSTRAP_IGN = "bootstrap.ign"
@@ -760,6 +764,9 @@ VSAN = "vsan"
 
 # terraform haproxy service
 TERRAFORM_HAPROXY_SERVICE = os.path.join(VSPHERE_DIR, "lb/haproxy.service")
+
+# vSphere IPI related constants
+NUM_OF_VIPS = 2
 
 # Config related constants
 config_keys_patterns_to_censor = ["passw", "token", "secret", "key", "credential"]
@@ -1112,7 +1119,6 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "ocs-operator",
 ]
 
-
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
 CINDER_CLNT_VERSION = "3.0"
@@ -1289,7 +1295,6 @@ VAULT_VERSION_INFO_URL = "https://github.com/hashicorp/vault/releases/latest"
 VAULT_DOWNLOAD_BASE_URL = "https://releases.hashicorp.com/vault"
 
 # Vault related constants
-
 VAULT_DEFAULT_NAMESPACE = ""
 VAULT_DEFAULT_PATH_PREFIX = "ocs"
 VAULT_DEFAULT_POLICY_PREFIX = "rook"
@@ -1337,3 +1342,6 @@ OCS_COMPONENTS_MAP = {
     "noobaa": "multiCloudGateway",
     "blockpools": "cephBlockPools",
 }
+
+# ibmcloud related constants
+IBMCLOUD_VOLUME_NAME = "ibmvolume"

@@ -2439,7 +2439,7 @@ def skipif_ui(ui_test):
 
     ocp_version = get_running_ocp_version()
     try:
-        locators.get(ocp_version).get(ui_test)
+        locators[ocp_version][ui_test]
     except KeyError:
         return True
     return False
@@ -3363,9 +3363,14 @@ def add_chrony_to_ocp_deployment():
             "machineconfiguration.openshift.io/role"
         ] = role
         chrony_template_obj["metadata"]["name"] = f"99-{role}-chrony-configuration"
-        chrony_template_obj["spec"]["config"]["ignition"][
-            "version"
-        ] = config.DEPLOYMENT["ignition_version"]
+        ignition_version = config.DEPLOYMENT["ignition_version"]
+        chrony_template_obj["spec"]["config"]["ignition"]["version"] = ignition_version
+
+        if Version.coerce(ignition_version) < Version.coerce("3.0"):
+            chrony_template_obj["spec"]["config"]["storage"]["files"][0][
+                "filesystem"
+            ] = "root"
+
         chrony_template_str = yaml.safe_dump(chrony_template_obj)
         chrony_file = os.path.join(
             config.ENV_DATA["cluster_path"],
@@ -3374,3 +3379,11 @@ def add_chrony_to_ocp_deployment():
         )
         with open(chrony_file, "w") as f:
             f.write(chrony_template_str)
+
+
+def enable_huge_pages():
+    log.info("Enabling huge pages.")
+    exec_cmd(f"oc apply -f {constants.HUGE_PAGES_TEMPLATE}")
+    time.sleep(10)
+    log.info("Waiting for machine config will be applied with huge pages")
+    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE)

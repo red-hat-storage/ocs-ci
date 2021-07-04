@@ -61,56 +61,37 @@ def get_csv_from_image(bundle_image):
         raise
 
 
-def prepare_disconnected_ocs_deployment(upgrade=False):
+def prune_and_mirror_index_image(
+    index_image, mirrored_index_image, packages, icsp=None
+):
     """
-    Prepare disconnected ocs deployment:
-    - get related images from OCS operator bundle csv
-    - mirror related images to mirror registry
-    - create imageContentSourcePolicy for the mirrored images
-    - disable the default OperatorSources
+    Prune given index image and push it to mirror registry, mirror all related
+    images to mirror registry and create relevant imageContentSourcePolicy
 
     Args:
-        upgrade (bool): is this fresh installation or upgrade process
-            (default: False)
+        index_image (str): index image which will be pruned and mirrored
+        mirrored_index_image (str): mirrored index image which will be pushed to
+            mirror registry
+        packages (list): list of packages to keep
+        icsp (dict): ImageContentSourcePolicy used for mirroring (workaround for
+            stage images, which are pointing to different registry than they
+            really are)
 
     Returns:
-        str: mirrored OCS registry image prepared for disconnected installation
-            or None (for live deployment)
+        str: path to generated catalogSource.yaml file
 
     """
-
-    if config.DEPLOYMENT.get("stage_rh_osbs"):
-        raise NotImplementedError(
-            "Disconnected installation from stage is not implemented!"
-        )
-
-    logger.info(
-        f"Prepare for disconnected OCS {'upgrade' if upgrade else 'installation'}"
-    )
-    # Disable the default OperatorSources
-    exec_cmd(
-        """oc patch OperatorHub cluster --type json """
-        """-p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'"""
-    )
-
     get_opm_tool()
-
     pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
-    ocp_version = get_ocp_version()
-    index_image = f"{config.DEPLOYMENT['cs_redhat_operators_image']}:v{ocp_version}"
-    mirrored_index_image = (
-        f"{config.DEPLOYMENT['mirror_registry']}/{constants.MIRRORED_INDEX_IMAGE_NAMESPACE}/"
-        f"{constants.MIRRORED_INDEX_IMAGE_NAME}:v{ocp_version}"
-    )
 
     # prune an index image
     logger.info(
         f"Prune index image {index_image} -> {mirrored_index_image} "
-        f"(packages: {', '.join(constants.DISCON_CL_REQUIRED_PACKAGES)})"
+        f"(packages: {', '.join(packages)})"
     )
     cmd = (
         f"opm index prune -f {index_image} "
-        f"-p {','.join(constants.DISCON_CL_REQUIRED_PACKAGES)} "
+        f"-p {','.join(packages)} "
         f"-t {mirrored_index_image}"
     )
     # opm tool doesn't have --authfile parameter, we have to supply auth
@@ -144,6 +125,46 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
     mirroring_manifests_dir = line.replace("wrote mirroring manifests to ", "")
     logger.debug(f"Mirrored manifests directory: {mirroring_manifests_dir}")
 
+    if icsp:
+        # update mapping.txt file with urls updated based on provided
+        # imageContentSourcePolicy
+        mapping_file = os.path.join(
+            f"{mirroring_manifests_dir}",
+            "mapping.txt",
+        )
+        with open(mapping_file) as mf:
+            mapping_file_content = []
+            for line in mf:
+                # exclude mirrored_index_image
+                if mirrored_index_image in line:
+                    continue
+                # apply any matching policy to all lines from mapping file
+                for policy in icsp["spec"]["repositoryDigestMirrors"]:
+                    # we use only first defined mirror for particular source,
+                    # because we don't use any ICSP with more mirrors for one
+                    # source and it will make the logic wery complex and
+                    # confusing
+                    line = line.replace(policy["source"], policy["mirrors"][0])
+                mapping_file_content.append(line)
+        # write mapping file to disk
+        mapping_file_updated = os.path.join(
+            f"{mirroring_manifests_dir}",
+            "mapping_updated.txt",
+        )
+        with open(mapping_file_updated, "w") as f:
+            f.writelines(mapping_file_content)
+        # mirror images based on the updated mapping file
+        # ignore errors, because some of the images might be already mirrored
+        # via the `oc adm catalog mirror ...` command and not available on the
+        # mirror
+        exec_cmd(
+            f"oc image mirror --filter-by-os='.*' -f {mapping_file_updated} "
+            f"--insecure --registry-config={pull_secret_path} "
+            "--max-per-registry=2 --continue-on-error=true --skip-missing=true",
+            timeout=3600,
+            ignore_error=True,
+        )
+
     # create ImageContentSourcePolicy
     icsp_file = os.path.join(
         f"{mirroring_manifests_dir}",
@@ -153,6 +174,64 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
     logger.info("Sleeping for 60 sec to start update machineconfigpool status")
     time.sleep(60)
     wait_for_machineconfigpool_status("all")
+
+    cs_file = os.path.join(
+        f"{mirroring_manifests_dir}",
+        "catalogSource.yaml",
+    )
+    return cs_file
+
+
+def prepare_disconnected_ocs_deployment(upgrade=False):
+    """
+    Prepare disconnected ocs deployment:
+    - mirror required images from redhat-operators
+    - get related images from OCS operator bundle csv
+    - mirror related images to mirror registry
+    - create imageContentSourcePolicy for the mirrored images
+    - disable the default OperatorSources
+
+    Args:
+        upgrade (bool): is this fresh installation or upgrade process
+            (default: False)
+
+    Returns:
+        str: mirrored OCS registry image prepared for disconnected installation
+            or None (for live deployment)
+
+    """
+
+    if config.DEPLOYMENT.get("stage_rh_osbs"):
+        raise NotImplementedError(
+            "Disconnected installation from stage is not implemented!"
+        )
+
+    logger.info(
+        f"Prepare for disconnected OCS {'upgrade' if upgrade else 'installation'}"
+    )
+    # Disable the default OperatorSources
+    exec_cmd(
+        """oc patch OperatorHub cluster --type json """
+        """-p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'"""
+    )
+
+    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+
+    # login to mirror registry
+    login_to_mirror_registry(pull_secret_path)
+
+    ocp_version = get_ocp_version()
+    index_image = f"{config.DEPLOYMENT['cs_redhat_operators_image']}:v{ocp_version}"
+    mirrored_index_image = (
+        f"{config.DEPLOYMENT['mirror_registry']}/{constants.MIRRORED_INDEX_IMAGE_NAMESPACE}/"
+        f"{constants.MIRRORED_INDEX_IMAGE_NAME}:v{ocp_version}"
+    )
+
+    prune_and_mirror_index_image(
+        index_image,
+        mirrored_index_image,
+        constants.DISCON_CL_REQUIRED_PACKAGES,
+    )
 
     # create redhat-operators CatalogSource
     catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)

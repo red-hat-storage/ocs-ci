@@ -330,3 +330,15 @@ class TemplateNotFound(Exception):
 
 class PVNotSufficientException(Exception):
     pass
+
+
+class IPAMReleaseUpdateFailed(Exception):
+    pass
+
+
+class IPAMAssignUpdateFailed(Exception):
+    pass
+
+
+class NodeHasNoAttachedVolume(Exception):
+    pass
