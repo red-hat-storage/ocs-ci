@@ -14,6 +14,7 @@ from ocs_ci.helpers.helpers import (
     verify_volume_deleted_in_backend,
     default_thick_storage_class,
     check_rbd_image_used_size,
+    default_ceph_block_pool,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
@@ -54,6 +55,7 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
         Test to delete RBD provisioner leader pod while creating a PVC using thick provision enabled storage class
         """
         pvc_size = 20
+        pool_name = default_ceph_block_pool()
         executor = ThreadPoolExecutor(max_workers=1)
         DISRUPTION_OPS.set_resource(
             resource="rbdplugin_provisioner", leader_type="provisioner"
@@ -94,7 +96,7 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
         assert check_rbd_image_used_size(
             pvc_objs=[pvc_obj],
             usage_to_compare=f"{pvc_size}GiB",
-            rbd_pool=constants.DEFAULT_BLOCKPOOL,
+            rbd_pool=pool_name,
             expect_match=True,
         ), f"PVC {pvc_obj.name} is not thick provisioned.\n PV describe :\n {pv_obj.describe()}"
         logger.info("Verified: The PVC is thick provisioned")
@@ -136,7 +138,7 @@ class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
         assert verify_volume_deleted_in_backend(
             interface=constants.CEPHBLOCKPOOL,
             image_uuid=image_uid,
-            pool_name=constants.DEFAULT_BLOCKPOOL,
+            pool_name=pool_name,
             timeout=300,
         ), f"Wait timeout - RBD image {image_name} is not deleted"
         logger.info(f"Verified: RBD image {image_name} is deleted")
