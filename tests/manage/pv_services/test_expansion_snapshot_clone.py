@@ -2,7 +2,11 @@ import logging
 import pytest
 
 from ocs_ci.helpers import helpers
-from ocs_ci.helpers.helpers import default_storage_class
+from ocs_ci.helpers.helpers import (
+    default_storage_class,
+    default_thick_storage_class,
+    check_rbd_image_used_size,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
@@ -11,6 +15,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
     polarion_id,
+    bugzilla,
 )
 
 log = logging.getLogger(__name__)
@@ -27,15 +32,27 @@ log = logging.getLogger(__name__)
         ),
         pytest.param(
             *["thick", "thick"],
-            marks=[polarion_id("OCS-2502"), skipif_ocs_version("<4.8")],
+            marks=[
+                polarion_id("OCS-2502"),
+                skipif_ocs_version("<4.8"),
+                bugzilla("1959793"),
+            ],
         ),
         pytest.param(
             *["thin", "thick"],
-            marks=[polarion_id("OCS-2507"), skipif_ocs_version("<4.8")],
+            marks=[
+                polarion_id("OCS-2507"),
+                skipif_ocs_version("<4.8"),
+                bugzilla("1959793"),
+            ],
         ),
         pytest.param(
             *["thick", "thin"],
-            marks=[polarion_id("OCS-2508"), skipif_ocs_version("<4.8")],
+            marks=[
+                polarion_id("OCS-2508"),
+                skipif_ocs_version("<4.8"),
+                bugzilla("1959793"),
+            ],
         ),
     ],
 )
@@ -64,11 +81,7 @@ class TestExpansionSnapshotClone(ManageTest):
 
         if "thick" in (pvc_create_sc_type, restore_sc_type):
             # Thick provisioning is applicable only for RBD
-            thick_sc = storageclass_factory(
-                interface=constants.CEPHBLOCKPOOL,
-                new_rbd_pool=False,
-                rbd_thick_provision=True,
-            )
+            thick_sc = default_thick_storage_class()
             access_modes_cephfs = None
             num_of_cephfs_pvc = 0
             thin_sc = default_storage_class(constants.CEPHBLOCKPOOL)
@@ -91,18 +104,33 @@ class TestExpansionSnapshotClone(ManageTest):
             sc_rbd=self.pvc_create_sc,
         )
 
+        self.ct_pod = pod.get_ceph_tools_pod()
+        if pvc_create_sc_type == "thick":
+            assert check_rbd_image_used_size(
+                pvc_objs=self.pvcs,
+                usage_to_compare=f"{self.pvc_size}GiB",
+                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                expect_match=True,
+            ), "One or more PVCs are not thick provisioned."
+
     def test_expansion_snapshot_clone(
-        self, snapshot_factory, snapshot_restore_factory, pvc_clone_factory, pod_factory
+        self,
+        pvc_create_sc_type,
+        restore_sc_type,
+        snapshot_factory,
+        snapshot_restore_factory,
+        pvc_clone_factory,
+        pod_factory,
     ):
         """
         This test performs the following operations :
 
-        Expand parent PVC --> Take snapshot --> Expand parent PVC -->
+        Run IO --> Expand parent PVC --> Take snapshot --> Expand parent PVC -->
         Take clone --> Restore snapshot --> Expand cloned and restored PVC -->
         Clone restored PVC --> Snapshot and restore of cloned PVCs -->
         Expand new PVCs
 
-        Data integrity will be checked in each stage as required.
+        Data integrity and thick provisioning will be verified in each stage as required.
         This test verifies that the clone, snapshot and parent PVCs are
         independent and any operation in one will not impact the other.
 
@@ -143,6 +171,18 @@ class TestExpansionSnapshotClone(ManageTest):
             pvc_obj.resize_pvc(pvc_size_expand_1, True)
         log.info(f"Verified: Size of all PVCs are expanded to {pvc_size_expand_1}Gi")
 
+        # Verify thick provision by checking the image used size
+        if pvc_create_sc_type == "thick":
+            assert check_rbd_image_used_size(
+                pvc_objs=self.pvcs,
+                usage_to_compare=f"{pvc_size_expand_1}GiB",
+                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                expect_match=True,
+            ), "One or more PVCs are not thick provisioned after expansion"
+            log.info(
+                f"Verified thick provision after expanding the PVCs to {pvc_size_expand_1}GiB"
+            )
+
         # Take snapshot of all PVCs
         log.info("Creating snapshot of all PVCs")
         for pvc_obj in self.pvcs:
@@ -172,6 +212,18 @@ class TestExpansionSnapshotClone(ManageTest):
             pvc_obj.resize_pvc(pvc_size_expand_2, True)
         log.info(f"Verified: Size of all PVCs are expanded to {pvc_size_expand_2}Gi")
 
+        # Verify thick provision by checking the image used size
+        if pvc_create_sc_type == "thick":
+            assert check_rbd_image_used_size(
+                pvc_objs=self.pvcs,
+                usage_to_compare=f"{pvc_size_expand_2}GiB",
+                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                expect_match=True,
+            ), "One or more PVCs are not thick provisioned after expansion"
+            log.info(
+                f"Verified thick provision after expanding the PVCs to {pvc_size_expand_2}GiB"
+            )
+
         # Clone PVCs
         log.info("Creating clone of all PVCs")
         clone_objs = []
@@ -185,7 +237,7 @@ class TestExpansionSnapshotClone(ManageTest):
             log.info(f"Created clone of PVC {pvc_obj.name}")
         log.info("Created clone of all PVCs")
 
-        log.info("Wait for cloned PVcs to reach Bound state and verify size")
+        log.info("Wait for cloned PVCs to reach Bound state and verify size")
         for pvc_obj in clone_objs:
             helpers.wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=180
@@ -229,6 +281,46 @@ class TestExpansionSnapshotClone(ManageTest):
             pvc_obj.reload()
         log.info("Verified: Restored PVCs are Bound.")
 
+        # Verify restored PVCs are thick provision or not by checking the image used size
+        if restore_sc_type == "thick":
+            assert check_rbd_image_used_size(
+                pvc_objs=restore_objs,
+                usage_to_compare=f"{pvc_size_expand_1}GiB",
+                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                expect_match=True,
+            ), "One or more restored PVCs are not thick provisioned"
+            log.info("Verified thick provision on restored PVCs")
+        elif restore_sc_type == "thin" and (
+            "thick" in (pvc_create_sc_type, restore_sc_type)
+        ):
+            assert check_rbd_image_used_size(
+                pvc_objs=restore_objs,
+                usage_to_compare=f"{pvc_size_expand_1}GiB",
+                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                expect_match=False,
+            ), "One or more restored PVCs are not thin provisioned"
+            log.info("Verified: Restored PVCs are not thick provisioned.")
+
+        # Verify clones are thick provision or not by checking the image used size
+        if pvc_create_sc_type == "thick":
+            assert check_rbd_image_used_size(
+                pvc_objs=clone_objs,
+                usage_to_compare=f"{pvc_size_expand_2}GiB",
+                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                expect_match=True,
+            ), "One or more cloned PVCs are not thick provisioned"
+            log.info("Verified thick provision on cloned PVCs.")
+        elif pvc_create_sc_type == "thin" and (
+            "thick" in (pvc_create_sc_type, restore_sc_type)
+        ):
+            assert check_rbd_image_used_size(
+                pvc_objs=clone_objs,
+                usage_to_compare=f"{pvc_size_expand_2}GiB",
+                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                expect_match=False,
+            ), "One or more cloned PVCs are not thin provisioned"
+            log.info("Verified: Cloned PVCs are not thick provisioned.")
+
         # Attach the restored and cloned PVCs to pods
         log.info("Attach the restored and cloned PVCs to pods")
         restore_clone_pod_objs = []
@@ -262,6 +354,67 @@ class TestExpansionSnapshotClone(ManageTest):
             f"Verified: Size of all cloned and restored PVCs are expanded to "
             f"{pvc_size_expand_3}G"
         )
+
+        # Verify thick provision or not by checking the image used size
+        if pvc_create_sc_type == "thick":
+            assert check_rbd_image_used_size(
+                pvc_objs=clone_objs,
+                usage_to_compare=f"{pvc_size_expand_3}GiB",
+                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                expect_match=True,
+            ), (
+                "One or more cloned PVCs are not thick provisioned after expanding "
+                f"to {pvc_size_expand_3}GiB"
+            )
+            log.info(
+                f"Verified thick provision after expanding cloned PVCs to {pvc_size_expand_3}GiB"
+            )
+        elif pvc_create_sc_type == "thin" and (
+            "thick" in (pvc_create_sc_type, restore_sc_type)
+        ):
+            assert check_rbd_image_used_size(
+                pvc_objs=clone_objs,
+                usage_to_compare=f"{pvc_size_expand_3}GiB",
+                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                expect_match=False,
+            ), (
+                "One or more cloned PVCs are not thin provisioned after expanding "
+                f"to {pvc_size_expand_3}GiB"
+            )
+            log.info(
+                "Verified: PVCs are not thick provisioned after expanding cloned "
+                f"PVCs to {pvc_size_expand_3}GiB"
+            )
+        if restore_sc_type == "thick":
+            assert check_rbd_image_used_size(
+                pvc_objs=restore_objs,
+                usage_to_compare=f"{pvc_size_expand_3}GiB",
+                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                expect_match=True,
+            ), (
+                "One or more restored PVCs are not thick provisioned after"
+                f" expanding to {pvc_size_expand_3}GiB"
+            )
+            log.info(
+                "Verified thick provision after expanding restored PVCs "
+                f"to {pvc_size_expand_3}GiB"
+            )
+        elif restore_sc_type == "thin" and (
+            "thick" in (pvc_create_sc_type, restore_sc_type)
+        ):
+            assert check_rbd_image_used_size(
+                pvc_objs=restore_objs,
+                usage_to_compare=f"{pvc_size_expand_3}GiB",
+                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                expect_match=False,
+            ), (
+                "One or more restored PVCs are not thin provisioned after "
+                f"expanding to {pvc_size_expand_3}GiB"
+            )
+            log.info(
+                "Verified: PVCs are not thick provisioned after expanding "
+                f"restored PVCs to {pvc_size_expand_3}GiB"
+            )
 
         # Run IO on pods attached with cloned and restored PVCs
         log.info("Starting IO on pods attached with cloned and restored PVCs")
@@ -317,7 +470,7 @@ class TestExpansionSnapshotClone(ManageTest):
             log.info(f"Created clone of restored PVC {pvc_obj.name}")
         log.info("Created clone of restored all PVCs")
 
-        log.info("Wait for cloned PVcs to reach Bound state and verify size")
+        log.info("Wait for cloned PVCs to reach Bound state and verify size")
         for pvc_obj in restored_clone_objs:
             helpers.wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=180
@@ -330,6 +483,31 @@ class TestExpansionSnapshotClone(ManageTest):
             f"Cloned PVCs reached Bound state. Verified the size of all PVCs "
             f"as {pvc_size_expand_3}Gi"
         )
+
+        # Verify PVCs cloned from restored PVCs are thick provisioned or not
+        # by checking the image used size
+        if restore_sc_type == "thick":
+            assert check_rbd_image_used_size(
+                pvc_objs=restored_clone_objs,
+                usage_to_compare=f"{pvc_size_expand_3}GiB",
+                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                expect_match=True,
+            ), "One or more PVCs cloned from restored PVCs are not thick provisioned"
+            log.info(
+                "Verified that the PVCs cloned from restored PVCs are thick provisioned"
+            )
+        if restore_sc_type == "thin" and (
+            "thick" in (pvc_create_sc_type, restore_sc_type)
+        ):
+            assert check_rbd_image_used_size(
+                pvc_objs=restored_clone_objs,
+                usage_to_compare=f"{pvc_size_expand_3}GiB",
+                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                expect_match=False,
+            ), "One or more PVCs cloned from restored PVCs are not thin provisioned"
+            log.info(
+                "Verified that the PVCs cloned from restored PVCs are not thick provisioned"
+            )
 
         # Take snapshot of all cloned PVCs
         snapshots_new = []
@@ -373,6 +551,28 @@ class TestExpansionSnapshotClone(ManageTest):
             )
             pvc_obj.reload()
         log.info("Verified: Restored PVCs are Bound.")
+
+        # Verify thick provision or not by checking the image used size
+        if restore_sc_type == "thick":
+            assert check_rbd_image_used_size(
+                pvc_objs=restore_objs_new,
+                usage_to_compare=f"{pvc_size_expand_3}GiB",
+                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                expect_match=True,
+            ), "One or more restored PVCs are not thick provisioned"
+            log.info("Verified thick provision on PVCs restored from the snapshots.")
+        if restore_sc_type == "thin" and (
+            "thick" in (pvc_create_sc_type, restore_sc_type)
+        ):
+            assert check_rbd_image_used_size(
+                pvc_objs=restore_objs_new,
+                usage_to_compare=f"{pvc_size_expand_3}GiB",
+                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                expect_match=False,
+            ), "One or more restored PVCs are not thin provisioned"
+            log.info(
+                "Verified that the PVCs restored from the snapshots are not thick provisioned."
+            )
 
         # Delete pods to attach the cloned PVCs to new pods
         log.info("Delete pods")

@@ -2,8 +2,9 @@ import logging
 import pytest
 import time
 
+from ocs_ci.framework.pytest_customization.marks import tier1
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
-from ocs_ci.framework.testlib import ui, skipif_ocs_version
+from ocs_ci.framework.testlib import skipif_ocs_version, skipif_ocp_version
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, delete_pvcs
 
 logger = logging.getLogger(__name__)
@@ -20,25 +21,81 @@ class TestPvcUserInterface(object):
         pvcs = [pvc_obj for pvc_obj in pvc_objs if "test-pvc" in pvc_obj.name]
         delete_pvcs(pvc_objs=pvcs)
 
-    @ui
+    @tier1
     @skipif_ocs_version("<4.6")
     @pytest.mark.parametrize(
-        argnames=["sc_type", "pvc_name", "access_mode", "pvc_size"],
+        argnames=["sc_type", "pvc_name", "access_mode", "pvc_size", "vol_mode"],
         argvalues=[
             pytest.param(
-                *["ocs-storagecluster-cephfs", "test-pvc-fs", "ReadWriteMany", "2"]
-            )
+                "ocs-storagecluster-cephfs",
+                "test-pvc-fs",
+                "ReadWriteMany",
+                "2",
+                "Filesystem",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd",
+                "test-pvc-rbd",
+                "ReadWriteMany",
+                "3",
+                "Block",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd-thick",
+                "test-pvc-rbd-thick",
+                "ReadWriteMany",
+                "4",
+                "Block",
+                marks=[skipif_ocp_version("<4.8")],
+            ),
+            pytest.param(
+                "ocs-storagecluster-cephfs",
+                "test-pvc-fs",
+                "ReadWriteOnce",
+                "10",
+                "Filesystem",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd",
+                "test-pvc-rbd",
+                "ReadWriteOnce",
+                "11",
+                "Block",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd-thick",
+                "test-pvc-rbd-thick",
+                "ReadWriteOnce",
+                "12",
+                "Block",
+                marks=[skipif_ocp_version("<4.8")],
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd",
+                "test-pvc-rbd",
+                "ReadWriteOnce",
+                "13",
+                "Filesystem",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd-thick",
+                "test-pvc-rbd-thick",
+                "ReadWriteOnce",
+                "4",
+                "Filesystem",
+                marks=[skipif_ocp_version("<4.8")],
+            ),
         ],
     )
     def test_create_delete_pvc(
-        self, setup_ui, sc_type, pvc_name, access_mode, pvc_size
+        self, setup_ui, sc_type, pvc_name, access_mode, pvc_size, vol_mode
     ):
         """
         Test create and delete pvc via UI
 
         """
         pvc_ui_obj = PvcUI(setup_ui)
-        pvc_ui_obj.create_pvc_ui(sc_type, pvc_name, access_mode, pvc_size)
+        pvc_ui_obj.create_pvc_ui(sc_type, pvc_name, access_mode, pvc_size, vol_mode)
         time.sleep(2)
 
         pvc_objs = get_all_pvc_objs(namespace="openshift-storage")
@@ -58,6 +115,20 @@ class TestPvcUserInterface(object):
             f"storage class error| expected storage class:{sc_type} "
             f"\n actual storage class:{pvc[0].backed_sc}"
         )
+
+        assert pvc[0].get_pvc_vol_mode == vol_mode, (
+            f"volume mode error| expected volume mode:{vol_mode} "
+            f"\n actual volume mode:{pvc[0].get_pvc_vol_mode}"
+        )
+
+        logger.info("Verifying PVC Details via UI")
+        pvc_ui_obj.verify_pvc_ui(
+            pvc_size=pvc_size,
+            access_mode=access_mode,
+            vol_mode=vol_mode,
+            sc_type=sc_type,
+        )
+        logger.info("PVC Details Verified via UI..!!")
 
         logger.info(f"Delete {pvc_name} pvc")
         pvc_ui_obj.delete_pvc_ui(pvc_name)

@@ -1403,16 +1403,8 @@ class AWS(object):
         """
         base_domain = base_domain or config.ENV_DATA["base_domain"]
         record_name = f"{cluster_name}.{base_domain}."
-        hosted_zones = self.route53_client.list_hosted_zones_by_name(
-            DNSName=base_domain, MaxItems="1"
-        )["HostedZones"]
-        hosted_zone_ids = [
-            zone["Id"] for zone in hosted_zones if zone["Name"] == f"{base_domain}."
-        ]
-        hosted_zone_id = hosted_zone_ids[0]
-        record_sets_in_base_domain = self.route53_client.list_resource_record_sets(
-            HostedZoneId=hosted_zone_id
-        )["ResourceRecordSets"]
+        hosted_zone_id = self.get_hosted_zone_id_for_domain(domain=base_domain)
+        record_sets_in_base_domain = self.get_record_sets(domain=base_domain)
 
         for record in record_sets_in_base_domain:
             if record["Name"] == record_name:
@@ -1421,6 +1413,24 @@ class AWS(object):
                 # breaking here since we will have single record in
                 # base domain and deleting is destructive action
                 break
+
+    def get_record_sets(self, domain=None):
+        """
+        Get all the record sets in domain
+
+        Args:
+            domain (str): Domain name to fetch the records
+
+        Returns:
+            list: list of record sets
+
+        """
+        domain = domain or config.ENV_DATA["base_domain"]
+        hosted_zone_id = self.get_hosted_zone_id_for_domain(domain=domain)
+        record_sets = self.route53_client.list_resource_record_sets(
+            HostedZoneId=hosted_zone_id
+        )["ResourceRecordSets"]
+        return record_sets
 
     def delete_record(self, record, hosted_zone_id):
         """
@@ -1561,6 +1571,26 @@ class AWS(object):
                 Id=response["ChangeInfo"]["Id"],
                 WaiterConfig={"MaxAttempts": max_attempts},
             )
+
+    def get_hosted_zone_id_for_domain(self, domain=None):
+        """
+        Get Zone id for domain
+
+        Args:
+            domain (str): Name of the domain.
+
+        Returns:
+            str: Zone id
+
+        """
+        domain = domain or config.ENV_DATA["base_domain"]
+        hosted_zones = self.route53_client.list_hosted_zones_by_name(
+            DNSName=domain, MaxItems="1"
+        )["HostedZones"]
+        hosted_zone_ids = [
+            zone["Id"] for zone in hosted_zones if zone["Name"] == f"{domain}."
+        ]
+        return hosted_zone_ids[0]
 
 
 def get_instances_ids_and_names(instances):
@@ -1783,14 +1813,14 @@ def delete_cluster_buckets(cluster_name):
         f"{cluster_name}-(\\w+)-image-registry-{region}-(\\w+)",
         f"{cluster_name}-(\\d{{4}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})",
         f"{cluster_name}-(\\w+)-oidc",
+        f"{cluster_name}-(\\d{{8}})",
     ]
     for pattern in patterns:
         r = re.compile(pattern)
         filtered_buckets = list(filter(r.search, bucket_names))
         logger.info(f"Found buckets: {filtered_buckets}")
-        if len(filtered_buckets) == 1:
-            s3_resource = boto3.resource("s3", region_name=region)
-            bucket_name = filtered_buckets[0]
+        s3_resource = boto3.resource("s3", region_name=region)
+        for bucket_name in filtered_buckets:
             logger.info("Deleting all files in bucket %s", bucket_name)
             try:
                 bucket = s3_resource.Bucket(bucket_name)
@@ -1799,8 +1829,6 @@ def delete_cluster_buckets(cluster_name):
                 bucket.delete()
             except ClientError as e:
                 logger.error(e)
-        else:
-            logger.info("No matches found for pattern %s", pattern)
 
 
 def get_stack_name_from_instance_dict(instance_dict):

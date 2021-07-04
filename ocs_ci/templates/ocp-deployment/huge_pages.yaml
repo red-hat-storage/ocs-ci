@@ -1,0 +1,33 @@
+---
+
+#
+# Configure hugepages on workers of an OCP cluster.
+#
+# See documentation:
+# - https://docs.openshift.com/container-platform/latest/scalability_and_performance/what-huge-pages-do-and-how-they-are-consumed-by-apps.html
+#
+# hugepages are required by some KubeVirt tier1 tests:
+# - https://github.com/kubevirt/kubevirt/blob/master/tests/vmi_configuration_test.go
+#
+#
+
+kind: Tuned
+apiVersion: tuned.openshift.io/v1
+metadata:
+  name: hugepages
+  namespace: openshift-cluster-node-tuning-operator
+spec:
+  profile:
+    - name: openshift-node-hugepages
+      data: |
+        [main]
+        summary=Boot time configuration for hugepages
+        include=openshift-node
+        [bootloader]
+        # Allocate 32x2Mi pages and 1x1Gi pages
+        cmdline_openshift_node_hugepages=default_hugepagesz=2M hugepages=32 hugepagesz=1G hugepages=1
+  recommend:
+    - machineConfigLabels:
+        machineconfiguration.openshift.io/role: "worker"
+      priority: 25
+      profile: openshift-node-hugepages

@@ -14,6 +14,7 @@ def hsbenchs3(request):
     hsbenchs3 = hsbench.HsBench()
 
     def teardown():
+        hsbenchs3.delete_test_user()
         hsbenchs3.cleanup()
 
     request.addfinalizer(teardown)

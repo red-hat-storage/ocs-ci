@@ -65,7 +65,7 @@ def test_create_delete_pvcs(multi_pvc_factory, pod_factory, project=None):
         helpers.wait_for_resource_state(
             resource=pvc_obj,
             state=constants.STATUS_BOUND,
-            timeout=1200,  # Timeout given 5 minutes
+            timeout=1200,  # Timeout given 20 minutes
         )
         pvc_info = pvc_obj.get()
         setattr(pvc_obj, "volume_mode", pvc_info["spec"]["volumeMode"])

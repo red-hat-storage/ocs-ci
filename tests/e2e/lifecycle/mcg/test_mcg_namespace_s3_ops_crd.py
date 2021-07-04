@@ -561,12 +561,25 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
                 },
                 marks=on_prem_platform_required,
             ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 600000,
+                        "namespacestore_dict": {
+                            "aws": [(1, "eu-central-1")],
+                        },
+                    },
+                    "placement_policy": {
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
+                    },
+                }
+            ),
         ],
-        ids=[
-            "AWS-OC-Single",
-            "Azure-OC-Single",
-            "RGW-OC-Single",
-        ],
+        ids=["AWS-OC-Single", "Azure-OC-Single", "RGW-OC-Single", "AWS-OC-Cache"],
     )
     def test_mcg_namespace_mpu_crd(
         self, mcg_obj, awscli_pod, bucket_factory, bucketclass_dict
