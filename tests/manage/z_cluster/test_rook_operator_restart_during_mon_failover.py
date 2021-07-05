@@ -35,7 +35,7 @@ class TestDrainNodeMon(ManageTest):
     4.Verify pdb status, disruptions_allowed=0, max_unavailable_mon=1
     5.Verify the number of mon pods is 3 for (1400 seconds)
     6.Respin  rook-ceph operator pod
-    7.Uncordon the node or schedule the node
+    7.Uncordon the node
     8.Wait for mon and osd pods to be on running state
     9.Verify pdb status, disruptions_allowed=1, max_unavailable_mon=1
 
