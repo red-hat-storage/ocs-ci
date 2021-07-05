@@ -1317,3 +1317,7 @@ OCS_COMPONENTS_MAP = {
     "noobaa": "multiCloudGateway",
     "blockpools": "cephBlockPools",
 }
+
+DEFAULT_PAXOS_SERVICE_TRIM_MIN = 250
+DEFAULT_PAXOS_SERVICE_TRIM_MAX = 500
+DEFAULT_OSD_OP_COMPLAINT_TIME = 30.000000
