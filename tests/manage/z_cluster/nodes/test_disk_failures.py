@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     cloud_platform_required,
     vsphere_platform_required,
     bugzilla,
+    skipif_ibm_cloud,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import (
@@ -168,6 +169,7 @@ class TestDiskFailures(ManageTest):
 
     @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1086")
+    @skipif_ibm_cloud
     def test_detach_attach_2_data_volumes(
         self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):
