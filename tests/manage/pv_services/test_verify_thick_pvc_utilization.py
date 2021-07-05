@@ -23,15 +23,13 @@ log = logging.getLogger(__name__)
 class TestVerifyRbdThickPvcUtilization(ManageTest):
     """
     Tests to verify storage utilization of RBD thick provisioned PVC
+
     """
 
     @pytest.fixture(autouse=True)
     def setup(self, project_factory):
         """
         Create project for the test
-
-        Returns:
-            OCP: An OCP instance of project
 
         """
         self.proj_obj = project_factory()
@@ -45,6 +43,7 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
     ):
         """
         Test to verify the storage utilization of RBD thick provisioned PVC
+
         """
         pvc_size = 15
         replica_size = 3
