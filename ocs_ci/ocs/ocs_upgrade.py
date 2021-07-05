@@ -473,7 +473,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
 
     # For external cluster , create the secrets if upgraded version is >= 4.8
     if config.DEPLOYMENT["external_mode"] and upgrade_version >= "4.8":
-        create_external_secret(ocs_version=upgrade_version)
+        create_external_secret(ocs_version=upgrade_version, apply=True)
 
     csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
     pre_upgrade_images = upgrade_ocs.get_pre_upgrade_image(csv_name_pre_upgrade)

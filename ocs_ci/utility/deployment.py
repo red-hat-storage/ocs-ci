@@ -47,12 +47,13 @@ def get_ocp_ga_version(channel):
     return ""
 
 
-def create_external_secret(ocs_version=None):
+def create_external_secret(ocs_version=None, apply=False):
     """
     Creates secret data for external cluster
 
     Args:
          ocs_version (str): OCS version
+         apply (bool): True if want to use apply instead of create command
 
     """
     ocs_version = ocs_version or config.ENV_DATA["ocs_version"]
@@ -73,4 +74,5 @@ def create_external_secret(ocs_version=None):
     )
     templating.dump_data_to_temp_yaml(secret_data, secret_data_yaml.name)
     logger.info(f"Creating external cluster secret for OCS version: {ocs_version}")
-    run_cmd(f"oc create -f {secret_data_yaml.name}")
+    oc_type = "apply" if apply else "create"
+    run_cmd(f"oc {oc_type} -f {secret_data_yaml.name}")
