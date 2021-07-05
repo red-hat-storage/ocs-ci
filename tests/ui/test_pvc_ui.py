@@ -4,7 +4,11 @@ import time
 
 from ocs_ci.framework.pytest_customization.marks import tier1
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
-from ocs_ci.framework.testlib import skipif_ocs_version, skipif_ocp_version
+from ocs_ci.framework.testlib import (
+    skipif_ocs_version,
+    skipif_ocp_version,
+    skipif_ibm_cloud,
+)
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, delete_pvcs
 
 logger = logging.getLogger(__name__)
@@ -21,6 +25,7 @@ class TestPvcUserInterface(object):
         pvcs = [pvc_obj for pvc_obj in pvc_objs if "test-pvc" in pvc_obj.name]
         delete_pvcs(pvc_objs=pvcs)
 
+    @skipif_ibm_cloud
     @tier1
     @skipif_ocs_version("<4.6")
     @pytest.mark.parametrize(
