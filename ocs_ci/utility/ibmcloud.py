@@ -19,6 +19,7 @@ from ocs_ci.ocs.exceptions import (
     NodeHasNoAttachedVolume,
 )
 from ocs_ci.utility.utils import get_ocp_version, run_cmd, TimeoutSampler
+from ocs_ci.ocs.node import get_nodes
 
 
 logger = logging.getLogger(name=__file__)
@@ -311,9 +312,9 @@ class IBMCloud(object):
                 storage backend, False otherwise
 
         """
-        provider_id = node[0].get()["spec"]["providerID"]
+        provider_id = node.get()["spec"]["providerID"]
         cluster_id = provider_id.split("/")[5]
-        worker_id = node[0].get()["metadata"]["labels"][
+        worker_id = node.get()["metadata"]["labels"][
             "ibm-cloud.kubernetes.io/worker-id"
         ]
 
@@ -357,7 +358,19 @@ class IBMCloud(object):
         else:
             worker_id = out["volume_attachments"][0]["instance"]["name"]
             logger.info(f"volume is  attached to node: {worker_id}")
-            return worker_id
+            worker_nodes = get_nodes(node_type="worker")
+            for worker_node in worker_nodes:
+                logger.info(
+                    f"worker node id is:{worker_node.get()['metadata']['labels']['ibm-cloud.kubernetes.io/worker-id']}"
+                )
+                if (
+                    worker_node.get()["metadata"]["labels"][
+                        "ibm-cloud.kubernetes.io/worker-id"
+                    ]
+                    == worker_id
+                ):
+                    logger.info(f"return worker node is:{worker_id}")
+                    return worker_node
 
     def get_data_volumes(self):
         """
