@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 @tier1
 @pytest.mark.post_ocp_upgrade
-@pytest.mark.first
+@pytest.mark.run(order=2)
 @pytest.mark.polarion_id("OCS-1261")
 @skipif_openshift_dedicated
 def test_monitoring_enabled():
