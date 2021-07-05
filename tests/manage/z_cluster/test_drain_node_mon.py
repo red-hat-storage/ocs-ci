@@ -1,4 +1,5 @@
 import logging
+import pytest
 
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -25,6 +26,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.6")
 @bugzilla("1959983")
 @ignore_leftovers
+@pytest.mark.polarion_id("OCS-2572")
 class TestDrainNodeMon(ManageTest):
     """
     1.Get worker node name where monitoring pod run
@@ -33,13 +35,13 @@ class TestDrainNodeMon(ManageTest):
     4.Verify pdb status, disruptions_allowed=0, max_unavailable_mon=1
     5.Verify the number of mon pods is 3 for (1400 seconds)
     6.Respin  rook-ceph operator pod
-    7.Change node to be scheduled
+    7.Uncordon the node or schedule the node
     8.Wait for mon and osd pods to be on running state
     9.Verify pdb status, disruptions_allowed=1, max_unavailable_mon=1
 
     """
 
-    def test_drain_node_mon(self, node_drain_teardown):
+    def test_rook_operator_restart_during_mon_failover(self, node_drain_teardown):
         """
         Verify the number of monitoring pod is three when drain node
 
