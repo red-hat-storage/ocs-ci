@@ -1,7 +1,12 @@
 import pytest
 import logging
 
-from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
+from ocs_ci.framework.testlib import (
+    E2ETest,
+    workloads,
+    ignore_leftovers,
+    skipif_ibm_cloud,
+)
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
@@ -43,6 +48,7 @@ class TestRegistryShutdownAndRecoveryNode(E2ETest):
         project_factory(project_name=self.project_name)
 
     @pytest.mark.polarion_id("OCS-1800")
+    @skipif_ibm_cloud
     def test_registry_shutdown_and_recovery_node(self, nodes):
         """
         Test registry workload when backed by OCS and
