@@ -1,9 +1,12 @@
 import logging
 import pytest
-import time
+
 
 from ocs_ci.framework.pytest_customization.marks import tier1
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
+from ocs_ci.framework.testlib import skipif_ocs_version, skipif_ocp_version
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
+from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
@@ -12,18 +15,15 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, delete_pvcs
 from ocs_ci.ocs.ui.base_ui import PageNavigator, BaseUI
 from selenium.webdriver.common.by import By
-from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
-from tests.conftest import pod_factory, pod_factory_fixture, teardown_factory, setup_ui
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium import webdriver
 
 logger = logging.getLogger(__name__)
 
 
 class TestPvcUserInterface(object):
+
     """
     Test PVC User Interface
 
@@ -47,6 +47,50 @@ class TestPvcUserInterface(object):
     @pytest.mark.parametrize(
         argnames=["sc_type", "pvc_name", "access_mode", "pvc_size", "vol_mode"],
         argvalues=[
+            pytest.param(
+                "ocs-storagecluster-cephfs",
+                "test-pvc-fs",
+                "ReadWriteMany",
+                "2",
+                "Filesystem",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd",
+                "test-pvc-rbd",
+                "ReadWriteMany",
+                "3",
+                "Block",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd-thick",
+                "test-pvc-rbd-thick",
+                "ReadWriteMany",
+                "4",
+                "Block",
+                marks=[skipif_ocp_version("<4.8")],
+            ),
+            pytest.param(
+                "ocs-storagecluster-cephfs",
+                "test-pvc-fs",
+                "ReadWriteOnce",
+                "10",
+                "Filesystem",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd",
+                "test-pvc-rbd",
+                "ReadWriteOnce",
+                "11",
+                "Block",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd-thick",
+                "test-pvc-rbd-thick",
+                "ReadWriteOnce",
+                "12",
+                "Block",
+                marks=[skipif_ocp_version("<4.8")],
+            ),
             # pytest.param(
             #     "ocs-storagecluster-cephfs",
             #     "test-pvc-fs",
@@ -158,20 +202,41 @@ class TestPvcUserInterface(object):
                 "Filesystem",
                 marks=[skipif_ocp_version("<4.9")],
             ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd-thick",
+                "test-pvc-rbd-thick",
+                "ReadWriteOnce",
+                "4",
+                "Filesystem",
+                marks=[skipif_ocp_version("<4.8")],
+            ),
         ],
     )
-    def test_create_delete_pvc(
-        self, setup_ui, sc_type, pvc_name, access_mode, pvc_size, vol_mode, teardown, teardown_factory
+    def test_create_resize_delete_pvc(
+        self,
+        project_factory,
+        teardown_factory,
+        setup_ui,
+        sc_type,
+        pvc_name,
+        access_mode,
+        pvc_size,
+        vol_mode,
     ):
         """
-        Test create and delete pvc via UI
+        Test create, resize and delete pvc via UI
 
         """
-        pvc_ui_obj = PvcUI(setup_ui)
-        pvc_ui_obj.create_pvc_ui(sc_type, pvc_name, access_mode, pvc_size, vol_mode)
-        time.sleep(2)
+        pro_obj = project_factory()
+        project_name = pro_obj.namespace
 
-        pvc_objs = get_all_pvc_objs(namespace="openshift-storage")
+        pvc_ui_obj = PvcUI(setup_ui)
+
+        pvc_ui_obj.create_pvc_ui(
+            project_name, sc_type, pvc_name, access_mode, pvc_size, vol_mode
+        )
+
+        pvc_objs = get_all_pvc_objs(namespace=project_name)
         pvc = [pvc_obj for pvc_obj in pvc_objs if pvc_obj.name == pvc_name]
 
         assert pvc[0].size == int(pvc_size), (
@@ -199,56 +264,67 @@ class TestPvcUserInterface(object):
             pvc_size=pvc_size,
             access_mode=access_mode,
             vol_mode=vol_mode,
-            sc_type=sc_type
+            sc_type=sc_type,
         )
         logger.info("PVC Details Verified via UI..!!")
 
         logger.info("Creating Pod")
-        if sc_type in (constants.DEFAULT_STORAGECLASS_RBD_THICK, constants.DEFAULT_STORAGECLASS_RBD):
+
+        if sc_type in (
+            constants.DEFAULT_STORAGECLASS_RBD_THICK,
+            constants.DEFAULT_STORAGECLASS_RBD,
+        ):
             interface_type = constants.CEPHBLOCKPOOL
         else:
             interface_type = constants.CEPHFILESYSTEM
-        new_pod = helpers.create_pod(interface_type=interface_type,
-                                     pvc_name=pvc_name,
-                                     namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-                                     raw_block_pv=vol_mode == constants.VOLUME_MODE_BLOCK)
+        new_pod = helpers.create_pod(
+            interface_type=interface_type,
+            pvc_name=pvc_name,
+            namespace=project_name,
+            raw_block_pv=vol_mode == constants.VOLUME_MODE_BLOCK,
+        )
 
         logger.info(f"Waiting for Pod: state= {constants.STATUS_RUNNING}")
         wait_for_resource_state(resource=new_pod, state=constants.STATUS_RUNNING)
 
         teardown_factory(new_pod)
 
-
-
         logger.info("Pvc Resizing")
         new_size = int(pvc_size) + 1
         pvc_ui_obj.pvc_resize_ui(
-            pvc_name=pvc_name, pvc_size=pvc_size, new_size=new_size, sc_type=sc_type
+            pvc_name=pvc_name, new_size=new_size, project_name=project_name
         )
-
-        assert new_size > int(pvc_size), (
-            f"New size of the PVC cannot be less than existing size: new size is {new_size})")
 
         logger.info("Verifying New Capacity after Pvc Resize")
-        # self.wait_for_element((f'//*[text()="{new_size} GiB"]', By.XPATH))
+        assert new_size > int(
+            pvc_size
+        ), f"New size of the PVC cannot be less than existing size: new size is {new_size})"
 
-
-        expected_capacity = self.base_ui.fetch_expected_text_from_ui("dd[data-test='pvc-requested-capacity']", By.CSS_SELECTOR,
-                                                                     expected_text= f"//*[text()={new_size} GiB]")
-        capacity = self.base_ui.fetch_expected_text_from_ui("dd[data-test-id='pvc-capacity']", By.CSS_SELECTOR,
-                                                            expected_text= f"//*[text()={new_size} GiB]")
-
-        assert expected_capacity == capacity, (
-            f"Pvc resize error: Expected capacity {expected_capacity})"
-            f"\n Actual capacity:{capacity}"
+        baseui_obj = PageNavigator(setup_ui)
+        expected_capacity = baseui_obj.wait_until_expected_text_is_found(
+            ("dd[data-test='pvc-requested-capacity']", By.CSS_SELECTOR),
+            expected_text=f"{new_size} GiB",
+        )
+        capacity = baseui_obj.wait_until_expected_text_is_found(
+            ("dd[data-test-id='pvc-capacity']", By.CSS_SELECTOR),
+            expected_text=f"{new_size} GiB",
         )
 
-        logger.info(f"Delete {pvc_name} pvc")
-        pvc_ui_obj.delete_pvc_ui(pvc_name, new_pod)
-        time.sleep(5)
+        assert expected_capacity == capacity, (
+            f"Pvc resize error: Expected capacity is {expected_capacity})"
+            f"\n Actual capacity:{capacity}"
+        )
+        logger.info(f"Pvc Resize Verified: New Capacity is {capacity}")
 
-        pvc_objs = get_all_pvc_objs(namespace="openshift-storage")
+        new_pod.delete(wait=True)
+        new_pod.ocp.wait_for_delete(resource_name=new_pod.name)
+
+        logger.info(f"Delete {pvc_name} pvc")
+        pvc_ui_obj.delete_pvc_ui(pvc_name, project_name)
+
+        pvc[0].ocp.wait_for_delete(pvc_name, timeout=120)
+
+        pvc_objs = get_all_pvc_objs(namespace=project_name)
         pvcs = [pvc_obj for pvc_obj in pvc_objs if pvc_obj.name == pvc_name]
         if len(pvcs) > 0:
             assert f"PVC {pvcs[0].name} does not deleted"
-

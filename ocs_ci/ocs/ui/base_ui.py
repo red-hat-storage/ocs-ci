@@ -42,12 +42,9 @@ class BaseUI:
 
     """
 
-
     def __init__(self, driver):
 
         self.driver = driver
-        print(type(self.driver))
-        logger.info(f"{type(self.driver)}from Base UI")
         self.screenshots_folder = os.path.join(
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
             f"screenshots_ui_{ocsci_config.RUN['run_id']}",
@@ -212,20 +209,54 @@ class BaseUI:
 
         Args:
             locator (tuple): (GUI element needs to operate on (str), type (By))
-            timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
+            timeout (int): Looks for a web element until timeout (sec) occurs
 
         """
         wait = WebDriverWait(self.driver, timeout)
         element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
         element.clear()
 
-    def wait_for_element(self, locator, timeout=10):
+    def wait_for_element(self, locator, timeout=30):
         """
-        Method to wait for a web element text to be found (use of explicit wait type)
+        Method to wait for a web element to be found (use of explicit wait type).
+        The method ignored all the listed exceptions for the given timeout and waits for the element
+        to be visible on the UI.
 
         Args:
             locator (tuple): (GUI element needs to operate on (str), type (By))
+            timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
+        return:
+            bool: True if the element is found, False otherwise
 
+        """
+        wait = WebDriverWait(
+            self.driver,
+            timeout=timeout,
+            poll_frequency=1,
+            ignored_exceptions=[
+                NoSuchElementException,
+                ElementNotVisibleException,
+                ElementNotSelectableException,
+                TimeoutException,
+            ],
+        )
+        try:
+            wait.until(ec.visibility_of_element_located(locator[::-1]))
+            return True
+        except TimeoutException:
+            logger.error("Could not find expected element")
+            return False
+
+    def wait_until_expected_text_is_found(self, locator, expected_text, timeout=300):
+        """
+        Method to wait for a expected text to appear on the UI (use of explicit wait type),
+        this method is helpful in working with elements which appear on completion of certain UI action and
+        ignores all the listed exceptions for the given timeout.
+
+        Args:
+            locator (tuple): (GUI element needs to operate on (str), type (By))
+            expected_text (str): Text which needs to be searched on UI
+            timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
         return:
             str: Returns the text (string) when found
 
@@ -242,77 +273,15 @@ class BaseUI:
             ],
         )
         try:
-            wait.until(ec.visibility_of_element_located(locator[::-1]))
-            logger.info("Element found")
-            return True
+            wait.until(
+                ec.text_to_be_present_in_element(
+                    (locator[1], locator[0]), text_=expected_text
+                )
+            )
+            logger.info(f"Element text found: {expected_text} ")
+            return f"{expected_text}"
         except TimeoutException:
-            logger.error("Could not find element")
-            return False
-
-    # def fetch_expected_text_from_ui(self, locator_type, locator, expected_text,
-    #                                 ignored_exceptions, timeout=300):
-    #
-    #     def _get_element(locator_type, locator):
-    #         return len(self.driver.find_element(locator_type, locator))
-    #
-    #         sample = TimeoutSampler(
-    #             timeout=timeout,
-    #             sleep=10,
-    #             func=_get_element,
-    #             locator_type=locator_type,
-    #             locator=locator,
-    #
-    #
-    #
-    #
-    #     """
-    #     Method to wait for a web element text to be found (use of explicit wait type)
-    #
-    #     Args:
-    #         locator (tuple): (GUI element needs to operate on (str), type (By))
-    #
-    #     return:
-    #         str: Returns the text (string) when found
-    #
-    #     """
-    #     wait = WebDriverWait(
-    #         self.driver,
-    #         timeout=timeout,
-    #         poll_frequency=1,
-    #
-    #         ],
-    #     )
-    #     try:
-    #         element_text = wait.until(self.driver.find_element(locator_type, locator)).text()
-    #         return element_text
-    #     except TimeoutException:
-    #         logger.error("Could not expected text")
-
-    def fetch_expected_text_from_ui(self, locator, locator_type, expected_text, timeout=300):
-
-        def _get_element(locator, locator_type, driver):
-
-            return (driver.find_element(locator, locator_type)).text()
-
-        wait = TimeoutSampler(
-            timeout=timeout,
-            sleep=5,
-            func=_get_element,
-            locator_type=locator_type,
-            locator=locator,
-            driver=self.driver
-            # ignored_exceptions=[
-            #     NoSuchElementException,
-            #     ElementNotVisibleException,
-            #     ElementNotSelectableException,
-            #     TimeoutException]
-        )
-        if wait.wait_for_func_status(result=expected_text):
-            logger.info(f"Expected text found: {expected_text}")
-            return True
-        else:
-            logger.error(f" after {timeout} seconds")
-            raise TimeoutExpiredError
+            logger.error(f"Could not find expected text: {expected_text} ")
 
 
 class PageNavigator(BaseUI):
@@ -323,9 +292,6 @@ class PageNavigator(BaseUI):
 
     def __init__(self, driver):
         super().__init__(driver)
-        print(type(driver))
-        print(type(self.driver))
-        logger.info(f"{type(self.driver)}from Page Nav")
         ocp_version = get_ocp_version()
         self.page_nav = locators[ocp_version]["page"]
         if Version.coerce(ocp_version) >= Version.coerce("4.8"):
@@ -660,7 +626,7 @@ def login_ui():
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if not headless:
+        if headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 
@@ -668,7 +634,6 @@ def login_ui():
         driver = webdriver.Chrome(
             ChromeDriverManager(chrome_type=chrome_browser_type).install(),
             options=chrome_options,
-
         )
     else:
         raise ValueError(f"Not Support on {browser}")
