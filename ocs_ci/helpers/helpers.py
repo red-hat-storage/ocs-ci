@@ -227,7 +227,11 @@ def create_pod(
                 "volumeDevices"
             ] = temp_dict
 
-        elif pod_dict in [constants.NGINX_POD_YAML, constants.CSI_RBD_POD_YAML, constants.CSI_CEPHFS_POD_YAML]:
+        elif pod_dict in [
+            constants.NGINX_POD_YAML,
+            constants.CSI_RBD_POD_YAML,
+            constants.CSI_CEPHFS_POD_YAML,
+        ]:
             temp_dict = [
                 {
                     "devicePath": raw_block_device,
