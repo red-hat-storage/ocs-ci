@@ -2936,7 +2936,7 @@ def fetch_used_size(cbp_name, exp_val=None):
 
     # Convert size to GB
     used_in_gb = float(format(size_bytes / constants.GB, ".4f"))
-    if exp_val is True and abs(exp_val - used_in_gb) < 1.5:
+    if exp_val and abs(exp_val - used_in_gb) > 1.5:
         raise UnexpectedBehaviour(
             f"Actual {used_in_gb} and expected size {exp_val} not "
             f"matching. Retrying"
