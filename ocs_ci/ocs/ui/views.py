@@ -252,18 +252,18 @@ pvc_4_7 = {
     "test-pvc-rbd": ("a[title='test-pvc-rbd']", By.CSS_SELECTOR),
     "Block": ("input[value='Block']", By.CSS_SELECTOR),
     "Filesystem": ("input[value='Filesystem']", By.CSS_SELECTOR),
+    "search-project": ("input[placeholder='Select Project...']", By.CSS_SELECTOR),
+    "expand_pvc": ("button[data-test-action='Expand PVC']", By.CSS_SELECTOR),
+    "resize-value": ("//input[@name='requestSizeValue']", By.XPATH),
+    "expand-btn": ("#confirm-action", By.CSS_SELECTOR),
 }
 
 pvc_4_8 = {
-    "search-project": ("input[placeholder='Select Project...']", By.CSS_SELECTOR),
     "ReadWriteMany": ("input[value='ReadWriteMany']", By.CSS_SELECTOR),
     "pvc_actions": ("button[aria-label='Actions']", By.CSS_SELECTOR),
     "ReadWriteOnce": ("input[value='ReadWriteOnce']", By.CSS_SELECTOR),
     "test-pvc-fs": ("a[title='test-pvc-fs']", By.CSS_SELECTOR),
     "test-pvc-rbd-thick": ("a[title='test-pvc-rbd-thick']", By.CSS_SELECTOR),
-    "expand_pvc": ("button[data-test-action='Expand PVC']", By.CSS_SELECTOR),
-    "resize-value": ("//input[@name='requestSizeValue']", By.XPATH),
-    "expand-btn": ("#confirm-action", By.CSS_SELECTOR),
     "pvc-status": (
         "//dd[@data-test-id='pvc-status']//span[@data-test='status-text'][normalize-space()='Bound']",
         By.XPATH,
