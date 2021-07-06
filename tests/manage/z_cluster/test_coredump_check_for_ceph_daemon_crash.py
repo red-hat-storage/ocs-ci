@@ -184,5 +184,6 @@ class TestKillCephDaemon(ManageTest):
         )
         if not sample.wait_for_func_status(True):
             raise Exception(
-                "The output of command ceph health detail is invalid (ceph status or warnings)"
+                "The output of command ceph health detail did not show "
+                "warning 'daemons have recently crashed'"
             )
