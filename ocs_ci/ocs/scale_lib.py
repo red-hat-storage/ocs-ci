@@ -1065,6 +1065,7 @@ def check_all_pod_reached_running_state_in_kube_job(
     # Check all the POD reached Running state
     pod_running_list, pod_not_running_list = ([] for i in range(2))
     while_iteration_count = 0
+    dc_pod = 0
     while True:
         # Get kube_job obj and fetch either all PODs are in Running state
         # If not Running, adding those PODs to pod_not_running_list
@@ -1074,6 +1075,7 @@ def check_all_pod_reached_running_state_in_kube_job(
                 pod_type = constants.POD
             else:
                 pod_type = None
+                dc_pod = 1
             if pod_type:
                 status = job_get_output["items"][i]["status"]["phase"]
                 logging.info(
@@ -1102,9 +1104,18 @@ def check_all_pod_reached_running_state_in_kube_job(
         if len(pod_not_running_list):
             time.sleep(timeout)
             while_iteration_count += 1
-            # Breaking while loop after 10 Iteration i.e. after 30*10 secs of wait_time
+
+            # Delete the dc pods which are not in running state
+            # To check either pods can come up after delete
+            if while_iteration_count == 10 and dc_pod:
+                ocp_obj = OCP()
+                for i in pod_not_running_list:
+                    cmd = f"delete pod {i} -n {namespace}"
+                    ocp_obj.exec_oc_cmd(command=cmd, timeout=120)
+
+            # Breaking while loop after 13 Iteration i.e. after 30*13 secs of wait_time
             # And if PODs are still not in Running state then there will be assert.
-            if while_iteration_count >= 10:
+            if while_iteration_count >= 13:
                 assert logging.error(
                     f" Listed PODs took more than 300secs for Running {pod_not_running_list}"
                 )
