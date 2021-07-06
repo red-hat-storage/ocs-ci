@@ -1283,6 +1283,7 @@ SQUADS = {
     "Magenta": ["/workloads/", "/registry/", "/logging/", "/flowtest/", "/lifecycle/"],
     "Grey": ["/performance/"],
     "Orange": ["/scale/"],
+    "Black": ["/ui/"],
 }
 
 PRODUCTION_JOBS_PREFIX = ["jnk"]
