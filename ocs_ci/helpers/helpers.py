@@ -1271,7 +1271,7 @@ def get_snapshot_time(interface, snap_name, status):
         return None
 
 
-def measure_snapshot_creation_time(interface, snap_name, snap_con_name):
+def measure_snapshot_creation_time(interface, snap_name, snap_con_name, snap_uid=None):
     """
     Measure Snapshot creation time based on logs
 
@@ -1284,10 +1284,31 @@ def measure_snapshot_creation_time(interface, snap_name, snap_con_name):
     """
     start = get_snapshot_time(interface, snap_name, status="start")
     end = get_snapshot_time(interface, snap_con_name, status="end")
+    logs = ""
     if start and end:
         total = end - start
         return total.total_seconds()
     else:
+        # at 4.8 the log messages was changed, so need different parsing
+        pod_name = pod.get_csi_provisioner_pod(interface)
+        # get the logs from the csi-provisioner containers
+        for log_pod in pod_name:
+            logger.info(f"Read logs from {log_pod}")
+            logs += pod.get_pod_logs(log_pod, "csi-snapshotter")
+        logs = logs.split("\n")
+        pattern = "CSI CreateSnapshot: snapshot-"
+        for line in logs:
+            if (
+                re.search(snap_uid, line)
+                and re.search(pattern, line)
+                and re.search("readyToUse \\[true\\]", line)
+            ):
+                # The creation time log is in nanosecond, so, it need to convert to seconds.
+                results = int(line.split()[-5].split(":")[1].replace("]", "")) * (
+                    10 ** -9
+                )
+                return float(f"{results:.3f}")
+
         return None
 
 

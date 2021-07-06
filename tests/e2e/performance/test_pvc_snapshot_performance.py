@@ -121,10 +121,14 @@ class TestPvcSnapshotPerformance(E2ETest):
 
         # Getting the snapshot content name
         self.snap_content = helpers.get_snapshot_content_obj(self.snap_obj)
+        self.snap_uid = (
+            self.snap_content.data.get("spec").get("volumeSnapshotRef").get("uid")
+        )
+        log.info(f"The snapshot UID is :{self.snap_uid}")
 
         # Measure the snapshot creation time
         c_time = helpers.measure_snapshot_creation_time(
-            interface, snap_name, self.snap_content.name
+            interface, snap_name, self.snap_content.name, self.snap_uid
         )
         return c_time
 
