@@ -255,6 +255,7 @@ pvc_4_7 = {
 }
 
 pvc_4_8 = {
+    "search-project": ("input[placeholder='Select Project...']", By.CSS_SELECTOR),
     "ReadWriteMany": ("input[value='ReadWriteMany']", By.CSS_SELECTOR),
     "pvc_actions": ("button[aria-label='Actions']", By.CSS_SELECTOR),
     "ReadWriteOnce": ("input[value='ReadWriteOnce']", By.CSS_SELECTOR),
@@ -265,8 +266,13 @@ pvc_4_8 = {
     "expand-btn": ("#confirm-action", By.CSS_SELECTOR),
     "pvc-status": (
         "//dd[@data-test-id='pvc-status']//span[@data-test='status-text'][normalize-space()='Bound']",
-        By.XPATH),
-    "resize-pending": ("div[class ='col-xs-4 col-sm-2 col-md-2'] span", By.CSS_SELECTOR),
+        By.XPATH,
+    ),
+    "resize-pending": (
+        "div[class ='col-xs-4 col-sm-2 col-md-2'] span",
+        By.CSS_SELECTOR,
+    ),
+    "search_pvc": ("input[placeholder='Search by name...']", By.CSS_SELECTOR),
 }
 page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
