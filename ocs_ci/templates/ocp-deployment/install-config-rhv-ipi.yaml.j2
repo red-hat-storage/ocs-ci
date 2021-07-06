@@ -13,6 +13,7 @@ compute:
       osDisk:
         sizeGB: 120
       vmType: server
+      affinityGroupsNames: []
   replicas: {{ worker_replicas | default(3) }}
 controlPlane:
   architecture: amd64
@@ -27,6 +28,7 @@ controlPlane:
       osDisk:
         sizeGB: 120
       vmType: server
+      affinityGroupsNames: []
   replicas: {{ master_replicas | default(3) }}
 metadata:
   creationTimestamp: null
