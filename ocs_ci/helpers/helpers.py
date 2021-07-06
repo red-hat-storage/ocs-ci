@@ -203,7 +203,7 @@ def create_pod(
             ] = pvc_name
 
     if interface_type == constants.CEPHBLOCKPOOL and raw_block_pv:
-        if pod_dict_path in [constants.FEDORA_DC_YAML, constants.FIO_DC_YAML]:
+        if pod_dict in [constants.FEDORA_DC_YAML, constants.FIO_DC_YAML]:
             temp_dict = [
                 {
                     "devicePath": raw_block_device,
@@ -214,7 +214,7 @@ def create_pod(
                     .get("name"),
                 }
             ]
-            if pod_dict_path == constants.FEDORA_DC_YAML:
+            if pod_dict == constants.FEDORA_DC_YAML:
                 del pod_data["spec"]["template"]["spec"]["containers"][0][
                     "volumeMounts"
                 ]
@@ -227,7 +227,7 @@ def create_pod(
                 "volumeDevices"
             ] = temp_dict
 
-        elif pod_dict_path == constants.NGINX_POD_YAML:
+        elif pod_dict in [constants.NGINX_POD_YAML, constants.CSI_RBD_POD_YAML, constants.CSI_CEPHFS_POD_YAML]:
             temp_dict = [
                 {
                     "devicePath": raw_block_device,
