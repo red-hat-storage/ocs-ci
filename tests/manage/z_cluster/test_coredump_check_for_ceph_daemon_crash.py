@@ -168,3 +168,21 @@ class TestKillCephDaemon(ManageTest):
             raise Exception(
                 f"coredump not getting generated for {daemon_types} daemons crash"
             )
+
+        log.info(
+            "Verify ceph status moved to HEALTH_WARN state with the relevant "
+            "information (daemons have recently crashed)"
+        )
+        sample = TimeoutSampler(
+            timeout=20,
+            sleep=5,
+            func=run_cmd_verify_cli_output,
+            cmd="ceph health detail",
+            expected_output_lst=daemon_types
+            + ["HEALTH_WARN", "daemons have recently crashed"],
+            cephtool_cmd=True,
+        )
+        if not sample.wait_for_func_status(True):
+            raise Exception(
+                "The output of command ceph health detail is invalid (ceph status or warnings)"
+            )
