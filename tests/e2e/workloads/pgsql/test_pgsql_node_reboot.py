@@ -86,6 +86,8 @@ class TestPgSQLNodeReboot(E2ETest):
         nodes.restart_nodes(node_1)
 
         # Wait for pg_bench pod to complete
+        # When the postgres pod running is rebooted the pgbench pod immediately
+        # goes to completed state and disappearing, handling it vai try;catch
         try:
             pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
         except ResourceNotFoundError as e:
@@ -99,10 +101,16 @@ class TestPgSQLNodeReboot(E2ETest):
         )
 
         # Get pgbench pods
-        pgbench_pods = pgsql.get_pgbench_pods()
+        try:
+            pgbench_pods = pgsql.get_pgbench_pods()
+        except ResourceNotFoundError as e:
+            log.info(f"Pgbench pod reached completed state and not found: {e}")
 
         # Validate pgbench run and parse logs
-        pgsql.validate_pgbench_run(pgbench_pods)
+        try:
+            pgsql.validate_pgbench_run(pgbench_pods)
+        except ResourceNotFoundError as e:
+            log.info(f"Pgbench pod reached completed state and not found: {e}")
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check(tries=40)

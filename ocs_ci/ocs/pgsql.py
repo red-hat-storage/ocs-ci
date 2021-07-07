@@ -409,7 +409,10 @@ class Postgresql(RipSaw):
 
     def filter_pgbench_nodes_from_nodeslist(self, nodes_list):
         """
-        get nodes where pgbench pods are not running
+        Filter pgbench nodes from the given nodes list
+
+        Args:
+            nodes_list (list): List of nodes to be filtered
 
         Returns:
             list: List of pgbench not running nodes from the given nodes list
