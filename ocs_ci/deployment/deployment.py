@@ -557,9 +557,7 @@ class Deployment(object):
             cluster_data["spec"]["nodeTopologies"][
                 "arbiterLocation"
             ] = self.get_arbiter_location()
-            cluster_data["spec"]["storageDeviceSets"][0][
-                "replica"
-            ] = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
+            cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 4
 
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
 
