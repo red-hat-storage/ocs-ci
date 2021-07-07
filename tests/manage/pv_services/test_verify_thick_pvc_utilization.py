@@ -27,12 +27,19 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, project_factory):
+    def setup(self, project_factory, storageclass_factory):
         """
         Create project for the test
 
         """
         self.proj_obj = project_factory()
+
+        self.sc_obj = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            new_rbd_pool=False,
+            pool_name=default_ceph_block_pool(),
+            rbd_thick_provision=True,
+        )
 
     @tier2
     @polarion_id("OCS-2537")
@@ -58,7 +65,7 @@ class TestVerifyRbdThickPvcUtilization(ManageTest):
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             project=self.proj_obj,
-            storageclass=default_thick_storage_class(),
+            storageclass=self.sc_obj,
             size=pvc_size,
             access_mode=constants.ACCESS_MODE_RWO,
             status=constants.STATUS_BOUND,
