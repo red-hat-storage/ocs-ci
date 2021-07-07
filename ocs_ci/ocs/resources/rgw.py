@@ -36,8 +36,8 @@ class RGW(object):
     def get_credentials(self, secret_name=constants.NOOBAA_OBJECTSTOREUSER_SECRET):
         """
         Get Endpoint, Access key and Secret key from OCS secret. Endpoint is
-        taken from rgw exposed service. Use rgw_endpoint fixture in test to get
-        it exposed.
+        taken from rgw exposed service. On 4.7 and above, the service is exposed by default.
+        Below 4.7, use the rgw_endpoint fixture in a test to expose it.
 
         Args:
             secret_name (str): Name of secret to be used
@@ -57,14 +57,28 @@ class RGW(object):
             kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
         )
         creds_secret_obj = secret_ocp_obj.get(secret_name)
-        if config.DEPLOYMENT["external_mode"]:
-            endpoint = route_ocp_obj.get(
-                resource_name=constants.RGW_SERVICE_EXTERNAL_MODE
-            )
+        # In 4.6 and prior, we manually expose the RGW service
+        # thus leading to different route names in 4.6 and 4.7
+        # in external and internal modes.
+        if float(config.ENV_DATA["ocs_version"]) < 4.6:
+            if config.DEPLOYMENT["external_mode"]:
+                endpoint = route_ocp_obj.get(
+                    resource_name=constants.RGW_SERVICE_EXTERNAL_MODE
+                )
+            else:
+                endpoint = route_ocp_obj.get(
+                    resource_name=constants.RGW_SERVICE_INTERNAL_MODE
+                )
         else:
-            endpoint = route_ocp_obj.get(
-                resource_name=constants.RGW_SERVICE_INTERNAL_MODE
-            )
+            if config.DEPLOYMENT["external_mode"]:
+                endpoint = route_ocp_obj.get(
+                    resource_name=constants.RGW_EXTERNAL_ROUTE_NAME
+                )
+            else:
+                endpoint = route_ocp_obj.get(
+                    resource_name=constants.RGW_DEFAULT_ROUTE_NAME
+                )
+
         endpoint = f"http://{endpoint['status']['ingress'][0]['host']}"
         access_key = base64.b64decode(
             creds_secret_obj.get("data").get("AccessKey")
