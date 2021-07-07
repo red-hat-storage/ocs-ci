@@ -216,38 +216,7 @@ class BaseUI:
         element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
         element.clear()
 
-    def wait_for_element(self, locator, timeout=30):
-        """
-        Method to wait for a web element to be found (use of explicit wait type).
-        The method ignored all the listed exceptions for the given timeout and waits for the element
-        to be visible on the UI.
-
-        Args:
-            locator (tuple): (GUI element needs to operate on (str), type (By))
-            timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
-        return:
-            bool: True if the element is found, False otherwise
-
-        """
-        wait = WebDriverWait(
-            self.driver,
-            timeout=timeout,
-            poll_frequency=1,
-            ignored_exceptions=[
-                NoSuchElementException,
-                ElementNotVisibleException,
-                ElementNotSelectableException,
-                TimeoutException,
-            ],
-        )
-        try:
-            wait.until(ec.visibility_of_element_located(locator[::-1]))
-            return True
-        except TimeoutException:
-            logger.error("Could not find expected element")
-            return False
-
-    def wait_until_expected_text_is_found(self, locator, expected_text, timeout=300):
+    def wait_until_expected_text_is_found(self, locator, expected_text, timeout=5):
         """
         Method to wait for a expected text to appear on the UI (use of explicit wait type),
         this method is helpful in working with elements which appear on completion of certain UI action and
@@ -258,10 +227,10 @@ class BaseUI:
             expected_text (str): Text which needs to be searched on UI
             timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
         return:
-            str: Returns the text (string) when found
+            str: Returns the expected text if the element is found, fetches and returns the actual text otherwise.
 
         """
-        wait = WebDriverWait(
+        WebDriverWait(
             self.driver,
             timeout=timeout,
             poll_frequency=1,
@@ -272,16 +241,13 @@ class BaseUI:
                 TimeoutException,
             ],
         )
-        try:
-            wait.until(
-                ec.text_to_be_present_in_element(
-                    (locator[1], locator[0]), text_=expected_text
-                )
-            )
-            logger.info(f"Element text found: {expected_text} ")
+        if ec.visibility_of_element_located((locator[1], locator[0])):
+            logger.info(f"Element found: {expected_text}")
             return f"{expected_text}"
-        except TimeoutException:
+        else:
+            element_found = (self.driver.find_element(locator[1], locator[0])).text
             logger.error(f"Could not find expected text: {expected_text} ")
+            return element_found
 
 
 class PageNavigator(BaseUI):

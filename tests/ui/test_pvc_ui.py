@@ -2,7 +2,7 @@ import logging
 import pytest
 
 
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.testlib import tier1, skipif_ui
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
 from ocs_ci.framework.testlib import skipif_ocs_version, skipif_ocp_version
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
@@ -44,6 +44,7 @@ class TestPvcUserInterface(object):
     @skipif_ibm_cloud
     @tier1
     @skipif_ocs_version("<4.6")
+    @skipif_ui("pvc")
     @pytest.mark.parametrize(
         argnames=["sc_type", "pvc_name", "access_mode", "pvc_size", "vol_mode"],
         argvalues=[

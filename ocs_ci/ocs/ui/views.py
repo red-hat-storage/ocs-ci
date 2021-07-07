@@ -256,6 +256,10 @@ pvc_4_7 = {
     "expand_pvc": ("button[data-test-action='Expand PVC']", By.CSS_SELECTOR),
     "resize-value": ("//input[@name='requestSizeValue']", By.XPATH),
     "expand-btn": ("#confirm-action", By.CSS_SELECTOR),
+    "pvc-status": (
+        "dd[data-test-id='pvc-status'] span[data-test='status-text']",
+        By.CSS_SELECTOR,
+    ),
 }
 
 pvc_4_8 = {
@@ -264,10 +268,6 @@ pvc_4_8 = {
     "ReadWriteOnce": ("input[value='ReadWriteOnce']", By.CSS_SELECTOR),
     "test-pvc-fs": ("a[title='test-pvc-fs']", By.CSS_SELECTOR),
     "test-pvc-rbd-thick": ("a[title='test-pvc-rbd-thick']", By.CSS_SELECTOR),
-    "pvc-status": (
-        "//dd[@data-test-id='pvc-status']//span[@data-test='status-text'][normalize-space()='Bound']",
-        By.XPATH,
-    ),
     "resize-pending": (
         "div[class ='col-xs-4 col-sm-2 col-md-2'] span",
         By.CSS_SELECTOR,

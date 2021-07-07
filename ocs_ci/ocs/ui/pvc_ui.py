@@ -132,11 +132,8 @@ class PvcUI(PageNavigator):
         self.do_click(self.pvc_loc[pvc_name])
 
         logger.info("Checking status of Pvc")
-        self.wait_for_element(
-            (
-                "dd[data-test-id='pvc-status'] span[data-test='status-text']",
-                By.CSS_SELECTOR,
-            )
+        self.wait_until_expected_text_is_found(
+            self.pvc_loc["pvc-status"], expected_text="Bound"
         )
 
         logger.info("Click on Actions")
