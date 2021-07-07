@@ -5,6 +5,7 @@ platforms like AWS, VMWare, Baremetal etc.
 
 from copy import deepcopy
 from semantic_version import Version
+import json
 import logging
 import tempfile
 import time
@@ -416,6 +417,24 @@ class Deployment(object):
 
         logger.info("Creating namespace and operator group.")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
+
+        # create multus network
+        if config.ENV_DATA.get("is_multus_enabled"):
+            logger.info("Creating multus network")
+            multus_data = templating.load_yaml(constants.MULTUS_YAML)
+            multus_config_str = multus_data["spec"]["config"]
+            multus_config_dct = json.loads(multus_config_str)
+            if config.ENV_DATA.get("multus_public_network_interface"):
+                multus_config_dct["master"] = config.ENV_DATA.get(
+                    "multus_public_network_interface"
+                )
+            multus_data["spec"]["config"] = json.dumps(multus_config_dct)
+            multus_data_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="multus", delete=False
+            )
+            templating.dump_data_to_temp_yaml(multus_data, multus_data_yaml.name)
+            run_cmd(f"oc create -f {multus_data_yaml.name}")
+
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             ibmcloud.add_deployment_dependencies()
             if not live_deployment:
@@ -701,6 +720,11 @@ class Deployment(object):
             setup_ceph_debug()
             cluster_data["spec"]["managedResources"] = {
                 "cephConfig": {"reconcileStrategy": "ignore"}
+            }
+        if config.ENV_DATA.get("is_multus_enabled"):
+            cluster_data["spec"]["network"] = {
+                "provider": "multus",
+                "selectors": {"public": "ocs-public"},
             }
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
