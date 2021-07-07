@@ -535,6 +535,8 @@ TEMPLATE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "imageContentSourcePolicy-template.yaml"
 )
 
+MULTUS_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multus.yaml")
+
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
 OPERATOR_SOURCE_SECRET_NAME = "ocs-operatorsource-secret"
