@@ -22,6 +22,7 @@ from ocs_ci.ocs.exceptions import (
     KMSResourceCleaneupError,
     CommandFailed,
     NotFoundError,
+    KMSConnectionDetailsError,
 )
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility import templating
@@ -786,3 +787,31 @@ def vault_kv_list(path):
     out = subprocess.check_output(shlex.split(cmd))
     json_out = json.loads(out)
     return json_out
+
+
+def get_encryption_kmsid():
+    """
+    Get encryption kmsid from 'csi-kms-connection-details'
+    configmap resource
+
+    Returns:
+        kmsid (str): A string id of the kms used
+
+    Raises:
+        KMSConnectionDetailsError: if csi kms connection detail doesn't exist
+
+    """
+
+    csi_kms_conf = ocp.OCP(
+        resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
+        kind="ConfigMap",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    try:
+        csi_kms_conf.get()
+    except CommandFailed:
+        raise KMSConnectionDetailsError("CSI kms resource doesn't exist")
+
+    for key in csi_kms_conf.get().get("data").keys():
+        if constants.VAULT_KMS_PROVIDER in key:
+            return key

@@ -41,7 +41,6 @@ from ocs_ci.ocs.exceptions import (
     UnavailableBuildException,
     UnexpectedImage,
     UnsupportedOSType,
-    KMSConnectionDetailsError,
 )
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
@@ -3349,37 +3348,6 @@ def clone_notify():
     subprocess.run(git_clone_cmd, shell=True, cwd=notify_dir, check=True)
     notify_path = f"{notify_dir}/notify/notify.py"
     return notify_path
-
-
-def get_encryption_kmsid():
-    """
-    Get encryption kmsid from 'csi-kms-connection-details'
-    configmap resource
-
-    Returns:
-        kmsid (str): A string id of the kms used
-
-    Raises:
-        KMSConnectionDetailsError: if csi kms connection detail doesn't exist
-
-    """
-
-    # To avoid circular imports
-    from ocs_ci.ocs.ocp import OCP
-
-    csi_kms_conf = OCP(
-        resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
-        kind="ConfigMap",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-    )
-    try:
-        csi_kms_conf.get()
-    except CommandFailed:
-        raise KMSConnectionDetailsError("CSI kms resource doesn't exist")
-
-    for key in csi_kms_conf.get().get("data").keys():
-        if constants.VAULT_KMS_PROVIDER in key:
-            return key
 
 
 def add_chrony_to_ocp_deployment():

@@ -44,7 +44,6 @@ from ocs_ci.utility.utils import (
     ocsci_log_path,
     run_cmd,
     update_container_with_mirrored_image,
-    get_encryption_kmsid,
 )
 
 logger = logging.getLogger(__name__)
@@ -541,6 +540,9 @@ def create_storage_class(
         if rbd_thick_provision:
             sc_data["parameters"]["thickProvision"] = "true"
         if encrypted:
+            # Avoid circular imports
+            from ocs_ci.utility.kms import get_encryption_kmsid
+
             sc_data["parameters"]["encrypted"] = "true"
             sc_data["parameters"]["encryptionKMSID"] = get_encryption_kmsid()
     elif interface_type == constants.CEPHFILESYSTEM:
