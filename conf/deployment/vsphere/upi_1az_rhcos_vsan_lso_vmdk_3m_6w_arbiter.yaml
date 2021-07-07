@@ -3,6 +3,7 @@
 DEPLOYMENT:
   allow_lower_instance_requirements: false
   local_storage: true
+  local_storage_storagedeviceset_count: 3
   type: 'VMDK'
   provision_type: 'thick'
   ocs_operator_nodes_to_label: 6

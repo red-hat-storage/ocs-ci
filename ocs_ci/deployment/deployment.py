@@ -632,6 +632,9 @@ class Deployment(object):
                 cluster_data["metadata"]["annotations"] = {
                     "cluster.ocs.openshift.io/local-devices": "true"
                 }
+            count = config.DEPLOYMENT.get("local_storage_storagedeviceset_count")
+            if count is not None:
+                deviceset_data["count"] = count
 
         # Allow lower instance requests and limits for OCS deployment
         # The resources we need to change can be found here:

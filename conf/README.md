@@ -83,7 +83,8 @@ anywhere else.
 * `terraform_version` - Version of terraform to download
 * `infra_nodes` - Add infrastructure nodes to the cluster
 * `openshift_install_timeout` - Time (in seconds) to wait before timing out during OCP installation
-* `local_storage` - Deploy OCS with the local storage operator (Default: false)
+* `local_storage` - Deploy OCS with the local storage operator (aka LSO) (Default: false)
+* `local_storage_storagedeviceset_count` - This option allows one to control `spec.storageDeviceSets[0].count` of LSO backed StorageCluster.
 * `optional_operators_image` - If provided, it is used for LSO installation on unreleased OCP version
 * `disconnected` - Set if the cluster is deployed in a disconnected environment
 * `mirror_registry` - Hostname of the mirror registry
