@@ -366,7 +366,7 @@ class Vault(KMS):
                 f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
             )
         cmd = (
-            f"vault secrets enable -path={self.vault_backend_path}"
+            f"vault secrets enable -path={self.vault_backend_path} "
             f"kv-{self.vault_backend_version}"
         )
         out = subprocess.check_output(shlex.split(cmd))
