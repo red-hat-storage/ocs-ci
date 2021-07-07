@@ -12,7 +12,6 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.helpers.helpers import (
     verify_volume_deleted_in_backend,
-    default_thick_storage_class,
     check_rbd_image_used_size,
     default_ceph_block_pool,
 )

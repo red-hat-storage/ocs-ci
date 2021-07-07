@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
 )
 from ocs_ci.helpers.helpers import (
-    default_thick_storage_class,
     fetch_used_size,
     default_ceph_block_pool,
 )
