@@ -446,10 +446,17 @@ def process_cluster_cli_params(config):
     ocsci_config.RUN["cli_params"]["deploy"] = get_cli_param(
         config, "deploy", default=False
     )
-    live_deployment = get_cli_param(config, "live_deploy", default=False)
-    ocsci_config.DEPLOYMENT["live_deployment"] = live_deployment or (
-        ocsci_config.DEPLOYMENT.get("live_deployment", False)
-    )
+    live_deployment = get_cli_param(
+        config, "live_deploy", default=False
+    ) or ocsci_config.DEPLOYMENT.get("live_deployment", False)
+    ocsci_config.DEPLOYMENT["live_deployment"] = live_deployment
+    if live_deployment:
+        ocsci_config.REPORTING[
+            "default_ocs_must_gather_latest_tag"
+        ] = f"v{ocsci_config.ENV_DATA['ocs_version']}"
+        ocsci_config.REPORTING["ocs_must_gather_image"] = ocsci_config.REPORTING[
+            "ocs_live_must_gather_image"
+        ]
     io_in_bg = get_cli_param(config, "io_in_bg")
     if io_in_bg:
         ocsci_config.RUN["io_in_bg"] = True
