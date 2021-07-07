@@ -46,7 +46,7 @@ class TestPvcUserInterface(object):
                 "ReadWriteMany",
                 "4",
                 "Block",
-                marks=[skipif_ocp_version("<4.8")],
+                marks=[skipif_ocp_version("<4.9")],
             ),
             pytest.param(
                 "ocs-storagecluster-cephfs",
@@ -68,7 +68,7 @@ class TestPvcUserInterface(object):
                 "ReadWriteOnce",
                 "12",
                 "Block",
-                marks=[skipif_ocp_version("<4.8")],
+                marks=[skipif_ocp_version("<4.9")],
             ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd",
@@ -83,7 +83,7 @@ class TestPvcUserInterface(object):
                 "ReadWriteOnce",
                 "4",
                 "Filesystem",
-                marks=[skipif_ocp_version("<4.8")],
+                marks=[skipif_ocp_version("<4.9")],
             ),
         ],
     )
