@@ -251,7 +251,11 @@ def ocs_install_verification(
     storage_class_names = {
         item["metadata"]["name"] for item in storage_classes["items"]
     }
-    assert required_storage_classes.issubset(storage_class_names)
+    # required storage class names should be observed in the cluster under test
+    missing_scs = required_storage_classes.difference(storage_class_names)
+    if len(missing_scs) > 0:
+        log.error("few storage classess are not present: %s", missing_scs)
+    assert list(missing_scs) == []
 
     # Verify OSDs are distributed
     if not config.DEPLOYMENT["external_mode"]:
