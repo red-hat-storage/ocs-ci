@@ -19,7 +19,7 @@ from ocs_ci.ocs import constants
 log = logging.getLogger(__name__)
 
 
-@skipif_ocs_version("<4.8")
+@skipif_ocs_version("<4.9")
 class TestVerifyRbdThickPvcUtilization(ManageTest):
     """
     Tests to verify storage utilization of RBD thick provisioned PVC
