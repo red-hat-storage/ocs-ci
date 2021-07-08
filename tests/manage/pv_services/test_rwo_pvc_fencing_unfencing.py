@@ -304,7 +304,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 if az_count == 1:
                     label_to_search = "topology.rook.io/rack"
                 else:
-                    label_to_search = "failure-domain.beta.kubernetes.io/zone"
+                    label_to_search = constants.ZONE_LABEL
 
                 mon_pod_nodes = [
                     pod.get_pod_node(pod_obj).name for pod_obj in ceph_cluster.mons

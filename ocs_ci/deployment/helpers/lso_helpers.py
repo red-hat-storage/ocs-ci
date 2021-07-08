@@ -242,9 +242,12 @@ def setup_local_storage(storageclass):
     storage_class_device_count = 1
     if platform == constants.AWS_PLATFORM and not lso_type == constants.AWS_EBS:
         storage_class_device_count = 2
-    if platform == constants.IBM_POWER_PLATFORM:
+    elif platform == constants.IBM_POWER_PLATFORM:
         numberofstoragedisks = config.ENV_DATA.get("number_of_storage_disks", 1)
         storage_class_device_count = numberofstoragedisks
+    elif platform == constants.VSPHERE_PLATFORM:
+        # extra_disks is used in vSphere attach_disk() method
+        storage_class_device_count = config.ENV_DATA.get("extra_disks", 1)
     expected_pvs = len(worker_names) * storage_class_device_count
     verify_pvs_created(expected_pvs, storageclass)
 
