@@ -11,6 +11,8 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
 )
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods, get_osd_pod_id
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
@@ -73,9 +75,43 @@ class TestOSDHeapProfile(ManageTest):
                 osd_pod_profile = osd_pod
 
         log.info(f"Verify osd.{osd_id}.profile log exist on /var/log/ceph/")
-        out = osd_pod_profile.exec_cmd_on_pod(command="ls -ltr /var/log/ceph/")
-        log.info(out)
-        assert (
-            f"osd.{osd_id}.profile" in out
-        ), f"osd.{osd_id}.profile log does not exist on /var/log/ceph/\n{out}"
+        sample = TimeoutSampler(
+            timeout=100,
+            sleep=10,
+            func=self.verify_output_command_osd_pod,
+            command="ls -ltr /var/log/ceph/",
+            pod_obj=osd_pod_profile,
+            osd_id=osd_id,
+        )
+        if not sample.wait_for_func_status(result=True):
+            log.error(f"osd.{osd_id}.profile log does not exist on /var/log/ceph")
+            raise ValueError(
+                f"osd.{osd_id}.profile log does not exist on /var/log/ceph"
+            )
+
         log.info(f"osd.{osd_id}.profile log exist on /var/log/ceph")
+
+    def verify_output_command_osd_pod(self, command, pod_obj, osd_id):
+        """
+        Check the output of the command (from osd pod)
+
+        Args:
+            command (str): command run on osd pod
+            pod_obj (obj): pod object
+            osd_id (str): osd id
+
+        return:
+            bool: True if we find the string in output, False otherwise
+
+        """
+        try:
+            out = pod_obj.exec_cmd_on_pod(command=command)
+            if f"osd.{osd_id}.profile" not in out:
+                log.info(f"output is {out}")
+                return False
+            else:
+                log.info(f"the output of the command {command}: {out}")
+                return True
+        except CommandFailed as e:
+            log.error(e)
+            return False
