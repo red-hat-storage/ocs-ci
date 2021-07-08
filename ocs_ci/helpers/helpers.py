@@ -3027,15 +3027,24 @@ def verify_pdb_mon(disruptions_allowed, max_unavailable_mon):
         disruptions_allowed (int): the expected number of disruptions_allowed
         max_unavailable_mon (int): the expected number of max_unavailable_mon
 
+    return:
+        bool: True if the expected pdb state equal to actual pdb state, False otherwise
+
     """
     logging.info("Check mon pdb status")
     mon_pdb = get_mon_pdb()
-    assert (
-        disruptions_allowed == mon_pdb[0]
-    ), f"The expected disruptions_allowed is: {disruptions_allowed}.The actual one is {mon_pdb[0]}"
-    assert (
-        max_unavailable_mon == mon_pdb[2]
-    ), f"The expected max_unavailable_mon is {max_unavailable_mon}.The actual one is {mon_pdb[2]}"
+    result = True
+    if disruptions_allowed != mon_pdb[0]:
+        result = False
+        logger.error(
+            f"The expected disruptions_allowed is: {disruptions_allowed}.The actual one is {mon_pdb[0]}"
+        )
+    if max_unavailable_mon != mon_pdb[2]:
+        result = False
+        logger.error(
+            f"The expected max_unavailable_mon is {max_unavailable_mon}.The actual one is {mon_pdb[2]}"
+        )
+    return result
 
 
 @retry(CommandFailed, tries=10, delay=30, backoff=1)

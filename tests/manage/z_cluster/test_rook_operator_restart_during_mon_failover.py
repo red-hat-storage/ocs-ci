@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.resources.pod import get_mon_pods, get_pod_obj
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
@@ -46,7 +46,16 @@ class TestDrainNodeMon(ManageTest):
         Verify the number of monitoring pod is three when drain node
 
         """
-        verify_pdb_mon(disruptions_allowed=1, max_unavailable_mon=1)
+        # verify_pdb_mon(disruptions_allowed=1, max_unavailable_mon=1)
+        sample = TimeoutSampler(
+            timeout=100,
+            sleep=10,
+            func=verify_pdb_mon,
+            disruptions_allowed=1,
+            max_unavailable_mon=1,
+        )
+        if sample.wait_for_func_status(result=True):
+            assert "the expected pdb state is not equal to actual pdb state"
 
         log.info("Get worker node name where monitoring pod run")
         mon_pod_objs = get_mon_pods()
@@ -54,7 +63,16 @@ class TestDrainNodeMon(ManageTest):
 
         drain_nodes([node_name])
 
-        verify_pdb_mon(disruptions_allowed=0, max_unavailable_mon=1)
+        # verify_pdb_mon(disruptions_allowed=0, max_unavailable_mon=1)
+        sample = TimeoutSampler(
+            timeout=100,
+            sleep=10,
+            func=verify_pdb_mon,
+            disruptions_allowed=0,
+            max_unavailable_mon=1,
+        )
+        if sample.wait_for_func_status(result=True):
+            assert "the expected pdb state is not equal to actual pdb state"
 
         log.info("Verify the number of mon pods is 3")
         sample = TimeoutSampler(timeout=1400, sleep=10, func=self.check_mon_pods_eq_3)
@@ -82,7 +100,18 @@ class TestDrainNodeMon(ManageTest):
             resource_count=3,
             timeout=100,
         )
-        verify_pdb_mon(disruptions_allowed=1, max_unavailable_mon=1)
+        # verify_pdb_mon(disruptions_allowed=1, max_unavailable_mon=1)
+        sample = TimeoutSampler(
+            timeout=100,
+            sleep=10,
+            func=verify_pdb_mon,
+            disruptions_allowed=1,
+            max_unavailable_mon=1,
+        )
+        if sample.wait_for_func_status(result=True):
+            assert "the expected pdb state is not equal to actual pdb state"
+
+        ceph_health_check()
 
     def check_mon_pods_eq_3(self):
         """
