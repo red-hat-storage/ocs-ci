@@ -260,6 +260,7 @@ pvc_4_7 = {
         "dd[data-test-id='pvc-status'] span[data-test='status-text']",
         By.CSS_SELECTOR,
     ),
+    "test-project-link": ("//a[normalize-space()='{}']", By.XPATH),
 }
 
 pvc_4_8 = {

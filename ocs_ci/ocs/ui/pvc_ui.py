@@ -1,7 +1,7 @@
 import logging
 
-from selenium.webdriver.common.by import By
 from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.ui_utils import format_locator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
 from ocs_ci.ocs import constants
@@ -42,7 +42,7 @@ class PvcUI(PageNavigator):
         self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
 
         logger.info(f"Select test project {project_name}")
-        self.do_click((f"//a[normalize-space()='{project_name}']", By.XPATH))
+        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
 
         logger.info("Click on 'Create Persistent Volume Claim'")
         self.do_click(self.pvc_loc["pvc_create_button"])
@@ -123,7 +123,7 @@ class PvcUI(PageNavigator):
         logger.info(f"Search and Select test project {project_name}")
         self.do_click(self.pvc_loc["pvc_project_selector"])
         self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-        self.do_click((f"//a[normalize-space()='{project_name}']", By.XPATH))
+        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -165,7 +165,7 @@ class PvcUI(PageNavigator):
         logger.info(f"Select test project {project_name}")
         self.do_click(self.pvc_loc["pvc_project_selector"])
         self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-        self.do_click((f"//a[normalize-space()='{project_name}']", By.XPATH))
+        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
