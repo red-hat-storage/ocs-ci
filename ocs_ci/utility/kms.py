@@ -371,13 +371,16 @@ class Vault(KMS):
         if backend_path:
             self.vault_backend_path = backend_path
         else:
-            # Generate backend path name using prefix "ocs"
-            # "ocs-<cluster-id>"
-            self.cluster_id = get_running_cluster_id()
-            self.vault_backend_path = (
-                f"{constants.VAULT_DEFAULT_PATH_PREFIX}-{self.cluster_id}-"
-                f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
-            )
+            if config.ENV_DATA.get("VAULT_BACKEND_PATH"):
+                self.vault_backend_path = config.ENV_DATA.get("VAULT_BACKEND_PATH")
+            else:
+                # Generate backend path name using prefix "ocs"
+                # "ocs-<cluster-id>"
+                self.cluster_id = get_running_cluster_id()
+                self.vault_backend_path = (
+                    f"{constants.VAULT_DEFAULT_PATH_PREFIX}-{self.cluster_id}-"
+                    f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
+                )
         cmd = (
             f"vault secrets enable -path={self.vault_backend_path} "
             f"kv-{self.vault_backend_version}"
