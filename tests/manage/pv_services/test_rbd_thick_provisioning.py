@@ -16,7 +16,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 log = logging.getLogger(__name__)
 
 
-@skipif_ocs_version("<4.8")
+@skipif_ocs_version("<4.9")
 class TestRbdThickProvisioning(ManageTest):
     """
     Tests to verify PVC creation and consumption using RBD thick provisioning enabled storage class

@@ -28,7 +28,7 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
 
 @tier4
 @tier4a
-@skipif_ocs_version("<4.8")
+@skipif_ocs_version("<4.9")
 class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
     """
     Test to delete rbd provisioner leader pod while thick provisioning is progressing
