@@ -29,6 +29,7 @@ from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     UnsupportedFeatureError,
 )
+from ocs_ci.deployment.zones import create_dummy_zone_labels
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
@@ -184,16 +185,21 @@ class Deployment(object):
         add_stage_cert()
         if config.ENV_DATA.get("huge_pages"):
             enable_huge_pages()
+        if config.DEPLOYMENT.get("dummy_zone_node_labels"):
+            create_dummy_zone_labels()
 
     def label_and_taint_nodes(self):
         """
         Label and taint worker nodes to be used by OCS operator
         """
 
+        # TODO: remove this "heuristics", it doesn't belong there, the process
+        # should be explicit and simple, this is asking for trouble, bugs and
+        # silently invalid deployments ...
+        # See https://github.com/red-hat-storage/ocs-ci/issues/4470
         arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 
         nodes = ocp.OCP(kind="node").get().get("items", [])
-        zone_label = self.get_zone_label()
 
         worker_nodes = [
             node
@@ -204,11 +210,16 @@ class Deployment(object):
             raise UnavailableResourceException("No worker node found!")
         az_worker_nodes = {}
         for node in worker_nodes:
-            az = node["metadata"]["labels"].get(zone_label)
+            az = node["metadata"]["labels"].get(constants.ZONE_LABEL)
             az_node_list = az_worker_nodes.get(az, [])
             az_node_list.append(node["metadata"]["name"])
             az_worker_nodes[az] = az_node_list
         logger.debug(f"Found the worker nodes in AZ: {az_worker_nodes}")
+
+        if arbiter_deployment:
+            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
+        else:
+            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label")
 
         distributed_worker_nodes = []
         if arbiter_deployment and config.DEPLOYMENT.get("arbiter_autodetect"):
@@ -218,10 +229,13 @@ class Deployment(object):
                     node_names = az_node_list[:2]
                     distributed_worker_nodes += node_names
         elif arbiter_deployment and not config.DEPLOYMENT.get("arbiter_autodetect"):
-            for az in list(config.DEPLOYMENT.get("worker_zones")):
+            to_label_per_az = int(
+                to_label / len(config.ENV_DATA.get("worker_availability_zones"))
+            )
+            for az in list(config.ENV_DATA.get("worker_availability_zones")):
                 az_node_list = az_worker_nodes.get(az)
                 if az_node_list and len(az_node_list) > 1:
-                    node_names = az_node_list[:2]
+                    node_names = az_node_list[:to_label_per_az]
                     distributed_worker_nodes += node_names
                 else:
                     raise UnavailableResourceException(
@@ -238,11 +252,6 @@ class Deployment(object):
                     else:
                         del az_worker_nodes[az]
         logger.info(f"Distributed worker nodes for AZ: {distributed_worker_nodes}")
-
-        if arbiter_deployment:
-            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
-        else:
-            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 3)
 
         to_taint = config.DEPLOYMENT.get("ocs_operator_nodes_to_taint", 0)
 
@@ -346,16 +355,6 @@ class Deployment(object):
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
 
-    def get_zone_label(self):
-        nodes = ocp.OCP(kind="node").get().get("items", [])
-
-        # Check which zone label is present
-        return (
-            constants.ZONE_LABEL
-            if nodes[0]["metadata"]["labels"].get(constants.ZONE_LABEL, False)
-            else constants.ZONE_LABEL_NEW
-        )
-
     def get_arbiter_location(self):
         """
         Get arbiter mon location for storage cluster
@@ -368,17 +367,15 @@ class Deployment(object):
         # below logic will autodetect arbiter_zone
         nodes = ocp.OCP(kind="node").get().get("items", [])
 
-        zone_label = self.get_zone_label()
-
         worker_nodes_zones = {
-            node["metadata"]["labels"].get(zone_label)
+            node["metadata"]["labels"].get(constants.ZONE_LABEL)
             for node in nodes
             if constants.WORKER_LABEL in node["metadata"]["labels"]
             and str(constants.OPERATOR_NODE_LABEL)[:-3] in node["metadata"]["labels"]
         }
 
         master_nodes_zones = {
-            node["metadata"]["labels"].get(zone_label)
+            node["metadata"]["labels"].get(constants.ZONE_LABEL)
             for node in nodes
             if constants.MASTER_LABEL in node["metadata"]["labels"]
         }
@@ -560,9 +557,7 @@ class Deployment(object):
             cluster_data["spec"]["nodeTopologies"][
                 "arbiterLocation"
             ] = self.get_arbiter_location()
-            cluster_data["spec"]["storageDeviceSets"][0][
-                "replica"
-            ] = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
+            cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 4
 
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
 
@@ -578,6 +573,7 @@ class Deployment(object):
             config.DEPLOYMENT.get("local_storage")
             and Version.coerce(ocs_version) >= Version.coerce("4.7")
             and zone_num < 3
+            and not config.DEPLOYMENT.get("arbiter_deployment")
         ):
             cluster_data["spec"]["flexibleScaling"] = True
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
@@ -636,6 +632,9 @@ class Deployment(object):
                 cluster_data["metadata"]["annotations"] = {
                     "cluster.ocs.openshift.io/local-devices": "true"
                 }
+            count = config.DEPLOYMENT.get("local_storage_storagedeviceset_count")
+            if count is not None:
+                deviceset_data["count"] = count
 
         # Allow lower instance requests and limits for OCS deployment
         # The resources we need to change can be found here:
