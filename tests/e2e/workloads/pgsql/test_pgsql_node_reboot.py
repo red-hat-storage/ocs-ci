@@ -65,13 +65,9 @@ class TestPgSQLNodeReboot(E2ETest):
         # Wait for pgbench pod to reach running state
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)
 
-        # Choose a node based on pod it contains
-        if pod_name == "postgres":
-            node_list = pgsql.get_pgsql_nodes()
-        elif pod_name == "osd":
-            osd_nodes_list = get_osd_running_nodes()
-            # Select a node where pgbench is not running and reboot
-            node_list = pgsql.filter_pgbench_nodes_from_nodeslist(osd_nodes_list)
+        # Select a node where pgbench is not running and reboot
+        osd_nodes_list = get_osd_running_nodes()
+        node_list = pgsql.filter_pgbench_nodes_from_nodeslist(osd_nodes_list)
 
         node_1 = get_node_objs(node_list[random.randint(0, len(node_list) - 1)])
         log.info(f"Selected node {node_1} for reboot operation")
