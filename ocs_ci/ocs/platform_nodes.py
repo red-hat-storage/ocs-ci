@@ -17,16 +17,7 @@ from ocs_ci.deployment.vmware import (
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
-from ocs_ci.utility import (
-    aws,
-    vsphere,
-    templating,
-    baremetal,
-    azure_utils,
-    powernodes,
-    rhv,
-    ibmcloud,
-)
+from ocs_ci.utility import templating
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.utility.load_balancer import LoadBalancer
 from ocs_ci.utility.retry import retry
@@ -197,6 +188,8 @@ class VMWareNodes(NodesBase):
 
     def __init__(self):
         super(VMWareNodes, self).__init__()
+        from ocs_ci.utility import vsphere
+
         self.cluster_name = config.ENV_DATA.get("cluster_name")
         self.server = config.ENV_DATA["vsphere_server"]
         self.user = config.ENV_DATA["vsphere_user"]
@@ -424,7 +417,10 @@ class AWSNodes(NodesBase):
 
     def __init__(self):
         super(AWSNodes, self).__init__()
-        self.aws = aws.AWS()
+        from ocs_ci.utility import aws as aws_utility
+
+        self.aws_utility = aws_utility
+        self.aws = aws_utility.AWS()
         self.az = AZInfo()
 
     def get_ec2_instances(self, nodes):
@@ -438,7 +434,7 @@ class AWSNodes(NodesBase):
             dict: The EC2 instances dicts (IDs and names)
 
         """
-        return aws.get_instances_ids_and_names(nodes)
+        return self.aws_utility.get_instances_ids_and_names(nodes)
 
     def get_data_volumes(self):
         """
@@ -449,7 +445,7 @@ class AWSNodes(NodesBase):
 
         """
         pvs = get_deviceset_pvs()
-        return aws.get_data_volumes(pvs)
+        return self.aws_utility.get_data_volumes(pvs)
 
     def get_node_by_attached_volume(self, volume):
         """
@@ -1695,6 +1691,8 @@ class BaremetalNodes(NodesBase):
 
     def __init__(self):
         super(BaremetalNodes, self).__init__()
+        from ocs_ci.utility import baremetal
+
         self.baremetal = baremetal.BAREMETAL()
 
     def stop_nodes(self, nodes, force=True):
@@ -1809,6 +1807,8 @@ class IBMPowerNodes(NodesBase):
 
     def __init__(self):
         super(IBMPowerNodes, self).__init__()
+        from ocs_ci.utility import powernodes
+
         self.powernodes = powernodes.PowerNodes()
 
     def stop_nodes(self, nodes, force=True):
@@ -1922,6 +1922,8 @@ class AZURENodes(NodesBase):
 
     def __init__(self):
         super(AZURENodes, self).__init__()
+        from ocs_ci.utility import azure_utils
+
         self.azure = azure_utils.AZURE()
 
     def stop_nodes(self, nodes, timeout=540, wait=True, force=True):
@@ -2190,6 +2192,8 @@ class RHVNodes(NodesBase):
 
     def __init__(self):
         super(RHVNodes, self).__init__()
+        from ocs_ci.utility import rhv
+
         self.rhv = rhv.RHV()
 
     def get_rhv_vm_instances(self, nodes):
@@ -2345,6 +2349,8 @@ class IBMCloud(NodesBase):
     """
 
     def __init__(self):
+        from ocs_ci.utility import ibmcloud
+
         super(IBMCloud, self).__init__()
         self.ibmcloud = ibmcloud.IBMCloud()
 
