@@ -11,8 +11,6 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     get_node_resource_utilization_from_adm_top,
 )
-from ocs_ci.ocs.exceptions import ResourceNotFoundError
-
 
 log = logging.getLogger(__name__)
 
@@ -50,8 +48,7 @@ class TestPgSQLNodeReboot(E2ETest):
     @pytest.mark.parametrize(
         argnames=["transactions", "pod_name"],
         argvalues=[
-            pytest.param(*[3600, "osd"], marks=pytest.mark.polarion_id("OCS-801")),
-            pytest.param(*[3600, "postgres"], marks=pytest.mark.polarion_id("OCS-799")),
+            pytest.param(*[3600, "osd"], marks=pytest.mark.polarion_id("OCS-801"))
         ],
     )
     @pytest.mark.usefixtures(pgsql_setup.__name__)
@@ -86,12 +83,7 @@ class TestPgSQLNodeReboot(E2ETest):
         nodes.restart_nodes(node_1)
 
         # Wait for pg_bench pod to complete
-        # When the postgres pod running is rebooted the pgbench pod immediately
-        # goes to completed state and disappearing, handling it vai try;catch
-        try:
-            pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
-        except ResourceNotFoundError as e:
-            log.info(f"Pgbench pod reached completed state and not found: {e}")
+        pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
 
         # Calculate the time from running state to completed state
         end_time = datetime.now()
@@ -101,16 +93,10 @@ class TestPgSQLNodeReboot(E2ETest):
         )
 
         # Get pgbench pods
-        try:
-            pgbench_pods = pgsql.get_pgbench_pods()
-        except ResourceNotFoundError as e:
-            log.info(f"Pgbench pod reached completed state and not found: {e}")
+        pgbench_pods = pgsql.get_pgbench_pods()
 
         # Validate pgbench run and parse logs
-        try:
-            pgsql.validate_pgbench_run(pgbench_pods)
-        except ResourceNotFoundError as e:
-            log.info(f"Pgbench pod reached completed state and not found: {e}")
+        pgsql.validate_pgbench_run(pgbench_pods)
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check(tries=40)
