@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -46,7 +47,6 @@ class TestDrainNodeMon(ManageTest):
         Verify the number of monitoring pod is three when drain node
 
         """
-        # verify_pdb_mon(disruptions_allowed=1, max_unavailable_mon=1)
         sample = TimeoutSampler(
             timeout=100,
             sleep=10,
@@ -63,7 +63,6 @@ class TestDrainNodeMon(ManageTest):
 
         drain_nodes([node_name])
 
-        # verify_pdb_mon(disruptions_allowed=0, max_unavailable_mon=1)
         sample = TimeoutSampler(
             timeout=100,
             sleep=10,
@@ -80,6 +79,7 @@ class TestDrainNodeMon(ManageTest):
             assert "There are more than 3 mon pods."
 
         log.info("Respin pod rook-ceph operator pod")
+        time.sleep(30)
         rook_ceph_operator_name = get_pod_name_by_pattern("rook-ceph-operator")
         rook_ceph_operator_obj = get_pod_obj(name=rook_ceph_operator_name[0])
         rook_ceph_operator_obj.delete()
@@ -100,7 +100,7 @@ class TestDrainNodeMon(ManageTest):
             resource_count=3,
             timeout=100,
         )
-        # verify_pdb_mon(disruptions_allowed=1, max_unavailable_mon=1)
+
         sample = TimeoutSampler(
             timeout=100,
             sleep=10,
