@@ -1,16 +1,25 @@
 import logging
 
-from ocs_ci.framework.testlib import tier2, ignore_leftovers, ManageTest, bugzilla
-from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
-from ocs_ci.ocs.resources.pod import get_pod_obj, get_all_pods
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import OPENSHIFT_STORAGE_NAMESPACE
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import get_pod_node, get_mgr_pods
+from ocs_ci.ocs.resources.pod import (
+    get_pod_node,
+    get_mgr_pods,
+    get_pod_obj,
+    get_all_pods,
+)
+from ocs_ci.framework.testlib import (
+    tier2,
+    ignore_leftovers,
+    ManageTest,
+    bugzilla,
+    skipif_external_mode,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +27,7 @@ logger = logging.getLogger(__name__)
 @tier2
 @ignore_leftovers
 @bugzilla("1898808")
+@skipif_external_mode
 @skipif_openshift_dedicated
 class TestAddNodeCrashCollector(ManageTest):
     """
@@ -26,13 +36,12 @@ class TestAddNodeCrashCollector(ManageTest):
     Test Procedure:
     1.Get worker node where mgr pod running [worker-node-x]
     2.Add worker node with OCS label
-    3.Check ceph status [wait_for_rebalance]
-    4.Drain worker-node-x
-    5.Wait for 3 mon pods to be on running state
-    6.Verify ceph-crashcollector pod running on worker node where "rook-ceph" pods are running.
-    7.Schedule worker-node-x
-    8.Wait for 3 osd pods to be on running state
-    9.Verify ceph-crashcollector pod running on worker node where "rook-ceph" pods are running.
+    3.Drain worker-node-x
+    4.Wait for 3 mon pods to be on running state
+    5.Verify ceph-crashcollector pod running on worker node where "rook-ceph" pods are running.
+    6.Schedule worker-node-x
+    7.Wait for 3 osd pods to be on running state
+    8.Verify ceph-crashcollector pod running on worker node where "rook-ceph" pods are running.
 
     """
 
@@ -43,16 +52,12 @@ class TestAddNodeCrashCollector(ManageTest):
         """
         logger.info("Get Node name where mgr pod running")
         mgr_pod_nodes = [get_pod_node(pod) for pod in get_mgr_pods()]
-        mgr_pod_node_name = [node.name for node in mgr_pod_nodes]
+        mgr_pod_node_names = [node.name for node in mgr_pod_nodes]
 
         logger.info("Add one worker node with OCS label")
-        add_nodes(ocs_nodes=False, node_count=1)
-        ceph_cluster_obj = CephCluster()
-        assert ceph_cluster_obj.wait_for_rebalance(
-            timeout=3600
-        ), "Data re-balance failed to complete"
+        add_nodes(ocs_nodes=True, node_count=1)
 
-        drain_nodes(mgr_pod_node_name)
+        drain_nodes(mgr_pod_node_names)
 
         logging.info("Wait for 3 mon pods to be on running state")
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
@@ -74,7 +79,7 @@ class TestAddNodeCrashCollector(ManageTest):
             f"even though rook-ceph pods are running on this node"
         )
 
-        schedule_nodes(mgr_pod_node_name)
+        schedule_nodes(mgr_pod_node_names)
 
         logging.info("Wait for 3 osd pods to be on running state")
         assert pod.wait_for_resource(
@@ -120,6 +125,7 @@ class TestAddNodeCrashCollector(ManageTest):
 
         return:
             set: node names where rook ceph pods are running
+
         """
         pods_openshift_storage = get_all_pods(namespace=OPENSHIFT_STORAGE_NAMESPACE)
         ocs_nodes = list()
