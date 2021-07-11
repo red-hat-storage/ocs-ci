@@ -8,12 +8,18 @@ import tempfile
 from jsonschema import validate
 from semantic_version import Version
 
+from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.exceptions import ResourceNotFoundError, UnsupportedFeatureError
+from ocs_ci.ocs.exceptions import (
+    ResourceNotFoundError,
+    UnsupportedFeatureError,
+    PVNotSufficientException,
+)
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
+from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.utility import localstorage, utils, templating, kms as KMS
@@ -496,12 +502,13 @@ def osd_encryption_verification():
                 )
 
 
-def add_capacity(osd_size_capacity_requested):
+def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=True):
     """
     Add storage capacity to the cluster
 
     Args:
         osd_size_capacity_requested(int): Requested osd size capacity
+        add_extra_disk_to_existing_worker(bool): Add Disk if True
 
     Returns:
         new storage device set count (int) : Returns True if all OSDs are in Running state
@@ -526,13 +533,22 @@ def add_capacity(osd_size_capacity_requested):
     storageDeviceSets->count = (capacity reqested / osd capacity ) + existing count storageDeviceSets
 
     """
+    lvpresent = None
+    lv_set_present = None
     osd_size_existing = get_osd_size()
     device_sets_required = int(osd_size_capacity_requested / osd_size_existing)
     old_storage_devices_sets_count = get_deviceset_count()
     new_storage_devices_sets_count = int(
         device_sets_required + old_storage_devices_sets_count
     )
-    lvpresent = localstorage.check_local_volume()
+    lv_lvs_data = localstorage.check_local_volume_local_volume_set()
+    if lv_lvs_data.get("localvolume"):
+        lvpresent = True
+    elif lv_lvs_data.get("localvolumeset"):
+        lv_set_present = True
+    else:
+        log.info(lv_lvs_data)
+        raise ResourceNotFoundError("No LocalVolume and LocalVolume Set found")
     ocp_version = get_ocp_version()
     platform = config.ENV_DATA.get("platform", "").lower()
     is_lso = config.DEPLOYMENT.get("local_storage")
@@ -577,6 +593,21 @@ def add_capacity(osd_size_capacity_requested):
             localstorage.check_pvs_created(
                 int(len(final_device_list) / new_storage_devices_sets_count)
             )
+        if lv_set_present:
+            if check_pvs_present_for_ocs_expansion():
+                log.info("Found Extra PV")
+            else:
+                if (
+                    platform == constants.VSPHERE_PLATFORM
+                    and add_extra_disk_to_existing_worker
+                ):
+                    log.info("No Extra PV found")
+                    log.info("Adding Extra Disk to existing VSphere Worker nodes")
+                    add_disk_for_vsphere_platform()
+                else:
+                    raise PVNotSufficientException(
+                        f"No Extra PV found in {constants.OPERATOR_NODE_LABEL}"
+                    )
         sc = get_storage_cluster()
         # adding the storage capacity to the cluster
         params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",

@@ -332,6 +332,10 @@ class TemplateNotFound(Exception):
     pass
 
 
+class PVNotSufficientException(Exception):
+    pass
+
+
 class IPAMReleaseUpdateFailed(Exception):
     pass
 
