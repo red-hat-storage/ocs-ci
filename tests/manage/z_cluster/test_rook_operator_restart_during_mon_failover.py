@@ -113,6 +113,9 @@ class TestDrainNodeMon(ManageTest):
         """
         Get number of monitoring pods
 
+        return:
+            bool: False if number of mon pods is 3, True otherwise
+
         """
         mon_pod_list = get_mon_pods()
         if len(mon_pod_list) == 3:
