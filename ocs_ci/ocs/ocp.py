@@ -1024,11 +1024,9 @@ def get_ocs_version():
     ocp_cluster = OCP(
         namespace=config.ENV_DATA["cluster_namespace"], kind="", resource_name="csv"
     )
-    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
-        for item in ocp_cluster.get()["items"]:
-            if item["metadata"]["name"].startswith("ocs-operator"):
-                return item["spec"]["version"]
-    return ocp_cluster.get()["items"][0]["spec"]["version"]
+    for item in ocp_cluster.get()["items"]:
+        if item["metadata"]["name"].startswith("ocs-operator"):
+            return item["spec"]["version"]
 
 
 def get_ocs_parsed_version():
