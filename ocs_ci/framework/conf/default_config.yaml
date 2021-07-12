@@ -44,8 +44,8 @@ DEPLOYMENT:
   # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
   installer_version: "4.8.0-0.nightly"
   force_download_installer: True
-  force_download_client: True
-  skip_download_client: False
+  force_download_client: False
+  skip_download_client: True
   default_latest_tag: 'latest-4.8'
   # define if ceph is setup as external mode, default is false
   external_mode: False

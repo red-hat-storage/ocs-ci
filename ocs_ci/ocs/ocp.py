@@ -999,6 +999,23 @@ def get_all_resource_names_of_a_kind(kind):
     ]
 
 
+def get_all_resource_of_kind_containing_string(search_string, kind):
+    """
+    Return all the resource of kind which name contain search_string
+    Args:
+         search_string (str): The string to search in name of the resource
+         kind (str): Kind of the resource to search for
+    Returns:
+        (list): List of resource
+    """
+
+    resource_list = []
+    for resource in OCP(kind=kind).get().get("items"):
+        if search_string in resource["metadata"]["name"]:
+            resource_list.append(resource)
+    return resource_list
+
+
 def get_clustername():
     """
     Return the name (DNS short name) of the cluster

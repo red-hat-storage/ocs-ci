@@ -966,6 +966,8 @@ def get_ceph_df_detail():
     """
     ceph_cmd = "ceph df detail"
     ct_pod = pod.get_ceph_tools_pod()
+    get_df_detail = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd, format="")
+    logger.info(f"{get_df_detail}")
     return ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
 
 

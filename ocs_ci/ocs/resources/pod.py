@@ -301,6 +301,10 @@ class Pod(OCS):
         fio_filename=None,
         bs="4K",
         end_fsync=0,
+        buffer_compress_percentage=None,
+        buffer_pattern=None,
+        numjobs=None,
+        readwrite=None,
     ):
         """
         Execute FIO on a pod
@@ -329,6 +333,11 @@ class Pod(OCS):
             bs (str): Block size, e.g. 4K
             end_fsync (int): If 1, fio will sync file contents when a write
                 stage has completed. Fio default is 0
+            buffer_compress_percentage (int): If this is set, then fio will attempt to provide I/O buffer
+                content (on WRITEs) that compresses to the specified level
+            buffer_pattern (str): fio will fill the I/O buffers with this pattern
+            numjobs (int): multiple the job sent to number of jobs.
+            readwrite (str): Type of I/O pattern default is randrw from yaml
         """
         if not self.wl_setup_done:
             self.workload_setup(storage_type=storage_type, jobs=jobs)
@@ -338,7 +347,11 @@ class Pod(OCS):
             self.io_params["rwmixread"] = rw_ratio
         else:
             self.io_params = templating.load_yaml(constants.FIO_IO_PARAMS_YAML)
-        self.io_params["runtime"] = runtime
+        if runtime != 0:
+            self.io_params["runtime"] = runtime
+        else:
+            del self.io_params["runtime"]
+            del self.io_params["time_based"]
         size = size if isinstance(size, str) else f"{size}G"
         self.io_params["size"] = size
         if fio_filename:
@@ -347,6 +360,14 @@ class Pod(OCS):
         self.io_params["rate"] = rate
         self.io_params["rate_process"] = rate_process
         self.io_params["bs"] = bs
+        if buffer_compress_percentage:
+            self.io_params["buffer_compress_percentage"] = buffer_compress_percentage
+        if buffer_pattern:
+            self.io_params["buffer_pattern"] = buffer_pattern
+        if numjobs:
+            self.io_params["numjobs"] = numjobs
+        if readwrite:
+            self.io_params["readwrite"] = readwrite
         if end_fsync:
             self.io_params["end_fsync"] = end_fsync
         self.fio_thread = self.wl_obj.run(**self.io_params)
