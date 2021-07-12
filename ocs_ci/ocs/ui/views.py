@@ -261,6 +261,14 @@ pvc_4_7 = {
         By.CSS_SELECTOR,
     ),
     "test-project-link": ("//a[normalize-space()='{}']", By.XPATH),
+    "expected-capacity": (
+        "//dd[contains(text(),'{}') and @data-test='pvc-requested-capacity']",
+        By.XPATH,
+    ),
+    "new-capacity": (
+        "//dd[contains(text(),'{}') and @data-test-id='pvc-capacity']",
+        By.XPATH,
+    ),
 }
 
 pvc_4_8 = {

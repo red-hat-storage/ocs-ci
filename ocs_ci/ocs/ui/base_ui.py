@@ -10,7 +10,7 @@ from selenium.common.exceptions import (
     WebDriverException,
     NoSuchElementException,
     ElementNotVisibleException,
-    ElementNotSelectableException,
+    StaleElementReferenceException,
 )
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
@@ -216,10 +216,10 @@ class BaseUI:
         element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
         element.clear()
 
-    def wait_until_expected_text_is_found(self, locator, expected_text, timeout=5):
+    def wait_until_expected_text_is_found(self, locator, expected_text, timeout=300):
         """
         Method to wait for a expected text to appear on the UI (use of explicit wait type),
-        this method is helpful in working with elements which appear on completion of certain UI action and
+        this method is helpful in working with elements which appear on completion of certain action and
         ignores all the listed exceptions for the given timeout.
 
         Args:
@@ -227,27 +227,28 @@ class BaseUI:
             expected_text (str): Text which needs to be searched on UI
             timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
         return:
-            str: Returns the expected text if the element is found, fetches and returns the actual text otherwise.
+            bool: Fetches the actual text and returns True if the expected text and actual text are same,
+                AssertionError otherwise.
+                TimeOutException if the element text is not found during the given time.
+
 
         """
-        WebDriverWait(
+        wait = WebDriverWait(
             self.driver,
             timeout=timeout,
             poll_frequency=1,
             ignored_exceptions=[
                 NoSuchElementException,
                 ElementNotVisibleException,
-                ElementNotSelectableException,
+                StaleElementReferenceException,
                 TimeoutException,
             ],
         )
-        if ec.visibility_of_element_located((locator[1], locator[0])):
-            logger.info(f"Element found: {expected_text}")
-            return f"{expected_text}"
-        else:
-            element_found = (self.driver.find_element(locator[1], locator[0])).text
-            logger.error(f"Could not find expected text: {expected_text} ")
-            return element_found
+        wait.until(ec.visibility_of_element_located((locator[1], locator[0])))
+        text_found = (self.driver.find_element(locator[1], locator[0])).text
+        assert (
+            expected_text == text_found
+        ), f"Text found: {text_found}, Expected text: {expected_text}"
 
 
 class PageNavigator(BaseUI):
@@ -592,7 +593,7 @@ def login_ui():
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if headless:
+        if not headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 
