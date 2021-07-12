@@ -11,7 +11,6 @@ from ocs_ci.framework.testlib import (
     tier4b,
     ManageTest,
     ignore_leftovers,
-    aws_platform_required,
     ipi_deployment_required,
 )
 from ocs_ci.ocs import constants, node
@@ -21,6 +20,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_openshift_dedicated,
     skipif_bmpsi,
     bugzilla,
+    skipif_external_mode,
 )
 
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -88,32 +88,33 @@ def delete_and_create_osd_node(osd_node_name):
         f"'{config.ENV_DATA['deployment_type']}' is not valid, "
         f"results of this test run are all invalid."
     )
-    # TODO: refactor this so that AWS is not a "special" platform
-    if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
-        if config.ENV_DATA["deployment_type"] == "ipi":
-            new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
 
-        elif config.ENV_DATA["deployment_type"] == "upi":
-            new_node_name = node.delete_and_create_osd_node_aws_upi(osd_node_name)
-        else:
-            log.error(msg_invalid)
-            pytest.fail(msg_invalid)
-    elif config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS:
-        if config.ENV_DATA["deployment_type"] == "ipi":
-            new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
-        else:
-            log.error(msg_invalid)
-            pytest.fail(msg_invalid)
-    elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+    if config.ENV_DATA["deployment_type"] == "ipi":
         if is_lso_cluster():
-            new_node_name = node.delete_and_create_osd_node_vsphere_upi_lso(
-                osd_node_name, use_existing_node=False
+            # TODO: Implement functionality for Internal-Attached devices mode
+            # once ocs-ci issue #4545 is resolved
+            # https://github.com/red-hat-storage/ocs-ci/issues/4545
+            raise NotImplementedError(
+                "Functionality not implemented for this deployment mode"
             )
-
         else:
-            new_node_name = node.delete_and_create_osd_node_vsphere_upi(
-                osd_node_name, use_existing_node=False
-            )
+            new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
+
+    elif config.ENV_DATA["deployment_type"] == "upi":
+        if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+            new_node_name = node.delete_and_create_osd_node_aws_upi(osd_node_name)
+        elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            if is_lso_cluster():
+                new_node_name = node.delete_and_create_osd_node_vsphere_upi_lso(
+                    osd_node_name, use_existing_node=False
+                )
+            else:
+                new_node_name = node.delete_and_create_osd_node_vsphere_upi(
+                    osd_node_name, use_existing_node=False
+                )
+    else:
+        log.error(msg_invalid)
+        pytest.fail(msg_invalid)
 
     log.info("Start node replacement verification steps...")
     check_node_replacement_verification_steps(
@@ -124,8 +125,10 @@ def delete_and_create_osd_node(osd_node_name):
 @tier4
 @tier4a
 @ignore_leftovers
-@aws_platform_required
 @ipi_deployment_required
+@skipif_openshift_dedicated
+@skipif_bmpsi
+@skipif_external_mode
 class TestNodeReplacementWithIO(ManageTest):
     """
     Knip-894 Node replacement proactive with IO
@@ -199,6 +202,7 @@ class TestNodeReplacementWithIO(ManageTest):
 @ignore_leftovers
 @skipif_openshift_dedicated
 @skipif_bmpsi
+@skipif_external_mode
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement proactive

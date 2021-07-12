@@ -835,17 +835,11 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     drain_nodes([osd_node_name])
     log.info("Getting machine name from specified node name")
     machine_name = machine.get_machine_from_node_name(osd_node_name)
-    machine_type = machine.get_machine_type(machine_name)
     log.info(f"Node {osd_node_name} associated machine is {machine_name}")
     log.info(f"Deleting machine {machine_name} and waiting for new machine to come up")
-    machine.delete_machine_and_check_state_of_new_spinned_machine(machine_name)
-    new_machine_list = machine.get_machines(machine_type=machine_type)
-    for machines in new_machine_list:
-        # Trimming is done to get just machine name
-        # eg:- machine_name:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b-nlgkr
-        # After trimming:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b
-        if re.match(machines.name[:-6], machine_name):
-            new_machine_name = machines.name
+    new_machine_name = machine.delete_machine_and_check_state_of_new_spinned_machine(
+        machine_name
+    )
     machineset_name = machine.get_machineset_from_machine_name(new_machine_name)
     log.info("Waiting for new worker node to be in ready state")
     machine.wait_for_new_node_to_be_ready(machineset_name)
@@ -1481,9 +1475,12 @@ def wait_for_new_osd_node(old_osd_node_names, timeout=600):
             Else it returns None
 
     """
+    pod.wait_for_pods_to_be_running(
+        pod_names=[osd_pod.name for osd_pod in pod.get_osd_pods()], timeout=timeout
+    )
     try:
         for current_osd_node_names in TimeoutSampler(
-            timeout=timeout, sleep=30, func=get_osd_running_nodes
+            timeout=60, sleep=3, func=get_osd_running_nodes
         ):
             new_osd_node_names = [
                 node_name
