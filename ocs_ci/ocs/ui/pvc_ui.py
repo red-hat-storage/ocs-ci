@@ -156,8 +156,7 @@ class PvcUI(PageNavigator):
         Verifying PVC resize via UI
 
         Args:
-            expected_capacity (str): the new size of pvc (GB)
-            capacity (str): the actual size of pvc after pvc expansion
+            expected_capacity (str): the new size of pvc (GiB)
 
         """
 
