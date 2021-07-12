@@ -151,15 +151,15 @@ class TestPVCCreationDeletionPerformance(PASTest):
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL_THICK, "5Gi"],
-                marks=[pytest.mark.performance],
+                marks=[pytest.mark.performance, pytest.mark.performance_new_feature],
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL_THICK, "15Gi"],
-                marks=[pytest.mark.performance],
+                marks=[pytest.mark.performance, pytest.mark.performance_new_feature],
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL_THICK, "25Gi"],
-                marks=[pytest.mark.performance],
+                marks=[pytest.mark.performance, pytest.mark.performance_new_feature],
             ),
         ],
     )
