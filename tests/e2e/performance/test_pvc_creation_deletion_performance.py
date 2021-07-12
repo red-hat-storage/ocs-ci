@@ -384,7 +384,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL_THICK],
-                marks=[pytest.mark.performance],
+                marks=[pytest.mark.performance, pytest.mark.performance_new_feature],
             ),
         ],
     )
