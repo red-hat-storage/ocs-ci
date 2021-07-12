@@ -1,10 +1,8 @@
 import logging
 import pytest
-import time
 
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.ocs.resources.pod import get_mon_pods, get_pod_obj
+from ocs_ci.ocs.resources.pod import get_mon_pods, get_operator_pods
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.helpers.helpers import verify_pdb_mon
 from ocs_ci.ocs.ocp import OCP
@@ -79,10 +77,8 @@ class TestDrainNodeMon(ManageTest):
             assert "There are more than 3 mon pods."
 
         log.info("Respin pod rook-ceph operator pod")
-        time.sleep(30)
-        rook_ceph_operator_name = get_pod_name_by_pattern("rook-ceph-operator")
-        rook_ceph_operator_obj = get_pod_obj(name=rook_ceph_operator_name[0])
-        rook_ceph_operator_obj.delete()
+        rook_ceph_operator_pod_obj = get_operator_pods()
+        rook_ceph_operator_pod_obj[0].delete()
 
         schedule_nodes([node_name])
 
