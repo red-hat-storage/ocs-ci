@@ -133,7 +133,7 @@ class PvcUI(PageNavigator):
 
         logger.info("Checking status of Pvc")
         self.wait_until_expected_text_is_found(
-            self.pvc_loc["pvc-status"], expected_text="Bound"
+            locator=self.pvc_loc["pvc-status"], expected_text="Bound"
         )
 
         logger.info("Click on Actions")
@@ -150,6 +150,26 @@ class PvcUI(PageNavigator):
 
         logger.info("Click on Expand Button")
         self.do_click(self.pvc_loc["expand-btn"])
+
+    def verify_pvc_resize_ui(self, expected_capacity):
+        """
+        Verifying PVC resize via UI
+
+        Args:
+            expected_capacity (str): the new size of pvc (GB)
+            capacity (str): the actual size of pvc after pvc expansion
+
+        """
+
+        self.wait_until_expected_text_is_found(
+            format_locator(self.pvc_loc["expected-capacity"], expected_capacity),
+            expected_text=expected_capacity,
+        )
+
+        self.wait_until_expected_text_is_found(
+            format_locator(self.pvc_loc["new-capacity"], expected_capacity),
+            expected_text=expected_capacity,
+        )
 
     def delete_pvc_ui(self, pvc_name, project_name):
         """

@@ -68,7 +68,7 @@ class TestPvcUserInterface(object):
                 "ReadWriteMany",
                 "4",
                 "Block",
-                marks=[skipif_ocp_version("<4.8")],
+                marks=[skipif_ocp_version("<=4.8")],
             ),
             pytest.param(
                 "ocs-storagecluster-cephfs",
@@ -90,7 +90,7 @@ class TestPvcUserInterface(object):
                 "ReadWriteOnce",
                 "12",
                 "Block",
-                marks=[skipif_ocp_version("<4.8")],
+                marks=[skipif_ocp_version("<=4.8")],
             ),
             # pytest.param(
             #     "ocs-storagecluster-cephfs",
@@ -209,7 +209,7 @@ class TestPvcUserInterface(object):
                 "ReadWriteOnce",
                 "4",
                 "Filesystem",
-                marks=[skipif_ocp_version("<4.8")],
+                marks=[skipif_ocp_version("<=4.8")],
             ),
         ],
     )
@@ -296,26 +296,17 @@ class TestPvcUserInterface(object):
             pvc_name=pvc_name, new_size=new_size, project_name=project_name
         )
 
-        logger.info("Verifying New Capacity after Pvc Resize")
         assert new_size > int(
             pvc_size
         ), f"New size of the PVC cannot be less than existing size: new size is {new_size})"
 
-        baseui_obj = PageNavigator(setup_ui)
-        expected_capacity = baseui_obj.wait_until_expected_text_is_found(
-            ("dd[data-test='pvc-requested-capacity']", By.CSS_SELECTOR),
-            expected_text=f"{new_size} GiB",
+        logger.info("Verifying PVC resize")
+        expected_capacity = f"{new_size} GiB"
+        pvc_ui_obj.verify_pvc_resize_ui(expected_capacity=expected_capacity)
+        logger.info(
+            "Pvc resize verified..!!"
+            f"New Capacity after PVC resize is {expected_capacity}"
         )
-        capacity = baseui_obj.wait_until_expected_text_is_found(
-            ("dd[data-test-id='pvc-capacity']", By.CSS_SELECTOR),
-            expected_text=f"{new_size} GiB",
-        )
-
-        assert expected_capacity == capacity, (
-            f"Pvc resize error: Expected capacity is {expected_capacity})"
-            f"\n Actual capacity:{capacity}"
-        )
-        logger.info(f"Pvc Resize Verified: New Capacity is {capacity}")
 
         new_pod.delete(wait=True)
         new_pod.ocp.wait_for_delete(resource_name=new_pod.name)
