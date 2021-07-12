@@ -243,6 +243,7 @@ class TestNodeReplacement(ManageTest):
 @ignore_leftovers
 @bugzilla("1840539")
 @pytest.mark.polarion_id("OCS-2535")
+@skipif_external_mode
 class TestNodeReplacementTwice(ManageTest):
     """
     Node replacement twice:
@@ -256,7 +257,7 @@ class TestNodeReplacementTwice(ManageTest):
       2. ceph side host still on the old rack
     """
 
-    def test_nodereplacenet_twice(self):
+    def test_nodereplacement_twice(self):
         for i in range(2):
             # Get random node name for replacement
             node_name_to_delete = select_osd_node_name()
