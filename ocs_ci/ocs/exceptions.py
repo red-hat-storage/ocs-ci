@@ -260,11 +260,39 @@ class PoolNotFound(Exception):
     pass
 
 
+class PoolDidNotReachReadyState(Exception):
+    pass
+
+
+class PoolStateIsUnknow(Exception):
+    pass
+
+
+class PoolNotDeleted(Exception):
+    pass
+
+
 class PoolDataNotErased(Exception):
     pass
 
 
 class PvcNotDeleted(Exception):
+    pass
+
+
+class StorageclassNotCreated(Exception):
+    pass
+
+
+class StorageclassIsNotDeleted(Exception):
+    pass
+
+
+class ResourceNotDeleted(Exception):
+    pass
+
+
+class PageNotLoaded(Exception):
     pass
 
 

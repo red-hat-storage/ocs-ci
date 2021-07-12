@@ -1320,6 +1320,9 @@ MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
 MCG_TESTS_MIN_NB_ENDPOINT_COUNT = 2
 MAX_NB_ENDPOINT_COUNT = 2
 
+REPLICA_2_LINK_TEXT = "2-way Replication"
+REPLICA_3_LINK_TEXT = "3-way Replication"
+
 VOLUMESNAPSHOT = "volumesnapshot"
 
 PERF_IMAGE = "quay.io/ocsci/perf:latest"

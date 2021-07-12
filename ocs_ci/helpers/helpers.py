@@ -35,7 +35,7 @@ from ocs_ci.ocs.exceptions import (
     UnavailableBuildException,
     UnexpectedBehaviour,
 )
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, get_all_resource_of_kind_containing_string
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -788,6 +788,30 @@ def get_cephfs_data_pool_name():
     ct_pod = pod.get_ceph_tools_pod()
     out = ct_pod.exec_ceph_cmd("ceph fs ls")
     return out[0]["data_pools"][0]
+
+
+def delete_all_resource_of_kind_containing_string(kind, search_string):
+    """
+    Delete all resource of kind specified with name containing search_string.
+    Args:
+        kind (str): kind of the resource to search and delete.
+        search_string (str): Search string for the resources to be searched and deleted.
+    Returns
+        bool: True if deletion of all resource succeeded else false.
+
+    """
+    resource_dict_list = get_all_resource_of_kind_containing_string(kind=kind, search_string=search_string)
+    if len(resource_dict_list) > 0:
+        for resource in resource_dict_list:
+            OCS(**resource).delete()
+        resource_dict_after_list = get_all_resource_of_kind_containing_string(kind=kind, search_string=search_string)
+        if len(resource_dict_after_list) > 0:
+            for resource in resource_dict_after_list:
+                logger.error(f"Resource {resource.resource_name} was not deleted successfully")
+            return False
+        else:
+            return True
+    return True
 
 
 def validate_cephfilesystem(fs_name):
