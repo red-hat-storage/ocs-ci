@@ -585,6 +585,10 @@ EXTERNAL_VAULT_KMS_TOKEN = os.path.join(EXTERNAL_VAULT_TEMPLATES, "ocs-kms-token
 EXTERNAL_VAULT_KMS_CONNECTION_DETAILS = os.path.join(
     EXTERNAL_VAULT_TEMPLATES, "ocs-kms-connection-details.yaml"
 )
+EXTERNAL_VAULT_CSI_KMS_TOKEN = os.path.join(TEMPLATE_CSI_RBD_DIR, "csi-kms-secret.yaml")
+EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "csi-kms-connection-details.yaml"
+)
 CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "ceph-debug-log-level-configmap.yaml"
 )
@@ -1312,6 +1316,8 @@ VAULT_KMS_TOKEN_RESOURCE = "ocs-kms-token"
 VAULT_CLIENT_CERT_PATH = os.path.join(DATA_DIR, "vault-client.crt")
 VAULT_KMS_PROVIDER = "vault"
 VAULT_NOOBAA_ROOT_SECRET_PATH = "NOOBAA_ROOT_SECRET_PATH"
+VAULT_KMS_CSI_CONNECTION_DETAILS = "csi-kms-connection-details"
+VAULT_KMS_CSI_TOKEN = "ceph-csi-kms-token"
 
 # min and max Noobaa endpoints
 MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
