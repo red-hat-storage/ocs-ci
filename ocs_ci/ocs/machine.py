@@ -180,7 +180,7 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
             resource_name=new_machine_name,
             column="PHASE",
             timeout=600,
-            sleep=10,
+            sleep=30,
         )
         log.info(f"{new_machine_name} is in {constants.STATUS_RUNNING} state")
         return new_machine_name
