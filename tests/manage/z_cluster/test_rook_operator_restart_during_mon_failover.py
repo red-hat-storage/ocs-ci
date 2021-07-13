@@ -36,7 +36,7 @@ class TestDrainNodeMon(ManageTest):
     5.Verify the number of mon pods is 3 for (1400 seconds)
     6.Respin  rook-ceph operator pod
     7.Uncordon the node
-    8.Wait for mon and osd pods to be on running state
+    8.Wait for all the pods in openshift-storage to be running
     9.Verify pdb status, disruptions_allowed=1, max_unavailable_mon=1
 
     """
@@ -87,7 +87,7 @@ class TestDrainNodeMon(ManageTest):
         schedule_nodes([node_name])
 
         logging.info("Wait for all the pods in openshift-storage to be running.")
-        wait_for_pods_to_be_running()
+        assert wait_for_pods_to_be_running(timeout=300)
 
         sample = TimeoutSampler(
             timeout=100,
