@@ -25,9 +25,9 @@ def s3bench(request):
 
 
 @scale
-class TestScaleOCBPerformance(E2ETest):
+class TestNoobaaPerformance(E2ETest):
     """
-    OBC Performance in the Multicloud Object Gateway and
+    Noobaa Performance in the Multicloud Object Gateway (MCG) and
     Ceph Object Gateway (RGW)
 
     """
