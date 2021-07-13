@@ -2,12 +2,13 @@ import logging
 import pytest
 
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
-from ocs_ci.ocs.resources.pod import get_mon_pods, get_operator_pods
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.helpers.helpers import verify_pdb_mon
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.pod import (
+    get_mon_pods,
+    get_operator_pods,
+    wait_for_pods_to_be_running,
+)
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4a,
@@ -71,8 +72,11 @@ class TestDrainNodeMon(ManageTest):
         if sample.wait_for_func_status(result=True):
             assert "the expected pdb state is not equal to actual pdb state"
 
-        log.info("Verify the number of mon pods is 3")
-        sample = TimeoutSampler(timeout=1400, sleep=10, func=self.check_mon_pods_eq_3)
+        timeout = 1400
+        log.info(f"Verify the number of mon pods is 3 for {timeout} seconds")
+        sample = TimeoutSampler(
+            timeout=timeout, sleep=10, func=self.check_mon_pods_eq_3
+        )
         if sample.wait_for_func_status(result=True):
             assert "There are more than 3 mon pods."
 
@@ -82,20 +86,8 @@ class TestDrainNodeMon(ManageTest):
 
         schedule_nodes([node_name])
 
-        logging.info("Wait for mon and osd pods to be on running state")
-        pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
-        assert pod.wait_for_resource(
-            condition="Running",
-            selector=constants.MON_APP_LABEL,
-            resource_count=3,
-            timeout=100,
-        )
-        assert pod.wait_for_resource(
-            condition="Running",
-            selector=constants.OSD_APP_LABEL,
-            resource_count=3,
-            timeout=100,
-        )
+        logging.info("Wait for all the pods in openshift-storage to be running.")
+        wait_for_pods_to_be_running()
 
         sample = TimeoutSampler(
             timeout=100,
