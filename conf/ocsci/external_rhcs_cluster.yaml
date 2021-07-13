@@ -12,3 +12,7 @@ EXTERNAL_MODE:
   # from exporter script
   # https://github.com/rook/rook/blob/master/cluster/examples/kubernetes/ceph/create-external-cluster-resources.py
   external_cluster_details: PLACE_HOLDER
+
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-2563'
