@@ -200,7 +200,7 @@ class TestPvcUserInterface(object):
         expected_capacity = f"{new_size} GiB"
         pvc_ui_obj.verify_pvc_resize_ui(expected_capacity=expected_capacity)
         logger.info(
-            "Pvc resize verified..!!"
+            "Pvc resize verified..!"
             f"New Capacity after PVC resize is {expected_capacity}"
         )
 
