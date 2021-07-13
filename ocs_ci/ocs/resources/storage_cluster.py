@@ -541,17 +541,19 @@ def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=
     new_storage_devices_sets_count = int(
         device_sets_required + old_storage_devices_sets_count
     )
-    lv_lvs_data = localstorage.check_local_volume_local_volume_set()
-    if lv_lvs_data.get("localvolume"):
-        lvpresent = True
-    elif lv_lvs_data.get("localvolumeset"):
-        lv_set_present = True
-    else:
-        log.info(lv_lvs_data)
-        raise ResourceNotFoundError("No LocalVolume and LocalVolume Set found")
+    is_lso = config.DEPLOYMENT.get("local_storage")
+    if is_lso:
+        lv_lvs_data = localstorage.check_local_volume_local_volume_set()
+        if lv_lvs_data.get("localvolume"):
+            lvpresent = True
+        elif lv_lvs_data.get("localvolumeset"):
+            lv_set_present = True
+        else:
+            log.info(lv_lvs_data)
+            raise ResourceNotFoundError("No LocalVolume and LocalVolume Set found")
     ocp_version = get_ocp_version()
     platform = config.ENV_DATA.get("platform", "").lower()
-    is_lso = config.DEPLOYMENT.get("local_storage")
+
     if (
         ocp_version == "4.7"
         and (
