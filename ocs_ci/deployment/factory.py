@@ -13,7 +13,7 @@ class DeploymentFactory(object):
     """
 
     def __init__(self):
-        self.deployment_platform = config.ENV_DATA["platform"]
+        self.deployment_platform = config.ENV_DATA["platform"].lower()
         self.cls_map = {}
         # A map of all existing deployments and respective classes
         # should be put here, but only in the condition if that platform is used.
