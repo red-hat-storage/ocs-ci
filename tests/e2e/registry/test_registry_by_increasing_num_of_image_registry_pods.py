@@ -9,12 +9,13 @@ from ocs_ci.ocs.registry import (
     modify_registry_pod_count,
     validate_pvc_mount_on_registry_pod,
 )
-from ocs_ci.framework.testlib import E2ETest, workloads
+from ocs_ci.framework.testlib import E2ETest, workloads, bugzilla
 
 log = logging.getLogger(__name__)
 
 
 @workloads
+@bugzilla("1981639")
 class TestRegistryByIncreasingNumPods(E2ETest):
     """
     Test to increase number of registry pods
@@ -38,6 +39,18 @@ class TestRegistryByIncreasingNumPods(E2ETest):
             # Reset namespace to default
             ocp.switch_to_default_rook_cluster_project()
             ocp_obj.wait_for_delete(resource_name=self.project_name)
+
+            # Validate replica count is set to 2
+            config_obj = ocp.OCP(
+                kind=constants.IMAGE_REGISTRY_CONFIG,
+                namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
+            )
+            replica_count = config_obj.get().get("spec").get("replicas")
+            if replica_count != 2:
+                modify_registry_pod_count(count=2)
+
+                # Validate image registry pods
+                validate_registry_pod_status()
 
         request.addfinalizer(finalizer)
 
