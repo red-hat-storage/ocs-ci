@@ -25,7 +25,6 @@ class HsBench(object):
         self.pod_dic_path = constants.GOLANG_YAML
         self.namespace = config.ENV_DATA["cluster_namespace"]
         self.hsbench_cr = templating.load_yaml(constants.HSBENCH_OBJ_YAML)
-        self.object_size = self.hsbench_cr["object_size"]
         self.duration = self.hsbench_cr["duration"]
         self.num_threads = self.hsbench_cr["num_threads"]
         self.num_bucket = self.hsbench_cr["num_bucket"]
@@ -105,6 +104,7 @@ class HsBench(object):
         self,
         num_obj=None,
         run_mode=None,
+        object_size=None,
         timeout=None,
         access_key=None,
         secret_key=None,
@@ -117,6 +117,7 @@ class HsBench(object):
         Args:
             num_obj (int): Maximum number of objects
             run_mode (string): mode types
+            object_size (string): size of object in KB
             timeout (int): timeout in seconds
             access_key (string): Access Key credential
             secret_key (string): Secret Key credential
@@ -129,6 +130,9 @@ class HsBench(object):
         self.timeout_clean = timeout * 3
         self.num_obj = num_obj if num_obj else self.hsbench_cr["num_obj"]
         self.run_mode = run_mode if run_mode else self.hsbench_cr["run_mode"]
+        self.object_size = (
+            object_size if object_size else self.hsbench_cr["object_size"]
+        )
         self.access_key = access_key if access_key else self.access_key
         self.secret_key = secret_key if secret_key else self.secret_key
         self.end_point = end_point if end_point else self.end_point

@@ -222,3 +222,20 @@ def wait_for_active_pods(job, desired_count, timeout=3):
             log.debug(f"Logs from job pod {job_pod['metadata']['name']}: {pod_logs}")
 
         return False
+
+
+def get_pod_logs(job):
+    """
+    Get logs from job pod
+    Args:
+        job (obj): OCS job object
+
+    """
+    job_name = job.name
+    job_pods = pod.get_pods_having_label(f"job-name={job_name}", job.namespace)
+    for job_pod in job_pods:
+        log.info(f"Description of job pod {job_pod['metadata']['name']}: {job_pod}")
+        pod_logs = pod.get_pod_logs(
+            job_pod["metadata"]["name"], namespace=job_pod["metadata"]["namespace"]
+        )
+        log.info(f"Logs from job pod {job_pod['metadata']['name']}: {pod_logs}")
