@@ -2,7 +2,6 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import skipif_cephfs_not_deployed, skipif_rbd_not_deployed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources import pod as pod_helpers
@@ -196,11 +195,15 @@ class TestAddCapacity(ManageTest):
 
         # New osd (all) pods corresponding to the additional capacity should be
         # in running state
+        if is_flexible_scaling_enabled:
+            replica_count = 1
+        else:
+            replica_count = 3
         pod.wait_for_resource(
             timeout=1200,
             condition=constants.STATUS_RUNNING,
             selector="app=rook-ceph-osd",
-            resource_count=result * 3,
+            resource_count=result * replica_count,
         )
 
         #################################

@@ -1,6 +1,7 @@
 import json
 import logging
 import uuid
+from time import sleep
 
 import pytest
 import botocore.exceptions as boto3exception
@@ -24,6 +25,8 @@ from ocs_ci.ocs.bucket_utils import (
     s3_delete_object,
     namespace_bucket_update,
     rm_object_recursive,
+    wait_for_cache,
+    s3_list_objects_v1,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -266,3 +269,181 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         # Namespace resource delete
         logger.info(f"Deleting the resource: {aws_target_bucket}")
         mcg_obj.delete_ns_resource(ns_resource_name=aws_target_bucket)
+
+    @pytest.mark.parametrize(
+        argnames=["bucketclass_dict"],
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 180000,
+                        "namespacestore_dict": {
+                            "aws": [(1, "eu-central-1")],
+                        },
+                    },
+                    "placement_policy": {
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
+                    },
+                },
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 180000,
+                        "namespacestore_dict": {
+                            "rgw": [(1, None)],
+                        },
+                    },
+                    "placement_policy": {
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
+                    },
+                },
+                marks=on_prem_platform_required,
+            ),
+        ],
+        ids=["AWS-OC-Cache", "RGW-OC-Cache"],
+    )
+    @tier2
+    @skipif_ocs_version("<4.8")
+    @pytest.mark.polarion_id("OCS-2471")
+    def test_mcg_cache_lifecycle(
+        self, mcg_obj, cld_mgr, awscli_pod, bucket_factory, bucketclass_dict
+    ):
+        """
+        Test MCG cache bucket lifecycle
+
+        1. Create cache buckets on each namespace stores (RGW-OBC/OBC)
+        2. Verify write operations cache and hub bucket
+        3. Verify read/list operations on cache bucket and hub target
+        4. Verify delete operation on buckets
+        5. Delete multiple cache buckets with data still in ns store
+        6. Recreate the cache buckets on ns store(with existing data) then read.
+
+        """
+        data = "Sample string content to write to a S3 object"
+        object_key = "ObjKey-" + str(uuid.uuid4().hex)
+        if (
+            constants.RGW_PLATFORM
+            in bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"]
+        ):
+            s3_creds = {
+                "access_key_id": cld_mgr.rgw_client.access_key,
+                "access_key": cld_mgr.rgw_client.secret_key,
+                "endpoint": cld_mgr.rgw_client.endpoint,
+            }
+            logger.info("RGW obc will be created as cache bucket")
+            obc_interface = "rgw-oc"
+        else:
+            s3_creds = {
+                "access_key_id": cld_mgr.aws_client.access_key,
+                "access_key": cld_mgr.aws_client.secret_key,
+                "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+                "region": config.ENV_DATA["region"],
+            }
+            logger.info("Noobaa obc will be created as cache bucket")
+            obc_interface = bucketclass_dict["interface"]
+
+        # Create the namespace resource and bucket
+        ns_bucket = bucket_factory(
+            interface=obc_interface,
+            bucketclass=bucketclass_dict,
+        )[0]
+        logger.info(f"Cache bucket: {ns_bucket.name} created")
+        target_bucket = ns_bucket.bucketclass.namespacestores[0].uls_name
+
+        # Write to cache
+        logger.info(f"Writing object on cache bucket: {ns_bucket.name}")
+        assert s3_put_object(
+            mcg_obj, ns_bucket.name, object_key, data
+        ), "Failed: PutObject"
+        wait_for_cache(mcg_obj, ns_bucket.name, [object_key])
+
+        # Write to hub and read from cache
+        logger.info("Setting up test files for upload")
+        setup_base_objects(awscli_pod, amount=3)
+        logger.info(f"Uploading objects to ns target: {target_bucket}")
+        sync_object_directory(
+            awscli_pod,
+            src=MCG_NS_ORIGINAL_DIR,
+            target=f"s3://{target_bucket}",
+            signed_request_creds=s3_creds,
+        )
+        sync_object_directory(
+            awscli_pod, f"s3://{ns_bucket.name}", MCG_NS_RESULT_DIR, mcg_obj
+        )
+
+        # Read cached object
+        assert s3_get_object(mcg_obj, ns_bucket.name, object_key), "Failed: GetObject"
+
+        # Read stale object(ttl expired)
+        sleep(bucketclass_dict["namespace_policy_dict"]["ttl"] / 1000)
+        logger.info(f"Get object on cache bucket: {ns_bucket.name}")
+        assert s3_get_object(mcg_obj, ns_bucket.name, object_key), "Failed: GetObject"
+
+        # List on cache bucket
+        list_response = s3_list_objects_v1(s3_obj=mcg_obj, bucketname=ns_bucket.name)
+        logger.info(f"Listed objects: {list_response}")
+
+        # Delete object from cache bucket
+        s3_delete_object(mcg_obj, ns_bucket.name, object_key)
+        sleep(5)
+        # Try to read deleted object
+        try:
+            s3_get_object(mcg_obj, ns_bucket.name, object_key)
+        except boto3exception.ClientError:
+            logger.info("object deleted successfully")
+
+        # Validate deletion on the hub
+        if (
+            constants.RGW_PLATFORM
+            in bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"]
+        ):
+            obj_list = list(
+                cld_mgr.rgw_client.client.Bucket(target_bucket).objects.all()
+            )
+        else:
+            obj_list = list(
+                cld_mgr.aws_client.client.Bucket(target_bucket).objects.all()
+            )
+        if object_key in obj_list:
+            raise UnexpectedBehaviour("Object was not deleted from cache properly")
+
+        # Recreate and validate object
+        assert s3_put_object(
+            mcg_obj, ns_bucket.name, object_key, data
+        ), "Failed: PutObject"
+        assert s3_get_object(mcg_obj, ns_bucket.name, object_key), "Failed: GetObject"
+
+        logger.info(f"Deleting cache bucket {ns_bucket.name}")
+        curr_ns_store = ns_bucket.bucketclass.namespacestores[0]
+        ns_bucket.delete()
+        new_bucket_class = {
+            "interface": "OC",
+            "namespace_policy_dict": {
+                "type": "Cache",
+                "ttl": 180000,
+                "namespacestores": [curr_ns_store],
+            },
+            "placement_policy": {
+                "tiers": [{"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}]
+            },
+        }
+        logger.info(
+            f"Recreating cache bucket {ns_bucket.name} using current hub: {target_bucket}"
+        )
+        ns_bucket = bucket_factory(
+            interface=obc_interface,
+            bucketclass=new_bucket_class,
+        )[0]
+        logger.info(
+            f"Read existing data on hub: {target_bucket} through cache bucket: {ns_bucket.name}"
+        )
+        assert s3_get_object(mcg_obj, ns_bucket.name, object_key), "Failed: GetObject"

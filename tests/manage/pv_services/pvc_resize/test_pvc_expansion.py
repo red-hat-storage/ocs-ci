@@ -110,6 +110,8 @@ class TestPvcExpand(ManageTest):
             for df_out in TimeoutSampler(
                 240, 3, pod_obj.exec_cmd_on_pod, command="df -kh"
             ):
+                if not df_out:
+                    continue
                 df_out = df_out.split()
                 new_size_mount = df_out[df_out.index(pod_obj.get_storage_path()) - 4]
                 if new_size_mount in [

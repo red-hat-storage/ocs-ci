@@ -170,7 +170,10 @@ def create_pod(
         AssertionError: In case of any failure
 
     """
-    if interface_type == constants.CEPHBLOCKPOOL:
+    if (
+        interface_type == constants.CEPHBLOCKPOOL
+        or interface_type == constants.CEPHBLOCKPOOL_THICK
+    ):
         pod_dict = pod_dict_path if pod_dict_path else constants.CSI_RBD_POD_YAML
         interface = constants.RBD_INTERFACE
     else:
@@ -501,6 +504,7 @@ def create_storage_class(
     sc_name=None,
     provisioner=None,
     rbd_thick_provision=False,
+    encrypted=False,
 ):
     """
     Create a storage class
@@ -535,6 +539,12 @@ def create_storage_class(
         )
         if rbd_thick_provision:
             sc_data["parameters"]["thickProvision"] = "true"
+        if encrypted:
+            # Avoid circular imports
+            from ocs_ci.utility.kms import get_encryption_kmsid
+
+            sc_data["parameters"]["encrypted"] = "true"
+            sc_data["parameters"]["encryptionKMSID"] = get_encryption_kmsid()
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = templating.load_yaml(constants.CSI_CEPHFS_STORAGECLASS_YAML)
         sc_data["parameters"]["csi.storage.k8s.io/node-stage-secret-name"] = secret_name
@@ -1268,7 +1278,7 @@ def get_snapshot_time(interface, snap_name, status):
         return None
 
 
-def measure_snapshot_creation_time(interface, snap_name, snap_con_name):
+def measure_snapshot_creation_time(interface, snap_name, snap_con_name, snap_uid=None):
     """
     Measure Snapshot creation time based on logs
 
@@ -1281,10 +1291,31 @@ def measure_snapshot_creation_time(interface, snap_name, snap_con_name):
     """
     start = get_snapshot_time(interface, snap_name, status="start")
     end = get_snapshot_time(interface, snap_con_name, status="end")
+    logs = ""
     if start and end:
         total = end - start
         return total.total_seconds()
     else:
+        # at 4.8 the log messages was changed, so need different parsing
+        pod_name = pod.get_csi_provisioner_pod(interface)
+        # get the logs from the csi-provisioner containers
+        for log_pod in pod_name:
+            logger.info(f"Read logs from {log_pod}")
+            logs += pod.get_pod_logs(log_pod, "csi-snapshotter")
+        logs = logs.split("\n")
+        pattern = "CSI CreateSnapshot: snapshot-"
+        for line in logs:
+            if (
+                re.search(snap_uid, line)
+                and re.search(pattern, line)
+                and re.search("readyToUse \\[true\\]", line)
+            ):
+                # The creation time log is in nanosecond, so, it need to convert to seconds.
+                results = int(line.split()[-5].split(":")[1].replace("]", "")) * (
+                    10 ** -9
+                )
+                return float(f"{results:.3f}")
+
         return None
 
 
@@ -2933,7 +2964,7 @@ def fetch_used_size(cbp_name, exp_val=None):
 
     # Convert size to GB
     used_in_gb = float(format(size_bytes / constants.GB, ".4f"))
-    if exp_val is True and abs(exp_val - used_in_gb) < 1.5:
+    if exp_val and abs(exp_val - used_in_gb) > 1.5:
         raise UnexpectedBehaviour(
             f"Actual {used_in_gb} and expected size {exp_val} not "
             f"matching. Retrying"
@@ -3025,4 +3056,55 @@ def run_cmd_verify_cli_output(
     for expected_output in expected_output_lst:
         if expected_output not in out:
             return False
+    return True
+
+
+def check_rbd_image_used_size(
+    pvc_objs, usage_to_compare, rbd_pool=constants.DEFAULT_BLOCKPOOL, expect_match=True
+):
+    """
+    Check if RBD image used size of the PVCs are matching with the given value
+
+    Args:
+        pvc_objs (list): List of PVC objects
+        usage_to_compare (str): Value of image used size to be compared with actual value. eg: "5GiB"
+        rbd_pool (str): Name of the pool
+        expect_match (bool): True to verify the used size is equal to 'usage_to_compare' value.
+            False to verify the used size is not equal to 'usage_to_compare' value.
+
+    Returns:
+        bool: True if the verification is success for all the PVCs, False otherwise
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    no_match_list = []
+    for pvc_obj in pvc_objs:
+        rbd_image_name = pvc_obj.get_rbd_image_name
+        du_out = ct_pod.exec_ceph_cmd(
+            ceph_cmd=f"rbd du -p {rbd_pool} {rbd_image_name}",
+            format="",
+        )
+        used_size = "".join(du_out.strip().split()[-2:])
+        if expect_match:
+            if usage_to_compare != used_size:
+                logger.error(
+                    f"Rbd image {rbd_image_name} of PVC {pvc_obj.name} did not meet the expectation."
+                    f" Expected used size: {usage_to_compare}. Actual used size: {used_size}. "
+                    f"Rbd du out: {du_out}"
+                )
+                no_match_list.append(pvc_obj.name)
+        else:
+            if usage_to_compare == used_size:
+                logger.error(
+                    f"Rbd image {rbd_image_name} of PVC {pvc_obj.name} did not meet the expectation. "
+                    f"Expected the used size to be diferent than {usage_to_compare}. "
+                    f"Actual used size: {used_size}. Rbd du out: {du_out}"
+                )
+                no_match_list.append(pvc_obj.name)
+
+    if no_match_list:
+        logger.error(
+            f"RBD image used size of these PVCs did not meet the expectation - {no_match_list}"
+        )
+        return False
     return True

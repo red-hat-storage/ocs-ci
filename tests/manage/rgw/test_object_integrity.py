@@ -1,5 +1,6 @@
 import logging
 import pytest
+from flaky import flaky
 
 from ocs_ci.framework.pytest_customization.marks import skipif_rgw_not_deployed
 from ocs_ci.ocs.bucket_utils import (
@@ -21,6 +22,7 @@ class TestObjectIntegrity(ManageTest):
     """
 
     @tier1
+    @flaky
     @pytest.mark.polarion_id("OCS-2246")
     def test_check_object_integrity(self, awscli_pod, rgw_bucket_factory):
         """

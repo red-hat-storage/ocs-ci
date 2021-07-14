@@ -222,6 +222,10 @@ pvc = {
         'a[id="ocs-storagecluster-cephfs-link"]',
         By.CSS_SELECTOR,
     ),
+    "ocs-storagecluster-ceph-rbd-thick": (
+        "a[id='ocs-storagecluster-ceph-rbd-thick-link'] div[class='text-muted small']",
+        By.CSS_SELECTOR,
+    ),
     "pvc_name": ('input[data-test="pvc-name"]', By.CSS_SELECTOR),
     "ReadWriteOnce": (
         'input[data-test="Single User (RWO)-radio-input"]',
@@ -240,10 +244,23 @@ pvc = {
         By.CSS_SELECTOR,
     ),
     "confirm_pvc_deletion": ('button[data-test="confirm-action"]', By.CSS_SELECTOR),
-    "pvc_test": ('a[data-test-id="test-pvc-fs"]', By.CSS_SELECTOR),
     "search_pvc": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
 }
 
+pvc_4_7 = {
+    "test-pvc-fs": ('a[data-test-id="test-pvc-fs"]', By.CSS_SELECTOR),
+    "test-pvc-rbd": ("a[title='test-pvc-rbd']", By.CSS_SELECTOR),
+    "Block": ("input[value='Block']", By.CSS_SELECTOR),
+    "Filesystem": ("input[value='Filesystem']", By.CSS_SELECTOR),
+}
+
+pvc_4_8 = {
+    "ReadWriteMany": ("input[value='ReadWriteMany']", By.CSS_SELECTOR),
+    "pvc_actions": ("button[aria-label='Actions']", By.CSS_SELECTOR),
+    "ReadWriteOnce": ("input[value='ReadWriteOnce']", By.CSS_SELECTOR),
+    "test-pvc-fs": ("a[title='test-pvc-fs']", By.CSS_SELECTOR),
+    "test-pvc-rbd-thick": ("a[title='test-pvc-rbd-thick']", By.CSS_SELECTOR),
+}
 page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "overview_page": ("Overview", By.LINK_TEXT),
@@ -294,14 +311,6 @@ infra = {
 }
 
 validation = {
-    "object_service_tab": (
-        'a[data-test-id="horizontal-link-Object Service"]',
-        By.CSS_SELECTOR,
-    ),
-    "persistent_storage_tab": (
-        'a[data-test-id="horizontal-link-Persistent Storage"]',
-        By.CSS_SELECTOR,
-    ),
     "object_service_button": ("//button[text()='Object Service']", By.XPATH),
     "data_resiliency_button": ("//button[text()='Data Resiliency']", By.XPATH),
     "search_ocs_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
@@ -331,6 +340,28 @@ validation = {
     ),
 }
 
+validation_4_7 = {
+    "object_service_tab": (
+        'a[data-test-id="horizontal-link-Object Service"]',
+        By.CSS_SELECTOR,
+    ),
+    "persistent_storage_tab": (
+        'a[data-test-id="horizontal-link-Persistent Storage"]',
+        By.CSS_SELECTOR,
+    ),
+}
+
+validation_4_8 = {
+    "object_service_tab": (
+        'a[data-test-id="horizontal-link-Object"]',
+        By.CSS_SELECTOR,
+    ),
+    "persistent_storage_tab": (
+        'a[data-test-id="horizontal-link-Block and File"]',
+        By.CSS_SELECTOR,
+    ),
+}
+
 locators = {
     "4.8": {
         "login": login,
@@ -341,14 +372,17 @@ locators = {
         "obc": obc,
         "bucketclass": bucketclass,
         "mcg_stores": mcg_stores,
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8},
+        "infra": infra,
+        "validation": {**validation, **validation_4_8},
     },
     "4.7": {
         "login": login,
         "page": page_nav,
         "deployment": {**deployment, **deployment_4_7},
-        "pvc": pvc,
+        "pvc": {**pvc, **pvc_4_7},
         "infra": infra,
-        "validation": validation,
+        "validation": {**validation, **validation_4_7},
     },
     "4.6": {
         "login": login,

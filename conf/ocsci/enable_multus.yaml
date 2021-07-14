@@ -1,0 +1,4 @@
+---
+# Use this config for enabling multus deployment
+ENV_DATA:
+  is_multus_enabled: true

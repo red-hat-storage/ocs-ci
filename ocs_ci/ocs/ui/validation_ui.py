@@ -18,9 +18,9 @@ class ValidationUI(PageNavigator):
 
     def __init__(self, driver):
         super().__init__(driver)
-        ocp_version = get_ocp_version()
+        self.ocp_version = get_ocp_version()
         self.err_list = list()
-        self.validation_loc = locators[ocp_version]["validation"]
+        self.validation_loc = locators[self.ocp_version]["validation"]
 
     def verify_object_service_page(self):
         """
@@ -48,7 +48,6 @@ class ValidationUI(PageNavigator):
         self.navigate_overview_page()
         self.do_click(self.validation_loc["persistent_storage_tab"])
         strings_object_service_tab = [
-            "Used Capacity",
             "IOPS",
             "Latency",
             "Throughput",
@@ -86,8 +85,6 @@ class ValidationUI(PageNavigator):
         strings_subscription_tab = [
             "Healthy",
             "openshift-storage",
-            "Channel",
-            "Approval",
         ]
         self.verify_page_contain_strings(
             strings_on_page=strings_subscription_tab, page_name="subscription_tab"

@@ -9,7 +9,7 @@ from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.framework.pytest_customization.marks import skipif_rhel_os
 from ocs_ci.framework.testlib import (
     ManageTest,
-    tier1,
+    tier2,
     bugzilla,
     skipif_ocs_version,
     skipif_external_mode,
@@ -25,7 +25,7 @@ from ocs_ci.ocs.resources.pod import (
 log = logging.getLogger(__name__)
 
 
-@tier1
+@tier2
 @skipif_external_mode
 @skipif_ocs_version("<4.7")
 @bugzilla("1904917")
@@ -167,4 +167,23 @@ class TestKillCephDaemon(ManageTest):
         if not sample.wait_for_func_status(True):
             raise Exception(
                 f"coredump not getting generated for {daemon_types} daemons crash"
+            )
+
+        log.info(
+            "Verify ceph status moved to HEALTH_WARN state with the relevant "
+            "information (daemons have recently crashed)"
+        )
+        sample = TimeoutSampler(
+            timeout=20,
+            sleep=5,
+            func=run_cmd_verify_cli_output,
+            cmd="ceph health detail",
+            expected_output_lst=daemon_types
+            + ["HEALTH_WARN", "daemons have recently crashed"],
+            cephtool_cmd=True,
+        )
+        if not sample.wait_for_func_status(True):
+            raise Exception(
+                "The output of command ceph health detail did not show "
+                "warning 'daemons have recently crashed'"
             )

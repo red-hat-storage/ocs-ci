@@ -191,6 +191,20 @@ class RHV(object):
         )
         return vms
 
+    def get_vm_names(self):
+        """
+        Returns:
+            list: list of VMs name
+
+        """
+        return [
+            vm.name
+            for vm in self.get_vms_by_pattern(
+                pattern=config.ENV_DATA["default_cluster_name"],
+                filter_by_cluster_name=True,
+            )
+        ]
+
     def get_disks_by_pattern(
         self, pattern=None, case_sensitive=True, key="name", filter_by_cluster_name=True
     ):
@@ -471,6 +485,7 @@ class RHV(object):
          Run the RHV virtual machines
 
         Args:
+
             vms (list): list of RHV vm instances
             wait (bool): Wait for RHV VMs to start
             timeout (int): time in seconds to wait for VM to reach 'up' status.
@@ -487,12 +502,74 @@ class RHV(object):
                 try:
                     for status in TimeoutSampler(timeout, 5, self.get_vm_status, vm):
                         logger.info(
-                            f"Waiting for RHV Machine {vm} to Power ON"
+                            f"Waiting for RHV Machine {vm.name} to Power ON "
                             f"Current status is : {status}"
                         )
                         if status == types.VmStatus.UP:
-                            logger.info(f"RHV Machine {vm} reached UP status")
+                            logger.info(f"RHV Machine {vm.name} reached UP status")
                             break
                 except TimeoutExpiredError:
-                    logger.error(f"RHV VM {vm} is not UP")
+                    logger.error(f"RHV VM {vm.name} is not UP")
                     raise
+
+    def reboot_rhv_vms(self, vms, timeout=600, wait=True, force=True):
+        """
+        Reboot the RHV virtual machines
+
+        Args:
+            vms (list): Names of RHV vms
+            timeout (int): time in seconds to wait for VM to reboot
+            wait (bool): Wait for RHV VMs to reboot
+            force (bool): True to reboot vm forcibly False otherwise
+
+        """
+        for vm in vms:
+            # Find the virtual machine
+            vm_service = self.get_vm_service(vm.id)
+            vm_service.reboot(force=force)
+
+            if wait:
+                # Wait till the virtual machine will start rebooting and then UP
+                try:
+                    expc_status = types.VmStatus.REBOOT_IN_PROGRESS
+                    look_up = False
+                    for status in TimeoutSampler(timeout, 5, self.get_vm_status, vm):
+                        if not look_up and status != expc_status:
+                            logger.info(
+                                f"Waiting for RHV Machine {vm.name} to {expc_status}"
+                                f" Current status is : {status}"
+                            )
+                            continue
+                        elif not look_up and status == expc_status:
+                            expc_status = types.VmStatus.UP
+                            look_up = True
+                            logger.info(f"RHV Machine {vm} is now {expc_status} status")
+                            continue
+                        else:
+                            logger.info(
+                                f"Waiting for RHV Machine {vm.name} to Power ON"
+                                f" Current status is : {status}"
+                            )
+                            if status == types.VmStatus.UP:
+                                logger.info(f"RHV Machine {vm.name} reached UP status")
+                                break
+                except TimeoutExpiredError:
+                    logger.error(
+                        f"RHV VM {vm.name} is still not {expc_status} after "
+                        f"initiating reboot"
+                    )
+                    raise
+
+    def restart_rhv_vms_by_stop_and_start(self, vms, wait=True, force=False):
+        """
+        Stop and Start RHV virtual machines
+
+        Args:
+            vms (list): list of RHV vm instances
+            force (bool): True for non-graceful VM shutdown, False for
+                graceful VM shutdown.
+            wait (bool): Wait for RHV VMs to start
+
+        """
+        self.stop_rhv_vms(vms, force=force)
+        self.start_rhv_vms(vms, wait=wait)

@@ -2,8 +2,9 @@ import logging
 
 import botocore
 import pytest
-from ocs_ci.ocs.bucket_utils import retrieve_test_objects_to_pod, sync_object_directory
+from flaky import flaky
 
+from ocs_ci.ocs.bucket_utils import retrieve_test_objects_to_pod, sync_object_directory
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import acceptance, tier1, tier3, skipif_rgw_not_deployed
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -44,6 +45,7 @@ class TestBucketDeletion:
             ),
         ],
     )
+    @flaky
     def test_bucket_delete_with_objects(
         self, rgw_bucket_factory, interface, awscli_pod
     ):

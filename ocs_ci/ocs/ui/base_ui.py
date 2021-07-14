@@ -204,10 +204,10 @@ class PageNavigator(BaseUI):
 
     def __init__(self, driver):
         super().__init__(driver)
-        ocp_version = get_ocp_version()
-        self.page_nav = locators[ocp_version]["page"]
-        if Version.coerce(ocp_version) >= Version.coerce("4.8"):
-            self.generic_locators = locators[ocp_version]["generic"]
+        self.ocp_version = get_ocp_version()
+        self.page_nav = locators[self.ocp_version]["page"]
+        if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
+            self.generic_locators = locators[self.ocp_version]["generic"]
 
     def navigate_overview_page(self):
         """
@@ -215,7 +215,11 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Navigate to Overview Page")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
+            self.choose_expanded_mode(mode=False, locator=self.page_nav["Home"])
+            self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        else:
+            self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
         self.do_click(locator=self.page_nav["overview_page"])
 
     def navigate_quickstarts_page(self):

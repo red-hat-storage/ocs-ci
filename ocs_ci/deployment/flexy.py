@@ -105,6 +105,19 @@ class FlexyBase(object):
             config.FLEXY["VARIABLES_LOCATION"] = self.template_file
         config.FLEXY["INSTANCE_NAME_PREFIX"] = self.cluster_name
         config.FLEXY["LAUNCHER_VARS"].update(self.get_installer_payload())
+        config.FLEXY["LAUNCHER_VARS"].update(
+            {
+                "vm_type_masters": config.ENV_DATA["master_instance_type"],
+                "vm_type_workers": config.ENV_DATA["worker_instance_type"],
+                "num_nodes": str(config.ENV_DATA["master_replicas"]),
+                "num_workers": str(config.ENV_DATA["worker_replicas"]),
+                "ssh_key_name": "openshift-dev",
+            }
+        )
+        config.FLEXY["AVAILABILITY_ZONE_COUNT"] = config.ENV_DATA.get(
+            "availability_zone_count", "1"
+        )
+        config.FLEXY["OPENSHIFT_SSHKEY_PATH"] = config.DEPLOYMENT["ssh_key_private"]
         self.merge_flexy_env()
 
     def get_installer_payload(self, version=None):

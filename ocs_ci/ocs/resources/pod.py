@@ -582,7 +582,10 @@ def get_csi_provisioner_pod(interface):
     )
     selector = (
         "app=csi-rbdplugin-provisioner"
-        if (interface == constants.CEPHBLOCKPOOL)
+        if (
+            interface == constants.CEPHBLOCKPOOL
+            or interface == constants.CEPHBLOCKPOOL_THICK
+        )
         else "app=csi-cephfsplugin-provisioner"
     )
     provision_pod_items = ocp_pod_obj.get(selector=selector)["items"]
@@ -1707,12 +1710,11 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
         str: The osd removal pod name
 
     """
-    ocp_version = get_ocp_version()
     ocs_version = config.ENV_DATA["ocs_version"]
-    if Version.coerce(ocp_version) >= Version.coerce("4.6") and Version.coerce(
-        ocs_version
-    ) >= Version.coerce("4.7"):
+    if Version.coerce(ocs_version) == Version.coerce("4.7"):
         pattern = "ocs-osd-removal-job"
+    elif Version.coerce(ocs_version) == Version.coerce("4.8"):
+        pattern = "ocs-osd-removal-"
     else:
         pattern = f"ocs-osd-removal-{osd_id}"
 
@@ -1762,24 +1764,25 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
             )
 
 
-def run_osd_removal_job(osd_id):
+def run_osd_removal_job(osd_ids=None):
     """
     Run the ocs-osd-removal job
 
     Args:
-        osd_id (str): The osd id
+        osd_ids (list): The osd IDs.
 
     Returns:
         ocs_ci.ocs.resources.ocs.OCS: The ocs-osd-removal job object
 
     """
+    osd_ids_str = ",".join(map(str, osd_ids))
     ocp_version = get_ocp_version()
     if Version.coerce(ocp_version) >= Version.coerce("4.6"):
-        cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_id} -o yaml"
+        cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
     else:
-        cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_id} -o yaml"
+        cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_ids_str} -o yaml"
 
-    logger.info(f"Executing OSD removal job on OSD-{osd_id}")
+    logger.info(f"Executing OSD removal job on OSD ids: {osd_ids_str}")
     ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     osd_removal_job_yaml = ocp_obj.exec_oc_cmd(cmd)
     # Add the namespace param, so that the ocs-osd-removal job will be created in the correct namespace
@@ -1876,11 +1879,8 @@ def delete_osd_removal_job(osd_id):
         bool: True, if the ocs-osd-removal job deleted successfully. False, otherwise
 
     """
-    ocp_version = get_ocp_version()
     ocs_version = config.ENV_DATA["ocs_version"]
-    if Version.coerce(ocp_version) >= Version.coerce("4.6") and Version.coerce(
-        ocs_version
-    ) >= Version.coerce("4.7"):
+    if Version.coerce(ocs_version) >= Version.coerce("4.7"):
         job_name = "ocs-osd-removal-job"
     else:
         job_name = f"ocs-osd-removal-{osd_id}"

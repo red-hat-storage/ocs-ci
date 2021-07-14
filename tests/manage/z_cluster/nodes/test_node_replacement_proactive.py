@@ -78,8 +78,7 @@ def delete_and_create_osd_node(osd_node_name):
 
     """
     new_node_name = None
-    osd_pods = node.get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())
-    old_osd_ids = [pod.get_osd_pod_id(osd_pod) for osd_pod in osd_pods]
+    old_osd_ids = node.get_node_osd_ids(osd_node_name)
 
     old_osd_node_names = node.get_osd_running_nodes()
 

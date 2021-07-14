@@ -1,6 +1,7 @@
 import logging
 
 import pytest
+from flaky import flaky
 
 from ocs_ci.framework.testlib import MCGTest, tier1, tier2, tier3
 from ocs_ci.ocs import constants
@@ -25,6 +26,7 @@ FILESIZE_SKIP = pytest.mark.skip("Current test filesize is too large.")
 RUNTIME_SKIP = pytest.mark.skip("Runtime is too long; Code needs to be parallelized")
 
 
+@flaky
 @skipif_openshift_dedicated
 @skipif_mcg_not_deployed
 class TestObjectIntegrity(MCGTest):
