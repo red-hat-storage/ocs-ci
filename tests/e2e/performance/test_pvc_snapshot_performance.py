@@ -404,6 +404,7 @@ class TestPvcSnapshotPerformance(E2ETest):
         sf_data["spec"]["workload"]["args"]["files"] = files
         sf_data["spec"]["workload"]["args"]["threads"] = threads
         sf_data["spec"]["workload"]["args"]["storageclass"] = storageclass
+        del sf_data["spec"]["elasticsearch"]
 
         """
         Calculating the size of the volume that need to be test, it should
