@@ -41,6 +41,23 @@ def login():
     logger.info("Successfully logged in to IBM cloud")
 
 
+def run_ibmcloud_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
+    """
+    Wrapper function for `run_cmd` which will perform IBM Cloud login command before running the ibmcloud command.
+
+    Args:
+        cmd (str): command to run
+        secrets (list): A list of secrets to be masked with asterisks
+            This kwarg is popped in order to not interfere with
+            subprocess.run(``**kwargs``)
+        timeout (int): Timeout for the command, defaults to 600 seconds.
+        ignore_error (bool): True if ignore non zero return code and do not
+            raise the exception.
+    """
+    login()
+    return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
+
+
 def get_cluster_details(cluster):
     """
     Returns info about the cluster which is taken from the ibmcloud command.
@@ -221,12 +238,11 @@ class IBMCloud(object):
 
         """
         logger.info("restarting nodes")
-        login()
         provider_id = nodes[0].get()["spec"]["providerID"]
         cluster_id = provider_id.split("/")[5]
 
         cmd = f"ibmcloud ks workers --cluster {cluster_id} --output json"
-        out = run_cmd(cmd)
+        out = run_ibmcloud_cmd(cmd)
         worker_nodes = json.loads(out)
 
         if len(worker_nodes) > 0:
@@ -340,7 +356,7 @@ class IBMCloud(object):
         logger.info("get data volumes")
 
         cmd = "ibmcloud is vols --output json"
-        out = run_cmd(cmd)
+        out = run_ibmcloud_cmd(cmd)
         out = json.loads(out)
 
         vol_ids = []
@@ -411,12 +427,11 @@ class IBMCloud(object):
 
         """
         logger.info("restarting nodes by stop and start")
-        login()
         provider_id = nodes[0].get()["spec"]["providerID"]
         cluster_id = provider_id.split("/")[5]
 
         cmd = f"ibmcloud ks workers --cluster {cluster_id} --output json"
-        out = run_cmd(cmd)
+        out = run_ibmcloud_cmd(cmd)
         worker_nodes = json.loads(out)
 
         worker_nodes_not_ready = []

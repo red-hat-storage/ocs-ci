@@ -137,3 +137,29 @@ def test_restart_nodes_by_stop_and_start_teardown():
     """
     ibmcloud = IBMCloud()
     ibmcloud.restart_nodes_by_stop_and_start_teardown()
+
+
+@libtest
+@ibmcloud_platform_required
+def test_create_nodes():
+    """
+    Check basic consistency in platform handling.
+    """
+    ibmcloud = IBMCloud()
+    node_conf = {}
+    node_type = "RHEL"
+    num_nodes = 1
+    ibmcloud.create_nodes(node_conf, node_type, num_nodes)
+
+
+@libtest
+@ibmcloud_platform_required
+def test_create_and_attach_nodes_to_cluster():
+    """
+    Check basic consistency in platform handling.
+    """
+    ibmcloud = IBMCloud()
+    node_conf = {}
+    node_type = "RHEL"
+    num_nodes = 1
+    ibmcloud.create_and_attach_nodes_to_cluster(node_conf, node_type, num_nodes)

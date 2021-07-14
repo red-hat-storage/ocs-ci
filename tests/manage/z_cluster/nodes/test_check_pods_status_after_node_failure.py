@@ -2,7 +2,12 @@ import logging
 import pytest
 import random
 
-from ocs_ci.framework.testlib import ManageTest, tier4a, ignore_leftovers
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier4a,
+    ignore_leftovers,
+    skipif_ibm_cloud,
+)
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
@@ -105,6 +110,7 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    @skipif_ibm_cloud
     def test_check_pods_status_after_node_failure(self, nodes, node_restart_teardown):
         """
         Test check pods status after a node failure event.
