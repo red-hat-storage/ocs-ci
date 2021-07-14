@@ -1,7 +1,10 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import skipif_cephfs_not_deployed, skipif_rbd_not_deployed
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_cephfs_not_deployed,
+    skipif_rbd_not_deployed,
+)
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import (
     default_storage_class,

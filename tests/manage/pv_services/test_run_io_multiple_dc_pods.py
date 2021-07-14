@@ -1,6 +1,9 @@
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_rbd_not_deployed,
+    skipif_cephfs_not_deployed,
+)
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import ManageTest, tier2

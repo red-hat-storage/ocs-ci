@@ -3,8 +3,13 @@ import random
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import aws_platform_required, skipif_mcg_not_deployed, \
-    skipif_cephfs_not_deployed, skipif_rgw_not_deployed, skipif_rbd_not_deployed
+from ocs_ci.framework.pytest_customization.marks import (
+    aws_platform_required,
+    skipif_mcg_not_deployed,
+    skipif_cephfs_not_deployed,
+    skipif_rgw_not_deployed,
+    skipif_rbd_not_deployed,
+)
 from ocs_ci.framework.testlib import ManageTest, tier4, tier4b
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers import sanity_helpers

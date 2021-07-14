@@ -4,7 +4,10 @@ A test for deleting an existing PVC and create a new PVC with the same name
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_rbd_not_deployed,
+    skipif_cephfs_not_deployed,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import ManageTest, tier2
 from ocs_ci.helpers import helpers

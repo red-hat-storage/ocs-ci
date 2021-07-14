@@ -3,7 +3,10 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_rbd_not_deployed,
+    skipif_cephfs_not_deployed,
+)
 from ocs_ci.framework.testlib import ManageTest, tier4, tier4c, ignore_leftover_label
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants

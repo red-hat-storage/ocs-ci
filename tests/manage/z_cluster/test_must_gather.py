@@ -30,7 +30,11 @@ class TestMustGather(ManageTest):
         argvalues=[
             pytest.param(
                 *["CEPH"],
-                marks=[pytest.mark.polarion_id("OCS-1583"), skipif_external_mode, skipif_ceph_not_deployed]
+                marks=[
+                    pytest.mark.polarion_id("OCS-1583"),
+                    skipif_external_mode,
+                    skipif_ceph_not_deployed,
+                ]
             ),
             pytest.param(
                 *["JSON"],

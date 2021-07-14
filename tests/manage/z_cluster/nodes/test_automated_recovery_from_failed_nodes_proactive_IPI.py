@@ -1,8 +1,12 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import skipif_rgw_not_deployed, skipif_mcg_not_deployed, skipif_rbd_not_deployed, \
-    skipif_cephfs_not_deployed
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_rgw_not_deployed,
+    skipif_mcg_not_deployed,
+    skipif_rbd_not_deployed,
+    skipif_cephfs_not_deployed,
+)
 from ocs_ci.framework.testlib import (
     tier4,
     tier4b,
@@ -59,8 +63,14 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     @pytest.mark.parametrize(
         argnames=["interface"],
         argvalues=[
-            pytest.param(*["rbd"], marks=[pytest.mark.polarion_id("OCS-2100"), skipif_rbd_not_deployed]),
-            pytest.param(*["cephfs"], marks=[pytest.mark.polarion_id("OCS-2101"), skipif_cephfs_not_deployed]),
+            pytest.param(
+                *["rbd"],
+                marks=[pytest.mark.polarion_id("OCS-2100"), skipif_rbd_not_deployed],
+            ),
+            pytest.param(
+                *["cephfs"],
+                marks=[pytest.mark.polarion_id("OCS-2101"), skipif_cephfs_not_deployed],
+            ),
         ],
     )
     def test_automated_recovery_from_failed_nodes_IPI_proactive(

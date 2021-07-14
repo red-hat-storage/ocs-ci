@@ -2,7 +2,10 @@ import logging
 
 from ocs_ci.framework.testlib import tier1, ignore_leftovers, ManageTest
 from ocs_ci.ocs.cluster import CephCluster
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated, skipif_ceph_not_deployed
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_openshift_dedicated,
+    skipif_ceph_not_deployed,
+)
 
 logger = logging.getLogger(__name__)
 

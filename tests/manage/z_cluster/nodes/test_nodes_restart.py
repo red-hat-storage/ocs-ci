@@ -1,8 +1,13 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import skipif_rgw_not_deployed, skipif_mcg_not_deployed, \
-    skipif_cephfs_not_deployed, skipif_rbd_not_deployed, skipif_ceph_not_deployed
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_rgw_not_deployed,
+    skipif_mcg_not_deployed,
+    skipif_cephfs_not_deployed,
+    skipif_rbd_not_deployed,
+    skipif_ceph_not_deployed,
+)
 from ocs_ci.framework.testlib import (
     tier4,
     tier4a,
@@ -102,10 +107,12 @@ class TestNodesRestart(ManageTest):
         argnames=["interface", "operation"],
         argvalues=[
             pytest.param(
-                *["rbd", "create_resources"], marks=[pytest.mark.polarion_id("OCS-1138"), skipif_rbd_not_deployed]
+                *["rbd", "create_resources"],
+                marks=[pytest.mark.polarion_id("OCS-1138"), skipif_rbd_not_deployed],
             ),
             pytest.param(
-                *["rbd", "delete_resources"], marks=[pytest.mark.polarion_id("OCS-1241"), skipif_rbd_not_deployed]
+                *["rbd", "delete_resources"],
+                marks=[pytest.mark.polarion_id("OCS-1241"), skipif_rbd_not_deployed],
             ),
             pytest.param(
                 *["cephfs", "create_resources"],

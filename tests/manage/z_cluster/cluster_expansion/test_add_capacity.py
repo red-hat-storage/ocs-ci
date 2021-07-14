@@ -9,7 +9,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_bm,
     skipif_external_mode,
     skipif_bmpsi,
-    skipif_ibm_power, skipif_ceph_not_deployed,
+    skipif_ibm_power,
+    skipif_ceph_not_deployed,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,

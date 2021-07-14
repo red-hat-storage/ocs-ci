@@ -20,7 +20,10 @@ from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_openshift_dedicated,
     skipif_bmpsi,
-    bugzilla, skipif_ceph_not_deployed, skipif_cephfs_not_deployed, skipif_rbd_not_deployed,
+    bugzilla,
+    skipif_ceph_not_deployed,
+    skipif_cephfs_not_deployed,
+    skipif_rbd_not_deployed,
 )
 
 from ocs_ci.helpers.sanity_helpers import Sanity

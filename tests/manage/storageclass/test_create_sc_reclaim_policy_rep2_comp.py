@@ -1,7 +1,10 @@
 import logging
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.testlib import ManageTest, tier2
-from ocs_ci.framework.pytest_customization.marks import polarion_id, skipif_rbd_not_deployed
+from ocs_ci.framework.pytest_customization.marks import (
+    polarion_id,
+    skipif_rbd_not_deployed,
+)
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_ocs_version,

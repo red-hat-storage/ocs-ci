@@ -3,8 +3,12 @@ import pytest
 
 from subprocess import TimeoutExpired
 
-from ocs_ci.framework.pytest_customization.marks import skipif_rgw_not_deployed, skipif_mcg_not_deployed, skipif_rbd_not_deployed, \
-    skipif_cephfs_not_deployed
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_rgw_not_deployed,
+    skipif_mcg_not_deployed,
+    skipif_rbd_not_deployed,
+    skipif_cephfs_not_deployed,
+)
 from ocs_ci.ocs.exceptions import CephHealthException, ResourceWrongStatusException
 from ocs_ci.utility.utils import ceph_health_check_base
 
@@ -324,8 +328,14 @@ class TestNodesMaintenance(ManageTest):
     @pytest.mark.parametrize(
         argnames=["interface"],
         argvalues=[
-            pytest.param(*["rbd"], marks=[pytest.mark.polarion_id("OCS-2128"), skipif_rbd_not_deployed]),
-            pytest.param(*["cephfs"], marks=[pytest.mark.polarion_id("OCS-2129"), skipif_cephfs_not_deployed]),
+            pytest.param(
+                *["rbd"],
+                marks=[pytest.mark.polarion_id("OCS-2128"), skipif_rbd_not_deployed],
+            ),
+            pytest.param(
+                *["cephfs"],
+                marks=[pytest.mark.polarion_id("OCS-2129"), skipif_cephfs_not_deployed],
+            ),
         ],
     )
     def test_simultaneous_drain_of_two_ocs_nodes(

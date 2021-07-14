@@ -2,7 +2,10 @@ import logging
 import pytest
 from concurrent.futures import ThreadPoolExecutor
 
-from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_rbd_not_deployed,
+    skipif_cephfs_not_deployed,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework.testlib import (
