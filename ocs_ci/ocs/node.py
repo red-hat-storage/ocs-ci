@@ -10,7 +10,12 @@ from semantic_version import Version
 from ocs_ci.ocs.machine import get_machine_objs
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, NotAllNodesCreated
+from ocs_ci.ocs.exceptions import (
+    TimeoutExpiredError,
+    NotAllNodesCreated,
+    CommandFailed,
+    ResourceNotFoundError,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
@@ -1334,7 +1339,7 @@ def untaint_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT, nodes_to_untaint=None
     return False
 
 
-def get_node_pods(node_name, pods_to_search=None):
+def get_node_pods(node_name, pods_to_search=None, raise_pod_not_found_error=False):
     """
     Get all the pods of a specified node
 
@@ -1342,13 +1347,33 @@ def get_node_pods(node_name, pods_to_search=None):
         node_name (str): The node name to get the pods
         pods_to_search (list): list of pods to search for the node pods.
             If not specified, will search in all the pods.
+        raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
+            in the pod names are not found. If False, it ignores the case of pod not found and
+            returns the pod objects of the rest of the pod nodes. The default value is False
 
     Returns:
         list: list of all the pods of the specified node
 
     """
+    node_pods = []
     pods_to_search = pods_to_search or pod.get_all_pods()
-    return [p for p in pods_to_search if pod.get_pod_node(p).name == node_name]
+
+    for p in pods_to_search:
+        try:
+            if pod.get_pod_node(p).name == node_name:
+                node_pods.append(p)
+        # Check if the command failed because the pod not found
+        except CommandFailed as ex:
+            if "not found" not in str(ex):
+                raise ex
+            # Check the 2 cases of pod not found error
+            pod_not_found_error_message = f"Failed to get the pod node of the pod {p.name} due to the exception {ex}"
+            if raise_pod_not_found_error:
+                raise ResourceNotFoundError(pod_not_found_error_message)
+            else:
+                log.info(pod_not_found_error_message)
+
+    return node_pods
 
 
 def get_node_pods_to_scale_down(node_name):
