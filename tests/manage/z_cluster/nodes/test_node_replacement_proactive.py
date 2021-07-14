@@ -94,9 +94,7 @@ def delete_and_create_osd_node(osd_node_name):
             # TODO: Implement functionality for Internal-Attached devices mode
             # once ocs-ci issue #4545 is resolved
             # https://github.com/red-hat-storage/ocs-ci/issues/4545
-            raise NotImplementedError(
-                "Functionality not implemented for this deployment mode"
-            )
+            pytest.skip("Functionality not implemented for this deployment mode")
         else:
             new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
 
