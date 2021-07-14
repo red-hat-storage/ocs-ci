@@ -100,18 +100,14 @@ class TestOSDHeapProfile(ManageTest):
             pod_obj (obj): pod object
             osd_id (str): osd id
 
-        return:
+        Returns:
             bool: True if we find the string in output, False otherwise
 
         """
         try:
             out = pod_obj.exec_cmd_on_pod(command=command)
-            if f"osd.{osd_id}.profile" not in out:
-                log.info(f"output is {out}")
-                return False
-            else:
-                log.info(f"the output of the command {command}: {out}")
-                return True
+            log.info(f"the output of the command {command}: {out}")
+            return True if f"osd.{osd_id}.profile" in out else False
         except CommandFailed as e:
             log.error(e)
             return False
