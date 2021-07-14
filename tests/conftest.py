@@ -794,7 +794,7 @@ def pod_factory_fixture(request, pvc_factory):
         else:
             instances.append(pod_obj)
         if status:
-            helpers.wait_for_resource_state(pod_obj, status)
+            helpers.wait_for_resource_state(pod_obj, status, timeout=300)
             pod_obj.reload()
         pod_obj.pvc = pvc
         if deployment_config:
