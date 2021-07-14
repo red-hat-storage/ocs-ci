@@ -1,7 +1,7 @@
 import logging
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.testlib import ManageTest, tier2
-from ocs_ci.framework.pytest_customization.marks import polarion_id
+from ocs_ci.framework.pytest_customization.marks import polarion_id, skipif_rbd_not_deployed
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_ocs_version,
@@ -31,6 +31,7 @@ log = logging.getLogger(__name__)
 @tier2
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
+@skipif_rbd_not_deployed
 @polarion_id("OCS-2398")
 class TestScReclaimPolicyRetainRep2Comp(ManageTest):
     """

@@ -4,6 +4,7 @@ import pytest
 import os.path
 import yaml
 
+from ocs_ci.framework.pytest_customization.marks import skipif_cephfs_not_deployed, skipif_rbd_not_deployed
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, defaults
@@ -54,8 +55,8 @@ OCS_341_RBD_PARAMS = {
 
 @pytest.fixture(
     params=[
-        pytest.param(OCS_311_CEPHFS_PARAMS, marks=pytest.mark.polarion_id("OCS-331")),
-        pytest.param(OCS_341_RBD_PARAMS, marks=pytest.mark.polarion_id("OCS-341")),
+        pytest.param(OCS_311_CEPHFS_PARAMS, marks=[pytest.mark.polarion_id("OCS-331"), skipif_cephfs_not_deployed]),
+        pytest.param(OCS_341_RBD_PARAMS, marks=[pytest.mark.polarion_id("OCS-341"), skipif_rbd_not_deployed]),
     ],  # TODO: add more test case parameters
     ids=["CephFS", "RBD"],
 )

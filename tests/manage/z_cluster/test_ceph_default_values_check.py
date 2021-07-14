@@ -2,7 +2,7 @@ import collections
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import bugzilla
+from ocs_ci.framework.pytest_customization.marks import bugzilla, skipif_ceph_not_deployed
 from ocs_ci.framework.testlib import ManageTest, tier1, skipif_external_mode
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.cluster import get_pg_balancer_status, get_mon_config_value
@@ -16,6 +16,7 @@ log = logging.getLogger(__name__)
 
 @tier1
 @skipif_external_mode
+@skipif_ceph_not_deployed
 @pytest.mark.polarion_id("OCS-2231")
 @bugzilla("1908414")
 class TestCephDefaultValuesCheck(ManageTest):
@@ -81,6 +82,7 @@ class TestCephDefaultValuesCheck(ManageTest):
             ), f"Failed, actual value:{max_pg_per_osd} not matching expected value: 600"
 
     @tier1
+    @skipif_ceph_not_deployed
     @pytest.mark.skipif(
         config.DEPLOYMENT.get("ceph_debug"),
         reason="Ceph was configured with customized values by ocs-ci so there is point in validating its config values",

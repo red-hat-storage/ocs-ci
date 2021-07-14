@@ -5,7 +5,7 @@ import pytest
 from ocs_ci.ocs.bucket_utils import retrieve_test_objects_to_pod, sync_object_directory
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import acceptance, tier1, tier3
+from ocs_ci.framework.pytest_customization.marks import acceptance, tier1, tier3, skipif_rgw_not_deployed
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import OBC
@@ -13,6 +13,7 @@ from ocs_ci.ocs.resources.objectbucket import OBC
 logger = logging.getLogger(__name__)
 
 
+@skipif_rgw_not_deployed
 class TestBucketDeletion:
     """
     Test deletion of RGW buckets

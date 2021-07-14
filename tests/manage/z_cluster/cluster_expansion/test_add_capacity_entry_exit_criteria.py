@@ -2,7 +2,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
-
+from ocs_ci.framework.pytest_customization.marks import skipif_cephfs_not_deployed, skipif_rbd_not_deployed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources import pod as pod_helpers
@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 )
 @ignore_leftovers
 @tier2
+@skipif_cephfs_not_deployed
+@skipif_rbd_not_deployed
 @pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM,
     reason=(

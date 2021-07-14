@@ -6,6 +6,7 @@ import logging
 
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.helpers import helpers
@@ -57,6 +58,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
 
     @acceptance
     @tier1
+    @skipif_rbd_not_deployed
     def test_pvc_delete_and_verify_size_is_returned_to_backend_pool(
         self, pause_and_resume_cluster_load, pvc_factory, pod_factory
     ):

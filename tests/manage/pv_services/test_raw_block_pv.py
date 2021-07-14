@@ -3,6 +3,7 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.testlib import tier1, ManageTest, acceptance
 from ocs_ci.ocs import constants, node
@@ -15,6 +16,7 @@ log = logging.getLogger(__name__)
 
 @tier1
 @acceptance
+@skipif_rbd_not_deployed
 @pytest.mark.parametrize(
     argnames=["reclaim_policy"],
     argvalues=[

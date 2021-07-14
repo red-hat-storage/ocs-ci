@@ -2,6 +2,7 @@ import logging
 import pytest
 from concurrent.futures import ThreadPoolExecutor
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.utility.utils import ceph_health_check
@@ -28,6 +29,8 @@ log = logging.getLogger(__name__)
 @skipif_vsphere_ipi
 @skipif_ocs_version("<4.5")
 @skipif_upgraded_from(["4.4"])
+@skipif_rbd_not_deployed
+@skipif_cephfs_not_deployed
 @polarion_id("OCS-2235")
 class TestNodeRestartDuringPvcExpansion(ManageTest):
     """

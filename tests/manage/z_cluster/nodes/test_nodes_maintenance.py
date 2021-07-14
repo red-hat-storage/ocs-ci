@@ -3,6 +3,8 @@ import pytest
 
 from subprocess import TimeoutExpired
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rgw_not_deployed, skipif_mcg_not_deployed, skipif_rbd_not_deployed, \
+    skipif_cephfs_not_deployed
 from ocs_ci.ocs.exceptions import CephHealthException, ResourceWrongStatusException
 from ocs_ci.utility.utils import ceph_health_check_base
 
@@ -106,6 +108,8 @@ class TestNodesMaintenance(ManageTest):
             pytest.skip(str(e))
 
     @tier1
+    @skipif_rgw_not_deployed
+    @skipif_mcg_not_deployed
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
@@ -156,6 +160,8 @@ class TestNodesMaintenance(ManageTest):
     @tier4
     @tier4b
     @skipif_bm
+    @skipif_rgw_not_deployed
+    @skipif_mcg_not_deployed
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
@@ -267,6 +273,8 @@ class TestNodesMaintenance(ManageTest):
         self.sanity_helpers.health_check()
 
     @tier2
+    @skipif_rgw_not_deployed
+    @skipif_mcg_not_deployed
     @pytest.mark.polarion_id("OCS-1274")
     def test_2_nodes_different_types(
         self, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
@@ -309,13 +317,15 @@ class TestNodesMaintenance(ManageTest):
 
     @tier4
     @tier4b
+    @skipif_rgw_not_deployed
+    @skipif_mcg_not_deployed
     @aws_platform_required
     @ipi_deployment_required
     @pytest.mark.parametrize(
         argnames=["interface"],
         argvalues=[
-            pytest.param(*["rbd"], marks=pytest.mark.polarion_id("OCS-2128")),
-            pytest.param(*["cephfs"], marks=pytest.mark.polarion_id("OCS-2129")),
+            pytest.param(*["rbd"], marks=[pytest.mark.polarion_id("OCS-2128"), skipif_rbd_not_deployed]),
+            pytest.param(*["cephfs"], marks=[pytest.mark.polarion_id("OCS-2129"), skipif_cephfs_not_deployed]),
         ],
     )
     def test_simultaneous_drain_of_two_ocs_nodes(

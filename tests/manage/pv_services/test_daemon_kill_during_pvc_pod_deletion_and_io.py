@@ -5,6 +5,7 @@ from itertools import cycle
 import pytest
 from functools import partial
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.framework.testlib import ManageTest, tier4, tier4b
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
@@ -40,29 +41,32 @@ log = logging.getLogger(__name__)
     argnames=["interface", "resource_name"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, "mgr"], marks=pytest.mark.polarion_id("OCS-1136")
+            *[constants.CEPHBLOCKPOOL, "mgr"],
+            marks=[pytest.mark.polarion_id("OCS-1136"), skipif_rbd_not_deployed],
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, "mon"], marks=pytest.mark.polarion_id("OCS-1122")
+            *[constants.CEPHBLOCKPOOL, "mon"],
+            marks=[pytest.mark.polarion_id("OCS-1122"), skipif_rbd_not_deployed],
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, "osd"], marks=pytest.mark.polarion_id("OCS-1129")
+            *[constants.CEPHBLOCKPOOL, "osd"],
+            marks=[pytest.mark.polarion_id("OCS-1129"), skipif_rbd_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "mgr"],
-            marks=pytest.mark.polarion_id("OCS-1108"),
+            marks=[pytest.mark.polarion_id("OCS-1108"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "mon"],
-            marks=pytest.mark.polarion_id("OCS-1093"),
+            marks=[pytest.mark.polarion_id("OCS-1093"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "osd"],
-            marks=pytest.mark.polarion_id("OCS-1101"),
+            marks=[pytest.mark.polarion_id("OCS-1101"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "mds"],
-            marks=pytest.mark.polarion_id("OCS-1115"),
+            marks=[pytest.mark.polarion_id("OCS-1115"), skipif_cephfs_not_deployed],
         ),
     ],
 )

@@ -2,6 +2,7 @@ import logging
 import pytest
 from itertools import cycle
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.framework.testlib import ManageTest, tier2
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
@@ -23,12 +24,14 @@ log = logging.getLogger(__name__)
             *[constants.CEPHBLOCKPOOL],
             marks=[
                 pytest.mark.polarion_id("OCS-896"),
+                skipif_rbd_not_deployed,
             ],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM],
             marks=[
                 pytest.mark.polarion_id("OCS-897"),
+                skipif_cephfs_not_deployed,
             ],
         ),
     ],

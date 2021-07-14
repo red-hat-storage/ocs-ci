@@ -1,5 +1,6 @@
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed
 from ocs_ci.helpers import helpers
 from ocs_ci.framework.testlib import polarion_id, skipif_ocs_version, tier2
 
@@ -8,6 +9,7 @@ log = logging.getLogger(__name__)
 
 @tier2
 @skipif_ocs_version("<4.3")
+@skipif_rbd_not_deployed
 @polarion_id("OCS-2130")
 def test_verify_new_cbp_creation_not_blocked_by_invalid_cbp(teardown_factory):
     """

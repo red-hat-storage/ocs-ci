@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rgw_not_deployed, skipif_mcg_not_deployed
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
@@ -38,6 +39,8 @@ log = logging.getLogger(__name__)
 @on_prem_platform_required
 @skipif_external_mode
 @skipif_vsphere_ipi
+@skipif_rgw_not_deployed
+@skipif_mcg_not_deployed
 class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
     """
     Test to verify fail node hosting

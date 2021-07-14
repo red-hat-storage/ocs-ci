@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.framework.testlib import ManageTest, tier1
@@ -18,6 +19,7 @@ log = logging.getLogger(__name__)
             marks=[
                 pytest.mark.polarion_id("OCS-1177"),
                 pytest.mark.bugzilla("1772990"),
+                skipif_rbd_not_deployed,
             ],
         ),
         pytest.param(
@@ -25,6 +27,7 @@ log = logging.getLogger(__name__)
             marks=[
                 pytest.mark.polarion_id("OCS-1179"),
                 pytest.mark.bugzilla("1772990"),
+                skipif_cephfs_not_deployed,
             ],
         ),
     ],

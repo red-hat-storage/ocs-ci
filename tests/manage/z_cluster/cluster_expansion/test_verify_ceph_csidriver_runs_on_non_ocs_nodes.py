@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.ocs.node import get_worker_nodes_not_in_ocs
@@ -12,6 +13,8 @@ logger = logging.getLogger(__name__)
 @tier1
 @pytest.mark.polarion_id("OCS-2490")
 @pytest.mark.bugzilla("1794389")
+@skipif_rbd_not_deployed
+@skipif_cephfs_not_deployed
 class TestCheckTolerationForCephCsiDriverDs(ManageTest):
     """
     Check toleration for Ceph CSI driver DS on non ocs node

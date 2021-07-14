@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import acceptance, tier1, tier3
+from ocs_ci.framework.pytest_customization.marks import acceptance, tier1, tier3, skipif_rgw_not_deployed
 from ocs_ci.ocs.resources.objectbucket import OBC, BUCKET_MAP
 from ocs_ci.ocs.exceptions import CommandFailed
 import botocore
@@ -11,6 +11,7 @@ import re
 logger = logging.getLogger(__name__)
 
 
+@skipif_rgw_not_deployed
 class TestRGWBucketCreation:
     """
     Test creation of a bucket

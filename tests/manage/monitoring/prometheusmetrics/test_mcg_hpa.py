@@ -1,7 +1,7 @@
 import logging
 
 from ocs_ci.framework.pytest_customization import marks
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.pytest_customization.marks import tier1, skipif_mcg_not_deployed
 from ocs_ci.framework.testlib import skipif_ocs_version, skipif_ocp_version
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 @skipif_ocp_version("<4.6")
 @marks.polarion_id("OCS-2376")
 @marks.bugzilla("1873162")
+@skipif_mcg_not_deployed
 @skipif_openshift_dedicated
 def test_hpa_noobaa_endpoint_metric():
     """

@@ -4,8 +4,8 @@ from ocs_ci.framework import config
 import pytest
 
 from ocs_ci.framework.pytest_customization import marks
-from ocs_ci.framework.testlib import (
-    MCGTest,
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_mcg_not_deployed,
     ignore_leftovers,
     on_prem_platform_required,
     skipif_ocs_version,
@@ -13,6 +13,9 @@ from ocs_ci.framework.testlib import (
     tier4a,
     tier3,
     skipif_openshift_dedicated,
+)
+from ocs_ci.framework.testlib import (
+    MCGTest,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
@@ -32,6 +35,7 @@ def setup(request):
 @tier4
 @tier4a
 @ignore_leftovers()
+@skipif_mcg_not_deployed
 @pytest.mark.usefixtures(setup.__name__)
 class TestMCGResourcesDisruptions(MCGTest):
     """

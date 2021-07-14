@@ -9,17 +9,19 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     acceptance,
     performance,
+    skipif_mcg_not_deployed,
+    skipif_openshift_dedicated,
 )
 from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 
 
 @skipif_openshift_dedicated
+@skipif_mcg_not_deployed
 class TestBucketCreation(MCGTest):
     """
     Test creation of a bucket

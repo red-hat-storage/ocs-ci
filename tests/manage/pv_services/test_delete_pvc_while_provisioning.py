@@ -2,6 +2,7 @@ import logging
 import pytest
 from concurrent.futures import ThreadPoolExecutor
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -61,6 +62,7 @@ class TestDeletePvcWhileProvisioning(ManageTest):
         self.proj_obj = project_factory()
 
     @skipif_ocs_version("<4.8")
+    @skipif_rbd_not_deployed
     def test_delete_rbd_pvc_while_thick_provisioning(
         self,
         resource_to_delete,

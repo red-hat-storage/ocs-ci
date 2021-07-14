@@ -2,6 +2,7 @@ import logging
 import pytest
 import uuid
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rgw_not_deployed
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity,
@@ -53,6 +54,7 @@ class TestS3MultipartUpload(ManageTest):
 
     @tier1
     @pytest.mark.polarion_id("OCS-2245")
+    @skipif_rgw_not_deployed
     @pytest.mark.skip(
         reason="Skipped because of https://github.com/red-hat-storage/ocs-ci/issues/2832"
     )

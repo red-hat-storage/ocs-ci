@@ -3,6 +3,7 @@ import pytest
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed
 from ocs_ci.framework.testlib import ignore_leftovers, tier4a
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -19,6 +20,7 @@ from ocs_ci.ocs import node
 
 @ignore_leftovers
 @tier4a
+@skipif_rbd_not_deployed
 class TestAddCapacityWithResourceDelete:
     """
     Test add capacity when one of the resources gets deleted

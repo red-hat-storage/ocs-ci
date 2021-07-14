@@ -1,6 +1,8 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rgw_not_deployed, skipif_mcg_not_deployed, skipif_rbd_not_deployed, \
+    skipif_cephfs_not_deployed
 from ocs_ci.framework.testlib import (
     tier4,
     tier4b,
@@ -33,6 +35,8 @@ log = logging.getLogger(__name__)
 @tier4b
 @aws_platform_required
 @ipi_deployment_required
+@skipif_rgw_not_deployed
+@skipif_mcg_not_deployed
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement - AWS-IPI-Reactive
@@ -62,17 +66,17 @@ class TestNodeReplacement(ManageTest):
         argnames=["interface", "failure"],
         argvalues=[
             pytest.param(
-                *["rbd", "power off"], marks=pytest.mark.polarion_id("OCS-2118")
+                *["rbd", "power off"], marks=[pytest.mark.polarion_id("OCS-2118"), skipif_rbd_not_deployed]
             ),
             pytest.param(
-                *["rbd", "network failure"], marks=pytest.mark.polarion_id("OCS-2120")
+                *["rbd", "network failure"], marks=[pytest.mark.polarion_id("OCS-2120"), skipif_rbd_not_deployed]
             ),
             pytest.param(
-                *["cephfs", "power off"], marks=pytest.mark.polarion_id("OCS-2119")
+                *["cephfs", "power off"], marks=[pytest.mark.polarion_id("OCS-2119"), skipif_cephfs_not_deployed]
             ),
             pytest.param(
                 *["cephfs", "network failure"],
-                marks=pytest.mark.polarion_id("OCS-2121"),
+                marks=[pytest.mark.polarion_id("OCS-2121"), skipif_cephfs_not_deployed]
             ),
         ],
     )

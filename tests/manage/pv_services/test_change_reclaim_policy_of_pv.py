@@ -2,6 +2,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.utility.utils import TimeoutSampler
@@ -20,19 +21,19 @@ log = logging.getLogger(__name__)
     argvalues=[
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "Delete"],
-            marks=pytest.mark.polarion_id("OCS-939"),
+            marks=[pytest.mark.polarion_id("OCS-939"), skipif_rbd_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "Retain"],
-            marks=pytest.mark.polarion_id("OCS-962"),
+            marks=[pytest.mark.polarion_id("OCS-962"), skipif_rbd_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "Delete"],
-            marks=pytest.mark.polarion_id("OCS-963"),
+            marks=[pytest.mark.polarion_id("OCS-963"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "Retain"],
-            marks=pytest.mark.polarion_id("OCS-964"),
+            marks=[pytest.mark.polarion_id("OCS-964"), skipif_cephfs_not_deployed],
         ),
     ],
 )

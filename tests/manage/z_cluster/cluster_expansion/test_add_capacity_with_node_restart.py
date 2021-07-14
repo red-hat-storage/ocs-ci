@@ -1,6 +1,7 @@
 import pytest
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed
 from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4a
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -23,6 +24,7 @@ from ocs_ci.ocs.cluster import check_ceph_health_after_add_capacity
 )
 @ignore_leftovers
 @tier4a
+@skipif_rbd_not_deployed
 class TestAddCapacityNodeRestart(ManageTest):
     """
     Test add capacity when one of the worker nodes got restart

@@ -3,6 +3,7 @@ import pytest
 import random
 from semantic_version import Version
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rgw_not_deployed, skipif_mcg_not_deployed
 from ocs_ci.ocs import node, constants, ocp, cluster
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
@@ -40,6 +41,8 @@ logger = logging.getLogger(__name__)
 @tier4
 @tier4b
 @ignore_leftovers
+@skipif_rgw_not_deployed
+@skipif_mcg_not_deployed
 class TestDiskFailures(ManageTest):
     """
     Test class for detach and attach worker volume

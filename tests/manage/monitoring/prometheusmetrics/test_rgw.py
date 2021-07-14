@@ -8,6 +8,7 @@ import logging
 
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rgw_not_deployed
 from ocs_ci.framework.testlib import skipif_ocs_version, tier4, tier4a
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs import metrics
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 @skipif_ocs_version("<4.6")
 @tier4
 @tier4a
+@skipif_rgw_not_deployed
 @pytest.mark.polarion_id("OCS-2385")
 def test_ceph_rgw_metrics_after_metrics_exporter_respin(rgw_deployments):
     """

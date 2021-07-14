@@ -1,5 +1,7 @@
 import pytest
 import logging
+
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import defaults
@@ -53,6 +55,8 @@ def resources(request):
 
 @skipif_external_mode
 @tier2
+@skipif_rbd_not_deployed
+@skipif_cephfs_not_deployed
 @pytest.mark.usefixtures(
     create_project.__name__,
     create_rbd_secret.__name__,

@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -20,6 +21,8 @@ logger = logging.getLogger(__name__)
 @acceptance
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
+@skipif_rbd_not_deployed
+@skipif_cephfs_not_deployed
 @pytest.mark.parametrize(
     argnames=["interface_type"],
     argvalues=[

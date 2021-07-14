@@ -20,7 +20,7 @@ from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_openshift_dedicated,
     skipif_bmpsi,
-    bugzilla,
+    bugzilla, skipif_ceph_not_deployed, skipif_cephfs_not_deployed, skipif_rbd_not_deployed,
 )
 
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -127,6 +127,8 @@ def delete_and_create_osd_node(osd_node_name):
 @ignore_leftovers
 @aws_platform_required
 @ipi_deployment_required
+@skipif_rbd_not_deployed
+@skipif_cephfs_not_deployed
 class TestNodeReplacementWithIO(ManageTest):
     """
     Knip-894 Node replacement proactive with IO
@@ -199,6 +201,7 @@ class TestNodeReplacementWithIO(ManageTest):
 @tier4a
 @ignore_leftovers
 @skipif_openshift_dedicated
+@skipif_ceph_not_deployed
 @skipif_bmpsi
 class TestNodeReplacement(ManageTest):
     """
@@ -238,6 +241,7 @@ class TestNodeReplacement(ManageTest):
 
 @tier4b
 @ignore_leftovers
+@skipif_ceph_not_deployed
 @bugzilla("1840539")
 @pytest.mark.polarion_id("OCS-2535")
 class TestNodeReplacementTwice(ManageTest):

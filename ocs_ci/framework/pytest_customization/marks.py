@@ -231,6 +231,33 @@ skipif_no_lso = pytest.mark.skipif(
     reason="Test run only on LSO deployed cluster",
 )
 
+skipif_cephfs_not_deployed = pytest.mark.skipif(
+    config.COMPONENTS.get("disable_cephfs"),
+    reason="Test run only if CephFS is deployed on the cluster",
+)
+
+skipif_rgw_not_deployed = pytest.mark.skipif(
+    config.COMPONENTS.get("disable_rgw"),
+    reason="Test run only if CephRGW is deployed on the cluster",
+)
+
+skipif_rbd_not_deployed = pytest.mark.skipif(
+    config.COMPONENTS.get("disable_blockpools"),
+    reason="Test run only if CephRBD is deployed on the cluster",
+)
+
+skipif_ceph_not_deployed = pytest.mark.skipif(
+    config.COMPONENTS.get("disable_blockpools")
+    and config.COMPONENTS.get("disable_cephfs")
+    and config.COMPONENTS.get("disable_rgw"),
+    reason="Test run only if Ceph is deployed on the cluster",
+)
+
+skipif_mcg_not_deployed = pytest.mark.skipif(
+    config.COMPONENTS.get("disable_noobaa"),
+    reason="Test run only if MCG is deployed on the cluster",
+)
+
 skipif_rhel_os = pytest.mark.skipif(
     (config.ENV_DATA.get("rhel_workers", None) is True)
     or (config.ENV_DATA.get("rhel_user", None) is not None),

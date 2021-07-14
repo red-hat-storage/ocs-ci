@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_cephfs_not_deployed, skipif_rbd_not_deployed
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs import constants
@@ -18,6 +19,8 @@ log = logging.getLogger(__name__)
 
 @tier2
 @skipif_ocp_version("<4.6")
+@skipif_cephfs_not_deployed
+@skipif_rbd_not_deployed
 @pytest.mark.parametrize(
     argnames=["pvc_create_sc_type", "restore_sc_type"],
     argvalues=[

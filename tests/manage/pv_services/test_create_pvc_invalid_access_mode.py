@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import ManageTest, tier3
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -13,10 +14,12 @@ log = logging.getLogger(__name__)
     argnames="interface",
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL], marks=pytest.mark.polarion_id("OCS-746")
+            *[constants.CEPHBLOCKPOOL],
+            marks=[pytest.mark.polarion_id("OCS-746"), skipif_rbd_not_deployed],
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM], marks=pytest.mark.polarion_id("OCS-747")
+            *[constants.CEPHFILESYSTEM],
+            marks=[pytest.mark.polarion_id("OCS-747"), skipif_cephfs_not_deployed],
         ),
     ],
 )

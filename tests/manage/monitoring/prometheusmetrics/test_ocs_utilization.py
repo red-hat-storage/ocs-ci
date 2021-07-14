@@ -11,8 +11,10 @@ from ocs_ci.framework.pytest_customization import marks
 from ocs_ci.framework.testlib import tier1
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.prometheus import check_query_range_result_limits
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
-
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_openshift_dedicated,
+    skipif_mcg_not_deployed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,7 @@ CPU_USAGE_POD = (
 @marks.polarion_id("OCS-2364")
 @marks.bugzilla("1849309")
 @skipif_openshift_dedicated
+@skipif_mcg_not_deployed
 def test_mcg_cpu_usage(workload_idle):
     """
     Without any IO  workload, cpu utilization of MCG pods should be minimal.

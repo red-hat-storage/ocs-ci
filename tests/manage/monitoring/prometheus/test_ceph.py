@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_ceph_not_deployed
 from ocs_ci.framework.testlib import tier4, tier4a
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
@@ -11,6 +12,7 @@ log = logging.getLogger(__name__)
 
 @tier4
 @tier4a
+@skipif_ceph_not_deployed
 @pytest.mark.polarion_id("OCS-903")
 @pytest.mark.skip(reason="measure_corrupt_pg fixture makes current test runs unstable")
 def test_corrupt_pg_alerts(measure_corrupt_pg):
@@ -56,6 +58,7 @@ def test_corrupt_pg_alerts(measure_corrupt_pg):
 
 @tier4
 @tier4a
+@skipif_ceph_not_deployed
 @pytest.mark.polarion_id("OCS-898")
 @pytest.mark.skip(reason="measure_corrupt_pg fixture makes current test runs unstable")
 def test_ceph_health(measure_stop_ceph_mon, measure_corrupt_pg):

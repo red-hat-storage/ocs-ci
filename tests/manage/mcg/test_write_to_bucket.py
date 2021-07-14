@@ -6,6 +6,8 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
     skip_inconsistent,
+    skipif_mcg_not_deployed,
+    skipif_openshift_dedicated,
 )
 from ocs_ci.framework.testlib import (
     MCGTest,
@@ -22,7 +24,6 @@ from ocs_ci.ocs.bucket_utils import (
     retrieve_anon_s3_resource,
     craft_s3_command,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ def pod_io(pods):
 
 
 @skipif_openshift_dedicated
+@skipif_mcg_not_deployed
 class TestBucketIO(MCGTest):
     """
     Test IO of a bucket

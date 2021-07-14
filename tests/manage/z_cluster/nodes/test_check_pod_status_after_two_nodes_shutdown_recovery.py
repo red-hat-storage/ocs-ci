@@ -2,6 +2,7 @@ import logging
 import pytest
 import time
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.framework.testlib import ManageTest, tier4c, ignore_leftovers
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
@@ -13,6 +14,8 @@ log = logging.getLogger(__name__)
 
 
 @ignore_leftovers
+@skipif_rbd_not_deployed
+@skipif_cephfs_not_deployed
 @tier4c
 class TestOCSWorkerNodeShutdown(ManageTest):
     """

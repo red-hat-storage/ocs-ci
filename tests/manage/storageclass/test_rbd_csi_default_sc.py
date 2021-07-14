@@ -5,6 +5,7 @@ Basic test for creating PVC with default StorageClass - RBD-CSI
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed
 from ocs_ci.framework.testlib import tier1, ManageTest, skipif_external_mode
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
@@ -58,6 +59,7 @@ def resources(request):
     create_rbd_secret.__name__,
 )
 @pytest.mark.polarion_id("OCS-347")
+@skipif_rbd_not_deployed
 class TestBasicPVCOperations(ManageTest):
     """
     Testing default storage class creation and pvc creation

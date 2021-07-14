@@ -1,6 +1,7 @@
 import pytest
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import ManageTest, tier2
@@ -20,10 +21,12 @@ class TestCreateLargeSizedPVCWhileIOInProgress(ManageTest):
         argnames=["interface"],
         argvalues=[
             pytest.param(
-                constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2087")
+                constants.CEPHBLOCKPOOL,
+                marks=[pytest.mark.polarion_id("OCS-2087"), skipif_rbd_not_deployed],
             ),
             pytest.param(
-                constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2088")
+                constants.CEPHFILESYSTEM,
+                marks=[pytest.mark.polarion_id("OCS-2088"), skipif_cephfs_not_deployed],
             ),
         ],
     )

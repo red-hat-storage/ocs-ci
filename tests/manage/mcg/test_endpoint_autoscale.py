@@ -1,12 +1,18 @@
-from ocs_ci.framework.testlib import MCGTest, tier1, skipif_ocs_version
+from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.framework.pytest_customization.marks import (
+    tier1,
+    skipif_openshift_dedicated,
+    skipif_mcg_not_deployed,
+    skipif_ocs_version,
+)
 
 
 # @pytest.mark.polarion_id("OCS-XXXX")
 # Skipped above 4.6 because of https://github.com/red-hat-storage/ocs-ci/issues/4129
 @skipif_ocs_version(["<4.5", ">4.6"])
 @skipif_openshift_dedicated
+@skipif_mcg_not_deployed
 @tier1
 class TestEndpointAutoScale(MCGTest):
     """

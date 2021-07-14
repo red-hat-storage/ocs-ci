@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.ocs.resources.ocs import OCS
@@ -75,6 +76,7 @@ def create_storageclass(sc_name, expect_fail=False):
 @pytest.mark.usefixtures(
     test_fixture.__name__,
 )
+@skipif_rbd_not_deployed
 @pytest.mark.polarion_id("OCS-322")
 class TestCreateSCSameName(ManageTest):
     def test_create_storageclass_with_same_name(self):

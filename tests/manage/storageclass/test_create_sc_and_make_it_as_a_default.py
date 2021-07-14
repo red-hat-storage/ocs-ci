@@ -1,5 +1,7 @@
 import pytest
 import logging
+
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.ocs import ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
@@ -26,10 +28,10 @@ class TestCreateStorageClassandMakeItAsDefault(ManageTest):
         argnames="interface_type",
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL], marks=pytest.mark.polarion_id("OCS-626")
+                *[constants.CEPHBLOCKPOOL], marks=[pytest.mark.polarion_id("OCS-626"), skipif_rbd_not_deployed]
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM], marks=pytest.mark.polarion_id("OCS-627")
+                *[constants.CEPHFILESYSTEM], marks=[pytest.mark.polarion_id("OCS-627"), skipif_cephfs_not_deployed]
             ),
         ],
     )

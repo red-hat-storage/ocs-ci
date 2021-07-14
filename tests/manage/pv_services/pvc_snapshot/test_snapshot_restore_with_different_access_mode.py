@@ -2,6 +2,7 @@ import logging
 import pytest
 from itertools import cycle
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.ocs import constants, node
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -19,6 +20,8 @@ log = logging.getLogger(__name__)
 @tier1
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
+@skipif_rbd_not_deployed
+@skipif_cephfs_not_deployed
 @polarion_id("OCS-2410")
 class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
     """

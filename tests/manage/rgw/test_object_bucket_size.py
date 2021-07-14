@@ -9,7 +9,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.framework.pytest_customization.marks import (
-    skipif_openshift_dedicated,
+    skipif_openshift_dedicated, skipif_rgw_not_deployed, skipif_mcg_not_deployed,
 )
 from ocs_ci.ocs.bucket_utils import get_bucket_available_size
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour, NoobaaConditionException
@@ -19,7 +19,8 @@ from ocs_ci.utility.utils import skipif_upgraded_from as upgraded_from
 
 logger = logging.getLogger(__name__)
 
-
+@skipif_rgw_not_deployed
+@skipif_mcg_not_deployed
 @retry((NoobaaConditionException, UnexpectedBehaviour), tries=30, delay=15, backoff=1)
 def compare_sizes(mcg_obj, ceph_obj, bucket_name):
     """

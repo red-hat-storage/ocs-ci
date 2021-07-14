@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier4a,
     bugzilla,
     skipif_ocs_version,
+    skipif_mcg_not_deployed,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 @skipif_openshift_dedicated
+@skipif_mcg_not_deployed
 @skipif_aws_creds_are_missing
 class TestMultiRegion(MCGTest):
     """

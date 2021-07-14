@@ -1,6 +1,7 @@
 import logging
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import skipif_mcg_not_deployed
 from ocs_ci.framework.testlib import (
     polarion_id,
     bugzilla,
@@ -19,6 +20,7 @@ log = logging.getLogger(__name__)
 @tier4a
 @polarion_id("OCS-1254")
 @bugzilla("1835290")
+@skipif_mcg_not_deployed
 @skipif_openshift_dedicated
 def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
     """
@@ -93,6 +95,7 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
 @tier4
 @tier4a
 @polarion_id("OCS-2498")
+@skipif_mcg_not_deployed
 @skipif_openshift_dedicated
 def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted):
     """

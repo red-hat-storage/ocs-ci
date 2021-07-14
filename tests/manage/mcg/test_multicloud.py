@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.pytest_customization.marks import tier1, skipif_mcg_not_deployed
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 @skipif_openshift_dedicated
+@skipif_mcg_not_deployed
 class TestMultiCloud(MCGTest):
     """
     Test the multi cloud functionality

@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.framework.testlib import ManageTest, tier4, tier4b
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
@@ -21,87 +22,87 @@ log = logging.getLogger(__name__)
     argvalues=[
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "create_pvc", "mgr"],
-            marks=pytest.mark.polarion_id("OCS-1131"),
+            marks=[pytest.mark.polarion_id("OCS-1131"), skipif_rbd_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "create_pod", "mgr"],
-            marks=pytest.mark.polarion_id("OCS-1130"),
+            marks=[pytest.mark.polarion_id("OCS-1130"), skipif_rbd_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "run_io", "mgr"],
-            marks=pytest.mark.polarion_id("OCS-1132"),
+            marks=[pytest.mark.polarion_id("OCS-1132"), skipif_rbd_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "create_pvc", "mon"],
-            marks=pytest.mark.polarion_id("OCS-1117"),
+            marks=[pytest.mark.polarion_id("OCS-1117"), skipif_rbd_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "create_pod", "mon"],
-            marks=pytest.mark.polarion_id("OCS-1116"),
+            marks=[pytest.mark.polarion_id("OCS-1116"), skipif_rbd_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "run_io", "mon"],
-            marks=pytest.mark.polarion_id("OCS-1118"),
+            marks=[pytest.mark.polarion_id("OCS-1118"), skipif_rbd_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "create_pvc", "osd"],
-            marks=pytest.mark.polarion_id("OCS-1124"),
+            marks=[pytest.mark.polarion_id("OCS-1124"), skipif_rbd_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "create_pod", "osd"],
-            marks=pytest.mark.polarion_id("OCS-1123"),
+            marks=[pytest.mark.polarion_id("OCS-1123"), skipif_rbd_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "run_io", "osd"],
-            marks=pytest.mark.polarion_id("OCS-1125"),
+            marks=[pytest.mark.polarion_id("OCS-1125"), skipif_rbd_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "create_pvc", "mgr"],
-            marks=pytest.mark.polarion_id("OCS-1103"),
+            marks=[pytest.mark.polarion_id("OCS-1103"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "create_pod", "mgr"],
-            marks=pytest.mark.polarion_id("OCS-1102"),
+            marks=[pytest.mark.polarion_id("OCS-1102"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "run_io", "mgr"],
-            marks=pytest.mark.polarion_id("OCS-1106"),
+            marks=[pytest.mark.polarion_id("OCS-1106"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "create_pvc", "mon"],
-            marks=pytest.mark.polarion_id("OCS-1089"),
+            marks=[pytest.mark.polarion_id("OCS-1089"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "create_pod", "mon"],
-            marks=pytest.mark.polarion_id("OCS-1087"),
+            marks=[pytest.mark.polarion_id("OCS-1087"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "run_io", "mon"],
-            marks=pytest.mark.polarion_id("OCS-1092"),
+            marks=[pytest.mark.polarion_id("OCS-1092"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "create_pvc", "osd"],
-            marks=pytest.mark.polarion_id("OCS-1096"),
+            marks=[pytest.mark.polarion_id("OCS-1096"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "create_pod", "osd"],
-            marks=pytest.mark.polarion_id("OCS-1095"),
+            marks=[pytest.mark.polarion_id("OCS-1095"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "run_io", "osd"],
-            marks=pytest.mark.polarion_id("OCS-1099"),
+            marks=[pytest.mark.polarion_id("OCS-1099"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "create_pvc", "mds"],
-            marks=pytest.mark.polarion_id("OCS-1110"),
+            marks=[pytest.mark.polarion_id("OCS-1110"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "create_pod", "mds"],
-            marks=pytest.mark.polarion_id("OCS-1109"),
+            marks=[pytest.mark.polarion_id("OCS-1109"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "run_io", "mds"],
-            marks=pytest.mark.polarion_id("OCS-1113"),
+            marks=[pytest.mark.polarion_id("OCS-1113"), skipif_cephfs_not_deployed],
         ),
     ],
 )

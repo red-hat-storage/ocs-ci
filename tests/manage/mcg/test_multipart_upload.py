@@ -14,7 +14,10 @@ from ocs_ci.ocs.bucket_utils import (
     complete_multipart_upload,
     sync_object_directory,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_openshift_dedicated,
+    skipif_mcg_not_deployed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +50,7 @@ def setup(pod_obj, bucket_factory):
 
 
 @skipif_openshift_dedicated
+@skipif_mcg_not_deployed
 class TestS3MultipartUpload(MCGTest):
     """
     Test Multipart upload on Noobaa buckets

@@ -7,6 +7,7 @@ import logging
 
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_ceph_not_deployed
 from ocs_ci.framework.testlib import tier3
 from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_enum
 
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 @tier3
+@skipif_ceph_not_deployed
 @pytest.mark.polarion_id("OCS-1306")
 def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
     """
@@ -85,6 +87,7 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
 
 
 @tier3
+@skipif_ceph_not_deployed
 @pytest.mark.polarion_id("OCS-1307")
 def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
     """

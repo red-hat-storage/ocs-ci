@@ -2,6 +2,7 @@ import logging
 import pytest
 from concurrent.futures import ThreadPoolExecutor
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import ceph_health_check
@@ -28,6 +29,8 @@ log = logging.getLogger(__name__)
 @skipif_vsphere_ipi
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
+@skipif_rbd_not_deployed
+@skipif_cephfs_not_deployed
 class TestNodeRestartDuringPvcClone(ManageTest):
     """
     Tests to verify PVC cloning will succeed if a node is restarted while

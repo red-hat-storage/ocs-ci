@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rgw_not_deployed
 from ocs_ci.ocs.bucket_utils import (
     retrieve_test_objects_to_pod,
     sync_object_directory,
@@ -13,6 +14,7 @@ from ocs_ci.ocs.resources.objectbucket import OBC
 logger = logging.getLogger(__name__)
 
 
+@skipif_rgw_not_deployed
 class TestObjectIntegrity(ManageTest):
     """
     Test data integrity of RGW buckets

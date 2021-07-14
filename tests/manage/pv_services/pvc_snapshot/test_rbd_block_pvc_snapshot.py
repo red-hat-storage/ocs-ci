@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -17,6 +18,7 @@ log = logging.getLogger(__name__)
 @tier1
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
+@skipif_rbd_not_deployed
 @pytest.mark.polarion_id("OCS-2361")
 class TestRbdBlockPvcSnapshot(ManageTest):
     """

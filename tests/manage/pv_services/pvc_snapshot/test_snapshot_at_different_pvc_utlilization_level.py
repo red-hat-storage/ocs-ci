@@ -2,6 +2,7 @@ import logging
 import pytest
 from copy import deepcopy
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
@@ -19,6 +20,8 @@ log = logging.getLogger(__name__)
 @tier1
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
+@skipif_rbd_not_deployed
+@skipif_cephfs_not_deployed
 @pytest.mark.polarion_id("OCS-2318")
 class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
     """

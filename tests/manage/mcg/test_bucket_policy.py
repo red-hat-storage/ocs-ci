@@ -11,7 +11,16 @@ from ocs_ci.ocs.exceptions import (
     InvalidStatusCode,
     UnexpectedBehaviour,
 )
-from ocs_ci.framework.testlib import MCGTest, tier1, tier2, tier3, skipif_ocs_version
+from ocs_ci.framework.testlib import MCGTest
+from ocs_ci.framework.pytest_customization.marks import (
+    tier1,
+    tier2,
+    tier3,
+    skipif_openshift_dedicated,
+    skipif_mcg_not_deployed,
+    skipif_ocs_version,
+)
+
 from ocs_ci.ocs.resources.bucket_policy import (
     NoobaaAccount,
     HttpResponseParser,
@@ -38,12 +47,12 @@ from ocs_ci.ocs.constants import (
     bucket_version_action_list,
     object_version_action_list,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 
 
 @skipif_openshift_dedicated
+@skipif_mcg_not_deployed
 @skipif_ocs_version("<4.3")
 class TestS3BucketPolicy(MCGTest):
     """

@@ -4,7 +4,7 @@ from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
-    skipif_ocs_version,
+    skipif_ocs_version, skipif_rbd_not_deployed,
 )
 from ocs_ci.ocs.cluster import (
     validate_compression,
@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 @tier1
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
+@skipif_rbd_not_deployed
 @pytest.mark.polarion_id("OCS-2391")
 class TestMultipleScOnePoolRep2Comp(ManageTest):
     """

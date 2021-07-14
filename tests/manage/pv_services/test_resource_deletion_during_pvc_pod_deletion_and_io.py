@@ -5,6 +5,7 @@ from itertools import cycle
 import pytest
 from functools import partial
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.framework.testlib import ManageTest, tier4, tier4c, ignore_leftover_label
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
@@ -42,35 +43,43 @@ log = logging.getLogger(__name__)
     argnames=["interface", "resource_to_delete"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, "mgr"], marks=pytest.mark.polarion_id("OCS-810")
+            *[constants.CEPHBLOCKPOOL, "mgr"],
+            marks=[pytest.mark.polarion_id("OCS-810"), skipif_rbd_not_deployed],
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, "mon"], marks=pytest.mark.polarion_id("OCS-811")
+            *[constants.CEPHBLOCKPOOL, "mon"],
+            marks=[pytest.mark.polarion_id("OCS-811"), skipif_rbd_not_deployed],
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, "osd"], marks=pytest.mark.polarion_id("OCS-812")
+            *[constants.CEPHBLOCKPOOL, "osd"],
+            marks=[pytest.mark.polarion_id("OCS-812"), skipif_rbd_not_deployed],
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, "mgr"], marks=pytest.mark.polarion_id("OCS-813")
+            *[constants.CEPHFILESYSTEM, "mgr"],
+            marks=[pytest.mark.polarion_id("OCS-813"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, "mon"], marks=pytest.mark.polarion_id("OCS-814")
+            *[constants.CEPHFILESYSTEM, "mon"],
+            marks=[pytest.mark.polarion_id("OCS-814"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, "osd"], marks=pytest.mark.polarion_id("OCS-815")
+            *[constants.CEPHFILESYSTEM, "osd"],
+            marks=[pytest.mark.polarion_id("OCS-815"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, "mds"], marks=pytest.mark.polarion_id("OCS-816")
+            *[constants.CEPHFILESYSTEM, "mds"],
+            marks=[pytest.mark.polarion_id("OCS-816"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "cephfsplugin"],
-            marks=pytest.mark.polarion_id("OCS-1012"),
+            marks=[pytest.mark.polarion_id("OCS-1012"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "rbdplugin"],
             marks=[
                 pytest.mark.polarion_id("OCS-1015"),
                 pytest.mark.bugzilla("1752487"),
+                skipif_rbd_not_deployed,
             ],
         ),
         pytest.param(
@@ -79,19 +88,28 @@ log = logging.getLogger(__name__)
                 pytest.mark.polarion_id("OCS-946"),
                 pytest.mark.bugzilla("1793387"),
                 pytest.mark.bugzilla("1860891"),
+                skipif_cephfs_not_deployed,
             ],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "rbdplugin_provisioner"],
-            marks=pytest.mark.polarion_id("OCS-953"),
+            marks=[pytest.mark.polarion_id("OCS-953"), skipif_rbd_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "operator"],
-            marks=[pytest.mark.polarion_id("OCS-934"), pytest.mark.bugzilla("1815078")],
+            marks=[
+                pytest.mark.polarion_id("OCS-934"),
+                pytest.mark.bugzilla("1815078"),
+                skipif_rbd_not_deployed,
+            ],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "operator"],
-            marks=[pytest.mark.polarion_id("OCS-930"), pytest.mark.bugzilla("1815078")],
+            marks=[
+                pytest.mark.polarion_id("OCS-930"),
+                pytest.mark.bugzilla("1815078"),
+                skipif_cephfs_not_deployed,
+            ],
         ),
     ],
 )

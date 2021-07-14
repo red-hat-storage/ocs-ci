@@ -1,4 +1,6 @@
 import pytest
+
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import ManageTest, tier2
@@ -8,9 +10,9 @@ from ocs_ci.framework.testlib import ManageTest, tier2
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[
-        pytest.param(constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-692")),
+        pytest.param(constants.CEPHBLOCKPOOL, marks=[pytest.mark.polarion_id("OCS-692"), skipif_rbd_not_deployed]),
         pytest.param(
-            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-693")
+            constants.CEPHFILESYSTEM, marks=[pytest.mark.polarion_id("OCS-693"), skipif_cephfs_not_deployed]
         ),
     ],
 )

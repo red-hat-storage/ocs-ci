@@ -2,6 +2,7 @@ import logging
 
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import tier3, ManageTest
 from ocs_ci.ocs.resources.ocs import OCS
@@ -57,6 +58,7 @@ def teardown():
 
 
 @tier3
+@skipif_rbd_not_deployed
 @pytest.mark.usefixtures(test_fixture.__name__)
 @pytest.mark.polarion_id("OCS-284")
 class TestPvcCreationInvalidInputs(ManageTest):

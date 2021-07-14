@@ -2,6 +2,8 @@ import logging
 import pytest
 
 from concurrent.futures import ThreadPoolExecutor
+
+from ocs_ci.framework.pytest_customization.marks import skipif_cephfs_not_deployed
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources import pod
@@ -19,6 +21,7 @@ class TestRWXMountPoint(ManageTest):
 
     @pytest.mark.polarion_id("OCS-965")
     @tier1
+    @skipif_cephfs_not_deployed
     def test_pvc_rwx_writeable_after_pod_deletions(self, pvc_factory, teardown_factory):
         """
         Test assign nodeName to a pod using RWX pvc

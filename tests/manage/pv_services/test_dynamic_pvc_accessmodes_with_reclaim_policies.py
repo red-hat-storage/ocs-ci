@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.framework.testlib import ManageTest, tier1, acceptance
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -77,6 +78,7 @@ class TestDynamicPvc(ManageTest):
                 marks=[
                     pytest.mark.polarion_id("OCS-530"),
                     pytest.mark.bugzilla("1772990"),
+                    skipif_rbd_not_deployed,
                 ],
             ),
             pytest.param(
@@ -85,6 +87,7 @@ class TestDynamicPvc(ManageTest):
                     pytest.mark.polarion_id("OCS-533"),
                     pytest.mark.bugzilla("1750916"),
                     pytest.mark.bugzilla("1772990"),
+                    skipif_rbd_not_deployed,
                 ],
             ),
             pytest.param(
@@ -94,6 +97,7 @@ class TestDynamicPvc(ManageTest):
                     pytest.mark.bugzilla("1751866"),
                     pytest.mark.bugzilla("1750916"),
                     pytest.mark.bugzilla("1772990"),
+                    skipif_cephfs_not_deployed,
                 ],
             ),
             pytest.param(
@@ -103,6 +107,7 @@ class TestDynamicPvc(ManageTest):
                     pytest.mark.bugzilla("1751866"),
                     pytest.mark.bugzilla("1750916"),
                     pytest.mark.bugzilla("1772990"),
+                    skipif_cephfs_not_deployed,
                 ],
             ),
         ],
@@ -203,6 +208,7 @@ class TestDynamicPvc(ManageTest):
 
     @acceptance
     @tier1
+    @skipif_cephfs_not_deployed
     @pytest.mark.bugzilla("1750916")
     @pytest.mark.bugzilla("1751866")
     @pytest.mark.parametrize(

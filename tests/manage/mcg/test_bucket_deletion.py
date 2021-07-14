@@ -9,6 +9,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     acceptance,
     performance,
+    skipif_mcg_not_deployed,
+    skipif_openshift_dedicated,
 )
 from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -21,13 +23,13 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
 ERRATIC_TIMEOUTS_SKIP_REASON = "Skipped because of erratic timeouts"
 
 
 @skipif_openshift_dedicated
+@skipif_mcg_not_deployed
 class TestBucketDeletion(MCGTest):
     """
     Test bucket Creation Deletion of buckets

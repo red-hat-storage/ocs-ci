@@ -1,4 +1,6 @@
 import logging
+
+from ocs_ci.framework.pytest_customization.marks import skipif_mcg_not_deployed
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
 
@@ -37,6 +39,7 @@ class TestStoreUserInterface(object):
     @tier1
     @skipif_ocs_version("<4.8")
     @skipif_disconnected_cluster
+    @skipif_mcg_not_deployed
     @pytest.mark.parametrize(
         argnames=["kind"],
         argvalues=[
@@ -87,6 +90,7 @@ class TestStoreUserInterface(object):
 @tier1
 @skipif_ocs_version("<4.8")
 @skipif_disconnected_cluster
+@skipif_mcg_not_deployed
 class TestBucketclassUserInterface(object):
     """
     Test the bucketclass UI
@@ -233,6 +237,7 @@ class TestObcUserInterface(object):
 
     @tier1
     @skipif_ocs_version("<4.8")
+    @skipif_mcg_not_deployed
     @pytest.mark.parametrize(
         argnames=["storageclass", "bucketclass"],
         argvalues=[

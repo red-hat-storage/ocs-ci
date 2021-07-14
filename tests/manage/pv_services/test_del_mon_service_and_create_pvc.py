@@ -3,6 +3,7 @@ import logging
 import pytest
 import time
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_external_mode,
@@ -37,10 +38,12 @@ POD_OBJ = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPAC
     argnames=["interface"],
     argvalues=[
         pytest.param(
-            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2495")
+            constants.CEPHBLOCKPOOL,
+            marks=[pytest.mark.polarion_id("OCS-2495"), skipif_rbd_not_deployed],
         ),
         pytest.param(
-            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2494")
+            constants.CEPHFILESYSTEM,
+            marks=[pytest.mark.polarion_id("OCS-2494"), skipif_cephfs_not_deployed],
         ),
     ],
 )

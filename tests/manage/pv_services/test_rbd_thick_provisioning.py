@@ -2,6 +2,7 @@ import logging
 import pytest
 from concurrent.futures import ThreadPoolExecutor
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -38,6 +39,7 @@ class TestRbdThickProvisioning(ManageTest):
 
     @acceptance
     @tier1
+    @skipif_rbd_not_deployed
     @polarion_id("OCS-2500")
     def test_rbd_thick_provisioning(self, multi_pvc_factory, pod_factory):
         """

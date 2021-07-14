@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.framework.testlib import ManageTest, tier4, tier4c, ignore_leftover_label
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
@@ -28,52 +29,72 @@ log = logging.getLogger(__name__)
     argnames=["interface", "resource_to_delete"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, "mgr"], marks=pytest.mark.polarion_id("OCS-735")
+            *[constants.CEPHBLOCKPOOL, "mgr"],
+            marks=[pytest.mark.polarion_id("OCS-735"), skipif_rbd_not_deployed],
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, "mon"], marks=pytest.mark.polarion_id("OCS-736")
+            *[constants.CEPHBLOCKPOOL, "mon"],
+            marks=[pytest.mark.polarion_id("OCS-736"), skipif_rbd_not_deployed],
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, "osd"], marks=pytest.mark.polarion_id("OCS-737")
+            *[constants.CEPHBLOCKPOOL, "osd"],
+            marks=[pytest.mark.polarion_id("OCS-737"), skipif_rbd_not_deployed],
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, "mgr"], marks=pytest.mark.polarion_id("OCS-738")
+            *[constants.CEPHFILESYSTEM, "mgr"],
+            marks=[pytest.mark.polarion_id("OCS-738"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, "mon"], marks=pytest.mark.polarion_id("OCS-739")
+            *[constants.CEPHFILESYSTEM, "mon"],
+            marks=[pytest.mark.polarion_id("OCS-739"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, "osd"], marks=pytest.mark.polarion_id("OCS-740")
+            *[constants.CEPHFILESYSTEM, "osd"],
+            marks=[pytest.mark.polarion_id("OCS-740"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, "mds"], marks=pytest.mark.polarion_id("OCS-741")
+            *[constants.CEPHFILESYSTEM, "mds"],
+            marks=[pytest.mark.polarion_id("OCS-741"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "cephfsplugin"],
-            marks=pytest.mark.polarion_id("OCS-1011"),
+            marks=[pytest.mark.polarion_id("OCS-1011"), skipif_cephfs_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "rbdplugin"],
             marks=[
                 pytest.mark.polarion_id("OCS-1010"),
                 pytest.mark.bugzilla("1752487"),
+                skipif_rbd_not_deployed,
             ],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "cephfsplugin_provisioner"],
-            marks=[pytest.mark.polarion_id("OCS-952"), pytest.mark.bugzilla("1860891")],
+            marks=[
+                pytest.mark.polarion_id("OCS-952"),
+                pytest.mark.bugzilla("1860891"),
+                skipif_cephfs_not_deployed,
+            ],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "rbdplugin_provisioner"],
-            marks=pytest.mark.polarion_id("OCS-945"),
+            marks=[pytest.mark.polarion_id("OCS-945"), skipif_rbd_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, "operator"],
-            marks=[pytest.mark.polarion_id("OCS-933"), pytest.mark.bugzilla("1815078")],
+            marks=[
+                pytest.mark.polarion_id("OCS-933"),
+                pytest.mark.bugzilla("1815078"),
+                skipif_rbd_not_deployed,
+            ],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "operator"],
-            marks=[pytest.mark.polarion_id("OCS-929"), pytest.mark.bugzilla("1815078")],
+            marks=[
+                pytest.mark.polarion_id("OCS-929"),
+                pytest.mark.bugzilla("1815078"),
+                skipif_cephfs_not_deployed,
+            ],
         ),
     ],
 )

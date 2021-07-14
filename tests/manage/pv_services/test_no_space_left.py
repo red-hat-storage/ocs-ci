@@ -4,6 +4,7 @@ Test to verify PVC behavior when full of data with I/O
 import logging
 import pytest
 import ocs_ci.ocs.exceptions as ex
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 
 from ocs_ci.framework.testlib import tier2, ManageTest
 from ocs_ci.ocs import constants
@@ -16,11 +17,16 @@ log = logging.getLogger(__name__)
     argnames=["interface"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL], marks=pytest.mark.polarion_id("OCS-852")
+            *[constants.CEPHBLOCKPOOL],
+            marks=[pytest.mark.polarion_id("OCS-852"), skipif_rbd_not_deployed],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM],
-            marks=[pytest.mark.polarion_id("OCS-853"), pytest.mark.bugzilla("1745344")],
+            marks=[
+                pytest.mark.polarion_id("OCS-853"),
+                pytest.mark.bugzilla("1745344"),
+                skipif_cephfs_not_deployed,
+            ],
         ),
     ],
 )
@@ -78,6 +84,7 @@ class TestPVCFullWithIORWO(ManageTest):
 
 @pytest.mark.polarion_id("OCS-854")
 @pytest.mark.bugzilla("1745344")
+@skipif_cephfs_not_deployed
 @tier2
 class TestPVCFullWithIORWX(ManageTest):
     """

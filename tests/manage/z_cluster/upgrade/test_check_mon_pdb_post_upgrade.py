@@ -4,6 +4,7 @@ import pytest
 from semantic_version import Version
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import skipif_ceph_not_deployed
 from ocs_ci.framework.testlib import post_ocs_upgrade, ManageTest, skipif_external_mode
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.helpers.helpers import get_mon_pdb
@@ -13,6 +14,7 @@ log = logging.getLogger(__name__)
 
 @post_ocs_upgrade
 @skipif_external_mode
+@skipif_ceph_not_deployed
 @pytest.mark.polarion_id("OCS-2449")
 class TestToCheckMonPDBPostUpgrade(ManageTest):
     """

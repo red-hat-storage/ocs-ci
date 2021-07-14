@@ -3,6 +3,8 @@ import pytest
 import random
 
 from concurrent.futures import ThreadPoolExecutor
+
+from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed, skipif_cephfs_not_deployed
 from ocs_ci.framework.testlib import ManageTest, tier1, acceptance
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_worker_nodes
@@ -27,10 +29,12 @@ class TestPvcAssignPodNode(ManageTest):
         argnames=["interface"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL], marks=pytest.mark.polarion_id("OCS-717")
+                *[constants.CEPHBLOCKPOOL],
+                marks=[pytest.mark.polarion_id("OCS-717"), skipif_rbd_not_deployed],
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM], marks=pytest.mark.polarion_id("OCS-744")
+                *[constants.CEPHFILESYSTEM],
+                marks=[pytest.mark.polarion_id("OCS-744"), skipif_cephfs_not_deployed],
             ),
         ],
     )
@@ -80,10 +84,12 @@ class TestPvcAssignPodNode(ManageTest):
         argnames=["interface"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL], marks=pytest.mark.polarion_id("OCS-1257")
+                *[constants.CEPHBLOCKPOOL],
+                marks=[pytest.mark.polarion_id("OCS-1257"), skipif_rbd_not_deployed],
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM], marks=pytest.mark.polarion_id("OCS-1258")
+                *[constants.CEPHFILESYSTEM],
+                marks=[pytest.mark.polarion_id("OCS-1258"), skipif_cephfs_not_deployed],
             ),
         ],
     )
