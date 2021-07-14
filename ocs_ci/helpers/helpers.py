@@ -3101,3 +3101,21 @@ def check_rbd_image_used_size(
         )
         return False
     return True
+
+
+def set_configmap_log_level_rook_ceph_operator(value):
+    """
+    Set ROOK_LOG_LEVEL on configmap of rook-ceph-operator
+
+    Args:
+        value (str): type of log
+
+    """
+    path = "/data/ROOK_LOG_LEVEL"
+    params = f"""[{{"op": "add", "path": "{path}", "value": "{value}"}}]"""
+    configmap_obj = OCP(
+        kind=constants.CONFIGMAP,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+    )
+    configmap_obj.patch(params=params, format_type="json")
