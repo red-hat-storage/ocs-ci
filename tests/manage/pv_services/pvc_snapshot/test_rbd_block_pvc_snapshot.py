@@ -3,6 +3,7 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import skipif_rbd_not_deployed
 from ocs_ci.ocs import constants
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -181,7 +182,12 @@ class TestRbdBlockPvcSnapshot(ManageTest):
         # Verify the new pods are running
         log.info("Verify the new pods are running")
         for pod_obj in restore_pod_objs:
-            wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+            timeout = (
+                300
+                if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                else 60
+            )
+            wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout)
         log.info("Verified: New pods are running")
 
         log.info("Verifying md5sum on new pods")

@@ -2,11 +2,12 @@ import logging
 import pytest
 import time
 
-from ocs_ci.framework.pytest_customization.marks import (
-    skipif_rbd_not_deployed,
-    skipif_cephfs_not_deployed,
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier4c,
+    ignore_leftovers,
+    skipif_ibm_cloud,
 )
-from ocs_ci.framework.testlib import ManageTest, tier4c, ignore_leftovers
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
 from ocs_ci.utility.retry import retry
@@ -17,8 +18,6 @@ log = logging.getLogger(__name__)
 
 
 @ignore_leftovers
-@skipif_rbd_not_deployed
-@skipif_cephfs_not_deployed
 @tier4c
 class TestOCSWorkerNodeShutdown(ManageTest):
     """
@@ -37,6 +36,7 @@ class TestOCSWorkerNodeShutdown(ManageTest):
         self.sanity_helpers = Sanity()
 
     @pytest.mark.polarion_id("OCS-2315")
+    @skipif_ibm_cloud
     def test_check_pod_status_after_two_nodes_shutdown_recovery(
         self, nodes, node_restart_teardown
     ):

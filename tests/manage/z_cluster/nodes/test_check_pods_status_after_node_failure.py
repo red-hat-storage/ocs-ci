@@ -2,8 +2,12 @@ import logging
 import pytest
 import random
 
-from ocs_ci.framework.pytest_customization.marks import skipif_ceph_not_deployed
-from ocs_ci.framework.testlib import ManageTest, tier4a, ignore_leftovers
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier4a,
+    ignore_leftovers,
+    skipif_ibm_cloud,
+)
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
@@ -68,7 +72,6 @@ def wait_for_change_in_rook_ceph_pods(node_name, timeout=300, sleep=20):
 
 @ignore_leftovers
 @tier4a
-@skipif_ceph_not_deployed
 @pytest.mark.polarion_id("OCS-2552")
 class TestCheckPodsAfterNodeFailure(ManageTest):
     """
@@ -107,6 +110,7 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    @skipif_ibm_cloud
     def test_check_pods_status_after_node_failure(self, nodes, node_restart_teardown):
         """
         Test check pods status after a node failure event.

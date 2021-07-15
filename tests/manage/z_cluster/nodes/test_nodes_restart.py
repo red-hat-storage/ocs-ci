@@ -1,13 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import (
-    skipif_rgw_not_deployed,
-    skipif_mcg_not_deployed,
-    skipif_cephfs_not_deployed,
-    skipif_rbd_not_deployed,
-    skipif_ceph_not_deployed,
-)
+
 from ocs_ci.framework.testlib import (
     tier4,
     tier4a,
@@ -17,6 +11,7 @@ from ocs_ci.framework.testlib import (
     bugzilla,
     skipif_no_lso,
     skipif_vsphere_ipi,
+    skipif_ibm_cloud,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs, get_nodes
@@ -68,8 +63,6 @@ class TestNodesRestart(ManageTest):
             ),
         ],
     )
-    @skipif_rgw_not_deployed
-    @skipif_mcg_not_deployed
     def test_nodes_restart(
         self, nodes, pvc_factory, pod_factory, force, bucket_factory, rgw_bucket_factory
     ):
@@ -86,8 +79,6 @@ class TestNodesRestart(ManageTest):
 
     @bugzilla("1754287")
     @pytest.mark.polarion_id("OCS-2015")
-    @skipif_rgw_not_deployed
-    @skipif_mcg_not_deployed
     def test_rolling_nodes_restart(
         self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):
@@ -107,25 +98,22 @@ class TestNodesRestart(ManageTest):
         argnames=["interface", "operation"],
         argvalues=[
             pytest.param(
-                *["rbd", "create_resources"],
-                marks=[pytest.mark.polarion_id("OCS-1138"), skipif_rbd_not_deployed],
+                *["rbd", "create_resources"], marks=pytest.mark.polarion_id("OCS-1138")
             ),
             pytest.param(
-                *["rbd", "delete_resources"],
-                marks=[pytest.mark.polarion_id("OCS-1241"), skipif_rbd_not_deployed],
+                *["rbd", "delete_resources"], marks=pytest.mark.polarion_id("OCS-1241")
             ),
             pytest.param(
                 *["cephfs", "create_resources"],
-                marks=[pytest.mark.polarion_id("OCS-1139"), skipif_cephfs_not_deployed],
+                marks=pytest.mark.polarion_id("OCS-1139"),
             ),
             pytest.param(
                 *["cephfs", "delete_resources"],
-                marks=[pytest.mark.polarion_id("OCS-1242"), skipif_cephfs_not_deployed],
+                marks=pytest.mark.polarion_id("OCS-1242"),
             ),
         ],
     )
-    @skipif_rgw_not_deployed
-    @skipif_mcg_not_deployed
+    @skipif_ibm_cloud
     def test_pv_provisioning_under_degraded_state_stop_provisioner_pod_node(
         self,
         nodes,
@@ -269,8 +257,7 @@ class TestNodesRestart(ManageTest):
             ),
         ],
     )
-    @skipif_rgw_not_deployed
-    @skipif_mcg_not_deployed
+    @skipif_ibm_cloud
     def test_pv_provisioning_under_degraded_state_stop_rook_operator_pod_node(
         self,
         nodes,
@@ -368,7 +355,6 @@ class TestNodesRestart(ManageTest):
         self.sanity_helpers.health_check()
 
     @skipif_no_lso
-    @skipif_ceph_not_deployed
     @bugzilla("1873938")
     @pytest.mark.polarion_id("OCS-2448")
     def test_pv_after_reboot_node(self, nodes):
