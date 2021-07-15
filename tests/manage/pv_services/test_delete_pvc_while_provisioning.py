@@ -61,6 +61,8 @@ class TestDeletePvcWhileProvisioning(ManageTest):
         """
         self.proj_obj = project_factory()
 
+    @skipif_ocs_version("<4.9")
+    @skipif_rbd_not_deployed
     def test_delete_rbd_pvc_while_thick_provisioning(
         self,
         resource_to_delete,
