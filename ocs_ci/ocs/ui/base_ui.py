@@ -43,7 +43,6 @@ class BaseUI:
     """
 
     def __init__(self, driver):
-
         self.driver = driver
         self.screenshots_folder = os.path.join(
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
@@ -259,10 +258,6 @@ class PageNavigator(BaseUI):
 
     def __init__(self, driver):
         super().__init__(driver)
-        ocp_version = get_ocp_version()
-        self.page_nav = locators[ocp_version]["page"]
-        if Version.coerce(ocp_version) >= Version.coerce("4.8"):
-            self.generic_locators = locators[ocp_version]["generic"]
         self.ocp_version = get_ocp_version()
         self.page_nav = locators[self.ocp_version]["page"]
         if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
