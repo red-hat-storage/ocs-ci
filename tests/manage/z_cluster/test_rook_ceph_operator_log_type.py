@@ -1,6 +1,7 @@
 from datetime import datetime
 import logging
 import re
+import pytest
 
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from ocs_ci.ocs.resources.pod import (
@@ -23,6 +24,7 @@ log = logging.getLogger(__name__)
 @tier2
 @bugzilla("1962821")
 @skipif_ocs_version("<4.8")
+@pytest.mark.polarion_id("OCS-2581")
 class TestRookCephOperatorLogType(ManageTest):
     """
     Test Process:
