@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_cephfs_not_deployed,
     skipif_rbd_not_deployed,
 )
+from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources import pod as pod_helpers

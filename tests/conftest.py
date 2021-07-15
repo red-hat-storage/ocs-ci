@@ -149,6 +149,11 @@ def pytest_collection_modifyitems(session, items):
             )
             skipif_no_kms_marker = item.get_closest_marker("skipif_no_kms")
             skipif_ui_marker = item.get_closest_marker("skipif_ui")
+            skipif_rbd_marker = item.get_closest_marker("skipif_rbd_not_deployed")
+            skipif_cephfs_marker = item.get_closest_marker("skipif_cephfs_not_deployed")
+            skipif_rgw_marker = item.get_closest_marker("skipif_rgw_not_deployed")
+            skipif_mcg_marker = item.get_closest_marker("skipif_mcg_not_deployed")
+            skipif_ceph_marker = item.get_closest_marker("skipif_ceph_not_deployed")
             if skipif_ocp_version_marker:
                 skip_condition = skipif_ocp_version_marker.args
                 # skip_condition will be a tuple
@@ -195,6 +200,37 @@ def pytest_collection_modifyitems(session, items):
                     )
                     items.remove(item)
                     continue
+            if skipif_rbd_marker:
+                log.info(
+                    f"Test: {item} will be skipped due to partial deployment, rbd is not available"
+                )
+                items.remove(item)
+                continue
+            if skipif_cephfs_marker:
+                log.info(
+                    f"Test: {item} will be skipped due to partial deployment, cephfs is not available"
+                )
+                items.remove(item)
+                continue
+            if skipif_rgw_marker:
+                log.info(
+                    f"Test: {item} will be skipped due to partial deployment, rgw is not available"
+                )
+                items.remove(item)
+                continue
+            if skipif_mcg_marker:
+                log.info(
+                    f"Test: {item} will be skipped due to partial deployment, mcg is not available"
+                )
+                items.remove(item)
+                continue
+            if skipif_ceph_marker:
+                log.info(
+                    f"Test: {item} will be skipped due to partial deployment,"
+                    f" ceph cluster is not available"
+                )
+                items.remove(item)
+                continue
 
 
 @pytest.fixture()
@@ -3837,7 +3873,6 @@ def load_cluster_info_file(request):
 
 @pytest.fixture(scope="function")
 def ripsaw(request):
-
     # Create benchmark Operator (formerly ripsaw)
     ripsaw = RipSaw()
 
