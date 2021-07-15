@@ -8,6 +8,10 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     skipif_ibm_cloud,
 )
+from ocs_ci.framework.pytest_customization.marks import (
+   skipif_rbd_not_deployed,
+   skipif_cephfs_not_deployed,
+)
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
 from ocs_ci.utility.retry import retry
@@ -19,6 +23,8 @@ log = logging.getLogger(__name__)
 
 @ignore_leftovers
 @tier4c
+@skipif_rbd_not_deployed
+@skipif_cephfs_not_deployed
 class TestOCSWorkerNodeShutdown(ManageTest):
     """
     Test case validate both the MDS pods rbd and cephfs plugin Provisioner

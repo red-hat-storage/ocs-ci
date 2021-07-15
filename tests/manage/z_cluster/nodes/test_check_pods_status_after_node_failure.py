@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     skipif_ibm_cloud,
 )
+from ocs_ci.framework.pytest_customization.marks import skipif_ceph_not_deployed
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
@@ -73,6 +74,7 @@ def wait_for_change_in_rook_ceph_pods(node_name, timeout=300, sleep=20):
 @ignore_leftovers
 @tier4a
 @pytest.mark.polarion_id("OCS-2552")
+@skipif_ceph_not_deployed
 class TestCheckPodsAfterNodeFailure(ManageTest):
     """
     Test check pods status after a node failure event.
