@@ -26,9 +26,9 @@ from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox
-from ocs_ci.utility.deployment import create_external_secret
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import (
+    exec_cmd,
     get_latest_ds_olm_tag,
     get_next_version_available_for_upgrade,
     get_ocs_version_from_image,
@@ -36,7 +36,10 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
 )
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
-from ocs_ci.ocs.exceptions import TimeoutException
+from ocs_ci.ocs.exceptions import (
+    TimeoutException,
+    ExternalClusterRGWAdminOpsUserException,
+)
 
 
 log = logging.getLogger(__name__)
@@ -473,7 +476,17 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
 
     # For external cluster , create the secrets if upgraded version is >= 4.8
     if config.DEPLOYMENT["external_mode"] and upgrade_version >= "4.8":
-        create_external_secret(ocs_version=upgrade_version, apply=True)
+        access_key = config.EXTERNAL_MODE.get("access_key_rgw-admin-ops-user", "")
+        secret_key = config.EXTERNAL_MODE.get("secret_key_rgw-admin-ops-user", "")
+        if not (access_key and secret_key):
+            raise ExternalClusterRGWAdminOpsUserException(
+                "Access and secret key for rgw-admin-ops-user not found"
+            )
+        cmd = (
+            f'oc create secret generic --type="kubernetes.io/rook"'
+            f' "rgw-admin-ops-user" --from-literal=accessKey={access_key} --from-literal=secretKey={secret_key}'
+        )
+        exec_cmd(cmd)
 
     csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
     pre_upgrade_images = upgrade_ocs.get_pre_upgrade_image(csv_name_pre_upgrade)
