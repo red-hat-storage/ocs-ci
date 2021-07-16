@@ -72,18 +72,17 @@ VAULT_DEFAULT_BACKEND_VERSION = "v1"
 # To be used for adding additional vault connections
 # to csi-kms-connection-details resource
 VAULT_CSI_CONNECTION_CONF = {
-    "1-vault": (
-        "{"
-        '"KMS_PROVIDER":"vaulttokens",'
-        '"KMS_SERVICE_NAME":"vault",'
-        '"VAULT_ADDR":"https://vault.qe.rh-ocs.com:8200",'
-        '"VAULT_BACKEND_PATH":"kv-v2",'
-        '"VAULT_CACERT":"ocs-kms-ca-secret",'
-        '"VAULT_TLS_SERVER_NAME":"",'
-        '"VAULT_NAMESPACE":"",'
-        '"VAULT_TOKEN_NAME":"ocs-kms-token",'
-        '"VAULT_CACERT_FILE":"fullchain.pem",'
-        '"VAULT_CLIENT_CERT_FILE":"cert.pem",'
-        '"VAULT_CLIENT_KEY_FILE":"privkey.pem"}'
-    )
+    "1-vault": {
+        "KMS_PROVIDER": "vaulttokens",
+        "KMS_SERVICE_NAME": "vault",
+        "VAULT_ADDR": "https://vault.qe.rh-ocs.com:8200",
+        "VAULT_BACKEND_PATH": "kv-v2",
+        "VAULT_CACERT": "ocs-kms-ca-secret",
+        "VAULT_TLS_SERVER_NAME": "",
+        "VAULT_NAMESPACE": "",
+        "VAULT_TOKEN_NAME": "ocs-kms-token",
+        "VAULT_CACERT_FILE": "fullchain.pem",
+        "VAULT_CLIENT_CERT_FILE": "cert.pem",
+        "VAULT_CLIENT_KEY_FILE": "privkey.pem",
+    }
 }
