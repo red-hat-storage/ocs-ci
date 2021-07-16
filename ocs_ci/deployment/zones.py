@@ -27,6 +27,21 @@ def are_zone_labels_missing():
     return len(nodes["items"]) == 0
 
 
+def are_zone_labels_present():
+    """
+    Check that there are no nodes without zone labels.
+
+    Returns:
+        Bool: True if all nodes have a zone label, False otherwise.
+    """
+    node_h = OCP(kind="node")
+    nodes_all = node_h.get()
+    nodes_labeled = node_h.get(selector=ZONE_LABEL)
+    node_names = [n["metadata"]["name"] for n in nodes_labeled["items"]]
+    logger.info("nodes with '%s' zone label: %s", ZONE_LABEL, node_names)
+    return len(nodes_labeled["items"]) == len(nodes_all["items"])
+
+
 def assign_dummy_zones(zones, nodes, overwrite=False):
     """
     Assign node labels to given nodes based on given zone lists. Zones
