@@ -1,6 +1,9 @@
 import logging
 import pytest
 
+from semantic_version import Version
+
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier4, tier4a
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
@@ -25,10 +28,15 @@ def test_rgw_unavailable(measure_stop_rgw):
     # get alerts from time when manager deployment was scaled down
     alerts = measure_stop_rgw.get("prometheus_alerts")
     target_label = constants.ALERT_CLUSTEROBJECTSTORESTATE
-    target_msg = (
-        "Cluster Object Store is in unhealthy state for more than 15s. "
-        "Please check Ceph cluster health or RGW connection."
-    )
+    # The alert message is changed since OCS 4.7
+    ocs_version = config.ENV_DATA["ocs_version"]
+    if Version.coerce(ocs_version) < Version.coerce("4.7"):
+        target_msg = (
+            "Cluster Object Store is in unhealthy state for more than 15s. "
+            "Please check Ceph cluster health or RGW connection."
+        )
+    else:
+        target_msg = "Cluster Object Store is in unhealthy state. Please check Ceph cluster health."
     states = ["pending", "firing"]
 
     prometheus.check_alert_list(
