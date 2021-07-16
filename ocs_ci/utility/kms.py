@@ -752,6 +752,40 @@ class Vault(KMS):
 kms_map = {"vault": Vault}
 
 
+def update_csi_kms_vault_connection_details(update_config):
+    """
+    Update the vault connection details in the resource
+    csi-kms-connection-details
+
+    Args:
+         update_config (dict): A dictionary of vault info to be updated
+
+    """
+    # Check if csi-kms-connection-details resource already exists
+    # if not we might need to rise an exception because without
+    # csi-kms-connection details  we can't proceed with update
+    csi_kms_conf = ocp.OCP(
+        resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
+        kind="ConfigMap",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    try:
+        csi_kms_conf.get()
+    except CommandFailed:
+        raise KMSConnectionDetailsError(
+            "CSI kms connection details doesn't exists"
+            "can't continue with update"
+        )
+    logger.info(csi_kms_conf.data)
+    csi_kms_conf.data.update(update_config)
+    resource_data_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="csikmsconndetailsupdate", delete=False
+    )
+    templating.dump_data_to_temp_yaml(csi_kms_conf.data, resource_data_yaml.name)
+    run_cmd(f"oc apply -f {resource_data_yaml.name}", timeout=300)
+
+
 def get_kms_deployment():
     provider = config.ENV_DATA["KMS_PROVIDER"]
     try:

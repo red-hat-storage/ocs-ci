@@ -505,6 +505,7 @@ def create_storage_class(
     provisioner=None,
     rbd_thick_provision=False,
     encrypted=False,
+    encryptionkmsid=None,
 ):
     """
     Create a storage class
@@ -521,6 +522,8 @@ def create_storage_class(
             (eg., 'Delete', 'Retain')
         rbd_thick_provision (bool): True to enable RBD thick provisioning.
             Applicable if interface_type is CephBlockPool
+        encrypted (bool): True to create encrypted SC else False
+        encryptionkmsid (str): ID of the KMS entry from connection details
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -544,7 +547,9 @@ def create_storage_class(
             from ocs_ci.utility.kms import get_encryption_kmsid
 
             sc_data["parameters"]["encrypted"] = "true"
-            sc_data["parameters"]["encryptionKMSID"] = get_encryption_kmsid()
+            sc_data["parameters"]["encryptionKMSID"] = (
+                encryptionkmsid if encryptionkmsid else get_encryption_kmsid()
+            )
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = templating.load_yaml(constants.CSI_CEPHFS_STORAGECLASS_YAML)
         sc_data["parameters"]["csi.storage.k8s.io/node-stage-secret-name"] = secret_name
