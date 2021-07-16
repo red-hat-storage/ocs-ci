@@ -774,11 +774,11 @@ def update_csi_kms_vault_connection_details(update_config):
         csi_kms_conf.get()
     except CommandFailed:
         raise KMSConnectionDetailsError(
-            "CSI kms connection details doesn't exists"
-            "can't continue with update"
+            "CSI kms connection details doesn't exists" "can't continue with update"
         )
-    logger.info(csi_kms_conf.data)
-    csi_kms_conf.data.update(update_config)
+    if csi_kms_conf.data.get("metadata").get("annotations"):
+        csi_kms_conf.data["metadata"].pop("annotations")
+    csi_kms_conf.data["data"].update(update_config)
     resource_data_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="csikmsconndetailsupdate", delete=False
     )
