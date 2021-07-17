@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-
 from ocs_ci.framework.testlib import tier1, skipif_ui
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
 from ocs_ci.framework.testlib import skipif_ocs_version, skipif_ocp_version
@@ -18,12 +17,14 @@ from selenium.webdriver.common.by import By
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.ocs.ui.ui_utils import format_locator
+from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.ocs.ui.views import locators
 
 logger = logging.getLogger(__name__)
 
 
 class TestPvcUserInterface(object):
-
     """
     Test PVC User Interface
 
@@ -124,11 +125,13 @@ class TestPvcUserInterface(object):
         Test create, resize and delete pvc via UI
 
         """
+        # Creating a test project via CLI
         pro_obj = project_factory()
         project_name = pro_obj.namespace
 
         pvc_ui_obj = PvcUI(setup_ui)
 
+        # Creating PVC via UI
         pvc_ui_obj.create_pvc_ui(
             project_name, sc_type, pvc_name, access_mode, pvc_size, vol_mode
         )
@@ -156,17 +159,20 @@ class TestPvcUserInterface(object):
             f"\n actual volume mode:{pvc[0].get_pvc_vol_mode}"
         )
 
+        # Verifying PVC via UI
         logger.info("Verifying PVC Details via UI")
         pvc_ui_obj.verify_pvc_ui(
             pvc_size=pvc_size,
             access_mode=access_mode,
             vol_mode=vol_mode,
             sc_type=sc_type,
+            pvc_name=pvc_name,
+            project_name=project_name,
         )
         logger.info("PVC Details Verified via UI..!!")
 
+        # Creating Pod via CLI
         logger.info("Creating Pod")
-
         if sc_type in (
             constants.DEFAULT_STORAGECLASS_RBD_THICK,
             constants.DEFAULT_STORAGECLASS_RBD,
@@ -184,8 +190,10 @@ class TestPvcUserInterface(object):
         logger.info(f"Waiting for Pod: state= {constants.STATUS_RUNNING}")
         wait_for_resource_state(resource=new_pod, state=constants.STATUS_RUNNING)
 
+        # Deleting Pod
         teardown_factory(new_pod)
 
+        # Expanding the PVC
         logger.info("Pvc Resizing")
         new_size = int(pvc_size) + 1
         pvc_ui_obj.pvc_resize_ui(
@@ -196,17 +204,33 @@ class TestPvcUserInterface(object):
             pvc_size
         ), f"New size of the PVC cannot be less than existing size: new size is {new_size})"
 
+        ocp_version = get_ocp_version()
+        self.pvc_loc = locators[ocp_version]["pvc"]
+
+        # Verifying PVC expansion
         logger.info("Verifying PVC resize")
         expected_capacity = f"{new_size} GiB"
+        text_found = pvc_ui_obj.wait_until_expected_text_is_found(
+            format_locator(self.pvc_loc["new-capacity"], expected_capacity),
+            expected_text=expected_capacity,
+            timeout=300,
+        )
+
         pvc_ui_obj.verify_pvc_resize_ui(expected_capacity=expected_capacity)
+
+        assert (
+            expected_capacity == text_found
+        ), f"Text found: {text_found}, Expected text: {expected_capacity}"
         logger.info(
             "Pvc resize verified..!!"
             f"New Capacity after PVC resize is {expected_capacity}"
         )
 
+        # Checking if the Pod is deleted or not
         new_pod.delete(wait=True)
         new_pod.ocp.wait_for_delete(resource_name=new_pod.name)
 
+        # Deleting the PVC
         logger.info(f"Delete {pvc_name} pvc")
         pvc_ui_obj.delete_pvc_ui(pvc_name, project_name)
 
