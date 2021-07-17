@@ -215,7 +215,7 @@ class BaseUI:
         element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
         element.clear()
 
-    def wait_until_expected_text_is_found(self, locator, expected_text, timeout=300):
+    def wait_until_expected_text_is_found(self, locator, expected_text, timeout=60):
         """
         Method to wait for a expected text to appear on the UI (use of explicit wait type),
         this method is helpful in working with elements which appear on completion of certain action and
@@ -226,9 +226,8 @@ class BaseUI:
             expected_text (str): Text which needs to be searched on UI
             timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
         return:
-            bool: Fetches the actual text and returns True if the expected text and actual text are same,
-                AssertionError otherwise.
-                TimeOutException if the element text is not found during the given time.
+            text_found (str): Fetches and returns the actual text if the web element text is found
+                TimeOutException if the element text is not found in the given timeout.
 
 
         """
@@ -243,11 +242,11 @@ class BaseUI:
                 TimeoutException,
             ],
         )
-        wait.until(ec.visibility_of_element_located((locator[1], locator[0])))
-        text_found = (self.driver.find_element(locator[1], locator[0])).text
-        assert (
-            expected_text == text_found
-        ), f"Text found: {text_found}, Expected text: {expected_text}"
+        if wait.until(
+            ec.text_to_be_present_in_element((locator[1], locator[0]), expected_text)
+        ):
+            text_found = (self.driver.find_element(locator[1], locator[0])).text
+            return text_found
 
 
 class PageNavigator(BaseUI):

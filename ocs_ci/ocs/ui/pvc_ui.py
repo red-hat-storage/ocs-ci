@@ -76,7 +76,9 @@ class PvcUI(PageNavigator):
         logger.info("Create PVC")
         self.do_click(self.pvc_loc["pvc_create"])
 
-    def verify_pvc_ui(self, pvc_size, access_mode, vol_mode, sc_type):
+    def verify_pvc_ui(
+        self, pvc_size, access_mode, vol_mode, sc_type, pvc_name, project_name
+    ):
         """
         Verifying PVC details via UI
 
@@ -85,8 +87,24 @@ class PvcUI(PageNavigator):
             access_mode (str): access mode
             vol_mode (str): volume mode type
             sc_type (str): storage class type
+            pvc_name (str): the name of pvc
+            project_name (str): name of test project
+
 
         """
+        self.navigate_persistentvolumeclaims_page()
+
+        logger.info(f"Search and Select test project {project_name}")
+        self.do_click(self.pvc_loc["pvc_project_selector"])
+        self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
+        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
+
+        logger.info(f"Search for {pvc_name} inside test project {project_name}")
+        self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
+
+        logger.info(f"Go to PVC {pvc_name} Page")
+        self.do_click(self.pvc_loc[pvc_name])
+
         pvc_size_new = f"{pvc_size} GiB"
         self.check_element_text(expected_text=pvc_size_new)
         logger.info(f"Verifying pvc size : {pvc_size_new}")
@@ -163,11 +181,13 @@ class PvcUI(PageNavigator):
         self.wait_until_expected_text_is_found(
             format_locator(self.pvc_loc["expected-capacity"], expected_capacity),
             expected_text=expected_capacity,
+            timeout=300,
         )
 
         self.wait_until_expected_text_is_found(
             format_locator(self.pvc_loc["new-capacity"], expected_capacity),
             expected_text=expected_capacity,
+            timeout=300,
         )
 
     def delete_pvc_ui(self, pvc_name, project_name):
