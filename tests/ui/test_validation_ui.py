@@ -1,6 +1,6 @@
 import logging
 
-from ocs_ci.framework.testlib import tier1, skipif_ui, skipif_ibm_cloud
+from ocs_ci.framework.testlib import tier1, skipif_ui_not_support
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 
 
@@ -13,9 +13,8 @@ class TestUserInterfaceValidation(object):
 
     """
 
-    @skipif_ibm_cloud
     @tier1
-    @skipif_ui("validation")
+    @skipif_ui_not_support("validation")
     def test_validation_ui(self, setup_ui):
         """
         Validate User Interface
