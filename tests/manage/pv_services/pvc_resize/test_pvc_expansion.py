@@ -39,7 +39,6 @@ class TestPvcExpand(ManageTest):
             f"{constants.ACCESS_MODE_RWX}-Block",
         ]
 
-
         if config.COMPONENTS.get("disable_blockpools"):
             self.pvcs_rbd = multi_pvc_factory(
                 interface=constants.CEPHBLOCKPOOL,
