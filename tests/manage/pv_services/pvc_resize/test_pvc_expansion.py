@@ -39,39 +39,47 @@ class TestPvcExpand(ManageTest):
             f"{constants.ACCESS_MODE_RWX}-Block",
         ]
 
-        self.pvcs_cephfs = multi_pvc_factory(
-            interface=constants.CEPHFILESYSTEM,
-            size=10,
-            access_modes=access_modes_cephfs,
-            status=constants.STATUS_BOUND,
-            num_of_pvc=2,
-            timeout=90,
-        )
 
-        self.pvcs_rbd = multi_pvc_factory(
-            interface=constants.CEPHBLOCKPOOL,
-            project=self.pvcs_cephfs[0].project,
-            size=10,
-            access_modes=access_modes_rbd,
-            status=constants.STATUS_BOUND,
-            num_of_pvc=3,
-            timeout=90,
-        )
+        if config.COMPONENTS.get("disable_blockpools"):
+            self.pvcs_rbd = multi_pvc_factory(
+                interface=constants.CEPHBLOCKPOOL,
+                project=self.pvcs_cephfs[0].project,
+                size=10,
+                access_modes=access_modes_rbd,
+                status=constants.STATUS_BOUND,
+                num_of_pvc=3,
+                timeout=90,
+            )
+            pods_rbd = helpers.create_pods(
+                self.pvcs_rbd,
+                pod_factory,
+                constants.CEPHBLOCKPOOL,
+                2,
+                constants.STATUS_RUNNING,
+            )
+        else:
+            self.pvcs_rbd = []
+            pods_rbd = []
 
-        pods_cephfs = helpers.create_pods(
-            self.pvcs_cephfs,
-            pod_factory,
-            constants.CEPHFILESYSTEM,
-            2,
-            constants.STATUS_RUNNING,
-        )
-        pods_rbd = helpers.create_pods(
-            self.pvcs_rbd,
-            pod_factory,
-            constants.CEPHBLOCKPOOL,
-            2,
-            constants.STATUS_RUNNING,
-        )
+        if config.COMPONENTS.get("disable_cephfs"):
+            self.pvcs_cephfs = multi_pvc_factory(
+                interface=constants.CEPHFILESYSTEM,
+                size=10,
+                access_modes=access_modes_cephfs,
+                status=constants.STATUS_BOUND,
+                num_of_pvc=2,
+                timeout=90,
+            )
+            pods_cephfs = helpers.create_pods(
+                self.pvcs_cephfs,
+                pod_factory,
+                constants.CEPHFILESYSTEM,
+                2,
+                constants.STATUS_RUNNING,
+            )
+        else:
+            self.pvcs_cephfs = []
+            pods_cephfs = []
 
         self.pods = pods_cephfs + pods_rbd
 
