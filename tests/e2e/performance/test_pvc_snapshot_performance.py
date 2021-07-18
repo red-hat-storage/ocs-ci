@@ -24,6 +24,7 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     performance,
 )
+from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
 
@@ -404,6 +405,7 @@ class TestPvcSnapshotPerformance(E2ETest):
         sf_data["spec"]["workload"]["args"]["files"] = files
         sf_data["spec"]["workload"]["args"]["threads"] = threads
         sf_data["spec"]["workload"]["args"]["storageclass"] = storageclass
+        del sf_data["spec"]["elasticsearch"]
 
         """
         Calculating the size of the volume that need to be test, it should
@@ -499,6 +501,8 @@ class TestPvcSnapshotPerformance(E2ETest):
             log.info("Deleting the snapshots")
             if self.snap_obj.delete(wait=True):
                 log.info("The snapshot deleted successfully")
+            log.info("Verify (and wait if needed) that ceph health is OK")
+            ceph_health_check(tries=45, delay=60)
 
         log.info(f"Full test report for {interface}:")
         log.info(
