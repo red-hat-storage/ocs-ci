@@ -790,6 +790,21 @@ def setup_ceph_toolbox(force_setup=False):
             rook_toolbox = OCS(**toolbox)
             rook_toolbox.create()
             return
+
+        if ocsci_config.ENV_DATA.get("is_multus_enabled"):
+            toolbox = templating.load_yaml(constants.TOOL_POD_YAML)
+            toolbox["spec"]["template"]["spec"]["containers"][0][
+                "image"
+            ] = get_rook_version()
+            toolbox["metadata"]["name"] += "-multus"
+            toolbox["spec"]["template"]["metadata"]["annotations"] = {
+                "k8s.v1.cni.cncf.io/networks": "openshift-storage/ocs-public"
+            }
+            toolbox["spec"]["template"]["spec"]["hostNetwork"] = False
+            rook_toolbox = OCS(**toolbox)
+            rook_toolbox.create()
+            return
+
         # for OCS >= 4.3 there is new toolbox pod deployment done here:
         # https://github.com/openshift/ocs-operator/pull/207/
         log.info("starting ceph toolbox pod")
