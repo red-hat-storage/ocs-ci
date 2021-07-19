@@ -39,7 +39,7 @@ class TestPvcExpand(ManageTest):
             f"{constants.ACCESS_MODE_RWX}-Block",
         ]
 
-        if config.COMPONENTS.get("disable_blockpools"):
+        if not config.COMPONENTS.get("disable_blockpools"):
             self.pvcs_rbd = multi_pvc_factory(
                 interface=constants.CEPHBLOCKPOOL,
                 project=self.pvcs_cephfs[0].project,
@@ -60,7 +60,7 @@ class TestPvcExpand(ManageTest):
             self.pvcs_rbd = []
             pods_rbd = []
 
-        if config.COMPONENTS.get("disable_cephfs"):
+        if not config.COMPONENTS.get("disable_cephfs"):
             self.pvcs_cephfs = multi_pvc_factory(
                 interface=constants.CEPHFILESYSTEM,
                 size=10,
