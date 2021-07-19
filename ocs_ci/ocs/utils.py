@@ -791,6 +791,9 @@ def setup_ceph_toolbox(force_setup=False):
             rook_toolbox.create()
             return
 
+        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1982721
+        # TODO: Remove workaround when bug 1982721 is fixed
+        # https://github.com/red-hat-storage/ocs-ci/issues/4585
         if ocsci_config.ENV_DATA.get("is_multus_enabled"):
             toolbox = templating.load_yaml(constants.TOOL_POD_YAML)
             toolbox["spec"]["template"]["spec"]["containers"][0][
