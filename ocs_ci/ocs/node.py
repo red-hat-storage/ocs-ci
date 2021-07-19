@@ -1480,7 +1480,7 @@ def wait_for_new_osd_node(old_osd_node_names, timeout=600):
     )
     try:
         for current_osd_node_names in TimeoutSampler(
-            timeout=60, sleep=3, func=get_osd_running_nodes
+            timeout=timeout, sleep=30, func=get_osd_running_nodes
         ):
             new_osd_node_names = [
                 node_name
