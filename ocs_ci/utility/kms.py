@@ -774,7 +774,7 @@ def update_csi_kms_vault_connection_details(update_config):
         csi_kms_conf.get()
     except CommandFailed:
         raise KMSConnectionDetailsError(
-            "CSI kms connection details doesn't exists can't continue with update"
+            "CSI KMS connection details don't exist, can't continue with update"
         )
     if csi_kms_conf.data.get("metadata").get("annotations"):
         csi_kms_conf.data["metadata"].pop("annotations")

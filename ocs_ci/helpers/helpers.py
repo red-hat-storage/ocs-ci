@@ -505,7 +505,7 @@ def create_storage_class(
     provisioner=None,
     rbd_thick_provision=False,
     encrypted=False,
-    encryptionkmsid=None,
+    encryption_kms_id=None,
 ):
     """
     Create a storage class
@@ -523,7 +523,7 @@ def create_storage_class(
         rbd_thick_provision (bool): True to enable RBD thick provisioning.
             Applicable if interface_type is CephBlockPool
         encrypted (bool): True to create encrypted SC else False
-        encryptionkmsid (str): ID of the KMS entry from connection details
+        encryption_kms_id (str): ID of the KMS entry from connection details
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -548,7 +548,7 @@ def create_storage_class(
 
             sc_data["parameters"]["encrypted"] = "true"
             sc_data["parameters"]["encryptionKMSID"] = (
-                encryptionkmsid if encryptionkmsid else get_encryption_kmsid()
+                encryption_kms_id if encryption_kms_id else get_encryption_kmsid()
             )
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = templating.load_yaml(constants.CSI_CEPHFS_STORAGECLASS_YAML)
