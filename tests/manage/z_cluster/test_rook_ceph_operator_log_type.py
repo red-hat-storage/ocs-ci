@@ -3,7 +3,7 @@ import logging
 import re
 import pytest
 
-from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.resources.pod import (
     get_pod_logs,
     get_osd_pods,
@@ -50,7 +50,6 @@ class TestRookCephOperatorLogType(ManageTest):
         logging.info(
             "Perform Ceph and cluster health checks after silencing the ceph warnings"
         )
-        ceph_health_check()
 
     def test_rook_ceph_operator_log_type(self):
         """
