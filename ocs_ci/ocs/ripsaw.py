@@ -42,9 +42,13 @@ class RipSaw(object):
         """
         self.args = kwargs
         self.repo = self.args.get(
-            "repo", "https://github.com/cloud-bulldozer/benchmark-operator"
+            # "repo", "https://github.com/cloud-bulldozer/benchmark-operator"
+            # This is emergency fix since the all benchmark-operator has changed
+            "repo",
+            "https://github.com/Avilir/ripsaw",
         )
-        self.branch = self.args.get("branch", "master")
+        self.branch = self.args.get("branch", "V0.1")
+        # self.branch = self.args.get("branch", "master")
         self.namespace = self.args.get("namespace", RIPSAW_NAMESPACE)
         self.pgsql_is_setup = False
         self.ocp = OCP()
