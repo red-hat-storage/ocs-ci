@@ -1697,3 +1697,81 @@ def get_mon_running_nodes():
 
     """
     return [pod.get_pod_node(mon_pod).name for mon_pod in pod.get_mon_pods()]
+
+
+def get_nodes_where_ocs_pods_running():
+    """
+    Get the node names where rook ceph pods are running
+
+    Returns:
+        set: node names where rook ceph pods are running
+
+    """
+    pods_openshift_storage = pod.get_all_pods(
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
+    ocs_nodes = list()
+    for pod_obj in pods_openshift_storage:
+        if (
+            "rook-ceph" in pod_obj.name
+            and "rook-ceph-operator" not in pod_obj.name
+            and "rook-ceph-tool" not in pod_obj.name
+        ):
+            try:
+                ocs_nodes.append(pod_obj.data["spec"]["nodeName"])
+            except Exception as e:
+                log.info(e)
+    return set(ocs_nodes)
+
+
+def get_node_rack(node_type=constants.WORKER_MACHINE):
+    """
+    Get node rack
+
+    Args:
+        node_type (str): The node type (e.g. worker, master)
+
+    Returns:
+        dict: {"Node name":"Rack name"}
+
+    """
+    worker_node_objs = get_nodes(node_type=node_type)
+    node_rack_dict = dict()
+    for worker_node_obj in worker_node_objs:
+        node_rack_dict[worker_node_obj.name] = worker_node_obj.data["metadata"][
+            "labels"
+        ]["topology.rook.io/rack"]
+    log.info(f"node-rack dictinary {node_rack_dict}")
+    return node_rack_dict
+
+
+def get_node_names(node_type=constants.WORKER_MACHINE):
+    """
+    Get node names
+
+    Args:
+        node_type (str): The node type (e.g. worker, master)
+
+    Returns:
+        list: The node names
+
+    """
+    log.info(f"Get {node_type} Node names")
+    node_objs = get_nodes(node_type=node_type)
+    return [node_obj.name for node_obj in node_objs]
+
+
+def get_crashcollector_nodes():
+    """
+    Get the nodes names where crashcollector pods are running
+
+    return:
+        set: node names where crashcollector pods are running
+
+    """
+    crashcollector_pod_objs = pod.get_crashcollector_pods()
+    crashcollector_ls = [
+        crashcollector_pod_obj.data["spec"]["nodeName"]
+        for crashcollector_pod_obj in crashcollector_pod_objs
+    ]
+    return set(crashcollector_ls)

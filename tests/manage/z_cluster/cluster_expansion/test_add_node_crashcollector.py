@@ -1,17 +1,15 @@
 import logging
 
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.framework import config
-from ocs_ci.ocs.constants import OPENSHIFT_STORAGE_NAMESPACE
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import (
-    get_pod_node,
-    get_mgr_pods,
-    get_pod_obj,
-    get_all_pods,
+from ocs_ci.ocs.node import (
+    get_nodes_where_ocs_pods_running,
+    get_node_rack,
+    get_node_names,
+    get_crashcollector_nodes,
 )
 from ocs_ci.framework.testlib import (
     tier2,
@@ -50,14 +48,22 @@ class TestAddNodeCrashCollector(ManageTest):
         Add node with OCS label and verify crashcollector created on new node
 
         """
-        logger.info("Get Node name where mgr pod running")
-        mgr_pod_nodes = [get_pod_node(pod) for pod in get_mgr_pods()]
-        mgr_pod_node_names = [node.name for node in mgr_pod_nodes]
+        old_nodes = get_node_names()
+        old_node_rack = get_node_rack()
 
         logger.info("Add one worker node with OCS label")
         add_nodes(ocs_nodes=True, node_count=1)
 
-        drain_nodes(mgr_pod_node_names)
+        logger.info("Get new worker node name")
+        new_node = list(set(get_node_names()) - set(old_nodes))
+
+        node_rack_dic = get_node_rack()
+        new_node_rack = node_rack_dic[new_node]
+        for node, rack in old_node_rack.items():
+            if rack == new_node_rack:
+                drain_node = node
+
+        drain_nodes([drain_node])
 
         logging.info("Wait for 3 mon pods to be on running state")
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
@@ -71,15 +77,15 @@ class TestAddNodeCrashCollector(ManageTest):
             "Verify rook-ceph-crashcollector pod running on worker node"
             " where rook-ceph pods are running."
         )
-        assert sorted(self.get_crashcollector_nodes()) == sorted(
-            self.get_nodes_where_ocs_pods()
+        assert sorted(get_crashcollector_nodes()) == sorted(
+            get_nodes_where_ocs_pods_running()
         ), (
             f"The crashcollector pod does not exist on "
-            f"{self.get_nodes_where_ocs_pods() - self.get_crashcollector_nodes()} "
+            f"{get_nodes_where_ocs_pods_running() - get_crashcollector_nodes()} "
             f"even though rook-ceph pods are running on this node"
         )
 
-        schedule_nodes(mgr_pod_node_names)
+        schedule_nodes([drain_node])
 
         logging.info("Wait for 3 osd pods to be on running state")
         assert pod.wait_for_resource(
@@ -92,51 +98,10 @@ class TestAddNodeCrashCollector(ManageTest):
         logger.info(
             "Verify rook-ceph-crashcollector pod running on worker node where rook-ceph pods are running."
         )
-        assert sorted(self.get_crashcollector_nodes()) == sorted(
-            self.get_nodes_where_ocs_pods()
+        assert sorted(get_crashcollector_nodes()) == sorted(
+            get_nodes_where_ocs_pods_running()
         ), (
             f"The crashcollector pod does not exist on "
-            f"{self.get_nodes_where_ocs_pods() - self.get_crashcollector_nodes()} "
+            f"{get_nodes_where_ocs_pods_running() - get_crashcollector_nodes()} "
             f"even though rook-ceph pods are running on this node"
         )
-
-    def get_crashcollector_nodes(self):
-        """
-        Get the nodes names where crashcollector pods are running
-
-        return:
-            set: cluster names where crashcollector pods are running
-
-        """
-        crashcollector_pod_names = get_pod_name_by_pattern(pattern="crashcollector")
-        crashcollector_pod_objs = [
-            get_pod_obj(crashcollector_pod_name)
-            for crashcollector_pod_name in crashcollector_pod_names
-        ]
-        crashcollector_ls = [
-            crashcollector_pod_obj.data["spec"]["nodeName"]
-            for crashcollector_pod_obj in crashcollector_pod_objs
-        ]
-        return set(crashcollector_ls)
-
-    def get_nodes_where_ocs_pods(self):
-        """
-        Get the node names where rook ceph pods are running
-
-        return:
-            set: node names where rook ceph pods are running
-
-        """
-        pods_openshift_storage = get_all_pods(namespace=OPENSHIFT_STORAGE_NAMESPACE)
-        ocs_nodes = list()
-        for pod in pods_openshift_storage:
-            if (
-                "rook-ceph" in pod.name
-                and "rook-ceph-operator" not in pod.name
-                and "rook-ceph-tool" not in pod.name
-            ):
-                try:
-                    ocs_nodes.append(pod.data["spec"]["nodeName"])
-                except Exception as e:
-                    logger.info(e)
-        return set(ocs_nodes)
