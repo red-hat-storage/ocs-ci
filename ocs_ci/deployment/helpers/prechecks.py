@@ -9,7 +9,7 @@ This module is mainly intended for on-prem platforms.
 import logging
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.constants import MIN_STORAGE_FOR_DATASTORE
+from ocs_ci.ocs.constants import MIN_STORAGE_FOR_DATASTORE, VSPHERE_PLATFORM
 from ocs_ci.ocs.exceptions import StorageNotSufficientException, TemplateNotFound
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 
@@ -112,6 +112,10 @@ class VSpherePreChecks(PreChecks):
             TemplateNotFound: If template not found in Datacenter.
 
         """
+        # skip the template check for vSphere IPI
+        if self.platform == VSPHERE_PLATFORM and self.deployment_type == "ipi":
+            return
+
         is_template_found = False
         logger.info(f"Checking for template existence in datacenter {self.datacenter}")
         for vm in self.dc.vmFolder.childEntity:
