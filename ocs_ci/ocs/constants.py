@@ -1053,10 +1053,6 @@ NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
 RGW_SERVICE_INTERNAL_MODE = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
 RGW_SERVICE_EXTERNAL_MODE = "rook-ceph-rgw-ocs-external-storagecluster-cephobjectstore"
 
-# Routes
-RGW_DEFAULT_ROUTE_NAME = "ocs-storagecluster-cephobjectstore"
-RGW_EXTERNAL_ROUTE_NAME = "ocs-external-storagecluster-cephobjectstore"
-
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
