@@ -2,12 +2,12 @@ from datetime import datetime
 import logging
 import re
 import pytest
+import random
 
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.resources.pod import (
     get_pod_logs,
     get_osd_pods,
-    get_ceph_tools_pod,
     get_operator_pods,
 )
 from ocs_ci.helpers.helpers import set_configmap_log_level_rook_ceph_operator
@@ -45,11 +45,6 @@ class TestRookCephOperatorLogType(ManageTest):
 
     def teardown(self):
         set_configmap_log_level_rook_ceph_operator(value="INFO")
-        tool_pod = get_ceph_tools_pod()
-        tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all", format=None)
-        logging.info(
-            "Perform Ceph and cluster health checks after silencing the ceph warnings"
-        )
 
     def test_rook_ceph_operator_log_type(self):
         """
@@ -61,8 +56,9 @@ class TestRookCephOperatorLogType(ManageTest):
         last_log_date_time_obj = self.get_last_log_time_date()
 
         log.info("Respin OSD pod")
-        osd_pods_objs = get_osd_pods()
-        osd_pods_objs[0].delete()
+        osd_pod_objs = get_osd_pods()
+        osd_pod_obj = random.choice(osd_pod_objs)
+        osd_pod_obj.delete()
 
         sample = TimeoutSampler(
             timeout=400,
@@ -78,8 +74,9 @@ class TestRookCephOperatorLogType(ManageTest):
         last_log_date_time_obj = self.get_last_log_time_date()
 
         log.info("Respin OSD pod")
-        osd_pods_objs = get_osd_pods()
-        osd_pods_objs[0].delete()
+        osd_pod_objs = get_osd_pods()
+        osd_pod_obj = random.choice(osd_pod_objs)
+        osd_pod_obj.delete()
 
         sample = TimeoutSampler(
             timeout=400,
@@ -124,8 +121,9 @@ class TestRookCephOperatorLogType(ManageTest):
 
         """
         log.info("Respin OSD pod")
-        osd_pods_objs = get_osd_pods()
-        osd_pods_objs[0].delete()
+        osd_pod_objs = get_osd_pods()
+        osd_pod_obj = random.choice(osd_pod_objs)
+        osd_pod_obj.delete()
         new_logs = list()
         rook_ceph_operator_logs = self.get_logs_rook_ceph_operator()
         for line in rook_ceph_operator_logs.splitlines():
