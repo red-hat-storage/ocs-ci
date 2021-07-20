@@ -45,13 +45,14 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedFeatureError,
 )
 from ocs_ci.deployment.zones import create_dummy_zone_labels
-from ocs_ci.deployment.netsplit import setup_netsplit
+from ocs_ci.deployment.netsplit import get_netsplit_mc
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods,
 )
 from ocs_ci.ocs.node import verify_all_nodes_created
+from ocs_ci.ocs.resources import machineconfig
 from ocs_ci.ocs.resources import packagemanifest
 from ocs_ci.ocs.resources.catalog_source import (
     CatalogSource,
@@ -263,12 +264,18 @@ class Deployment(object):
             log_cli_level (str): log level for installer (default: DEBUG)
         """
         self.do_deploy_ocp(log_cli_level)
-        # Deployment of network split scripts via machineconfig API happens
-        # after OCP deployment.
+
+        # TODO: use temporary directory for all temporary files of
+        # ocs-deployment, not just here in this particular case
+        tmp_path = Path(tempfile.mkdtemp(prefix="ocs-ci-deployment-"))
+        logger.debug("created temporary directory %s", tmp_path)
+
+        # Deployment of network split and or extra latency scripts via
+        # machineconfig API happens after OCP but before OCS deployment.
         if (
             config.DEPLOYMENT.get("network_split_setup")
-            and not config.ENV_DATA["skip_ocp_deployment"]
-        ):
+            or config.DEPLOYMENT.get("network_zone_latency")
+        ) and not config.ENV_DATA["skip_ocp_deployment"]:
             master_zones = config.ENV_DATA.get("master_availability_zones")
             worker_zones = config.ENV_DATA.get("worker_availability_zones")
             # special external zone, which is directly defined by ip addr list,
@@ -283,12 +290,17 @@ class Deployment(object):
                 logger.debug("detected arbiter zone: %s", arbiter_zone)
             else:
                 arbiter_zone = None
-            # TODO: use temporary directory for all temporary files of
-            # ocs-deployment, not just here in this particular case
-            tmp_path = Path(tempfile.mkdtemp(prefix="ocs-ci-deployment-"))
-            logger.debug("created temporary directory %s", tmp_path)
-            setup_netsplit(
-                tmp_path, master_zones, worker_zones, x_addr_list, arbiter_zone
+            mc_dict = get_netsplit_mc(
+                tmp_path,
+                master_zones,
+                worker_zones,
+                enable_split=config.DEPLOYMENT.get("network_split_setup"),
+                x_addr_list=x_addr_list,
+                arbiter_zone=arbiter_zone,
+                latency=config.DEPLOYMENT.get("network_zone_latency"),
+            )
+            machineconfig.deploy_machineconfig(
+                tmp_path, "network-split", mc_dict, mcp_num=2
             )
         ocp_version = version.get_semantic_ocp_version_from_config()
         if (
