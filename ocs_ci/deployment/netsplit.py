@@ -8,18 +8,23 @@ import ocpnetsplit.main
 from ocs_ci.deployment.zones import are_zone_labels_present
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 
 
 logger = logging.getLogger(__name__)
 
 
-def setup_netsplit(
-    tmp_path, master_zones, worker_zones, x_addr_list=None, arbiter_zone=None
+def get_netsplit_mc(
+    tmp_path,
+    master_zones,
+    worker_zones,
+    enable_split=True,
+    x_addr_list=None,
+    arbiter_zone=None,
+    latency=None,
 ):
     """
-    Deploy machineconfig with network split scripts and configuration, tailored
-    for the current cluster state.
+    Generate machineconfig with network split scripts and configuration,
+    tailored for the current cluster state.
 
     Args:
         tmp_path(pathlib.Path): Directory where a temporary yaml file will
@@ -28,6 +33,12 @@ def setup_netsplit(
         worker_zones(list[str]): zones where worker nodes are placed
         x_addr_list(list[str]): IP addressess of external services (zone x)
         arbiter_zone(str): name of arbiter zone if arbiter deployment is used
+        latency(int): additional latency in miliseconds, which will be
+               introduced among zones
+
+    Returns:
+        mc (dict with MachineConfig) to deploy via
+            :py:func:`deploy_machineconfig`
 
     Raises:
         UnexpectedDeploymentConfiguration: in case of invalid cluster
@@ -85,37 +96,7 @@ def setup_netsplit(
     zone_config = ocpnetsplit.main.get_zone_config(zone_a, zone_b, zone_c, x_addr_list)
     zone_env = zone_config.get_env_file()
     # get machinecofnig for network split firewall scripts
-    mc = ocpnetsplit.main.get_networksplit_mc_spec(zone_env)
-    # deploy it within openshift-config namespace
-    mc_file = ObjectConfFile("network-split", mc, None, tmp_path)
-    mc_file.create(namespace="openshift-config")
-    # now let's make sure the MCO (machine config operator) noticed just
-    # deployed network-split machine config and started to process it
-    logger.info(
-        "waiting for both machineconfigpools to be updating "
-        "as a result of deployment of network-split machineconfig"
+    mc = ocpnetsplit.main.get_networksplit_mc_spec(
+        zone_env, split=enable_split, latency=latency
     )
-    mcp_h.wait_for_resource(
-        resource_count=2,
-        condition="True",
-        column="UPDATING",
-        sleep=5,
-        timeout=120,
-    )
-    # and now wait for MachineConfigPools to be updated and ready
-    logger.info("waiting for both machineconfigpools to be updated and ready")
-    mcp_h.wait_for_resource(
-        resource_count=2,
-        condition="True",
-        column="UPDATED",
-        sleep=60,
-        timeout=1800,
-    )
-    # also check that no pools are degraded
-    mcp_h.wait_for_resource(
-        resource_count=2,
-        condition="False",
-        column="DEGRADED",
-        sleep=10,
-        timeout=120,
-    )
+    return mc
