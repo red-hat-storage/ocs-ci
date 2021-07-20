@@ -32,14 +32,13 @@ class TestAddNodeCrashCollector(ManageTest):
     Add node with OCS label and verify crashcollector created on new node
 
     Test Procedure:
-    1.Get worker node where mgr pod running [worker-node-x]
-    2.Add worker node with OCS label
-    3.Drain worker-node-x
-    4.Wait for 3 mon pods to be on running state
-    5.Verify ceph-crashcollector pod running on worker node where "rook-ceph" pods are running.
-    6.Schedule worker-node-x
-    7.Wait for 3 osd pods to be on running state
-    8.Verify ceph-crashcollector pod running on worker node where "rook-ceph" pods are running.
+    1.Add worker node with OCS label
+    2.Drain the 'old' node located in the same zone/rack of ​​the new node
+    3.Wait for 3 mon pods to be on running state
+    4.Verify ceph-crashcollector pod running on worker node where "rook-ceph" pods are running.
+    5.Schedule worker-node-x
+    6.Wait for 3 osd pods to be on running state
+    7.Verify ceph-crashcollector pod running on worker node where "rook-ceph" pods are running.
 
     """
 
