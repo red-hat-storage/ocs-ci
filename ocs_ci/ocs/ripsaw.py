@@ -89,7 +89,8 @@ class RipSaw(object):
         Args:
             crd (str): Name of file to apply
         """
-        self.dir += "/benchmark-operator"
+        # self.dir += "/benchmark-operator"
+        self.dir += "/ripsaw"
         run("oc apply -f deploy", shell=True, check=True, cwd=self.dir)
         run(f"oc apply -f {crd}", shell=True, check=True, cwd=self.dir)
         run(f"oc apply -f {self.operator}", shell=True, check=True, cwd=self.dir)
