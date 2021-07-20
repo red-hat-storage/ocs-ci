@@ -1,4 +1,3 @@
-import re
 import logging
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
@@ -157,27 +156,36 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
         machine_name (str): Name of the machine you want to delete
 
     Returns:
-        bool: True in case of success, False otherwise
+        machine (str): New machine name
+
+    Raise:
+        ResourceNotFoundError: Incase machine creation failed
+
     """
     machine_type = get_machine_type(machine_name)
+    machine_list = get_machines(machine_type=machine_type)
+    initial_machine_names = [machine.name for machine in machine_list]
     delete_machine(machine_name)
-    machines = get_machines(machine_type=machine_type)
-    for machine in machines:
-        if re.match(machine.name[:-6], machine_name):
-            log.info(f"New spinned machine name is {machine.name}")
-            new_machine = machine
-            break
+    new_machine_list = get_machines(machine_type=machine_type)
+    new_machine = [
+        machine
+        for machine in new_machine_list
+        if machine.name not in initial_machine_names
+    ]
     if new_machine is not None:
-        log.info(f"Checking the state of new spinned machine {new_machine.name}")
-        state = (
-            new_machine.get()
-            .get("metadata")
-            .get("annotations")
-            .get("machine.openshift.io/instance-state")
+        new_machine_name = new_machine[0].name
+        log.info(f"Checking the state of new spinned machine {new_machine_name}")
+        new_machine[0].ocp.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_name=new_machine_name,
+            column="PHASE",
+            timeout=600,
+            sleep=30,
         )
-        log.info(f"{new_machine.name} is in {state} state")
-        return state == constants.STATUS_RUNNING.islower()
-    return False
+        log.info(f"{new_machine_name} is in {constants.STATUS_RUNNING} state")
+        return new_machine_name
+    else:
+        raise ResourceNotFoundError("New Machine resource not found")
 
 
 def create_custom_machineset(
