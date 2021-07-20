@@ -457,9 +457,10 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     """
 
     ceph_cluster = CephCluster()
+    original_ocs_version = config.ENV_DATA.get("ocs_version")
     upgrade_ocs = OCSUpgrade(
         namespace=config.ENV_DATA["cluster_namespace"],
-        version_before_upgrade=config.ENV_DATA.get("ocs_version"),
+        version_before_upgrade=original_ocs_version,
         ocs_registry_image=config.UPGRADE.get("upgrade_ocs_registry_image"),
         upgrade_in_current_source=config.UPGRADE.get(
             "upgrade_in_current_source", False
@@ -475,7 +476,11 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     )
 
     # For external cluster , create the secrets if upgraded version is >= 4.8
-    if config.DEPLOYMENT["external_mode"] and upgrade_version >= "4.8":
+    if (
+        config.DEPLOYMENT["external_mode"]
+        and original_ocs_version == "4.7"
+        and upgrade_version == "4.8"
+    ):
         access_key = config.EXTERNAL_MODE.get("access_key_rgw-admin-ops-user", "")
         secret_key = config.EXTERNAL_MODE.get("secret_key_rgw-admin-ops-user", "")
         if not (access_key and secret_key):
