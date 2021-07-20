@@ -1783,18 +1783,6 @@ def rgw_endpoint(request):
     oc = ocp.OCP(kind=constants.SERVICE, namespace=config.ENV_DATA["cluster_namespace"])
     rgw_service = oc.get(selector=constants.RGW_APP_LABEL)["items"]
     if rgw_service:
-        if float(config.ENV_DATA["ocs_version"]) > 4.6:
-            log.info("RGW service should be exposed by default. Skipping exposure.")
-            if config.DEPLOYMENT["external_mode"]:
-                rgw_route = constants.RGW_EXTERNAL_ROUTE_NAME
-            else:
-                rgw_route = constants.RGW_DEFAULT_ROUTE_NAME
-            default_rgw_route = ocp.OCP(
-                kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
-            ).get(resource_name=rgw_route)
-            default_rgw_host = default_rgw_route["status"]["ingress"][0]["host"]
-            return f"http://{default_rgw_host}"
-
         if config.DEPLOYMENT["external_mode"]:
             rgw_service = constants.RGW_SERVICE_EXTERNAL_MODE
         else:
