@@ -2439,7 +2439,7 @@ class IBMCloud(NodesBase):
 
         """
         logger.info("Getting all workers status")
-        out = run_cmd(cmd)
+        out = run_ibmcloud_cmd(cmd)
         worker_nodes = json.loads(out)
         for worker_node in worker_nodes:
             node_id = worker_node["id"]
