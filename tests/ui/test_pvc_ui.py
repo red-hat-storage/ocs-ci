@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.framework.testlib import tier1, skipif_ui
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
-from ocs_ci.framework.testlib import skipif_ocs_version, skipif_ocp_version
+from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.framework.testlib import (
@@ -17,7 +17,6 @@ from selenium.webdriver.common.by import By
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
-from ocs_ci.ocs.ui.ui_utils import format_locator
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.ui.views import locators
 
@@ -49,50 +48,50 @@ class TestPvcUserInterface(object):
     @pytest.mark.parametrize(
         argnames=["sc_type", "pvc_name", "access_mode", "pvc_size", "vol_mode"],
         argvalues=[
-            pytest.param(
-                "ocs-storagecluster-cephfs",
-                "test-pvc-fs",
-                "ReadWriteMany",
-                "2",
-                "Filesystem",
-            ),
-            pytest.param(
-                "ocs-storagecluster-ceph-rbd",
-                "test-pvc-rbd",
-                "ReadWriteMany",
-                "3",
-                "Block",
-            ),
-            pytest.param(
-                "ocs-storagecluster-ceph-rbd-thick",
-                "test-pvc-rbd-thick",
-                "ReadWriteMany",
-                "4",
-                "Block",
-                marks=[skipif_ocp_version("<4.9")],
-            ),
-            pytest.param(
-                "ocs-storagecluster-cephfs",
-                "test-pvc-fs",
-                "ReadWriteOnce",
-                "10",
-                "Filesystem",
-            ),
-            pytest.param(
-                "ocs-storagecluster-ceph-rbd",
-                "test-pvc-rbd",
-                "ReadWriteOnce",
-                "11",
-                "Block",
-            ),
-            pytest.param(
-                "ocs-storagecluster-ceph-rbd-thick",
-                "test-pvc-rbd-thick",
-                "ReadWriteOnce",
-                "12",
-                "Block",
-                marks=[skipif_ocp_version("<4.9")],
-            ),
+            # pytest.param(
+            #     "ocs-storagecluster-cephfs",
+            #     "test-pvc-fs",
+            #     "ReadWriteMany",
+            #     "2",
+            #     "Filesystem",
+            # ),
+            # pytest.param(
+            #     "ocs-storagecluster-ceph-rbd",
+            #     "test-pvc-rbd",
+            #     "ReadWriteMany",
+            #     "3",
+            #     "Block",
+            # ),
+            # pytest.param(
+            #     "ocs-storagecluster-ceph-rbd-thick",
+            #     "test-pvc-rbd-thick",
+            #     "ReadWriteMany",
+            #     "4",
+            #     "Block",
+            #     marks=[skipif_ocp_version("<4.9")],
+            # ),
+            # pytest.param(
+            #     "ocs-storagecluster-cephfs",
+            #     "test-pvc-fs",
+            #     "ReadWriteOnce",
+            #     "10",
+            #     "Filesystem",
+            # ),
+            # pytest.param(
+            #     "ocs-storagecluster-ceph-rbd",
+            #     "test-pvc-rbd",
+            #     "ReadWriteOnce",
+            #     "11",
+            #     "Block",
+            # ),
+            # pytest.param(
+            #     "ocs-storagecluster-ceph-rbd-thick",
+            #     "test-pvc-rbd-thick",
+            #     "ReadWriteOnce",
+            #     "12",
+            #     "Block",
+            #     marks=[skipif_ocp_version("<4.9")],
+            # ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd",
                 "test-pvc-rbd",
@@ -100,14 +99,14 @@ class TestPvcUserInterface(object):
                 "13",
                 "Filesystem",
             ),
-            pytest.param(
-                "ocs-storagecluster-ceph-rbd-thick",
-                "test-pvc-rbd-thick",
-                "ReadWriteOnce",
-                "4",
-                "Filesystem",
-                marks=[skipif_ocp_version("<4.9")],
-            ),
+            # pytest.param(
+            #     "ocs-storagecluster-ceph-rbd-thick",
+            #     "test-pvc-rbd-thick",
+            #     "ReadWriteOnce",
+            #     "4",
+            #     "Filesystem",
+            #     marks=[skipif_ocp_version("<4.9")],
+            # ),
         ],
     )
     def test_create_resize_delete_pvc(
@@ -190,7 +189,7 @@ class TestPvcUserInterface(object):
         logger.info(f"Waiting for Pod: state= {constants.STATUS_RUNNING}")
         wait_for_resource_state(resource=new_pod, state=constants.STATUS_RUNNING)
 
-        # Deleting Pod
+        # Calling the Teardown Factory Method to make sure Pod is deleted
         teardown_factory(new_pod)
 
         # Expanding the PVC
@@ -210,17 +209,11 @@ class TestPvcUserInterface(object):
         # Verifying PVC expansion
         logger.info("Verifying PVC resize")
         expected_capacity = f"{new_size} GiB"
-        text_found = pvc_ui_obj.wait_until_expected_text_is_found(
-            format_locator(self.pvc_loc["new-capacity"], expected_capacity),
-            expected_text=expected_capacity,
-            timeout=300,
+        pvc_resize = pvc_ui_obj.verify_pvc_resize_ui(
+            expected_capacity=expected_capacity
         )
 
-        pvc_ui_obj.verify_pvc_resize_ui(expected_capacity=expected_capacity)
-
-        assert (
-            expected_capacity == text_found
-        ), f"Text found: {text_found}, Expected text: {expected_capacity}"
+        assert pvc_resize, "PVC resize failed"
         logger.info(
             "Pvc resize verified..!!"
             f"New Capacity after PVC resize is {expected_capacity}"

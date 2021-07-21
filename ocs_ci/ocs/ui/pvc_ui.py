@@ -105,6 +105,11 @@ class PvcUI(PageNavigator):
         logger.info(f"Go to PVC {pvc_name} Page")
         self.do_click(self.pvc_loc[pvc_name])
 
+        logger.info("Checking status of Pvc")
+        self.wait_until_expected_text_is_found(
+            locator=self.pvc_loc["pvc-status"], expected_text="Bound"
+        )
+
         pvc_size_new = f"{pvc_size} GiB"
         self.check_element_text(expected_text=pvc_size_new)
         logger.info(f"Verifying pvc size : {pvc_size_new}")
@@ -149,11 +154,6 @@ class PvcUI(PageNavigator):
         logger.info(f"Go to PVC {pvc_name} Page")
         self.do_click(self.pvc_loc[pvc_name])
 
-        logger.info("Checking status of Pvc")
-        self.wait_until_expected_text_is_found(
-            locator=self.pvc_loc["pvc-status"], expected_text="Bound"
-        )
-
         logger.info("Click on Actions")
         self.do_click(self.pvc_loc["pvc_actions"])
 
@@ -178,17 +178,28 @@ class PvcUI(PageNavigator):
 
         """
 
-        self.wait_until_expected_text_is_found(
+        is_expected_capacity = self.wait_until_expected_text_is_found(
             format_locator(self.pvc_loc["expected-capacity"], expected_capacity),
             expected_text=expected_capacity,
             timeout=300,
         )
 
-        self.wait_until_expected_text_is_found(
+        is_capacity = self.wait_until_expected_text_is_found(
             format_locator(self.pvc_loc["new-capacity"], expected_capacity),
             expected_text=expected_capacity,
             timeout=300,
         )
+
+        if not is_expected_capacity:
+            logger.error("Expected capacity text is not found")
+
+        if not is_capacity:
+            logger.error("Capacity text is not found")
+
+        if is_expected_capacity and is_capacity:
+            return True
+        else:
+            return False
 
     def delete_pvc_ui(self, pvc_name, project_name):
         """
