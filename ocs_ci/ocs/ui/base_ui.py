@@ -51,7 +51,7 @@ class BaseUI:
         elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
             self.storage_class = "gp2_sc"
 
-    def do_click(self, locator, timeout=30, enable_screenshot=True):
+    def do_click(self, locator, timeout=30, enable_screenshot=False):
         """
         Click on Button/link on OpenShift Console
 
