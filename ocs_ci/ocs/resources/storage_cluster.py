@@ -3,6 +3,7 @@ StorageCluster related functionalities
 """
 import logging
 import tempfile
+import yaml
 
 from jsonschema import validate
 from semantic_version import Version
@@ -16,7 +17,17 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
-from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
+from ocs_ci.ocs.resources.pod import (
+    get_pods_having_label,
+    get_osd_pods,
+    get_mon_pods,
+    get_mds_pods,
+    get_mgr_pods,
+    get_rgw_pods,
+    get_plugin_pods,
+    get_cephfsplugin_provisioner_pods,
+    get_rbdfsplugin_provisioner_pods,
+)
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.node import get_osds_per_node, add_new_disk_for_vsphere
@@ -450,6 +461,9 @@ def ocs_install_verification(
         log.info("Verifying images in storage cluster")
         verify_sc_images(storage_cluster)
 
+    if config.ENV_DATA.get("is_multus_enabled"):
+        verify_multus_network()
+
 
 def osd_encryption_verification():
     """
@@ -754,3 +768,70 @@ def get_osd_replica_count():
         sc.get().get("items")[0].get("spec").get("storageDeviceSets")[0].get("replica")
     )
     return replica_count
+
+
+def verify_multus_network():
+    """
+    Verify Multus network(s) created successfully and are present on relevant pods.
+    """
+    with open(constants.MULTUS_YAML, mode="r") as f:
+        multus_public_data = yaml.load(f)
+        multus_namespace = multus_public_data["metadata"]["namespace"]
+        multus_name = multus_public_data["metadata"]["name"]
+        multus_public_network_name = f"{multus_namespace}/{multus_name}"
+
+    log.info("Verifying multus NetworkAttachmentDefinitions")
+    ocp.OCP(
+        resource_name=multus_public_network_name,
+        kind="network-attachment-definitions",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    # TODO: also check if private NAD exists
+
+    log.info("Verifying multus public network exists on ceph pods")
+    osd_pods = get_osd_pods()
+    for _pod in osd_pods:
+        assert (
+            _pod.data["metadata"]["annotations"]["k8s.v1.cni.cncf.io/networks"]
+            == multus_public_network_name
+        )
+    # TODO: also check private network if it exists on OSD pods
+
+    mon_pods = get_mon_pods()
+    mds_pods = get_mds_pods()
+    mgr_pods = get_mgr_pods()
+    rgw_pods = get_rgw_pods()
+    ceph_pods = [*mon_pods, *mds_pods, *mgr_pods, *rgw_pods]
+    for _pod in ceph_pods:
+        assert (
+            _pod.data["metadata"]["annotations"]["k8s.v1.cni.cncf.io/networks"]
+            == multus_public_network_name
+        )
+
+    log.info("Verifying multus public network exists on CSI pods")
+    csi_pods = []
+    interfaces = [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]
+    for interface in interfaces:
+        plugin_pods = get_plugin_pods(interface)
+        csi_pods += plugin_pods
+
+    cephfs_provisioner_pods = get_cephfsplugin_provisioner_pods()
+    rbd_provisioner_pods = get_rbdfsplugin_provisioner_pods()
+
+    csi_pods += cephfs_provisioner_pods
+    csi_pods += rbd_provisioner_pods
+
+    for _pod in csi_pods:
+        assert (
+            _pod.data["metadata"]["annotations"]["k8s.v1.cni.cncf.io/networks"]
+            == multus_public_network_name
+        )
+
+    log.info("Verifying StorageCluster multus network data")
+    sc = get_storage_cluster()
+    sc_data = sc.get().get("items")[0]
+    network_data = sc_data["spec"]["network"]
+    assert network_data["provider"] == "multus"
+    selectors = network_data["selectors"]
+    assert selectors["public"] == f"{defaults.ROOK_CLUSTER_NAMESPACE}/ocs-public"
+    # TODO: also check private network if it exists
