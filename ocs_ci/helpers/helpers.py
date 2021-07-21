@@ -3119,3 +3119,16 @@ def set_configmap_log_level_rook_ceph_operator(value):
         resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
     )
     configmap_obj.patch(params=params, format_type="json")
+
+
+def get_logs_rook_ceph_operator():
+    """
+    Get logs from a rook_ceph_operator pod
+
+    Returns:
+        str: Output from 'oc get logs rook-ceph-operator command
+
+    """
+    logger.info("Get logs from rook_ceph_operator pod")
+    rook_ceph_operator_objs = pod.get_operator_pods()
+    return pod.get_pod_logs(pod_name=rook_ceph_operator_objs[0].name)

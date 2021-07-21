@@ -5,12 +5,11 @@ import pytest
 import random
 
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.ocs.resources.pod import (
-    get_pod_logs,
-    get_osd_pods,
-    get_operator_pods,
+from ocs_ci.ocs.resources.pod import get_osd_pods
+from ocs_ci.helpers.helpers import (
+    set_configmap_log_level_rook_ceph_operator,
+    get_logs_rook_ceph_operator,
 )
-from ocs_ci.helpers.helpers import set_configmap_log_level_rook_ceph_operator
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -91,18 +90,6 @@ class TestRookCephOperatorLogType(ManageTest):
                 "OSD INFO Log does not exist or DEBUG Log exist on INFO mode"
             )
 
-    def get_logs_rook_ceph_operator(self):
-        """
-        Get logs from a rook_ceph_operator pod
-
-        Returns:
-            str: Output from 'oc get logs rook-ceph-operator command
-
-        """
-        log.info("Get logs from rook_ceph_operator pod")
-        rook_ceph_operator_objs = get_operator_pods()
-        return get_pod_logs(pod_name=rook_ceph_operator_objs[0].name)
-
     def check_osd_log_exist_on_rook_ceph_operator_pod(
         self, last_log_date_time_obj, expected_strings=(), unexpected_strings=()
     ):
@@ -125,7 +112,7 @@ class TestRookCephOperatorLogType(ManageTest):
         osd_pod_obj = random.choice(osd_pod_objs)
         osd_pod_obj.delete()
         new_logs = list()
-        rook_ceph_operator_logs = self.get_logs_rook_ceph_operator()
+        rook_ceph_operator_logs = get_logs_rook_ceph_operator()
         for line in rook_ceph_operator_logs.splitlines():
             if re.search(r"\d{4}-\d{2}-\d{2}", line):
                 log_date_time_obj = datetime.strptime(line[:26], "%Y-%m-%d %H:%M:%S.%f")
@@ -160,7 +147,7 @@ class TestRookCephOperatorLogType(ManageTest):
 
         """
         log.info("Get last log time")
-        rook_ceph_operator_logs = self.get_logs_rook_ceph_operator()
+        rook_ceph_operator_logs = get_logs_rook_ceph_operator()
         for line in rook_ceph_operator_logs.splitlines():
             if re.search(r"\d{4}-\d{2}-\d{2}", line):
                 last_log_date_time_obj = datetime.strptime(
