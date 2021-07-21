@@ -10,6 +10,7 @@ import json
 import shlex
 import tempfile
 import subprocess
+from subprocess import CalledProcessError
 import base64
 
 from ocs_ci.framework import config
@@ -176,6 +177,26 @@ class Vault(KMS):
         if proc.returncode:
             if "Namespace not found" in err:
                 return False
+        return True
+
+    def vault_backend_path_exists(self, backend_path):
+        """
+        Check if vault backend path already exists
+
+        Args:
+            backend_path (str): name of the vault backend path
+
+        Returns:
+            bool: True if exists else False
+
+        """
+        cmd = f"vault secrets list | grep {backend_path}"
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+        )
+        out, err = proc.communicate()
+        if proc.returncode:
+            return False
         return True
 
     def create_namespace(self, vault_namespace):
@@ -381,17 +402,21 @@ class Vault(KMS):
                     f"{constants.VAULT_DEFAULT_PATH_PREFIX}-{self.cluster_id}-"
                     f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
                 )
-        cmd = (
-            f"vault secrets enable -path={self.vault_backend_path} "
-            f"kv-{self.vault_backend_version}"
-        )
-        out = subprocess.check_output(shlex.split(cmd))
-        if "Success" in out.decode():
-            logger.info(f"vault path {self.vault_backend_path} created")
+        if self.vault_backend_path_exists(self.vault_backend_path):
+            logger.info(f"vault path {self.vault_backend_path} already exists")
+
         else:
-            raise VaultOperationError(
-                f"Failed to create path f{self.vault_backend_path}"
+            cmd = (
+                f"vault secrets enable -path={self.vault_backend_path} "
+                f"kv-{self.vault_backend_version}"
             )
+            out = subprocess.check_output(shlex.split(cmd))
+            if "Success" in out.decode():
+                logger.info(f"vault path {self.vault_backend_path} created")
+            else:
+                raise VaultOperationError(
+                    f"Failed to create path f{self.vault_backend_path}"
+                )
         if not backend_path:
             self.vault_create_policy()
 
@@ -827,19 +852,41 @@ def vault_kv_list(path):
     return json_out
 
 
+def is_key_present_in_path(key, path):
+    """
+    Check if key is present in the backend Path
+
+    Args:
+        key (str): Name of the key
+        path (str): Vault backend path name
+
+    Returns:
+        (bool): True if key is present in the backend path
+    """
+    try:
+        kvlist = vault_kv_list(path=path)
+    except CalledProcessError:
+        return False
+    if any(key in k for k in kvlist):
+        return True
+    else:
+        return False
+
+
 def get_encryption_kmsid():
     """
     Get encryption kmsid from 'csi-kms-connection-details'
     configmap resource
 
     Returns:
-        kmsid (str): A string id of the kms used
+        kmsid (list): A list of KMS IDs available
 
     Raises:
         KMSConnectionDetailsError: if csi kms connection detail doesn't exist
 
     """
 
+    kmsid = []
     csi_kms_conf = ocp.OCP(
         resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
         kind="ConfigMap",
@@ -852,4 +899,61 @@ def get_encryption_kmsid():
 
     for key in csi_kms_conf.get().get("data").keys():
         if constants.VAULT_KMS_PROVIDER in key:
-            return key
+            kmsid.append(key)
+    return kmsid
+
+
+def remove_kmsid(kmsid):
+    """
+    This function will remove all the details for the given kmsid from the csi-kms-connection-details configmap
+
+    Args:
+        kmsid (str) : kmsid to be remove_kmsid
+
+    Raises:
+        KMSResourceCleaneupError: If the kmsid entry is not deleted
+
+    """
+    ocp_obj = ocp.OCP()
+    patch = f'\'[{{"op": "remove", "path": "/data/{kmsid}"}}]\''
+    patch_cmd = (
+        f"patch -n {constants.OPENSHIFT_STORAGE_NAMESPACE} cm"
+        f"{constants.VAULT_KMS_CSI_CONNECTION_DETAILS} --type json -p " + patch
+    )
+    ocp_obj.exec_oc_cmd(command=patch_cmd)
+    kmsid_list = get_encryption_kmsid()
+    if any(kmsid in k for k in kmsid_list):
+        raise KMSResourceCleaneupError(f"KMS ID {kmsid} deletion failed")
+    logger.info(f"KMS ID {kmsid} deleted")
+
+
+def update_csi_kms_vault_connection_details(update_config):
+    """
+    Update the vault connection details in the resource
+    csi-kms-connection-details
+    Args:
+         update_config (dict): A dictionary of vault info to be updated
+    """
+    # Check if csi-kms-connection-details resource already exists
+    # if not we might need to rise an exception because without
+    # csi-kms-connection details  we can't proceed with update
+    csi_kms_conf = ocp.OCP(
+        resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
+        kind="ConfigMap",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    try:
+        csi_kms_conf.get()
+    except CommandFailed:
+        raise KMSConnectionDetailsError(
+            "CSI kms connection details doesn't exists" "can't continue with update"
+        )
+    if csi_kms_conf.data.get("metadata").get("annotations"):
+        csi_kms_conf.data["metadata"].pop("annotations")
+    csi_kms_conf.data["data"].update(update_config)
+    resource_data_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="csikmsconndetailsupdate", delete=False
+    )
+    templating.dump_data_to_temp_yaml(csi_kms_conf.data, resource_data_yaml.name)
+    run_cmd(f"oc apply -f {resource_data_yaml.name}", timeout=300)
