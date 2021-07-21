@@ -3272,3 +3272,16 @@ def clear_crash_warning_and_osd_removal_leftovers():
         ct_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
     else:
         logger.info("There are no daemon crash warnings")
+
+
+def get_noobaa_url():
+    """
+    Get the URL of noobaa console
+
+    Returns:
+        str: url of noobaa console
+
+    """
+    ocp_obj = OCP(kind="routes", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    route_obj = ocp_obj.get(resource_name="noobaa-mgmt")
+    return route_obj["spec"]["host"]
