@@ -1,4 +1,3 @@
-import json
 import logging
 import pytest
 
@@ -52,6 +51,7 @@ class TestRbdPvEncryption(ManageTest):
         self.vault.vault_create_policy(policy_name=self.vault_resource_name)
 
         ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+
         # If csi-kms-connection-details exists, edit the configmap to add new vault config
         try:
             ocp_obj.get_resource(
@@ -65,10 +65,10 @@ class TestRbdPvEncryption(ManageTest):
             vdict[self.new_kmsid] = vdict.pop(old_key)
             vdict[self.new_kmsid]["VAULT_BACKEND_PATH"] = self.vault_resource_name
             vdict[self.new_kmsid]["VAULT_NAMESPACE"] = self.vault_resource_name
-            vdict[self.new_kmsid] = json.dumps(vdict[self.new_kmsid])
             kms.update_csi_kms_vault_connection_details(vdict)
 
         except CommandFailed:
+            self.new_kmsid = "1-vault"
             self.vault.create_vault_csi_kms_connection_details()
 
     @pytest.fixture(autouse=True)
@@ -100,7 +100,7 @@ class TestRbdPvEncryption(ManageTest):
         pod_factory,
     ):
         """
-        Test to verify RBD PV encryption with KV-v1 secret engine
+        Test to verify creation and deletion of encrypted RBD PVC
 
         """
         # Create a project
@@ -110,7 +110,7 @@ class TestRbdPvEncryption(ManageTest):
         sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             encrypted=True,
-            encryptionkmsid=self.new_kmsid,
+            encryption_kms_id=self.new_kmsid,
         )
 
         # Create ceph-csi-kms-token in the tenant namespace
@@ -139,6 +139,7 @@ class TestRbdPvEncryption(ManageTest):
             pv_obj = pvc_obj.backed_pv_obj
             vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
             vol_handles.append(vol_handle)
+
             # Check if encryption key is created in Vault
             if kms.is_key_present_in_path(
                 key=vol_handle, path=self.vault.vault_backend_path

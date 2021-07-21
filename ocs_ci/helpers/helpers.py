@@ -549,7 +549,7 @@ def create_storage_class(
 
             sc_data["parameters"]["encrypted"] = "true"
             sc_data["parameters"]["encryptionKMSID"] = (
-                encryption_kms_id if encryption_kms_id else get_encryption_kmsid()
+                encryption_kms_id if encryption_kms_id else get_encryption_kmsid()[0]
             )
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = templating.load_yaml(constants.CSI_CEPHFS_STORAGECLASS_YAML)

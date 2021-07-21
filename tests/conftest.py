@@ -423,7 +423,7 @@ def storageclass_factory_fixture(
         pool_name=None,
         rbd_thick_provision=False,
         encrypted=False,
-        encryptionkmsid=None,
+        encryption_kms_id=None,
     ):
         """
         Args:
@@ -475,7 +475,7 @@ def storageclass_factory_fixture(
                 reclaim_policy=reclaim_policy,
                 rbd_thick_provision=rbd_thick_provision,
                 encrypted=encrypted,
-                encryptionkmsid=encryptionkmsid,
+                encryption_kms_id=encryption_kms_id,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret

@@ -917,7 +917,7 @@ def remove_kmsid(kmsid):
     ocp_obj = ocp.OCP()
     patch = f'\'[{{"op": "remove", "path": "/data/{kmsid}"}}]\''
     patch_cmd = (
-        f"patch -n {constants.OPENSHIFT_STORAGE_NAMESPACE} cm"
+        f"patch -n {constants.OPENSHIFT_STORAGE_NAMESPACE} cm "
         f"{constants.VAULT_KMS_CSI_CONNECTION_DETAILS} --type json -p " + patch
     )
     ocp_obj.exec_oc_cmd(command=patch_cmd)
@@ -925,35 +925,3 @@ def remove_kmsid(kmsid):
     if any(kmsid in k for k in kmsid_list):
         raise KMSResourceCleaneupError(f"KMS ID {kmsid} deletion failed")
     logger.info(f"KMS ID {kmsid} deleted")
-
-
-def update_csi_kms_vault_connection_details(update_config):
-    """
-    Update the vault connection details in the resource
-    csi-kms-connection-details
-    Args:
-         update_config (dict): A dictionary of vault info to be updated
-    """
-    # Check if csi-kms-connection-details resource already exists
-    # if not we might need to rise an exception because without
-    # csi-kms-connection details  we can't proceed with update
-    csi_kms_conf = ocp.OCP(
-        resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
-        kind="ConfigMap",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-    )
-
-    try:
-        csi_kms_conf.get()
-    except CommandFailed:
-        raise KMSConnectionDetailsError(
-            "CSI kms connection details doesn't exists" "can't continue with update"
-        )
-    if csi_kms_conf.data.get("metadata").get("annotations"):
-        csi_kms_conf.data["metadata"].pop("annotations")
-    csi_kms_conf.data["data"].update(update_config)
-    resource_data_yaml = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="csikmsconndetailsupdate", delete=False
-    )
-    templating.dump_data_to_temp_yaml(csi_kms_conf.data, resource_data_yaml.name)
-    run_cmd(f"oc apply -f {resource_data_yaml.name}", timeout=300)
