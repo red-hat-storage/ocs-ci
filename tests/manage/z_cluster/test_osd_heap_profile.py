@@ -74,31 +74,30 @@ class TestOSDHeapProfile(ManageTest):
             if get_osd_pod_id(osd_pod) == osd_id:
                 osd_pod_profile = osd_pod
 
-        log.info(f"Verify osd.{osd_id}.profile log exist on /var/log/ceph/")
+        osd_profile_str = f"osd.{osd_id}.profile"
+        log.info(f"Verify {osd_profile_str} log exist on /var/log/ceph/")
         sample = TimeoutSampler(
             timeout=100,
             sleep=10,
             func=self.verify_output_command_osd_pod,
             command="ls -ltr /var/log/ceph/",
             pod_obj=osd_pod_profile,
-            osd_id=osd_id,
+            str_to_check=osd_profile_str,
         )
         if not sample.wait_for_func_status(result=True):
-            log.error(f"osd.{osd_id}.profile log does not exist on /var/log/ceph")
-            raise ValueError(
-                f"osd.{osd_id}.profile log does not exist on /var/log/ceph"
-            )
+            log.error(f"{osd_profile_str} log does not exist on /var/log/ceph")
+            raise ValueError(f"{osd_profile_str} log does not exist on /var/log/ceph")
 
         log.info(f"osd.{osd_id}.profile log exist on /var/log/ceph")
 
-    def verify_output_command_osd_pod(self, command, pod_obj, osd_id):
+    def verify_output_command_osd_pod(self, command, pod_obj, str_to_check):
         """
         Check the output of the command (from osd pod)
 
         Args:
             command (str): command run on osd pod
             pod_obj (obj): pod object
-            osd_id (str): osd id
+            str_to_check (str): check if the string is contained on output command
 
         Returns:
             bool: True if we find the string in output, False otherwise
@@ -107,7 +106,7 @@ class TestOSDHeapProfile(ManageTest):
         try:
             out = pod_obj.exec_cmd_on_pod(command=command)
             log.info(f"the output of the command {command}: {out}")
-            return True if f"osd.{osd_id}.profile" in out else False
+            return True if str_to_check in out else False
         except CommandFailed as e:
             log.error(e)
             return False
