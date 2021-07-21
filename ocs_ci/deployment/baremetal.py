@@ -707,15 +707,15 @@ def clean_disk():
 
     for worker in workers:
         cmd = """lsblk --all --noheadings --output "KNAME,PKNAME,TYPE,MOUNTPOINT" --json"""
-        out = ocp_obj.exec_oc_debug_cmd(
-            node=worker.name, cmd_list=[cmd]
-        )
+        out = ocp_obj.exec_oc_debug_cmd(node=worker.name, cmd_list=[cmd])
         disk_to_ignore_cleanup_raw = json.loads(str(out))
         disk_to_ignore_cleanup_json = disk_to_ignore_cleanup_raw["blockdevices"]
         for disk_to_ignore_cleanup in disk_to_ignore_cleanup_json:
-            if disk_to_ignore_cleanup['mountpoint'] == "/boot":
-                logger.info(f"Ignorning disk {disk_to_ignore_cleanup['pkname']} for cleanup")
-                selected_disk_to_ignore_cleanup = disk_to_ignore_cleanup['pkname']
+            if disk_to_ignore_cleanup["mountpoint"] == "/boot":
+                logger.info(
+                    f"Ignorning disk {disk_to_ignore_cleanup['pkname']} for cleanup"
+                )
+                selected_disk_to_ignore_cleanup = disk_to_ignore_cleanup["pkname"]
         out = ocp_obj.exec_oc_debug_cmd(
             node=worker.name, cmd_list=["lsblk -nd -e252,7 --output NAME --json"]
         )
@@ -729,7 +729,7 @@ def clean_disk():
             lsblk_output = json.loads(str(out))
             lsblk_devices_to_clean = lsblk_output["blockdevices"]
             for device_to_clean in lsblk_devices_to_clean:
-                if device_to_clean['name'] == str(selected_disk_to_ignore_cleanup):
+                if device_to_clean["name"] == str(selected_disk_to_ignore_cleanup):
                     logger.info(f"Skipping disk cleanup for {device_to_clean['name']}")
                 else:
                     out = ocp_obj.exec_oc_debug_cmd(
