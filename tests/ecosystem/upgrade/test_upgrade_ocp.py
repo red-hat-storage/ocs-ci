@@ -32,12 +32,24 @@ class TestUpgradeOCP(ManageTest):
     """
 
     def load_ocp_version_config_file(self, ocp_upgrade_version):
-        version_before_upgrade = parse_version(config.DEPLOYMENT.get("ocp_version"))
+        """
+        Loads config file to the ocs-ci config with upgrade version
+
+        Args:
+            ocp_upgrade_version: (str): version to be upgraded
+
+        """
+
+        short_ocp_upgrade_version = ".".join(ocp_upgrade_version.split(".")[0:2])
+        version_before_upgrade = parse_version(
+            config.DEPLOYMENT.get("installer_version")
+        )
         version_post_upgrade = parse_version(ocp_upgrade_version)
         version_change = version_post_upgrade > version_before_upgrade
         if version_change:
             version_config_file = os.path.join(
-                constants.OCP_VERSION_CONF_DIR, f"ocp-{ocp_upgrade_version}-config.yaml"
+                constants.OCP_VERSION_CONF_DIR,
+                f"ocp-{short_ocp_upgrade_version}-config.yaml",
             )
             logger.debug(f"config file to be loaded: {version_config_file}")
             load_config_file(version_config_file)
