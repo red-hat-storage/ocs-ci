@@ -263,6 +263,17 @@ class BaseUI:
     def do_clear(self, locator, timeout=30):
         """
         Clear the existing text from UI
+        Args:
+            locator (tuple): (GUI element needs to operate on (str), type (By))
+            timeout (int): Looks for a web element until timeout (sec) occurs
+        """
+        wait = WebDriverWait(self.driver, timeout)
+        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        element.clear()
+
+    def do_clear(self, locator, timeout=30):
+        """
+        Clear the existing text from UI
 
         Args:
             locator (tuple): (GUI element needs to operate on (str), type (By))
@@ -655,7 +666,7 @@ def login_ui():
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if headless:
+        if not headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 
