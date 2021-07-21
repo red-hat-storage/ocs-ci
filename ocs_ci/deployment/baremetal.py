@@ -730,7 +730,9 @@ def clean_disk():
             lsblk_devices_to_clean = lsblk_output["blockdevices"]
             for device_to_clean in lsblk_devices_to_clean:
                 if device_to_clean["name"] == str(selected_disk_to_ignore_cleanup):
-                    logger.info(f"Skipping disk cleanup for {device_to_clean['name']} because it's a root disk")
+                    logger.info(
+                        f"Skipping disk cleanup for {device_to_clean['name']} because it's a root disk"
+                    )
                 else:
                     out = ocp_obj.exec_oc_debug_cmd(
                         node=worker.name,
