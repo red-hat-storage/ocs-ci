@@ -716,6 +716,8 @@ def clean_disk():
                     f"Ignorning disk {disk_to_ignore_cleanup['pkname']} for cleanup because it's a root disk "
                 )
                 selected_disk_to_ignore_cleanup = disk_to_ignore_cleanup["pkname"]
+                # Adding break when root disk is found
+                break
         out = ocp_obj.exec_oc_debug_cmd(
             node=worker.name, cmd_list=["lsblk -nd -e252,7 --output NAME --json"]
         )
