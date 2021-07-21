@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.framework.testlib import tier1, skipif_ui
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
-from ocs_ci.framework.testlib import skipif_ocs_version
+from ocs_ci.framework.testlib import skipif_ocs_version, skipif_ocp_version
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.framework.testlib import (
@@ -48,50 +48,50 @@ class TestPvcUserInterface(object):
     @pytest.mark.parametrize(
         argnames=["sc_type", "pvc_name", "access_mode", "pvc_size", "vol_mode"],
         argvalues=[
-            # pytest.param(
-            #     "ocs-storagecluster-cephfs",
-            #     "test-pvc-fs",
-            #     "ReadWriteMany",
-            #     "2",
-            #     "Filesystem",
-            # ),
-            # pytest.param(
-            #     "ocs-storagecluster-ceph-rbd",
-            #     "test-pvc-rbd",
-            #     "ReadWriteMany",
-            #     "3",
-            #     "Block",
-            # ),
-            # pytest.param(
-            #     "ocs-storagecluster-ceph-rbd-thick",
-            #     "test-pvc-rbd-thick",
-            #     "ReadWriteMany",
-            #     "4",
-            #     "Block",
-            #     marks=[skipif_ocp_version("<4.9")],
-            # ),
-            # pytest.param(
-            #     "ocs-storagecluster-cephfs",
-            #     "test-pvc-fs",
-            #     "ReadWriteOnce",
-            #     "10",
-            #     "Filesystem",
-            # ),
-            # pytest.param(
-            #     "ocs-storagecluster-ceph-rbd",
-            #     "test-pvc-rbd",
-            #     "ReadWriteOnce",
-            #     "11",
-            #     "Block",
-            # ),
-            # pytest.param(
-            #     "ocs-storagecluster-ceph-rbd-thick",
-            #     "test-pvc-rbd-thick",
-            #     "ReadWriteOnce",
-            #     "12",
-            #     "Block",
-            #     marks=[skipif_ocp_version("<4.9")],
-            # ),
+            pytest.param(
+                "ocs-storagecluster-cephfs",
+                "test-pvc-fs",
+                "ReadWriteMany",
+                "2",
+                "Filesystem",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd",
+                "test-pvc-rbd",
+                "ReadWriteMany",
+                "3",
+                "Block",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd-thick",
+                "test-pvc-rbd-thick",
+                "ReadWriteMany",
+                "4",
+                "Block",
+                marks=[skipif_ocp_version("<4.9")],
+            ),
+            pytest.param(
+                "ocs-storagecluster-cephfs",
+                "test-pvc-fs",
+                "ReadWriteOnce",
+                "10",
+                "Filesystem",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd",
+                "test-pvc-rbd",
+                "ReadWriteOnce",
+                "11",
+                "Block",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd-thick",
+                "test-pvc-rbd-thick",
+                "ReadWriteOnce",
+                "12",
+                "Block",
+                marks=[skipif_ocp_version("<4.9")],
+            ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd",
                 "test-pvc-rbd",
@@ -99,14 +99,14 @@ class TestPvcUserInterface(object):
                 "13",
                 "Filesystem",
             ),
-            # pytest.param(
-            #     "ocs-storagecluster-ceph-rbd-thick",
-            #     "test-pvc-rbd-thick",
-            #     "ReadWriteOnce",
-            #     "4",
-            #     "Filesystem",
-            #     marks=[skipif_ocp_version("<4.9")],
-            # ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd-thick",
+                "test-pvc-rbd-thick",
+                "ReadWriteOnce",
+                "4",
+                "Filesystem",
+                marks=[skipif_ocp_version("<4.9")],
+            ),
         ],
     )
     def test_create_resize_delete_pvc(
