@@ -226,8 +226,7 @@ class BaseUI:
             expected_text (str): Text which needs to be searched on UI
             timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
         return:
-            text_found (str): Fetches and returns the actual text if the web element text is found
-                TimeOutException if the element text is not found in the given timeout.
+            bool: Returns True if the expected element text is found, False otherwise
 
 
         """
@@ -242,11 +241,19 @@ class BaseUI:
                 TimeoutException,
             ],
         )
-        if wait.until(
-            ec.text_to_be_present_in_element((locator[1], locator[0]), expected_text)
-        ):
-            text_found = (self.driver.find_element(locator[1], locator[0])).text
-            return text_found
+        try:
+            wait.until(
+                ec.text_to_be_present_in_element(
+                    (locator[1], locator[0]), expected_text
+                )
+            )
+            return True
+        except TimeoutException:
+            self.take_screenshot()
+            logger.error(
+                f"Locator {locator[1]} {locator[0]} did not find text {expected_text}"
+            )
+            return False
 
 
 class PageNavigator(BaseUI):
