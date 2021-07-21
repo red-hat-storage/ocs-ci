@@ -1700,7 +1700,7 @@ def check_ceph_health_after_add_capacity(
         additional_ceph_health_tries = int(config.RUN.get("io_load") * 1.3)
         ceph_health_tries += additional_ceph_health_tries
 
-        additional_ceph_rebalance_timeout = int(config.RUN.get("io_load") * 40)
+        additional_ceph_rebalance_timeout = int(config.RUN.get("io_load") * 80)
         ceph_rebalance_timeout += additional_ceph_rebalance_timeout
 
     ceph_health_check(
