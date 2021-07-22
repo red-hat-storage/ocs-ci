@@ -9,4 +9,4 @@ DEPLOYMENT:
   # https://docs.openshift.com/container-platform/4.7/post_installation_configuration/machine-configuration-tasks.html#machine-config-overview-post-install-machine-configuration-tasks
   ignition_version: "3.2.0"
 ENV_DATA:
-  vm_template: "rhcos-48.83.202103221318-0-vmware.x86_64"
+  vm_template: "rhcos-48.84.202106091622-0-vmware.x86_64"
