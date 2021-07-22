@@ -317,6 +317,33 @@ pvc_4_8 = {
     "search_pvc": ("input[placeholder='Search by name...']", By.CSS_SELECTOR),
 }
 
+storage_class = {
+    "create-sc": (
+        '#yaml-create',
+        By.CSS_SELECTOR,
+    ),
+    "sc-name": (
+        "#storage-class-name",
+        By.CSS_SELECTOR,
+    ),
+    "sc-description": ("#storage-class-description", By.CSS_SELECTOR),
+    "reclaim-policy": ("#storage-class-reclaim-policy", By.CSS_SELECTOR),
+    "reclaim-policy-delete": ("//button[@id='Delete-link']", By.XPATH),
+    "provisioner": ("#storage-class-provisioner", By.CSS_SELECTOR),
+    "rbd-provisioner": ("//a[normalize-space()='openshift-storage.rbd.csi.ceph.com']", By.XPATH),
+    "storage-pool": ("#pool-dropdown-id", By.CSS_SELECTOR),
+    "ceph-block-pool": ("//div[@class='pf-c-dropdown__menu-item-main']", By.XPATH),
+    "encryption": ("#storage-class-encryption", By.CSS_SELECTOR),
+    "connections-details": (".pf-c-button.pf-m-link[data-test='edit-kms-link']", By.CSS_SELECTOR),
+    "service-name": ("#kms-service-name", By.CSS_SELECTOR),
+    "kms-address": ("#kms-address", By.CSS_SELECTOR),
+    "kms-port": ("#kms-address-port", By.CSS_SELECTOR),
+    "save-btn": (".pf-c-button.pf-m-secondary[data-test='save-action']", By.CSS_SELECTOR),
+    "pvc-expansion-check": ("input[class='create-storage-class-form__checkbox']", By.CSS_SELECTOR),
+    "create": ("#save-changes", By.CSS_SELECTOR),
+}
+
+
 page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "overview_page": ("Overview", By.LINK_TEXT),
@@ -495,6 +522,7 @@ locators = {
         "mcg_stores": mcg_stores,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8},
         "validation": {**validation, **validation_4_8},
+        "storage_class": storage_class
         "add_capacity": add_capacity,
         "block_pool": block_pool,
         "storageclass": storageclass,
