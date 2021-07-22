@@ -8,6 +8,7 @@ import logging
 import tempfile
 import time
 
+from ocs_ci.deployment.disconnected import prune_and_mirror_index_image
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.exceptions import CommandFailed, UnsupportedPlatformError
@@ -44,23 +45,47 @@ def setup_local_storage(storageclass):
     ocs_version = config.ENV_DATA.get("ocs_version")
     ocp_ga_version = get_ocp_ga_version(ocp_version)
     if not ocp_ga_version:
-        optional_operators_data = templating.load_yaml(
-            constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
-        )
-        logger.info(
-            "Creating temp yaml file with optional operators data:\n %s",
-            optional_operators_data,
+        optional_operators_data = list(
+            templating.load_yaml(
+                constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
+            )
         )
         optional_operators_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="optional_operators", delete=False
         )
+        if config.DEPLOYMENT.get("optional_operators_image"):
+            for _dict in optional_operators_data:
+                if _dict.get("kind").lower() == "catalogsource":
+                    _dict["spec"]["image"] = config.DEPLOYMENT.get(
+                        "optional_operators_image"
+                    )
+        if config.DEPLOYMENT.get("disconnected"):
+            # in case of disconnected environment, we have to mirror all the
+            # optional_operators images
+            icsp = None
+            for _dict in optional_operators_data:
+                if _dict.get("kind").lower() == "catalogsource":
+                    index_image = _dict["spec"]["image"]
+                if _dict.get("kind").lower() == "imagecontentsourcepolicy":
+                    icsp = _dict
+            mirrored_index_image = (
+                f"{config.DEPLOYMENT['mirror_registry']}/"
+                f"{index_image.split('/', 1)[-1]}"
+            )
+            prune_and_mirror_index_image(
+                index_image,
+                mirrored_index_image,
+                constants.DISCON_CL_REQUIRED_PACKAGES,
+                icsp,
+            )
+            _dict["spec"]["image"] = mirrored_index_image
         templating.dump_data_to_temp_yaml(
             optional_operators_data, optional_operators_yaml.name
         )
         with open(optional_operators_yaml.name, "r") as f:
             logger.info(f.read())
         logger.info(
-            "Creating optional operators CatalogSource and" " ImageContentSourcePolicy"
+            "Creating optional operators CatalogSource and ImageContentSourcePolicy"
         )
         run_cmd(f"oc create -f {optional_operators_yaml.name}")
         logger.info("Sleeping for 60 sec to start update machineconfigpool status")
@@ -111,10 +136,16 @@ def setup_local_storage(storageclass):
         timeout=600,
     ), "Local storage operator did not reach running phase"
 
-    # Add RDM disk for vSphere platform
+    # Add disks for vSphere/RHV platform
     platform = config.ENV_DATA.get("platform").lower()
     lso_type = config.DEPLOYMENT.get("type")
-    add_disk_for_vsphere_platform()
+
+    if platform == constants.VSPHERE_PLATFORM:
+        add_disk_for_vsphere_platform()
+
+    if platform == constants.RHV_PLATFORM:
+        add_disk_for_rhv_platform()
+
     if (ocp_version >= "4.6") and (ocs_version >= "4.6"):
         # Pull local volume discovery yaml data
         logger.info("Pulling LocalVolumeDiscovery CR data from yaml")
@@ -211,10 +242,14 @@ def setup_local_storage(storageclass):
     storage_class_device_count = 1
     if platform == constants.AWS_PLATFORM and not lso_type == constants.AWS_EBS:
         storage_class_device_count = 2
-    if platform == constants.IBM_POWER_PLATFORM:
+    elif platform == constants.IBM_POWER_PLATFORM:
         numberofstoragedisks = config.ENV_DATA.get("number_of_storage_disks", 1)
         storage_class_device_count = numberofstoragedisks
-    verify_pvs_created(len(worker_names) * storage_class_device_count)
+    elif platform == constants.VSPHERE_PLATFORM:
+        # extra_disks is used in vSphere attach_disk() method
+        storage_class_device_count = config.ENV_DATA.get("extra_disks", 1)
+    expected_pvs = len(worker_names) * storage_class_device_count
+    verify_pvs_created(expected_pvs, storageclass)
 
 
 def get_device_paths(worker_names):
@@ -280,7 +315,7 @@ def _get_disk_by_id(worker):
 
 
 @retry(AssertionError, 120, 10, 1)
-def verify_pvs_created(expected_pvs):
+def verify_pvs_created(expected_pvs, storageclass):
     """
     Verify that PVs were created and are in the Available state
 
@@ -297,20 +332,26 @@ def verify_pvs_created(expected_pvs):
     pv_json = json.loads(out)
     assert pv_json["items"], f"No PVs created but we are expecting {expected_pvs}"
 
-    # check number of PVs created
-    num_pvs = len(pv_json["items"])
-    assert (
-        num_pvs == expected_pvs
-    ), f"{num_pvs} PVs created but we are expecting {expected_pvs}"
-
     # checks the state of PV
+    available_pvs = []
     for pv in pv_json["items"]:
         pv_state = pv["status"]["phase"]
         pv_name = pv["metadata"]["name"]
+        sc_name = pv["spec"]["storageClassName"]
+        if sc_name != storageclass:
+            logger.info(f"Skipping check for {pv_name}")
+            continue
         logger.info(f"{pv_name} is in {pv_state} state")
+        available_pvs.append(pv_name)
         assert (
             pv_state == "Available"
         ), f"{pv_name} not in 'Available' state. Current state is {pv_state}"
+
+    # check number of PVs created
+    num_pvs = len(available_pvs)
+    assert (
+        num_pvs == expected_pvs
+    ), f"{num_pvs} PVs created but we are expecting {expected_pvs}"
 
     logger.debug("PVs, Workers: %s, %s", num_pvs, expected_pvs)
 
@@ -344,3 +385,25 @@ def add_disk_for_vsphere_platform():
             raise NotImplementedError(
                 "LSO Deployment for VMDirectPath is not implemented"
             )
+
+
+def add_disk_for_rhv_platform():
+    """
+    Add disk for RHV platform
+
+    """
+    platform = config.ENV_DATA.get("platform").lower()
+    if platform == constants.RHV_PLATFORM:
+        # Importing here to avoid circular dependency
+        from ocs_ci.deployment.rhv import RHVBASE
+
+        rhv_base = RHVBASE()
+        rhv_base.attach_disks(
+            config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
+            config.ENV_DATA.get("disk_format", constants.RHV_DISK_FORMAT_RAW),
+            config.ENV_DATA.get(
+                "disk_interface", constants.RHV_DISK_INTERFACE_VIRTIO_SCSI
+            ),
+            config.ENV_DATA.get("sparse"),
+            config.ENV_DATA.get("pass_discard"),
+        )

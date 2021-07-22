@@ -2,12 +2,19 @@ import collections
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier1, skipif_external_mode
+from ocs_ci.framework.pytest_customization.marks import bugzilla
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier1,
+    skipif_external_mode,
+    post_ocs_upgrade,
+)
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.cluster import get_pg_balancer_status
+from ocs_ci.ocs.cluster import get_pg_balancer_status, get_mon_config_value
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.cluster import get_mds_cache_memory_limit
 
 
 log = logging.getLogger(__name__)
@@ -16,6 +23,7 @@ log = logging.getLogger(__name__)
 @tier1
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-2231")
+@bugzilla("1908414")
 class TestCephDefaultValuesCheck(ManageTest):
     def test_ceph_default_values_check(self):
         """
@@ -71,6 +79,13 @@ class TestCephDefaultValuesCheck(ManageTest):
         # Check if PG balancer is active
         assert get_pg_balancer_status(), "PG balancer is not active"
 
+        # Validates the default value of mon_max_pg_per_osd, BZ1908414.
+        if float(config.ENV_DATA["ocs_version"]) >= 4.7:
+            max_pg_per_osd = get_mon_config_value(key="mon_max_pg_per_osd")
+            assert (
+                max_pg_per_osd == 600
+            ), f"Failed, actual value:{max_pg_per_osd} not matching expected value: 600"
+
     @tier1
     @pytest.mark.skipif(
         config.DEPLOYMENT.get("ceph_debug"),
@@ -99,4 +114,25 @@ class TestCephDefaultValuesCheck(ManageTest):
             f"is different than the expected. Please inform OCS-QE about this discrepancy. "
             f"The expected values are:\n{stored_values}\n"
             f"The cluster's Ceph values are:{config_data}"
+        )
+
+    @post_ocs_upgrade
+    @skipif_external_mode
+    @bugzilla("1951348")
+    @bugzilla("1944148")
+    @pytest.mark.polarion_id("OCS-2554")
+    def test_check_mds_cache_memory_limit(self):
+        """
+        Testcase to check mds cache memory limit post ocs upgrade
+
+        """
+        mds_cache_memory_limit = get_mds_cache_memory_limit()
+        expected_mds_value = 4294967296
+        expected_mds_value_in_GB = int(expected_mds_value / 1073741274)
+        assert mds_cache_memory_limit == expected_mds_value, (
+            f"mds_cache_memory_limit is not set with a value of {expected_mds_value_in_GB}GB. "
+            f"MDS cache memory limit is set : {mds_cache_memory_limit}B "
+        )
+        log.info(
+            f"mds_cache_memory_limit is set with a value of {expected_mds_value_in_GB}GB"
         )

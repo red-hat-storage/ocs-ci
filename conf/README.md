@@ -83,7 +83,9 @@ anywhere else.
 * `terraform_version` - Version of terraform to download
 * `infra_nodes` - Add infrastructure nodes to the cluster
 * `openshift_install_timeout` - Time (in seconds) to wait before timing out during OCP installation
-* `local_storage` - Deploy OCS with the local storage operator (Default: false)
+* `local_storage` - Deploy OCS with the local storage operator (aka LSO) (Default: false)
+* `local_storage_storagedeviceset_count` - This option allows one to control `spec.storageDeviceSets[0].count` of LSO backed StorageCluster.
+* `optional_operators_image` - If provided, it is used for LSO installation on unreleased OCP version
 * `disconnected` - Set if the cluster is deployed in a disconnected environment
 * `mirror_registry` - Hostname of the mirror registry
 * `mirror_registry_user` - Username for disconnected cluster mirror registry
@@ -100,6 +102,12 @@ anywhere else.
   Cloud deployment.
 * `ceph_dubg` - Deploy OCS with Ceph in debug log level. Available starting OCS 4.7 (Default: false)
 * `ignition_version` - Ignition Version is the version used in MachineConfigs.
+* `dummy_zone_node_labels`: When set to `True`, ocs-ci will try to label all
+  master and worker nodes based on values of `worker_availability_zones` and
+  `master_availability_zones` options, but only if there are no zone labels
+  already defined. Labeling happens during post OCP deployment procedures.
+  If proper labeling is not possible, an exception (which will fail OCP
+  deployment) is raised. The default is False.
 
 
 #### REPORTING
@@ -188,6 +196,7 @@ higher priority).
 * `VAULT_SKIP_VERIFY` - Skip SSL check (Default: false)
 * `VAULT_BACKEND_PATH` - Vault path name used in ocs cluster
 * `VAULT_POLICY` - Vault policy name used in ocs cluster
+* `huge_pages` - True if you would like to enable HUGE PAGES.
 
 #### UPGRADE
 

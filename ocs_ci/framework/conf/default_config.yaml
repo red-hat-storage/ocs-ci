@@ -89,6 +89,12 @@ DEPLOYMENT:
   ceph_debug: False
   # Ignition version used for chrony
   ignition_version: "3.2.0"
+  # Label all nodes with "dummy" zone labels? Assumes zone lables are missing.
+  dummy_zone_node_labels: False
+  # Network split setup. When enabled, network split scripts will be deployed
+  # on all master and worker nodes via MachineConfig during deployment.
+  # See also: https://mbukatov.gitlab.io/ocp-network-split/
+  network_split_setup: False
 
 
 # Section for reporting configuration
@@ -102,6 +108,7 @@ REPORTING:
   us_ds: 'DS'
   ocp_must_gather_image: "quay.io/openshift/origin-must-gather"
   ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
+  ocs_live_must_gather_image: "registry.redhat.io/ocs4/ocs-must-gather-rhel8"
   default_ocs_must_gather_latest_tag: 'latest-4.8'
   gather_on_deploy_failure: true
   collect_logs_on_success_run: False
@@ -181,6 +188,7 @@ AUTH:
 # This section is for FLEXY, any variable in this section will be copied into
 # flexy env file
 FLEXY:
+  LAUNCHER_VARS: {}
 
 # Defines the configuration of external Ceph Cluster
 EXTERNAL_MODE:
@@ -221,4 +229,3 @@ COMPONENTS:
   disable_noobaa: False
   disable_cephfs: False
   disable_blockpools: False
-

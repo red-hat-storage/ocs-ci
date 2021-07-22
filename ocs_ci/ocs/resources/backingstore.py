@@ -59,11 +59,19 @@ class BackingStore:
         log.info(f"Cleaning up backingstore {self.name}")
         # If the backingstore utilizes a PV, save its PV name for deletion verification
         if self.type == "pv":
-            backingstore_pvc = OCP(
-                kind=constants.PVC,
-                selector=f"pool={self.name}",
-                namespace=config.ENV_DATA["cluster_namespace"],
-            ).get()["items"][0]
+            try:
+                backingstore_pvc = OCP(
+                    kind=constants.PVC,
+                    selector=f"pool={self.name}",
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                ).get()["items"][0]
+            except IndexError:
+                log.error(
+                    f"Could not find the OCP object for {self.name}, proceeding without removal"
+                )
+                return True
+            except Exception as e:
+                raise e
             pv_name = backingstore_pvc["spec"]["volumeName"]
 
         if self.method == "oc":

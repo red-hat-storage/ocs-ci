@@ -11,3 +11,4 @@ ENV_DATA:
   VAULT_CLIENT_CERT: "ocs-kms-client-cert"
   VAULT_CLIENT_KEY: "ocs-kms-client-key"
   VAULT_SKIP_VERIFY: false
+  VAULT_BACKEND: "v1"

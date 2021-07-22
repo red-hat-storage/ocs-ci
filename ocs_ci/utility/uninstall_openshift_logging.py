@@ -85,7 +85,7 @@ def uninstall_cluster_logging():
         assert rbd, f"Volume associated with PVC {pvc_name} still exists " f"in backend"
 
     # Checking for used space after PVC deletion
-    used_space_after_deletion = fetch_used_size(cbp_name, exp_val=30)
+    used_space_after_deletion = fetch_used_size(cbp_name)
     logger.info(
         f"Used space after deletion of cluster logging {used_space_after_deletion}"
     )

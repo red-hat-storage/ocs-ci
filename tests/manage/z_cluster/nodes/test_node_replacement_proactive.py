@@ -8,9 +8,9 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
     tier4,
     tier4a,
+    tier4b,
     ManageTest,
     ignore_leftovers,
-    aws_platform_required,
     ipi_deployment_required,
 )
 from ocs_ci.ocs import constants, node
@@ -19,6 +19,8 @@ from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_openshift_dedicated,
     skipif_bmpsi,
+    bugzilla,
+    skipif_external_mode,
 )
 
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -76,8 +78,7 @@ def delete_and_create_osd_node(osd_node_name):
 
     """
     new_node_name = None
-    osd_pods = node.get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())
-    old_osd_ids = [pod.get_osd_pod_id(osd_pod) for osd_pod in osd_pods]
+    old_osd_ids = node.get_node_osd_ids(osd_node_name)
 
     old_osd_node_names = node.get_osd_running_nodes()
 
@@ -87,32 +88,31 @@ def delete_and_create_osd_node(osd_node_name):
         f"'{config.ENV_DATA['deployment_type']}' is not valid, "
         f"results of this test run are all invalid."
     )
-    # TODO: refactor this so that AWS is not a "special" platform
-    if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
-        if config.ENV_DATA["deployment_type"] == "ipi":
-            new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
 
-        elif config.ENV_DATA["deployment_type"] == "upi":
-            new_node_name = node.delete_and_create_osd_node_aws_upi(osd_node_name)
-        else:
-            log.error(msg_invalid)
-            pytest.fail(msg_invalid)
-    elif config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS:
-        if config.ENV_DATA["deployment_type"] == "ipi":
-            new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
-        else:
-            log.error(msg_invalid)
-            pytest.fail(msg_invalid)
-    elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+    if config.ENV_DATA["deployment_type"] == "ipi":
         if is_lso_cluster():
-            new_node_name = node.delete_and_create_osd_node_vsphere_upi_lso(
-                osd_node_name, use_existing_node=False
-            )
-
+            # TODO: Implement functionality for Internal-Attached devices mode
+            # once ocs-ci issue #4545 is resolved
+            # https://github.com/red-hat-storage/ocs-ci/issues/4545
+            pytest.skip("Functionality not implemented for this deployment mode")
         else:
-            new_node_name = node.delete_and_create_osd_node_vsphere_upi(
-                osd_node_name, use_existing_node=False
-            )
+            new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
+
+    elif config.ENV_DATA["deployment_type"] == "upi":
+        if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+            new_node_name = node.delete_and_create_osd_node_aws_upi(osd_node_name)
+        elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            if is_lso_cluster():
+                new_node_name = node.delete_and_create_osd_node_vsphere_upi_lso(
+                    osd_node_name, use_existing_node=False
+                )
+            else:
+                new_node_name = node.delete_and_create_osd_node_vsphere_upi(
+                    osd_node_name, use_existing_node=False
+                )
+    else:
+        log.error(msg_invalid)
+        pytest.fail(msg_invalid)
 
     log.info("Start node replacement verification steps...")
     check_node_replacement_verification_steps(
@@ -123,8 +123,10 @@ def delete_and_create_osd_node(osd_node_name):
 @tier4
 @tier4a
 @ignore_leftovers
-@aws_platform_required
 @ipi_deployment_required
+@skipif_openshift_dedicated
+@skipif_bmpsi
+@skipif_external_mode
 class TestNodeReplacementWithIO(ManageTest):
     """
     Knip-894 Node replacement proactive with IO
@@ -198,6 +200,7 @@ class TestNodeReplacementWithIO(ManageTest):
 @ignore_leftovers
 @skipif_openshift_dedicated
 @skipif_bmpsi
+@skipif_external_mode
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement proactive
@@ -232,3 +235,37 @@ class TestNodeReplacement(ManageTest):
         assert ceph_cluster_obj.wait_for_rebalance(
             timeout=1800
         ), "Data re-balance failed to complete"
+
+
+@tier4b
+@ignore_leftovers
+@bugzilla("1840539")
+@pytest.mark.polarion_id("OCS-2535")
+@skipif_external_mode
+class TestNodeReplacementTwice(ManageTest):
+    """
+    Node replacement twice:
+    node_x -> node_y
+    node_z -> node_x
+
+    After node_replacement, the deleted node (node_x) suppose to be removed from the ceph-osd-tree.
+    The BZ deals with the SECOND node_replacement.
+    The existence of the deleted node (node_x from previous replacement) in the crash-map ends with:
+      1. node is labeled for rack correctly
+      2. ceph side host still on the old rack
+    """
+
+    def test_nodereplacement_twice(self):
+        for i in range(2):
+            # Get random node name for replacement
+            node_name_to_delete = select_osd_node_name()
+            log.info(f"Selected node for replacement: {node_name_to_delete}")
+            delete_and_create_osd_node(node_name_to_delete)
+            ct_pod = pod.get_ceph_tools_pod()
+            tree_output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
+            log.info("ceph osd tree output:")
+            log.info(tree_output)
+
+            assert not (
+                node_name_to_delete in str(tree_output)
+            ), f"Deleted host {node_name_to_delete} still exist in ceph osd tree after node replacement"

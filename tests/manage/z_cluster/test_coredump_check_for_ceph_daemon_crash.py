@@ -1,12 +1,19 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla, skipif_ocs_version
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.framework.pytest_customization.marks import skipif_rhel_os
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier2,
+    bugzilla,
+    skipif_ocs_version,
+    skipif_external_mode,
+)
 from ocs_ci.ocs.resources.pod import (
     get_pod_node,
     get_mon_pods,
@@ -18,9 +25,14 @@ from ocs_ci.ocs.resources.pod import (
 log = logging.getLogger(__name__)
 
 
-@tier1
+@tier2
+@skipif_external_mode
 @skipif_ocs_version("<4.7")
 @bugzilla("1904917")
+@pytest.mark.polarion_id("OCS-2491")
+@pytest.mark.polarion_id("OCS-2492")
+@pytest.mark.polarion_id("OCS-2493")
+@skipif_rhel_os
 class TestKillCephDaemon(ManageTest):
     """
     Verify coredump getting generated for ceph daemon crash
@@ -47,30 +59,42 @@ class TestKillCephDaemon(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    @pytest.mark.parametrize(
-        argnames=["daemon_type"],
-        argvalues=[
-            pytest.param(*["mon"], marks=pytest.mark.polarion_id("OCS-2491")),
-            pytest.param(*["osd"], marks=pytest.mark.polarion_id("OCS-2492")),
-            pytest.param(*["mgr"], marks=pytest.mark.polarion_id("OCS-2493")),
-        ],
-    )
-    def test_coredump_check_for_ceph_daemon_crash(self, daemon_type):
+    def test_coredump_check_for_ceph_daemon_crash(self):
         """
         Verify coredumpctl list updated after killing daemon
 
         """
-        log.info(f"Get Node name where {daemon_type} pod running")
-        if daemon_type == "mon":
-            mon_pod_nodes = [get_pod_node(pod) for pod in get_mon_pods()]
-            node_obj = mon_pod_nodes[0]
-        elif daemon_type == "mgr":
-            mgr_pod_nodes = [get_pod_node(pod) for pod in get_mgr_pods()]
-            node_obj = mgr_pod_nodes[0]
-        elif daemon_type == "osd":
-            osd_pod_nodes = [get_pod_node(pod) for pod in get_osd_pods()]
-            node_obj = osd_pod_nodes[0]
-        node_name = node_obj.name
+        log.info("Get Node name where mon pod running")
+        mon_pod_nodes = [get_pod_node(pod) for pod in get_mon_pods()]
+        mon_pod_node_names = [node.name for node in mon_pod_nodes]
+
+        log.info("Get Node name where mgr pod running")
+        mgr_pod_nodes = [get_pod_node(pod) for pod in get_mgr_pods()]
+        mgr_pod_node_names = [node.name for node in mgr_pod_nodes]
+
+        log.info("Get Node name where osd pod running")
+        osd_pod_nodes = [get_pod_node(pod) for pod in get_osd_pods()]
+        osd_pod_node_names = [node.name for node in osd_pod_nodes]
+
+        node_mgr_mon_osd_names = set(mgr_pod_node_names).intersection(
+            osd_pod_node_names, mon_pod_node_names
+        )
+        node_mgr_osd_names = set(mgr_pod_node_names).intersection(osd_pod_node_names)
+        node_mgr_mon_names = set(mgr_pod_node_names).intersection(mon_pod_node_names)
+
+        if len(node_mgr_mon_osd_names) > 0:
+            daemon_types = ["mgr", "osd", "mon"]
+            node_name = list(node_mgr_mon_osd_names)[0]
+        elif len(node_mgr_osd_names) > 0:
+            daemon_types = ["mgr", "osd"]
+            node_name = list(node_mgr_osd_names)[0]
+        elif len(node_mgr_mon_names) > 0:
+            daemon_types = ["mgr", "mon"]
+            node_name = list(node_mgr_mon_names)[0]
+        else:
+            daemon_types = ["mgr"]
+            node_name = mgr_pod_node_names[0]
+        log.info(f"Test the daemon_types {daemon_types} on node {node_name}")
 
         log.info(
             "Delete the contents of 'posted' directory "
@@ -81,53 +105,57 @@ class TestKillCephDaemon(ManageTest):
         cmd = cmd_bash + cmd_delete_files
         run_cmd(cmd=cmd)
 
-        log.info(f"find ceph-{daemon_type} process-id")
-        cmd_pid = f"pidof ceph-{daemon_type}"
-        cmd_gen = "oc debug node/" + node_name + " -- chroot /host "
-        cmd = cmd_gen + cmd_pid
-        out = run_cmd(cmd=cmd)
-        pids = out.strip().split()
-        pid = pids[0]
-        if not pid.isnumeric():
-            raise Exception(f"The ceph-{daemon_type} process-id was not found.")
+        for daemon_type in daemon_types:
+            log.info(f"find ceph-{daemon_type} process-id")
+            cmd_pid = f"pidof ceph-{daemon_type}"
+            cmd_gen = "oc debug node/" + node_name + " -- chroot /host "
+            cmd = cmd_gen + cmd_pid
+            out = run_cmd(cmd=cmd)
+            pids = out.strip().split()
+            pid = pids[0]
+            if not pid.isnumeric():
+                raise Exception(f"The ceph-{daemon_type} process-id was not found.")
 
-        log.info(f"Kill ceph-{daemon_type} process-id {pid}")
-        disruptions_obj = Disruptions()
-        disruptions_obj.daemon_pid = pid
-        disruptions_obj.kill_daemon(
-            node_name=node_name, check_new_pid=False, kill_signal="11"
+            log.info(f"Kill ceph-{daemon_type} process-id {pid}")
+            disruptions_obj = Disruptions()
+            disruptions_obj.daemon_pid = pid
+            disruptions_obj.kill_daemon(
+                node_name=node_name, check_new_pid=False, kill_signal="11"
+            )
+
+        log.info(
+            f"Verify that we have a crash event for ceph-{daemon_types} crash (tool pod)"
         )
-
-        log.info(f"Verify that we have a crash event for ceph-{daemon_type} crash")
         sample = TimeoutSampler(
             timeout=600,
             sleep=10,
             func=run_cmd_verify_cli_output,
             cmd="ceph crash ls",
-            expected_output_lst=[daemon_type],
+            expected_output_lst=daemon_types,
             cephtool_cmd=True,
         )
         if not sample.wait_for_func_status(True):
             raise Exception(
-                f"ceph-{daemon_type} process does not exist on crash list (tool pod)"
+                f"ceph-{daemon_types} process does not exist on crash list (tool pod)"
             )
 
         log.info(
-            f"Verify coredumpctl list updated after killing ceph-{daemon_type} daemon"
+            f"Verify coredumpctl list updated after killing {daemon_types} daemons on {node_name}"
         )
         sample = TimeoutSampler(
             timeout=600,
             sleep=10,
             func=run_cmd_verify_cli_output,
             cmd="coredumpctl list",
-            expected_output_lst=[daemon_type],
+            expected_output_lst=daemon_types,
             debug_node=node_name,
         )
         if not sample.wait_for_func_status(True):
             raise Exception(
-                f"coredump not getting generated for ceph-{daemon_type} daemon crash"
+                f"coredump not getting generated for ceph-{daemon_types} daemon crash"
             )
 
+        log.info(f"Verify the directory postedcoredumpctl is not empty on {node_name}")
         sample = TimeoutSampler(
             timeout=600,
             sleep=10,
@@ -138,5 +166,24 @@ class TestKillCephDaemon(ManageTest):
         )
         if not sample.wait_for_func_status(True):
             raise Exception(
-                f"coredump not getting generated for ceph-{daemon_type} daemon crash"
+                f"coredump not getting generated for {daemon_types} daemons crash"
+            )
+
+        log.info(
+            "Verify ceph status moved to HEALTH_WARN state with the relevant "
+            "information (daemons have recently crashed)"
+        )
+        sample = TimeoutSampler(
+            timeout=20,
+            sleep=5,
+            func=run_cmd_verify_cli_output,
+            cmd="ceph health detail",
+            expected_output_lst=daemon_types
+            + ["HEALTH_WARN", "daemons have recently crashed"],
+            cephtool_cmd=True,
+        )
+        if not sample.wait_for_func_status(True):
+            raise Exception(
+                "The output of command ceph health detail did not show "
+                "warning 'daemons have recently crashed'"
             )

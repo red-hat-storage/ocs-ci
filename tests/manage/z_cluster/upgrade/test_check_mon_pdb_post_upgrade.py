@@ -35,15 +35,16 @@ class TestToCheckMonPDBPostUpgrade(ManageTest):
         disruptions_allowed, min_available_mon, max_unavailable_mon = get_mon_pdb()
         log.info(f"Number of Mons Disruptions_allowed {disruptions_allowed}")
         log.info(f"Minimum_available mon count {min_available_mon}")
-        log.info(f"Minimum_available mon count {max_unavailable_mon}")
+        log.info(f"Maximum_available mon count {max_unavailable_mon}")
 
         # The PDB values are considered from OCS 4.5 onwards.
         assert disruptions_allowed == 1, "Mon Disruptions_allowed count not matching"
         ocs_version = config.ENV_DATA["ocs_version"]
-        if Version.coerce(ocs_version) <= Version.coerce("4.6"):
+        if Version.coerce(ocs_version) < Version.coerce("4.6"):
             assert min_available_mon == 2, "Minimum available mon count is not matching"
         else:
-            # This mon pdb change is from 4.7 on wards, please refer bz1935065
+            # This mon pdb change is from 4.6.5, 4.7 on wards, please refer bz1946573, bz1935065
+            # (https://bugzilla.redhat.com/show_bug.cgi?id=1946573)
             # (https://bugzilla.redhat.com/show_bug.cgi?id=1935065)
             assert (
                 max_unavailable_mon == 1
