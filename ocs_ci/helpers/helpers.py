@@ -3152,8 +3152,6 @@ def check_osd_log_exist_on_rook_ceph_operator_pod(
         contain the unexpected strings, False otherwise
 
     """
-    from datetime import datetime
-
     logger.info("Respin OSD pod")
     osd_pod_objs = pod.get_osd_pods()
     osd_pod_obj = random.choice(osd_pod_objs)
@@ -3162,7 +3160,9 @@ def check_osd_log_exist_on_rook_ceph_operator_pod(
     rook_ceph_operator_logs = get_logs_rook_ceph_operator()
     for line in rook_ceph_operator_logs.splitlines():
         if re.search(r"\d{4}-\d{2}-\d{2}", line):
-            log_date_time_obj = datetime.strptime(line[:26], "%Y-%m-%d %H:%M:%S.%f")
+            log_date_time_obj = datetime.datetime.strptime(
+                line[:26], "%Y-%m-%d %H:%M:%S.%f"
+            )
             if log_date_time_obj > last_log_date_time_obj:
                 new_logs.append(line)
     res_expected = False
@@ -3194,13 +3194,11 @@ def get_last_log_time_date():
         last_log_date_time_obj (datetime obj): type of log
 
     """
-    from datetime import datetime
-
     logger.info("Get last log time")
     rook_ceph_operator_logs = get_logs_rook_ceph_operator()
     for line in rook_ceph_operator_logs.splitlines():
         if re.search(r"\d{4}-\d{2}-\d{2}", line):
-            last_log_date_time_obj = datetime.strptime(
+            last_log_date_time_obj = datetime.datetime.strptime(
                 line[:26], "%Y-%m-%d %H:%M:%S.%f"
             )
     return last_log_date_time_obj
