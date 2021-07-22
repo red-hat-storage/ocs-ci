@@ -1,6 +1,4 @@
-from datetime import datetime
 import logging
-import re
 import pytest
 import random
 
@@ -8,7 +6,8 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.helpers.helpers import (
     set_configmap_log_level_rook_ceph_operator,
-    get_logs_rook_ceph_operator,
+    get_last_log_time_date,
+    check_osd_log_exist_on_rook_ceph_operator_pod,
 )
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -52,7 +51,7 @@ class TestRookCephOperatorLogType(ManageTest):
 
         """
         set_configmap_log_level_rook_ceph_operator(value="DEBUG")
-        last_log_date_time_obj = self.get_last_log_time_date()
+        last_log_date_time_obj = get_last_log_time_date()
 
         log.info("Respin OSD pod")
         osd_pod_objs = get_osd_pods()
@@ -62,7 +61,7 @@ class TestRookCephOperatorLogType(ManageTest):
         sample = TimeoutSampler(
             timeout=400,
             sleep=20,
-            func=self.check_osd_log_exist_on_rook_ceph_operator_pod,
+            func=check_osd_log_exist_on_rook_ceph_operator_pod,
             last_log_date_time_obj=last_log_date_time_obj,
             expected_strings=["D |", "osd"],
         )
@@ -70,7 +69,7 @@ class TestRookCephOperatorLogType(ManageTest):
             raise ValueError("OSD DEBUG Log does not exist")
 
         set_configmap_log_level_rook_ceph_operator(value="INFO")
-        last_log_date_time_obj = self.get_last_log_time_date()
+        last_log_date_time_obj = get_last_log_time_date()
 
         log.info("Respin OSD pod")
         osd_pod_objs = get_osd_pods()
@@ -80,7 +79,7 @@ class TestRookCephOperatorLogType(ManageTest):
         sample = TimeoutSampler(
             timeout=400,
             sleep=20,
-            func=self.check_osd_log_exist_on_rook_ceph_operator_pod,
+            func=check_osd_log_exist_on_rook_ceph_operator_pod,
             last_log_date_time_obj=last_log_date_time_obj,
             expected_strings=["I |", "osd"],
             unexpected_strings=["D |"],
@@ -89,68 +88,3 @@ class TestRookCephOperatorLogType(ManageTest):
             raise ValueError(
                 "OSD INFO Log does not exist or DEBUG Log exist on INFO mode"
             )
-
-    def check_osd_log_exist_on_rook_ceph_operator_pod(
-        self, last_log_date_time_obj, expected_strings=(), unexpected_strings=()
-    ):
-        """
-        Verify logs contain the expected strings and the logs do not
-            contain the unexpected strings
-
-        Args:
-            last_log_date_time_obj (datetime obj): type of log
-            expected_strings (list): verify the logs contain the expected strings
-            unexpected_strings (list): verify the logs do not contain the strings
-
-        Returns:
-            bool: True if logs contain the expected strings and the logs do not
-            contain the unexpected strings, False otherwise
-
-        """
-        log.info("Respin OSD pod")
-        osd_pod_objs = get_osd_pods()
-        osd_pod_obj = random.choice(osd_pod_objs)
-        osd_pod_obj.delete()
-        new_logs = list()
-        rook_ceph_operator_logs = get_logs_rook_ceph_operator()
-        for line in rook_ceph_operator_logs.splitlines():
-            if re.search(r"\d{4}-\d{2}-\d{2}", line):
-                log_date_time_obj = datetime.strptime(line[:26], "%Y-%m-%d %H:%M:%S.%f")
-                if log_date_time_obj > last_log_date_time_obj:
-                    new_logs.append(line)
-        res_expected = False
-        res_unexpected = True
-        for new_log in new_logs:
-            if all(
-                expected_string.lower() in new_log.lower()
-                for expected_string in expected_strings
-            ):
-                res_expected = True
-                log.info(f"{new_log} contain expected strings {expected_strings}")
-                break
-        for new_log in new_logs:
-            if any(
-                unexpected_string.lower() in new_log.lower()
-                for unexpected_string in unexpected_strings
-            ):
-                log.error(f"{new_log} contain unexpected strings {unexpected_strings}")
-                res_unexpected = False
-                break
-        return res_expected & res_unexpected
-
-    def get_last_log_time_date(self):
-        """
-        Get last log time
-
-        Returns:
-            last_log_date_time_obj (datetime obj): type of log
-
-        """
-        log.info("Get last log time")
-        rook_ceph_operator_logs = get_logs_rook_ceph_operator()
-        for line in rook_ceph_operator_logs.splitlines():
-            if re.search(r"\d{4}-\d{2}-\d{2}", line):
-                last_log_date_time_obj = datetime.strptime(
-                    line[:26], "%Y-%m-%d %H:%M:%S.%f"
-                )
-        return last_log_date_time_obj
