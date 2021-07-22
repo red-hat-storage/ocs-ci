@@ -255,3 +255,45 @@ def check_if_cluster_was_upgraded():
 
     """
     return True if "replaces" in get_ocs_csv().get().get("spec") else False
+
+
+def get_all_jobs(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Get all the jobs in a specific namespace
+
+    Args:
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list: list of dictionaries of the job OCS instances.
+
+    """
+    ocp_obj = OCP(kind=constants.JOB, namespace=namespace)
+    return ocp_obj.get()["items"]
+
+
+def get_jobs_with_prefix(prefix, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Get all the jobs that start with a specific prefix
+
+    Args:
+        prefix (str): The prefix to search in the job names
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list: list of dictionaries of the job OCS instances that start with the prefix
+
+    """
+    ocp_obj = OCP(kind=constants.JOB, namespace=namespace)
+    jobs_dict = get_all_jobs(namespace)
+    job_names = [item["metadata"]["name"] for item in jobs_dict]
+    job_names_with_prefix = [
+        job_name for job_name in job_names if job_name.startswith(prefix)
+    ]
+
+    jobs_with_prefix = []
+    for job_name_with_prefix in job_names_with_prefix:
+        ocp_dict = ocp_obj.get(resource_name=job_name_with_prefix)
+        jobs_with_prefix.append(OCS(**ocp_dict))
+
+    return jobs_with_prefix

@@ -29,7 +29,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
-from ocs_ci.ocs.resources.ocs import OCS, get_job_obj
+from ocs_ci.ocs.resources.ocs import OCS, get_job_obj, get_jobs_with_prefix
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     run_cmd,
@@ -2168,3 +2168,29 @@ def get_mon_pod_id(mon_pod):
 
     """
     return mon_pod.get().get("metadata").get("labels").get("ceph_daemon_id")
+
+
+def delete_all_osd_removal_jobs(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Delete all the osd removal jobs in a specific namespace
+
+    Args:
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        bool: True, if all the jobs deleted successfully. False, otherwise
+
+    """
+    result = True
+    osd_removal_jobs = get_jobs_with_prefix("ocs-osd-removal-", namespace=namespace)
+    for osd_removal_job in osd_removal_jobs:
+        osd_removal_job.delete()
+        try:
+            osd_removal_job.ocp.wait_for_delete(resource_name=osd_removal_job.name)
+        except TimeoutError:
+            logger.warning(
+                f"{osd_removal_job.name} job did not get deleted successfully"
+            )
+            result = False
+
+    return result
