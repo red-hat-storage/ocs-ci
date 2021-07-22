@@ -57,7 +57,7 @@ class TestAddNodeCrashCollector(ManageTest):
         new_node = list(set(get_node_names()) - set(old_nodes))
 
         node_rack_dic = get_node_rack()
-        new_node_rack = node_rack_dic[new_node]
+        new_node_rack = node_rack_dic[new_node[0]]
         for node, rack in old_node_rack.items():
             if rack == new_node_rack:
                 drain_node = node
