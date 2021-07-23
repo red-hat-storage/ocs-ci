@@ -132,7 +132,7 @@ class TestVerifyRbdTrashPurge(ManageTest):
                     raise
 
         # Check if any image removal is in progress
-        ceph_status = ct_pod.exec_ceph_cmd(ceph_cmd=f"ceph status", format="")
+        ceph_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph status", format="")
         assert (
             f"Removing image {pool_name}" not in ceph_status
         ), f"Some image deletion is in progress after running trash purge command\n{ceph_status}"
