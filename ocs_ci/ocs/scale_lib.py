@@ -11,10 +11,13 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
 from ocs_ci.utility import templating, utils
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.utility.utils import ocsci_log_path
+from ocs_ci.ocs.resources import storage_cluster
+from ocs_ci.ocs import machine as machine_utils
+from ocs_ci.ocs.resources.pvc import get_all_pvcs
+from ocs_ci.utility.utils import ocsci_log_path, ceph_health_check
 from ocs_ci.ocs import constants, cluster, machine, node
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
-from ocs_ci.ocs.node import get_nodes
+from ocs_ci.ocs.node import get_nodes, get_worker_nodes
 from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     UnexpectedBehaviour,
@@ -1361,3 +1364,165 @@ def get_pod_creation_time_in_kube_job(kube_job_obj, namespace, no_of_pod):
         pod_dict[pod_name] = total.total_seconds()
 
     return pod_dict
+
+
+def scale_ocs_node(node_count=3):
+    """
+    Scale OCS worker node by increasing the respective
+    machineset replica value by node_count.
+
+    Example: If node_count = 3 & existing cluster has 3 worker nodes,
+    then at the end of this function, setup should have 6 OCS worker nodes.
+
+    Args:
+        node_count (int): Add node_count OCS worker node to the cluster
+
+    """
+    if config.ENV_DATA["deployment_type"] == "ipi":
+
+        # Get the initial nodes list
+        initial_nodes = get_worker_nodes()
+
+        ms_name = machine_utils.get_machineset_objs()
+        if len(ms_name) == 3:
+            add_replica_by = int(node_count / 3)
+        else:
+            add_replica_by = node_count
+
+        replica = machine_utils.get_ready_replica_count(ms_name[0].name)
+
+        # Increase the replica count and wait for node add to complete.
+        for ms in ms_name:
+            machine_utils.add_node(
+                machine_set=ms.name, count=(replica + add_replica_by)
+            )
+        threads = list()
+        for ms in ms_name:
+            process = threading.Thread(
+                target=machine_utils.wait_for_new_node_to_be_ready,
+                kwargs={"machine_set": ms.name},
+            )
+            process.start()
+            threads.append(process)
+        for process in threads:
+            process.join()
+
+        # Get the node name of new spun node
+        nodes_after_new_spun_node = get_worker_nodes()
+        new_spun_node = list(set(nodes_after_new_spun_node) - set(initial_nodes))
+        logging.info(f"New spun node is {new_spun_node}")
+
+        # Label it
+        node_obj = OCP(kind="node")
+        for new_node in new_spun_node:
+            node_obj.add_label(
+                resource_name=new_node, label=constants.OPERATOR_NODE_LABEL
+            )
+            logging.info(f"Successfully labeled {new_spun_node} with OCS storage label")
+        return True
+
+    else:
+        logging.error("Unsupported Platform, can't scale nodes")
+        return False
+
+
+def scale_capacity_with_deviceset(add_deviceset_count=2):
+    """
+    Scale storagecluster deviceset count by increasing the
+    value in storagecluster crs fil
+
+    Example: If add_deviceset_count = 2 & existing storagecluster
+    has deviceset count as 1, at the end of function deviceset value
+    will be existing value + add_deviceset_count i.e. 3
+
+    Args:
+        add_deviceset_count (int): Deviceset count to be added to existing value
+
+    """
+    existing_deviceset_count = storage_cluster.get_deviceset_count()
+    expected_deviceset_count = existing_deviceset_count + add_deviceset_count
+
+    # adding the storage capacity to the cluster
+    params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
+                       "value": {expected_deviceset_count}}}]"""
+    sc = storage_cluster.get_storage_cluster()
+    sc.patch(
+        resource_name=sc.get()["items"][0]["metadata"]["name"],
+        params=params.strip("\n"),
+        format_type="json",
+    )
+    pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    return_val = pod.wait_for_resource(
+        timeout=300,
+        condition=constants.STATUS_RUNNING,
+        selector="app=rook-ceph-osd",
+        resource_count=cluster.count_cluster_osd(),
+    )
+
+    ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=80)
+
+    return return_val
+
+
+def validate_all_pvcs_and_check_state(namespace, pvc_scale_list):
+    """
+    Function to validate all the PVCs are in Bound state
+
+    Args:
+        namespace (str): Namespace of PVC's created
+        pvc_scale_list (list): List of expected PVCs scaled
+
+    """
+
+    all_pvc_dict = get_all_pvcs(namespace=namespace)
+    pvc_bound_list, pvc_not_bound_list = ([], [])
+    for i in range(len(pvc_scale_list)):
+        pvc_data = all_pvc_dict["items"][i]
+        if not pvc_data["status"]["phase"] == constants.STATUS_BOUND:
+            pvc_not_bound_list.append(pvc_data["metadata"]["name"])
+        else:
+            pvc_bound_list.append(pvc_data["metadata"]["name"])
+
+    # Check status of PVCs scaled
+    if not len(pvc_bound_list) == len(pvc_scale_list):
+        logging.error(
+            f"PVC Bound count mismatch {len(pvc_not_bound_list)} PVCs not in Bound state"
+            f" PVCs not in Bound state {pvc_not_bound_list}"
+        )
+        return False
+    else:
+        logging.info(f"All the expected {len(pvc_bound_list)} PVCs are in Bound state")
+        return True
+
+
+def validate_all_pods_and_check_state(namespace, pod_scale_list):
+    """
+    Function to validate all the PODs are in Running state
+
+    Args:
+        namespace (str): Namespace of PVC's created
+        pod_scale_list (list): List of expected PODs scaled
+
+    """
+
+    ocp_pod_obj = OCP(kind=constants.DEPLOYMENTCONFIG, namespace=namespace)
+    all_pods_dict = ocp_pod_obj.get()
+    pod_running_list, pod_not_running_list = ([], [])
+    for i in range(len(pod_scale_list)):
+        pod_data = all_pods_dict["items"][i]
+        if not pod_data["status"]["availableReplicas"]:
+            pod_not_running_list.append(pod_data["metadata"]["name"])
+        else:
+            pod_running_list.append(pod_data["metadata"]["name"])
+
+    if not len(pod_running_list) == len(pod_scale_list):
+        logging.error(
+            f"POD Running count mismatch {len(pod_not_running_list)} PODs not in Running state "
+            f"PODs not in Running state {pod_not_running_list}"
+        )
+        return False
+    else:
+        logging.info(
+            f"All the expected {len(pod_running_list)} PODs are in Running state"
+        )
+        return True
