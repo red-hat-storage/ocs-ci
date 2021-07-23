@@ -190,14 +190,13 @@ class Vault(KMS):
             bool: True if exists else False
 
         """
-        cmd = f"vault secrets list | grep {backend_path}"
-        proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
-        )
-        out, err = proc.communicate()
-        if proc.returncode:
-            return False
-        return True
+        cmd = f"vault secrets list --format=json"
+        out = subprocess.check_output(shlex.split(cmd))
+        json_out = json.loads(out)
+        for path in json_out.keys():
+            if backend_path in path:
+                return True
+        return False
 
     def create_namespace(self, vault_namespace):
         """
@@ -922,6 +921,6 @@ def remove_kmsid(kmsid):
     )
     ocp_obj.exec_oc_cmd(command=patch_cmd)
     kmsid_list = get_encryption_kmsid()
-    if any(kmsid in k for k in kmsid_list):
+    if kmsid in kmsid_list:
         raise KMSResourceCleaneupError(f"KMS ID {kmsid} deletion failed")
     logger.info(f"KMS ID {kmsid} deleted")

@@ -12,7 +12,11 @@ from ocs_ci.helpers.helpers import (
     create_pods,
 )
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    KMSResourceCleaneupError,
+    ResourceNotFoundError,
+)
 from ocs_ci.utility import kms
 from ocs_ci.ocs.ocp import OCP
 
@@ -57,8 +61,7 @@ class TestRbdPvEncryption(ManageTest):
             ocp_obj.get_resource(
                 resource_name="csi-kms-connection-details", column="NAME"
             )
-            kmsid_list = kms.get_encryption_kmsid()
-            self.new_kmsid = f"{len(kmsid_list) + 1}-vault"
+            self.new_kmsid = self.vault_resource_name
             vdict = defaults.VAULT_CSI_CONNECTION_CONF
             for key in vdict.keys():
                 old_key = key
@@ -146,7 +149,7 @@ class TestRbdPvEncryption(ManageTest):
             ):
                 log.info(f"Vault: Found key for {pvc_obj.name}")
             else:
-                log.error(f"Vault: Key not found for {pvc_obj.name}")
+                raise ResourceNotFoundError(f"Vault: Key not found for {pvc_obj.name}")
 
         # Create pods
         pod_objs = create_pods(
@@ -194,6 +197,8 @@ class TestRbdPvEncryption(ManageTest):
             if not kms.is_key_present_in_path(
                 key=vol_handle, path=self.vault.vault_backend_path
             ):
-                log.info(f"Vault: Key deleted for {pvc_obj.name}")
+                log.info(f"Vault: Key deleted for {vol_handle}")
             else:
-                log.error(f"Vault: Key deletion failed for {pvc_obj.name}")
+                raise KMSResourceCleaneupError(
+                    f"Vault: Key deletion failed for {vol_handle}"
+                )

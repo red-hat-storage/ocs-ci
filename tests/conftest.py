@@ -442,6 +442,9 @@ def storageclass_factory_fixture(
                 then the default rbd pool.
             rbd_thick_provision (bool): True to enable RBD thick provisioning.
                 Applicable if interface is CephBlockPool
+            encrypted (bool): True to enable RBD PV encryption
+            encryption_kms_id (str): Key value of vault config to be used from
+                    csi-kms-connection-details configmap
 
         Returns:
             object: helpers.create_storage_class instance with links to
