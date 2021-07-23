@@ -262,13 +262,9 @@ class FioPodScale(object):
                 logging.info(
                     f"Scaled {scale_count} PVCs and created {scale_count/20} PODs"
                 )
-
-                if cluster.validate_pg_balancer():
-                    logging.info(
-                        "OSD consumption and PG distribution is good to continue"
-                    )
-                else:
-                    raise UnexpectedBehaviour("Unequal PG distribution to OSDs")
+                # TODO: Removing PG balancer validation, due to PG auto_scale enabled
+                # TODO: sometime PG's can't be equally distributed across OSDs
+                # TODO: Revisit the code once we have more clarity
 
                 break
             else:

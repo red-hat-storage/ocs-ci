@@ -93,10 +93,13 @@ def test_scale_pvcs_pods_post_upgrade():
     """
 
     # Get info from SCALE_DATA_FILE for validation
-    file_data = templating.load_yaml(SCALE_DATA_FILE)
-    namespace = file_data.get("NAMESPACE")
-    pod_scale_list = file_data.get("POD_SCALE_LIST")
-    pvc_scale_list = file_data.get("PVC_SCALE_LIST")
+    if SCALE_DATA_FILE:
+        file_data = templating.load_yaml(SCALE_DATA_FILE)
+        namespace = file_data.get("NAMESPACE")
+        pod_scale_list = file_data.get("POD_SCALE_LIST")
+        pvc_scale_list = file_data.get("PVC_SCALE_LIST")
+    else:
+        raise FileNotFoundError
 
     # Get all PVCs from namespace
     all_pvc_dict = get_all_pvcs(namespace=namespace)
