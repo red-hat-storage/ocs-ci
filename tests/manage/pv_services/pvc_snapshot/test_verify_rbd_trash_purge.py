@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 @pytest.mark.polarion_id("")
 class TestVerifyRbdTrashPurge(ManageTest):
     """
-    Verify RBD trash purge command if the RBD PVCs have snapshots
+    Verify RBD trash purge command if the RBD image have snapshots
 
     """
 
@@ -36,11 +36,15 @@ class TestVerifyRbdTrashPurge(ManageTest):
 
         """
         self.num_of_pvc = 6
+
+        # Create storage class
         self.sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             new_rbd_pool=True,
         )
 
+        # Create PVC
+        log.info("Create PVCs")
         self.pvc_objs = multi_pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             storageclass=self.sc_obj,
@@ -50,13 +54,25 @@ class TestVerifyRbdTrashPurge(ManageTest):
             wait_each=False,
         )
 
-        self.snap_objs = [snapshot_factory(pvc_obj) for pvc_obj in self.pvc_objs]
+        # Create snapshot
+        log.info("Create snapshots")
+        self.snap_objs = [snapshot_factory(pvc_obj, False) for pvc_obj in self.pvc_objs]
+
+        # Verify snapshots are ready
+        log.info("Verify snapshots are ready")
+        for snap_obj in self.snap_objs:
+            snap_obj.ocp.wait_for_resource(
+                condition="true",
+                resource_name=snap_obj.name,
+                column=constants.STATUS_READYTOUSE,
+                timeout=180,
+            )
 
     def test_verify_rbd_trash_purge_when_snapshots_present(
         self, snapshot_factory, snapshot_restore_factory, pod_factory
     ):
         """
-        Verify RBD trash purge command if the RBD PVCs have snapshots. Verifies bug 1964373.
+        Verify RBD trash purge command if the RBD image in trash have snapshots. Verifies bug 1964373.
 
         """
         pool_name = self.sc_obj.get()["parameters"]["pool"]
@@ -86,7 +102,7 @@ class TestVerifyRbdTrashPurge(ManageTest):
         try:
             ct_pod.exec_ceph_cmd(ceph_cmd=f"rbd trash purge {pool_name}", format="")
             raise UnexpectedBehaviour(
-                f"Rbd trash rm purge command completed successfully"
+                "Rbd trash rm purge command completed successfully"
             )
         except CommandFailed as cfe:
             if "rbd: some expired images could not be removed" not in str(cfe):
