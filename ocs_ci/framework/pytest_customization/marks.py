@@ -60,6 +60,8 @@ flowtests = pytest.mark.flowtests
 performance = pytest.mark.performance
 performance_extended = pytest.mark.performance_extended
 scale = pytest.mark.scale
+scale_long_run = pytest.mark.scale_long_run
+scale_changed_layout = pytest.mark.scale_changed_layout
 deployment = pytest.mark.deployment
 polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla
@@ -75,6 +77,8 @@ tier_marks = [
     tier_after_upgrade,
     performance,
     scale,
+    scale_long_run,
+    scale_changed_layout,
     workloads,
 ]
 
