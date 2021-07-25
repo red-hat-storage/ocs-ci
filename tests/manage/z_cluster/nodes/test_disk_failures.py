@@ -13,13 +13,13 @@ from ocs_ci.framework.testlib import (
     bugzilla,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery, run_cmd_verify_cli_output
+from ocs_ci.helpers.helpers import (
+    wait_for_ct_pod_recovery,
+    clear_crash_warning_and_osd_removal_leftovers,
+)
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     get_pod_node,
-    delete_all_osd_removal_jobs,
-    get_ceph_tools_pod,
-    wait_for_pods_to_be_running,
 )
 from ocs_ci.utility.aws import AWSTimeoutException
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
@@ -69,34 +69,6 @@ class TestDiskFailures(ManageTest):
                 f"node {worker_node}"
             )
 
-    def clear_warnings_and_leftovers(self):
-        """
-        Clear warnings and leftovers after the test
-        """
-        is_deleted = delete_all_osd_removal_jobs()
-        if is_deleted:
-            logger.info("Successfully deleted all the ocs-osd-removal jobs")
-
-        is_osd_pods_running = wait_for_pods_to_be_running(
-            pod_names=[osd_pod.name for osd_pod in get_osd_pods()], timeout=120
-        )
-
-        if not is_osd_pods_running:
-            logger.warning("There are still osds down. Can't clear ceph crash warnings")
-            return
-
-        is_daemon_recently_crash_warnings = run_cmd_verify_cli_output(
-            cmd="ceph health detail",
-            expected_output_lst={"HEALTH_WARN", "daemons have recently crashed"},
-            cephtool_cmd=True,
-        )
-        if is_daemon_recently_crash_warnings:
-            logger.info("Clear all ceph crash warnings")
-            ct_pod = get_ceph_tools_pod()
-            ct_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
-        else:
-            logger.info("There are no daemon crash warnings")
-
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
         """
@@ -134,8 +106,8 @@ class TestDiskFailures(ManageTest):
             if config.ENV_DATA.get("encryption_at_rest"):
                 osd_encryption_verification()
 
-            logger.info("Clear warnings and leftovers")
-            self.clear_warnings_and_leftovers()
+            logger.info("Clear crash warnings and osd removal leftovers")
+            clear_crash_warning_and_osd_removal_leftovers()
 
         request.addfinalizer(finalizer)
 
