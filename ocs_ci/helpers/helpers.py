@@ -2,6 +2,7 @@
 Helper functions file for OCS QE
 """
 import base64
+import random
 import datetime
 import hashlib
 import json
@@ -3141,3 +3142,103 @@ def check_rbd_image_used_size(
         )
         return False
     return True
+
+
+def set_configmap_log_level_rook_ceph_operator(value):
+    """
+    Set ROOK_LOG_LEVEL on configmap of rook-ceph-operator
+
+    Args:
+        value (str): type of log
+
+    """
+    path = "/data/ROOK_LOG_LEVEL"
+    params = f"""[{{"op": "add", "path": "{path}", "value": "{value}"}}]"""
+    configmap_obj = OCP(
+        kind=constants.CONFIGMAP,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+    )
+    configmap_obj.patch(params=params, format_type="json")
+
+
+def get_logs_rook_ceph_operator():
+    """
+    Get logs from a rook_ceph_operator pod
+
+    Returns:
+        str: Output from 'oc get logs rook-ceph-operator command
+
+    """
+    logger.info("Get logs from rook_ceph_operator pod")
+    rook_ceph_operator_objs = pod.get_operator_pods()
+    return pod.get_pod_logs(pod_name=rook_ceph_operator_objs[0].name)
+
+
+def check_osd_log_exist_on_rook_ceph_operator_pod(
+    last_log_date_time_obj, expected_strings=(), unexpected_strings=()
+):
+    """
+    Verify logs contain the expected strings and the logs do not
+        contain the unexpected strings
+
+    Args:
+        last_log_date_time_obj (datetime obj): type of log
+        expected_strings (list): verify the logs contain the expected strings
+        unexpected_strings (list): verify the logs do not contain the strings
+
+    Returns:
+        bool: True if logs contain the expected strings and the logs do not
+        contain the unexpected strings, False otherwise
+
+    """
+    logger.info("Respin OSD pod")
+    osd_pod_objs = pod.get_osd_pods()
+    osd_pod_obj = random.choice(osd_pod_objs)
+    osd_pod_obj.delete()
+    new_logs = list()
+    rook_ceph_operator_logs = get_logs_rook_ceph_operator()
+    for line in rook_ceph_operator_logs.splitlines():
+        if re.search(r"\d{4}-\d{2}-\d{2}", line):
+            log_date_time_obj = datetime.datetime.strptime(
+                line[:26], "%Y-%m-%d %H:%M:%S.%f"
+            )
+            if log_date_time_obj > last_log_date_time_obj:
+                new_logs.append(line)
+    res_expected = False
+    res_unexpected = True
+    for new_log in new_logs:
+        if all(
+            expected_string.lower() in new_log.lower()
+            for expected_string in expected_strings
+        ):
+            res_expected = True
+            logger.info(f"{new_log} contain expected strings {expected_strings}")
+            break
+    for new_log in new_logs:
+        if any(
+            unexpected_string.lower() in new_log.lower()
+            for unexpected_string in unexpected_strings
+        ):
+            logger.error(f"{new_log} contain unexpected strings {unexpected_strings}")
+            res_unexpected = False
+            break
+    return res_expected & res_unexpected
+
+
+def get_last_log_time_date():
+    """
+    Get last log time
+
+    Returns:
+        last_log_date_time_obj (datetime obj): type of log
+
+    """
+    logger.info("Get last log time")
+    rook_ceph_operator_logs = get_logs_rook_ceph_operator()
+    for line in rook_ceph_operator_logs.splitlines():
+        if re.search(r"\d{4}-\d{2}-\d{2}", line):
+            last_log_date_time_obj = datetime.datetime.strptime(
+                line[:26], "%Y-%m-%d %H:%M:%S.%f"
+            )
+    return last_log_date_time_obj
