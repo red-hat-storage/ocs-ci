@@ -28,13 +28,17 @@ class ValidationUI(PageNavigator):
 
         """
         self.navigate_overview_page()
-        self.do_click(self.validation_loc["object_service_tab"])
+        self.do_click(self.validation_loc["object_service_tab"], enable_screenshot=True)
         platform = config.ENV_DATA.get("platform").lower()
         if platform in constants.ON_PREM_PLATFORMS:
             logger.info("Click on Object Service button")
-            self.do_click(self.validation_loc["object_service_button"])
+            self.do_click(
+                self.validation_loc["object_service_button"], enable_screenshot=True
+            )
             logger.info("Click on Data Resiliency button")
-            self.do_click(self.validation_loc["data_resiliency_button"])
+            self.do_click(
+                self.validation_loc["data_resiliency_button"], enable_screenshot=True
+            )
         strings_object_service_tab = ["Total Reads", "Total Writes"]
         self.verify_page_contain_strings(
             strings_on_page=strings_object_service_tab, page_name="object_service"
@@ -46,7 +50,9 @@ class ValidationUI(PageNavigator):
 
         """
         self.navigate_overview_page()
-        self.do_click(self.validation_loc["persistent_storage_tab"])
+        self.do_click(
+            self.validation_loc["persistent_storage_tab"], enable_screenshot=True
+        )
         strings_object_service_tab = [
             "IOPS",
             "Latency",
@@ -72,7 +78,10 @@ class ValidationUI(PageNavigator):
             text="OpenShift Container Storage",
         )
         logger.info("Click on ocs operator on Installed Operators")
-        self.do_click(locator=self.validation_loc["ocs_operator_installed"])
+        self.do_click(
+            locator=self.validation_loc["ocs_operator_installed"],
+            enable_screenshot=True,
+        )
 
         logger.info("Verify Details tab on OCS operator")
         strings_details_tab = ["Description", "Succeeded", "openshift-storage"]
@@ -81,7 +90,9 @@ class ValidationUI(PageNavigator):
         )
 
         logger.info("Verify Subscription tab on OCS operator")
-        self.do_click(self.validation_loc["osc_subscription_tab"])
+        self.do_click(
+            self.validation_loc["osc_subscription_tab"], enable_screenshot=True
+        )
         strings_subscription_tab = [
             "Healthy",
             "openshift-storage",
@@ -91,28 +102,36 @@ class ValidationUI(PageNavigator):
         )
 
         logger.info("Verify All instances tab on OCS operator")
-        self.do_click(self.validation_loc["osc_all_instances_tab"])
+        self.do_click(
+            self.validation_loc["osc_all_instances_tab"], enable_screenshot=True
+        )
         strings_all_instances_tab = ["Phase", "Ready", "Status"]
         self.verify_page_contain_strings(
             strings_on_page=strings_all_instances_tab, page_name="all_instances_tab"
         )
 
         logger.info("Verify Storage Cluster tab on OCS operator")
-        self.do_click(self.validation_loc["osc_storage_cluster_tab"])
+        self.do_click(
+            self.validation_loc["osc_storage_cluster_tab"], enable_screenshot=True
+        )
         strings_storage_cluster_tab = ["Phase", "Ready", "Status"]
         self.verify_page_contain_strings(
             strings_on_page=strings_storage_cluster_tab, page_name="storage_cluster_tab"
         )
 
         logger.info("Verify Backing Store tab on OCS operator")
-        self.do_click(self.validation_loc["osc_backing_store_tab"])
+        self.do_click(
+            self.validation_loc["osc_backing_store_tab"], enable_screenshot=True
+        )
         strings_backing_store_tab = ["Phase", "Ready", "Status"]
         self.verify_page_contain_strings(
             strings_on_page=strings_backing_store_tab, page_name="backing_store_tab"
         )
 
         logger.info("Verify Bucket Class tab on OCS operator")
-        self.do_click(self.validation_loc["osc_bucket_class_tab"])
+        self.do_click(
+            self.validation_loc["osc_bucket_class_tab"], enable_screenshot=True
+        )
         strings_bucket_class_tab = ["Phase", "Ready", "Status"]
         self.verify_page_contain_strings(
             strings_on_page=strings_bucket_class_tab, page_name="bucket_class_tab"

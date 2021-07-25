@@ -92,7 +92,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     skipif_upgraded_from,
     update_container_with_mirrored_image,
-    skipif_ui,
+    skipif_ui_not_support,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -148,7 +148,9 @@ def pytest_collection_modifyitems(session, items):
                 "skipif_upgraded_from"
             )
             skipif_no_kms_marker = item.get_closest_marker("skipif_no_kms")
-            skipif_ui_marker = item.get_closest_marker("skipif_ui")
+            skipif_ui_not_support_marker = item.get_closest_marker(
+                "skipif_ui_not_support"
+            )
             if skipif_ocp_version_marker:
                 skip_condition = skipif_ocp_version_marker.args
                 # skip_condition will be a tuple
@@ -187,9 +189,9 @@ def pytest_collection_modifyitems(session, items):
                     log.warning(
                         "Cluster is not yet installed. Skipping skipif_no_kms check."
                     )
-            if skipif_ui_marker:
-                skip_condition = skipif_ui_marker
-                if skipif_ui(skip_condition.args[0]):
+            if skipif_ui_not_support_marker:
+                skip_condition = skipif_ui_not_support_marker
+                if skipif_ui_not_support(skip_condition.args[0]):
                     log.info(
                         f"Test: {item} will be skipped due to UI test {skip_condition} is not avalible"
                     )
