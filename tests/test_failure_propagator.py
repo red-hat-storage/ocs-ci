@@ -1,6 +1,9 @@
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import tier1
 
+
+@tier1
 @pytest.mark.last
 class TestFailurePropagator:
     """
