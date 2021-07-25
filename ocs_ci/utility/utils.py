@@ -2423,7 +2423,7 @@ def skipif_ocs_version(expressions):
     return any(eval(config.ENV_DATA["ocs_version"] + expr) for expr in expr_list)
 
 
-def skipif_ui(ui_test):
+def skipif_ui_not_support(ui_test):
     """
     This function evaluates the condition for ui test skip
     based on ui_test expression
@@ -2438,6 +2438,8 @@ def skipif_ui(ui_test):
     from ocs_ci.ocs.ui.views import locators
 
     ocp_version = get_running_ocp_version()
+    if config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
+        return True
     try:
         locators[ocp_version][ui_test]
     except KeyError:
