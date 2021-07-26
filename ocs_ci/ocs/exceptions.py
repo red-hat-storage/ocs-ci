@@ -236,6 +236,10 @@ class ExternalClusterDetailsException(Exception):
     pass
 
 
+class ExternalClusterRGWAdminOpsUserException(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 
