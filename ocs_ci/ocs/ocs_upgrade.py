@@ -475,7 +475,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         f"{upgrade_ocs.version_before_upgrade}"
     )
 
-    # For external cluster , create the secrets if upgraded version is >= 4.8
+    # For external cluster , create the secrets if upgraded version is 4.8
     if (
         config.DEPLOYMENT["external_mode"]
         and original_ocs_version == "4.7"
