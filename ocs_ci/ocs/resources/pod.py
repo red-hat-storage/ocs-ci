@@ -29,7 +29,8 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
-from ocs_ci.ocs.resources.ocs import OCS, get_job_obj, get_jobs_with_prefix
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.job import get_job_obj, get_jobs_with_prefix
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     run_cmd,
