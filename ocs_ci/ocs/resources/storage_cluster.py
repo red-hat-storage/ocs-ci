@@ -482,6 +482,8 @@ def osd_encryption_verification():
         lsblk_output_split = lsblk_output.split()
         logging.info(f"lsblk split:{lsblk_output_split}")
         logging.info(f"osd_node_names dictionary: {osd_node_names}")
+        logging.info(f"count crypt {lsblk_output_split.count('crypt')}")
+        logging.info(f"osd_number_per_node = {osd_number_per_node}")
         if lsblk_output_split.count("crypt") != osd_number_per_node:
             logging.error(
                 f"The output of lsblk command on node {worker_node} is not as expected:\n{lsblk_output}"
