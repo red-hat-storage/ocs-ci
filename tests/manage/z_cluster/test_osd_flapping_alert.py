@@ -27,9 +27,9 @@ class TestOSDAlert(ManageTest):
 
         # TODO find where the alert is coming from
         log_alert = "mashehu"
-        expected_alert = "mashehu aher"
-        """expected_alert = (
+
+        expected_alert = (
             f"Storage daemon {target_osd.name} has restarted 5 times in the last 5 minutes. Please check "
             f"the pod events or ceph status to find out the cause."
-        )"""
+        )
         assert log_alert == expected_alert, "Message alert was not displayed"
