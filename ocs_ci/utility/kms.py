@@ -190,7 +190,7 @@ class Vault(KMS):
             bool: True if exists else False
 
         """
-        cmd = f"vault secrets list --format=json"
+        cmd = "vault secrets list --format=json"
         out = subprocess.check_output(shlex.split(cmd))
         json_out = json.loads(out)
         for path in json_out.keys():
@@ -381,7 +381,7 @@ class Vault(KMS):
         outbuf = json.loads(output)
         return outbuf["sealed"]
 
-    def vault_create_backend_path(self, backend_path=None):
+    def vault_create_backend_path(self, backend_path=None, kv_version=None):
         """
         create vault path to be used by OCS
 
@@ -405,6 +405,10 @@ class Vault(KMS):
             logger.info(f"vault path {self.vault_backend_path} already exists")
 
         else:
+            if kv_version:
+                self.vault_backend_version = kv_version
+            else:
+                self.vault_backend_version = config.ENV_DATA.get("VAULT_BACKEND")
             cmd = (
                 f"vault secrets enable -path={self.vault_backend_path} "
                 f"kv-{self.vault_backend_version}"

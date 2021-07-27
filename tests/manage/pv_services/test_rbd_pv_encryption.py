@@ -4,7 +4,6 @@ import pytest
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
-    polarion_id,
     skipif_ocs_version,
 )
 from ocs_ci.helpers.helpers import (
@@ -23,6 +22,13 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
+@pytest.mark.parametrize(
+    argnames=["kv_version"],
+    argvalues=[
+        pytest.param("v1", marks=pytest.mark.polarion_id("OCS-2585")),
+        pytest.param("v2", marks=pytest.mark.polarion_id("OCS-2592")),
+    ],
+)
 @skipif_ocs_version("<4.7")
 class TestRbdPvEncryption(ManageTest):
     """
@@ -31,7 +37,7 @@ class TestRbdPvEncryption(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self):
+    def setup(self, kv_version):
         """
         Setup csi-kms-connection-details configmap
 
@@ -51,7 +57,9 @@ class TestRbdPvEncryption(ManageTest):
         # Create vault namespace, backend path and policy in vault
         self.vault_resource_name = create_unique_resource_name("test", "vault")
         self.vault.vault_create_namespace(namespace=self.vault_resource_name)
-        self.vault.vault_create_backend_path(backend_path=self.vault_resource_name)
+        self.vault.vault_create_backend_path(
+            backend_path=self.vault_resource_name, kv_version=kv_version
+        )
         self.vault.vault_create_policy(policy_name=self.vault_resource_name)
 
         ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
@@ -94,13 +102,13 @@ class TestRbdPvEncryption(ManageTest):
         request.addfinalizer(finalizer)
 
     @tier1
-    @polarion_id("OCS-2585")
     def test_rbd_pv_encryption(
         self,
         project_factory,
         storageclass_factory,
         multi_pvc_factory,
         pod_factory,
+        kv_version,
     ):
         """
         Test to verify creation and deletion of encrypted RBD PVC
@@ -192,13 +200,14 @@ class TestRbdPvEncryption(ManageTest):
             pvc_obj.delete()
             pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
 
-        # Verify whether the key is deleted in Vault
-        for vol_handle in vol_handles:
-            if not kms.is_key_present_in_path(
-                key=vol_handle, path=self.vault.vault_backend_path
-            ):
-                log.info(f"Vault: Key deleted for {vol_handle}")
-            else:
-                raise KMSResourceCleaneupError(
-                    f"Vault: Key deletion failed for {vol_handle}"
-                )
+        # Verify whether the key is deleted in Vault. Skip check for kv-v2 due to BZ#1979244
+        if kv_version == "v1":
+            for vol_handle in vol_handles:
+                if not kms.is_key_present_in_path(
+                    key=vol_handle, path=self.vault.vault_backend_path
+                ):
+                    log.info(f"Vault: Key deleted for {vol_handle}")
+                else:
+                    raise KMSResourceCleaneupError(
+                        f"Vault: Key deletion failed for {vol_handle}"
+                    )
