@@ -144,6 +144,10 @@ def pytest_collection_modifyitems(session, items):
     teardown = config.RUN["cli_params"].get("teardown")
     deploy = config.RUN["cli_params"].get("deploy")
     skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
+    skip_components = config.ENV_DATA.get("disable_components", [None])
+    skip_rbd_tests = True if "blockpools" in skip_components else False
+    skip_cephfs_tests = True if "cephfs" in skip_components else False
+    skip_mcg_tests = True if "noobaa" in skip_components else False
 
     if not (teardown or deploy or skip_ocs_deployment):
         for item in items[:]:
@@ -156,6 +160,8 @@ def pytest_collection_modifyitems(session, items):
             skipif_ui_not_support_marker = item.get_closest_marker(
                 "skipif_ui_not_support"
             )
+            skipif_rbd_disabled = item.get_closest_marker("skipif_rbd_disabled")
+            skipif_noobaa_disabled = item.get_closest_marker("skipif_noobaa_disabled")
             if skipif_ocp_version_marker:
                 skip_condition = skipif_ocp_version_marker.args
                 # skip_condition will be a tuple
@@ -200,6 +206,33 @@ def pytest_collection_modifyitems(session, items):
                     log.info(
                         f"Test: {item} will be skipped due to UI test {skip_condition} is not avalible"
                     )
+                    items.remove(item)
+                    continue
+            if skip_rbd_tests:
+                if (
+                    skipif_rbd_disabled
+                    or any(
+                        component in item.name for component in ["CephBlockPool", "rbd", "RBD"]
+                    )
+                ):
+                    log.info(f"skipping because rbd disabled: {item.name}")
+                    items.remove(item)
+                    continue
+            if skip_cephfs_tests:
+                if any (
+                    component in item.name for component in ["CephFileSystem", "CEPHFS", "fs", "Filesystem"]
+                ):
+                    log.info(f"Skipping because cephfs disabled: {item.name}")
+                    items.remove(item)
+                    continue
+            if skip_mcg_tests:
+                if (
+                    skipif_noobaa_disabled
+                    or any (
+                        component in item.name for component in ["mcg", "MCG", "noobaa"]
+                    )
+                ):
+                    log.info(f"skipping because noobaa is disabled:{item.name}")
                     items.remove(item)
                     continue
 
