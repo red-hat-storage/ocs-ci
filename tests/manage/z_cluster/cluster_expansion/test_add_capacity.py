@@ -54,7 +54,7 @@ def add_capacity_test():
     ), f"The following OSD pods were restarted (deleted) post add capacity: {restarted_osds}"
 
     pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
-    if is_flexible_scaling_enabled:
+    if is_flexible_scaling_enabled():
         replica_count = 1
     else:
         replica_count = 3

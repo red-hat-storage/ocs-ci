@@ -102,7 +102,7 @@ class TestAddCapacityWithResourceDelete:
         """
         logging.info("starting function 'wait_for_osd_pods_to_be_running'")
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
-        if is_flexible_scaling_enabled:
+        if is_flexible_scaling_enabled():
             replica_count = 1
         else:
             replica_count = 3
