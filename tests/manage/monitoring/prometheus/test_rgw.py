@@ -36,7 +36,10 @@ def test_rgw_unavailable(measure_stop_rgw):
             "Please check Ceph cluster health or RGW connection."
         )
     else:
-        target_msg = "Cluster Object Store is in unhealthy state. Please check Ceph cluster health."
+        target_msg = (
+            "Cluster Object Store is in unhealthy state for more than 15s. "
+            "Please check Ceph cluster health."
+        )
     states = ["pending", "firing"]
 
     prometheus.check_alert_list(
