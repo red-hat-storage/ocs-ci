@@ -8,6 +8,7 @@ from elasticsearch import Elasticsearch
 from ocs_ci.framework.testlib import BaseTest
 
 from ocs_ci.ocs import defaults, constants, node
+from ocs_ci.ocs import benchmark_operator
 from ocs_ci.framework import config
 from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.ocs.resources.ocs import OCS
@@ -41,7 +42,7 @@ class PASTest(BaseTest):
         self.benchmark_obj = None  # place holder for the benchmark object
         self.client_pod = None  # Place holder for the client pod object
         self.dev_mode = config.RUN["cli_params"].get("dev_mode")
-        self.pod_obj = OCP(kind="pod")
+        self.pod_obj = OCP(kind="pod", namespace=benchmark_operator.BMO_NAME)
 
         # Collecting all Environment configuration Software & Hardware
         # for the performance report.
@@ -52,6 +53,10 @@ class PASTest(BaseTest):
 
         self.get_node_info(node_type="master")
         self.get_node_info(node_type="worker")
+
+    def teardown(self):
+        if hasattr(self, "operator"):
+            self.operator.cleanup()
 
     def get_osd_info(self):
         """
@@ -95,6 +100,14 @@ class PASTest(BaseTest):
         self.environment[f"{node_type}_nodes_memory"] = oc_cmd.exec_oc_debug_cmd(
             node=nodes[0], cmd_list=["free | grep Mem | awk '{print $2}'"]
         ).rstrip()
+
+    def deploy_benchmark_operator(self):
+        """
+        Deploy the benchmark operator
+
+        """
+        self.operator = benchmark_operator.BenchmarkOperator()
+        self.operator.deploy()
 
     def ripsaw_deploy(self, ripsaw):
         """
@@ -228,7 +241,7 @@ class PASTest(BaseTest):
             sleep,
             get_pod_name_by_pattern,
             self.client_pod_name,
-            constants.RIPSAW_NAMESPACE,
+            benchmark_operator.BMO_NAME,
         ):
             try:
                 if bm_pod[0] is not None:
@@ -259,7 +272,7 @@ class PASTest(BaseTest):
         while not Finished:
             results = run_oc_command(
                 "get pod --no-headers -o custom-columns=:metadata.name,:status.phase",
-                namespace="my-ripsaw",
+                namespace=benchmark_operator.BMO_NAME,
             )
             fname = ""
             for name in results:
