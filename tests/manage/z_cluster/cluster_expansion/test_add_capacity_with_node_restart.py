@@ -77,7 +77,7 @@ class TestAddCapacityNodeRestart(ManageTest):
         # 'wip-add-capacity-e_e' will be merged into master I will use the functions from this branch.
 
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
-        if is_flexible_scaling_enabled:
+        if is_flexible_scaling_enabled():
             replica_count = 1
         else:
             replica_count = 3
