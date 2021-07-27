@@ -194,7 +194,7 @@ class TestAddCapacity(ManageTest):
 
         # New osd (all) pods corresponding to the additional capacity should be
         # in running state
-        if is_flexible_scaling_enabled:
+        if is_flexible_scaling_enabled():
             replica_count = 1
         else:
             replica_count = 3
