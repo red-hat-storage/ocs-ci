@@ -85,7 +85,7 @@ def add_capacity_test():
 @tier1
 @acceptance
 @polarion_id("OCS-1191")
-@pytest.mark.last
+@pytest.mark.second_to_last
 @skipif_openshift_dedicated
 @skipif_aws_i3
 @skipif_bm
