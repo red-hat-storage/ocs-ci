@@ -13,7 +13,10 @@ from ocs_ci.framework.testlib import (
     bugzilla,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
+from ocs_ci.helpers.helpers import (
+    wait_for_ct_pod_recovery,
+    clear_crash_warning_and_osd_removal_leftovers,
+)
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     get_pod_node,
@@ -102,6 +105,9 @@ class TestDiskFailures(ManageTest):
             # Verify OSD encrypted
             if config.ENV_DATA.get("encryption_at_rest"):
                 osd_encryption_verification()
+
+            logger.info("Clear crash warnings and osd removal leftovers")
+            clear_crash_warning_and_osd_removal_leftovers()
 
         request.addfinalizer(finalizer)
 

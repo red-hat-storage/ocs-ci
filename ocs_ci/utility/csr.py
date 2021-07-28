@@ -169,8 +169,11 @@ def wait_for_all_nodes_csr_and_approve(timeout=900, sleep=10, expected_node_num=
         expected_node_num = (
             config.ENV_DATA["master_replicas"] + config.ENV_DATA["worker_replicas"] + 1
         )
-        if Version.coerce(ocp_version) >= Version.coerce("4.8"):
+        if Version.coerce(ocp_version) == Version.coerce("4.8"):
             expected_node_num += 1
+        # In OCP 4.9, openshift-monitoring CSR is added
+        if Version.coerce(ocp_version) >= Version.coerce("4.9"):
+            expected_node_num += 2
 
     for csr_nodes in TimeoutSampler(timeout=timeout, sleep=sleep, func=get_nodes_csr):
         logger.debug(f"CSR data: {csr_nodes}")

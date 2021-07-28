@@ -763,3 +763,19 @@ def verify_sc_images(storage_cluster):
     assert (
         len(set(images_list)) == len(images_list) / 2
     ), "actualImage and desiredImage are different"
+
+
+def get_osd_replica_count():
+    """
+    Get OSD replication count from storagecluster cr
+
+    Returns:
+        replica_count (int): Returns OSD replication count
+
+    """
+
+    sc = get_storage_cluster()
+    replica_count = (
+        sc.get().get("items")[0].get("spec").get("storageDeviceSets")[0].get("replica")
+    )
+    return replica_count

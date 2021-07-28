@@ -106,7 +106,7 @@ class TestBaseOperationNodeDrain(E2ETest):
         osd_size = storage_cluster.get_osd_size()
         result = storage_cluster.add_capacity(osd_size)
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
-        if is_flexible_scaling_enabled:
+        if is_flexible_scaling_enabled():
             replica_count = 1
         else:
             replica_count = 3
