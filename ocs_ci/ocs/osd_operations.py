@@ -5,7 +5,7 @@ from semantic_version import Version
 
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import get_ocp_version
-from ocs_ci.ocs.resources.ocs import get_job_obj
+from ocs_ci.ocs.resources.job import get_job_obj
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs, get_deviceset_pvcs
 from ocs_ci.ocs import constants, node, ocp
 from ocs_ci.ocs import cluster
