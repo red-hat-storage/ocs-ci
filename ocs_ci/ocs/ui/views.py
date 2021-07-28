@@ -339,7 +339,16 @@ storage_class = {
     "kms-address": ("#kms-address", By.CSS_SELECTOR),
     "kms-port": ("#kms-address-port", By.CSS_SELECTOR),
     "save-btn": (".pf-c-button.pf-m-secondary[data-test='save-action']", By.CSS_SELECTOR),
+    "advanced-settings": (".pf-c-button.pf-m-link.ocs-storage-class-encryption__form-body", By.CSS_SELECTOR
+                          ),
+    "backend-path": ("#kms-service-backend-path", By.CSS_SELECTOR),
+    "tls-server-name": ("#kms-service-tls", By.CSS_SELECTOR),
+    "vault-enterprise-namespace": ("#kms-service-namespace", By.CSS_SELECTOR),
+    "browse-ca-certificate": ("#kms-service-ca-cert-browse-button", By.CSS_SELECTOR),
+    "browse-client-certificate":("#kms-service-cert-browse-button", By.CSS_SELECTOR),
+    "browse-client-private-key":("#kms-service-key-browse-button", By.CSS_SELECTOR),
     "pvc-expansion-check": ("input[class='create-storage-class-form__checkbox']", By.CSS_SELECTOR),
+    "save-advanced-settings": ("#confirm-action", By.CSS_SELECTOR),
     "create": ("#save-changes", By.CSS_SELECTOR),
 }
 
