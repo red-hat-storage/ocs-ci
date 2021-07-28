@@ -94,7 +94,7 @@ class TestMultipleMonPodsStaysOnSameNode(ManageTest):
         mon_running_nodes = get_mon_running_nodes()
         dup = set()
         mons_on_same_node = [m for m in mon_running_nodes if m in dup or dup.add(m)]
-        assert mons_on_same_node is None, "Two or more mons running on same node"
+        assert mons_on_same_node == [], "Two or more mons running on same node"
         log.info("Mons are running on different nodes")
 
     def test_multiple_mon_pod_stays_on_same_node(self):
@@ -200,8 +200,12 @@ class TestMultipleMonPodsStaysOnSameNode(ManageTest):
         ), f"Mon moved to node {mon_node} such that 2 mons are running on same node"
 
         # Verify rook deletes one of the mon and move to another node
-        log.info("Waiting for 10 seconds")
-        time.sleep(10)
+        POD_OBJ.wait_for_resource(
+            condition=STATUS_PENDING,
+            resource_count=1,
+            selector=MON_APP_LABEL,
+            timeout=1200,
+        )
         POD_OBJ.wait_for_resource(
             condition=STATUS_RUNNING,
             resource_count=len(mon_pods),
