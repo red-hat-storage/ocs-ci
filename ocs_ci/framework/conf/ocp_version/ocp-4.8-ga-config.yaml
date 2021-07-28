@@ -13,4 +13,4 @@ DEPLOYMENT:
   ignition_version: "3.2.0"
   ocp_channel: "fast"
 ENV_DATA:
-  vm_template: "rhcos-48.83.202103221318-0-vmware.x86_64"
+  vm_template: "rhcos-4.8.2-x86_64-vmware.x86_64"
