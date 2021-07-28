@@ -3242,3 +3242,33 @@ def get_last_log_time_date():
                 line[:26], "%Y-%m-%d %H:%M:%S.%f"
             )
     return last_log_date_time_obj
+
+
+def clear_crash_warning_and_osd_removal_leftovers():
+    """
+    Clear crash warnings and osd removal leftovers. This function can be used for example,
+    after the device replacement test or the node replacement test.
+    """
+    is_deleted = pod.delete_all_osd_removal_jobs()
+    if is_deleted:
+        logger.info("Successfully deleted all the ocs-osd-removal jobs")
+
+    is_osd_pods_running = pod.wait_for_pods_to_be_running(
+        pod_names=[osd_pod.name for osd_pod in pod.get_osd_pods()], timeout=120
+    )
+
+    if not is_osd_pods_running:
+        logger.warning("There are still osds down. Can't clear ceph crash warnings")
+        return
+
+    is_daemon_recently_crash_warnings = run_cmd_verify_cli_output(
+        cmd="ceph health detail",
+        expected_output_lst={"HEALTH_WARN", "daemons have recently crashed"},
+        cephtool_cmd=True,
+    )
+    if is_daemon_recently_crash_warnings:
+        logger.info("Clear all ceph crash warnings")
+        ct_pod = pod.get_ceph_tools_pod()
+        ct_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
+    else:
+        logger.info("There are no daemon crash warnings")
