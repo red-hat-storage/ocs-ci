@@ -3,6 +3,7 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
@@ -72,38 +73,45 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
         num_of_rbd_pvc = (
             num_of_rbd_pvc if num_of_rbd_pvc is not None else len(access_modes_rbd)
         )
-        num_of_cephfs_pvc = (
-            num_of_cephfs_pvc
-            if num_of_cephfs_pvc is not None
-            else len(access_modes_cephfs)
-        )
 
-        pvcs_rbd = multi_pvc_factory(
-            interface=constants.CEPHBLOCKPOOL,
-            storageclass=sc_rbd,
-            size=pvc_size,
-            access_modes=access_modes_rbd,
-            status=constants.STATUS_BOUND,
-            num_of_pvc=num_of_rbd_pvc,
-            timeout=180,
-        )
-        for pvc_obj in pvcs_rbd:
-            pvc_obj.interface = constants.CEPHBLOCKPOOL
+        if not config.COMPONENTS.get("disable_blockpools"):
+            pvcs_rbd = multi_pvc_factory(
+                interface=constants.CEPHBLOCKPOOL,
+                storageclass=sc_rbd,
+                size=pvc_size,
+                access_modes=access_modes_rbd,
+                status=constants.STATUS_BOUND,
+                num_of_pvc=num_of_rbd_pvc,
+                timeout=180,
+            )
+            for pvc_obj in pvcs_rbd:
+                pvc_obj.interface = constants.CEPHBLOCKPOOL
+        else:
+            pvcs_rbd = []
 
-        project = pvcs_rbd[0].project if pvcs_rbd else None
+        if not config.COMPONENTS.get("disable_cephfs"):
+            num_of_cephfs_pvc = (
+                num_of_cephfs_pvc
+                if num_of_cephfs_pvc is not None
+                else len(access_modes_cephfs)
+            )
 
-        pvcs_cephfs = multi_pvc_factory(
-            interface=constants.CEPHFILESYSTEM,
-            project=project,
-            storageclass=sc_cephfs,
-            size=pvc_size,
-            access_modes=access_modes_cephfs,
-            status=constants.STATUS_BOUND,
-            num_of_pvc=num_of_cephfs_pvc,
-            timeout=180,
-        )
-        for pvc_obj in pvcs_cephfs:
-            pvc_obj.interface = constants.CEPHFILESYSTEM
+            project = pvcs_rbd[0].project if pvcs_rbd else None
+
+            pvcs_cephfs = multi_pvc_factory(
+                interface=constants.CEPHFILESYSTEM,
+                project=project,
+                storageclass=sc_cephfs,
+                size=pvc_size,
+                access_modes=access_modes_cephfs,
+                status=constants.STATUS_BOUND,
+                num_of_pvc=num_of_cephfs_pvc,
+                timeout=180,
+            )
+            for pvc_obj in pvcs_cephfs:
+                pvc_obj.interface = constants.CEPHFILESYSTEM
+        else:
+            pvcs_cephfs = []
 
         pvcs = pvcs_cephfs + pvcs_rbd
 
@@ -162,10 +170,14 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
                 pod_obj.pvc = pod_dc.pvc
             pods.extend(pod_objs)
 
-        log.info(
-            f"Created {len(pvcs_cephfs)} cephfs PVCs and {len(pvcs_rbd)} rbd "
-            f"PVCs. Created {len(pods)} pods. "
-        )
+        if pvcs:
+            rbd_info = f"{len(pvcs_rbd)} rbd PVCs." if pvcs_rbd else ""
+            cephfs_info = f"{len(pvcs_cephfs)} cephfs PVCs, " if pvcs_cephfs else ""
+            log.info(f"Created {cephfs_info}{rbd_info} Created {len(pods)} pods. ")
+        else:
+            log.warning(
+                "No resources were created, verify existence of cephfs/rbd in the cluster"
+            )
         return pvcs, pods
 
     return factory
