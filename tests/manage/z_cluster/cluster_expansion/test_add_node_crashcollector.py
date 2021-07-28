@@ -1,4 +1,5 @@
 import logging
+import pytest
 
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
@@ -17,6 +18,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     bugzilla,
     skipif_external_mode,
+    vsphere_platform_required,
 )
 
 logger = logging.getLogger(__name__)
@@ -26,14 +28,16 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @bugzilla("1898808")
 @skipif_external_mode
+@vsphere_platform_required
 @skipif_openshift_dedicated
+@pytest.mark.polarion_id("OCS-2594")
 class TestAddNodeCrashCollector(ManageTest):
     """
     Add node with OCS label and verify crashcollector created on new node
 
     Test Procedure:
     1.Add worker node with OCS label
-    2.Drain the 'old' node located in the same zone/rack of ​​the new node
+    2.Drain the 'old' node located in the same rack of ​​the new node
     3.Wait for 3 mon pods to be on running state
     4.Verify ceph-crashcollector pod running on worker node where "rook-ceph" pods are running.
     5.Schedule worker-node-x
@@ -79,9 +83,9 @@ class TestAddNodeCrashCollector(ManageTest):
         assert sorted(get_crashcollector_nodes()) == sorted(
             get_nodes_where_ocs_pods_running()
         ), (
-            f"The crashcollector pod does not exist on "
-            f"{get_nodes_where_ocs_pods_running() - get_crashcollector_nodes()} "
-            f"even though rook-ceph pods are running on this node"
+            f"The crashcollector pod exists on "
+            f"{get_crashcollector_nodes() - get_nodes_where_ocs_pods_running()} "
+            f"even though rook-ceph pods are not running on this node"
         )
 
         schedule_nodes([drain_node])
@@ -100,7 +104,7 @@ class TestAddNodeCrashCollector(ManageTest):
         assert sorted(get_crashcollector_nodes()) == sorted(
             get_nodes_where_ocs_pods_running()
         ), (
-            f"The crashcollector pod does not exist on "
-            f"{get_nodes_where_ocs_pods_running() - get_crashcollector_nodes()} "
-            f"even though rook-ceph pods are running on this node"
+            f"The crashcollector pod exists on "
+            f"{get_crashcollector_nodes() - get_nodes_where_ocs_pods_running()} "
+            f"even though rook-ceph pods are not running on this node"
         )
