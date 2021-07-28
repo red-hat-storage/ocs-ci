@@ -1686,3 +1686,14 @@ def get_node_mon_ids(node_name):
     mon_pods = pod.get_mon_pods()
     node_mon_pods = get_node_pods(node_name, pods_to_search=mon_pods)
     return [pod.get_mon_pod_id(mon_pod) for mon_pod in node_mon_pods]
+
+
+def get_mon_running_nodes():
+    """
+    Gets the mon running node names
+
+    Returns:
+        list: MON node names
+
+    """
+    return [pod.get_pod_node(mon_node).name for mon_node in pod.get_mon_pods()]
