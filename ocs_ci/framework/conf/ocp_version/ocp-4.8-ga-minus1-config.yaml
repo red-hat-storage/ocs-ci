@@ -12,4 +12,4 @@ DEPLOYMENT:
   ocp_channel: "fast"
   ocp_version_index: -2
 ENV_DATA:
-  vm_template: 'rhcos-4.8.0-x86_64-vmware.x86_64'
+  vm_template: 'rhcos-4.8.2-x86_64-vmware.x86_64'
