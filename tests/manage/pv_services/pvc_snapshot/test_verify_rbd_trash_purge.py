@@ -15,10 +15,10 @@ log = logging.getLogger(__name__)
 
 @tier2
 @skipif_ocs_version("<4.8")
-@pytest.mark.polarion_id("")
+@pytest.mark.polarion_id("OCS-2595")
 class TestVerifyRbdTrashPurge(ManageTest):
     """
-    Verify RBD trash purge command if the RBD image have snapshots
+    Verify RBD trash purge command when the RBD image have snapshots
 
     """
 
@@ -72,7 +72,7 @@ class TestVerifyRbdTrashPurge(ManageTest):
         self, snapshot_factory, snapshot_restore_factory, pod_factory
     ):
         """
-        Verify RBD trash purge command if the RBD image in trash have snapshots. Verifies bug 1964373.
+        Verify RBD trash purge command when the RBD image in trash have snapshots. Verifies bug 1964373.
 
         """
         pool_name = self.sc_obj.get()["parameters"]["pool"]
@@ -102,7 +102,7 @@ class TestVerifyRbdTrashPurge(ManageTest):
         try:
             ct_pod.exec_ceph_cmd(ceph_cmd=f"rbd trash purge {pool_name}", format="")
             raise UnexpectedBehaviour(
-                "Rbd trash rm purge command completed successfully"
+                "Unexpected: Rbd trash rm purge command completed successfully"
             )
         except CommandFailed as cfe:
             if "rbd: some expired images could not be removed" not in str(cfe):
@@ -117,7 +117,7 @@ class TestVerifyRbdTrashPurge(ManageTest):
             f"List of RBD images remaining in trash after running trash purge- {image_list_final}"
         )
 
-        # Try to delete each of the remaining images. Rbd trash rm command should fail.
+        # Try to delete each of the remaining images from trash. Rbd trash rm command should fail.
         for image_name in image_list_final:
             try:
                 ct_pod.exec_ceph_cmd(
@@ -132,7 +132,8 @@ class TestVerifyRbdTrashPurge(ManageTest):
                     raise
 
         # Check if any image removal is in progress
-        ceph_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph status", format="")
-        assert (
-            f"Removing image {pool_name}" not in ceph_status
-        ), f"Some image deletion is in progress after running trash purge command\n{ceph_status}"
+        ceph_progress = ct_pod.exec_ceph_cmd(ceph_cmd="ceph progress json", format="")
+        for progress_item in ceph_progress.get("events", []):
+            assert (
+                f"Removing image {pool_name}" not in progress_item["message"]
+            ), f"Some image deletion is in progress after running trash purge command\n{ceph_progress}"
