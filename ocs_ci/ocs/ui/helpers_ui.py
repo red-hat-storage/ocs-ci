@@ -1,10 +1,17 @@
 import logging
+import time
 
+from pyautogui import write, press
+from webdriver_manager import driver
 from selenium.webdriver.common.by import By
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.helpers.proxy import get_cluster_proxies
+from ocs_ci.ocs.ui.base_ui import BaseUI, PageNavigator
+
+
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
 from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count, get_osd_size
@@ -78,6 +85,74 @@ def ui_deployment_conditions():
     else:
         return True
 
+
+def create_storage_class_with_encryption_ui(setup_ui, sc_name="test-storage-class"):
+
+    base_ui_obj = PageNavigator(setup_ui)
+
+    ocp_version = get_ocp_version()
+    pvc_loc = locators[ocp_version]["storage_class"]
+
+    base_ui_obj.navigate_storageclasses_page()
+    logger.info("Create Storage Class")
+    base_ui_obj.do_click(pvc_loc["create-sc"])
+    logger.info("Storage Class Name")
+    base_ui_obj.do_send_keys(pvc_loc["sc-name"], f"{sc_name}")
+    logger.info("Storage Class Description")
+    base_ui_obj.do_send_keys(pvc_loc["sc-description"], "this is a test storage class")
+    logger.info("Storage Class Reclaim Policy")
+    base_ui_obj.do_click(pvc_loc["reclaim-policy"])
+    base_ui_obj.do_click(pvc_loc["reclaim-policy-delete"])
+    base_ui_obj.do_click(pvc_loc["reclaim-policy-delete"])
+    logger.info("Storage Class Provisioner")
+    base_ui_obj.do_click(pvc_loc["provisioner"])
+    base_ui_obj.do_click(pvc_loc["rbd-provisioner"])
+    logger.info("Storage Class Storage Pool")
+    base_ui_obj.do_click(pvc_loc["storage-pool"])
+    base_ui_obj.do_click(pvc_loc["ceph-block-pool"])
+    logger.info("Storage Class with Encryption")
+    base_ui_obj.do_click(pvc_loc["encryption"])
+    logger.info("Storage Class Connection Details")
+    base_ui_obj.do_click(pvc_loc["connections-details"])
+    logger.info("Storage Class Service Name")
+    base_ui_obj.do_clear(pvc_loc["service-name"])
+    base_ui_obj.do_send_keys(pvc_loc["service-name"], "test-service")
+    logger.info("Storage Class Address")
+    base_ui_obj.do_clear(pvc_loc["kms-address"])
+    base_ui_obj.do_send_keys(pvc_loc["kms-address"], "https://www.test-service.com")
+    logger.info("Storage Class Port")
+    base_ui_obj.do_clear(pvc_loc["kms-port"])
+    base_ui_obj.do_send_keys(pvc_loc["kms-port"], "007")
+    logger.info("Click on Advanced Settings")
+    base_ui_obj.do_click(pvc_loc["advanced-settings"])
+    logger.info("Enter Backend Path")
+    base_ui_obj.do_send_keys(pvc_loc["backend-path"], "IDon'tKnow")
+    logger.info("Enter TLS Server Name")
+    base_ui_obj.do_send_keys(pvc_loc["tls-server-name"], "http://vault.qe.rh-ocs.com/")
+    logger.info("Enter Vault Enterprise Namespace")
+    base_ui_obj.do_send_keys(pvc_loc["vault-enterprise-namespace"], "kms-test-namespace")
+    logger.info("Selecting CA Certificate")
+    base_ui_obj.do_click(pvc_loc["browse-ca-certificate"])
+    time.sleep(2)
+    write('/home/amagrawa/kms-cert/cert.pem')
+    press('enter')
+    logger.info("CA Certificate Selected")
+    logger.info("Selecting Client Certificate")
+    base_ui_obj.do_click(pvc_loc["browse-client-certificate"])
+    write('/home/amagrawa/kms-cert/fullchain.pem')
+    time.sleep(2)
+    press('enter')
+    logger.info("Client Certificate Selected")
+    logger.info("Selecting Client Private Key")
+    base_ui_obj.do_click(pvc_loc["browse-client-private-key"])
+    write('/home/amagrawa/kms-cert/privkey.pem')
+    time.sleep(2)
+    press('enter')
+    logger.info("Private Key Selected")
+    logger.info("Saving Key Management Service Advanced Settings")
+    base_ui_obj.do_click(pvc_loc["save-advanced-settings"])
+    logger.info("Creating Storage Class with Encryption")
+    base_ui_obj.do_click(pvc_loc["create"])
 
 def format_locator(locator, string_to_insert):
     """
