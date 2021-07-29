@@ -22,6 +22,7 @@ from uuid import uuid4
 import yaml
 
 from ocs_ci.framework import config
+from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
 from ocs_ci.helpers.proxy import (
     get_cluster_proxies,
     update_container_with_proxy_env,
@@ -3321,3 +3322,14 @@ def mon_pods_running_on_same_node():
         logger.error(f"Mons running on nodes: {mon_running_nodes}")
         raise UnexpectedBehaviour("Two or more mons running on same node")
     logger.info("Mons are running on different nodes")
+
+
+def get_failure_domain():
+    """
+    Get Failure Domain
+
+    Returns:
+        string: type of failure domain
+    """
+    storage_cluster_obj = get_storage_cluster()
+    return storage_cluster_obj.data["items"][0]["status"]["failureDomain"]

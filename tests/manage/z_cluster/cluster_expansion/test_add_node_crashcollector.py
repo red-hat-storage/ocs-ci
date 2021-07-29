@@ -2,7 +2,8 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
-from ocs_ci.ocs.node import drain_nodes, schedule_nodes
+from ocs_ci.ocs.node import drain_nodes, schedule_nodes, get_node_zone
+from ocs_ci.helpers.helpers import get_failure_domain
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -18,7 +19,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     bugzilla,
     skipif_external_mode,
-    vsphere_platform_required,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @bugzilla("1898808")
 @skipif_external_mode
-@vsphere_platform_required
 @skipif_openshift_dedicated
 @pytest.mark.polarion_id("OCS-2594")
 class TestAddNodeCrashCollector(ManageTest):
@@ -51,8 +50,12 @@ class TestAddNodeCrashCollector(ManageTest):
         Add node with OCS label and verify crashcollector created on new node
 
         """
+        failure_domain = get_failure_domain()
+        old_node_rack_zone = (
+            get_node_zone() if failure_domain.lower() == "zone" else get_node_rack()
+        )
+
         old_nodes = get_node_names()
-        old_node_rack = get_node_rack()
 
         logger.info("Add one worker node with OCS label")
         add_nodes(ocs_nodes=True, node_count=1)
@@ -60,10 +63,13 @@ class TestAddNodeCrashCollector(ManageTest):
         logger.info("Get new worker node name")
         new_node = list(set(get_node_names()) - set(old_nodes))
 
-        node_rack_dic = get_node_rack()
-        new_node_rack = node_rack_dic[new_node[0]]
-        for node, rack in old_node_rack.items():
-            if rack == new_node_rack:
+        new_node_rack_zone = (
+            get_node_zone() if failure_domain.lower() == "zone" else get_node_rack()
+        )
+
+        new_rack_zone = new_node_rack_zone[new_node[0]]
+        for node, rack_zone in old_node_rack_zone.items():
+            if rack_zone == new_rack_zone:
                 drain_node = node
 
         drain_nodes([drain_node])
