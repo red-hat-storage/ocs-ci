@@ -111,14 +111,20 @@ def ui_add_capacity_conditions():
         return False
     elif is_external or is_disconnected or is_proxy or is_lso:
         if is_external:
-            logger.info("Add capacity via UI is not supported on external cluster")
+            logger.info(
+                "Add capacity via UI is not automated at the moment on external cluster"
+            )
         if is_disconnected:
-            logger.info("Add capacity via UI is not supported on disconnected cluster")
+            logger.info(
+                "Add capacity via UI is not automated at the moment on disconnected cluster"
+            )
         if is_proxy:
-            logger.info("Add capacity via UI is not supported on proxy cluster")
+            logger.info(
+                "Add capacity via UI is not automated at the moment on proxy cluster"
+            )
         if is_lso:
             logger.info(
-                "Add capacity via UI is not automated at the moment on LSO cluster"
+                "Add capacity via UI is not automated at the moment on lso cluster"
             )
         return False
     else:
