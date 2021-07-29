@@ -2850,7 +2850,14 @@ def set_selinux_permissions(workers=None):
     for worker in worker_nodes:
         node = worker.get().get("metadata").get("name") if not workers else worker
         log.info(f"{node} is a RHEL based worker - applying '{cmd_list}'")
-        retry(CommandFailed)(ocp_obj.exec_oc_debug_cmd)(node=node, cmd_list=cmd_list)
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+            retry(CommandFailed, tries=10, delay=3, backoff=2)(
+                ocp_obj.exec_oc_debug_cmd
+            )(node=node, cmd_list=cmd_list)
+        else:
+            retry(CommandFailed)(ocp_obj.exec_oc_debug_cmd)(
+                node=node, cmd_list=cmd_list
+            )
 
 
 def set_registry_to_managed_state():
