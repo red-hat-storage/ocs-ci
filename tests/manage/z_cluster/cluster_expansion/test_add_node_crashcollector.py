@@ -51,23 +51,29 @@ class TestAddNodeCrashCollector(ManageTest):
 
         """
         failure_domain = get_failure_domain()
+        logger.info(f"The failure domain is {failure_domain}")
+
         old_node_rack_zone = (
             get_node_zone() if failure_domain.lower() == "zone" else get_node_rack()
         )
+        logger.info(f"The old node rack/zone is {old_node_rack_zone}")
 
         old_nodes = get_node_names()
 
         logger.info("Add one worker node with OCS label")
         add_nodes(ocs_nodes=True, node_count=1)
 
-        logger.info("Get new worker node name")
         new_node = list(set(get_node_names()) - set(old_nodes))
+        logger.info(f"New worker node is {new_node[0]}")
 
         new_node_rack_zone = (
             get_node_zone() if failure_domain.lower() == "zone" else get_node_rack()
         )
+        logger.info(f"The new node rack/zone is {new_node_rack_zone}")
 
         new_rack_zone = new_node_rack_zone[new_node[0]]
+        logger.info(f"New worker node {new_node[0]} in zone/rack {new_rack_zone}")
+
         for node, rack_zone in old_node_rack_zone.items():
             if rack_zone == new_rack_zone:
                 drain_node = node

@@ -1745,6 +1745,27 @@ def get_node_rack(node_type=constants.WORKER_MACHINE):
     return node_rack_dict
 
 
+def get_node_zone(node_type=constants.WORKER_MACHINE):
+    """
+    Get node rack
+
+    Args:
+        node_type (str): The node type (e.g. worker, master)
+
+    Returns:
+        dict: {"Node name":"Zone name"}
+
+    """
+    node_objs = get_nodes(node_type=node_type)
+    node_zone_dict = dict()
+    for node_obj in node_objs:
+        node_zone_dict[node_obj.name] = node_obj.data["metadata"]["labels"][
+            "failure-domain.beta.kubernetes.io/zone"
+        ]
+    log.info(f"node-zone dictionary {node_zone_dict}")
+    return node_zone_dict
+
+
 def get_node_names(node_type=constants.WORKER_MACHINE):
     """
     Get node names
@@ -1775,24 +1796,3 @@ def get_crashcollector_nodes():
         for crashcollector_pod_obj in crashcollector_pod_objs
     ]
     return set(crashcollector_ls)
-
-
-def get_node_zone(node_type=constants.WORKER_MACHINE):
-    """
-    Get node rack
-
-    Args:
-        node_type (str): The node type (e.g. worker, master)
-
-    Returns:
-        dict: {"Node name":"Zone name"}
-
-    """
-    node_objs = get_nodes(node_type=node_type)
-    node_zone_dict = dict()
-    for node_obj in node_objs:
-        node_zone_dict[node_obj.name] = node_obj.data["metadata"]["labels"][
-            "failure-domain.beta.kubernetes.io/zone"
-        ]
-    log.info(f"node-zone dictionary {node_zone_dict}")
-    return node_zone_dict
