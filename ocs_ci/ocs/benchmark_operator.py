@@ -137,12 +137,26 @@ class BenchmarkOperator(object):
         try:
             cmd = f'wait --for=condition=available "{BMO_DEPLOYMENT}" -n {BMO_NAME} --timeout=300s'
             self.pod_obj.exec_oc_cmd(cmd)
+
+            # At this point the benchmark operator pod is ready, but we need to
+            # verifying that all containers in the pod are ready
+            while True:
+                OK = 1
+                result = self.pod_obj.exec_oc_cmd(f"get pod -n {BMO_NAME} -o json")
+                for cnt in (
+                    result.get("items")[0].get("status").get("containerStatuses")
+                ):
+                    if not cnt.get("ready"):
+                        OK = 0
+                if not OK:
+                    log.warning("Benchmark Operator is not ready yet")
+                    time.sleep(3)
+                else:
+                    break
         except Exception as ex:
             log.error(f"Failed to wait for benchmark operator : {ex}")
 
-        # since the Benchmark-Operator pod have 2 containers it get into Running
-        # state and not both of containers are up, so, wait 5 sec until 2/2 are up
-        time.sleep(5)
+        log.info("the benchmark Operator is ready")
 
     def cleanup(self):
         """
