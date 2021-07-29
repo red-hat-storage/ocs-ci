@@ -637,8 +637,9 @@ def get_osds_per_node():
 
     """
     dic_node_osd = defaultdict(list)
-    for osd_pod in pod.get_osd_pods():
-        dic_node_osd[pod.get_pod_node(osd_pod).name].append(osd_pod.name)
+    osd_pods = pod.get_osd_pods()
+    for osd_pod in osd_pods:
+        dic_node_osd[osd_pod.data["spec"]["nodeName"]].append(osd_pod.name)
     return dic_node_osd
 
 

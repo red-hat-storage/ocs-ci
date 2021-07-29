@@ -1,7 +1,6 @@
 """
 StorageCluster related functionalities
 """
-import re
 import logging
 import tempfile
 
@@ -467,39 +466,29 @@ def osd_encryption_verification():
     if ocs_version < 4.6:
         error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"
         raise UnsupportedFeatureError(error_message)
-    osd_size = get_osd_size()
 
     log.info("Get 'lsblk' command output on nodes where osd running")
     osd_node_names = get_osds_per_node()
-    lsblk_output_list = []
     for worker_node in osd_node_names:
-        lsblk_cmd = "oc debug node/" + worker_node + " -- chroot /host lsblk"
-        out = run_cmd(lsblk_cmd)
-        log.info(f"the output from lsblk command is {out}")
-        lsblk_output_list.append((out, len(osd_node_names[worker_node])))
+        lsblk_cmd = f"oc debug node/{worker_node} -- chroot /host lsblk"
+        lsblk_out = run_cmd(lsblk_cmd)
+        log.info(f"the output of lsblk command on node {worker_node} is:\n {lsblk_out}")
+        osd_node_names[worker_node].append(lsblk_out)
 
     log.info("Verify 'lsblk' command results are as expected")
-    for node_output_lsblk in lsblk_output_list:
-        node_lsb = node_output_lsblk[0].split()
-
-        log.info("Search 'crypt' in node_lsb list")
-        all_occurrences_crypt = [
-            index for index, element in enumerate(node_lsb) if element == "crypt"
-        ]
-
-        log.info("Verify all OSDs encrypted on node")
-        if len(all_occurrences_crypt) != node_output_lsblk[1]:
-            raise EnvironmentError("OSD is not encrypted")
-
-        log.info("Verify that OSD is encrypted, and not another component like sda")
-        for index_crypt in all_occurrences_crypt:
-            encrypted_component_size = int(
-                (re.findall(r"\d+", node_lsb[index_crypt - 2]))[0]
+    for worker_node in osd_node_names:
+        osd_number_per_node = len(osd_node_names[worker_node]) - 1
+        lsblk_output = osd_node_names[worker_node][-1]
+        lsblk_output_split = lsblk_output.split()
+        logging.info(f"lsblk split:{lsblk_output_split}")
+        logging.info(f"osd_node_names dictionary: {osd_node_names}")
+        logging.info(f"count crypt {lsblk_output_split.count('crypt')}")
+        logging.info(f"osd_number_per_node = {osd_number_per_node}")
+        if lsblk_output_split.count("crypt") != osd_number_per_node:
+            logging.error(
+                f"The output of lsblk command on node {worker_node} is not as expected:\n{lsblk_output}"
             )
-            if encrypted_component_size != osd_size:
-                raise EnvironmentError(
-                    "The OSD is not encrypted, another mount encrypted."
-                )
+            raise ValueError("OSD is not encrypted")
 
 
 def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=True):
