@@ -117,7 +117,9 @@ def ui_add_capacity_conditions():
         if is_proxy:
             logger.info("Add capacity via UI is not supported on proxy cluster")
         if is_lso:
-            logger.info("Add capacity via UI is not supported on lso cluster")
+            logger.info(
+                "Add capacity via UI is not automated at the moment on LSO cluster"
+            )
         return False
     else:
         return True
