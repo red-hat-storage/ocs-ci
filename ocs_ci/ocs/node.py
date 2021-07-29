@@ -1,6 +1,7 @@
 import copy
 import logging
 import re
+import time
 from prettytable import PrettyTable
 from collections import defaultdict
 
@@ -399,6 +400,11 @@ def add_new_node_and_label_upi(
 
     new_spun_nodes = list(set(nodes_after_exp) - set(initial_nodes))
     log.info(f"New spun nodes: {new_spun_nodes}")
+    # For IBM cloud, it takes time to settle down new nodes even after reaching READY state
+    if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+        log.info("Sleeping for 300 seconds for new nodes to settle down")
+        time.sleep(300)
+
     if node_type == constants.RHEL_OS:
         set_selinux_permissions(workers=new_spun_nodes)
 
