@@ -763,6 +763,7 @@ def pod_factory_fixture(request, pvc_factory):
         replica_count=1,
         command=None,
         command_args=None,
+        subpath=None,
     ):
         """
         Args:
@@ -809,6 +810,7 @@ def pod_factory_fixture(request, pvc_factory):
                 replica_count=replica_count,
                 command=command,
                 command_args=command_args,
+                subpath=subpath,
             )
             assert pod_obj, "Failed to create pod"
         if deployment_config:
