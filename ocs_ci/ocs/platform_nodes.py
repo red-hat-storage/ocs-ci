@@ -387,7 +387,9 @@ class VMWareNodes(NodesBase):
         ]
         # Start the VMs
         if stopped_vms:
-            logger.info(f"The following VMs are powered off: {stopped_vms}")
+            logger.info(
+                f"The following VMs are powered off: {[vm.name for vm in stopped_vms]}"
+            )
             self.vsphere.start_vms(stopped_vms)
 
     def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
@@ -2339,7 +2341,9 @@ class RHVNodes(NodesBase):
 
         # Start the VMs
         if stopped_vms:
-            logger.info(f"The following VMs are powered off: {stopped_vms}")
+            logger.info(
+                f"The following VMs are powered off: {[vm.name for vm in stopped_vms]}"
+            )
             self.rhv.start_rhv_vms(stopped_vms)
 
 
