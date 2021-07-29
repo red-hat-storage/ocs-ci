@@ -19,7 +19,7 @@ from subprocess import run, CalledProcessError
 # Local modules
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.node import get_nodes
+from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 
 # BMO is stand for : BenchMark Operator
@@ -88,7 +88,7 @@ class BenchmarkOperator(object):
         self.ns_obj = OCP(kind="namespace")
         self.pod_obj = OCP(namespace=BMO_NAME, kind="pod")
         # list of worker nodes to label
-        self.worker_nodes = [node.name for node in get_nodes()]
+        self.worker_nodes = get_worker_nodes()
         self._clone_operator()
         self.dir += f"/{BMO_NAME}"
 
