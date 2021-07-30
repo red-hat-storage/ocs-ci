@@ -8,9 +8,6 @@ from selenium import webdriver
 from selenium.common.exceptions import (
     TimeoutException,
     WebDriverException,
-    NoSuchElementException,
-    ElementNotVisibleException,
-    StaleElementReferenceException,
 )
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
@@ -234,12 +231,6 @@ class BaseUI:
             self.driver,
             timeout=timeout,
             poll_frequency=1,
-            ignored_exceptions=[
-                NoSuchElementException,
-                ElementNotVisibleException,
-                StaleElementReferenceException,
-                TimeoutException,
-            ],
         )
         try:
             wait.until(
