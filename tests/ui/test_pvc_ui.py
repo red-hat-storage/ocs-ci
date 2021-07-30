@@ -1,19 +1,13 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import tier1, skipif_ui
+from ocs_ci.framework.testlib import tier1, skipif_ui_not_support
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
-from ocs_ci.framework.testlib import skipif_ocs_version, skipif_ocp_version
-from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
-from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
-    skipif_ibm_cloud,
 )
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, delete_pvcs
-from ocs_ci.ocs.ui.base_ui import PageNavigator, BaseUI
-from selenium.webdriver.common.by import By
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
@@ -29,9 +23,6 @@ class TestPvcUserInterface(object):
     Test PVC User Interface
 
     """
-
-    base_ui = PageNavigator(setup_ui)
-
     @pytest.fixture()
     def teardown(self, request):
 
@@ -42,10 +33,9 @@ class TestPvcUserInterface(object):
 
         request.addfinalizer(finalizer)
 
-    @skipif_ibm_cloud
     @tier1
     @skipif_ocs_version("<4.6")
-    @skipif_ui("pvc")
+    @skipif_ui_not_support("pvc")
     @pytest.mark.parametrize(
         argnames=["sc_type", "pvc_name", "access_mode", "pvc_size", "vol_mode"],
         argvalues=[
