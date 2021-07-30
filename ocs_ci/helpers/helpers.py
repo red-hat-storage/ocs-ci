@@ -278,9 +278,14 @@ def create_pod(
         pod_data["spec"]["template"]["spec"]["serviceAccountName"] = sa_name
 
     if subpath:
-        pod_data["spec"]["template"]["spec"]["containers"][0]["volumeMounts"][0][
-            "subPath"
-        ] = subpath
+        if dc_deployment:
+            pod_data["spec"]["template"]["spec"]["containers"][0]["volumeMounts"][0][
+                "subPath"
+            ] = subpath
+        else:
+            pod_data["spec"]["containers"][0]["volumeMounts"][0][
+                "subPath"
+            ] = subpath
 
     # overwrite used image (required for disconnected installation)
     update_container_with_mirrored_image(pod_data)
