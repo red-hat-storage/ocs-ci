@@ -28,6 +28,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     clone_repo,
     create_rhelpod,
+    delete_file,
     get_cluster_name,
     get_infra_id,
     run_cmd,
@@ -301,6 +302,13 @@ class AWSUPI(AWSBase):
                 self.upi_script_path,
             )
             shutil.copy2(os.path.join(bindir, "oc"), self.upi_script_path)
+            # and another UGLY WORKAROUND: copy openshift-install also to the
+            # absolute_cluster_path (for more details, see
+            # https://github.com/red-hat-storage/ocs-ci/pull/4650)
+            shutil.copy2(
+                os.path.join(bindir, "openshift-install"),
+                os.path.abspath(os.path.join(self.cluster_path, "..")),
+            )
 
         def deploy(self, log_cli_level="DEBUG"):
             """
@@ -363,6 +371,11 @@ class AWSUPI(AWSBase):
                 "Removing openshift-misc directory located at %s", self.upi_repo_path
             )
             shutil.rmtree(self.upi_repo_path)
+            # Delete openshift-install copied to cluster_dir (see WORKAROUND at
+            # the end of deploy_prereq method of this class)
+            delete_file(
+                os.path.abspath(os.path.join(self.cluster_path, "../openshift-install"))
+            )
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         """
