@@ -19,6 +19,7 @@ from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,7 @@ class TestPvcUserInterface(object):
     def test_create_resize_delete_pvc(
         self,
         project_factory,
+        pod_factory,
         teardown_factory,
         setup_ui,
         sc_type,
@@ -179,6 +181,7 @@ class TestPvcUserInterface(object):
             interface_type = constants.CEPHBLOCKPOOL
         else:
             interface_type = constants.CEPHFILESYSTEM
+
         new_pod = helpers.create_pod(
             interface_type=interface_type,
             pvc_name=pvc_name,
@@ -194,7 +197,7 @@ class TestPvcUserInterface(object):
 
         # Expanding the PVC
         logger.info("Pvc Resizing")
-        new_size = int(pvc_size) + 1
+        new_size = int(pvc_size) + 3
         pvc_ui_obj.pvc_resize_ui(
             pvc_name=pvc_name, new_size=new_size, project_name=project_name
         )
@@ -218,6 +221,18 @@ class TestPvcUserInterface(object):
             "Pvc resize verified..!!"
             f"New Capacity after PVC resize is {expected_capacity}"
         )
+
+        # Running FIO
+        logger.info("Execute FIO on a Pod")
+        if vol_mode in constants.VOLUME_MODE_BLOCK:
+            storage_type = "block"
+        else:
+            storage_type = "fs"
+
+        new_pod.run_io(storage_type, size=(new_size - 1), invalidate=0, rate="1000m")
+
+        get_fio_rw_iops(new_pod)
+        logger.info("FIO execution on Pod successfully completed..!!")
 
         # Checking if the Pod is deleted or not
         new_pod.delete(wait=True)
