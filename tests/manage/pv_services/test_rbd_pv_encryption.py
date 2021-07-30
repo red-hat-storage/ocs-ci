@@ -37,7 +37,7 @@ class TestRbdPvEncryption(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, kv_version):
+    def setup(self, kv_version, request):
         """
         Setup csi-kms-connection-details configmap
 
@@ -51,8 +51,11 @@ class TestRbdPvEncryption(ManageTest):
         ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
         try:
             ocp_obj.get_resource(resource_name="ocs-kms-ca-secret", column="NAME")
-        except CommandFailed:
-            self.vault.create_ocs_vault_cert_resources()
+        except CommandFailed as cfe:
+            if "not found" not in str(cfe):
+                raise
+            else:
+                self.vault.create_ocs_vault_cert_resources()
 
         # Create vault namespace, backend path and policy in vault
         self.vault_resource_name = create_unique_resource_name("test", "vault")
@@ -78,16 +81,12 @@ class TestRbdPvEncryption(ManageTest):
             vdict[self.new_kmsid]["VAULT_NAMESPACE"] = self.vault_resource_name
             kms.update_csi_kms_vault_connection_details(vdict)
 
-        except CommandFailed:
-            self.new_kmsid = "1-vault"
-            self.vault.create_vault_csi_kms_connection_details()
-
-    @pytest.fixture(autouse=True)
-    def teardown(self, request):
-        """
-        Cleanup the KMS resources in vault and OCS
-
-        """
+        except CommandFailed as cfe:
+            if "not found" not in str(cfe):
+                raise
+            else:
+                self.new_kmsid = "1-vault"
+                self.vault.create_vault_csi_kms_connection_details()
 
         def finalizer():
             # Remove the vault config from csi-kms-connection-details configMap
@@ -197,8 +196,9 @@ class TestRbdPvEncryption(ManageTest):
 
         # Delete the PVC
         for pvc_obj in pvc_objs:
+            pv_obj = pvc_obj.backed_pv_obj
             pvc_obj.delete()
-            pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
+            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
 
         # Verify whether the key is deleted in Vault. Skip check for kv-v2 due to BZ#1979244
         if kv_version == "v1":
