@@ -379,7 +379,6 @@ class Deployment(object):
         )
         run_cmd(f"oc create -f {subscription_manifest.name}")
         logger.info("Sleeping for 15 seconds after subscribing OCS")
-        subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
 
