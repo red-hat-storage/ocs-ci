@@ -23,9 +23,9 @@ class TestPvcUserInterface(object):
     Test PVC User Interface
 
     """
+
     @pytest.fixture()
     def teardown(self, request):
-
         def finalizer():
             pvc_objs = get_all_pvc_objs(namespace="openshift-storage")
             pvcs = [pvc_obj for pvc_obj in pvc_objs if "test-pvc" in pvc_obj.name]
