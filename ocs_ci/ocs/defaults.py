@@ -35,6 +35,7 @@ PROMETHEUS_ROUTE = "prometheus-k8s"
 DEVICE_SIZE = 100
 
 OCS_OPERATOR_NAME = "ocs-operator"
+ODF_OPERATOR_NAME = "odf-operator"
 LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
 LIVE_CONTENT_SOURCE = "redhat-operators"
 
