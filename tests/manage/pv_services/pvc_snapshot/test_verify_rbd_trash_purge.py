@@ -27,9 +27,8 @@ class TestVerifyRbdTrashPurge(ManageTest):
         self,
         project_factory,
         storageclass_factory,
-        snapshot_restore_factory,
-        multi_pvc_factory,
         snapshot_factory,
+        multi_pvc_factory,
     ):
         """
         Create RBD pool, storage class, PVCs and snapshots
@@ -68,9 +67,7 @@ class TestVerifyRbdTrashPurge(ManageTest):
                 timeout=180,
             )
 
-    def test_verify_rbd_trash_purge_when_snapshots_present(
-        self, snapshot_factory, snapshot_restore_factory, pod_factory
-    ):
+    def test_verify_rbd_trash_purge_when_snapshots_present(self):
         """
         Verify RBD trash purge command when the RBD image in trash have snapshots. Verifies bug 1964373.
 
@@ -112,20 +109,23 @@ class TestVerifyRbdTrashPurge(ManageTest):
         image_list_out = ct_pod.exec_ceph_cmd(
             ceph_cmd=f"rbd trash ls {pool_name}", format=""
         )
-        image_list_final = image_list_out.strip().split("\n")
+        image_final = image_list_out.strip().split("\n")[0]
         log.info(
-            f"List of RBD images remaining in trash after running trash purge- {image_list_final}"
+            f"List of RBD images remaining in trash after running trash purge- {image_final}"
         )
 
         # Try to delete each of the remaining images from trash. Rbd trash rm command should fail.
-        for image_name in image_list_final:
+        # Get the image IDs from image_final str.
+        # Eg : image_final = '61379c647069 csi-vol-7b1da20d-f107-11eb-99c7-0a580a80020d 6137b6f29eb7
+        # csi-vol-7e40651f-f107-11eb-99c7-0a580a80020d 6137c642615f csi-vol-77f43877-f107-11eb-99c7-0a580a80020d'
+        for image_id in image_final.split()[::2]:
             try:
                 ct_pod.exec_ceph_cmd(
-                    ceph_cmd=f"rbd trash rm {image_name.split()[0]} -p {pool_name}",
+                    ceph_cmd=f"rbd trash rm {image_id} -p {pool_name}",
                     format="",
                 )
                 raise UnexpectedBehaviour(
-                    f"Rbd trash rm command to delete the image {image_name} completed successfully"
+                    f"Rbd trash rm command to delete the image with id {image_id} completed successfully"
                 )
             except CommandFailed as cfe:
                 if "rbd: image has snapshots" not in str(cfe):
