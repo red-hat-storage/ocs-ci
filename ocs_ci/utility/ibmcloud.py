@@ -58,6 +58,7 @@ def run_ibmcloud_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwarg
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
     """
+    return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
     last_login = config.RUN.get("ibmcloud_last_login", 0)
     timeout_from_last_login = time.time() - last_login
     # Login if the timeout from last login is greater than 9.5 minutes.
@@ -360,21 +361,30 @@ class IBMCloud(object):
 
     def get_data_volumes(self):
         """
-        Returns volumes in IBM Cloud.
+        Returns volumes in IBM Cloud for cluster.
 
         Returns:
-            list: volumes in IBM Cloud.
+            list: volumes in IBM Cloud for cluster.
 
         """
         logger.info("get data volumes")
 
+        # get cluster ID
+        cmd = f"ibmcloud ks cluster get --cluster {config.ENV_DATA['cluster_name']} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+        cluster_id = out["id"]
+
+        # get the volume list
         cmd = "ibmcloud is vols --output json"
         out = run_ibmcloud_cmd(cmd)
         out = json.loads(out)
 
         vol_ids = []
-        for vols in out:
-            vol_ids.append(vols["id"])
+        for vol in out:
+            if vol["volume_attachments"]:
+                if cluster_id in vol["volume_attachments"][0]["instance"]["name"]:
+                    vol_ids.append(vol["id"])
 
         logger.info(f"volume ids are : {vol_ids}")
         return vol_ids
