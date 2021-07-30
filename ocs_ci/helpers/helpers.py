@@ -3282,6 +3282,6 @@ def get_noobaa_url():
         str: url of noobaa console
 
     """
-    ocp_obj = OCP(kind="routes", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp_obj = OCP(kind=constants.ROUTE, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     route_obj = ocp_obj.get(resource_name="noobaa-mgmt")
     return route_obj["spec"]["host"]
