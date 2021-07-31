@@ -103,7 +103,6 @@ class TestPvcUserInterface(object):
     def test_create_resize_delete_pvc(
         self,
         project_factory,
-        pod_factory,
         teardown_factory,
         setup_ui,
         sc_type,
