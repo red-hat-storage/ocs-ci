@@ -330,6 +330,8 @@ class Pod(OCS):
             bs (str): Block size, e.g. 4K
             end_fsync (int): If 1, fio will sync file contents when a write
                 stage has completed. Fio default is 0
+            invalidate (bool): Invalidate the buffer/page cache parts of the files to be used prior to starting I/O
+
         """
         if not self.wl_setup_done:
             self.workload_setup(storage_type=storage_type, jobs=jobs)
