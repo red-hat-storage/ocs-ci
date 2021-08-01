@@ -11,7 +11,6 @@ port 9200, this test can not be running in your host.
 
 # Builtin modules
 import logging
-import time
 
 # 3ed party modules
 import pytest
@@ -27,6 +26,7 @@ from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.elasticsearch import ElasticSearch
+from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
 
@@ -433,11 +433,10 @@ class TestSmallFileWorkload(PASTest):
         if isinstance(self.es, ElasticSearch):
             self.es.cleanup()
         self.operator.cleanup()
-        sleep_time = 5
-        log.info(
-            f"Going to sleep for {sleep_time} Minute, for background cleanup to complete"
-        )
-        time.sleep(sleep_time * 60)
+        # wait up to 45 min for the ceph cluster be health OK after backend
+        # operation completed.
+        log.info("Verify (and wait if needed) that ceph health is OK")
+        ceph_health_check(tries=45, delay=60)
 
     @pytest.mark.parametrize(
         argnames=["file_size", "files", "threads", "samples", "interface"],
