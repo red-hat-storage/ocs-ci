@@ -141,7 +141,7 @@ def add_capacity_setup(add_nodes):
             logging.info(
                 f"Adding more {num_of_wnodes_to_add} worker nodes to the cluster"
             )
-            add_nodes(ocs_nodes=False, node_count=num_of_wnodes_to_add)
+            add_nodes(ocs_nodes=True, node_count=num_of_wnodes_to_add)
 
         wnodes_not_in_ocs = get_worker_nodes_not_in_ocs()
         if wnodes_not_in_ocs:
