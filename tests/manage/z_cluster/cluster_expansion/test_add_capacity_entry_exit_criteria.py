@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 class TestAddCapacity(ManageTest):
     def test_add_capacity(
         self,
+        add_capacity_setup,
         project_factory,
         multi_dc_pod,
         multi_pvc_factory,

@@ -134,6 +134,7 @@ class TestAddCapacityWithResourceDelete:
     )
     def test_add_capacity_with_resource_delete(
         self,
+        add_capacity_setup,
         workload_storageutilization_rbd,
         resource_name,
         resource_id,
