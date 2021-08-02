@@ -203,18 +203,18 @@ def create_pod(
             ] = pvc_name
 
     if interface_type == constants.CEPHBLOCKPOOL and raw_block_pv:
-        if pod_dict in [constants.FEDORA_DC_YAML, constants.FIO_DC_YAML]:
+        if pod_dict_path in [constants.FEDORA_DC_YAML, constants.FIO_DC_YAML]:
             temp_dict = [
                 {
                     "devicePath": raw_block_device,
                     "name": pod_data.get("spec")
-                    .get("template")
-                    .get("spec")
-                    .get("volumes")[0]
-                    .get("name"),
+                        .get("template")
+                        .get("spec")
+                        .get("volumes")[0]
+                        .get("name"),
                 }
             ]
-            if pod_dict == constants.FEDORA_DC_YAML:
+            if pod_dict_path == constants.FEDORA_DC_YAML:
                 del pod_data["spec"]["template"]["spec"]["containers"][0][
                     "volumeMounts"
                 ]
@@ -227,18 +227,14 @@ def create_pod(
                 "volumeDevices"
             ] = temp_dict
 
-        elif pod_dict in [
-            constants.NGINX_POD_YAML,
-            constants.CSI_RBD_POD_YAML,
-            constants.CSI_CEPHFS_POD_YAML,
-        ]:
+        elif pod_dict_path == constants.NGINX_POD_YAML:
             temp_dict = [
                 {
                     "devicePath": raw_block_device,
                     "name": pod_data.get("spec")
-                    .get("containers")[0]
-                    .get("volumeMounts")[0]
-                    .get("name"),
+                        .get("containers")[0]
+                        .get("volumeMounts")[0]
+                        .get("name"),
                 }
             ]
             del pod_data["spec"]["containers"][0]["volumeMounts"]
@@ -1706,9 +1702,9 @@ def get_default_storage_class():
         sc.get("metadata").get("name")
         for sc in storage_classes
         if sc.get("metadata")
-        .get("annotations")
-        .get("storageclass.kubernetes.io/is-default-class")
-        == "true"
+               .get("annotations")
+               .get("storageclass.kubernetes.io/is-default-class")
+           == "true"
     ]
 
 
@@ -2822,9 +2818,9 @@ def retrieve_default_ingress_crt():
             namespace="openshift-ingress-operator",
             resource_name="router-ca",
         )
-        .get()
-        .get("data")
-        .get("tls.crt")
+            .get()
+            .get("data")
+            .get("tls.crt")
     )
 
     decoded_crt = base64.b64decode(default_ingress_crt_b64).decode("utf-8")
@@ -2844,8 +2840,8 @@ def storagecluster_independent_check():
     """
     storage_cluster = (
         OCP(kind="StorageCluster", namespace=config.ENV_DATA["cluster_namespace"])
-        .get()
-        .get("items")[0]
+            .get()
+            .get("items")[0]
     )
 
     return bool(
