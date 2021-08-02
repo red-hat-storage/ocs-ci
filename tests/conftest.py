@@ -209,30 +209,26 @@ def pytest_collection_modifyitems(session, items):
                     items.remove(item)
                     continue
             if skip_rbd_tests:
-                if (
-                    skipif_rbd_disabled
-                    or any(
-                        component in item.name for component in ["CephBlockPool", "rbd", "RBD"]
-                    )
+                if skipif_rbd_disabled or any(
+                    component in item.name
+                    for component in ["CephBlockPool", "rbd", "RBD"]
                 ):
-                    log.info(f"skipping because rbd disabled: {item.name}")
+                    log.info(f"Skipping test: {item.name}, because rbd is disabled")
                     items.remove(item)
                     continue
             if skip_cephfs_tests:
-                if any (
-                    component in item.name for component in ["CephFileSystem", "CEPHFS", "fs", "Filesystem"]
+                if any(
+                    component in item.name
+                    for component in ["CephFileSystem", "CEPHFS", "fs", "Filesystem"]
                 ):
-                    log.info(f"Skipping because cephfs disabled: {item.name}")
+                    log.info(f"Skipping test: {item.name}, because cephfs is disabled")
                     items.remove(item)
                     continue
             if skip_mcg_tests:
-                if (
-                    skipif_noobaa_disabled
-                    or any (
-                        component in item.name for component in ["mcg", "MCG", "noobaa"]
-                    )
+                if skipif_noobaa_disabled or any(
+                    component in item.name for component in ["mcg", "MCG", "noobaa"]
                 ):
-                    log.info(f"skipping because noobaa is disabled:{item.name}")
+                    log.info(f"Skipping test: {item.name}, because noobaa is disabled")
                     items.remove(item)
                     continue
 
