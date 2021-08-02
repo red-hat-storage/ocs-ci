@@ -2,6 +2,7 @@ import logging
 import os
 
 from pkg_resources import parse_version
+from semantic_version import Version
 
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs import constants
@@ -40,7 +41,8 @@ class TestUpgradeOCP(ManageTest):
 
         """
 
-        short_ocp_upgrade_version = ".".join(ocp_upgrade_version.split(".")[0:2])
+        version = Version.coerce(ocp_upgrade_version)
+        short_ocp_upgrade_version = ".".join([str(version.major), str(version.minor)])
         version_before_upgrade = parse_version(
             config.DEPLOYMENT.get("installer_version")
         )
