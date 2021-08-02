@@ -3309,3 +3309,15 @@ def select_unique_pvcs(pvcs):
             access_mode_volume_mode, pvc_obj
         )
     return pvc_dict.values()
+
+
+def mon_pods_running_on_same_node():
+    """
+    Verifies two mons are running on same node
+
+    """
+    mon_running_nodes = node.get_mon_running_nodes()
+    if len(mon_running_nodes) != len(set(mon_running_nodes)):
+        logger.error(f"Mons running on nodes: {mon_running_nodes}")
+        raise UnexpectedBehaviour("Two or more mons running on same node")
+    logger.info("Mons are running on different nodes")

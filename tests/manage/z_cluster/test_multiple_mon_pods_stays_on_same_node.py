@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ignore_leftovers,
 )
+from ocs_ci.helpers.helpers import mon_pods_running_on_same_node
 from ocs_ci.ocs.constants import (
     ROOK_CEPH_MON_ENDPOINTS,
     CONFIGMAP,
@@ -22,7 +23,6 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, ResourceWrongStatusException
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.node import get_mon_running_nodes
 from ocs_ci.ocs.resources.pod import (
     get_mon_pods,
     get_operator_pods,
@@ -86,17 +86,6 @@ class TestMultipleMonPodsStaysOnSameNode(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def mon_pods_running_on_same_node(self):
-        """
-        Verifies two mons are running on same node
-
-        """
-        mon_running_nodes = get_mon_running_nodes()
-        dup = set()
-        mons_on_same_node = [m for m in mon_running_nodes if m in dup or dup.add(m)]
-        assert mons_on_same_node == [], "Two or more mons running on same node"
-        log.info("Mons are running on different nodes")
-
     def test_multiple_mon_pod_stays_on_same_node(self):
         """
         A testcase to verify multiple mon pods stays on same node
@@ -139,6 +128,9 @@ class TestMultipleMonPodsStaysOnSameNode(ManageTest):
             format_type="strategic",
         )
         log.info(f"Configmap {ROOK_CEPH_MON_ENDPOINTS} edited successfully")
+        log.info(
+            f"Rook-ceph-mon-endpoints updated configmap: {rook_ceph_mon_configmap}"
+        )
 
         # Delete one mon deployment which had been edited
         dep_obj = OCP(kind=DEPLOYMENT, namespace=OPENSHIFT_STORAGE_NAMESPACE)
@@ -212,4 +204,4 @@ class TestMultipleMonPodsStaysOnSameNode(ManageTest):
         log.info(
             "Mons are up and running state and validate are running on different nodes"
         )
-        self.mon_pods_running_on_same_node()
+        mon_pods_running_on_same_node()

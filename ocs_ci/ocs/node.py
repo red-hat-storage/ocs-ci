@@ -1696,4 +1696,4 @@ def get_mon_running_nodes():
         list: MON node names
 
     """
-    return [pod.get_pod_node(mon_node).name for mon_node in pod.get_mon_pods()]
+    return [pod.get_pod_node(mon_pod).name for mon_pod in pod.get_mon_pods()]
