@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     post_upgrade,
     skipif_bm,
     skipif_external_mode,
+    ipi_deployment_required,
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
@@ -29,6 +30,7 @@ SCALE_DATA_FILE = f"{log_path}/scale_data_file.yaml"
 @skipif_external_mode
 @skipif_bm
 @pre_upgrade
+@ipi_deployment_required
 @pytest.mark.polarion_id("OCS-755")
 def test_scale_pvcs_pods_pre_upgrade():
     """

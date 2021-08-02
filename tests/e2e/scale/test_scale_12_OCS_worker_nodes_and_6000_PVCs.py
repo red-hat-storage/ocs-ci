@@ -22,6 +22,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ibm_cloud,
     skipif_ibm_power,
     skipif_lso,
+    ipi_deployment_required,
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
@@ -39,6 +40,7 @@ SCALE_DATA_FILE = f"{log_path}/scale_data_file.yaml"
 @skipif_ibm_cloud
 @skipif_ibm_power
 @skipif_external_mode
+@ipi_deployment_required
 @ignore_leftovers
 class TestAddNode(E2ETest):
     """
