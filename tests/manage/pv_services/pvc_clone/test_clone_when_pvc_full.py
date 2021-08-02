@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -110,7 +111,12 @@ class TestCloneWhenFull(ManageTest):
         # Verify the new pods are running
         log.info("Verify the new pods are running")
         for pod_obj in clone_pod_objs:
-            wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+            timeout = (
+                300
+                if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                else 60
+            )
+            wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout)
         log.info("Verified: New pods are running")
 
         # Verify that the md5sum matches
