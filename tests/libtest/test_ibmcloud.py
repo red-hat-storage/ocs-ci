@@ -37,8 +37,8 @@ def get_attached_volume(request, get_volume):
     """
 
     def finalizer():
-        worker_nodes = node.get_nodes(node_type="worker", num_of_nodes=1)
-        ibmcloud.detach_volume(get_volume, worker_nodes)
+        worker_node = ibmcloud.get_node_by_attached_volume(get_volume)
+        ibmcloud.detach_volume(get_volume, worker_node)
 
     request.addfinalizer(finalizer)
     ibmcloud = IBMCloud()
@@ -81,8 +81,8 @@ def test_detachvolume(get_volume, get_attached_volume):
     """
     ibmcloud = IBMCloud()
 
-    worker_nodes = node.get_nodes(node_type="worker", num_of_nodes=1)
-    ibmcloud.detach_volume(get_volume, worker_nodes)
+    worker_node = get_attached_volume
+    ibmcloud.detach_volume(get_volume, worker_node)
 
 
 @libtest
