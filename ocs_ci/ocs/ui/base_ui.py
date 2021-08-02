@@ -222,9 +222,9 @@ class BaseUI:
             locator (tuple): (GUI element needs to operate on (str), type (By))
             expected_text (str): Text which needs to be searched on UI
             timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
+
         return:
             bool: Returns True if the expected element text is found, False otherwise
-
 
         """
         wait = WebDriverWait(
