@@ -134,8 +134,9 @@ class BucketClassUI(PageNavigator):
             self.do_send_keys(
                 self.generic_locators["search_resource_field"], backingstore_name
             )
-            sleep(0.1)
+            sleep(0.3)
             self.do_click(self.generic_locators["check_first_row_checkbox"])
+            sleep(0.3)
             self.do_click(self.generic_locators["remove_search_filter"])
 
         self.do_click(self.generic_locators["submit_form"])
