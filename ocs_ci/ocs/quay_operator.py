@@ -25,10 +25,10 @@ class QuayOperator(object):
         Initializer function
 
         """
-        self.namespace = "openshift-operators"
+        self.namespace = constants.OPENSHIFT_OPERATORS
         self.quay_operator = None
         self.quay_registry = None
-        self.quay_pod_obj = OCP(kind="pod", namespace=self.namespace)
+        self.quay_pod_obj = OCP(kind=constants.POD, namespace=self.namespace)
         self.quay_registry_name = ""
         self.quay_operator_csv = ""
         self.sc_default = False
@@ -49,10 +49,10 @@ class QuayOperator(object):
         logger.info(f"Installing Quay operator: {self.quay_operator.name}")
         self.quay_operator.create()
         for quay_pod in TimeoutSampler(
-            300, 10, get_pod_name_by_pattern, "quay-operator", self.namespace
+            300, 10, get_pod_name_by_pattern, constants.QUAY_OPERATOR, self.namespace
         ):
             if quay_pod:
-                assert self.quay_pod_obj.wait_for_resource(
+                self.quay_pod_obj.wait_for_resource(
                     condition=constants.STATUS_RUNNING,
                     resource_name=quay_pod[0],
                     sleep=30,
@@ -129,4 +129,6 @@ class QuayOperator(object):
             self.quay_registry.delete()
         if self.quay_operator:
             self.quay_operator.delete()
-        exec_cmd(f"oc delete csv {self.quay_operator_csv} -n {self.namespace}")
+        exec_cmd(
+            f"oc delete {constants.CLUSTER_SERVICE_VERSION} {self.quay_operator_csv} -n {self.namespace}"
+        )

@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import bugzilla
+from ocs_ci.framework.pytest_customization.marks import bugzilla, skipif_ocs_version
 from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.quay_operator import QuayOperator
@@ -29,6 +29,7 @@ class TestQuayWorkload(E2ETest):
 
     @bugzilla("1947796")
     @pytest.mark.polarion_id("OCS-2596")
+    @skipif_ocs_version("<4.8")
     def test_quay(self, quay_operator, mcg_obj):
         """
         Test verifies quay operator deployment and
