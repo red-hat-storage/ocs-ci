@@ -17,8 +17,8 @@ def test_osd_flapping_alert(measure_stop_ceph_osd):
 
     """
     expected_alert_msg = (
-        f"Storage daemon osd.0 has restarted 5 times in the last 5 minutes. Please check "
-        f"the pod events or ceph status to find out the cause."
+        "Storage daemon osd.0 has restarted 5 times in the last 5 minutes. Please check "
+        "the pod events or ceph status to find out the cause."
     )
 
     target_osd = get_osd_pods_having_ids([0])
