@@ -37,7 +37,7 @@ class TestUpgradeOCP(ManageTest):
         Loads config file to the ocs-ci config with upgrade version
 
         Args:
-            ocp_upgrade_version: (str): version to be upgraded
+            ocp_upgrade_version (str): version to be upgraded
 
         """
 
