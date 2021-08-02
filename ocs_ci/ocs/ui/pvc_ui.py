@@ -1,7 +1,7 @@
 import logging
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
-from ocs_ci.ocs.ui.ui_utils import format_locator
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
 from ocs_ci.ocs import constants
@@ -140,7 +140,6 @@ class PvcUI(PageNavigator):
             new_size (int): the new size of pvc (GB)
 
         """
-
         self.navigate_persistentvolumeclaims_page()
 
         logger.info(f"Search and Select test project {project_name}")
@@ -169,14 +168,28 @@ class PvcUI(PageNavigator):
         logger.info("Click on Expand Button")
         self.do_click(self.pvc_loc["expand-btn"])
 
-    def verify_pvc_resize_ui(self, expected_capacity):
+    def verify_pvc_resize_ui(self, project_name, pvc_name, expected_capacity):
         """
         Verifying PVC resize via UI
 
         Args:
+            project_name (str): name of test project
+            pvc_name (str): the name of pvc
             expected_capacity (str): the new size of pvc (GiB)
 
         """
+        self.navigate_persistentvolumeclaims_page()
+
+        logger.info(f"Search and Select test project {project_name}")
+        self.do_click(self.pvc_loc["pvc_project_selector"])
+        self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
+        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
+
+        logger.info(f"Search for {pvc_name} inside test project {project_name}")
+        self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
+
+        logger.info(f"Go to PVC {pvc_name} Page")
+        self.do_click(self.pvc_loc[pvc_name])
 
         is_expected_capacity = self.wait_until_expected_text_is_found(
             format_locator(self.pvc_loc["expected-capacity"], expected_capacity),

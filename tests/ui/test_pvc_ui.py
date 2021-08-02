@@ -7,7 +7,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
 )
-from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, delete_pvcs
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
@@ -23,15 +23,6 @@ class TestPvcUserInterface(object):
     Test PVC User Interface
 
     """
-
-    @pytest.fixture()
-    def teardown(self, request):
-        def finalizer():
-            pvc_objs = get_all_pvc_objs(namespace="openshift-storage")
-            pvcs = [pvc_obj for pvc_obj in pvc_objs if "test-pvc" in pvc_obj.name]
-            delete_pvcs(pvc_objs=pvcs)
-
-        request.addfinalizer(finalizer)
 
     @tier1
     @skipif_ocs_version("<4.6")
@@ -202,7 +193,9 @@ class TestPvcUserInterface(object):
         logger.info("Verifying PVC resize")
         expected_capacity = f"{new_size} GiB"
         pvc_resize = pvc_ui_obj.verify_pvc_resize_ui(
-            expected_capacity=expected_capacity
+            project_name=project_name,
+            pvc_name=pvc_name,
+            expected_capacity=expected_capacity,
         )
 
         assert pvc_resize, "PVC resize failed"
@@ -213,10 +206,10 @@ class TestPvcUserInterface(object):
 
         # Running FIO
         logger.info("Execute FIO on a Pod")
-        if vol_mode in constants.VOLUME_MODE_BLOCK:
-            storage_type = "block"
+        if vol_mode == constants.VOLUME_MODE_BLOCK:
+            storage_type = constants.WORKLOAD_STORAGE_TYPE_BLOCK
         else:
-            storage_type = "fs"
+            storage_type = constants.WORKLOAD_STORAGE_TYPE_FS
 
         new_pod.run_io(storage_type, size=(new_size - 1), invalidate=0, rate="1000m")
 
@@ -227,7 +220,7 @@ class TestPvcUserInterface(object):
         new_pod.delete(wait=True)
         new_pod.ocp.wait_for_delete(resource_name=new_pod.name)
 
-        # Deleting the PVC
+        # Deleting the PVC via UI
         logger.info(f"Delete {pvc_name} pvc")
         pvc_ui_obj.delete_pvc_ui(pvc_name, project_name)
 
