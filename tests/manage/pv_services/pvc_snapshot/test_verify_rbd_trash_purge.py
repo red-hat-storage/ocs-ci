@@ -25,10 +25,9 @@ class TestVerifyRbdTrashPurge(ManageTest):
     @pytest.fixture(autouse=True)
     def setup(
         self,
-        project_factory,
         storageclass_factory,
-        snapshot_factory,
         multi_pvc_factory,
+        snapshot_factory,
     ):
         """
         Create RBD pool, storage class, PVCs and snapshots
@@ -58,13 +57,14 @@ class TestVerifyRbdTrashPurge(ManageTest):
         self.snap_objs = [snapshot_factory(pvc_obj, False) for pvc_obj in self.pvc_objs]
 
         # Verify snapshots are ready
+        # Setting timeout as 600 seconds due to the bug 1972013
         log.info("Verify snapshots are ready")
         for snap_obj in self.snap_objs:
             snap_obj.ocp.wait_for_resource(
                 condition="true",
                 resource_name=snap_obj.name,
                 column=constants.STATUS_READYTOUSE,
-                timeout=180,
+                timeout=600,
             )
 
     def test_verify_rbd_trash_purge_when_snapshots_present(self):
