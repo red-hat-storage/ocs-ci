@@ -107,7 +107,8 @@ class ElasticSearch(object):
         """
         log.info("Initializing the Elastic-Search environment object")
         self.namespace = "elastic-system"
-        self.eck_file = "ocs_ci/templates/app-pods/eck.1.3.1-all-in-one.yaml"
+        # self.eck_file = "ocs_ci/templates/app-pods/eck.1.3.1-all-in-one.yaml"
+        self.eck_file = "ocs_ci/templates/app-pods/eck.1.6.0-all-in-one.yaml"
         self.dumper_file = "ocs_ci/templates/app-pods/esclient.yaml"
         self.pvc = "ocs_ci/templates/app-pods/es-pvc.yaml"
         self.crd = "ocs_ci/templates/app-pods/esq.yaml"

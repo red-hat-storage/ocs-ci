@@ -56,7 +56,7 @@ data:
     webhook-name: elastic-webhook.k8s.elastic.co
 ---
 # Source: eck-operator/charts/eck-operator-crds/templates/all-crds.yaml
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
@@ -519,12 +519,39 @@ spec:
   - name: v1
     served: true
     storage: true
+    # A schema is required
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          host:
+            type: string
+          port:
+            type: string
   - name: v1beta1
-    served: true
+    served: false
     storage: false
+    # A schema is required
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          host:
+            type: string
+          port:
+            type: string
   - name: v1alpha1
     served: false
     storage: false
+    # A schema is required
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          host:
+            type: string
+          port:
+            type: string
 status:
   acceptedNames:
     kind: ""
@@ -533,7 +560,7 @@ status:
   storedVersions: []
 ---
 # Source: eck-operator/charts/eck-operator-crds/templates/all-crds.yaml
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
@@ -792,11 +819,32 @@ spec:
                 specifies the lowest version currently running.'
               type: string
           type: object
-  version: v1beta1
+  version: v1
   versions:
-  - name: v1beta1
+  - name: v1
     served: true
     storage: true
+    # A schema is required
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          host:
+            type: string
+          port:
+            type: string
+  - name: v1beta1
+    served: true
+    storage: false
+    # A schema is required
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          host:
+            type: string
+          port:
+            type: string
 status:
   acceptedNames:
     kind: ""
@@ -805,7 +853,7 @@ status:
   storedVersions: []
 ---
 # Source: eck-operator/charts/eck-operator-crds/templates/all-crds.yaml
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
@@ -1871,12 +1919,39 @@ spec:
   - name: v1
     served: true
     storage: true
+    # A schema is required
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          host:
+            type: string
+          port:
+            type: string
   - name: v1beta1
     served: true
     storage: false
+    # A schema is required
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          host:
+            type: string
+          port:
+            type: string
   - name: v1alpha1
     served: false
     storage: false
+    # A schema is required
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          host:
+            type: string
+          port:
+            type: string
 status:
   acceptedNames:
     kind: ""
@@ -1885,7 +1960,7 @@ status:
   storedVersions: []
 ---
 # Source: eck-operator/charts/eck-operator-crds/templates/all-crds.yaml
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
@@ -2294,11 +2369,20 @@ spec:
                 specifies the lowest version currently running.'
               type: string
           type: object
-  version: v1beta1
+  version: v1
   versions:
-  - name: v1beta1
+  - name: v1
     served: true
     storage: true
+    # A schema is required
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          host:
+            type: string
+          port:
+            type: string
 status:
   acceptedNames:
     kind: ""
@@ -2307,7 +2391,7 @@ status:
   storedVersions: []
 ---
 # Source: eck-operator/charts/eck-operator-crds/templates/all-crds.yaml
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
@@ -2741,12 +2825,39 @@ spec:
   - name: v1
     served: true
     storage: true
+    # A schema is required
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          host:
+            type: string
+          port:
+            type: string
   - name: v1beta1
     served: true
     storage: false
+    # A schema is required
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          host:
+            type: string
+          port:
+            type: string
   - name: v1alpha1
     served: false
     storage: false
+    # A schema is required
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          host:
+            type: string
+          port:
+            type: string
 status:
   acceptedNames:
     kind: ""

@@ -5,9 +5,10 @@ Testing the Elasticsearch server deployment
 import logging
 import time
 
-from ocs_ci.ocs import defaults
+# from ocs_ci.ocs import defaults
 from ocs_ci.helpers.helpers import get_full_test_logs_path
-from ocs_ci.helpers.performance_lib import run_command
+
+# from ocs_ci.helpers.performance_lib import run_command
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
@@ -15,12 +16,19 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.elasticsearch import elasticsearch_load
+from ocs_ci.ocs.elasticsearch import ElasticSearch  # , elasticsearch_load
 
+# from ocs_ci.ocs
 log = logging.getLogger(__name__)
 
 
 class TestElasticsearch:
+    def setup(self):
+        self.es = ElasticSearch()
+
+    def teardown(self):
+        self.es.cleanup()
+
     def smallfile_run(self, es):
         """
         Run the smallfiles workload so the elasticsearch server will have some data
@@ -102,41 +110,39 @@ class TestElasticsearch:
         ripsaw.cleanup()
         return uuid
 
-    def test_elasticsearch(self, es):
+    def test_elasticsearch(self):
         """
         This test only deploy the elasticsearch module, connect to it with and
         without credentials and teardown the environment
-
-        Args:
-            es (fixture) : fixture that deploy / teardown the elasticsearch
 
         """
         full_log_path = get_full_test_logs_path(cname=self)
         log.info(f"Logs file path name is : {full_log_path}")
         log.info("The ElasticSearch deployment test started.")
-        if es.get_health():
+        if self.es.get_health():
             log.info("The Status of the elasticsearch is OK")
         else:
             log.warning("The Status of the elasticsearch is Not OK")
             log.info("Waiting another 30 sec.")
             time.sleep(30)
-            if es.get_health():
+            if self.es.get_health():
                 log.info("The Status of the elasticsearch is OK")
             else:
                 log.error("The Status of the elasticsearch is Not OK ! Exiting.")
 
-        if es.get_health():
+        if self.es.get_health():
             log.info("\nThe Elastic-Search server information :\n")
-            log.info(f"The Elasticsearch IP is {es.get_ip()}")
-            log.info(f"The Elasticsearch port is {es.get_port()}")
-            log.info(f"The Password to connect is {es.get_password()}")
+            log.info(f"The Elasticsearch IP is {self.es.get_ip()}")
+            log.info(f"The Elasticsearch port is {self.es.get_port()}")
+            log.info(f"The Password to connect is {self.es.get_password()}")
 
         else:
             assert False, "The Elasticsearch module is not ready !"
 
-        log.info(f"Test UUDI is : {self.smallfile_run(es)}")
+        """
+        log.info(f"Test UUDI is : {self.smallfile_run(self.es)}")
 
-        assert es.dumping_all_data(full_log_path), "Can not Retrieve the test data"
+        assert self.es.dumping_all_data(full_log_path), "Can not Retrieve the test data"
 
         assert run_command(
             f"ls {full_log_path}/FullResults.tgz"
@@ -149,3 +155,4 @@ class TestElasticsearch:
         assert elasticsearch_load(
             main_es, full_log_path
         ), "Can not load data into Main ES server"
+        """
