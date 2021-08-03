@@ -1,19 +1,24 @@
 """
 StorageCluster related functionalities
 """
-import re
 import logging
 import tempfile
 
 from jsonschema import validate
 from semantic_version import Version
 
+from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.exceptions import ResourceNotFoundError, UnsupportedFeatureError
+from ocs_ci.ocs.exceptions import (
+    ResourceNotFoundError,
+    UnsupportedFeatureError,
+    PVNotSufficientException,
+)
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
+from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.utility import localstorage, utils, templating, kms as KMS
@@ -219,8 +224,12 @@ def ocs_install_verification(
         f"{storage_cluster_name}-cephfs",
         f"{storage_cluster_name}-ceph-rbd",
     }
-    if Version.coerce(ocs_version) >= Version.coerce("4.8"):
-        required_storage_classes.update({f"{storage_cluster_name}-ceph-rbd-thick"})
+    if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+        # TODO: Add rbd-thick storage class verification in external mode cluster upgraded
+        # to OCS 4.8 when the bug 1978542 is fixed
+        # Skip rbd-thick storage class verification in external mode upgraded cluster. This is blocked by bug 1978542
+        if not (config.DEPLOYMENT["external_mode"] and post_upgrade_verification):
+            required_storage_classes.update({f"{storage_cluster_name}-ceph-rbd-thick"})
     skip_storage_classes = set()
     if disable_cephfs:
         skip_storage_classes.update(
@@ -247,7 +256,11 @@ def ocs_install_verification(
     storage_class_names = {
         item["metadata"]["name"] for item in storage_classes["items"]
     }
-    assert required_storage_classes.issubset(storage_class_names)
+    # required storage class names should be observed in the cluster under test
+    missing_scs = required_storage_classes.difference(storage_class_names)
+    if len(missing_scs) > 0:
+        log.error("few storage classess are not present: %s", missing_scs)
+    assert list(missing_scs) == []
 
     # Verify OSDs are distributed
     if not config.DEPLOYMENT["external_mode"]:
@@ -435,6 +448,10 @@ def ocs_install_verification(
             f" the actaul failure domain is {failure_domain}"
         )
 
+    if Version.coerce(ocs_version) >= Version.coerce("4.7"):
+        log.info("Verifying images in storage cluster")
+        verify_sc_images(storage_cluster)
+
 
 def osd_encryption_verification():
     """
@@ -449,47 +466,38 @@ def osd_encryption_verification():
     if ocs_version < 4.6:
         error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"
         raise UnsupportedFeatureError(error_message)
-    osd_size = get_osd_size()
 
     log.info("Get 'lsblk' command output on nodes where osd running")
     osd_node_names = get_osds_per_node()
-    lsblk_output_list = []
     for worker_node in osd_node_names:
-        lsblk_cmd = "oc debug node/" + worker_node + " -- chroot /host lsblk"
-        out = run_cmd(lsblk_cmd)
-        log.info(f"the output from lsblk command is {out}")
-        lsblk_output_list.append((out, len(osd_node_names[worker_node])))
+        lsblk_cmd = f"oc debug node/{worker_node} -- chroot /host lsblk"
+        lsblk_out = run_cmd(lsblk_cmd)
+        log.info(f"the output of lsblk command on node {worker_node} is:\n {lsblk_out}")
+        osd_node_names[worker_node].append(lsblk_out)
 
     log.info("Verify 'lsblk' command results are as expected")
-    for node_output_lsblk in lsblk_output_list:
-        node_lsb = node_output_lsblk[0].split()
-
-        log.info("Search 'crypt' in node_lsb list")
-        all_occurrences_crypt = [
-            index for index, element in enumerate(node_lsb) if element == "crypt"
-        ]
-
-        log.info("Verify all OSDs encrypted on node")
-        if len(all_occurrences_crypt) != node_output_lsblk[1]:
-            raise EnvironmentError("OSD is not encrypted")
-
-        log.info("Verify that OSD is encrypted, and not another component like sda")
-        for index_crypt in all_occurrences_crypt:
-            encrypted_component_size = int(
-                (re.findall(r"\d+", node_lsb[index_crypt - 2]))[0]
+    for worker_node in osd_node_names:
+        osd_number_per_node = len(osd_node_names[worker_node]) - 1
+        lsblk_output = osd_node_names[worker_node][-1]
+        lsblk_output_split = lsblk_output.split()
+        logging.info(f"lsblk split:{lsblk_output_split}")
+        logging.info(f"osd_node_names dictionary: {osd_node_names}")
+        logging.info(f"count crypt {lsblk_output_split.count('crypt')}")
+        logging.info(f"osd_number_per_node = {osd_number_per_node}")
+        if lsblk_output_split.count("crypt") != osd_number_per_node:
+            logging.error(
+                f"The output of lsblk command on node {worker_node} is not as expected:\n{lsblk_output}"
             )
-            if encrypted_component_size != osd_size:
-                raise EnvironmentError(
-                    "The OSD is not encrypted, another mount encrypted."
-                )
+            raise ValueError("OSD is not encrypted")
 
 
-def add_capacity(osd_size_capacity_requested):
+def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=True):
     """
     Add storage capacity to the cluster
 
     Args:
         osd_size_capacity_requested(int): Requested osd size capacity
+        add_extra_disk_to_existing_worker(bool): Add Disk if True
 
     Returns:
         new storage device set count (int) : Returns True if all OSDs are in Running state
@@ -514,16 +522,27 @@ def add_capacity(osd_size_capacity_requested):
     storageDeviceSets->count = (capacity reqested / osd capacity ) + existing count storageDeviceSets
 
     """
+    lvpresent = None
+    lv_set_present = None
     osd_size_existing = get_osd_size()
     device_sets_required = int(osd_size_capacity_requested / osd_size_existing)
     old_storage_devices_sets_count = get_deviceset_count()
     new_storage_devices_sets_count = int(
         device_sets_required + old_storage_devices_sets_count
     )
-    lvpresent = localstorage.check_local_volume()
+    is_lso = config.DEPLOYMENT.get("local_storage")
+    if is_lso:
+        lv_lvs_data = localstorage.check_local_volume_local_volume_set()
+        if lv_lvs_data.get("localvolume"):
+            lvpresent = True
+        elif lv_lvs_data.get("localvolumeset"):
+            lv_set_present = True
+        else:
+            log.info(lv_lvs_data)
+            raise ResourceNotFoundError("No LocalVolume and LocalVolume Set found")
     ocp_version = get_ocp_version()
     platform = config.ENV_DATA.get("platform", "").lower()
-    is_lso = config.DEPLOYMENT.get("local_storage")
+
     if (
         ocp_version == "4.7"
         and (
@@ -565,6 +584,21 @@ def add_capacity(osd_size_capacity_requested):
             localstorage.check_pvs_created(
                 int(len(final_device_list) / new_storage_devices_sets_count)
             )
+        if lv_set_present:
+            if check_pvs_present_for_ocs_expansion():
+                log.info("Found Extra PV")
+            else:
+                if (
+                    platform == constants.VSPHERE_PLATFORM
+                    and add_extra_disk_to_existing_worker
+                ):
+                    log.info("No Extra PV found")
+                    log.info("Adding Extra Disk to existing VSphere Worker nodes")
+                    add_disk_for_vsphere_platform()
+                else:
+                    raise PVNotSufficientException(
+                        f"No Extra PV found in {constants.OPERATOR_NODE_LABEL}"
+                    )
         sc = get_storage_cluster()
         # adding the storage capacity to the cluster
         params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
@@ -699,3 +733,38 @@ def setup_ceph_debug():
     )
     log.info("Setting Ceph to work in debug log level using a new ConfigMap resource")
     run_cmd(f"oc create -f {ceph_configmap_yaml.name}")
+
+
+def verify_sc_images(storage_cluster):
+    """
+    Verifying images in storage cluster such as ceph, noobaaDB and noobaaCore
+
+    Args:
+        storage_cluster (obj): storage_cluster ocp object
+    """
+    images_list = list()
+    images = storage_cluster.get().get("status").get("images")
+    for component, images_dict in images.items():
+        if len(images_dict) > 1:
+            for image, image_name in images_dict.items():
+                log.info(f"{component} has {image}:{image_name}")
+                images_list.append(image_name)
+    assert (
+        len(set(images_list)) == len(images_list) / 2
+    ), "actualImage and desiredImage are different"
+
+
+def get_osd_replica_count():
+    """
+    Get OSD replication count from storagecluster cr
+
+    Returns:
+        replica_count (int): Returns OSD replication count
+
+    """
+
+    sc = get_storage_cluster()
+    replica_count = (
+        sc.get().get("items")[0].get("spec").get("storageDeviceSets")[0].get("replica")
+    )
+    return replica_count

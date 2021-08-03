@@ -2,6 +2,7 @@ import logging
 
 import botocore
 import pytest
+from flaky import flaky
 from ocs_ci.ocs.bucket_utils import sync_object_directory
 
 from ocs_ci.framework import config
@@ -44,6 +45,7 @@ class TestBucketDeletion:
             ),
         ],
     )
+    @flaky
     def test_bucket_delete_with_objects(
         self, rgw_bucket_factory, interface, awscli_pod_session
     ):

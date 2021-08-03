@@ -11,10 +11,13 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
 from ocs_ci.utility import templating, utils
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.utility.utils import ocsci_log_path
+from ocs_ci.ocs.resources import storage_cluster
+from ocs_ci.ocs import machine as machine_utils
+from ocs_ci.ocs.resources.pvc import get_all_pvcs
+from ocs_ci.utility.utils import ocsci_log_path, ceph_health_check
 from ocs_ci.ocs import constants, cluster, machine, node
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
-from ocs_ci.ocs.node import get_nodes
+from ocs_ci.ocs.node import get_nodes, get_worker_nodes
 from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     UnexpectedBehaviour,
@@ -231,11 +234,18 @@ class FioPodScale(object):
         expected_worker_count = get_expected_worker_count(scale_count)
         if check_and_add_enough_worker(expected_worker_count):
             if (
-                config.ENV_DATA["deployment_type"] == "ipi"
-                and config.ENV_DATA["platform"].lower() == "aws"
-            ) or (
-                config.ENV_DATA["deployment_type"] == "ipi"
-                and config.ENV_DATA["platform"].lower() == "azure"
+                (
+                    config.ENV_DATA["deployment_type"] == "ipi"
+                    and config.ENV_DATA["platform"].lower() == "aws"
+                )
+                or (
+                    config.ENV_DATA["deployment_type"] == "ipi"
+                    and config.ENV_DATA["platform"].lower() == "azure"
+                )
+                or (
+                    config.ENV_DATA["deployment_type"] == "ipi"
+                    and config.ENV_DATA["platform"].lower() == "rhv"
+                )
             ):
                 for obj in machine.get_machineset_objs():
                     if "app" in obj.name:
@@ -255,13 +265,9 @@ class FioPodScale(object):
                 logging.info(
                     f"Scaled {scale_count} PVCs and created {scale_count/20} PODs"
                 )
-
-                if cluster.validate_pg_balancer():
-                    logging.info(
-                        "OSD consumption and PG distribution is good to continue"
-                    )
-                else:
-                    raise UnexpectedBehaviour("Unequal PG distribution to OSDs")
+                # TODO: Removing PG balancer validation, due to PG auto_scale enabled
+                # TODO: sometime PG's can't be equally distributed across OSDs
+                # TODO: Revisit the code once we have more clarity
 
                 break
             else:
@@ -280,6 +286,8 @@ class FioPodScale(object):
             f"Scaled {actual_itr_counter * (max_pvc_count+10)} PVC's and "
             f"Created {int((actual_itr_counter * (max_pvc_count+10))/20)} PODs"
         )
+
+        return self.kube_job_pod_list, self.kube_job_pvc_list
 
     def pvc_expansion(self, pvc_new_size):
         """
@@ -641,6 +649,11 @@ def get_expected_worker_count(scale_count=1500):
             and config.ENV_DATA["platform"].lower() == "azure"
         ):
             expected_worker_count = worker_count_dict[scale_count]["azure"]
+        elif (
+            config.ENV_DATA["deployment_type"] == "ipi"
+            and config.ENV_DATA["platform"].lower() == "rhv"
+        ):
+            expected_worker_count = worker_count_dict[scale_count]["rhv"]
         else:
             raise UnsupportedPlatformError("Unsupported Platform")
         return expected_worker_count
@@ -757,7 +770,7 @@ def check_and_add_enough_worker(worker_count):
             config.ENV_DATA["deployment_type"] == "ipi"
             and config.ENV_DATA["platform"].lower() == "azure"
         ):
-            # Create machineset for app worker nodes on each aws zone
+            # Create machineset for app worker nodes on each azure zone
             # Each zone will have one app worker node
             ms_name = list()
             labels = [("node-role.kubernetes.io/app", "app-scale")]
@@ -778,6 +791,60 @@ def check_and_add_enough_worker(worker_count):
                     ms_name.append(
                         machine.create_custom_machineset(
                             instance_type=constants.AZURE_PRODUCTION_INSTANCE_TYPE,
+                            labels=labels,
+                            zone="1",
+                        )
+                    )
+                for ms in ms_name:
+                    machine.wait_for_new_node_to_be_ready(ms)
+            if len(ms_name) == 3:
+                exp_count = int(worker_count / 3)
+            else:
+                exp_count = worker_count
+            for name in ms_name:
+                machine.add_node(machine_set=name, count=exp_count)
+            for ms in ms_name:
+                machine.wait_for_new_node_to_be_ready(ms)
+            worker_list = node.get_worker_nodes()
+            ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+            scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
+            ocs_worker_list.extend(scale_label_worker)
+            final_list = list(dict.fromkeys(ocs_worker_list))
+            for node_item in final_list:
+                if node_item in worker_list:
+                    worker_list.remove(node_item)
+            if worker_list:
+                helpers.label_worker_node(
+                    node_list=worker_list,
+                    label_key="scale-label",
+                    label_value="app-scale",
+                )
+            return True
+
+        # Add enough worker for RHV
+        elif (
+            config.ENV_DATA["deployment_type"] == "ipi"
+            and config.ENV_DATA["platform"].lower() == "rhv"
+        ):
+            # Create machineset for app worker nodes on each rhv zone
+            # Each zone will have one app worker node
+            ms_name = list()
+            labels = [("node-role.kubernetes.io/app", "app-scale")]
+            for obj in machine.get_machineset_objs():
+                if "app" in obj.name:
+                    ms_name.append(obj.name)
+            if not ms_name:
+                if len(machine.get_machineset_objs()) == 3:
+                    for zone in ["3", "4", "5"]:
+                        ms_name.append(
+                            machine.create_custom_machineset(
+                                labels=labels,
+                                zone=zone,
+                            )
+                        )
+                else:
+                    ms_name.append(
+                        machine.create_custom_machineset(
                             labels=labels,
                             zone="1",
                         )
@@ -1063,6 +1130,7 @@ def check_all_pod_reached_running_state_in_kube_job(
     # Check all the POD reached Running state
     pod_running_list, pod_not_running_list = ([] for i in range(2))
     while_iteration_count = 0
+    dc_pod = 0
     while True:
         # Get kube_job obj and fetch either all PODs are in Running state
         # If not Running, adding those PODs to pod_not_running_list
@@ -1072,6 +1140,7 @@ def check_all_pod_reached_running_state_in_kube_job(
                 pod_type = constants.POD
             else:
                 pod_type = None
+                dc_pod = 1
             if pod_type:
                 status = job_get_output["items"][i]["status"]["phase"]
                 logging.info(
@@ -1100,11 +1169,20 @@ def check_all_pod_reached_running_state_in_kube_job(
         if len(pod_not_running_list):
             time.sleep(timeout)
             while_iteration_count += 1
-            # Breaking while loop after 10 Iteration i.e. after 30*10 secs of wait_time
+
+            # Delete the dc pods which are not in running state
+            # To check either pods can come up after delete
+            if while_iteration_count == 10 and dc_pod:
+                ocp_obj = OCP()
+                for i in pod_not_running_list:
+                    cmd = f"delete pod {i} -n {namespace}"
+                    ocp_obj.exec_oc_cmd(command=cmd, timeout=120)
+
+            # Breaking while loop after 13 Iteration i.e. after 30*13 secs of wait_time
             # And if PODs are still not in Running state then there will be assert.
-            if while_iteration_count >= 10:
+            if while_iteration_count >= 13:
                 assert logging.error(
-                    f" Listed PODs took more than 300secs for Running {pod_not_running_list}"
+                    f" Listed PODs took more than 390secs for Running {pod_not_running_list}"
                 )
                 break
             pod_not_running_list.clear()
@@ -1286,3 +1364,165 @@ def get_pod_creation_time_in_kube_job(kube_job_obj, namespace, no_of_pod):
         pod_dict[pod_name] = total.total_seconds()
 
     return pod_dict
+
+
+def scale_ocs_node(node_count=3):
+    """
+    Scale OCS worker node by increasing the respective
+    machineset replica value by node_count.
+
+    Example: If node_count = 3 & existing cluster has 3 worker nodes,
+    then at the end of this function, setup should have 6 OCS worker nodes.
+
+    Args:
+        node_count (int): Add node_count OCS worker node to the cluster
+
+    """
+    if config.ENV_DATA["deployment_type"] == "ipi":
+
+        # Get the initial nodes list
+        initial_nodes = get_worker_nodes()
+
+        ms_name = machine_utils.get_machineset_objs()
+        if len(ms_name) == 3:
+            add_replica_by = int(node_count / 3)
+        else:
+            add_replica_by = node_count
+
+        replica = machine_utils.get_ready_replica_count(ms_name[0].name)
+
+        # Increase the replica count and wait for node add to complete.
+        for ms in ms_name:
+            machine_utils.add_node(
+                machine_set=ms.name, count=(replica + add_replica_by)
+            )
+        threads = list()
+        for ms in ms_name:
+            process = threading.Thread(
+                target=machine_utils.wait_for_new_node_to_be_ready,
+                kwargs={"machine_set": ms.name},
+            )
+            process.start()
+            threads.append(process)
+        for process in threads:
+            process.join()
+
+        # Get the node name of new spun node
+        nodes_after_new_spun_node = get_worker_nodes()
+        new_spun_node = list(set(nodes_after_new_spun_node) - set(initial_nodes))
+        logging.info(f"New spun node is {new_spun_node}")
+
+        # Label it
+        node_obj = OCP(kind="node")
+        for new_node in new_spun_node:
+            node_obj.add_label(
+                resource_name=new_node, label=constants.OPERATOR_NODE_LABEL
+            )
+            logging.info(f"Successfully labeled {new_spun_node} with OCS storage label")
+        return True
+
+    else:
+        logging.error("Unsupported Platform, can't scale nodes")
+        return False
+
+
+def scale_capacity_with_deviceset(add_deviceset_count=2):
+    """
+    Scale storagecluster deviceset count by increasing the
+    value in storagecluster crs fil
+
+    Example: If add_deviceset_count = 2 & existing storagecluster
+    has deviceset count as 1, at the end of function deviceset value
+    will be existing value + add_deviceset_count i.e. 3
+
+    Args:
+        add_deviceset_count (int): Deviceset count to be added to existing value
+
+    """
+    existing_deviceset_count = storage_cluster.get_deviceset_count()
+    expected_deviceset_count = existing_deviceset_count + add_deviceset_count
+
+    # adding the storage capacity to the cluster
+    params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
+                       "value": {expected_deviceset_count}}}]"""
+    sc = storage_cluster.get_storage_cluster()
+    sc.patch(
+        resource_name=sc.get()["items"][0]["metadata"]["name"],
+        params=params.strip("\n"),
+        format_type="json",
+    )
+    pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    return_val = pod.wait_for_resource(
+        timeout=300,
+        condition=constants.STATUS_RUNNING,
+        selector="app=rook-ceph-osd",
+        resource_count=cluster.count_cluster_osd(),
+    )
+
+    ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=80)
+
+    return return_val
+
+
+def validate_all_pvcs_and_check_state(namespace, pvc_scale_list):
+    """
+    Function to validate all the PVCs are in Bound state
+
+    Args:
+        namespace (str): Namespace of PVC's created
+        pvc_scale_list (list): List of expected PVCs scaled
+
+    """
+
+    all_pvc_dict = get_all_pvcs(namespace=namespace)
+    pvc_bound_list, pvc_not_bound_list = ([], [])
+    for i in range(len(pvc_scale_list)):
+        pvc_data = all_pvc_dict["items"][i]
+        if not pvc_data["status"]["phase"] == constants.STATUS_BOUND:
+            pvc_not_bound_list.append(pvc_data["metadata"]["name"])
+        else:
+            pvc_bound_list.append(pvc_data["metadata"]["name"])
+
+    # Check status of PVCs scaled
+    if not len(pvc_bound_list) == len(pvc_scale_list):
+        logging.error(
+            f"PVC Bound count mismatch {len(pvc_not_bound_list)} PVCs not in Bound state"
+            f" PVCs not in Bound state {pvc_not_bound_list}"
+        )
+        return False
+    else:
+        logging.info(f"All the expected {len(pvc_bound_list)} PVCs are in Bound state")
+        return True
+
+
+def validate_all_pods_and_check_state(namespace, pod_scale_list):
+    """
+    Function to validate all the PODs are in Running state
+
+    Args:
+        namespace (str): Namespace of PVC's created
+        pod_scale_list (list): List of expected PODs scaled
+
+    """
+
+    ocp_pod_obj = OCP(kind=constants.DEPLOYMENTCONFIG, namespace=namespace)
+    all_pods_dict = ocp_pod_obj.get()
+    pod_running_list, pod_not_running_list = ([], [])
+    for i in range(len(pod_scale_list)):
+        pod_data = all_pods_dict["items"][i]
+        if not pod_data["status"]["availableReplicas"]:
+            pod_not_running_list.append(pod_data["metadata"]["name"])
+        else:
+            pod_running_list.append(pod_data["metadata"]["name"])
+
+    if not len(pod_running_list) == len(pod_scale_list):
+        logging.error(
+            f"POD Running count mismatch {len(pod_not_running_list)} PODs not in Running state "
+            f"PODs not in Running state {pod_not_running_list}"
+        )
+        return False
+    else:
+        logging.info(
+            f"All the expected {len(pod_running_list)} PODs are in Running state"
+        )
+        return True

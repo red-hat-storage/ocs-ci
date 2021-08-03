@@ -26,9 +26,11 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     TimeoutExpiredError,
     UnavailableResourceException,
+    ResourceNotFoundError,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
-from ocs_ci.ocs.resources.ocs import OCS, get_job_obj
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.job import get_job_obj, get_jobs_with_prefix
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     run_cmd,
@@ -581,7 +583,10 @@ def get_csi_provisioner_pod(interface):
     )
     selector = (
         "app=csi-rbdplugin-provisioner"
-        if (interface == constants.CEPHBLOCKPOOL)
+        if (
+            interface == constants.CEPHBLOCKPOOL
+            or interface == constants.CEPHBLOCKPOOL_THICK
+        )
         else "app=csi-cephfsplugin-provisioner"
     )
     provision_pod_items = ocp_pod_obj.get(selector=selector)["items"]
@@ -1563,16 +1568,33 @@ def get_pod_restarts_count(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     return restart_dict
 
 
-def check_pods_in_running_state(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def check_pods_in_running_state(
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    pod_names=None,
+    raise_pod_not_found_error=False,
+):
     """
     checks whether all the pods in a given namespace are in Running state or not
+
+    Args:
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        pod_names (list): List of the pod names to check.
+            If not provided, it will check all the pods in the given namespace
+        raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
+            in the pod names are not found. If False, it ignores the case of pod not found and
+            returns the pod objects of the rest of the pod names. The default value is False
 
     Returns:
         Boolean: True, if all pods in Running state. False, otherwise
 
     """
     ret_val = True
-    list_of_pods = get_all_pods(namespace)
+
+    if pod_names:
+        list_of_pods = get_pod_objs(pod_names, raise_pod_not_found_error)
+    else:
+        list_of_pods = get_all_pods(namespace)
+
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     for p in list_of_pods:
         # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
@@ -1615,13 +1637,23 @@ def get_running_state_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
 
 
 def wait_for_pods_to_be_running(
-    namespace=defaults.ROOK_CLUSTER_NAMESPACE, timeout=200, sleep=10
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    pod_names=None,
+    raise_pod_not_found_error=False,
+    timeout=200,
+    sleep=10,
 ):
     """
     Wait for all the pods in a specific namespace to be running.
 
     Args:
         namespace (str): the namespace ot the pods
+        pod_names (list): List of the pod names to check.
+            If not provided, it will check all the pods in the given namespace
+        raise_pod_not_found_error (bool): If True, it raises an exception(in the function
+            'check_pods_in_running_state'), if one of the pods in the pod names are not found.
+            If False, it ignores the case of pod not found and returns the pod objects of
+            the rest of the pod names. The default value is False
         timeout (int): time to wait for pods to be running
         sleep (int): Time in seconds to sleep between attempts
 
@@ -1635,11 +1667,14 @@ def wait_for_pods_to_be_running(
             sleep=sleep,
             func=check_pods_in_running_state,
             namespace=namespace,
+            pod_names=pod_names,
+            raise_pod_not_found_error=raise_pod_not_found_error,
         ):
             # Check if all the pods in running state
             if pods_running:
                 logging.info("All the pods reached status running!")
                 return True
+
     except TimeoutExpiredError:
         logging.warning(
             f"Not all the pods reached status running " f"after {timeout} seconds"
@@ -1676,12 +1711,11 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
         str: The osd removal pod name
 
     """
-    ocp_version = get_ocp_version()
     ocs_version = config.ENV_DATA["ocs_version"]
-    if Version.coerce(ocp_version) >= Version.coerce("4.6") and Version.coerce(
-        ocs_version
-    ) >= Version.coerce("4.7"):
+    if Version.coerce(ocs_version) == Version.coerce("4.7"):
         pattern = "ocs-osd-removal-job"
+    elif Version.coerce(ocs_version) == Version.coerce("4.8"):
+        pattern = "ocs-osd-removal-"
     else:
         pattern = f"ocs-osd-removal-{osd_id}"
 
@@ -1731,24 +1765,25 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
             )
 
 
-def run_osd_removal_job(osd_id):
+def run_osd_removal_job(osd_ids=None):
     """
     Run the ocs-osd-removal job
 
     Args:
-        osd_id (str): The osd id
+        osd_ids (list): The osd IDs.
 
     Returns:
         ocs_ci.ocs.resources.ocs.OCS: The ocs-osd-removal job object
 
     """
+    osd_ids_str = ",".join(map(str, osd_ids))
     ocp_version = get_ocp_version()
     if Version.coerce(ocp_version) >= Version.coerce("4.6"):
-        cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_id} -o yaml"
+        cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
     else:
-        cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_id} -o yaml"
+        cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_ids_str} -o yaml"
 
-    logger.info(f"Executing OSD removal job on OSD-{osd_id}")
+    logger.info(f"Executing OSD removal job on OSD ids: {osd_ids_str}")
     ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     osd_removal_job_yaml = ocp_obj.exec_oc_cmd(cmd)
     # Add the namespace param, so that the ocs-osd-removal job will be created in the correct namespace
@@ -1845,11 +1880,8 @@ def delete_osd_removal_job(osd_id):
         bool: True, if the ocs-osd-removal job deleted successfully. False, otherwise
 
     """
-    ocp_version = get_ocp_version()
     ocs_version = config.ENV_DATA["ocs_version"]
-    if Version.coerce(ocp_version) >= Version.coerce("4.6") and Version.coerce(
-        ocs_version
-    ) >= Version.coerce("4.7"):
+    if Version.coerce(ocs_version) >= Version.coerce("4.7"):
         job_name = "ocs-osd-removal-job"
     else:
         job_name = f"ocs-osd-removal-{osd_id}"
@@ -2006,3 +2038,160 @@ def get_osd_pods_having_ids(osd_ids):
             osd_pods_having_ids.append(osd_pod)
 
     return osd_pods_having_ids
+
+
+def get_pod_objs(
+    pod_names,
+    raise_pod_not_found_error=False,
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+):
+    """
+    Get the pod objects of the specified pod names
+
+    Args:
+        pod_names (list): The list of the pod names to get their pod objects
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
+            in the pod names are not found. If False, it ignores the case of pod not found and
+            returns the pod objects of the rest of the pod names. The default value is False
+
+    Returns:
+        list: The pod objects of the specified pod names
+
+    Raises:
+        ResourceNotFoundError: If 'raise_pod_not_found_error' is True,
+            and not all the pod names were found
+
+    """
+    # Convert it to set to reduce complexity
+    pod_names_set = set(pod_names)
+    pods = get_all_pods(namespace=namespace)
+    pod_objs_found = [p for p in pods if p.name in pod_names_set]
+
+    if len(pod_names) > len(pod_objs_found):
+        pod_names_found_set = {p.name for p in pod_objs_found}
+        pod_names_not_found = list(pod_names_set - pod_names_found_set)
+        error_message = f"Did not find the following pod names: {pod_names_not_found}"
+        if raise_pod_not_found_error:
+            raise ResourceNotFoundError(error_message)
+        else:
+            logger.info(error_message)
+
+    return pod_objs_found
+
+
+def wait_for_change_in_pods_statuses(
+    pod_names,
+    current_statuses=None,
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    timeout=300,
+    sleep=20,
+):
+    """
+    Wait for the pod statuses in a specific namespace to change.
+
+    Args:
+        pod_names (list): List of the pod names to check if their status changed.
+        namespace (str): the namespace ot the pods
+        current_statuses (list): The current pod statuses. These are the pod statuses
+            to check if they changed during each iteration.
+        timeout (int): time to wait for pod statuses to change
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        bool: True, if the pod statuses have changed. False, otherwise
+
+    """
+    if current_statuses is None:
+        # If 'current_statuses' is None the default value will be the ready statues
+        current_statuses = [constants.STATUS_RUNNING, constants.STATUS_COMPLETED]
+
+    try:
+        for pod_objs in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_pod_objs,
+            namespace=namespace,
+            pod_names=pod_names,
+        ):
+            ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+            if len(pod_objs) < len(pod_names):
+                pod_names_found_set = {p.name for p in pod_objs}
+                pod_names_not_found = list(set(pod_names) - pod_names_found_set)
+                logger.info(f"Some of the pods have not found: {pod_names_not_found}")
+                return True
+
+            for p in pod_objs:
+                try:
+                    pod_status = ocp_pod_obj.get_resource_status(p.name)
+                except CommandFailed as ex:
+                    logger.info(
+                        f"Can't get the status of the pod {p.name} due to the error: {ex}"
+                    )
+                    continue
+
+                if pod_status not in current_statuses:
+                    logger.info(
+                        f"The status of the pod '{p.name}' has changed to '{pod_status}'"
+                    )
+                    return True
+    except TimeoutExpiredError:
+        logging.info(f"The status of the pods did not change after {timeout} seconds")
+        return False
+
+
+def get_rook_ceph_pod_names():
+    """
+    Get all the rook ceph pod names
+
+    Returns:
+        list: List of the rook ceph pod names
+
+    """
+    rook_ceph_pod_names = get_pod_name_by_pattern("rook-ceph-")
+    # Exclude the rook ceph pod tools because it creates by OCS and not rook ceph operator
+    return [
+        pod_name
+        for pod_name in rook_ceph_pod_names
+        if not pod_name.startswith("rook-ceph-tools-")
+    ]
+
+
+def get_mon_pod_id(mon_pod):
+    """
+    Get the mon pod id
+
+    Args:
+        mon_pod (ocs_ci.ocs.resources.pod.Pod): The mon pod object
+
+    Returns:
+        str: The mon pod id
+
+    """
+    return mon_pod.get().get("metadata").get("labels").get("ceph_daemon_id")
+
+
+def delete_all_osd_removal_jobs(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Delete all the osd removal jobs in a specific namespace
+
+    Args:
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        bool: True, if all the jobs deleted successfully. False, otherwise
+
+    """
+    result = True
+    osd_removal_jobs = get_jobs_with_prefix("ocs-osd-removal-", namespace=namespace)
+    for osd_removal_job in osd_removal_jobs:
+        osd_removal_job.delete()
+        try:
+            osd_removal_job.ocp.wait_for_delete(resource_name=osd_removal_job.name)
+        except TimeoutError:
+            logger.warning(
+                f"{osd_removal_job.name} job did not get deleted successfully"
+            )
+            result = False
+
+    return result

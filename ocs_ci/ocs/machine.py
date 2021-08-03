@@ -1,4 +1,3 @@
-import re
 import logging
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
@@ -157,27 +156,36 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
         machine_name (str): Name of the machine you want to delete
 
     Returns:
-        bool: True in case of success, False otherwise
+        machine (str): New machine name
+
+    Raise:
+        ResourceNotFoundError: Incase machine creation failed
+
     """
     machine_type = get_machine_type(machine_name)
+    machine_list = get_machines(machine_type=machine_type)
+    initial_machine_names = [machine.name for machine in machine_list]
     delete_machine(machine_name)
-    machines = get_machines(machine_type=machine_type)
-    for machine in machines:
-        if re.match(machine.name[:-6], machine_name):
-            log.info(f"New spinned machine name is {machine.name}")
-            new_machine = machine
-            break
+    new_machine_list = get_machines(machine_type=machine_type)
+    new_machine = [
+        machine
+        for machine in new_machine_list
+        if machine.name not in initial_machine_names
+    ]
     if new_machine is not None:
-        log.info(f"Checking the state of new spinned machine {new_machine.name}")
-        state = (
-            new_machine.get()
-            .get("metadata")
-            .get("annotations")
-            .get("machine.openshift.io/instance-state")
+        new_machine_name = new_machine[0].name
+        log.info(f"Checking the state of new spinned machine {new_machine_name}")
+        new_machine[0].ocp.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_name=new_machine_name,
+            column="PHASE",
+            timeout=600,
+            sleep=30,
         )
-        log.info(f"{new_machine.name} is in {state} state")
-        return state == constants.STATUS_RUNNING.islower()
-    return False
+        log.info(f"{new_machine_name} is in {constants.STATUS_RUNNING} state")
+        return new_machine_name
+    else:
+        raise ResourceNotFoundError("New Machine resource not found")
 
 
 def create_custom_machineset(
@@ -444,6 +452,105 @@ def create_custom_machineset(
                     return f"{cls_id}-{role}-{az_zone}"
                 else:
                     raise ResourceNotFoundError("Machineset resource not found")
+
+    # check for RHV and IPI platform
+    elif config.ENV_DATA["platform"] == "rhv":
+        machinesets_obj = OCP(
+            kind=constants.MACHINESETS,
+            namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
+        )
+        for machine in machinesets_obj.get()["items"]:
+            # Get inputs from existing machineset config.
+            cls_uuid = (
+                machine.get("spec")
+                .get("template")
+                .get("spec")
+                .get("providerSpec")
+                .get("value")
+                .get("cluster_id")
+            )
+            template_name = (
+                machine.get("spec")
+                .get("template")
+                .get("spec")
+                .get("providerSpec")
+                .get("value")
+                .get("template_name")
+            )
+            cls_id = (
+                machine.get("spec")
+                .get("selector")
+                .get("matchLabels")
+                .get("machine.openshift.io/cluster-api-cluster")
+            )
+            socket = (
+                machine.get("spec")
+                .get("template")
+                .get("spec")
+                .get("providerSpec")
+                .get("value")
+                .get("cpu")
+                .get("sockets")
+            )
+
+            machineset_yaml = templating.load_yaml(constants.MACHINESET_YAML_RHV)
+
+            # Update machineset_yaml with required values.
+            machineset_yaml["metadata"]["labels"][
+                "machine.openshift.io/cluster-api-cluster"
+            ] = cls_id
+            machineset_yaml["metadata"]["name"] = f"{cls_id}-{role}-{zone}"
+            machineset_yaml["spec"]["selector"]["matchLabels"][
+                "machine.openshift.io/cluster-api-cluster"
+            ] = cls_id
+            machineset_yaml["spec"]["selector"]["matchLabels"][
+                "machine.openshift.io/cluster-api-machineset"
+            ] = f"{cls_id}-{role}-{zone}"
+            machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                "machine.openshift.io/cluster-api-cluster"
+            ] = cls_id
+            machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                "machine.openshift.io/cluster-api-machine-role"
+            ] = role
+            machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                "machine.openshift.io/cluster-api-machine-type"
+            ] = role
+            machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                "machine.openshift.io/cluster-api-machineset"
+            ] = f"{cls_id}-{role}-{zone}"
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "cluster_id"
+            ] = cls_uuid
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "template_name"
+            ] = template_name
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"]["cpu"][
+                "sockets"
+            ] = socket
+
+            # Apply the labels
+            if labels:
+                for label in labels:
+                    machineset_yaml["spec"]["template"]["spec"]["metadata"]["labels"][
+                        label[0]
+                    ] = label[1]
+                # Remove app label in case of infra nodes
+                if role == "infra":
+                    machineset_yaml["spec"]["template"]["spec"]["metadata"][
+                        "labels"
+                    ].pop(constants.APP_LABEL, None)
+
+            if taints:
+                machineset_yaml["spec"]["template"]["spec"].update({"taints": taints})
+
+            # Create new custom machineset
+            ms_obj = OCS(**machineset_yaml)
+            ms_obj.create()
+            if check_machineset_exists(f"{cls_id}-{role}-{zone}"):
+                logging.info(f"Machineset {cls_id}-{role}-{zone} created")
+                return f"{cls_id}-{role}-{zone}"
+            else:
+                raise ResourceNotFoundError("Machineset resource not found")
 
     else:
         raise UnsupportedPlatformError("Functionality not supported in this platform")

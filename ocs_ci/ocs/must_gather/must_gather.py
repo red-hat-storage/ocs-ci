@@ -145,14 +145,16 @@ class MustGather(object):
         """
         regular_ex_list = [
             "must-gather-.*.-helper",
-            r"compute-*",
-            r"ip-*",
-            r"j-*",
-            r"argo-*",
-            r"vmware-*",
+            r"^compute-*",
+            r"^ip-*",
+            r"^j-*",
+            r"^argo-*",
+            r"^vmware-*",
+            "^must-gather",
+            r"-debug$",
         ]
         for regular_ex in regular_ex_list:
-            if re.match(regular_ex, pod_name) is not None:
+            if re.search(regular_ex, pod_name) is not None:
                 return True
         return False
 

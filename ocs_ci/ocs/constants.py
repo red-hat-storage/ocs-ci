@@ -68,10 +68,12 @@ ROOK_CSI_RBD_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "rbd")
 ROOK_CSI_CEPHFS_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "cephfs")
 CLEANUP_YAML = "cleanup.yaml.j2"
 MANIFESTS_DIR = "manifests"
+
+# OCP Deployment constants
 CHRONY_TEMPLATE = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "99-role-chrony-configuration.yaml"
 )
-
+HUGE_PAGES_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "huge_pages.yaml")
 
 # Statuses
 STATUS_READY = "Ready"
@@ -100,9 +102,11 @@ HEALTHY_PV_BS = ["`OPTIMAL`", "`LOW_CAPACITY`"]
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
+CEPHBLOCKPOOL_THICK = "CephBlockPoolThick"
 CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
 CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
 NOOBAA_SC = "openshift-storage.noobaa.io"
+LOCALSTORAGE_SC = "localblock"
 DEPLOYMENT = "Deployment"
 JOB = "Job"
 STORAGECLASS = "StorageClass"
@@ -129,7 +133,6 @@ VOLUMESNAPSHOTCLASS = "VolumeSnapshotClass"
 HPA = "horizontalpodautoscaler"
 VOLUMESNAPSHOTCONTENT = "VolumeSnapshotContent"
 POD_DISRUPTION_BUDGET = "PodDisruptionBudget"
-
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -204,11 +207,11 @@ RIPSAW_CRD = "resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml"
 RIPSAW_DROP_CACHE = os.path.join(TEMPLATE_FIO_DIR, "drop_cache_pod.yaml")
 OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
 
-
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 DEFAULT_STORAGECLASS_RGW = f"{DEFAULT_CLUSTERNAME}-ceph-rgw"
+DEFAULT_STORAGECLASS_RBD_THICK = f"{DEFAULT_CLUSTERNAME}-ceph-rbd-thick"
 
 # Independent mode default StorageClasses
 DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW = f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rgw"
@@ -218,6 +221,9 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS = (
     f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephfs"
 )
 DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rbd"
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_THICK = (
+    f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rbd-thick"
+)
 
 # Default VolumeSnapshotClass
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfsplugin-snapclass"
@@ -530,6 +536,8 @@ TEMPLATE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "imageContentSourcePolicy-template.yaml"
 )
 
+MULTUS_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multus.yaml")
+
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
 OPERATOR_SOURCE_SECRET_NAME = "ocs-operatorsource-secret"
@@ -555,6 +563,7 @@ MACHINESET_YAML = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "machine-set.yaml")
 MACHINESET_YAML_AZURE = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-azure.yaml"
 )
+MACHINESET_YAML_RHV = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-rhv.yaml")
 PODS_PER_NODE_COUNT_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "max-pods-per-node.yaml"
 )
@@ -575,6 +584,10 @@ EXTERNAL_VAULT_CLIENT_KEY = os.path.join(
 EXTERNAL_VAULT_KMS_TOKEN = os.path.join(EXTERNAL_VAULT_TEMPLATES, "ocs-kms-token.yaml")
 EXTERNAL_VAULT_KMS_CONNECTION_DETAILS = os.path.join(
     EXTERNAL_VAULT_TEMPLATES, "ocs-kms-connection-details.yaml"
+)
+EXTERNAL_VAULT_CSI_KMS_TOKEN = os.path.join(TEMPLATE_CSI_RBD_DIR, "csi-kms-secret.yaml")
+EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "csi-kms-connection-details.yaml"
 )
 CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "ceph-debug-log-level-configmap.yaml"
@@ -689,7 +702,10 @@ ON_PREM_PLATFORMS = [
     IBM_POWER_PLATFORM,
     RHV_PLATFORM,
 ]
-CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM]
+CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM, IBMCLOUD_PLATFORM]
+
+# AWS i3 worker instance for LSO
+AWS_LSO_WORKER_INSTANCE = "i3en.2xlarge"
 
 # ignition files
 BOOTSTRAP_IGN = "bootstrap.ign"
@@ -707,7 +723,7 @@ VSPHERE_NODE_USER = "core"
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
 VSPHERE_SCALEUP_REPO = "https://code.engineering.redhat.com/gerrit/openshift-misc"
-VSPHERE_CLUSTER_LAUNCHER = "https://gitlab.cee.redhat.com/aosqe/cluster-launcher.git"
+VSPHERE_CLUSTER_LAUNCHER = "https://gitlab.cee.redhat.com/aosqe/v4-scaleup.git"
 VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
 INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
 VM_IFCFG = os.path.join(VSPHERE_DIR, "vm/ifcfg.tmpl")
@@ -735,9 +751,9 @@ SCALEUP_VSPHERE_MACHINE_CONF = os.path.join(
     SCALEUP_VSPHERE_DIR, "machines/vsphere-rhel-machine.tf"
 )
 
-# cluster-launcher
+# v4-scaleup
 CLUSTER_LAUNCHER_VSPHERE_DIR = os.path.join(
-    EXTERNAL_DIR, "cluster-launcher/v4-scaleup/ocp4-rhel-scaleup/"
+    EXTERNAL_DIR, "v4-scaleup/ocp4-rhel-scaleup/"
 )
 CLUSTER_LAUNCHER_MACHINE_CONF = "vsphere/machines/vsphere-rhel-machine.tf"
 
@@ -755,6 +771,9 @@ VSAN = "vsan"
 
 # terraform haproxy service
 TERRAFORM_HAPROXY_SERVICE = os.path.join(VSPHERE_DIR, "lb/haproxy.service")
+
+# vSphere IPI related constants
+NUM_OF_VIPS = 2
 
 # Config related constants
 config_keys_patterns_to_censor = ["passw", "token", "secret", "key", "credential"]
@@ -821,8 +840,7 @@ SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scale
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
 APP_LABEL = "node-role.kubernetes.io/app"
-ZONE_LABEL = "failure-domain.beta.kubernetes.io/zone"
-ZONE_LABEL_NEW = "topology.kubernetes.io/zone"
+ZONE_LABEL = "topology.kubernetes.io/zone"
 
 # Cluster name limits
 CLUSTER_NAME_MIN_CHARACTERS = 5
@@ -1102,11 +1120,11 @@ MIRRORED_INDEX_IMAGE_NAME = "redhat-operator-index"
 # following packages are required for live disconnected cluster installation
 # (all images related to those packages will be mirrored to the mirror registry)
 DISCON_CL_REQUIRED_PACKAGES = [
-    # "elasticsearch-operator",
+    "cluster-logging",
+    "elasticsearch-operator",
     "local-storage-operator",
     "ocs-operator",
 ]
-
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
@@ -1149,11 +1167,11 @@ SCALE_LABEL = "scale-label=app-scale"
 # bm dict value is based on each worker BM machine of config 40CPU and 256G/184G RAM
 # azure dict value is based on assumption similar to vmware vms min worker config of 12CPU and 64G RAM
 SCALE_WORKER_DICT = {
-    1500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3},
-    3000: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3},
-    4500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3},
-    6000: {"aws": 6, "vmware": 6, "bm": 4, "azure": 6},
-    9000: {"aws": 6, "vmware": 6, "bm": 4, "azure": 6},
+    1500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
+    3000: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
+    4500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
+    6000: {"aws": 6, "vmware": 6, "bm": 4, "azure": 6, "rhv": 6},
+    9000: {"aws": 6, "vmware": 6, "bm": 4, "azure": 6, "rhv": 6},
 }
 SCALE_MAX_PVCS_PER_NODE = 500
 
@@ -1214,8 +1232,22 @@ BM_STATUS_PRESENT = "PRESENT"
 BM_STATUS_RESPONSE_UPDATED = "UPDATED"
 BM_METAL_IMAGE = "rhcos-metal.x86_64.raw.gz"
 
+# RHV related constants
+RHV_CONFIG_FILEPATH = os.path.expanduser("~/.ovirt/ovirt-config.yaml")
+RHV_DISK_FORMAT_COW = "COW"
+RHV_DISK_FORMAT_RAW = "RAW"
+RHV_DISK_INTERFACE_VIRTIO_SCSI = "VIRTIO_SCSI"
+
 # MCG constants
 PLACEMENT_BUCKETCLASS = "placement-bucketclass"
+
+# Cosbench constants
+COSBENCH = "cosbench"
+COSBENCH_PROJECT = "cosbench-project"
+
+COSBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "cosbench")
+COSBENCH_POD = os.path.join(COSBENCH_DIR, "cosbench_pod.yaml")
+COSBENCH_CONFIGMAP = os.path.join(COSBENCH_DIR, "cosbench_configmap.yaml")
 
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
@@ -1258,6 +1290,7 @@ SQUADS = {
     "Magenta": ["/workloads/", "/registry/", "/logging/", "/flowtest/", "/lifecycle/"],
     "Grey": ["/performance/"],
     "Orange": ["/scale/"],
+    "Black": ["/ui/"],
 }
 
 PRODUCTION_JOBS_PREFIX = ["jnk"]
@@ -1270,7 +1303,6 @@ VAULT_VERSION_INFO_URL = "https://github.com/hashicorp/vault/releases/latest"
 VAULT_DOWNLOAD_BASE_URL = "https://releases.hashicorp.com/vault"
 
 # Vault related constants
-
 VAULT_DEFAULT_NAMESPACE = ""
 VAULT_DEFAULT_PATH_PREFIX = "ocs"
 VAULT_DEFAULT_POLICY_PREFIX = "rook"
@@ -1281,6 +1313,8 @@ VAULT_KMS_TOKEN_RESOURCE = "ocs-kms-token"
 VAULT_CLIENT_CERT_PATH = os.path.join(DATA_DIR, "vault-client.crt")
 VAULT_KMS_PROVIDER = "vault"
 VAULT_NOOBAA_ROOT_SECRET_PATH = "NOOBAA_ROOT_SECRET_PATH"
+VAULT_KMS_CSI_CONNECTION_DETAILS = "csi-kms-connection-details"
+VAULT_KMS_CSI_TOKEN = "ceph-csi-kms-token"
 
 # min and max Noobaa endpoints
 MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
@@ -1293,10 +1327,12 @@ PERF_IMAGE = "quay.io/ocsci/perf:latest"
 
 ROOK_CEPH_CONFIG_VALUES = """
 [global]
+bdev_flock_retry = 20
 mon_osd_full_ratio = .85
 mon_osd_backfillfull_ratio = .8
 mon_osd_nearfull_ratio = .75
 mon_max_pg_per_osd = 600
+mon_pg_warn_max_object_skew = 0
 [osd]
 osd_memory_target_cgroup_limit_ratio = 0.5
 """
@@ -1318,3 +1354,10 @@ OCS_COMPONENTS_MAP = {
     "noobaa": "multiCloudGateway",
     "blockpools": "cephBlockPools",
 }
+
+DEFAULT_PAXOS_SERVICE_TRIM_MIN = 250
+DEFAULT_PAXOS_SERVICE_TRIM_MAX = 500
+DEFAULT_OSD_OP_COMPLAINT_TIME = 30.000000
+
+# ibmcloud related constants
+IBMCLOUD_VOLUME_NAME = "ibmvolume"

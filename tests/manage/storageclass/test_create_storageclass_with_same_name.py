@@ -26,9 +26,10 @@ def teardown():
     Tearing down the environment
 
     """
-    log.info(f"Deleting created storage class: {SC_OBJ.name}")
-    SC_OBJ.delete()
-    log.info(f"Storage class: {SC_OBJ.name} deleted successfully")
+    if SC_OBJ:
+        log.info(f"Deleting created storage class: {SC_OBJ.name}")
+        SC_OBJ.delete()
+        log.info(f"Storage class: {SC_OBJ.name} deleted successfully")
 
 
 def create_storageclass(sc_name, expect_fail=False):

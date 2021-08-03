@@ -28,6 +28,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import (
+    exec_cmd,
     get_latest_ds_olm_tag,
     get_next_version_available_for_upgrade,
     get_ocs_version_from_image,
@@ -35,7 +36,10 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
 )
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
-from ocs_ci.ocs.exceptions import TimeoutException
+from ocs_ci.ocs.exceptions import (
+    TimeoutException,
+    ExternalClusterRGWAdminOpsUserException,
+)
 
 
 log = logging.getLogger(__name__)
@@ -453,9 +457,10 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     """
 
     ceph_cluster = CephCluster()
+    original_ocs_version = config.ENV_DATA.get("ocs_version")
     upgrade_ocs = OCSUpgrade(
         namespace=config.ENV_DATA["cluster_namespace"],
-        version_before_upgrade=config.ENV_DATA.get("ocs_version"),
+        version_before_upgrade=original_ocs_version,
         ocs_registry_image=config.UPGRADE.get("upgrade_ocs_registry_image"),
         upgrade_in_current_source=config.UPGRADE.get(
             "upgrade_in_current_source", False
@@ -469,6 +474,25 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         f"is not higher or equal to the version you currently running: "
         f"{upgrade_ocs.version_before_upgrade}"
     )
+
+    # For external cluster , create the secrets if upgraded version is 4.8
+    if (
+        config.DEPLOYMENT["external_mode"]
+        and original_ocs_version == "4.7"
+        and upgrade_version == "4.8"
+    ):
+        access_key = config.EXTERNAL_MODE.get("access_key_rgw-admin-ops-user", "")
+        secret_key = config.EXTERNAL_MODE.get("secret_key_rgw-admin-ops-user", "")
+        if not (access_key and secret_key):
+            raise ExternalClusterRGWAdminOpsUserException(
+                "Access and secret key for rgw-admin-ops-user not found"
+            )
+        cmd = (
+            f'oc create secret generic --type="kubernetes.io/rook"'
+            f' "rgw-admin-ops-user" --from-literal=accessKey={access_key} --from-literal=secretKey={secret_key}'
+        )
+        exec_cmd(cmd)
+
     csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
     pre_upgrade_images = upgrade_ocs.get_pre_upgrade_image(csv_name_pre_upgrade)
     upgrade_ocs.load_version_config_file(upgrade_version)

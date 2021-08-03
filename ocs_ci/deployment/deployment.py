@@ -9,8 +9,8 @@ import json
 import logging
 import tempfile
 import time
+from pathlib import Path
 
-import requests
 import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
@@ -28,9 +28,10 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceWrongStatusException,
     UnavailableResourceException,
-    ExternalClusterDetailsException,
     UnsupportedFeatureError,
 )
+from ocs_ci.deployment.zones import create_dummy_zone_labels
+from ocs_ci.deployment.netsplit import setup_netsplit
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
@@ -51,6 +52,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.storage_cluster import setup_ceph_debug
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
+from ocs_ci.utility.deployment import create_external_secret
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility import (
     templating,
@@ -60,6 +62,7 @@ from ocs_ci.utility import (
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
+    enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
     get_ocp_version,
@@ -75,6 +78,7 @@ from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
+from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
 
 logger = logging.getLogger(__name__)
@@ -140,6 +144,31 @@ class Deployment(object):
                         collect_ocs_logs("deployment", ocs=False)
                     raise
 
+        # Deployment of network split scripts via machineconfig API happens
+        # before OCS deployment.
+        if config.DEPLOYMENT.get("network_split_setup"):
+            master_zones = config.ENV_DATA.get("master_availability_zones")
+            worker_zones = config.ENV_DATA.get("worker_availability_zones")
+            # special external zone, which is directly defined by ip addr list,
+            # such zone could represent external services, which we could block
+            # access to via ax-bx-cx network split
+            if config.DEPLOYMENT.get("network_split_zonex_addrs") is not None:
+                x_addr_list = config.DEPLOYMENT["network_split_zonex_addrs"].split(",")
+            else:
+                x_addr_list = None
+            if config.DEPLOYMENT.get("arbiter_deployment"):
+                arbiter_zone = self.get_arbiter_location()
+                logger.debug("detected arbiter zone: %s", arbiter_zone)
+            else:
+                arbiter_zone = None
+            # TODO: use temporary directory for all temporary files of
+            # ocs-deployment, not just here in this particular case
+            tmp_path = Path(tempfile.mkdtemp(prefix="ocs-ci-deployment-"))
+            logger.debug("created temporary directory %s", tmp_path)
+            setup_netsplit(
+                tmp_path, master_zones, worker_zones, x_addr_list, arbiter_zone
+            )
+
         if not config.ENV_DATA["skip_ocs_deployment"]:
             try:
                 self.deploy_ocs()
@@ -182,16 +211,23 @@ class Deployment(object):
         set_selinux_permissions()
         set_registry_to_managed_state()
         add_stage_cert()
+        if config.ENV_DATA.get("huge_pages"):
+            enable_huge_pages()
+        if config.DEPLOYMENT.get("dummy_zone_node_labels"):
+            create_dummy_zone_labels()
 
     def label_and_taint_nodes(self):
         """
         Label and taint worker nodes to be used by OCS operator
         """
 
+        # TODO: remove this "heuristics", it doesn't belong there, the process
+        # should be explicit and simple, this is asking for trouble, bugs and
+        # silently invalid deployments ...
+        # See https://github.com/red-hat-storage/ocs-ci/issues/4470
         arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 
         nodes = ocp.OCP(kind="node").get().get("items", [])
-        zone_label = self.get_zone_label()
 
         worker_nodes = [
             node
@@ -202,11 +238,16 @@ class Deployment(object):
             raise UnavailableResourceException("No worker node found!")
         az_worker_nodes = {}
         for node in worker_nodes:
-            az = node["metadata"]["labels"].get(zone_label)
+            az = node["metadata"]["labels"].get(constants.ZONE_LABEL)
             az_node_list = az_worker_nodes.get(az, [])
             az_node_list.append(node["metadata"]["name"])
             az_worker_nodes[az] = az_node_list
         logger.debug(f"Found the worker nodes in AZ: {az_worker_nodes}")
+
+        if arbiter_deployment:
+            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
+        else:
+            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label")
 
         distributed_worker_nodes = []
         if arbiter_deployment and config.DEPLOYMENT.get("arbiter_autodetect"):
@@ -216,10 +257,13 @@ class Deployment(object):
                     node_names = az_node_list[:2]
                     distributed_worker_nodes += node_names
         elif arbiter_deployment and not config.DEPLOYMENT.get("arbiter_autodetect"):
-            for az in list(config.DEPLOYMENT.get("worker_zones")):
+            to_label_per_az = int(
+                to_label / len(config.ENV_DATA.get("worker_availability_zones"))
+            )
+            for az in list(config.ENV_DATA.get("worker_availability_zones")):
                 az_node_list = az_worker_nodes.get(az)
                 if az_node_list and len(az_node_list) > 1:
-                    node_names = az_node_list[:2]
+                    node_names = az_node_list[:to_label_per_az]
                     distributed_worker_nodes += node_names
                 else:
                     raise UnavailableResourceException(
@@ -236,11 +280,6 @@ class Deployment(object):
                     else:
                         del az_worker_nodes[az]
         logger.info(f"Distributed worker nodes for AZ: {distributed_worker_nodes}")
-
-        if arbiter_deployment:
-            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
-        else:
-            to_label = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 3)
 
         to_taint = config.DEPLOYMENT.get("ocs_operator_nodes_to_taint", 0)
 
@@ -293,72 +332,6 @@ class Deployment(object):
             )
             _ocp.exec_oc_cmd(command=taint_cmd)
 
-    def create_stage_operator_source(self):
-        """
-        This prepare operator source for OCS deployment from stage.
-        """
-        logger.info("Adding Stage Secret")
-        # generate quay token
-        credentials = {
-            "user": {
-                "username": config.DEPLOYMENT["stage_quay_username"],
-                "password": config.DEPLOYMENT["stage_quay_password"],
-            }
-        }
-        token = requests.post(
-            url="https://quay.io/cnr/api/v1/users/login",
-            data=json.dumps(credentials),
-            headers={"Content-Type": "application/json"},
-        ).json()["token"]
-        stage_ns = config.DEPLOYMENT["stage_namespace"]
-
-        # create Secret
-        stage_os_secret = templating.load_yaml(constants.OPERATOR_SOURCE_SECRET_YAML)
-        stage_os_secret["metadata"]["name"] = constants.OPERATOR_SOURCE_SECRET_NAME
-        stage_os_secret["stringData"]["token"] = token
-        stage_secret_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+",
-            prefix=constants.OPERATOR_SOURCE_SECRET_NAME,
-            delete=False,
-        )
-        templating.dump_data_to_temp_yaml(stage_os_secret, stage_secret_data_yaml.name)
-        run_cmd(f"oc create -f {stage_secret_data_yaml.name}")
-        logger.info("Waiting 10 secs after secret is created")
-        time.sleep(10)
-
-        logger.info("Adding Stage Operator Source")
-        # create Operator Source
-        stage_os = templating.load_yaml(constants.OPERATOR_SOURCE_YAML)
-        stage_os["spec"]["registryNamespace"] = stage_ns
-        stage_os["spec"]["authorizationToken"][
-            "secretName"
-        ] = constants.OPERATOR_SOURCE_SECRET_NAME
-        stage_os_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix=constants.OPERATOR_SOURCE_NAME, delete=False
-        )
-        templating.dump_data_to_temp_yaml(stage_os, stage_os_data_yaml.name)
-        run_cmd(f"oc create -f {stage_os_data_yaml.name}")
-        catalog_source = CatalogSource(
-            resource_name=constants.OPERATOR_SOURCE_NAME,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
-        # Wait for catalog source is ready
-        catalog_source.wait_for_state("READY")
-
-    def create_ocs_operator_source(self, image=None):
-        """
-        This prepare catalog or operator source for OCS deployment.
-
-        Args:
-            image (str): Image of ocs registry.
-
-        """
-        if config.DEPLOYMENT.get("stage"):
-            # deployment from stage
-            self.create_stage_operator_source()
-        else:
-            create_catalog_source(image)
-
     def subscribe_ocs(self):
         """
         This method subscription manifest and subscribe to OCS operator.
@@ -410,16 +383,6 @@ class Deployment(object):
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
 
-    def get_zone_label(self):
-        nodes = ocp.OCP(kind="node").get().get("items", [])
-
-        # Check which zone label is present
-        return (
-            constants.ZONE_LABEL
-            if nodes[0]["metadata"]["labels"].get(constants.ZONE_LABEL, False)
-            else constants.ZONE_LABEL_NEW
-        )
-
     def get_arbiter_location(self):
         """
         Get arbiter mon location for storage cluster
@@ -432,17 +395,15 @@ class Deployment(object):
         # below logic will autodetect arbiter_zone
         nodes = ocp.OCP(kind="node").get().get("items", [])
 
-        zone_label = self.get_zone_label()
-
         worker_nodes_zones = {
-            node["metadata"]["labels"].get(zone_label)
+            node["metadata"]["labels"].get(constants.ZONE_LABEL)
             for node in nodes
             if constants.WORKER_LABEL in node["metadata"]["labels"]
             and str(constants.OPERATOR_NODE_LABEL)[:-3] in node["metadata"]["labels"]
         }
 
         master_nodes_zones = {
-            node["metadata"]["labels"].get(zone_label)
+            node["metadata"]["labels"].get(constants.ZONE_LABEL)
             for node in nodes
             if constants.MASTER_LABEL in node["metadata"]["labels"]
         }
@@ -468,7 +429,7 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 
-        if ui_deployment:
+        if ui_deployment and ui_deployment_conditions():
             self.deployment_with_ui()
             # Skip the rest of the deployment when deploy via UI
             return
@@ -481,13 +442,30 @@ class Deployment(object):
 
         logger.info("Creating namespace and operator group.")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
+
+        # create multus network
+        if config.ENV_DATA.get("is_multus_enabled"):
+            logger.info("Creating multus network")
+            multus_data = templating.load_yaml(constants.MULTUS_YAML)
+            multus_config_str = multus_data["spec"]["config"]
+            multus_config_dct = json.loads(multus_config_str)
+            if config.ENV_DATA.get("multus_public_network_interface"):
+                multus_config_dct["master"] = config.ENV_DATA.get(
+                    "multus_public_network_interface"
+                )
+            multus_data["spec"]["config"] = json.dumps(multus_config_dct)
+            multus_data_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="multus", delete=False
+            )
+            templating.dump_data_to_temp_yaml(multus_data, multus_data_yaml.name)
+            run_cmd(f"oc create -f {multus_data_yaml.name}")
+
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             ibmcloud.add_deployment_dependencies()
             if not live_deployment:
                 create_ocs_secret(self.namespace)
-                create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         if not live_deployment:
-            self.create_ocs_operator_source(image)
+            create_catalog_source(image)
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
@@ -607,9 +585,7 @@ class Deployment(object):
             cluster_data["spec"]["nodeTopologies"][
                 "arbiterLocation"
             ] = self.get_arbiter_location()
-            cluster_data["spec"]["storageDeviceSets"][0][
-                "replica"
-            ] = config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 4)
+            cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 4
 
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
 
@@ -625,6 +601,7 @@ class Deployment(object):
             config.DEPLOYMENT.get("local_storage")
             and Version.coerce(ocs_version) >= Version.coerce("4.7")
             and zone_num < 3
+            and not config.DEPLOYMENT.get("arbiter_deployment")
         ):
             cluster_data["spec"]["flexibleScaling"] = True
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
@@ -668,7 +645,13 @@ class Deployment(object):
                 and not lso_type == constants.AWS_EBS
             ):
                 deviceset_data["count"] = 2
-            if ocs_version >= 4.5:
+            # setting resource limits for AWS i3
+            # https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.6/html-single/deploying_openshift_container_storage_using_amazon_web_services/index#creating-openshift-container-storage-cluster-on-amazon-ec2_local-storage
+            if (
+                ocs_version >= 4.5
+                and config.ENV_DATA.get("worker_instance_type")
+                == constants.AWS_LSO_WORKER_INSTANCE
+            ):
                 deviceset_data["resources"] = {
                     "limits": {"cpu": 2, "memory": "5Gi"},
                     "requests": {"cpu": 1, "memory": "5Gi"},
@@ -677,6 +660,9 @@ class Deployment(object):
                 cluster_data["metadata"]["annotations"] = {
                     "cluster.ocs.openshift.io/local-devices": "true"
                 }
+            count = config.DEPLOYMENT.get("local_storage_storagedeviceset_count")
+            if count is not None:
+                deviceset_data["count"] = count
 
         # Allow lower instance requests and limits for OCS deployment
         # The resources we need to change can be found here:
@@ -762,6 +748,11 @@ class Deployment(object):
             cluster_data["spec"]["managedResources"] = {
                 "cephConfig": {"reconcileStrategy": "ignore"}
             }
+        if config.ENV_DATA.get("is_multus_enabled"):
+            cluster_data["spec"]["network"] = {
+                "provider": "multus",
+                "selectors": {"public": "ocs-public"},
+            }
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
@@ -798,7 +789,7 @@ class Deployment(object):
             logger.info("Creating namespace and operator group.")
             run_cmd(f"oc create -f {constants.OLM_YAML}")
         if not live_deployment:
-            self.create_ocs_operator_source()
+            create_catalog_source()
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
@@ -814,19 +805,7 @@ class Deployment(object):
         csv.wait_for_phase("Succeeded", timeout=720)
 
         # Create secret for external cluster
-        secret_data = templating.load_yaml(constants.EXTERNAL_CLUSTER_SECRET_YAML)
-        external_cluster_details = config.EXTERNAL_MODE.get(
-            "external_cluster_details", ""
-        )
-        if not external_cluster_details:
-            raise ExternalClusterDetailsException("No external cluster data found")
-        secret_data["data"]["external_cluster_details"] = external_cluster_details
-        secret_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="external_cluster_secret", delete=False
-        )
-        templating.dump_data_to_temp_yaml(secret_data, secret_data_yaml.name)
-        logger.info("Creating external cluster secret")
-        run_cmd(f"oc create -f {secret_data_yaml.name}")
+        create_external_secret()
 
         cluster_data = templating.load_yaml(constants.EXTERNAL_STORAGE_CLUSTER_YAML)
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
@@ -1066,8 +1045,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         ignore_upgrade (bool): Ignore upgrade parameter.
 
     """
-    if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
-        link_all_sa_and_secret(constants.OCS_SECRET, constants.MARKETPLACE_NAMESPACE)
     logger.info("Adding CatalogSource")
     if not image:
         image = config.DEPLOYMENT.get("ocs_registry_image", "")
@@ -1099,6 +1076,9 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         )
 
     catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
+    if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+        create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
+        catalog_source_data["spec"]["secrets"] = [constants.OCS_SECRET]
     cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
     change_cs_condition = (
         (image or image_tag)

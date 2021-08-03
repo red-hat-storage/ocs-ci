@@ -8,7 +8,7 @@ from ocs_ci.ocs.ocp import switch_to_project
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass, get_all_pvcs
 from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
-from ocs_ci.utility.localstorage import check_local_volume
+from ocs_ci.utility.localstorage import check_local_volume_local_volume_set
 from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
@@ -42,7 +42,10 @@ def remove_ocp_registry_from_ocs(platform):
         namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
     )
     params_list = list()
-    if platform.lower() == constants.AWS_PLATFORM:
+    if (
+        platform.lower() == constants.AWS_PLATFORM
+        or platform.lower() == constants.RHV_PLATFORM
+    ):
         params_list.append('[{"op": "remove", "path": "/spec/storage"}]')
         params_list.append('[{"op": "remove", "path": "/status/storage"}]')
 
@@ -187,7 +190,7 @@ def uninstall_ocs():
 
     log.info("Checking for local storage")
     lso_sc = None
-    if check_local_volume():
+    if check_local_volume_local_volume_set():
         "Local volume was found. Will be removed later"
         lso_sc = (
             storage_cluster.get()

@@ -1,15 +1,22 @@
 import copy
 import logging
 import re
+import time
 from prettytable import PrettyTable
 from collections import defaultdict
 
 from subprocess import TimeoutExpired
+from semantic_version import Version
 
 from ocs_ci.ocs.machine import get_machine_objs
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, NotAllNodesCreated
+from ocs_ci.ocs.exceptions import (
+    TimeoutExpiredError,
+    NotAllNodesCreated,
+    CommandFailed,
+    ResourceNotFoundError,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
@@ -19,7 +26,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions
 from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
-    verify_new_pv_available_in_sc,
+    verify_new_pvs_available_in_sc,
     delete_released_pvs_in_sc,
     get_pv_size,
 )
@@ -393,6 +400,11 @@ def add_new_node_and_label_upi(
 
     new_spun_nodes = list(set(nodes_after_exp) - set(initial_nodes))
     log.info(f"New spun nodes: {new_spun_nodes}")
+    # For IBM cloud, it takes time to settle down new nodes even after reaching READY state
+    if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+        log.info("Sleeping for 300 seconds for new nodes to settle down")
+        time.sleep(300)
+
     if node_type == constants.RHEL_OS:
         set_selinux_permissions(workers=new_spun_nodes)
 
@@ -625,8 +637,9 @@ def get_osds_per_node():
 
     """
     dic_node_osd = defaultdict(list)
-    for osd_pod in pod.get_osd_pods():
-        dic_node_osd[pod.get_pod_node(osd_pod).name].append(osd_pod.name)
+    osd_pods = pod.get_osd_pods()
+    for osd_pod in osd_pods:
+        dic_node_osd[osd_pod.data["spec"]["nodeName"]].append(osd_pod.name)
     return dic_node_osd
 
 
@@ -710,7 +723,11 @@ def get_compute_node_names(no_replace=False):
     """
     platform = config.ENV_DATA.get("platform").lower()
     compute_node_objs = get_nodes()
-    if platform in [constants.VSPHERE_PLATFORM, constants.AWS_PLATFORM]:
+    if platform in [
+        constants.VSPHERE_PLATFORM,
+        constants.AWS_PLATFORM,
+        constants.RHV_PLATFORM,
+    ]:
         return [
             compute_obj.get()["metadata"]["labels"][constants.HOSTNAME_LABEL]
             for compute_obj in compute_node_objs
@@ -830,17 +847,11 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     drain_nodes([osd_node_name])
     log.info("Getting machine name from specified node name")
     machine_name = machine.get_machine_from_node_name(osd_node_name)
-    machine_type = machine.get_machine_type(machine_name)
     log.info(f"Node {osd_node_name} associated machine is {machine_name}")
     log.info(f"Deleting machine {machine_name} and waiting for new machine to come up")
-    machine.delete_machine_and_check_state_of_new_spinned_machine(machine_name)
-    new_machine_list = machine.get_machines(machine_type=machine_type)
-    for machines in new_machine_list:
-        # Trimming is done to get just machine name
-        # eg:- machine_name:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b-nlgkr
-        # After trimming:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b
-        if re.match(machines.name[:-6], machine_name):
-            new_machine_name = machines.name
+    new_machine_name = machine.delete_machine_and_check_state_of_new_spinned_machine(
+        machine_name
+    )
     machineset_name = machine.get_machineset_from_machine_name(new_machine_name)
     log.info("Waiting for new worker node to be in ready state")
     machine.wait_for_new_node_to_be_ready(machineset_name)
@@ -908,7 +919,7 @@ def get_node_az(node):
 
     """
     labels = node.get().get("metadata", {}).get("labels", {})
-    return labels.get("topology.kubernetes.io/zone")
+    return labels.get(constants.ZONE_LABEL)
 
 
 def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=False):
@@ -978,9 +989,19 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     old_pv_objs = get_pv_objs_in_sc(sc_name)
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
-    osd_pod = get_node_pods(osd_node_name, pods_to_search=pod.get_osd_pods())[0]
-    osd_id = pod.get_osd_pod_id(osd_pod)
-    log.info(f"osd id to remove = {osd_id}")
+    osd_ids = get_node_osd_ids(osd_node_name)
+    assert osd_ids, f"The node {osd_node_name} does not have osd pods"
+
+    ocs_version = config.ENV_DATA["ocs_version"]
+    assert not (
+        len(osd_ids) > 1 and Version.coerce(ocs_version) <= Version.coerce("4.6")
+    ), (
+        f"We have {len(osd_ids)} osd ids, and ocs version is {ocs_version}. "
+        f"The ocs-osd-removal job works with multiple ids only from ocs version 4.7"
+    )
+
+    osd_id = osd_ids[0]
+    log.info(f"osd ids to remove = {osd_ids}")
     # Save the node hostname before deleting the node
     osd_node_hostname_label = get_node_hostname_label(osd_node)
 
@@ -994,9 +1015,12 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     assert new_node_name, "Failed to create a new node"
     log.info(f"New node created successfully. Node name: {new_node_name}")
 
+    num_of_new_pvs = len(osd_ids)
+    log.info(f"Number of the expected new pvs = {num_of_new_pvs}")
     # If we use LSO, we need to create and attach a new disk manually
     new_node = get_node_objs(node_names=[new_node_name])[0]
-    add_disk_to_node(new_node)
+    for i in range(num_of_new_pvs):
+        add_disk_to_node(new_node)
 
     new_node_hostname_label = get_node_hostname_label(new_node)
     log.info(
@@ -1008,25 +1032,27 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     )
     assert res, "Failed to add the new node to LVD and LVS"
 
-    log.info("Verify new pv is available...")
-    is_new_pv_available = verify_new_pv_available_in_sc(old_pv_objs, sc_name)
-    assert is_new_pv_available, "New pv is not available"
+    log.info("Verify new pvs are available...")
+    is_new_pvs_available = verify_new_pvs_available_in_sc(
+        old_pv_objs, sc_name, num_of_new_pvs=num_of_new_pvs
+    )
+    assert is_new_pvs_available, "New pvs are not available"
     log.info("Finished verifying that the new pv is available")
 
-    osd_removal_job = pod.run_osd_removal_job(osd_id)
+    osd_removal_job = pod.run_osd_removal_job(osd_ids)
     assert osd_removal_job, "ocs-osd-removal failed to create"
     is_completed = (pod.verify_osd_removal_job_completed_successfully(osd_id),)
     assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
     log.info("ocs-osd-removal-job completed successfully")
 
-    expected_num_of_deleted_pvs = [0, 1]
+    expected_num_of_deleted_pvs = [0, num_of_new_pvs]
     num_of_deleted_pvs = delete_released_pvs_in_sc(sc_name)
     assert num_of_deleted_pvs in expected_num_of_deleted_pvs, (
         f"num of deleted PVs is {num_of_deleted_pvs} "
         f"instead of the expected values {expected_num_of_deleted_pvs}"
     )
     log.info(f"num of deleted PVs is {num_of_deleted_pvs}")
-    log.info("Successfully deleted old pv")
+    log.info("Successfully deleted old pvs")
 
     is_deleted = pod.delete_osd_removal_job(osd_id)
     assert is_deleted, "Failed to delete ocs-osd-removal-job"
@@ -1314,7 +1340,7 @@ def untaint_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT, nodes_to_untaint=None
     return False
 
 
-def get_node_pods(node_name, pods_to_search=None):
+def get_node_pods(node_name, pods_to_search=None, raise_pod_not_found_error=False):
     """
     Get all the pods of a specified node
 
@@ -1322,13 +1348,33 @@ def get_node_pods(node_name, pods_to_search=None):
         node_name (str): The node name to get the pods
         pods_to_search (list): list of pods to search for the node pods.
             If not specified, will search in all the pods.
+        raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
+            in the pod names are not found. If False, it ignores the case of pod not found and
+            returns the pod objects of the rest of the pod nodes. The default value is False
 
     Returns:
         list: list of all the pods of the specified node
 
     """
+    node_pods = []
     pods_to_search = pods_to_search or pod.get_all_pods()
-    return [p for p in pods_to_search if pod.get_pod_node(p).name == node_name]
+
+    for p in pods_to_search:
+        try:
+            if pod.get_pod_node(p).name == node_name:
+                node_pods.append(p)
+        # Check if the command failed because the pod not found
+        except CommandFailed as ex:
+            if "not found" not in str(ex):
+                raise ex
+            # Check the 2 cases of pod not found error
+            pod_not_found_error_message = f"Failed to get the pod node of the pod {p.name} due to the exception {ex}"
+            if raise_pod_not_found_error:
+                raise ResourceNotFoundError(pod_not_found_error_message)
+            else:
+                log.info(pod_not_found_error_message)
+
+    return node_pods
 
 
 def get_node_pods_to_scale_down(node_name):
@@ -1461,6 +1507,9 @@ def wait_for_new_osd_node(old_osd_node_names, timeout=600):
             Else it returns None
 
     """
+    pod.wait_for_pods_to_be_running(
+        pod_names=[osd_pod.name for osd_pod in pod.get_osd_pods()], timeout=timeout
+    )
     try:
         for current_osd_node_names in TimeoutSampler(
             timeout=timeout, sleep=30, func=get_osd_running_nodes
@@ -1590,3 +1639,50 @@ def add_new_nodes_and_label_upi_lso(
             add_node_to_lvd_and_lvs(node_obj.name)
 
     return new_node_names
+
+
+def get_nodes_in_statuses(statuses):
+    """
+    Get all nodes in specific statuses
+
+    Args:
+        statuses (list): List of the statuses to search for the nodes
+
+    Returns:
+        list: OCP objects representing the nodes in the specific statuses
+
+    """
+    nodes = get_node_objs()
+    return [n for n in nodes if n.ocp.get_resource_status(n.name) in statuses]
+
+
+def get_node_osd_ids(node_name):
+    """
+    Get the node osd ids
+
+    Args:
+        node_name (str): The node name to get the osd ids
+
+    Returns:
+        list: The list of the osd ids
+
+    """
+    osd_pods = pod.get_osd_pods()
+    node_osd_pods = get_node_pods(node_name, pods_to_search=osd_pods)
+    return [pod.get_osd_pod_id(osd_pod) for osd_pod in node_osd_pods]
+
+
+def get_node_mon_ids(node_name):
+    """
+    Get the node mon ids
+
+    Args:
+        node_name (str): The node name to get the mon ids
+
+    Returns:
+        list: The list of the mon ids
+
+    """
+    mon_pods = pod.get_mon_pods()
+    node_mon_pods = get_node_pods(node_name, pods_to_search=mon_pods)
+    return [pod.get_mon_pod_id(mon_pod) for mon_pod in node_mon_pods]

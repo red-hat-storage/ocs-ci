@@ -69,23 +69,32 @@ def add_nodes():
             log.info(
                 f"The worker nodes number before expansion {len(get_worker_nodes())}"
             )
-            if config.ENV_DATA.get("rhel_user"):
-                node_type = constants.RHEL_OS
-            else:
-                node_type = constants.RHCOS
+            dt = config.ENV_DATA["deployment_type"]
+            if dt == "ipi":
+                machines = machine_utils.get_machinesets()
+                for machine in machines:
+                    new_nodes.append(
+                        add_new_node_and_label_it(machine, mark_for_ocs_label=ocs_nodes)
+                    )
 
-            if config.DEPLOYMENT.get("local_storage"):
-                new_nodes.append(
-                    add_new_nodes_and_label_upi_lso(
-                        node_type, node_count, mark_for_ocs_label=ocs_nodes
-                    )
-                )
             else:
-                new_nodes.append(
-                    add_new_node_and_label_upi(
-                        node_type, node_count, mark_for_ocs_label=ocs_nodes
+                if config.ENV_DATA.get("rhel_user"):
+                    node_type = constants.RHEL_OS
+                else:
+                    node_type = constants.RHCOS
+
+                if config.DEPLOYMENT.get("local_storage"):
+                    new_nodes.append(
+                        add_new_nodes_and_label_upi_lso(
+                            node_type, node_count, mark_for_ocs_label=ocs_nodes
+                        )
                     )
-                )
+                else:
+                    new_nodes.append(
+                        add_new_node_and_label_upi(
+                            node_type, node_count, mark_for_ocs_label=ocs_nodes
+                        )
+                    )
 
             log.info(
                 f"The worker nodes number after expansion {len(get_worker_nodes())}"

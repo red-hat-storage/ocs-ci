@@ -23,6 +23,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_obj,
     get_operator_pods,
     get_file_path,
+    get_pod_node,
 )
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.helpers.helpers import (
@@ -287,14 +288,7 @@ class Postgresql(RipSaw):
             timeout (int): Time in seconds to wait
 
         """
-        """
-        Sometimes with the default values in the benchmark yaml the pgbench pod is not
-        getting completed within the specified time and the tests are failing.
-        I think it is varying with the infrastructure.
-        So, for now we set the timeout to 30 mins and will start monitoring each pg bench
-        pods for each run.Based on the results we will define the timeout again
-        """
-        timeout = timeout if timeout else 1800
+        timeout = timeout if timeout else 900
         # Wait for pg_bench pods to initialized and running
         log.info(f"Waiting for pgbench pods to be reach {status} state")
         pgbench_pod_objs = self.get_pgbench_pods()
@@ -392,6 +386,39 @@ class Postgresql(RipSaw):
             )
             nodes_set.add(pod["spec"]["nodeName"])
         return list(nodes_set)
+
+    def get_pgbench_running_nodes(self):
+        """
+        get nodes that contains pgbench pods
+
+        Returns:
+            list: List of pgbench running nodes
+
+        """
+        pgbench_nodes = [
+            get_pod_node(pgbench_pod).name for pgbench_pod in self.get_pgbench_pods()
+        ]
+        return list(set(pgbench_nodes))
+
+    def filter_pgbench_nodes_from_nodeslist(self, nodes_list):
+        """
+        Filter pgbench nodes from the given nodes list
+
+        Args:
+            nodes_list (list): List of nodes to be filtered
+
+        Returns:
+            list: List of pgbench not running nodes from the given nodes list
+
+        """
+        log.info("Get pgbench running nodes")
+        pgbench_nodes = self.get_pgbench_running_nodes()
+        log.info("Select a node where pgbench is not running from the nodes list")
+        log.info(f"nodes list: {nodes_list}")
+        log.info(f"pgbench running nodes list: {pgbench_nodes}")
+        filtered_nodes_list = list(set(nodes_list) - set(pgbench_nodes))
+        log.info(f"pgbench is not running on nodes: {filtered_nodes_list}")
+        return filtered_nodes_list
 
     def respin_pgsql_app_pod(self):
         """

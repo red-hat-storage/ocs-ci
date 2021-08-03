@@ -2,6 +2,10 @@ class CommandFailed(Exception):
     pass
 
 
+class UnexpectedDeploymentConfiguration(Exception):
+    pass
+
+
 class UnsupportedOSType(Exception):
     pass
 
@@ -232,6 +236,10 @@ class ExternalClusterDetailsException(Exception):
     pass
 
 
+class ExternalClusterRGWAdminOpsUserException(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 
@@ -325,4 +333,20 @@ class NotAllNodesCreated(Exception):
 
 
 class TemplateNotFound(Exception):
+    pass
+
+
+class PVNotSufficientException(Exception):
+    pass
+
+
+class IPAMReleaseUpdateFailed(Exception):
+    pass
+
+
+class IPAMAssignUpdateFailed(Exception):
+    pass
+
+
+class NodeHasNoAttachedVolume(Exception):
     pass

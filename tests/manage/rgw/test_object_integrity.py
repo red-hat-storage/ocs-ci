@@ -1,6 +1,7 @@
 import logging
 
 import pytest
+from flaky import flaky
 
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
@@ -20,6 +21,7 @@ class TestObjectIntegrity(ManageTest):
     """
 
     @tier1
+    @flaky
     @pytest.mark.polarion_id("OCS-2246")
     def test_check_object_integrity(
         self, awscli_pod_session, rgw_bucket_factory, test_directory_setup

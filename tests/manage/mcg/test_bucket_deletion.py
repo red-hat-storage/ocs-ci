@@ -3,6 +3,7 @@ import timeit
 
 import botocore
 import pytest
+from flaky import flaky
 
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
@@ -174,6 +175,7 @@ class TestBucketDeletion(MCGTest):
         ],
         ids=["S3", "CLI", "OC", "OC-AWS", "OC-AZURE", "OC-GCP"],
     )
+    @flaky
     def test_bucket_delete_with_objects(
         self, mcg_obj, awscli_pod_session, bucket_factory, interface, bucketclass_dict
     ):
