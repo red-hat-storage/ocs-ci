@@ -222,3 +222,23 @@ def check_pvs_present_for_ocs_expansion(sc=constants.LOCALSTORAGE_SC):
 
     # TODO: need to handle it for arbiter_deployment
     # elif not flexible_scaling and arbiter_deployment:
+
+
+def get_node_pv_objs(sc_name, node_name):
+    """
+    Get the pv objects that associated to a node in a specific Storage class
+
+    Args:
+        sc_name (str): The storage class name
+        node_name (str): The node name
+
+    Returns:
+        list: list of dictionaries of the pv objects that associated to the node name
+
+    """
+    pv_objs = get_pv_objs_in_sc(sc_name)
+    return [
+        pv_obj
+        for pv_obj in pv_objs
+        if pv_obj["metadata"]["labels"]["kubernetes.io/hostname"] == node_name
+    ]

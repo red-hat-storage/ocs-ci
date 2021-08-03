@@ -7,7 +7,6 @@ import tempfile
 from jsonschema import validate
 from semantic_version import Version
 
-from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.exceptions import (
@@ -20,7 +19,7 @@ from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
-from ocs_ci.ocs.node import get_osds_per_node
+from ocs_ci.ocs.node import get_osds_per_node, add_new_disk_for_vsphere
 from ocs_ci.utility import localstorage, utils, templating, kms as KMS
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd, get_ocp_version
@@ -593,8 +592,8 @@ def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=
                     and add_extra_disk_to_existing_worker
                 ):
                     log.info("No Extra PV found")
-                    log.info("Adding Extra Disk to existing VSphere Worker nodes")
-                    add_disk_for_vsphere_platform()
+                    log.info("Adding Extra Disk to existing VSphere Worker node")
+                    add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
                 else:
                     raise PVNotSufficientException(
                         f"No Extra PV found in {constants.OPERATOR_NODE_LABEL}"
