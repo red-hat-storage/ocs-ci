@@ -350,6 +350,12 @@ storage_class = {
     "pvc-expansion-check": ("input[class='create-storage-class-form__checkbox']", By.CSS_SELECTOR),
     "save-advanced-settings": ("#confirm-action", By.CSS_SELECTOR),
     "create": ("#save-changes", By.CSS_SELECTOR),
+    "sc-dropdown": ("button[data-test-id='dropdown-button']", By.CSS_SELECTOR),
+    "name-from-dropdown": ("//button[@id='NAME-link']", By.XPATH),
+    "sc-search": ("input[placeholder='Search by name...']", By.CSS_SELECTOR),
+    "select-sc": ("//a[normalize-space()='{}']", By.XPATH),
+    "sc-actions": ("button[aria-label='Actions']", By.CSS_SELECTOR),
+    "delete-storage-class": ("//button[normalize-space()='Delete StorageClass']", By.XPATH),
 }
 
 
