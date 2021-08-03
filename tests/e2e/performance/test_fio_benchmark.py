@@ -18,7 +18,6 @@ from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.cluster import CephCluster, calculate_compression_ratio
 from ocs_ci.helpers.performance_lib import run_command
 from ocs_ci.ocs.elasticsearch import ElasticSearch
-from ocs_ci.ocs.ripsaw import RipSaw
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +25,7 @@ log = logging.getLogger(__name__)
 class FIOResultsAnalyse(PerfResult):
     """
     This class is reading all test results from elasticsearch server (which the
-    ripsaw running of the benchmark is generate), aggregate them by :
+    benchmark operator running of the benchmark is generate), aggregate them by :
         test operation (e.g. create / delete etc.)
         sample (for test to be valid it need to run with more the one sample)
         host (test can be run on more then one pod {called host})
@@ -159,7 +158,7 @@ class FIOResultsAnalyse(PerfResult):
 @performance
 class TestFIOBenchmark(PASTest):
     """
-    Run FIO perf test using ripsaw benchmark
+    Run FIO perf test using benchmark operator
 
     """
 
@@ -190,7 +189,7 @@ class TestFIOBenchmark(PASTest):
 
         super(TestFIOBenchmark, self).setup()
         # deploy the benchmark-operator (ripsaw)
-        self.ripsaw = RipSaw()
+        # self.operator = RipSaw()
         self.ripsaw_deploy(self.ripsaw)
 
     def setting_storage_usage(self):
