@@ -3,11 +3,15 @@ import pytest
 import time
 from uuid import uuid4
 
+import numpy
+
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import performance
+from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import get_full_test_logs_path, pod_start_time
 from ocs_ci.ocs import constants
-import ocs_ci.ocs.exceptions as ex
+
+# import ocs_ci.ocs.exceptions as ex
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.perftests import PASTest
 
@@ -88,6 +92,7 @@ class TestPodStartTime(PASTest):
             }
 
         self.pvc_size = 5  # The size of the pv to create
+        self.number_of_samples = 5  # The number of samples to run
 
     def init_full_results(self, full_results):
         """
@@ -105,6 +110,7 @@ class TestPodStartTime(PASTest):
         full_results.add_key("index", full_results.new_index)
         return full_results
 
+    '''
     @pytest.fixture()
     def pod(self, interface, pod_factory, pvc_factory):
         """
@@ -118,6 +124,7 @@ class TestPodStartTime(PASTest):
         pvc_obj = pvc_factory(interface=interface, size=self.pvc_size)
         pod_obj = pod_factory(pvc=pvc_obj)
         return pod_obj
+    '''
 
     def get_time(self):
         """
@@ -129,15 +136,67 @@ class TestPodStartTime(PASTest):
         """
         return time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
 
-    def test_pod_start_time(self, pod):
+    def run(self):
+
+        logging.info(f"Pulling pod image {constants.PERF_IMAGE}")
+        helpers.pull_images(constants.PERF_IMAGE)
+
+        results = []  # list of all samples results
+
+        for i in range(self.number_of_samples):
+
+            logging.info(f"Starting sample number {i + 1}")
+
+            # Creation PVC
+            logging.info(f"Creating {self.pvc_size} GiB {self.sc} PVC")
+            pvc_obj = helpers.create_pvc(sc_name=self.sc, size=self.pvc_size)
+            timeout = 600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
+            helpers.wait_for_resource_state(
+                pvc_obj, constants.STATUS_BOUND, timeout=timeout
+            )
+            pvc_obj.reload()
+            logging.info(f"PVC number {i + 1} was created in.")
+
+            # Attach POD to the PVC
+            logging.info(f"Creating Pod with pvc {pvc_obj.name}")
+
+            pod_obj = helpers.create_pod(
+                interface_type=self.interface,
+                pvc_name=pvc_obj.name,
+                namespace=pvc_obj.namespace,
+                pod_dict_path=constants.PERF_POD_YAML,
+            )
+
+            # measure the attached time
+            start_time_dict = pod_start_time(pod_obj)
+            start_time = start_time_dict["perf-pod"]
+            results.append(start_time)
+            logging.info(f"pod start time is : {start_time} seconds")
+            # if start_time > 30:
+            #    raise ex.PerformanceException(
+            #        f"pod start time is {start_time}," f"which is greater than 30 seconds"
+            #    )
+
+            # delete the pod
+            logging.info(f"Delete pod number : {1 + 1}")
+            pod_obj.delete(wait=True)
+
+            # Delete the pvc
+            logging.info(f"Delete PVC number : {1 + 1}")
+            pvc_obj.delete(wait=True)
+
+        return results
+
+    def test_pod_start_time(self, interface):
         """
         Test to log pod start time
         """
+        self.interface = interface
         # Getting the test start time
         self.start_time = self.get_time()
 
         # The actual test
-        start_time_dict = pod_start_time(pod)
+        # start_time_dict = pod_start_time(pod)
 
         # Getting the full path for the test logs
         self.full_log_path = get_full_test_logs_path(cname=self)
@@ -158,15 +217,20 @@ class TestPodStartTime(PASTest):
             ResultsAnalyse(self.uuid, self.crd_data, self.full_log_path)
         )
 
-        start_time = start_time_dict["web-server"]
-        logging.info(f"pod start time: {start_time} seconds")
-        if start_time > 30:
-            raise ex.PerformanceException(
-                f"pod start time is {start_time}," f"which is greater than 30 seconds"
-            )
+        # start_time = start_time_dict["web-server"]
+        # logging.info(f"pod start time: {start_time} seconds")
+        # if start_time > 30:
+        #    raise ex.PerformanceException(
+        #        f"pod start time is {start_time}," f"which is greater than 30 seconds"
+        #    )
         self.full_results.add_key("storageclass", self.sc)
-        self.full_results.add_key("attach_time", start_time)
+        # self.full_results.add_key("attach_time", start_time)
+        results = self.run()
+        self.full_results.add_key("attach_time", numpy.average(results))
+        self.full_results.add_key("all_results", results)
 
+        logging.info(f"All results are : {results}")
+        logging.info(f"Average of {self.number_of_samples} is {numpy.average(results)}")
         # Getting the test end time
         self.end_time = self.get_time()
 
