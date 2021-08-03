@@ -185,11 +185,12 @@ def schedule_nodes(node_names):
     wait_for_nodes_status(node_names)
 
 
-def drain_nodes(node_names):
+def drain_nodes(node_names, force="true"):
     """
     Drain nodes
 
     Args:
+        force:
         node_names (list): The names of the nodes
 
     Raises:
@@ -201,8 +202,8 @@ def drain_nodes(node_names):
     log.info(f"Draining nodes {node_names_str}")
     try:
         ocp.exec_oc_cmd(
-            f"adm drain {node_names_str} --force=true --ignore-daemonsets "
-            f"--delete-local-data",
+            f"adm drain {node_names_str} --force={force} --ignore-daemonsets "
+            f"--delete-emptydir-data",
             timeout=1800,
         )
     except TimeoutExpired:

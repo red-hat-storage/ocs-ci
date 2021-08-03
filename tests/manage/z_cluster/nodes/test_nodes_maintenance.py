@@ -291,7 +291,7 @@ class TestNodesMaintenance(ManageTest):
         node_names = [typed_node.name for typed_node in nodes]
 
         # Maintenance the nodes (unschedule and drain)
-        drain_nodes(node_names)
+        drain_nodes(node_names, force="false")
 
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
