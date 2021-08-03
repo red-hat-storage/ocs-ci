@@ -6,8 +6,12 @@ Code in this module Supports monitoring test cases dealing with OCS metrics.
 """
 
 import logging
+import re
+import subprocess
 
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.node import get_nodes
+from ocs_ci.ocs.ocp import OCP
 
 
 logger = logging.getLogger(__name__)
@@ -321,3 +325,131 @@ def get_missing_metrics(prometheus, metrics, current_platform=None):
                 logger.error(f"failed to get results for {metric}")
                 metrics_without_results.append(metric)
     return metrics_without_results
+
+
+def parse_cadvisor_extras(assignments):
+    """
+    Parse the list of comma separated x="y" fields in a line of
+    metrics data into a dictionary, retv, whose values are such
+    that retv[x] = "y"
+
+    Parameters:
+        assignments -- text of the form a1="b1",a2="b2"...
+
+    Returns:
+        a dictionary, retv, whose values are extracted from the
+        assignments parameter into the form retv[a1] = "b1"...
+    """
+    ptrn = re.compile(r"[^,=]*=\"[^\"]*\"")
+    eqlist = ptrn.findall(assignments)
+    retv = {}
+    for part in eqlist:
+        parts = part.split("=")
+        retv[parts[0]] = parts[1][1:-1]
+    return retv
+
+
+def parse_cadvisor_metrics_line(mline):
+    """
+    Parse one of the statistics in the Cadvisor metrics data.
+
+    Parameters:
+        mline -- line of raw output from the Cadvisor metrics data
+
+    Returns:
+        A dictionary with the following entries:
+            stat_name -- The name of the metric passed in this line
+            fields -- A dictionary extracted from the x=y style
+                      parameters passed inside the brackets in mline
+            numbers -- A list of the numbers passed at the end of mline
+    """
+    if mline.startswith("#"):
+        return False
+    if len(mline) == 0:
+        return False
+    split1 = mline.split("{")
+    stat_name = split1[0]
+    try:
+        split2 = split1[1].split("}")
+        fields = parse_cadvisor_extras(split2[0])
+        numbers = split2[1].strip().split(" ")
+    except IndexError:
+        fields = {}
+        nofields_str = stat_name.split(" ")
+        stat_name = nofields_str[0]
+        numbers = nofields_str[1:]
+    nnumbs = []
+    try:
+        for numb in numbers:
+            nnumbs.append(float(numb))
+    except ValueError:
+        logging.info("Invalid number in Cadviser metrics field")
+        return False
+    return {"stat_name": stat_name, "fields": fields, "numbers": nnumbs}
+
+
+def collect_cadvisor_metrics():
+    """
+    Collect a set of statistics from proxy/metrics/cadvisor.
+
+    Returns: a list of dictionary values represent a metric collected.
+             The format of these dictionary values is defined in
+             parse_metrics_line.
+    """
+    ocs = OCP(kind="pod", namespace="openshift-storage")
+    ocs_pods = ocs.get()
+    nlist = []
+    for x in ocs_pods["items"]:
+        pod = x["spec"]["nodeName"]
+        nlist.append(pod)
+    worker_nodes = get_nodes(node_type="worker")
+    stat_list = []
+    for wnode in worker_nodes:
+        result = subprocess.run(
+            [
+                "oc",
+                "get",
+                "--raw",
+                f"/api/v1/nodes/{wnode.name}/proxy/metrics/cadvisor",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        for line in result.stdout.split("\n"):
+            tval = parse_cadvisor_metrics_line(line)
+            if tval:
+                stat_list.append(tval)
+    return stat_list
+
+
+def collect_pod_metrics():
+    """
+    Scan the cadvisor metrics and find all entries for a device on a pod
+
+    Return a dictionary indexed by pod.  The data in each entry is a dict
+            indexed by device.  The device information is indexed by statistic
+            name, and contains a dict of number and operation values.
+    """
+    metrics = collect_cadvisor_metrics()
+    if metrics[0]["stat_name"] == "cadvisor_version_info":
+        logging.info("Found cadvisor metrics")
+    ret_dict = {}
+
+    for minfo in metrics:
+        parms = minfo["fields"]
+        try:
+            if parms["pod"] and parms["device"]:
+                pod_dev = ' '.join([parms["pod"], parms["device"]])
+                if pod_dev not in ret_dict:
+                    ret_dict[pod_dev] = {}
+                entry = ret_dict[pod_dev]
+                stat_nm = minfo["stat_name"]
+                if "operation" in parms:
+                    stat_nm += " " + parms["operation"]
+                if stat_nm not in entry:
+                    entry[stat_nm] = []
+                entry[stat_nm] = minfo['numbers']
+        except KeyError:
+            # skip if "pod" or "device" is not in line
+            pass
+    return ret_dict
