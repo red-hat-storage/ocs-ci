@@ -2056,9 +2056,31 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
     return f"{base_command}{cmd}{string_wrapper}"
 
 
+def current_test_name():
+    """
+    A function to return the current test name in a parsed manner
+    Returns:
+        str: The test name.
+    """
+    return os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+
+
 def setup_pod_directories(pod_obj, dir_names):
+    """
+    Creates directories on the specified pod.
+    Directories created under the respective test name directory.
+
+
+    Args:
+        pod_obj: A pod object on which to create directories
+        dir_names: A list of directories names to create.
+
+    Returns:
+        list: A list of all the full paths of the created directories
+
+    """
     full_dirs_path = []
-    test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+    test_name = current_test_name()
     pod_obj.exec_cmd_on_pod(command=f"mkdir -p {test_name}")
     for cur_dir in dir_names:
         current = f"{test_name}/{cur_dir}"
