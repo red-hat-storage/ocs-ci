@@ -163,7 +163,7 @@ class TestMonLogTrimming(E2ETest):
         self.fio_pod_obj.run_io(
             storage_type="fs",
             size="100M",
-            runtime=60,
+            runtime=480,
         )
         thread1 = threading.Thread(target=self.check_mon_db_trim)
         thread1.start()
@@ -187,3 +187,4 @@ class TestMonLogTrimming(E2ETest):
             f"No trimming made. "
             f"Initial mon db size was {self.initial_db_size}K and after fio the mon db size is {final_db_size}K"
         )
+        log.info(f"Number of trims made: {self.mon_db_trim_count}")
