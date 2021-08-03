@@ -42,22 +42,12 @@ class TestPVEncryption(object):
                 "10",
                 "Block",
             ),
-            pytest.param(
-                "ocs-storagecluster-ceph-rbd",
-                "test-pvc-rbd",
-                "ReadWriteOnce",
-                "15",
-                "Filesystem",
-            ),
-            pytest.param(
-                "ocs-storagecluster-ceph-rbd",
-                "test-pvc-rbd",
-                "ReadWriteMany",
-                "20",
-                "Filesystem",
-            ),
         ],
     )
+    def test_vault_
+
+
+
     def test_create_sc(self, setup_ui):
         create_storage_class_with_encryption_ui(setup_ui, sc_name="test-storage-class")
 
@@ -123,13 +113,10 @@ class TestPVEncryption(object):
 
         # Creating Pod via CLI
         logger.info("Creating Pod")
-        if sc_type in (
-            constants.DEFAULT_STORAGECLASS_RBD_THICK,
-            constants.DEFAULT_STORAGECLASS_RBD,
-        ):
-            interface_type = constants.CEPHBLOCKPOOL
-        else:
-            interface_type = constants.CEPHFILESYSTEM
+        # if sc_type in (
+        #     constants.DEFAULT_STORAGECLASS_RBD,
+        # ):
+        #     interface_type = constants.CEPHBLOCKPOOL
 
         new_pod = helpers.create_pod(
             interface_type=interface_type,
