@@ -96,7 +96,11 @@ from ocs_ci.utility.utils import (
     skipif_ui_not_support,
 )
 from ocs_ci.helpers import helpers
-from ocs_ci.helpers.helpers import create_unique_resource_name, setup_pod_directories
+from ocs_ci.helpers.helpers import (
+    create_unique_resource_name,
+    setup_pod_directories,
+    current_test_name,
+)
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW
@@ -1927,7 +1931,7 @@ def test_directory_setup_fixture(request, awscli_pod_session):
     SetupDirs = namedtuple("SetupDirs", "origin_dir, result_dir")
 
     def dir_cleanup():
-        test_name = os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0]
+        test_name = current_test_name()
         awscli_pod_session.exec_cmd_on_pod(command=f"rm -rf {test_name}")
 
     request.addfinalizer(dir_cleanup)

@@ -16,6 +16,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 from ocs_ci.framework import config
 from ocs_ci.framework import config as ocsci_config
+from ocs_ci.helpers.helpers import current_test_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ui.views import locators
@@ -41,7 +42,7 @@ class BaseUI:
         self.screenshots_folder = os.path.join(
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
             f"screenshots_ui_{ocsci_config.RUN['run_id']}",
-            os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0],
+            current_test_name(),
         )
         if not os.path.isdir(self.screenshots_folder):
             Path(self.screenshots_folder).mkdir(parents=True, exist_ok=True)
@@ -484,7 +485,7 @@ def take_screenshot(driver):
     screenshots_folder = os.path.join(
         os.path.expanduser(ocsci_config.RUN["log_dir"]),
         f"screenshots_ui_{ocsci_config.RUN['run_id']}",
-        os.environ.get("PYTEST_CURRENT_TEST").split(":")[-1].split(" ")[0],
+        current_test_name(),
     )
     if not os.path.isdir(screenshots_folder):
         Path(screenshots_folder).mkdir(parents=True, exist_ok=True)
