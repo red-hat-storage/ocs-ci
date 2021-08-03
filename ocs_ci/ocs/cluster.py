@@ -1611,6 +1611,50 @@ def wait_for_silence_ceph_osd_crash_warning(osd_pod_name, timeout=900):
         return False
 
 
+def get_mon_config_value(key):
+    """
+    Gets the default value of a specific ceph monitor config
+
+    Args:
+        key (str): Configuration key. Ex: mon_max_pg_per_osd
+
+    Returns:
+        any: Ceph monitor configuration value
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    mon_dump_dict = ct_pod.exec_ceph_cmd("ceph mon dump")
+    ceph_mon_name = mon_dump_dict.get("mons")[0].get("name")
+    mon_config_value = ct_pod.exec_ceph_cmd(
+        f"ceph config show mon.{ceph_mon_name} {key}"
+    )
+    return mon_config_value
+
+
+def get_mds_cache_memory_limit():
+    """
+    Get the default value of mds
+
+    Returns:
+        int: Value of mds cache memory limit
+
+    Raises:
+        UnexpectedBehaviour: if MDS-a and MDS-b cache memory limit doesn't match
+
+    """
+    pod_obj = pod.get_ceph_tools_pod()
+    ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-a mds_cache_memory_limit"
+    mds_a_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-b mds_cache_memory_limit"
+    mds_b_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    if mds_a_cache_memory_limit != mds_b_cache_memory_limit:
+        raise UnexpectedBehaviour(
+            f"mds_a_cache_memory_limit: {mds_a_cache_memory_limit}. "
+            f"mds_b_cache_memory_limit: {mds_b_cache_memory_limit}"
+        )
+    return int(mds_a_cache_memory_limit)
+
+
 def is_lso_cluster():
     """
     Check if the cluster is an lso cluster
@@ -1656,7 +1700,7 @@ def check_ceph_health_after_add_capacity(
         additional_ceph_health_tries = int(config.RUN.get("io_load") * 1.3)
         ceph_health_tries += additional_ceph_health_tries
 
-        additional_ceph_rebalance_timeout = int(config.RUN.get("io_load") * 40)
+        additional_ceph_rebalance_timeout = int(config.RUN.get("io_load") * 80)
         ceph_rebalance_timeout += additional_ceph_rebalance_timeout
 
     ceph_health_check(

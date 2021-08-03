@@ -135,10 +135,18 @@ def bucket_class_factory(
                 namespace_policy["type"] = bucket_class_dict["namespace_policy_dict"][
                     "type"
                 ]
-                namespace_policy["read_resources"] = [
-                    nss.name for nss in namespacestores
-                ]
-                namespace_policy["write_resource"] = namespacestores[0].name
+                if namespace_policy["type"] == "Cache":
+                    namespace_policy["cache"] = {
+                        "hubResource": namespacestores[0].name,
+                        "caching": {
+                            "ttl": bucket_class_dict["namespace_policy_dict"]["ttl"]
+                        },
+                    }
+                else:
+                    namespace_policy["read_resources"] = [
+                        nss.name for nss in namespacestores
+                    ]
+                    namespace_policy["write_resource"] = namespacestores[0].name
 
         elif "backingstore_dict" in bucket_class_dict:
             backingstores = [

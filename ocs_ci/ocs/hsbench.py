@@ -31,7 +31,6 @@ class HsBench(object):
         self.num_bucket = self.hsbench_cr["num_bucket"]
         self.bucket_prefix = self.hsbench_cr["bucket_prefix"]
         self.end_point = self.hsbench_cr["end_point"]
-        self.end_point_port = self.hsbench_cr["end_point_port"]
         self.hsbench_bin_dir = self.hsbench_cr["hsbench_bin_dir"]
 
     def create_resource_hsbench(self):
@@ -92,6 +91,7 @@ class HsBench(object):
         email = self.hsbench_cr["email"]
         self.access_key = self.hsbench_cr["access_key"]
         self.secret_key = self.hsbench_cr["secret_key"]
+        self.end_point = self.hsbench_cr["end_point"]
 
         log.info(f"Create RGW test user {self.uid}")
         self.toolbox.exec_cmd_on_pod(
@@ -101,7 +101,15 @@ class HsBench(object):
         )
         return
 
-    def run_benchmark(self, num_obj=None, run_mode=None, timeout=None):
+    def run_benchmark(
+        self,
+        num_obj=None,
+        run_mode=None,
+        timeout=None,
+        access_key=None,
+        secret_key=None,
+        end_point=None,
+    ):
         """
          Running Hotsauce S3 benchmark
          Usage detail can be found at: https://github.com/markhpc/hsbench
@@ -110,6 +118,9 @@ class HsBench(object):
             num_obj (int): Maximum number of objects
             run_mode (string): mode types
             timeout (int): timeout in seconds
+            access_key (string): Access Key credential
+            secret_key (string): Secret Key credential
+            end_point (string): S3 end_point
 
         """
         # Create hsbench S3 benchmark
@@ -118,10 +129,13 @@ class HsBench(object):
         self.timeout_clean = timeout * 3
         self.num_obj = num_obj if num_obj else self.hsbench_cr["num_obj"]
         self.run_mode = run_mode if run_mode else self.hsbench_cr["run_mode"]
+        self.access_key = access_key if access_key else self.access_key
+        self.secret_key = secret_key if secret_key else self.secret_key
+        self.end_point = end_point if end_point else self.end_point
         self.pod_obj.exec_cmd_on_pod(
             f"{self.hsbench_bin_dir} -a {self.access_key} "
             f"-s {self.secret_key} "
-            f"-u {self.end_point}:{self.end_point_port} "
+            f"-u {self.end_point} "
             f"-z {self.object_size} "
             f"-d {self.duration} -t {self.num_threads} "
             f"-b {self.num_bucket} "
@@ -193,4 +207,3 @@ class HsBench(object):
         run_cmd(f"oc delete deploymentconfig/{self.pod_name} -n {self.namespace}")
         self.pod_obj.delete()
         self.pvc_obj.delete()
-        self.delete_test_user()

@@ -22,6 +22,7 @@ from ocs_ci.ocs.exceptions import (
     KMSResourceCleaneupError,
     CommandFailed,
     NotFoundError,
+    KMSConnectionDetailsError,
 )
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility import templating
@@ -53,6 +54,9 @@ class KMS(object):
     def post_deploy_verification(self):
         raise NotImplementedError("Child class should implement this method")
 
+    def create_csi_kms_resources(self):
+        raise NotImplementedError("Child class should implement this method")
+
 
 class Vault(KMS):
     """
@@ -75,6 +79,9 @@ class Vault(KMS):
         self.vault_namespace = None
         self.vault_deploy_mode = config.ENV_DATA.get("vault_deploy_mode")
         self.vault_backend_path = None
+        self.vault_backend_version = config.ENV_DATA.get(
+            "VAULT_BACKEND", defaults.VAULT_DEFAULT_BACKEND_VERSION
+        )
         # Base64 encoded (with padding) token
         self.vault_path_token = None
         self.vault_policy_name = None
@@ -127,25 +134,26 @@ class Vault(KMS):
             self.vault_tls_server = self.vault_conf["VAULT_TLS_SERVER_NAME"]
         self.vault_root_token = self.vault_conf["VAULT_ROOT_TOKEN"]
 
-    def vault_create_namespace(self):
+    def vault_create_namespace(self, namespace=None):
         """
         Create a vault namespace if it doesn't exists
 
         """
 
-        self.vault_namespace = get_default_if_keyval_empty(
-            config.ENV_DATA, "VAULT_NAMESPACE", constants.VAULT_DEFAULT_NAMESPACE
-        )
-
-        if (
-            not self.vault_namespace_exists(self.vault_namespace)
-            or self.vault_namespace == ""
-        ):
-            self.vault_namespace = (
-                f"{constants.VAULT_DEFAULT_NAMESPACE_PREFIX}-"
-                f"{get_running_cluster_id()}-"
-                f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
+        if namespace:
+            self.vault_namespace = namespace
+        else:
+            self.vault_namespace = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_NAMESPACE", constants.VAULT_DEFAULT_NAMESPACE
             )
+            if self.vault_namespace == "":
+                self.vault_namespace = (
+                    f"{constants.VAULT_DEFAULT_NAMESPACE_PREFIX}-"
+                    f"{get_running_cluster_id()}-"
+                    f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
+                )
+
+        if not self.vault_namespace_exists(self.vault_namespace):
             self.create_namespace(self.vault_namespace)
         os.environ["VAULT_NAMESPACE"] = self.vault_namespace
 
@@ -225,6 +233,41 @@ class Vault(KMS):
             cert.write(cert_str)
             logger.info(f"Created cert file at {constants.VAULT_CLIENT_CERT_PATH}")
 
+    def create_ocs_vault_cert_resources(self):
+        """
+        Explicitly create secrets like ca cert, client cert, client key
+        Assumption is vault section in AUTH file contains base64 encoded
+        (with padding) ca, client certs, client key
+
+        """
+
+        # create ca cert secret
+        ca_data = templating.load_yaml(constants.EXTERNAL_VAULT_CA_CERT)
+        self.ca_cert_name = get_default_if_keyval_empty(
+            config.ENV_DATA, "VAULT_CACERT", defaults.VAULT_DEFAULT_CA_CERT
+        )
+        ca_data["metadata"]["name"] = self.ca_cert_name
+        ca_data["data"]["cert"] = self.ca_cert_base64
+        self.create_resource(ca_data, prefix="ca")
+
+        # create client cert secret
+        client_cert_data = templating.load_yaml(constants.EXTERNAL_VAULT_CLIENT_CERT)
+        self.client_cert_name = get_default_if_keyval_empty(
+            config.ENV_DATA, "VAULT_CLIENT_CERT", defaults.VAULT_DEFAULT_CLIENT_CERT
+        )
+        client_cert_data["metadata"]["name"] = self.client_cert_name
+        client_cert_data["data"]["cert"] = self.client_cert_base64
+        self.create_resource(client_cert_data, prefix="clientcert")
+
+        # create client key secert
+        client_key_data = templating.load_yaml(constants.EXTERNAL_VAULT_CLIENT_KEY)
+        self.client_key_name = get_default_if_keyval_empty(
+            config.ENV_DATA, "VAULT_CLIENT_KEY", defaults.VAULT_DEFAULT_CLIENT_KEY
+        )
+        client_key_data["metadata"]["name"] = self.client_key_name
+        client_key_data["data"]["key"] = self.client_key_base64
+        self.create_resource(client_key_data, prefix="clientkey")
+
     def create_ocs_vault_resources(self):
         """
         This function takes care of creating ocp resources for
@@ -234,34 +277,7 @@ class Vault(KMS):
 
         """
         if not config.ENV_DATA.get("VAULT_SKIP_VERIFY"):
-            # create ca cert secret
-            ca_data = templating.load_yaml(constants.EXTERNAL_VAULT_CA_CERT)
-            self.ca_cert_name = get_default_if_keyval_empty(
-                config.ENV_DATA, "VAULT_CACERT", defaults.VAULT_DEFAULT_CA_CERT
-            )
-            ca_data["metadata"]["name"] = self.ca_cert_name
-            ca_data["data"]["cert"] = self.ca_cert_base64
-            self.create_resource(ca_data, prefix="ca")
-
-            # create client cert secret
-            client_cert_data = templating.load_yaml(
-                constants.EXTERNAL_VAULT_CLIENT_CERT
-            )
-            self.client_cert_name = get_default_if_keyval_empty(
-                config.ENV_DATA, "VAULT_CLIENT_CERT", defaults.VAULT_DEFAULT_CLIENT_CERT
-            )
-            client_cert_data["metadata"]["name"] = self.client_cert_name
-            client_cert_data["data"]["cert"] = self.client_cert_base64
-            self.create_resource(client_cert_data, prefix="clientcert")
-
-            # create client key secert
-            client_key_data = templating.load_yaml(constants.EXTERNAL_VAULT_CLIENT_KEY)
-            self.client_key_name = get_default_if_keyval_empty(
-                config.ENV_DATA, "VAULT_CLIENT_KEY", defaults.VAULT_DEFAULT_CLIENT_KEY
-            )
-            client_key_data["metadata"]["name"] = self.client_key_name
-            client_key_data["data"]["key"] = self.client_key_base64
-            self.create_resource(client_key_data, prefix="clientkey")
+            self.create_ocs_vault_cert_resources()
 
         # create oc resource secret for token
         token_data = templating.load_yaml(constants.EXTERNAL_VAULT_KMS_TOKEN)
@@ -283,6 +299,7 @@ class Vault(KMS):
         connection_data["data"]["VAULT_CLIENT_KEY"] = self.client_key_name
         connection_data["data"]["VAULT_NAMESPACE"] = self.vault_namespace
         connection_data["data"]["VAULT_TLS_SERVER_NAME"] = self.vault_tls_server
+        connection_data["data"]["VAULT_BACKEND"] = self.vault_backend_version
         self.create_resource(connection_data, prefix="kmsconnection")
 
     def create_resource(self, resource_data, prefix=None):
@@ -344,24 +361,30 @@ class Vault(KMS):
         outbuf = json.loads(output)
         return outbuf["sealed"]
 
-    def vault_create_backend_path(self):
+    def vault_create_backend_path(self, backend_path=None):
         """
         create vault path to be used by OCS
 
         Raises:
             VaultOperationError exception
         """
-        if config.ENV_DATA.get("VAULT_BACKEND_PATH"):
-            self.vault_backend_path = config.ENV_DATA.get("VAULT_BACKEND_PATH")
+        if backend_path:
+            self.vault_backend_path = backend_path
         else:
-            # Generate backend path name using prefix "ocs"
-            # "ocs-<cluster-id>"
-            self.cluster_id = get_running_cluster_id()
-            self.vault_backend_path = (
-                f"{constants.VAULT_DEFAULT_PATH_PREFIX}-{self.cluster_id}-"
-                f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
-            )
-        cmd = f"vault secrets enable -path={self.vault_backend_path} kv"
+            if config.ENV_DATA.get("VAULT_BACKEND_PATH"):
+                self.vault_backend_path = config.ENV_DATA.get("VAULT_BACKEND_PATH")
+            else:
+                # Generate backend path name using prefix "ocs"
+                # "ocs-<cluster-id>"
+                self.cluster_id = get_running_cluster_id()
+                self.vault_backend_path = (
+                    f"{constants.VAULT_DEFAULT_PATH_PREFIX}-{self.cluster_id}-"
+                    f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
+                )
+        cmd = (
+            f"vault secrets enable -path={self.vault_backend_path} "
+            f"kv-{self.vault_backend_version}"
+        )
         out = subprocess.check_output(shlex.split(cmd))
         if "Success" in out.decode():
             logger.info(f"vault path {self.vault_backend_path} created")
@@ -369,9 +392,10 @@ class Vault(KMS):
             raise VaultOperationError(
                 f"Failed to create path f{self.vault_backend_path}"
             )
-        self.vault_create_policy()
+        if not backend_path:
+            self.vault_create_policy()
 
-    def vault_create_policy(self):
+    def vault_create_policy(self, policy_name=None):
         """
         Create a vault policy and generate token
 
@@ -391,14 +415,17 @@ class Vault(KMS):
         with open(vault_hcl.name, "w") as hcl:
             hcl.write(policy)
 
-        if not get_default_if_keyval_empty(config.ENV_DATA, "VAULT_POLICY", None):
-            self.vault_policy_name = (
-                f"{constants.VAULT_DEFAULT_POLICY_PREFIX}-"
-                f"{self.cluster_id}-"
-                f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
-            )
+        if policy_name:
+            self.vault_policy_name = policy_name
         else:
-            self.vault_policy_name = config.ENV_DATA.get("VAULT_POLICY")
+            if not get_default_if_keyval_empty(config.ENV_DATA, "VAULT_POLICY", None):
+                self.vault_policy_name = (
+                    f"{constants.VAULT_DEFAULT_POLICY_PREFIX}-"
+                    f"{self.cluster_id}-"
+                    f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
+                )
+            else:
+                self.vault_policy_name = config.ENV_DATA.get("VAULT_POLICY")
 
         cmd = f"vault policy write {self.vault_policy_name} {vault_hcl.name}"
         out = subprocess.check_output(shlex.split(cmd))
@@ -681,8 +708,83 @@ class Vault(KMS):
             logger.error("KMS not enabled on storage cluster")
             raise NotFoundError("KMS flag not found")
 
+    def create_vault_csi_kms_token(
+        self, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    ):
+        """
+        create vault specific csi kms secret resource
+
+        """
+        csi_kms_token = templating.load_yaml(constants.EXTERNAL_VAULT_CSI_KMS_TOKEN)
+        csi_kms_token["data"]["token"] = base64.b64encode(
+            self.vault_path_token.encode()
+        ).decode()
+        csi_kms_token["metadata"]["namespace"] = namespace
+        self.create_resource(csi_kms_token, prefix="csikmstoken")
+
+    def create_vault_csi_kms_connection_details(
+        self, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    ):
+        """
+        Create vault specific csi kms connection details
+        configmap resource
+
+        """
+        csi_kms_conn_details = templating.load_yaml(
+            constants.EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS
+        )
+        conn_str = csi_kms_conn_details["data"]["1-vault"]
+        buf = json.loads(conn_str)
+        buf["VAULT_ADDR"] = f"https://{self.vault_server}:{self.port}"
+        buf["VAULT_BACKEND_PATH"] = self.vault_backend_path
+        buf["VAULT_CACERT"] = get_default_if_keyval_empty(
+            config.ENV_DATA, "VAULT_CACERT", defaults.VAULT_DEFAULT_CA_CERT
+        )
+        buf["VAULT_NAMESPACE"] = self.vault_namespace
+        buf["VAULT_TOKEN_NAME"] = get_default_if_keyval_empty(
+            config.ENV_DATA, "VAULT_TOKEN_NAME", constants.EXTERNAL_VAULT_CSI_KMS_TOKEN
+        )
+        csi_kms_conn_details["data"]["1-vault"] = json.dumps(buf)
+        csi_kms_conn_details["metadata"]["namespace"] = namespace
+        self.create_resource(csi_kms_conn_details, prefix="csikmsconn")
+
 
 kms_map = {"vault": Vault}
+
+
+def update_csi_kms_vault_connection_details(update_config):
+    """
+    Update the vault connection details in the resource
+    csi-kms-connection-details
+
+    Args:
+         update_config (dict): A dictionary of vault info to be updated
+
+    """
+    # Check if csi-kms-connection-details resource already exists
+    # if not we might need to rise an exception because without
+    # csi-kms-connection details  we can't proceed with update
+    csi_kms_conf = ocp.OCP(
+        resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
+        kind="ConfigMap",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    try:
+        csi_kms_conf.get()
+    except CommandFailed:
+        raise KMSConnectionDetailsError(
+            "CSI KMS connection details don't exist, can't continue with update"
+        )
+    if csi_kms_conf.data.get("metadata").get("annotations"):
+        csi_kms_conf.data["metadata"].pop("annotations")
+    for key in update_config.keys():
+        csi_kms_conf.data["data"].update({key: json.dumps(update_config[key])})
+    resource_data_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="csikmsconndetailsupdate", delete=False
+    )
+    templating.dump_data_to_temp_yaml(csi_kms_conf.data, resource_data_yaml.name)
+    run_cmd(f"oc apply -f {resource_data_yaml.name}", timeout=300)
 
 
 def get_kms_deployment():
@@ -723,3 +825,31 @@ def vault_kv_list(path):
     out = subprocess.check_output(shlex.split(cmd))
     json_out = json.loads(out)
     return json_out
+
+
+def get_encryption_kmsid():
+    """
+    Get encryption kmsid from 'csi-kms-connection-details'
+    configmap resource
+
+    Returns:
+        kmsid (str): A string id of the kms used
+
+    Raises:
+        KMSConnectionDetailsError: if csi kms connection detail doesn't exist
+
+    """
+
+    csi_kms_conf = ocp.OCP(
+        resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
+        kind="ConfigMap",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    try:
+        csi_kms_conf.get()
+    except CommandFailed:
+        raise KMSConnectionDetailsError("CSI kms resource doesn't exist")
+
+    for key in csi_kms_conf.get().get("data").keys():
+        if constants.VAULT_KMS_PROVIDER in key:
+            return key

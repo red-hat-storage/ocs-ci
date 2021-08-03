@@ -23,7 +23,10 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.ocs.cluster import check_ceph_health_after_add_capacity
+from ocs_ci.ocs.cluster import (
+    check_ceph_health_after_add_capacity,
+    is_flexible_scaling_enabled,
+)
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
@@ -51,11 +54,15 @@ def add_capacity_test():
     ), f"The following OSD pods were restarted (deleted) post add capacity: {restarted_osds}"
 
     pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    if is_flexible_scaling_enabled():
+        replica_count = 1
+    else:
+        replica_count = 3
     pod.wait_for_resource(
         timeout=300,
         condition=constants.STATUS_RUNNING,
         selector="app=rook-ceph-osd",
-        resource_count=result * 3,
+        resource_count=result * replica_count,
     )
 
     # Verify status of rook-ceph-osd-prepare pods. Verifies bug 1769061
@@ -71,14 +78,14 @@ def add_capacity_test():
     if config.ENV_DATA.get("encryption_at_rest"):
         osd_encryption_verification()
 
-    check_ceph_health_after_add_capacity()
+    check_ceph_health_after_add_capacity(ceph_rebalance_timeout=3600)
 
 
 @ignore_leftovers
 @tier1
 @acceptance
 @polarion_id("OCS-1191")
-@pytest.mark.last
+@pytest.mark.second_to_last
 @skipif_openshift_dedicated
 @skipif_aws_i3
 @skipif_bm

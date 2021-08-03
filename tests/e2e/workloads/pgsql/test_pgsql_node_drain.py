@@ -1,10 +1,11 @@
 import logging
 import pytest
+import random
 from datetime import datetime
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import node
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.framework.testlib import E2ETest, workloads
+from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.node import get_node_resource_utilization_from_adm_top
 
@@ -23,6 +24,7 @@ def pgsql(request):
     return pgsql
 
 
+@ignore_leftovers
 @workloads
 @pytest.mark.polarion_id("OCS-820")
 class TestPgSQLNodeReboot(E2ETest):
@@ -42,7 +44,7 @@ class TestPgSQLNodeReboot(E2ETest):
         self.sanity_helpers = Sanity()
 
     @pytest.mark.usefixtures(pgsql_setup.__name__)
-    def test_run_pgsql_node_drain(self, pgsql, transactions=900, node_type="master"):
+    def test_run_pgsql_node_drain(self, pgsql, transactions=5600, node_type="worker"):
         """
         Test pgsql workload
         """
@@ -58,9 +60,11 @@ class TestPgSQLNodeReboot(E2ETest):
         # Check worker node utilization (adm_top)
         get_node_resource_utilization_from_adm_top(node_type="worker", print_table=True)
 
-        # Node drain with specific node type
-        typed_nodes = node.get_nodes(node_type=node_type, num_of_nodes=1)
-        typed_node_name = typed_nodes[0].name
+        # Select a node where pgbench is not running for drain
+        typed_nodes = [node1.name for node1 in node.get_nodes(node_type=node_type)]
+        filter_list = pgsql.filter_pgbench_nodes_from_nodeslist(typed_nodes)
+        typed_node_name = filter_list[random.randint(0, len(filter_list) - 1)]
+        log.info(f"Selected node {typed_node_name} for node drain operation")
 
         # Node maintenance - to gracefully terminate all pods on the node
         node.drain_nodes([typed_node_name])

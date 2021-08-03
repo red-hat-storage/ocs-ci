@@ -2,6 +2,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
+from flaky import flaky
 
 from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
@@ -87,6 +88,7 @@ class TestBucketIO(MCGTest):
             "GCP-OC-1",
         ],
     )
+    @flaky
     def test_write_file_to_bucket(
         self,
         mcg_obj,

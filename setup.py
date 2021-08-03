@@ -67,6 +67,9 @@ setup(
         # https://github.com/python-greenlet/greenlet/issues/230
         "greenlet<1.0.0",
         "ovirt-engine-sdk-python==4.4.11",
+        "junitparser",
+        "flaky==3.7.0",
+        "ocp-network-split",
     ],
     entry_points={
         "console_scripts": [

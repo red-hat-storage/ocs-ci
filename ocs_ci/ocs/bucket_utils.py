@@ -1093,8 +1093,6 @@ def wait_for_cache(mcg_obj, bucket_name, expected_objects_names=None):
     if not sample.wait_for_func_status(result=True):
         logger.error("Objects were not able to cache properly")
         raise UnexpectedBehaviour
-    else:
-        logger.info("Objects were not cached yet, Retrying")
 
 
 def compare_directory(awscli_pod, original_dir, result_dir, amount=2):

@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     tier4a,
     on_prem_platform_required,
     skipif_external_mode,
+    skipif_vsphere_ipi,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import wait_for_resource_state
@@ -36,6 +37,7 @@ log = logging.getLogger(__name__)
 @pytest.mark.bugzilla("1852983")
 @on_prem_platform_required
 @skipif_external_mode
+@skipif_vsphere_ipi
 class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
     """
     Test to verify fail node hosting

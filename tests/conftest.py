@@ -93,6 +93,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     skipif_upgraded_from,
     update_container_with_mirrored_image,
+    skipif_ui_not_support,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name, setup_pod_directories
@@ -148,6 +149,9 @@ def pytest_collection_modifyitems(session, items):
                 "skipif_upgraded_from"
             )
             skipif_no_kms_marker = item.get_closest_marker("skipif_no_kms")
+            skipif_ui_not_support_marker = item.get_closest_marker(
+                "skipif_ui_not_support"
+            )
             if skipif_ocp_version_marker:
                 skip_condition = skipif_ocp_version_marker.args
                 # skip_condition will be a tuple
@@ -178,7 +182,7 @@ def pytest_collection_modifyitems(session, items):
                 try:
                     if not is_kms_enabled():
                         log.info(
-                            f"Test: {item} will be skipped because the OCS cluster"
+                            f"Test: {item} it will be skipped because the OCS cluster"
                             f" has not configured cluster-wide encryption with KMS"
                         )
                         items.remove(item)
@@ -186,6 +190,14 @@ def pytest_collection_modifyitems(session, items):
                     log.warning(
                         "Cluster is not yet installed. Skipping skipif_no_kms check."
                     )
+            if skipif_ui_not_support_marker:
+                skip_condition = skipif_ui_not_support_marker
+                if skipif_ui_not_support(skip_condition.args[0]):
+                    log.info(
+                        f"Test: {item} will be skipped due to UI test {skip_condition} is not avalible"
+                    )
+                    items.remove(item)
+                    continue
 
 
 @pytest.fixture()
@@ -685,13 +697,7 @@ def pvc_factory_fixture(request, project_factory):
                 pv_obj.delete()
                 pv_obj.ocp.wait_for_delete(pv_obj.name)
             else:
-                # Workaround for bug 1915706, increasing timeout from 180 to 720
-                timeout = (
-                    720
-                    if config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM
-                    else 180
-                )
-                pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=timeout)
+                pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     request.addfinalizer(finalizer)
     return factory
@@ -791,7 +797,7 @@ def pod_factory_fixture(request, pvc_factory):
         else:
             instances.append(pod_obj)
         if status:
-            helpers.wait_for_resource_state(pod_obj, status)
+            helpers.wait_for_resource_state(pod_obj, status, timeout=300)
             pod_obj.reload()
         pod_obj.pvc = pvc
         if deployment_config:
@@ -1793,7 +1799,11 @@ def rgw_endpoint(request):
         route = oc.get(resource_name="noobaa-mgmt")
         router_hostname = route["status"]["ingress"][0]["routerCanonicalHostname"]
         rgw_hostname = f"rgw.{router_hostname}"
-        oc.exec_oc_cmd(f"expose service/{rgw_service} --hostname {rgw_hostname}")
+        try:
+            oc.exec_oc_cmd(f"expose service/{rgw_service} --hostname {rgw_hostname}")
+        except CommandFailed as cmdfailed:
+            if "AlreadyExists" in str(cmdfailed):
+                log.warning("RGW route already exists.")
         # new route is named after service
         rgw_endpoint = oc.get(resource_name=rgw_service)
         endpoint_obj = OCS(**rgw_endpoint)
@@ -3000,9 +3010,9 @@ def node_drain_teardown(request):
 @pytest.fixture(scope="function")
 def node_restart_teardown(request, nodes):
     """
-    Make sure all nodes are up again
-    Make sure that all cluster's nodes are in 'Ready' state and if not,
-    change them back to 'Ready' state by restarting the nodes
+    Make sure all nodes are up and in 'Ready' state and if not,
+    try to make them 'Ready' by restarting the nodes.
+
     """
 
     def finalizer():
@@ -3021,7 +3031,7 @@ def node_restart_teardown(request, nodes):
                 log.info(
                     f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
                 )
-                nodes.restart_nodes(not_ready_nodes)
+                nodes.restart_nodes_by_stop_and_start(not_ready_nodes)
                 node.wait_for_nodes_status(status=constants.NODE_READY)
 
     request.addfinalizer(finalizer)
