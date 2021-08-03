@@ -87,7 +87,6 @@ def ui_deployment_conditions():
 
 
 def create_storage_class_with_encryption_ui(setup_ui, sc_name="test-storage-class"):
-
     base_ui_obj = PageNavigator(setup_ui)
 
     ocp_version = get_ocp_version()
@@ -261,3 +260,28 @@ def get_element_type(element_name):
     """
 
     return (f"//a[contains(@title,'{element_name}')]", By.XPATH)
+
+
+
+def delete_storage_class_with_encryption_ui(setup_ui, sc_name="test-storage-class"):
+    base_ui_obj = PageNavigator(setup_ui)
+
+    ocp_version = get_ocp_version()
+    pvc_loc = locators[ocp_version]["storage_class"]
+
+    base_ui_obj.navigate_storageclasses_page()
+    logger.info("Click on Dropdown and Select Name")
+    base_ui_obj.do_click(pvc_loc["sc-dropdown"])
+    base_ui_obj.do_click(pvc_loc["name-from-dropdown"])
+
+    logger.info("Search Storage Class with Name")
+    base_ui_obj.do_send_keys(pvc_loc["sc-search"], text=sc_name)
+
+    logger.info("CLick and Select Storage Class")
+    base_ui_obj.do_click(format_locator(pvc_loc["test-project-link"], sc_name))
+
+    logger.info("Click on Actions")
+    base_ui_obj.do_click(pvc_loc["sc-actions"])
+
+    logger.info("Deleting Storage Class")
+    base_ui_obj.do_click(pvc_loc["delete-storage-class"])

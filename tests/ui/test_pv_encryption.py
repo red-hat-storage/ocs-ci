@@ -3,10 +3,15 @@ import pytest
 import time
 
 from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
-from ocs_ci.ocs.ui.helpers_ui import create_storage_class_with_encryption_ui
+from ocs_ci.ocs.ui.helpers_ui import create_storage_class_with_encryption_ui, delete_storage_class_with_encryption_ui
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
-from ocs_ci.utility.utils import skipif_ocs_version
+from ocs_ci.ocs.ui.views import locators
+from ocs_ci.utility.utils import skipif_ocs_version, get_ocp_version
 
 logger = logging.getLogger(__name__)
 
@@ -23,26 +28,32 @@ class TestPVEncryption(object):
     @pytest.mark.parametrize(
         argnames=["sc_type", "pvc_name", "access_mode", "pvc_size", "vol_mode"],
         argvalues=[
-
             pytest.param(
                 "ocs-storagecluster-ceph-rbd",
                 "test-pvc-rbd",
                 "ReadWriteMany",
-                "3",
+                "5",
                 "Block",
             ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd",
                 "test-pvc-rbd",
                 "ReadWriteOnce",
-                "11",
+                "10",
                 "Block",
             ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd",
                 "test-pvc-rbd",
                 "ReadWriteOnce",
-                "13",
+                "15",
+                "Filesystem",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd",
+                "test-pvc-rbd",
+                "ReadWriteMany",
+                "20",
                 "Filesystem",
             ),
         ],
@@ -50,7 +61,7 @@ class TestPVEncryption(object):
     def test_create_sc(self, setup_ui):
         create_storage_class_with_encryption_ui(setup_ui, sc_name="test-storage-class")
 
-    def test_create_resize_delete_pvc(
+    def test_create_delete_pvc(
         self,
         project_factory,
         teardown_factory,
@@ -110,11 +121,58 @@ class TestPVEncryption(object):
         )
         logger.info("PVC Details Verified via UI..!!")
 
-        logger.info(f"Delete {pvc_name} pvc")
-        pvc_ui_obj.delete_pvc_ui(pvc_name)
-        time.sleep(5)
+        # Creating Pod via CLI
+        logger.info("Creating Pod")
+        if sc_type in (
+            constants.DEFAULT_STORAGECLASS_RBD_THICK,
+            constants.DEFAULT_STORAGECLASS_RBD,
+        ):
+            interface_type = constants.CEPHBLOCKPOOL
+        else:
+            interface_type = constants.CEPHFILESYSTEM
 
-        pvc_objs = get_all_pvc_objs(namespace="openshift-storage")
+        new_pod = helpers.create_pod(
+            interface_type=interface_type,
+            pvc_name=pvc_name,
+            namespace=project_name,
+            raw_block_pv=vol_mode == constants.VOLUME_MODE_BLOCK,
+        )
+
+        logger.info(f"Waiting for Pod: state= {constants.STATUS_RUNNING}")
+        wait_for_resource_state(resource=new_pod, state=constants.STATUS_RUNNING)
+
+        # Calling the Teardown Factory Method to make sure Pod is deleted
+        teardown_factory(new_pod)
+
+        ocp_version = get_ocp_version()
+        self.pvc_loc = locators[ocp_version]["pvc"]
+
+        # Running FIO
+        logger.info("Execute FIO on a Pod")
+        if vol_mode == constants.VOLUME_MODE_BLOCK:
+            storage_type = constants.WORKLOAD_STORAGE_TYPE_BLOCK
+        else:
+            storage_type = constants.WORKLOAD_STORAGE_TYPE_FS
+
+        new_pod.run_io(storage_type, size=(pvc_size - 1), invalidate=0, rate="1000m")
+
+        get_fio_rw_iops(new_pod)
+        logger.info("FIO execution on Pod successfully completed..!!")
+
+        # Checking if the Pod is deleted or not
+        new_pod.delete(wait=True)
+        new_pod.ocp.wait_for_delete(resource_name=new_pod.name)
+
+        # Deleting the PVC via UI
+        logger.info(f"Delete {pvc_name} pvc")
+        pvc_ui_obj.delete_pvc_ui(pvc_name, project_name)
+
+        pvc[0].ocp.wait_for_delete(pvc_name, timeout=120)
+
+        pvc_objs = get_all_pvc_objs(namespace=project_name)
         pvcs = [pvc_obj for pvc_obj in pvc_objs if pvc_obj.name == pvc_name]
         if len(pvcs) > 0:
             assert f"PVC {pvcs[0].name} does not deleted"
+
+    def test_delete_sc(self, setup_ui):
+        delete_storage_class_with_encryption_ui(setup_ui, sc_name="test-storage-class")
