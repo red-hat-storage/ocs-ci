@@ -139,8 +139,9 @@ class BenchmarkOperator(object):
             self.pod_obj.exec_oc_cmd(cmd)
 
             # At this point the benchmark operator pod is ready, but we need to
-            # verifying that all containers in the pod are ready
-            while True:
+            # verifying that all containers in the pod are ready (up to 30 sec.)
+            done = 10
+            while True and done > 0:
                 OK = 1
                 result = self.pod_obj.exec_oc_cmd(f"get pod -n {BMO_NAME} -o json")
                 for cnt in (
@@ -151,6 +152,7 @@ class BenchmarkOperator(object):
                 if not OK:
                     log.warning("Benchmark Operator is not ready yet")
                     time.sleep(3)
+                    done -= 1
                 else:
                     break
         except Exception as ex:
