@@ -1,6 +1,6 @@
 """
 Benchmark Operator Class to run various workloads, performance  and scale tests
-    known as Ripsaw and implemented from :
+    previously known as Ripsaw and implemented from :
         https://github.com/cloud-bulldozer/benchmark-operator
 
 This operator can be used as an object or as a fixture
@@ -11,7 +11,7 @@ import logging
 import tempfile
 import time
 
-# 3ed party modules
+# 3rd party modules
 import pytest
 import re
 from subprocess import run, CalledProcessError
@@ -22,7 +22,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 
-# BMO is stand for : BenchMark Operator
+# BMO stand for : BenchMark Operator
 # The benchmark operator name used for path / namespace etc.
 BMO_NAME = "benchmark-operator"
 # The benchmark operator git repository
