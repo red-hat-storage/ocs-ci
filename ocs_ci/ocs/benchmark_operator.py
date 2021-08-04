@@ -21,6 +21,7 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
+from ocs_ci.utility.utils import TimeoutSampler
 
 # BMO stand for : BenchMark Operator
 # The benchmark operator name used for path / namespace etc.
@@ -122,6 +123,25 @@ class BenchmarkOperator(object):
             log.error(f"Error during cloning of {BMO_NAME} repository")
             raise cf
 
+    def _is_ready(self):
+        """
+        Check the status of the benchmark-operator to verify it is Ready
+
+        Returns:
+            bool : True if all containers ar up, other false.
+
+        """
+        OK = 1
+        result = self.pod_obj.exec_oc_cmd(f"get pod -n {BMO_NAME} -o json")
+        for cnt in result.get("items")[0].get("status").get("containerStatuses"):
+            if not cnt.get("ready"):
+                OK = 0
+        if not OK:
+            log.warning("Benchmark Operator is not ready")
+            return False
+        else:
+            return True
+
     def deploy(self):
         """
         Deploy the benchmark-operator
@@ -140,21 +160,9 @@ class BenchmarkOperator(object):
 
             # At this point the benchmark operator pod is ready, but we need to
             # verifying that all containers in the pod are ready (up to 30 sec.)
-            done = 10
-            while True and done > 0:
-                OK = 1
-                result = self.pod_obj.exec_oc_cmd(f"get pod -n {BMO_NAME} -o json")
-                for cnt in (
-                    result.get("items")[0].get("status").get("containerStatuses")
-                ):
-                    if not cnt.get("ready"):
-                        OK = 0
-                if not OK:
-                    log.warning("Benchmark Operator is not ready yet")
-                    time.sleep(3)
-                    done -= 1
-                else:
-                    break
+            sample = TimeoutSampler(timeout=30, sleep=3, func=self._is_ready)
+            if not sample.wait_for_func_status(True):
+                raise Exception("Not all the containers are ready")
         except Exception as ex:
             log.error(f"Failed to wait for benchmark operator : {ex}")
 
