@@ -9,4 +9,4 @@ spec:
   name: quay-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
-  startingCSV: quay-operator.v3.5.4
+  startingCSV: quay-operator.v3.5.5
