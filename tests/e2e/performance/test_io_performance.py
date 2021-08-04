@@ -32,21 +32,24 @@ class TestIOPerformance(ManageTest):
         self.pod_obj = pod_factory(self.interface)
 
     @pytest.mark.parametrize(
-        argnames=["size", "io_direction", "jobs", "runtime", "depth"],
+        argnames=["size", "io_direction", "jobs", "runtime", "depth", "checksum_type"],
         argvalues=[
             pytest.param(
-                *["1GB", "rw", 1, 60, 4], marks=pytest.mark.polarion_id("OCS-676")
+                *["1GB", "rw", 1, 60, 4, "crc32c"],
+                marks=pytest.mark.polarion_id("OCS-676"),
             ),
             pytest.param(
-                *["1GB", "rw", 6, 60, 16], marks=pytest.mark.polarion_id("OCS-677")
+                *["1GB", "rw", 6, 60, 16, "crc32c"],
+                marks=pytest.mark.polarion_id("OCS-677"),
             ),
             pytest.param(
-                *["1GB", "rw", 12, 60, 32], marks=pytest.mark.polarion_id("OCS-678")
+                *["1GB", "rw", 12, 60, 32, "crc32c"],
+                marks=pytest.mark.polarion_id("OCS-678"),
             ),
         ],
     )
     @pytest.mark.usefixtures(base_setup.__name__)
-    def test_run_io(self, size, io_direction, jobs, runtime, depth):
+    def test_run_io(self, size, io_direction, jobs, runtime, depth, checksum_type):
         """
         Test IO
         """
@@ -61,6 +64,7 @@ class TestIOPerformance(ManageTest):
             jobs=jobs,
             runtime=runtime,
             depth=depth,
+            verify=checksum_type,
         )
         logging.info("Waiting for results")
         fio_result = self.pod_obj.get_fio_results()

@@ -302,6 +302,8 @@ class Pod(OCS):
         bs="4K",
         end_fsync=0,
         invalidate=None,
+        verify=config.RUN["io_verification_method"],
+
     ):
         """
         Execute FIO on a pod
@@ -331,7 +333,8 @@ class Pod(OCS):
             end_fsync (int): If 1, fio will sync file contents when a write
                 stage has completed. Fio default is 0
             invalidate (bool): Invalidate the buffer/page cache parts of the files to be used prior to starting I/O
-
+            verify (str): This method verifies file contents after each
+                iteration of the job. e.g. crc32c, md5
         """
         if not self.wl_setup_done:
             self.workload_setup(storage_type=storage_type, jobs=jobs)
@@ -356,6 +359,8 @@ class Pod(OCS):
         self.io_params["bs"] = bs
         if end_fsync:
             self.io_params["end_fsync"] = end_fsync
+        if verify:
+            self.io_params["verify"] = verify
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
     def fillup_fs(self, size, fio_filename=None):
