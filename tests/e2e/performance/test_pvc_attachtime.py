@@ -7,11 +7,17 @@ import numpy
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import performance
-from ocs_ci.helpers import helpers
-from ocs_ci.helpers.helpers import get_full_test_logs_path, pod_start_time
+from ocs_ci.helpers.helpers import (
+    get_full_test_logs_path,
+    pod_start_time,
+    pull_images,
+    create_pvc,
+    wait_for_resource_state,
+    create_pod,
+)
 from ocs_ci.ocs import constants
 
-# import ocs_ci.ocs.exceptions as ex
+import ocs_ci.ocs.exceptions as ex
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.perftests import PASTest
 
@@ -44,6 +50,54 @@ class ResultsAnalyse(PerfResult):
         # make sure we have connection to the elastic search server
         self.es_connect()
 
+    def float_format(self, number):
+        """
+        Formatting floating point number to have only 2 digits after the floating point
+
+        Args:
+            number (float): floating point number
+
+        Returns:
+             float : formatted floating point number - N.xx
+
+        """
+        return float("{:.2f}".format(number))
+
+    def analyse_results(self, results):
+        """
+        Analyze the test results, write them to the log and
+        push them into the elastic-search document.
+
+        Args:
+            results (list) : list of all samples test results
+
+        """
+        log.info("Analyze the test results")
+        attach_time = self.float_format(numpy.average(results))
+        st_deviation = self.float_format(numpy.std(results))
+        mean = self.float_format(numpy.mean(results))
+        pct_dev = self.float_format((st_deviation / mean) * 100)
+
+        self.add_key("attach_time", attach_time)
+        self.add_key("std_deviation", st_deviation)
+        self.add_key("pct_deviation", pct_dev)
+        self.add_key("samples_results", results)
+
+        log.info(f"All results are : {results}")
+        log.info(f"Average of {len(results)} is {attach_time}")
+        log.info(f"The samples standard deviation (%) is : {pct_dev}")
+
+        # TODO: normalize the results (PR #4169 implement this)
+
+        if pct_dev > 30:
+            log.warning("Deviation between samples is more then 30%")
+
+        for res in results:
+            if res > 30:
+                raise ex.PerformanceException(
+                    "pod start time is greater than 30 seconds"
+                )
+
 
 @performance
 @pytest.mark.parametrize(
@@ -61,8 +115,6 @@ class TestPodStartTime(PASTest):
     """
     Measure time to start pod with PVC attached
     """
-
-    pvc_size = 5
 
     def setup(self):
         """
@@ -91,8 +143,20 @@ class TestPodStartTime(PASTest):
                 "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
             }
 
-        self.pvc_size = 5  # The size of the pv to create
-        self.number_of_samples = 5  # The number of samples to run
+        log.info(f"Pulling pod image {constants.PERF_IMAGE}")
+        pull_images(constants.PERF_IMAGE)
+
+        self.pvc_size = 5  # The size (in GiB) of the pv to create
+        self.number_of_samples = 7  # The number of samples to run
+
+    def teardown(self):
+        """
+        Cleanup the cluster from resources created during the test
+        """
+        log.info("Starting the test teardown")
+        self.pod_obj.delete(wait=True)
+        self.pvc_obj.delete(wait=True)
+        super(TestPodStartTime, self).teardown()
 
     def init_full_results(self, full_results):
         """
@@ -110,22 +174,6 @@ class TestPodStartTime(PASTest):
         full_results.add_key("index", full_results.new_index)
         return full_results
 
-    '''
-    @pytest.fixture()
-    def pod(self, interface, pod_factory, pvc_factory):
-        """
-        Prepare pod for the test
-
-        Returns:
-            pod obj: Pod instance
-
-        """
-        self.interface = interface
-        pvc_obj = pvc_factory(interface=interface, size=self.pvc_size)
-        pod_obj = pod_factory(pvc=pvc_obj)
-        return pod_obj
-    '''
-
     def get_time(self):
         """
         Getting the current GMT time in a specific format for the ES report
@@ -137,53 +185,64 @@ class TestPodStartTime(PASTest):
         return time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
 
     def run(self):
+        """
+        Running the test
 
-        logging.info(f"Pulling pod image {constants.PERF_IMAGE}")
-        helpers.pull_images(constants.PERF_IMAGE)
+        Returns:
+            results (list) : list of all samples pod attache time
+        """
 
-        results = []  # list of all samples results
+        # List of all samples results
+        results = []
+
+        # Setting timeout for pvc/pod creation
+        timeout = 600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
 
         for i in range(self.number_of_samples):
 
-            logging.info(f"Starting sample number {i + 1}")
+            test_num = i + 1  # since range start with 0
 
-            # Creation PVC
-            logging.info(f"Creating {self.pvc_size} GiB {self.sc} PVC")
-            pvc_obj = helpers.create_pvc(sc_name=self.sc, size=self.pvc_size)
-            timeout = 600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
-            helpers.wait_for_resource_state(
-                pvc_obj, constants.STATUS_BOUND, timeout=timeout
+            log.info(f"Starting sample number {test_num}")
+
+            # Creating PVC and wait until it bound
+            log.info(f"Creating {self.pvc_size} GiB {self.sc} PVC")
+            self.pvc_obj = create_pvc(sc_name=self.sc_name, size=f"{self.pvc_size}Gi")
+            wait_for_resource_state(
+                self.pvc_obj, constants.STATUS_BOUND, timeout=timeout
             )
-            pvc_obj.reload()
-            logging.info(f"PVC number {i + 1} was created in.")
+            self.pvc_obj.reload()
+            log.info(f"PVC number {test_num} was created in.")
 
-            # Attach POD to the PVC
-            logging.info(f"Creating Pod with pvc {pvc_obj.name}")
-
-            pod_obj = helpers.create_pod(
+            # Attach POD to the PVC and wait for it to be in Running state
+            log.info(f"Creating Pod with pvc {self.pvc_obj.name}")
+            self.pod_obj = create_pod(
                 interface_type=self.interface,
-                pvc_name=pvc_obj.name,
-                namespace=pvc_obj.namespace,
+                pvc_name=self.pvc_obj.name,
+                namespace=self.pvc_obj.namespace,
                 pod_dict_path=constants.PERF_POD_YAML,
             )
+            wait_for_resource_state(
+                self.pod_obj, constants.STATUS_RUNNING, timeout=timeout
+            )
+            self.pod_obj.reload()
 
-            # measure the attached time
-            start_time_dict = pod_start_time(pod_obj)
-            start_time = start_time_dict["perf-pod"]
+            # Getting the pod start time
+            start_time_dict = pod_start_time(self.pod_obj)
+            start_time = start_time_dict["performance"]
+
             results.append(start_time)
-            logging.info(f"pod start time is : {start_time} seconds")
-            # if start_time > 30:
-            #    raise ex.PerformanceException(
-            #        f"pod start time is {start_time}," f"which is greater than 30 seconds"
-            #    )
+            log.info(f"pod start time is : {start_time} seconds")
 
-            # delete the pod
-            logging.info(f"Delete pod number : {1 + 1}")
-            pod_obj.delete(wait=True)
+            # Delete the pod
+            log.info(f"Delete pod number : {test_num}")
+            self.pod_obj.delete(wait=True)
 
             # Delete the pvc
-            logging.info(f"Delete PVC number : {1 + 1}")
-            pvc_obj.delete(wait=True)
+            log.info(f"Delete PVC number : {test_num}")
+            self.pvc_obj.delete(wait=True)
+
+            # Wait 30 sec. between samples
+            time.sleep(30)
 
         return results
 
@@ -191,20 +250,21 @@ class TestPodStartTime(PASTest):
         """
         Test to log pod start time
         """
-        self.interface = interface
         # Getting the test start time
         self.start_time = self.get_time()
 
-        # The actual test
-        # start_time_dict = pod_start_time(pod)
+        self.interface = interface
 
         # Getting the full path for the test logs
         self.full_log_path = get_full_test_logs_path(cname=self)
         if self.interface == constants.CEPHBLOCKPOOL:
+            self.sc_name = constants.CEPHBLOCKPOOL_SC
             self.sc = "RBD"
         elif self.interface == constants.CEPHFILESYSTEM:
+            self.sc_name = constants.CEPHFILESYSTEM_SC
             self.sc = "CephFS"
         elif self.interface == constants.CEPHBLOCKPOOL_THICK:
+            self.sc_name = "ocs-storagecluster-ceph-rbd-thick"
             self.sc = "RBD-Thick"
         self.full_log_path += f"-{self.sc}"
         log.info(f"Logs file path name is : {self.full_log_path}")
@@ -212,25 +272,20 @@ class TestPodStartTime(PASTest):
         # Collecting environment information
         self.get_env_info()
 
+        # Run the test
+        results = self.run()
+
         # Initialize the results doc file.
         self.full_results = self.init_full_results(
             ResultsAnalyse(self.uuid, self.crd_data, self.full_log_path)
         )
 
-        # start_time = start_time_dict["web-server"]
-        # logging.info(f"pod start time: {start_time} seconds")
-        # if start_time > 30:
-        #    raise ex.PerformanceException(
-        #        f"pod start time is {start_time}," f"which is greater than 30 seconds"
-        #    )
-        self.full_results.add_key("storageclass", self.sc)
-        # self.full_results.add_key("attach_time", start_time)
-        results = self.run()
-        self.full_results.add_key("attach_time", numpy.average(results))
-        self.full_results.add_key("all_results", results)
+        # Analyze the results
+        self.full_results.analyse_results(results)
 
-        logging.info(f"All results are : {results}")
-        logging.info(f"Average of {self.number_of_samples} is {numpy.average(results)}")
+        self.full_results.add_key("samples", self.number_of_samples)
+        self.full_results.add_key("storageclass", self.sc)
+
         # Getting the test end time
         self.end_time = self.get_time()
 
