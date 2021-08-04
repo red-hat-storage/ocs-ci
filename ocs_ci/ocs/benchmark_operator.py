@@ -202,22 +202,17 @@ class BenchmarkOperator(object):
             str: the UUID of the test or '' if UUID not found in the benchmark pod
 
         """
-        count = 0
-        while count <= 5:
-            try:
-                output = self.pod_obj.exec_oc_cmd(f"exec {benchmark} -- env")
-                break
-            except CommandFailed:
-                time.sleep(3)
-                count += 1
-        uuid = ""
-        if output:
-            for line in output.split():
-                if "uuid=" in line:
-                    uuid = line.split("=")[1]
-                    break
-            log.info(f"The UUID of the test is : {uuid}")
-        else:
-            log.error(f"Can not get the UUID from {benchmark}")
+        for output in TimeoutSampler(
+            timeout=30,
+            sleep=5,
+            func=self.pod_obj.exec_oc_cmd,
+            command=f"exec {benchmark} -- env",
+        ):
+            if output != "":
+                for line in output.split():
+                    if re.match("uuid=", line):
+                        uuid = line.split("=")[1]
+                        log.info(f"The UUID of the test is : {uuid}")
+                        return uuid
 
-        return uuid
+        return ""
