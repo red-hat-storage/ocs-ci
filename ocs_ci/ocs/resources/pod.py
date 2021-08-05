@@ -270,17 +270,18 @@ class Pod(OCS):
             .get("mountPath")
         )
 
-    def workload_setup(self, storage_type, jobs=1):
+    def workload_setup(self, storage_type, jobs=1, path=None):
         """
         Do setup on pod for running FIO
 
         Args:
             storage_type (str): 'fs' or 'block'
             jobs (int): Number of jobs to execute FIO
+            path (str): Mount path
         """
         work_load = "fio"
         name = f"test_workload_{work_load}"
-        path = self.get_storage_path(storage_type)
+        path = path or self.get_storage_path(storage_type)
         # few io parameters for Fio
 
         self.wl_obj = workload.WorkLoad(name, path, work_load, storage_type, self, jobs)
@@ -302,6 +303,7 @@ class Pod(OCS):
         bs="4K",
         end_fsync=0,
         invalidate=None,
+        path=None,
     ):
         """
         Execute FIO on a pod
@@ -331,10 +333,11 @@ class Pod(OCS):
             end_fsync (int): If 1, fio will sync file contents when a write
                 stage has completed. Fio default is 0
             invalidate (bool): Invalidate the buffer/page cache parts of the files to be used prior to starting I/O
+            path (str): Mount path
 
         """
         if not self.wl_setup_done:
-            self.workload_setup(storage_type=storage_type, jobs=jobs)
+            self.workload_setup(storage_type=storage_type, jobs=jobs, path=path)
 
         if io_direction == "rw":
             self.io_params = templating.load_yaml(constants.FIO_IO_RW_PARAMS_YAML)
@@ -412,10 +415,24 @@ class Pod(OCS):
             packages (list): List of packages to install
 
         """
+        pkg_mgrs = ["apt-get", "yum"]
+        pkg_mgr_present = None
+        for pkg_mgr in pkg_mgrs:
+            try:
+                self.exec_cmd_on_pod(f"which {pkg_mgr}", out_yaml_format=False)
+                pkg_mgr_present = pkg_mgr
+                break
+            except CommandFailed:
+                logger.debug(f"Package manager is not {pkg_mgr}")
+        assert (
+            pkg_mgr_present
+        ), f"Couldn't identify the package manager on pod {self.name}."
+        logger.debug(f"Package manager on pod {self.name} is {pkg_mgr_present}")
+
         if isinstance(packages, list):
             packages = " ".join(packages)
 
-        cmd = f"yum install {packages} -y"
+        cmd = f"{pkg_mgr_present} install {packages} -y"
         self.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
     def copy_to_server(self, server, authkey, localpath, remotepath, user=None):
@@ -492,6 +509,50 @@ class Pod(OCS):
             return self.pod_data["spec"]["nodeSelector"]["kubernetes.io/hostname"]
         else:
             return self.pod_data["spec"]["nodeName"]
+
+    def create_filesystem(self):
+        """
+        Create ext4 filesystem to mount the volume. Applicable for RBD block volume mode PVC.
+
+        """
+        device_path = self.get_storage_path(storage_type="block")
+        self.install_packages(["e2fsprogs"])
+        self.exec_cmd_on_pod(command=f"mkfs.ext4 {device_path}", out_yaml_format=False)
+
+    def mount_device(self, mount_path, do_format=True, read_only=False):
+        """
+        Mount RBD block volume using ext4 filesystem
+
+        Args:
+            mount_path (str): Mount path to use
+            do_format (str): True if ext4 formatting has to be done, False otherwise.
+                Ext4 signature should be already present if do_format is False
+            read_only (bool): True to mount as read only, False otherwise
+
+        """
+        device_path = self.get_storage_path(storage_type="block")
+        if do_format:
+            self.create_filesystem()
+
+        # Create directory if not present
+        try:
+            self.exec_cmd_on_pod(command=f"find {mount_path}", out_yaml_format=False)
+        except CommandFailed as cmd_fail:
+            if "No such file or directory" in str(cmd_fail):
+                self.exec_cmd_on_pod(
+                    command=f"mkdir -p {mount_path}",
+                    out_yaml_format=False,
+                )
+            else:
+                raise
+
+        mount_cmd = f"mount -t ext4 {device_path} {mount_path}"
+        if read_only:
+            mount_cmd = f"{mount_cmd} -r"
+        self.exec_cmd_on_pod(
+            command=mount_cmd,
+            out_yaml_format=False,
+        )
 
 
 # Helper functions for Pods
@@ -716,7 +777,7 @@ def get_file_path(pod_obj, file_name):
     return file_path
 
 
-def cal_md5sum(pod_obj, file_name, block=False):
+def cal_md5sum(pod_obj, file_name, block=False, file_path=None):
     """
     Calculates the md5sum of the file
 
@@ -725,11 +786,12 @@ def cal_md5sum(pod_obj, file_name, block=False):
         file_name (str): The name of the file for which md5sum to be calculated
         block (bool): True if the volume mode of PVC used on pod is 'Block'.
             file_name will be the devicePath in this case.
+        file_path: File path of which the md5sum has to be obtained
 
     Returns:
         str: The md5sum of the file
     """
-    file_path = file_name if block else get_file_path(pod_obj, file_name)
+    file_path = file_path or (file_name if block else get_file_path(pod_obj, file_name))
     md5sum_cmd_out = pod_obj.exec_cmd_on_pod(
         command=f'bash -c "md5sum {file_path}"', out_yaml_format=False
     )
@@ -738,7 +800,9 @@ def cal_md5sum(pod_obj, file_name, block=False):
     return md5sum
 
 
-def verify_data_integrity(pod_obj, file_name, original_md5sum, block=False):
+def verify_data_integrity(
+    pod_obj, file_name, original_md5sum, block=False, file_path=None
+):
     """
     Verifies existence and md5sum of file created from first pod
 
@@ -748,6 +812,7 @@ def verify_data_integrity(pod_obj, file_name, original_md5sum, block=False):
         original_md5sum (str): The original md5sum of the file
         block (bool): True if the volume mode of PVC used on pod is 'Block'.
             file_name will be the devicePath in this case.
+        file_path: File path of which the md5sum has to be verified
 
     Returns:
         bool: True if the file exists and md5sum matches
@@ -755,9 +820,9 @@ def verify_data_integrity(pod_obj, file_name, original_md5sum, block=False):
     Raises:
         AssertionError: If file doesn't exist or md5sum mismatch
     """
-    file_path = file_name if block else get_file_path(pod_obj, file_name)
+    file_path = file_path or (file_name if block else get_file_path(pod_obj, file_name))
     assert check_file_existence(pod_obj, file_path), f"File {file_name} doesn't exists"
-    current_md5sum = cal_md5sum(pod_obj, file_name, block)
+    current_md5sum = cal_md5sum(pod_obj, file_name, block, file_path)
     logger.info(f"Original md5sum of file: {original_md5sum}")
     logger.info(f"Current md5sum of file: {current_md5sum}")
     assert current_md5sum == original_md5sum, "Data corruption found"
