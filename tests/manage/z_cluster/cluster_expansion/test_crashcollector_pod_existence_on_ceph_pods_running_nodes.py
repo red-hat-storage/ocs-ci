@@ -45,7 +45,9 @@ class TestAddNodeCrashCollector(ManageTest):
 
     """
 
-    def test_add_node_crash_collector(self, add_nodes, node_drain_teardown):
+    def test_crashcollector_pod_existence_on_ceph_pods_running_nodes(
+        self, add_nodes, node_drain_teardown
+    ):
         """
         Add node with OCS label and verify crashcollector created on new node
 
