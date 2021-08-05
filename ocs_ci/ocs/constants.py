@@ -1248,6 +1248,13 @@ COSBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "cosbench")
 COSBENCH_POD = os.path.join(COSBENCH_DIR, "cosbench_pod.yaml")
 COSBENCH_CONFIGMAP = os.path.join(COSBENCH_DIR, "cosbench_configmap.yaml")
 
+# Quay operator constants
+QUAY_OPERATOR = "quay-operator"
+OPENSHIFT_OPERATORS = "openshift-operators"
+QUAY_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "quay")
+QUAY_SUB = os.path.join(QUAY_DIR, "quay_subscription.yaml")
+QUAY_REGISTRY = os.path.join(QUAY_DIR, "quay_registry.yaml")
+
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
 MCG_NS_AZURE_ENDPOINT = "https://blob.core.windows.net"
