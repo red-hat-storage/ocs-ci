@@ -39,8 +39,9 @@ def create_cluster(cluster_name):
     configs = config.ENV_DATA["configs"]
     cmd = (
         f"podman run -e ADDON_IDS -e NUM_WORKER_NODES -e OCM_COMPUTE_MACHINE_TYPE"
-        f" -e OCM_TOKEN -e CLUSTER_NAME -e CLUSTER_EXPIRY_IN_MINUTES"
-        f" quay.io/app-sre/osde2e test --configs {configs}"
+        f" -e OCM_TOKEN -e OCM_AWS_ACCOUNT -e OCM_AWS_ACCESS_KEY"
+        f" -e OCM_AWS_SECRET_KEY -e CLUSTER_NAME -e CLUSTER_EXPIRY_IN_MINUTES"
+        f" -e OCM_CCS quay.io/app-sre/osde2e test --configs {configs}"
     )
     exec_cmd(cmd, timeout=9000)
     cluster_info = get_cluster_details(cluster_name)

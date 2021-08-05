@@ -8,6 +8,8 @@ ENV_DATA:
   worker_replicas: '6'
   cluster_expiry_in_minutes: '600'
   skip_ocs_deployment: true
+  ocm_ccs: true
+  osd_size: '1'
 
 # AUTH:
 #  openshiftdedicated:

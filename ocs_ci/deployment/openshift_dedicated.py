@@ -36,7 +36,11 @@ class OpenshiftDedicatedOCP(BaseOCPDeployment):
             "NUM_WORKER_NODES": config.ENV_DATA["worker_replicas"],
             "CLUSTER_EXPIRY_IN_MINUTES": config.ENV_DATA["cluster_expiry_in_minutes"],
             "CLUSTER_NAME": config.ENV_DATA["cluster_name"],
+            "OCM_CCS":config.ENV_DATA["ocm_ccs"],
             "OCM_TOKEN": openshiftdedicated["token"],
+            "OCM_AWS_ACCOUNT": openshiftdedicated["OCM_AWS_ACCOUNT"],
+            "OCM_AWS_ACCESS_KEY": openshiftdedicated["OCM_AWS_ACCESS_KEY"],
+            "OCM_AWS_SECRET_KEY": openshiftdedicated["OCM_AWS_SECRET_KEY"],
         }
 
         for key, value in env_vars.items():
