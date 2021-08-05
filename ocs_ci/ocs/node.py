@@ -1724,18 +1724,15 @@ def get_nodes_where_ocs_pods_running():
     return set(ocs_nodes)
 
 
-def get_node_rack(node_type=constants.WORKER_MACHINE):
+def get_node_rack():
     """
-    Get node rack
-
-    Args:
-        node_type (str): The node type (e.g. worker, master)
+    Get worker node rack
 
     Returns:
         dict: {"Node name":"Rack name"}
 
     """
-    worker_node_objs = get_nodes(node_type=node_type)
+    worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
     node_rack_dict = dict()
     for worker_node_obj in worker_node_objs:
         node_rack_dict[worker_node_obj.name] = worker_node_obj.data["metadata"][
@@ -1745,18 +1742,15 @@ def get_node_rack(node_type=constants.WORKER_MACHINE):
     return node_rack_dict
 
 
-def get_node_zone(node_type=constants.WORKER_MACHINE):
+def get_node_zone():
     """
-    Get node rack
-
-    Args:
-        node_type (str): The node type (e.g. worker, master)
+    Get worker node zone
 
     Returns:
         dict: {"Node name":"Zone name"}
 
     """
-    node_objs = get_nodes(node_type=node_type)
+    node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
     node_zone_dict = dict()
     for node_obj in node_objs:
         node_zone_dict[node_obj.name] = node_obj.data["metadata"]["labels"][
