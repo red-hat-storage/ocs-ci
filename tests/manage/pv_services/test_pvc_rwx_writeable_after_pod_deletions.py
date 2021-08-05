@@ -13,9 +13,11 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[
-        pytest.param(constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("")),
         pytest.param(
             constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-965")
+        ),
+        pytest.param(
+            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2599")
         ),
     ],
 )
