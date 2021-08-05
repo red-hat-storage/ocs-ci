@@ -301,6 +301,7 @@ class Pod(OCS):
         fio_filename=None,
         bs="4K",
         end_fsync=0,
+        invalidate=None,
     ):
         """
         Execute FIO on a pod
@@ -329,6 +330,8 @@ class Pod(OCS):
             bs (str): Block size, e.g. 4K
             end_fsync (int): If 1, fio will sync file contents when a write
                 stage has completed. Fio default is 0
+            invalidate (bool): Invalidate the buffer/page cache parts of the files to be used prior to starting I/O
+
         """
         if not self.wl_setup_done:
             self.workload_setup(storage_type=storage_type, jobs=jobs)
@@ -338,6 +341,10 @@ class Pod(OCS):
             self.io_params["rwmixread"] = rw_ratio
         else:
             self.io_params = templating.load_yaml(constants.FIO_IO_PARAMS_YAML)
+
+        if invalidate is not None:
+            self.io_params["invalidate"] = invalidate
+
         self.io_params["runtime"] = runtime
         size = size if isinstance(size, str) else f"{size}G"
         self.io_params["size"] = size

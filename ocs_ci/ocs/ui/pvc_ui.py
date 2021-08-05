@@ -1,9 +1,10 @@
 import logging
-import time
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
+from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 
@@ -19,22 +20,29 @@ class PvcUI(PageNavigator):
         ocp_version = get_ocp_version()
         self.pvc_loc = locators[ocp_version]["pvc"]
 
-    def create_pvc_ui(self, sc_type, pvc_name, access_mode, pvc_size, vol_mode):
+    def create_pvc_ui(
+        self, project_name, sc_type, pvc_name, access_mode, pvc_size, vol_mode
+    ):
         """
         Create PVC via UI.
 
-        sc_type (str): storage class type
-        pvc_name (str): the name of pvc
-        access_mode (str): access mode
-        pvc_size (str): the size of pvc (GB)
-        vol_mode (str): volume mode type
+        Args:
+            project_name (str): name of test project
+            sc_type (str): storage class type
+            pvc_name (str): the name of pvc
+            access_mode (str): access mode
+            pvc_size (str): the size of pvc (GB)
+            vol_mode (str): volume mode type
 
         """
         self.navigate_persistentvolumeclaims_page()
 
-        logger.info("Select openshift-storage project")
+        logger.info(f"Search test project {project_name}")
         self.do_click(self.pvc_loc["pvc_project_selector"])
-        self.do_click(self.pvc_loc["select_openshift-storage_project"])
+        self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
+
+        logger.info(f"Select test project {project_name}")
+        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
 
         logger.info("Click on 'Create Persistent Volume Claim'")
         self.do_click(self.pvc_loc["pvc_create_button"])
@@ -54,7 +62,10 @@ class PvcUI(PageNavigator):
 
         if (
             sc_type
-            in ("ocs-storagecluster-ceph-rbd-thick", "ocs-storagecluster-ceph-rbd")
+            in (
+                constants.DEFAULT_STORAGECLASS_RBD_THICK,
+                constants.DEFAULT_STORAGECLASS_RBD,
+            )
             and access_mode == "ReadWriteOnce"
         ):
             logger.info(f"Test running on OCP version: {get_running_ocp_version()}")
@@ -65,17 +76,40 @@ class PvcUI(PageNavigator):
         logger.info("Create PVC")
         self.do_click(self.pvc_loc["pvc_create"])
 
-        time.sleep(2)
-
-    def verify_pvc_ui(self, pvc_size, access_mode, vol_mode, sc_type):
+    def verify_pvc_ui(
+        self, pvc_size, access_mode, vol_mode, sc_type, pvc_name, project_name
+    ):
         """
         Verifying PVC details via UI
 
-        pvc_size (str): the size of pvc (GB)
-        access_mode (str): access mode
-        vol_mode (str): volume mode type
+        Args:
+            pvc_size (str): the size of pvc (GB)
+            access_mode (str): access mode
+            vol_mode (str): volume mode type
+            sc_type (str): storage class type
+            pvc_name (str): the name of pvc
+            project_name (str): name of test project
+
 
         """
+        self.navigate_persistentvolumeclaims_page()
+
+        logger.info(f"Search and Select test project {project_name}")
+        self.do_click(self.pvc_loc["pvc_project_selector"])
+        self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
+        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
+
+        logger.info(f"Search for {pvc_name} inside test project {project_name}")
+        self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
+
+        logger.info(f"Go to PVC {pvc_name} Page")
+        self.do_click(self.pvc_loc[pvc_name])
+
+        logger.info("Checking status of Pvc")
+        self.wait_until_expected_text_is_found(
+            locator=self.pvc_loc["pvc-status"], expected_text="Bound"
+        )
+
         pvc_size_new = f"{pvc_size} GiB"
         self.check_element_text(expected_text=pvc_size_new)
         logger.info(f"Verifying pvc size : {pvc_size_new}")
@@ -87,8 +121,8 @@ class PvcUI(PageNavigator):
         if (
             sc_type
             in (
-                "ocs-storagecluster-ceph-rbd-thick",
-                "ocs-storagecluster-ceph-rbd",
+                constants.DEFAULT_STORAGECLASS_RBD_THICK,
+                constants.DEFAULT_STORAGECLASS_RBD,
             )
             and (access_mode == "ReadWriteOnce")
         ):
@@ -96,19 +130,107 @@ class PvcUI(PageNavigator):
             self.check_element_text(expected_text=pvc_vol_mode_new)
             logger.info(f"Verifying volume mode : {pvc_vol_mode_new}")
 
-    def delete_pvc_ui(self, pvc_name):
+    def pvc_resize_ui(self, project_name, pvc_name, new_size):
         """
-        Delete pvc via UI
+        Resizing pvc via UI
 
-        pvc_name (str): Name of the pvc
+        Args:
+            project_name (str): name of test project
+            pvc_name (str): the name of pvc
+            new_size (int): the new size of pvc (GB)
 
         """
         self.navigate_persistentvolumeclaims_page()
 
-        logger.info("Select openshift-storage project")
+        logger.info(f"Search and Select test project {project_name}")
         self.do_click(self.pvc_loc["pvc_project_selector"])
-        self.do_click(self.pvc_loc["select_openshift-storage_project"])
+        self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
+        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
 
+        logger.info(f"Search for {pvc_name} inside test project {project_name}")
+        self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
+
+        logger.info(f"Go to PVC {pvc_name} Page")
+        self.do_click(self.pvc_loc[pvc_name])
+
+        logger.info("Click on Actions")
+        self.do_click(self.pvc_loc["pvc_actions"])
+
+        logger.info("Click on Expand PVC from dropdown options")
+        self.do_click(self.pvc_loc["expand_pvc"])
+
+        logger.info("Clear the size of existing pvc")
+        self.do_clear(self.pvc_loc["resize-value"])
+
+        logger.info("Enter the size of new pvc")
+        self.do_send_keys(self.pvc_loc["resize-value"], text=new_size)
+
+        logger.info("Click on Expand Button")
+        self.do_click(self.pvc_loc["expand-btn"])
+
+    def verify_pvc_resize_ui(self, project_name, pvc_name, expected_capacity):
+        """
+        Verifying PVC resize via UI
+
+        Args:
+            project_name (str): name of test project
+            pvc_name (str): the name of pvc
+            expected_capacity (str): the new size of pvc (GiB)
+
+        """
+        self.navigate_persistentvolumeclaims_page()
+
+        logger.info(f"Search and Select test project {project_name}")
+        self.do_click(self.pvc_loc["pvc_project_selector"])
+        self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
+        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
+
+        logger.info(f"Search for {pvc_name} inside test project {project_name}")
+        self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
+
+        logger.info(f"Go to PVC {pvc_name} Page")
+        self.do_click(self.pvc_loc[pvc_name])
+
+        is_expected_capacity = self.wait_until_expected_text_is_found(
+            format_locator(self.pvc_loc["expected-capacity"], expected_capacity),
+            expected_text=expected_capacity,
+            timeout=300,
+        )
+
+        is_capacity = self.wait_until_expected_text_is_found(
+            format_locator(self.pvc_loc["new-capacity"], expected_capacity),
+            expected_text=expected_capacity,
+            timeout=300,
+        )
+
+        if not is_expected_capacity:
+            logger.error("Expected capacity text is not found")
+
+        if not is_capacity:
+            logger.error("Capacity text is not found")
+
+        if is_expected_capacity and is_capacity:
+            return True
+        else:
+            return False
+
+    def delete_pvc_ui(self, pvc_name, project_name):
+        """
+        Delete pvc via UI
+
+        Args:
+            pvc_name (str): Name of the pvc
+            project_name (str): name of test project
+
+        """
+        self.navigate_persistentvolumeclaims_page()
+
+        logger.info(f"Select test project {project_name}")
+        self.do_click(self.pvc_loc["pvc_project_selector"])
+        self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
+        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
+
+        logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
         logger.info(f"Go to PVC {pvc_name} Page")
@@ -122,5 +244,3 @@ class PvcUI(PageNavigator):
 
         logger.info("Confirm PVC Deletion")
         self.do_click(self.pvc_loc["confirm_pvc_deletion"])
-
-        time.sleep(2)
