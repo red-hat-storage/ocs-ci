@@ -35,6 +35,7 @@ from ocs_ci.utility.utils import (
     get_default_if_keyval_empty,
     get_cluster_name,
 )
+from subprocess import CalledProcessError
 
 
 logger = logging.getLogger(__name__)
@@ -943,3 +944,22 @@ def remove_kmsid(kmsid):
     if kmsid in kmsid_list:
         raise KMSResourceCleaneupError(f"KMS ID {kmsid} deletion failed")
     logger.info(f"KMS ID {kmsid} deleted")
+
+
+def is_key_present_in_path(key, path):
+    """
+    Check if key is present in the backend Path
+    Args:
+        key (str): Name of the key
+        path (str): Vault backend path name
+    Returns:
+        (bool): True if key is present in the backend path
+    """
+    try:
+        kvlist = vault_kv_list(path=path)
+    except CalledProcessError:
+        return False
+    if any(key in k for k in kvlist):
+        return True
+    else:
+        return False
