@@ -86,6 +86,22 @@ def ui_deployment_conditions():
         return True
 
 
+def format_locator(locator, string_to_insert):
+    """
+    Use this function format_locator when working with dynamic locators.
+
+    Args:
+        locator (tuple): (GUI element needs to operate on (str), type (By))
+        string_to_insert (str): Name of the variable (string) which contains the dynamic web element
+            when generated on certain action
+
+    return:
+        formats the locator using .format() function which takes string to be inserted as an argument
+
+    """
+    return locator[0].format(string_to_insert), locator[1]
+
+
 def create_storage_class_ui(setup_ui, sc_name="test-storage-class", encryption=False, backend_path=None):
     """
     Test to  creation and deletion of encrypted RBD PVC
@@ -116,7 +132,7 @@ def create_storage_class_ui(setup_ui, sc_name="test-storage-class", encryption=F
     if encryption:
         logger.info("Storage Class with Encryption")
         base_ui_obj.do_click(pvc_loc["encryption"])
-        logger.info("Storage Class Connection Details")
+        logger.info("Click on Change Connection Details")
         base_ui_obj.do_click(pvc_loc["connections-details"])
         logger.info("Storage Class Service Name")
         base_ui_obj.do_clear(pvc_loc["service-name"])
