@@ -192,8 +192,8 @@ class TestMultipleMonPodsStaysOnSameNode(ManageTest):
         ), f"Mon moved to node {mon_node} such that 2 mons are running on same node"
 
         # Verify rook deletes one of the mon and move to another node
-        log.info("Waiting for 30 seconds for mon recovery")
-        time.sleep(30)
+        log.info("Waiting for 40 seconds for mon recovery")
+        time.sleep(40)
         POD_OBJ.wait_for_resource(
             condition=STATUS_RUNNING,
             resource_count=len(mon_pods),
