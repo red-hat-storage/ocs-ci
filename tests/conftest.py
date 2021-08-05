@@ -422,6 +422,8 @@ def storageclass_factory_fixture(
         new_rbd_pool=False,
         pool_name=None,
         rbd_thick_provision=False,
+        encrypted=False,
+        encryption_kms_id=None,
     ):
         """
         Args:
@@ -440,6 +442,9 @@ def storageclass_factory_fixture(
                 then the default rbd pool.
             rbd_thick_provision (bool): True to enable RBD thick provisioning.
                 Applicable if interface is CephBlockPool
+            encrypted (bool): True to enable RBD PV encryption
+            encryption_kms_id (str): Key value of vault config to be used from
+                    csi-kms-connection-details configmap
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -472,6 +477,8 @@ def storageclass_factory_fixture(
                 sc_name=sc_name,
                 reclaim_policy=reclaim_policy,
                 rbd_thick_provision=rbd_thick_provision,
+                encrypted=encrypted,
+                encryption_kms_id=encryption_kms_id,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret

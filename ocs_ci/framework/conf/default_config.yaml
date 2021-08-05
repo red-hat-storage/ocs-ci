@@ -170,6 +170,15 @@ ENV_DATA:
   opm_owner_repo: "operator-framework/operator-registry"
   # opm tool release tag (particular version or "latest") to be downloaded
   opm_release_tag: "latest"
+  # vault environment variables
+  vault_deploy_mode: external
+  KMS_PROVIDER: vault
+  KMS_SERVICE_NAME: vault
+  VAULT_CACERT: "ocs-kms-ca-secret"
+  VAULT_CLIENT_CERT: "ocs-kms-client-cert"
+  VAULT_CLIENT_KEY: "ocs-kms-client-key"
+  VAULT_SKIP_VERIFY: false
+  VAULT_BACKEND: "v1"
 
 # This section is related to upgrade
 UPGRADE:

@@ -10,6 +10,7 @@ import json
 import shlex
 import tempfile
 import subprocess
+from subprocess import CalledProcessError
 import base64
 
 from ocs_ci.framework import config
@@ -177,6 +178,25 @@ class Vault(KMS):
             if "Namespace not found" in err:
                 return False
         return True
+
+    def vault_backend_path_exists(self, backend_path):
+        """
+        Check if vault backend path already exists
+
+        Args:
+            backend_path (str): name of the vault backend path
+
+        Returns:
+            bool: True if exists else False
+
+        """
+        cmd = "vault secrets list --format=json"
+        out = subprocess.check_output(shlex.split(cmd))
+        json_out = json.loads(out)
+        for path in json_out.keys():
+            if backend_path in path:
+                return True
+        return False
 
     def create_namespace(self, vault_namespace):
         """
@@ -361,7 +381,7 @@ class Vault(KMS):
         outbuf = json.loads(output)
         return outbuf["sealed"]
 
-    def vault_create_backend_path(self, backend_path=None):
+    def vault_create_backend_path(self, backend_path=None, kv_version=None):
         """
         create vault path to be used by OCS
 
@@ -381,17 +401,25 @@ class Vault(KMS):
                     f"{constants.VAULT_DEFAULT_PATH_PREFIX}-{self.cluster_id}-"
                     f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
                 )
-        cmd = (
-            f"vault secrets enable -path={self.vault_backend_path} "
-            f"kv-{self.vault_backend_version}"
-        )
-        out = subprocess.check_output(shlex.split(cmd))
-        if "Success" in out.decode():
-            logger.info(f"vault path {self.vault_backend_path} created")
+        if self.vault_backend_path_exists(self.vault_backend_path):
+            logger.info(f"vault path {self.vault_backend_path} already exists")
+
         else:
-            raise VaultOperationError(
-                f"Failed to create path f{self.vault_backend_path}"
+            if kv_version:
+                self.vault_backend_version = kv_version
+            else:
+                self.vault_backend_version = config.ENV_DATA.get("VAULT_BACKEND")
+            cmd = (
+                f"vault secrets enable -path={self.vault_backend_path} "
+                f"kv-{self.vault_backend_version}"
             )
+            out = subprocess.check_output(shlex.split(cmd))
+            if "Success" in out.decode():
+                logger.info(f"vault path {self.vault_backend_path} created")
+            else:
+                raise VaultOperationError(
+                    f"Failed to create path f{self.vault_backend_path}"
+                )
         if not backend_path:
             self.vault_create_policy()
 
@@ -827,19 +855,41 @@ def vault_kv_list(path):
     return json_out
 
 
+def is_key_present_in_path(key, path):
+    """
+    Check if key is present in the backend Path
+
+    Args:
+        key (str): Name of the key
+        path (str): Vault backend path name
+
+    Returns:
+        (bool): True if key is present in the backend path
+    """
+    try:
+        kvlist = vault_kv_list(path=path)
+    except CalledProcessError:
+        return False
+    if any(key in k for k in kvlist):
+        return True
+    else:
+        return False
+
+
 def get_encryption_kmsid():
     """
     Get encryption kmsid from 'csi-kms-connection-details'
     configmap resource
 
     Returns:
-        kmsid (str): A string id of the kms used
+        kmsid (list): A list of KMS IDs available
 
     Raises:
         KMSConnectionDetailsError: if csi kms connection detail doesn't exist
 
     """
 
+    kmsid = []
     csi_kms_conf = ocp.OCP(
         resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
         kind="ConfigMap",
@@ -852,4 +902,29 @@ def get_encryption_kmsid():
 
     for key in csi_kms_conf.get().get("data").keys():
         if constants.VAULT_KMS_PROVIDER in key:
-            return key
+            kmsid.append(key)
+    return kmsid
+
+
+def remove_kmsid(kmsid):
+    """
+    This function will remove all the details for the given kmsid from the csi-kms-connection-details configmap
+
+    Args:
+        kmsid (str) : kmsid to be remove_kmsid
+
+    Raises:
+        KMSResourceCleaneupError: If the kmsid entry is not deleted
+
+    """
+    ocp_obj = ocp.OCP()
+    patch = f'\'[{{"op": "remove", "path": "/data/{kmsid}"}}]\''
+    patch_cmd = (
+        f"patch -n {constants.OPENSHIFT_STORAGE_NAMESPACE} cm "
+        f"{constants.VAULT_KMS_CSI_CONNECTION_DETAILS} --type json -p " + patch
+    )
+    ocp_obj.exec_oc_cmd(command=patch_cmd)
+    kmsid_list = get_encryption_kmsid()
+    if kmsid in kmsid_list:
+        raise KMSResourceCleaneupError(f"KMS ID {kmsid} deletion failed")
+    logger.info(f"KMS ID {kmsid} deleted")
