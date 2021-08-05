@@ -59,7 +59,7 @@ class TestDaemonKillDuringCreationOperations(ManageTest):
     multiple operations - pods creation, PVC creation and IO
     """
 
-    num_of_pvcs = 12
+    num_of_pvcs = 6
     pvc_size = 5
 
     @pytest.fixture()
@@ -123,13 +123,13 @@ class TestDaemonKillDuringCreationOperations(ManageTest):
         )
         log.info(f"Created {num_of_rwx_pvc} RWX PVCs.")
 
-        # Select 6 PVCs for IO pods
+        # Select 3 PVCs for IO pods and the remaining PVCs to create new pods
         if block_rwo_pvcs:
-            pvc_objs_for_io_pods = rwo_pvcs[0:2] + rwx_pvcs[0:2] + block_rwo_pvcs[0:2]
-            pvc_objs_new_pods = rwo_pvcs[2:] + rwx_pvcs[2:] + block_rwo_pvcs[2:]
+            pvc_objs_for_io_pods = rwo_pvcs[0:1] + rwx_pvcs[0:1] + block_rwo_pvcs[0:1]
+            pvc_objs_new_pods = rwo_pvcs[1:] + rwx_pvcs[1:] + block_rwo_pvcs[1:]
         else:
-            pvc_objs_for_io_pods = rwo_pvcs[0:3] + rwx_pvcs[0:3]
-            pvc_objs_new_pods = rwo_pvcs[3:] + rwx_pvcs[3:]
+            pvc_objs_for_io_pods = rwo_pvcs[0:2] + rwx_pvcs[0:1]
+            pvc_objs_new_pods = rwo_pvcs[2:] + rwx_pvcs[1:]
 
         # Create one pod using each RWO PVC and two pods using each RWX PVC
         # for running IO
@@ -337,8 +337,14 @@ class TestDaemonKillDuringCreationOperations(ManageTest):
             pod_obj.reload()
         log.info("Successfully created new pods using all PVCs.")
 
-        # Run IO on each of the newly created pods
-        for pod_obj in pod_objs_re:
+        # Select pods from newly created pods list to run IO
+        pod_objs_re_io = [
+            pod_obj
+            for pod_obj in pod_objs_re
+            if pod_obj.pvc
+            in helpers.select_unique_pvcs([pod_obj.pvc for pod_obj in pod_objs_re])
+        ]
+        for pod_obj in pod_objs_re_io:
             if pod_obj.pvc.volume_mode == "Block":
                 storage_type = "block"
             else:
@@ -351,7 +357,7 @@ class TestDaemonKillDuringCreationOperations(ManageTest):
             )
 
         log.info("Fetching IO results from newly created pods")
-        for pod_obj in pod_objs_re:
+        for pod_obj in pod_objs_re_io:
             fio_result = pod_obj.get_fio_results()
             err_count = fio_result.get("jobs")[0].get("error")
             assert (
