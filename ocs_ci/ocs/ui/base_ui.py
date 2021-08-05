@@ -5,7 +5,10 @@ import os
 import time
 
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.common.exceptions import (
+    TimeoutException,
+    WebDriverException,
+)
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
@@ -195,6 +198,53 @@ class BaseUI:
         logger.info(f"Creating snapshot: {filename}")
         self.driver.save_screenshot(filename)
         time.sleep(0.5)
+
+    def do_clear(self, locator, timeout=30):
+        """
+        Clear the existing text from UI
+
+        Args:
+            locator (tuple): (GUI element needs to operate on (str), type (By))
+            timeout (int): Looks for a web element until timeout (sec) occurs
+
+        """
+        wait = WebDriverWait(self.driver, timeout)
+        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        element.clear()
+
+    def wait_until_expected_text_is_found(self, locator, expected_text, timeout=60):
+        """
+        Method to wait for a expected text to appear on the UI (use of explicit wait type),
+        this method is helpful in working with elements which appear on completion of certain action and
+        ignores all the listed exceptions for the given timeout.
+
+        Args:
+            locator (tuple): (GUI element needs to operate on (str), type (By))
+            expected_text (str): Text which needs to be searched on UI
+            timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
+
+        return:
+            bool: Returns True if the expected element text is found, False otherwise
+
+        """
+        wait = WebDriverWait(
+            self.driver,
+            timeout=timeout,
+            poll_frequency=1,
+        )
+        try:
+            wait.until(
+                ec.text_to_be_present_in_element(
+                    (locator[1], locator[0]), expected_text
+                )
+            )
+            return True
+        except TimeoutException:
+            self.take_screenshot()
+            logger.error(
+                f"Locator {locator[1]} {locator[0]} did not find text {expected_text}"
+            )
+            return False
 
 
 class PageNavigator(BaseUI):

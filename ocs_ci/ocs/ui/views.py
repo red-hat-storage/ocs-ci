@@ -252,6 +252,23 @@ pvc_4_7 = {
     "test-pvc-rbd": ("a[title='test-pvc-rbd']", By.CSS_SELECTOR),
     "Block": ("input[value='Block']", By.CSS_SELECTOR),
     "Filesystem": ("input[value='Filesystem']", By.CSS_SELECTOR),
+    "search-project": ("input[placeholder='Select Project...']", By.CSS_SELECTOR),
+    "expand_pvc": ("button[data-test-action='Expand PVC']", By.CSS_SELECTOR),
+    "resize-value": ("//input[@name='requestSizeValue']", By.XPATH),
+    "expand-btn": ("#confirm-action", By.CSS_SELECTOR),
+    "pvc-status": (
+        "dd[data-test-id='pvc-status'] span[data-test='status-text']",
+        By.CSS_SELECTOR,
+    ),
+    "test-project-link": ("//a[normalize-space()='{}']", By.XPATH),
+    "expected-capacity": (
+        "//dd[contains(text(),'{}') and @data-test='pvc-requested-capacity']",
+        By.XPATH,
+    ),
+    "new-capacity": (
+        "//dd[contains(text(),'{}') and @data-test-id='pvc-capacity']",
+        By.XPATH,
+    ),
 }
 
 pvc_4_8 = {
@@ -260,6 +277,11 @@ pvc_4_8 = {
     "ReadWriteOnce": ("input[value='ReadWriteOnce']", By.CSS_SELECTOR),
     "test-pvc-fs": ("a[title='test-pvc-fs']", By.CSS_SELECTOR),
     "test-pvc-rbd-thick": ("a[title='test-pvc-rbd-thick']", By.CSS_SELECTOR),
+    "resize-pending": (
+        "div[class ='col-xs-4 col-sm-2 col-md-2'] span",
+        By.CSS_SELECTOR,
+    ),
+    "search_pvc": ("input[placeholder='Search by name...']", By.CSS_SELECTOR),
 }
 page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
