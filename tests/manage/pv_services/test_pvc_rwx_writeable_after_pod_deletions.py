@@ -128,7 +128,7 @@ class TestRWXMountPoint(ManageTest):
             )
 
         # Verify data integrity of all files from each pod
-        logger.info(f"Verify all files from all pods")
+        logger.info("Verify all files from all pods")
         for pod_obj in pod_list:
             for filename, md5sum in md5sum_pod_data.items():
                 assert pod.verify_data_integrity(
