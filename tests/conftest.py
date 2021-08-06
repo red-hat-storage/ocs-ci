@@ -67,6 +67,7 @@ from ocs_ci.utility import (
     deployment_openshift_logging as ocp_logging_obj,
     ibmcloud,
     kms as KMS,
+    pagerduty,
     templating,
     users,
 )
