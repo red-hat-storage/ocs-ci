@@ -322,6 +322,18 @@ def log_ocs_version(cluster):
     log.info("human readable ocs version info written into %s", file_name)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def pagerduty_integration():
+    """
+    Update ocs-converged-pagerduty secret with correct integration key.
+    This is currently applicable only for ODF Managed Service.
+
+    """
+    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+        integration_key = config.AUTH["pagerduty"]["integration_key"]
+        pagerduty.set_pagerduty_integration_secret(integration_key)
+
+
 @pytest.fixture(scope="class")
 def ceph_pool_factory_class(request, replica=3, compression=None):
     return ceph_pool_factory_fixture(request, replica=replica, compression=compression)
