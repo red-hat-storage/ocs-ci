@@ -7,13 +7,16 @@ import csv
 import pytest
 import time
 from timeit import default_timer
+from uuid import uuid4
 
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, scale_lib
+from ocs_ci.utility import templating
 from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.metrics import collect_pod_metrics
+from ocs_ci.ocs.perfresult import PerfResult
 
 log = logging.getLogger(__name__)
 
@@ -64,7 +67,7 @@ class TestScaleAndRecordMetrics(E2ETest):
         """
         crd_data = templating.load_yaml(constants.OSD_SCALE_BENCHMARK_YAML)
         our_uuid = uuid4().hex
-        self.elastic_info = ElasticData(our_uuid, crd_data)
+        self.elastic_info = PerfResult(our_uuid, crd_data)
         self.elastic_info.es_connect()
         metrics = collect_pod_metrics()
         logging.info("Beginning of run METRICS collection")

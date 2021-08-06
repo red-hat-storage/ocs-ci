@@ -111,6 +111,34 @@ class MillionFilesOnCephfs(object):
         logging.info("Teardown complete")
 
 
+def file_disrupt_and_move(million_file_cephfs, resource_to_delete,):
+    """
+    Add a million files to the ceph filesystem
+        Delete each instance of the parametrized ceph pod once
+        the ceph cluster is healthy.  Make sure the ceph cluster comes back
+        up and that rename operations function as expected.
+
+        Args:
+            million_file_cephfs (MillionFilesOnCephfs object):
+                Tracks cephfs pod, pvcs, and list of files to rename.
+            resource_to_delete (str): resource deleted for each testcase
+    """
+    disruption = disruption_helpers.Disruptions()
+    disruption.set_resource(resource=resource_to_delete)
+    disruption.delete_resource()
+    ocp_obj = million_file_cephfs.ocp_obj
+    for sfile in million_file_cephfs.test_file_list:
+        sample = os.sep.join([constants.MOUNT_POINT, "x", sfile])
+        newname = str(uuid.uuid4())
+        fullnew = os.sep.join([constants.MOUNT_POINT, "x", newname])
+        ocp_obj.exec_oc_cmd(
+            f"exec {million_file_cephfs.pod_name} -- mv {sample} {fullnew}"
+        )
+        ocp_obj.exec_oc_cmd(
+            f"exec {million_file_cephfs.pod_name} -- mv {fullnew} {sample}"
+        )
+
+
 @pytest.fixture(scope="class")
 def million_file_cephfs(request):
     million_file_cephfs = MillionFilesOnCephfs()
@@ -153,10 +181,7 @@ class TestMillionCephfsFiles(E2ETest):
         resource_to_delete,
     ):
         """
-        Add a million files to the ceph filesystem
-        Delete each instance of the parametrized ceph pod once
-        the ceph cluster is healthy.  Make sure the ceph cluster comes back
-        up and that rename operations function as expected.
+        Call file_disrupt_and_move function.
 
         Args:
             million_file_cephfs (MillionFilesOnCephfs object):
@@ -165,18 +190,5 @@ class TestMillionCephfsFiles(E2ETest):
 
         """
         logging.info(f"Testing respin of {resource_to_delete}")
-        disruption = disruption_helpers.Disruptions()
-        disruption.set_resource(resource=resource_to_delete)
-        disruption.delete_resource()
-        ocp_obj = million_file_cephfs.ocp_obj
-        for sfile in million_file_cephfs.test_file_list:
-            sample = os.sep.join([constants.MOUNT_POINT, "x", sfile])
-            newname = str(uuid.uuid4())
-            fullnew = os.sep.join([constants.MOUNT_POINT, "x", newname])
-            ocp_obj.exec_oc_cmd(
-                f"exec {million_file_cephfs.pod_name} -- mv {sample} {fullnew}"
-            )
-            ocp_obj.exec_oc_cmd(
-                f"exec {million_file_cephfs.pod_name} -- mv {fullnew} {sample}"
-            )
+        file_disrupt_and_move(million_file_cephfs, resource_to_delete)
         logging.info("Tests complete")
