@@ -28,8 +28,9 @@ class TestQuayWorkload(E2ETest):
     """
 
     @bugzilla("1947796")
+    @bugzilla("1959331")
     @pytest.mark.polarion_id("OCS-2596")
-    @skipif_ocs_version("<4.8")
+    @skipif_ocs_version("<4.7")
     def test_quay(self, quay_operator, mcg_obj):
         """
         Test verifies quay operator deployment and
