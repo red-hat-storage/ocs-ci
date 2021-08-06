@@ -90,9 +90,7 @@ class TestRbdBlockPvc(ManageTest):
                 file_name=pod_obj.get_storage_path(storage_type="block"),
                 block=True,
             )
-            assert (
-                pod_obj.md5sum_before_io != pod_obj.md5sum_after_io
-            ), (
+            assert pod_obj.md5sum_before_io != pod_obj.md5sum_after_io, (
                 f"md5sum obtained from the pod {pod_obj.name} has not changed after IO. "
                 f"IO was run from pod {self.pod_objs[0].name}"
             )
