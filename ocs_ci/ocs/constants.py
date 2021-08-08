@@ -1333,6 +1333,16 @@ PERF_IMAGE = "quay.io/ocsci/perf:latest"
 
 ROOK_CEPH_CONFIG_VALUES = """
 [global]
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_max_pg_per_osd = 600
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.5
+"""
+
+ROOK_CEPH_CONFIG_VALUES_48 = """
+[global]
 bdev_flock_retry = 20
 mon_osd_full_ratio = .85
 mon_osd_backfillfull_ratio = .8
@@ -1342,6 +1352,7 @@ mon_pg_warn_max_object_skew = 0
 [osd]
 osd_memory_target_cgroup_limit_ratio = 0.5
 """
+
 CEPH_DEBUG_CONFIG_VALUES = """
 [mon]
 debug_mon = 20
