@@ -45,7 +45,7 @@ setup(
         "semantic-version==2.8.5",
         "jsonschema>=3.2.0",
         "google-cloud-storage==1.29.0",
-        "elasticsearch==7.8.0",
+        "elasticsearch==7.14.0",
         "numpy==1.19.5",
         "python-ipmi==0.4.2",
         "scipy==1.6.0",
