@@ -1,10 +1,11 @@
 import logging
+from time import sleep
 
 from selenium.webdriver.support.wait import WebDriverWait
 
+from ocs_ci.ocs.ocp import get_ocs_parsed_version
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.ocs.ocp import get_ocs_parsed_version
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +134,9 @@ class BucketClassUI(PageNavigator):
             self.do_send_keys(
                 self.generic_locators["search_resource_field"], backingstore_name
             )
+            sleep(0.3)
             self.do_click(self.generic_locators["check_first_row_checkbox"])
+            sleep(0.3)
             self.do_click(self.generic_locators["remove_search_filter"])
 
         self.do_click(self.generic_locators["submit_form"])
