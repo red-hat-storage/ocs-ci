@@ -2,10 +2,21 @@
 Test osd node balancing by adding nodes and osds and checking their distribution
 """
 import logging
+import re
 from uuid import uuid4
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_aws_i3,
+    skipif_bm,
+    skipif_external_mode,
+    skipif_ibm_cloud,
+    skipif_ibm_power,
+    skipif_lso,
+    ipi_deployment_required,
+)
 from ocs_ci.framework.testlib import scale_changed_layout, ignore_leftovers
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.node import get_nodes
+from ocs_ci.ocs.ocp import get_ocs_version
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.scale_lib import scale_capacity_with_deviceset, scale_ocs_node
@@ -14,6 +25,7 @@ from ocs_ci.utility.utils import ceph_health_check
 
 FINAL_REPORT = "Final Report"
 INITIAL_SETUP = "Initial Setup"
+NOT_BALANCED = "OSDs are not balanced"
 MAX_NODE_COUNT = 9
 MAX_OSDS_PER_NODE = 3
 START_NODE_NUM = 3
@@ -22,19 +34,43 @@ OSD_LIMIT_AT_START = MAX_OSDS_PER_NODE * START_NODE_NUM
 MAX_TIMES_ADDED = 3
 
 
+def is_balanced(this_skew, maxov):
+    """
+    Check if cluster is balanced
+
+    Args:
+        this_skew (int): Difference in OSD count between the node with the
+            most OSDs and the node with the fewest
+        maxov (int): Maximum number of OSDs on any current node
+
+    Returns:
+        bool: False if nodes are not balanced when they are expected to be
+    """
+    balanced = True
+    if this_skew > 1 and maxov > MAX_OSDS_PER_NODE:
+        balanced = False
+    ocs_version = float(re.findall(r"\d.\d", get_ocs_version())[0])
+    if not balanced:
+        if ocs_version < 4.9:
+            logging.info(NOT_BALANCED)
+            return True
+    return balanced
+
+
 def collect_stats(action_text, elastic_info):
     """
     Write the current configuration information into the REPORT file.
     This information includes the osd, nodes and which osds are on which
     nodes.  The minimum and maximum numbers of osds per node are also
-    computed and saved.  If this is the final call to collect_stats
-    (action_text parameter is FINAL_REPORT), then the data collected
-    in the REPORT file is also displayed in the log.
+    computed and saved.
 
     Args:
-        action_text -- Title of last action taken
+        action_text (str): Title of last action taken
                 (usually adding nodes or adding osds)
-        elastic_info -- ElasticData object
+        elastic_info (es): ElasticData object for stat collection
+
+    Raises:
+        AssertionError: OSD layout is unbalanced
     """
     output_info = {"title": action_text}
     pod_obj = ocp.OCP(
@@ -67,21 +103,11 @@ def collect_stats(action_text, elastic_info):
     output_info["maxov"] = maxov
     output_info["minov"] = minov
     output_info["skew_value"] = this_skew
-    balanced = True
-    if this_skew > 1 and maxov > MAX_OSDS_PER_NODE:
-        balanced = False
     elastic_info.add_key(elastic_info.record_counter, output_info)
     elastic_info.log_recent_activity()
     elastic_info.record_counter += 1
-    if not balanced:
-        logging.info("OSDs are not balanced")
-        if action_text == FINAL_REPORT:
-            logging.info("FINAL RESULT -- OSDs are not balanced")
-            ceph_health_check(tries=30, delay=60)
-            return
-    if action_text == FINAL_REPORT:
-        logging.info("FINAL RESULT -- OSDs are balanced")
     ceph_health_check(tries=30, delay=60)
+    assert is_balanced(this_skew, maxov), NOT_BALANCED
 
 
 class ElasticData(PerfResult):
@@ -107,8 +133,15 @@ class ElasticData(PerfResult):
         logging.info(f"skew_value: {new_data['skew_value']}")
 
 
-@ignore_leftovers
 @scale_changed_layout
+@skipif_aws_i3
+@skipif_bm
+@skipif_lso
+@skipif_ibm_cloud
+@skipif_ibm_power
+@skipif_external_mode
+@ipi_deployment_required
+@ignore_leftovers
 class Test_Osd_Balance(PASTest):
     """
     There is no cleanup code in this test because the final
