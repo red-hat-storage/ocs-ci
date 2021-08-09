@@ -212,9 +212,11 @@ class ElasticSearch(object):
         """
 
         # Creating PVC for the elasticsearch server and wait until it bound
-        log.info("Creating 10 GiB PVC for the ElasticSearch cluster")
+        log.info("Creating 10 GiB PVC for the ElasticSearch cluster on")
         self.pvc_obj = create_pvc(
             sc_name=constants.CEPHBLOCKPOOL_SC,
+            namespace=self.namespace,
+            pvc_name="elasticsearch-data-quickstart-es-default-0",
             access_mode=constants.ACCESS_MODE_RWO,
             size="10Gi",
         )
