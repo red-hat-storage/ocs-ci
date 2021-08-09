@@ -59,7 +59,6 @@ def run_ibmcloud_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwarg
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
     """
-    return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
     last_login = config.RUN.get("ibmcloud_last_login", 0)
     timeout_from_last_login = time.time() - last_login
     # Login if the timeout from last login is greater than 9.5 minutes.
