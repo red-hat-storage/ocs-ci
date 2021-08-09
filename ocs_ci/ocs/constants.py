@@ -284,6 +284,7 @@ CEPH_ROOK_IO_PVC_LABEL = "ceph.rook.io/pvc"
 ROOK_CEPH_MON_PVC_LABEL = "pvc_name"
 PGSQL_APP_LABEL = "app=postgres"
 HOSTNAME_LABEL = "kubernetes.io/hostname"
+OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
 
 # Auth Yaml
 OCSCI_DATA_BUCKET = "ocs-ci-data"
