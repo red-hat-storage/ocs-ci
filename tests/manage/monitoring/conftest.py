@@ -12,12 +12,12 @@ from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
+from ocs_ci.ocs.resources.pod import delete_pods, get_osd_pods_having_ids
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.utility.workloadfixture import measure_operation, is_measurement_done
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
 import ocs_ci.ocs.exceptions
-
 
 logger = logging.getLogger(__name__)
 
@@ -807,4 +807,43 @@ def measure_noobaa_ns_target_bucket_deleted(
     ns_bucket[0].delete()
     ns_bucket[0].bucketclass.delete()
     ns_stores[0].delete()
+    return measured_op
+
+
+@pytest.fixture
+def measure_ceph_osd_flapping(measurement_dir):
+    """
+    Delete Ceph osd, measures the time when it was
+    deleted and alerts that were triggered during this event.
+
+    Returns:
+        dict: Contains information about `start` and `stop` time for stopping
+            Ceph osd pod
+    """
+
+    def stop_osd():
+        """
+        Delete osd with id 0 for 6 times with 50 seconds sleep between the deletions
+        after 5 minutes prometeuse ale
+
+        Returns:
+            str: Names of downscaled deployments
+        """
+        # sleep time between OSD deletion
+        run_time = 45
+        for i in range(6):
+            target_osd = get_osd_pods_having_ids([0])
+            logger.info(f"Deleting OSD {target_osd}")
+            delete_pods(target_osd[0])
+            logger.info(f"{target_osd} was deleted")
+            logger.info(f"Waiting for {run_time} seconds")
+            time.sleep(run_time)
+
+    test_file = os.path.join(measurement_dir, "measure_ceph_osd_flapping.json")
+    measured_op = measure_operation(stop_osd, test_file)
+
+    # wait for ceph to return into HEALTH_OK state after osd count
+    # is returned back to normal
+    ceph_health_check(tries=20, delay=15)
+
     return measured_op
