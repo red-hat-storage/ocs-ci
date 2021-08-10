@@ -28,6 +28,7 @@ def ui_deployment_conditions():
     is_disconnected = config.DEPLOYMENT.get("disconnected")
     is_kms = config.DEPLOYMENT.get("kms_deployment")
     is_proxy = config.DEPLOYMENT.get("proxy")
+    is_infra_nodes = config.DEPLOYMENT.get("infra_nodes")
 
     try:
         locators[ocp_version]["deployment"]
@@ -51,10 +52,17 @@ def ui_deployment_conditions():
             f" is different from the OCP version [{ocp_version}]"
         )
         return False
-    elif is_external or is_disconnected or is_proxy or is_kms or is_arbiter:
+    elif (
+        is_external
+        or is_disconnected
+        or is_proxy
+        or is_kms
+        or is_arbiter
+        or is_infra_nodes
+    ):
         logger.info(
             "OCS deployment via UI is not supported on "
-            "external/disconnected/proxy/kms/arbiter cluster"
+            "external/disconnected/proxy/kms/arbiter/infra-nodes cluster"
         )
         return False
     elif platform == constants.AWS_PLATFORM and is_lso is True:
