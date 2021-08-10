@@ -1426,7 +1426,7 @@ def scale_ocs_node(node_count=3):
         return False
 
 
-def scale_capacity_with_deviceset(add_deviceset_count=2):
+def scale_capacity_with_deviceset(add_deviceset_count=2, timeout=300):
     """
     Scale storagecluster deviceset count by increasing the
     value in storagecluster crs fil
@@ -1453,7 +1453,7 @@ def scale_capacity_with_deviceset(add_deviceset_count=2):
     )
     pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
     return_val = pod.wait_for_resource(
-        timeout=300,
+        timeout=timeout,
         condition=constants.STATUS_RUNNING,
         selector="app=rook-ceph-osd",
         resource_count=cluster.count_cluster_osd(),
