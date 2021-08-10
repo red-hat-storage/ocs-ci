@@ -1079,7 +1079,7 @@ def get_ocp_channel():
     try:
         cnl = ocp_cluster.get()["items"][0]["spec"]["channel"]
     except Exception:
-        cnl = None
+        cnl = "None"
     return cnl
 
 
