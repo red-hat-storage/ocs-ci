@@ -133,6 +133,7 @@ VOLUMESNAPSHOTCLASS = "VolumeSnapshotClass"
 HPA = "horizontalpodautoscaler"
 VOLUMESNAPSHOTCONTENT = "VolumeSnapshotContent"
 POD_DISRUPTION_BUDGET = "PodDisruptionBudget"
+STATEFULSET = "StatefulSet"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
