@@ -155,7 +155,7 @@ class Postgresql(BenchmarkOperator):
                 replicas,
                 get_pod_name_by_pattern,
                 "pgbench-1-dbs-client",
-                BMO_NAME
+                BMO_NAME,
             ):
                 try:
                     if len(pgbench_pods) == replicas:
@@ -417,9 +417,7 @@ class Postgresql(BenchmarkOperator):
             pod status
 
         """
-        app_pod_list = get_operator_pods(
-            constants.PGSQL_APP_LABEL, constants.BMO_NAME
-        )
+        app_pod_list = get_operator_pods(constants.PGSQL_APP_LABEL, constants.BMO_NAME)
         app_pod = app_pod_list[random.randint(0, len(app_pod_list) - 1)]
         log.info(f"respin pod {app_pod.name}")
         app_pod.delete(wait=True, force=False)
