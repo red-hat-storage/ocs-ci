@@ -6,7 +6,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
 )
-from ocs_ci.ocs.resources.pod import cal_md5sum
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +23,7 @@ class TestRbdBlockPvc(ManageTest):
         Create PVC and pods
 
         """
-        self.pvc_size = 5
+        self.pvc_size = 10
 
         self.pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
@@ -32,6 +31,7 @@ class TestRbdBlockPvc(ManageTest):
             access_mode=constants.ACCESS_MODE_RWX,
             status=constants.STATUS_BOUND,
             volume_mode=constants.VOLUME_MODE_BLOCK,
+            size_unit="Mi",
         )
 
         worker_nodes_list = node.get_worker_nodes()
@@ -57,52 +57,56 @@ class TestRbdBlockPvc(ManageTest):
         log.info("Find initial md5sum value")
         for pod_obj in self.pod_objs:
             # Find initial md5sum
-            pod_obj.md5sum_before_io = cal_md5sum(
-                pod_obj=pod_obj,
-                file_name=pod_obj.get_storage_path(storage_type="block"),
-                block=True,
+            pod_obj.md5sum_before_io = pod_obj.exec_sh_cmd_on_pod(
+                command=f"dd iflag=direct if={pod_obj.get_storage_path(storage_type='block')} | md5sum"
             )
         md5sum_values_initial = [pod_obj.md5sum_before_io for pod_obj in self.pod_objs]
         assert (
             len(set(md5sum_values_initial)) == 1
         ), "Initial md5sum values from the pods are not same"
+        md5sum_value_initial = md5sum_values_initial[0]
 
-        # Run IO from one pod
-        log.info("Run IO from one pod")
-        self.pod_objs[0].run_io(
-            storage_type="block",
-            size="1G",
-            io_direction="write",
-            runtime=30,
-            end_fsync=1,
-        )
-        log.info(f"IO started on pod {self.pod_objs[0].name}")
-
-        # Wait for IO completion
-        self.pod_objs[0].get_fio_results()
-        log.info(f"IO completed on pod {self.pod_objs[0].name}")
-
-        # Verify md5sum has changed after IO
-        log.info("Verify md5sum has changed after IO. Verify from all pods.")
-        for pod_obj in self.pod_objs:
-            pod_obj.md5sum_after_io = cal_md5sum(
-                pod_obj=pod_obj,
-                file_name=pod_obj.get_storage_path(storage_type="block"),
-                block=True,
+        # Run IO from each pod and verify md5sum on all pods
+        for io_pod in self.pod_objs:
+            # Run IO from one pod
+            log.info("Run IO from one pod")
+            io_pod.run_io(
+                storage_type="block",
+                size="5M",
+                io_direction="write",
+                runtime=5,
+                end_fsync=1,
             )
-            assert pod_obj.md5sum_before_io != pod_obj.md5sum_after_io, (
-                f"md5sum obtained from the pod {pod_obj.name} has not changed after IO. "
-                f"IO was run from pod {self.pod_objs[0].name}"
-            )
+            log.info(f"IO started on pod {io_pod.name}")
+
+            # Wait for IO completion
+            io_pod.get_fio_results()
+            log.info(f"IO completed on pod {io_pod.name}")
+
+            # Verify md5sum has changed after IO
+            log.info("Verify md5sum has changed after IO. Verify from all pods.")
+            for pod_obj in self.pod_objs:
+                # Find md5sum
+                pod_obj.md5sum_after_io = pod_obj.exec_sh_cmd_on_pod(
+                    command=f"dd iflag=direct if={pod_obj.get_storage_path(storage_type='block')} | md5sum"
+                )
+                assert pod_obj.md5sum_after_io != md5sum_value_initial, (
+                    f"md5sum obtained from the pod {pod_obj.name} has not changed after IO. "
+                    f"IO was run from pod {io_pod.name}"
+                )
+                log.info(
+                    f"md5sum obtained from the pod {pod_obj.name} has changed after IO from pod {io_pod.name}"
+                )
+
+            # Verify the md5sum value obtained from all the pods are same
+            md5sum_values_final = [pod_obj.md5sum_after_io for pod_obj in self.pod_objs]
+            assert (
+                len(set(md5sum_values_final)) == 1
+            ), f"md5sum values from the pods after IO are not same-{md5sum_values_final}"
             log.info(
-                f"md5sum obtained from the pod {pod_obj.name} has changed after IO"
+                f"md5sum value obtained from all pods after running IO from {io_pod.name} are same - {md5sum_values_final}"
             )
-
-        # Verify the md5sum value obtained from all the pods are same
-        md5sum_values_final = [pod_obj.md5sum_after_io for pod_obj in self.pods]
-        assert (
-            len(set(md5sum_values_final)) == 1
-        ), "md5sum values from the pods after IO are not same"
+            md5sum_value_initial = md5sum_values_final[0]
 
         # Delete pods
         log.info("Deleting the pods")
@@ -121,24 +125,24 @@ class TestRbdBlockPvc(ManageTest):
 
         # Find md5sum value and compare
         log.info("Find md5sum value from new pod")
-        md5sum_new = cal_md5sum(
-            pod_obj=pod_obj_new,
-            file_name=pod_obj_new.get_storage_path(storage_type="block"),
-            block=True,
+        md5sum_new = pod_obj_new.exec_sh_cmd_on_pod(
+            command=f"dd iflag=direct if={pod_obj_new.get_storage_path(storage_type='block')} | md5sum"
         )
-        assert md5sum_new == md5sum_values_final[0], "md5sum mismatch on new pod"
+        assert (
+            md5sum_new == md5sum_value_initial
+        ), f"md5sum mismatch on new pod. Expected {md5sum_value_initial}. Obtained {md5sum_new}"
 
-        # Run IO
-        log.info("Run IO from one pod")
+        # Run IO from new pod
+        log.info("Run IO from new pod")
         pod_obj_new.run_io(
             storage_type="block",
-            size="1G",
+            size="5M",
             io_direction="write",
             runtime=30,
             end_fsync=1,
         )
-        log.info(f"IO started on pod {pod_obj_new.name}")
+        log.info(f"IO started on the new pod {pod_obj_new.name}")
 
         # Wait for IO completion
         pod_obj_new.get_fio_results()
-        log.info(f"IO completed on pod {pod_obj_new.name}")
+        log.info(f"IO completed on the new pod {pod_obj_new.name}")

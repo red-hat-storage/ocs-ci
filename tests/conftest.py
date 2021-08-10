@@ -612,6 +612,7 @@ def pvc_factory_fixture(request, project_factory):
         custom_data=None,
         status=constants.STATUS_BOUND,
         volume_mode=None,
+        size_unit="Gi",
     ):
         """
         Args:
@@ -633,6 +634,7 @@ def pvc_factory_fixture(request, project_factory):
                 desired state.
             volume_mode (str): Volume mode for PVC.
                 eg: volume_mode='Block' to create rbd `block` type volume
+            size_unit (str): PVC size unit, eg: "Mi"
 
         Returns:
             object: helpers.create_pvc instance.
@@ -658,7 +660,7 @@ def pvc_factory_fixture(request, project_factory):
                 )
                 active_cephfs_storageclass = storageclass
 
-            pvc_size = f"{size}Gi" if size else None
+            pvc_size = f"{size}{size_unit}" if size else None
 
             pvc_obj = helpers.create_pvc(
                 sc_name=storageclass.name,
