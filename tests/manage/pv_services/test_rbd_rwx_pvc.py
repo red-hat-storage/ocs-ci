@@ -104,7 +104,8 @@ class TestRbdBlockPvc(ManageTest):
                 len(set(md5sum_values_final)) == 1
             ), f"md5sum values from the pods after IO are not same-{md5sum_values_final}"
             log.info(
-                f"md5sum value obtained from all pods after running IO from {io_pod.name} are same - {md5sum_values_final}"
+                f"md5sum value obtained from all pods after running IO"
+                f" from {io_pod.name} are same - {md5sum_values_final}"
             )
             md5sum_value_initial = md5sum_values_final[0]
 
