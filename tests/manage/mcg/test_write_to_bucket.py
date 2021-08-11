@@ -81,12 +81,22 @@ class TestBucketIO(MCGTest):
                 *["OC", {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}],
                 marks=[tier1],
             ),
+            pytest.param(
+                *["OC", {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}}],
+                marks=[tier1],
+            ),
+            pytest.param(
+                *["CLI", {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}}],
+                marks=[tier1],
+            ),
         ],
         ids=[
             "DEFAULT-BACKINGSTORE",
             "AWS-OC-1",
             "AZURE-OC-1",
             "GCP-OC-1",
+            "IBMCOS-OC-1",
+            "IBMCOS-CLI-1",
         ],
     )
     @flaky
@@ -140,12 +150,22 @@ class TestBucketIO(MCGTest):
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
                 marks=[tier1],
             ),
+            pytest.param(
+                {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
+                marks=[tier1],
+            ),
+            pytest.param(
+                {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
+                marks=[tier1],
+            ),
         ],
         ids=[
             "DEFAULT-BACKINGSTORE",
             "AWS-OC-1",
             "AZURE-OC-1",
             "GCP-OC-1",
+            "IBMCOS-OC-1",
+            "IBMCOS-CLI-1",
         ],
     )
     def test_mcg_data_deduplication(
@@ -204,12 +224,22 @@ class TestBucketIO(MCGTest):
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
                 marks=[tier1],
             ),
+            pytest.param(
+                {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
+                marks=[tier1],
+            ),
+            pytest.param(
+                {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
+                marks=[tier1],
+            ),
         ],
         ids=[
             "DEFAULT-BACKINGSTORE",
             "AWS-OC-1",
             "AZURE-OC-1",
             "GCP-OC-1",
+            "IBMCOS-OC-1",
+            "IBMCOS-CLI-1",
         ],
     )
     def test_mcg_data_compression(

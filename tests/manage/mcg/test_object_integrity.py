@@ -56,6 +56,14 @@ class TestObjectIntegrity(MCGTest):
                 marks=[tier1],
             ),
             pytest.param(
+                {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
+                marks=[tier1],
+            ),
+            pytest.param(
+                {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
+                marks=[tier1],
+            ),
+            pytest.param(
                 {
                     "interface": "OC",
                     "namespace_policy_dict": {
@@ -79,7 +87,10 @@ class TestObjectIntegrity(MCGTest):
             "AWS-OC-1",
             "AZURE-OC-1",
             "GCP-OC-1",
+            "IBMCOS-OC-1",
+            "IBMCOS-CLI-1",
             "AWS-OC-Cache",
+
         ],
     )
     def test_check_object_integrity(

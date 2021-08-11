@@ -173,8 +173,16 @@ class TestBucketDeletion(MCGTest):
                 *["OC", {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}],
                 marks=[tier1],
             ),
+            pytest.param(
+                *["OC", {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}}],
+                marks=[tier1],
+            ),
+            pytest.param(
+                *["CLI", {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}}],
+                 marks=[tier1],
+            ),
         ],
-        ids=["S3", "CLI", "OC", "OC-AWS", "OC-AZURE", "OC-GCP"],
+        ids=["S3", "CLI", "OC", "OC-AWS", "OC-AZURE", "OC-GCP", "OC-IBMCOS", "CLI-IBMCOS"],
     )
     @flaky
     def test_bucket_delete_with_objects(
