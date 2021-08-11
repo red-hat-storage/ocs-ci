@@ -1076,7 +1076,11 @@ def get_ocp_channel():
         kind="",
         resource_name="clusterversion",
     )
-    return ocp_cluster.get()["items"][0]["spec"]["channel"]
+    try:
+        cnl = ocp_cluster.get()["items"][0]["spec"]["channel"]
+    except Exception:
+        cnl = "None"
+    return cnl
 
 
 def switch_to_project(project_name):
