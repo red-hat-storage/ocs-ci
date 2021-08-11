@@ -18,7 +18,7 @@ from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.cluster import CephCluster, calculate_compression_ratio
 from ocs_ci.helpers.performance_lib import run_command
 from ocs_ci.ocs.elasticsearch import ElasticSearch
-from ocs_ci.ocs.ripsaw import RipSaw
+from ocs_ci.ocs import benchmark_operator
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 class FIOResultsAnalyse(PerfResult):
     """
     This class is reading all test results from elasticsearch server (which the
-    ripsaw running of the benchmark is generate), aggregate them by :
+    benchmark operator running of the benchmark is generate), aggregate them by :
         test operation (e.g. create / delete etc.)
         sample (for test to be valid it need to run with more the one sample)
         host (test can be run on more then one pod {called host})
@@ -159,7 +159,7 @@ class FIOResultsAnalyse(PerfResult):
 @performance
 class TestFIOBenchmark(PASTest):
     """
-    Run FIO perf test using ripsaw benchmark
+    Run FIO perf test using benchmark operator
 
     """
 
@@ -189,9 +189,8 @@ class TestFIOBenchmark(PASTest):
                     return
 
         super(TestFIOBenchmark, self).setup()
-        # deploy the benchmark-operator (ripsaw)
-        self.ripsaw = RipSaw()
-        self.ripsaw_deploy(self.ripsaw)
+        # deploy the benchmark-operator
+        self.deploy_benchmark_operator()
 
     def setting_storage_usage(self):
         """
@@ -319,7 +318,7 @@ class TestFIOBenchmark(PASTest):
         # Getting all PVCs created in the test (if left).
         NL = "\\n"  # NewLine character
         command = ["oc", "get", "pvc", "-n"]
-        command.append(constants.RIPSAW_NAMESPACE)
+        command.append(benchmark_operator.BMO_NAME)
         command.append("-o")
         command.append("template")
         command.append("--template")
@@ -328,7 +327,7 @@ class TestFIOBenchmark(PASTest):
         log.info(f"list of all PVCs :{pvcs_list}")
         for pvc in pvcs_list:
             pvc = pvc.replace("'", "")
-            run_command(f"oc -n {constants.RIPSAW_NAMESPACE} delete pvc {pvc}")
+            run_command(f"oc -n {benchmark_operator.BMO_NAME} delete pvc {pvc}")
 
         # Getting all PVs created in the test (if left).
         command[2] = "pv"
@@ -338,7 +337,7 @@ class TestFIOBenchmark(PASTest):
             + "\"}}{{end}}'"
         )
         command.remove("-n")
-        command.remove(constants.RIPSAW_NAMESPACE)
+        command.remove(benchmark_operator.BMO_NAME)
         pvs_list = run_command(command, out_format="list")
         log.info(f"list of all PVs :{pvs_list}")
 
@@ -346,7 +345,7 @@ class TestFIOBenchmark(PASTest):
             try:
                 pv, ns = line.split(" ")
                 pv = pv.replace("'", "")
-                if ns == constants.RIPSAW_NAMESPACE:
+                if ns == benchmark_operator.BMO_NAME:
                     log.info(f"Going to delete {pv}")
                     run_command(f"oc delete pv {pv}")
             except Exception:
@@ -359,7 +358,7 @@ class TestFIOBenchmark(PASTest):
         """
         self.deploy_and_wait_for_wl_to_start(timeout=900)
         # Getting the UUID from inside the benchmark pod
-        self.uuid = self.ripsaw.get_uuid(self.client_pod)
+        self.uuid = self.operator.get_uuid(self.client_pod)
         # Setting back the original elastic-search information
         if hasattr(self, "backup_es"):
             self.crd_data["spec"]["elasticsearch"] = self.backup_es
@@ -382,8 +381,7 @@ class TestFIOBenchmark(PASTest):
 
         """
         log.info("cleanup the environment")
-        if hasattr(self, "ripsaw"):
-            self.ripsaw.cleanup()
+        self.operator.cleanup()
         if isinstance(self.es, ElasticSearch):
             self.es.cleanup()
 
