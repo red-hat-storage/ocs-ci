@@ -54,7 +54,7 @@ class Service(object):
         nodeip = self.nodes[node.name]
         result = exec_cmd(
             f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
-            "sudo systemctl is-active {self.service_name}.service",
+            f"sudo systemctl is-active {self.service_name}.service",
             ignore_error=True,
         )
 
@@ -86,7 +86,7 @@ class Service(object):
         nodeip = self.nodes[node.name]
         cmd = (
             f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
-            "sudo systemctl stop {self.service_name}.service"
+            f"sudo systemctl stop {self.service_name}.service"
         )
         if self.force:
             cmd += " -f"
@@ -103,7 +103,7 @@ class Service(object):
         )
         if not ret.wait_for_func_status(result=True):
             raise UnexpectedBehaviour(
-                "Service {self.service_name} on Node {node.name} is still Running"
+                f"Service {self.service_name} on Node {node.name} is still Running"
             )
 
     def start(self, node, timeout):
@@ -120,7 +120,7 @@ class Service(object):
         nodeip = self.nodes[node.name]
         cmd = (
             f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
-            "sudo systemctl start {self.service_name}.service"
+            f"sudo systemctl start {self.service_name}.service"
         )
         result = exec_cmd(cmd)
         logger.info(f"Result of start of service {self.service_name} is {result}")
@@ -133,7 +133,7 @@ class Service(object):
         )
         if not ret.wait_for_func_status(result=True):
             raise UnexpectedBehaviour(
-                "Service {self.service_name} on Node {node.name} is still not Running"
+                f"Service {self.service_name} on Node {node.name} is still not Running"
             )
 
     def kill(self, node, timeout):
@@ -148,7 +148,7 @@ class Service(object):
         nodeip = self.nodes[node.name]
         cmd = (
             f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
-            "sudo systemctl kill {self.service_name}.service"
+            f"sudo systemctl kill {self.service_name}.service"
         )
         result = exec_cmd(cmd)
         ret = TimeoutSampler(
@@ -172,7 +172,7 @@ class Service(object):
         nodeip = self.nodes[node.name]
         cmd = (
             f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
-            "sudo systemctl restart {self.service_name}.service"
+            f"sudo systemctl restart {self.service_name}.service"
         )
         result = exec_cmd(cmd)
         ret = TimeoutSampler(
@@ -200,7 +200,7 @@ class Service(object):
         nodeip = self.nodes[node.name]
         cmd = (
             f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
-            "sudo systemctl status {self.service_name}.service"
+            f"sudo systemctl status {self.service_name}.service"
         )
         result = exec_cmd(cmd)
         logger.info(f"Result of status of service {self.service_name} is {result}")
