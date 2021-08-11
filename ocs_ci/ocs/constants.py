@@ -258,6 +258,7 @@ NB_DB_NAME_47_AND_ABOVE = "noobaa-db-pg-0"
 # Pod label
 MON_APP_LABEL = "app=rook-ceph-mon"
 MDS_APP_LABEL = "app=rook-ceph-mds"
+CRASHCOLLECTOR_APP_LABEL = "app=rook-ceph-crashcollector"
 TOOL_APP_LABEL = "app=rook-ceph-tools"
 MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
