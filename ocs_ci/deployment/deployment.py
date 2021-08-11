@@ -480,27 +480,36 @@ class Deployment(object):
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
         ocs_version = config.ENV_DATA["ocs_version"]
         if Version.coerce(ocs_version) >= Version.coerce("4.9"):
-            ocs_operator_name = defaults.ODF_OPERATOR_NAME
+            ocs_operator_names = [
+                defaults.ODF_OPERATOR_NAME,
+                defaults.OCS_OPERATOR_NAME,
+            ]
         else:
-            ocs_operator_name = defaults.OCS_OPERATOR_NAME
-        package_manifest = PackageManifest(
-            resource_name=ocs_operator_name,
-            selector=operator_selector,
-            subscription_plan_approval=subscription_plan_approval,
-        )
-        package_manifest.wait_for_resource(timeout=300)
+            ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
-        csv_name = package_manifest.get_current_csv(channel=channel)
-        csv = CSV(resource_name=csv_name, namespace=self.namespace)
-        if (
-            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-            and not live_deployment
-        ):
-            csv.wait_for_phase("Installing", timeout=720)
-            logger.info("Sleeping for 30 seconds before applying SA")
-            time.sleep(30)
-            link_all_sa_and_secret_and_delete_pods(constants.OCS_SECRET, self.namespace)
-        csv.wait_for_phase("Succeeded", timeout=720)
+        is_ibm_sa_lined = False
+        for ocs_operator_name in ocs_operator_names:
+            package_manifest = PackageManifest(
+                resource_name=ocs_operator_name,
+                selector=operator_selector,
+                subscription_plan_approval=subscription_plan_approval,
+            )
+            package_manifest.wait_for_resource(timeout=300)
+            csv_name = package_manifest.get_current_csv(channel=channel)
+            csv = CSV(resource_name=csv_name, namespace=self.namespace)
+            if (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and not live_deployment
+            ):
+                csv.wait_for_phase("Installing", timeout=720)
+                if not is_ibm_sa_lined:
+                    logger.info("Sleeping for 30 seconds before applying SA")
+                    time.sleep(30)
+                    link_all_sa_and_secret_and_delete_pods(constants.OCS_SECRET, self.namespace)
+                    is_ibm_sa_lined = True
+                    logger.info("Deleting all pods in openshift-storage namespace")
+                    exec_cmd(f"oc delete pod --all -n {self.namespace}")
+            csv.wait_for_phase("Succeeded", timeout=720)
         ocp_version = float(get_ocp_version())
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             config_map = ocp.OCP(
