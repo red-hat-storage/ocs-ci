@@ -75,3 +75,49 @@ def format_locator(locator, string_to_insert):
 
     """
     return locator[0].format(string_to_insert), locator[1]
+
+
+def ui_add_capacity_conditions():
+    """
+    Conditions for add capacity via UI
+
+    return:
+        bool: True if support UI add capacity, False otherwise
+    """
+    platform = config.ENV_DATA["platform"]
+    ocp_version = get_ocp_version()
+    is_external = config.DEPLOYMENT["external_mode"]
+    is_disconnected = config.DEPLOYMENT.get("disconnected")
+    is_lso = config.DEPLOYMENT.get("local_storage")
+    http_proxy, https_proxy, no_proxy = get_cluster_proxies()
+    is_proxy = True if http_proxy else False
+
+    try:
+        locators[ocp_version]["add_capacity"]
+    except KeyError as e:
+        logger.info(
+            f"Add capacity via UI is not supported on ocp version {ocp_version}"
+        )
+        logger.error(e)
+        return False
+
+    if platform.lower() not in (constants.AWS_PLATFORM, constants.VSPHERE_PLATFORM):
+        logger.info(f"Add capacity via UI is not supported on platform {platform}")
+        return False
+    elif ocp_version not in ("4.7", "4.8"):
+        logger.info(
+            f"Add capacity via UI is not supported when the OCP version [{ocp_version}]"
+        )
+        return False
+    elif is_external or is_disconnected or is_proxy or is_lso:
+        if is_external:
+            logger.info("Add capacity via UI is not supported on external cluster")
+        if is_disconnected:
+            logger.info("Add capacity via UI is not supported on disconnected cluster")
+        if is_proxy:
+            logger.info("Add capacity via UI is not supported on proxy cluster")
+        if is_lso:
+            logger.info("Add capacity via UI is not supported on lso cluster")
+        return False
+    else:
+        return True
