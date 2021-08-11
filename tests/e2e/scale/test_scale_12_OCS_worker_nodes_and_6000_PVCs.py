@@ -50,6 +50,7 @@ class TestAddNode(E2ETest):
     skip_all = False
 
     @pytest.mark.skipif("TestAddNode.skip_all")
+    @pytest.mark.polarion_id("OCS-2610")
     def test_scale_node_and_capacity(self):
         """
         Test for scaling 12 OCS worker nodes to the cluster
@@ -93,6 +94,7 @@ class TestAddNode(E2ETest):
             raise
 
     @pytest.mark.skipif("TestAddNode.skip_all")
+    @pytest.mark.polarion_id("OCS-609")
     def test_scale_pvcs_pods(self):
         """
         Scale 6000 PVCs and PODs in cluster with 12 worker nodes
@@ -172,8 +174,8 @@ class TestAddNode(E2ETest):
         argnames="resource_to_delete",
         argvalues=[
             pytest.param(*["mgr"], marks=[pytest.mark.polarion_id("OCS-766")]),
-            pytest.param(*["mon"], marks=[pytest.mark.polarion_id("OCS-764")]),
-            pytest.param(*["osd"], marks=[pytest.mark.polarion_id("OCS-765")]),
+            pytest.param(*["mon"], marks=[pytest.mark.polarion_id("OCS-669")]),
+            pytest.param(*["osd"], marks=[pytest.mark.polarion_id("OCS-610")]),
             pytest.param(*["mds"], marks=[pytest.mark.polarion_id("OCS-613")]),
             pytest.param(
                 *["cephfsplugin"], marks=[pytest.mark.polarion_id("OCS-1891")]
