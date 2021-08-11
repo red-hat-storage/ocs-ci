@@ -2,16 +2,13 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants, node
-from ocs_ci.framework.testlib import (
-    ManageTest,
-    tier2,
-)
+from ocs_ci.framework.testlib import ManageTest, tier2
 
 log = logging.getLogger(__name__)
 
 
 @tier2
-@pytest.mark.polarion_id("")
+@pytest.mark.polarion_id("OCS-2599")
 class TestRbdBlockPvc(ManageTest):
     """
     Tests RBD block PVC
@@ -72,7 +69,7 @@ class TestRbdBlockPvc(ManageTest):
             log.info("Run IO from one pod")
             io_pod.run_io(
                 storage_type="block",
-                size="5M",
+                size=f"{int(self.pvc_size/2)}M",
                 io_direction="write",
                 runtime=5,
                 end_fsync=1,
@@ -137,7 +134,7 @@ class TestRbdBlockPvc(ManageTest):
         log.info("Run IO from new pod")
         pod_obj_new.run_io(
             storage_type="block",
-            size="5M",
+            size=f"{int(self.pvc_size/2)}M",
             io_direction="write",
             runtime=30,
             end_fsync=1,
