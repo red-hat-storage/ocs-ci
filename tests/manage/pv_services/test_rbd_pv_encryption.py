@@ -143,6 +143,15 @@ class TestRbdPvEncryption(ManageTest):
             wait_each=False,
         )
 
+        # Create pods
+        pod_objs = create_pods(
+            pvc_objs,
+            pod_factory,
+            constants.CEPHBLOCKPOOL,
+            pods_for_rwx=1,
+            status=constants.STATUS_RUNNING,
+        )
+
         # Verify if the key is created in Vault
         vol_handles = []
         for pvc_obj in pvc_objs:
@@ -157,15 +166,6 @@ class TestRbdPvEncryption(ManageTest):
                 log.info(f"Vault: Found key for {pvc_obj.name}")
             else:
                 raise ResourceNotFoundError(f"Vault: Key not found for {pvc_obj.name}")
-
-        # Create pods
-        pod_objs = create_pods(
-            pvc_objs,
-            pod_factory,
-            constants.CEPHBLOCKPOOL,
-            pods_for_rwx=1,
-            status=constants.STATUS_RUNNING,
-        )
 
         # Verify whether encrypted device is present inside the pod and run IO
         for vol_handle, pod_obj in zip(vol_handles, pod_objs):
