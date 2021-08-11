@@ -788,6 +788,7 @@ def pod_factory_fixture(request, pvc_factory):
             command (list): The command to be executed on the pod
             command_args (list): The arguments to be sent to the command running
                 on the pod
+            subpath (str): Value of subPath parameter in pod yaml
 
         Returns:
             object: helpers.create_pod instance
