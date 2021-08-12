@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     post_upgrade,
     skipif_aws_creds_are_missing,
     bugzilla,
+    skipif_ocs_version,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import ocp
@@ -101,6 +102,7 @@ def test_pod_io(
 
 @post_upgrade
 @bugzilla("1974343")
+@skipif_ocs_version("<=4.4")
 def test_pod_log_after_upgrade():
     """
     Check OSD/MON/MGR pod logs after upgrade and verify the expected log exist
