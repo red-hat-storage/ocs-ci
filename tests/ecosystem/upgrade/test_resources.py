@@ -3,6 +3,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.ocs.resources.pod import get_pod_logs
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     pre_upgrade,
@@ -109,7 +110,7 @@ def test_pod_log_after_upgrade():
     pod_names = [osd_pod_obj.name for osd_pod_obj in osd_pod_objs]
     expected_log_after_upgrade = "set uid:gid to 167:167 (ceph:ceph)"
     for pod_name in pod_names:
-        pod_logs = helpers.get_pod_logs(pod_name=pod_name)
+        pod_logs = get_pod_logs(pod_name=pod_name, all_containers=True)
         assert expected_log_after_upgrade in pod_logs, (
             f"The expected log after upgrade '{expected_log_after_upgrade}' does not exist"
             f" on pod {pod_name}"

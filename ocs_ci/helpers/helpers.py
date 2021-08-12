@@ -3334,22 +3334,3 @@ def get_failure_domain():
 
     storage_cluster_obj = get_storage_cluster()
     return storage_cluster_obj.data["items"][0]["status"]["failureDomain"]
-
-
-def get_pod_logs(
-    pod_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, all_containers=True
-):
-    """
-    Get pod logs
-
-    Args:
-        pod_name (str): The name of the pod
-        namespace (str): The name of the namespace to use
-        all_containers (bool): fetch logs from all containers of the resource
-
-    Returns:
-        str: container logs
-
-    """
-    ocp_obj = OCP(namespace=namespace, kind="pod")
-    return ocp_obj.get_logs(name=pod_name, all_containers=all_containers)
