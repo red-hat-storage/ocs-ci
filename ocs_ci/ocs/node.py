@@ -4,6 +4,7 @@ import re
 import time
 from prettytable import PrettyTable
 from collections import defaultdict
+from operator import itemgetter
 
 from subprocess import TimeoutExpired
 from semantic_version import Version
@@ -29,6 +30,7 @@ from ocs_ci.ocs.resources.pv import (
     verify_new_pvs_available_in_sc,
     delete_released_pvs_in_sc,
     get_pv_size,
+    get_node_pv_objs,
 )
 
 
@@ -1790,3 +1792,19 @@ def get_crashcollector_nodes():
         for crashcollector_pod_obj in crashcollector_pod_objs
     ]
     return set(crashcollector_ls)
+
+
+def add_new_disk_for_vsphere(sc_name):
+    """
+    Check the PVS in use per node, and add a new disk to the worker node with the minimum PVS.
+
+    Args:
+        sc_name (str): The storage class name
+
+    """
+    ocs_nodes = get_ocs_nodes()
+    num_of_pv_per_node_tuples = [
+        (len(get_node_pv_objs(sc_name, n.name)), n) for n in ocs_nodes
+    ]
+    node_with_min_pvs = min(num_of_pv_per_node_tuples, key=itemgetter(0))[1]
+    add_disk_to_node(node_with_min_pvs)
