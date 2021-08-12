@@ -102,7 +102,7 @@ def test_pod_io(
 
 @post_upgrade
 @bugzilla("1974343")
-@skipif_ocs_version("<=4.4")
+@skipif_ocs_version("<4.4")
 def test_pod_log_after_upgrade():
     """
     Check OSD/MON/MGR pod logs after upgrade and verify the expected log exist

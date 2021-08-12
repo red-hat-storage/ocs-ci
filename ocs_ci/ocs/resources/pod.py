@@ -1114,18 +1114,18 @@ def get_pod_obj(name, namespace=None):
 def get_pod_logs(
     pod_name,
     container=None,
-    all_containers=False,
     namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     previous=False,
+    all_containers=False,
 ):
     """
     Get logs from a given pod
 
     pod_name (str): Name of the pod
     container (str): Name of the container
-    all_containers (bool): fetch logs from all containers of the resource
     namespace (str): Namespace of the pod
     previous (bool): True, if pod previous log required. False otherwise.
+    all_containers (bool): fetch logs from all containers of the resource
 
     Returns:
         str: Output from 'oc get logs <pod_name> command
