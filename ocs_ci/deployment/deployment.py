@@ -750,7 +750,9 @@ class Deployment(object):
         if config.ENV_DATA.get("is_multus_enabled"):
             cluster_data["spec"]["network"] = {
                 "provider": "multus",
-                "selectors": {"public": "ocs-public"},
+                "selectors": {
+                    "public": f"{defaults.ROOK_CLUSTER_NAMESPACE}/ocs-public"
+                },
             }
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
