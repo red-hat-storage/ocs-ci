@@ -190,7 +190,7 @@ class TestAddNode(E2ETest):
         """
 
         # Get info from SCALE_DATA_FILE for validation
-        if SCALE_DATA_FILE:
+        if os.path.exists(SCALE_DATA_FILE):
             file_data = templating.load_yaml(SCALE_DATA_FILE)
             namespace = file_data.get("NAMESPACE")
             pod_scale_list = file_data.get("POD_SCALE_LIST")
@@ -228,7 +228,7 @@ class TestAddNode(E2ETest):
         """
 
         # Get info from SCALE_DATA_FILE for validation
-        if SCALE_DATA_FILE:
+        if os.path.exists(SCALE_DATA_FILE):
             file_data = templating.load_yaml(SCALE_DATA_FILE)
             namespace = file_data.get("NAMESPACE")
             pod_obj_file_list = file_data.get("POD_OBJ_FILE_LIST")
