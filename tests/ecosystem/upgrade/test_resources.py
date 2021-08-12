@@ -8,10 +8,16 @@ from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade,
     post_upgrade,
     skipif_aws_creds_are_missing,
+    bugzilla,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import ocp
-from ocs_ci.ocs.resources.pod import wait_for_storage_pods
+from ocs_ci.ocs.resources.pod import (
+    wait_for_storage_pods,
+    get_osd_pods,
+    get_mon_pods,
+    get_mgr_pods,
+)
 from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
@@ -90,3 +96,21 @@ def test_pod_io(
         helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING, timeout=600)
         job_name = pod.get_labels().get("job-name")
         job_obj.delete(resource_name=job_name)
+
+
+@post_upgrade
+@bugzilla("1974343")
+def test_pod_log_after_upgrade():
+    """
+    Check OSD/MON/MGR pod logs after upgrade and verify the expected log exist
+
+    """
+    osd_pod_objs = get_osd_pods() + get_mon_pods() + get_mgr_pods()
+    pod_names = [osd_pod_obj.name for osd_pod_obj in osd_pod_objs]
+    expected_log_after_upgrade = "set uid:gid to 167:167 (ceph:ceph)"
+    for pod_name in pod_names:
+        pod_logs = helpers.get_pod_logs(pod_name=pod_name)
+        assert expected_log_after_upgrade in pod_logs, (
+            f"The expected log after upgrade '{expected_log_after_upgrade}' does not exist"
+            f" on pod {pod_name}"
+        )
