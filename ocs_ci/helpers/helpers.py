@@ -226,8 +226,7 @@ def create_pod(
             pod_data["spec"]["template"]["spec"]["containers"][0][
                 "volumeDevices"
             ] = temp_dict
-
-        elif pod_dict_path == constants.NGINX_POD_YAML:
+        else:
             temp_dict = [
                 {
                     "devicePath": raw_block_device,
@@ -239,13 +238,6 @@ def create_pod(
             ]
             del pod_data["spec"]["containers"][0]["volumeMounts"]
             pod_data["spec"]["containers"][0]["volumeDevices"] = temp_dict
-        else:
-            pod_data["spec"]["containers"][0]["volumeDevices"][0][
-                "devicePath"
-            ] = raw_block_device
-            pod_data["spec"]["containers"][0]["volumeDevices"][0]["name"] = (
-                pod_data.get("spec").get("volumes")[0].get("name")
-            )
 
     if command:
         if dc_deployment:
