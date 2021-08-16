@@ -301,13 +301,8 @@ class Pod(OCS):
         fio_filename=None,
         bs="4K",
         end_fsync=0,
-<<<<<<< HEAD
         invalidate=None,
         verify=config.RUN["io_verification_method"],
-
-=======
-        verify=config.RUN["io_verification_method"],
->>>>>>> 3b00bf1e (Added io_verification_method param on default_config file)
     ):
         """
         Execute FIO on a pod
