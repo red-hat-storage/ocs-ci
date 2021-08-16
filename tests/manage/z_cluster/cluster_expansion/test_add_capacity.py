@@ -29,7 +29,7 @@ from ocs_ci.ocs.cluster import (
 )
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
-from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions, add_capacity_ui
+from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions, ui_add_capacity
 
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ def add_capacity_test():
     existing_osd_pod_names = [pod.name for pod in existing_osd_pods]
     if ui_add_capacity_conditions():
         try:
-            result = add_capacity_ui(osd_size)
+            result = ui_add_capacity(osd_size)
         except Exception as e:
             logging.error(
                 f"Add capacity via UI is not applicable and CLI method will be done. The error is {e}"

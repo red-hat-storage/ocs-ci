@@ -135,9 +135,9 @@ def ui_add_capacity_conditions():
         return True
 
 
-def add_capacity_ui(osd_size_capacity_requested):
+def ui_add_capacity(osd_size_capacity_requested):
     """
-    Add storage capacity to the cluster
+    Add Capacity via UI
 
     Args:
         osd_size_capacity_requested (int): Requested osd size capacity
