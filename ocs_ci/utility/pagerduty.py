@@ -54,13 +54,16 @@ class PagerDutyAPI(object):
         self._token = token or config.AUTH["pagerduty"]["api_key"]
         self.set_pagerduty_secret
 
-    def get(self, resource):
+    def get(self, resource, payload=None):
         """
         Get resources from PagerDuty API.
 
         Args:
             resource (str): Represents part of uri that specifies given
                 resource
+            payload (dict): Provide parameters to GET API call.
+                e.g. for `incidents` resource this can be
+                {"service_ids[]": <id>, "since": "2021-07-15T00:00:00Z", "time_zone": "UTC"}
 
         Returns:
             dict: Response from Prometheus alerts api
@@ -74,10 +77,12 @@ class PagerDutyAPI(object):
 
         logger.debug(f"GET {self._endpoint + pattern}")
         logger.debug(f"headers={headers}")
+        logger.debug(f"params={payload}")
 
         response = requests.get(
             self._endpoint + pattern,
             headers=headers,
             verify=False,
+            params=payload,
         )
         return response
