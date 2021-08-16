@@ -54,7 +54,10 @@ class DeploymentFactory(object):
             from ocs_ci.deployment.ibm import IBMDeployment
 
             self.cls_map["powervs_upi"] = IBMDeployment
-        elif self.deployment_platform == constants.BAREMETAL_PLATFORM:
+        elif (
+            self.deployment_platform == constants.BAREMETAL_PLATFORM
+            or self.deployment_platform == constants.BAREMETALPSI_PLATFORM
+        ):
             from .baremetal import BAREMETALUPI, BaremetalPSIUPI
 
             self.cls_map.update(
