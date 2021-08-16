@@ -22,9 +22,8 @@ from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.node import get_osds_per_node, add_new_disk_for_vsphere
 from ocs_ci.utility import localstorage, utils, templating, kms as KMS
 from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import run_cmd, get_ocp_version
-from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
-from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
+from ocs_ci.utility.utils import run_cmd
+
 
 log = logging.getLogger(__name__)
 
@@ -539,74 +538,57 @@ def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=
         else:
             log.info(lv_lvs_data)
             raise ResourceNotFoundError("No LocalVolume and LocalVolume Set found")
-    ocp_version = get_ocp_version()
     platform = config.ENV_DATA.get("platform", "").lower()
-
-    if (
-        ocp_version == "4.7"
-        and (
-            platform == constants.AWS_PLATFORM or platform == constants.VSPHERE_PLATFORM
+    if lvpresent:
+        ocp_obj = OCP(
+            kind="localvolume", namespace=config.ENV_DATA["local_storage_namespace"]
         )
-        and (not is_lso)
-    ):
-        logging.info("Add capacity via UI")
-        setup_ui = login_ui()
-        add_ui_obj = AddReplaceDeviceUI(setup_ui)
-        add_ui_obj.add_capacity_ui()
-        close_browser(setup_ui)
-    else:
-        if lvpresent:
-            ocp_obj = OCP(
-                kind="localvolume", namespace=config.ENV_DATA["local_storage_namespace"]
-            )
-            localvolume_data = ocp_obj.get(resource_name="local-block")
-            device_list = localvolume_data["spec"]["storageClassDevices"][0][
-                "devicePaths"
-            ]
-            final_device_list = localstorage.get_new_device_paths(
-                device_sets_required, osd_size_capacity_requested
-            )
-            device_list.sort()
-            final_device_list.sort()
-            if device_list == final_device_list:
-                raise ResourceNotFoundError("No Extra device found")
-            param = f"""[{{ "op": "replace", "path": "/spec/storageClassDevices/0/devicePaths",
-                                                     "value": {final_device_list}}}]"""
-            log.info(f"Final device list : {final_device_list}")
-            lvcr = localstorage.get_local_volume_cr()
-            log.info("Patching Local Volume CR...")
-            lvcr.patch(
-                resource_name=lvcr.get()["items"][0]["metadata"]["name"],
-                params=param.strip("\n"),
-                format_type="json",
-            )
-            localstorage.check_pvs_created(
-                int(len(final_device_list) / new_storage_devices_sets_count)
-            )
-        if lv_set_present:
-            if check_pvs_present_for_ocs_expansion():
-                log.info("Found Extra PV")
-            else:
-                if (
-                    platform == constants.VSPHERE_PLATFORM
-                    and add_extra_disk_to_existing_worker
-                ):
-                    log.info("No Extra PV found")
-                    log.info("Adding Extra Disk to existing VSphere Worker node")
-                    add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
-                else:
-                    raise PVNotSufficientException(
-                        f"No Extra PV found in {constants.OPERATOR_NODE_LABEL}"
-                    )
-        sc = get_storage_cluster()
-        # adding the storage capacity to the cluster
-        params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
-                    "value": {new_storage_devices_sets_count}}}]"""
-        sc.patch(
-            resource_name=sc.get()["items"][0]["metadata"]["name"],
-            params=params.strip("\n"),
+        localvolume_data = ocp_obj.get(resource_name="local-block")
+        device_list = localvolume_data["spec"]["storageClassDevices"][0]["devicePaths"]
+        final_device_list = localstorage.get_new_device_paths(
+            device_sets_required, osd_size_capacity_requested
+        )
+        device_list.sort()
+        final_device_list.sort()
+        if device_list == final_device_list:
+            raise ResourceNotFoundError("No Extra device found")
+        param = f"""[{{ "op": "replace", "path": "/spec/storageClassDevices/0/devicePaths",
+                                                 "value": {final_device_list}}}]"""
+        log.info(f"Final device list : {final_device_list}")
+        lvcr = localstorage.get_local_volume_cr()
+        log.info("Patching Local Volume CR...")
+        lvcr.patch(
+            resource_name=lvcr.get()["items"][0]["metadata"]["name"],
+            params=param.strip("\n"),
             format_type="json",
         )
+        localstorage.check_pvs_created(
+            int(len(final_device_list) / new_storage_devices_sets_count)
+        )
+    if lv_set_present:
+        if check_pvs_present_for_ocs_expansion():
+            log.info("Found Extra PV")
+        else:
+            if (
+                platform == constants.VSPHERE_PLATFORM
+                and add_extra_disk_to_existing_worker
+            ):
+                log.info("No Extra PV found")
+                log.info("Adding Extra Disk to existing VSphere Worker node")
+                add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
+            else:
+                raise PVNotSufficientException(
+                    f"No Extra PV found in {constants.OPERATOR_NODE_LABEL}"
+                )
+    sc = get_storage_cluster()
+    # adding the storage capacity to the cluster
+    params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
+                "value": {new_storage_devices_sets_count}}}]"""
+    sc.patch(
+        resource_name=sc.get()["items"][0]["metadata"]["name"],
+        params=params.strip("\n"),
+        format_type="json",
+    )
     return new_storage_devices_sets_count
 
 
