@@ -31,8 +31,8 @@ log = logging.getLogger(__name__)
 @pytest.mark.parametrize(
     argnames=["kv_version"],
     argvalues=[
-        pytest.param("v1", marks=pytest.mark.polarion_id("OCS-2585")),
-        pytest.param("v2", marks=pytest.mark.polarion_id("OCS-2592")),
+        pytest.param("v1", marks=pytest.mark.polarion_id("OCS-2612")),
+        pytest.param("v2", marks=pytest.mark.polarion_id("OCS-2613")),
     ],
 )
 @tier1
