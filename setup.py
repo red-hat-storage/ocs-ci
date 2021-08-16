@@ -26,7 +26,7 @@ setup(
         "openshift==0.11.2",
         "boto3==1.14.7",
         "munch==2.5.0",
-        "pytest==5.3.5",
+        "pytest==6.2.5",
         "pytest-logger==0.5.1",
         'dataclasses==0.7;python_version < "3.7"',
         "pytest-html==2.1.1",
