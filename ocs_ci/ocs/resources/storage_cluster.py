@@ -22,10 +22,9 @@ from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.node import get_osds_per_node, add_new_disk_for_vsphere
 from ocs_ci.utility import localstorage, utils, templating, kms as KMS
 from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, get_ocp_version
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
-from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions
 
 log = logging.getLogger(__name__)
 
@@ -540,8 +539,16 @@ def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=
         else:
             log.info(lv_lvs_data)
             raise ResourceNotFoundError("No LocalVolume and LocalVolume Set found")
+    ocp_version = get_ocp_version()
     platform = config.ENV_DATA.get("platform", "").lower()
-    if ui_add_capacity_conditions():
+
+    if (
+        ocp_version == "4.7"
+        and (
+            platform == constants.AWS_PLATFORM or platform == constants.VSPHERE_PLATFORM
+        )
+        and (not is_lso)
+    ):
         logging.info("Add capacity via UI")
         setup_ui = login_ui()
         add_ui_obj = AddReplaceDeviceUI(setup_ui)
