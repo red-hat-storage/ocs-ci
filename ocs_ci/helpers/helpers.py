@@ -2056,7 +2056,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
     return f"{base_command}{cmd}{string_wrapper}"
 
 
-def current_test_name():
+def get_current_test_name():
     """
     A function to return the current test name in a parsed manner
     Returns:
@@ -2080,7 +2080,7 @@ def setup_pod_directories(pod_obj, dir_names):
 
     """
     full_dirs_path = []
-    test_name = current_test_name()
+    test_name = get_current_test_name()
     pod_obj.exec_cmd_on_pod(command=f"mkdir -p {test_name}")
     for cur_dir in dir_names:
         current = f"{test_name}/{cur_dir}"
