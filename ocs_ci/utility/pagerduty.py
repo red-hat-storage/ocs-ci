@@ -86,3 +86,77 @@ class PagerDutyAPI(object):
             params=payload,
         )
         return response
+
+    def create(self, resource, payload=None):
+        """
+        Post resources from PagerDuty API.
+
+        Args:
+            resource (str): Represents part of uri that specifies given
+                resource
+            payload (dict): Provide parameters to POST API call.
+
+        Returns:
+            dict: Response from Prometheus alerts api
+
+        """
+        pattern = f"/{resource}"
+        headers = {
+            "Authorization": f"Token {self._token}",
+            "Accept": "application/vnd.pagerduty+json;version=2",
+            "Content-Type": "application/json",
+        }
+
+        logger.debug(f"POST {self._endpoint + pattern}")
+        logger.debug(f"headers={headers}")
+        logger.debug(f"params={payload}")
+
+        response = requests.post(
+            self._endpoint + pattern,
+            headers=headers,
+            verify=False,
+            params=payload,
+        )
+        return response
+
+    def get_default_escalation_policy_id(self):
+        """
+        Get default account escalation policy from PagerDuty API.
+
+        Returns:
+            str: Escalation policy reference
+
+        """
+        default = None
+        policies = self.get("escalation_policies").json()
+        for policy in policies["escalation_policies"]:
+            if policy["name"] == "Default":
+                default = policy["id"]
+        if not default:
+            logger.warning("PagerDuty default escalation policy was not found")
+        return default
+
+    def get_service_dict(self):
+        """
+        Get a structure prepared to be a payload for service creation via API.
+
+        Returns:
+            dict: Structure containing all data required to by PagerDuty API
+                in order to create a service
+
+        """
+        cluster_name = config.ENV_DATA["cluster_name"]
+        default_policy = self.get_default_escelation_policy_id()
+        return {
+            "service": {
+                "type": "service",
+                "name": cluster_name,
+                "description": f"Service for cluster {cluster_name}",
+                "status": "active",
+                "escalation_policy": {
+                    "id": default_policy,
+                    "type": "escalation_policy_reference",
+                },
+                "alert_creation": "create_alerts_and_incidents",
+            }
+        }

@@ -324,6 +324,24 @@ def log_ocs_version(cluster):
 
 
 @pytest.fixture(scope="session", autouse=True)
+def pagerduty_service():
+    """
+    Create a Service in PagerDuty service. The service represents a cluster instance.
+
+    Returns:
+        str: PagerDuty service json
+
+    """
+    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+        pagerduty_api = pagerduty.PagerDutyAPI()
+        payload = pagerduty.get_service_dict()
+        service_response = pagerduty_api.create("service", payload=payload)
+        msg = f"Request {service_response.request.url} failed"
+        assert service_response.ok, msg
+        return service_response.json()
+
+
+@pytest.fixture(scope="session", autouse=True)
 def pagerduty_integration():
     """
     Update ocs-converged-pagerduty secret with correct integration key.
