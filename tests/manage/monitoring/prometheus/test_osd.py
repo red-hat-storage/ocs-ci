@@ -4,7 +4,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 
 
-@pytest.mark.polarion_id("")  # TODO
+@pytest.mark.polarion_id("OCS-2615")
 @pytest.mark.bugzilla("1935342")
 @tier4c
 def test_osd_flapping_alert(measure_ceph_osd_flapping):
