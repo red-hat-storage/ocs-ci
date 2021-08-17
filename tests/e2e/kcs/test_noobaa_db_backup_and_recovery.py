@@ -69,7 +69,7 @@ class TestNoobaaBackupAndRecovery(E2ETest):
 
         request.addfinalizer(finalizer)
 
-    def test_noobaa_backup_and_recovery(
+    def test_noobaa_db_backup_and_recovery(
         self,
         pvc_factory,
         pod_factory,

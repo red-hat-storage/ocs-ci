@@ -3375,10 +3375,10 @@ def get_failure_domain():
 def modify_statefulset_replica_count(statefulset_name, replica_count):
     """
     Function to modify statefulset replica count,
-    i.e to scale up or down deployment
+    i.e to scale up or down statefulset
 
     Args:
-        deployment_name (str): Name of statefulset
+        statefulset_namee (str): Name of statefulset
         replica_count (int): replica count to be changed to
 
     Returns:
