@@ -238,7 +238,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         pod_obj = pod_factory(interface=interface)
         pod_obj.run_io(storage_type="fs", size="500M")
 
-    @bugzilla("1858195")
+    @bugzilla("1969733")
     @pytest.mark.polarion_id("OCS-2611")
     def test_del_mon_svc(self, multi_pvc_factory):
         """
@@ -319,6 +319,9 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         # Verify everything running fine
         log.info("Verifying All resources are Running and matches expected result")
         self.sanity_helpers.health_check(tries=120)
+
+        # Validate all storage pods are running
+        wait_for_storage_pods()
 
         # Create and delete resources
         self.Sanity.create_pvc_delete(multi_pvc_factory=multi_pvc_factory)
