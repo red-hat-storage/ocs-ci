@@ -2,6 +2,8 @@ import collections
 import logging
 import pytest
 
+from semantic_version import Version
+
 from ocs_ci.framework.pytest_customization.marks import bugzilla
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -108,7 +110,11 @@ class TestCephDefaultValuesCheck(ManageTest):
             "Validating that the Ceph values, configured by ceph-config-override "
             "confiMap, match the ones stored in ocs-ci"
         )
-        stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
+        ocs_version = config.ENV_DATA["ocs_version"]
+        if Version.coerce(ocs_version) < Version.coerce("4.8"):
+            stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
+        else:
+            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_48.split("\n")
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
             f"The Ceph config, set by {constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP} "
             f"is different than the expected. Please inform OCS-QE about this discrepancy. "

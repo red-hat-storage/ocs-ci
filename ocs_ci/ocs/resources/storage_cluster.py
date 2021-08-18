@@ -720,8 +720,13 @@ def setup_ceph_debug():
     ceph_debug_log_configmap_data = templating.load_yaml(
         constants.CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP
     )
+    ocs_version = config.ENV_DATA["ocs_version"]
+    if Version.coerce(ocs_version) < Version.coerce("4.8"):
+        stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
+    else:
+        stored_values = constants.ROOK_CEPH_CONFIG_VALUES_48.split("\n")
     ceph_debug_log_configmap_data["data"]["config"] = (
-        constants.ROOK_CEPH_CONFIG_VALUES + constants.CEPH_DEBUG_CONFIG_VALUES
+        stored_values + constants.CEPH_DEBUG_CONFIG_VALUES
     )
 
     ceph_configmap_yaml = tempfile.NamedTemporaryFile(
