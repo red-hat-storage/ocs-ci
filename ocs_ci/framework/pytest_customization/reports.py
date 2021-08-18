@@ -42,8 +42,6 @@ def pytest_runtest_makereport(item, call):
     """
     Add extra column( Log File) and link the log file location
     """
-    from pytest_reportportal import RPLogHandler
-
     pytest_html = item.config.pluginmanager.getplugin("html")
     outcome = yield
     report = outcome.get_result()
@@ -51,10 +49,11 @@ def pytest_runtest_makereport(item, call):
     extra = getattr(report, "extra", [])
 
     if report.when == "call":
-        if isinstance(logging.getLogger().handlers[1], RPLogHandler):
-            log_file = logging.getLogger().handlers[2].baseFilename
-        else:
-            log_file = logging.getLogger().handlers[1].baseFilename
+        log_file = ""
+        for handler in logging.getLogger().handlers:
+            if isinstance(handler, logging.FileHandler):
+                log_file = handler.baseFilename
+                break
         extra.append(pytest_html.extras.url(log_file, name="Log File"))
         report.extra = extra
         item.session.results[item] = report
