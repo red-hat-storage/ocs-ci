@@ -46,6 +46,7 @@ class OCP(object):
         namespace=None,
         resource_name="",
         selector=None,
+        field_selector=None,
     ):
         """
         Initializer function
@@ -57,6 +58,8 @@ class OCP(object):
             resource_name (str): Resource name
             selector (str): The label selector to look for. It has higher
                 priority than resource_name and is used instead of the name.
+            field_selector (str): Selector (field query) to filter on, supports
+                '=', '==', and '!='. (e.g. status.phase=Running)
         """
         self._api_version = api_version
         self._kind = kind
@@ -64,6 +67,7 @@ class OCP(object):
         self._resource_name = resource_name
         self._data = {}
         self.selector = selector
+        self.field_selector = field_selector
 
     @property
     def api_version(self):
@@ -192,6 +196,7 @@ class OCP(object):
         retry=0,
         wait=3,
         dont_raise=False,
+        field_selector=None,
     ):
         """
         Get command - 'oc get <resource>'
@@ -204,6 +209,8 @@ class OCP(object):
             retry (int): Number of attempts to retry to get resource
             wait (int): Number of seconds to wait between attempts for retry
             dont_raise (bool): If True will raise when get is not found
+            field_selector (str): Selector (field query) to filter on, supports
+                '=', '==', and '!='. (e.g. status.phase=Running)
 
         Example:
             get('my-pv1')
@@ -215,7 +222,8 @@ class OCP(object):
         """
         resource_name = resource_name if resource_name else self.resource_name
         selector = selector if selector else self.selector
-        if selector:
+        field_selector = field_selector if field_selector else self.field_selector
+        if selector or field_selector:
             resource_name = ""
         command = f"get {self.kind} {resource_name}"
         if all_namespaces and not self.namespace:
@@ -224,6 +232,8 @@ class OCP(object):
             command += f" -n {self.namespace}"
         if selector is not None:
             command += f" --selector={selector}"
+        if field_selector is not None:
+            command += f" --field-selector={field_selector}"
         if out_yaml_format:
             command += " -o yaml"
         retry += 1
