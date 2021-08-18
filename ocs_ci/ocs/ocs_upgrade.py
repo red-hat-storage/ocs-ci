@@ -62,6 +62,21 @@ def get_upgrade_image_info(old_csv_images, new_csv_images):
     """
     old_csv_images = set(old_csv_images.values())
     new_csv_images = set(new_csv_images.values())
+    # Ignore the same SHA images for BZ:
+    # https://bugzilla.redhat.com/show_bug.cgi?id=1994007
+    for old_image in old_csv_images.copy():
+        old_image_sha = None
+        if constants.SHA_SEPARATOR in old_image:
+            _, old_image_sha = old_image.split(constants.SHA_SEPARATOR)
+        if old_image_sha:
+            for new_image in new_csv_images:
+                if old_image_sha in new_csv_images:
+                    log.info(
+                        f"There is a new image: {new_image} with the same SHA "
+                        f"which is the same as the old image: {old_image}. "
+                        "This image will be ignored because of this BZ: 1994007"
+                    )
+                    old_csv_images.remove(old_image)
     old_images_for_upgrade = old_csv_images - new_csv_images
     log.info(
         f"Old images which are going to be upgraded: "
