@@ -503,6 +503,7 @@ def get_all_pods(
     selector_label="app",
     exclude_selector=False,
     wait=False,
+    field_selector=None,
 ):
     """
     Get all pods in a namespace.
@@ -514,12 +515,18 @@ def get_all_pods(
             Example: ['alertmanager','prometheus']
         selector_label (str): Label of selector (default: app).
         exclude_selector (bool): If list of the resource selector not to search with
+        field_selector (str): Selector (field query) to filter on, supports
+            '=', '==', and '!='. (e.g. status.phase=Running)
 
     Returns:
         list: List of Pod objects
 
     """
-    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    ocp_pod_obj = OCP(
+        kind=constants.POD,
+        namespace=namespace,
+        field_selector=field_selector,
+    )
     # In case of >4 worker nodes node failures automatic failover of pods to
     # other nodes will happen.
     # So, we are waiting for the pods to come up on new node
