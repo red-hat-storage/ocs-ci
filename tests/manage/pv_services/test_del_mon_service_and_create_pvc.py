@@ -324,4 +324,4 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         wait_for_storage_pods()
 
         # Create and delete resources
-        self.Sanity.create_pvc_delete(multi_pvc_factory=multi_pvc_factory)
+        self.sanity_helpers.create_pvc_delete(multi_pvc_factory=multi_pvc_factory)
