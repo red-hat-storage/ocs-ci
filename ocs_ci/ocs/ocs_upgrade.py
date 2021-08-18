@@ -164,6 +164,8 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
                 selector=constants.RGW_APP_LABEL,
                 count=rgw_count,
             )
+    if upgrade_version >= parse_version("4.6"):
+        verify_pods_upgraded(old_images, selector=constants.OCS_METRICS_EXPORTER)
 
 
 class OCSUpgrade(object):
