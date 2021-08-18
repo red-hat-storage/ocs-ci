@@ -2,7 +2,10 @@ import logging
 import pytest
 import time
 
-from ocs_ci.framework.pytest_customization.marks import skipif_vsphere_ipi
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_vsphere_ipi,
+    skipif_ibm_cloud,
+)
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import default_storage_class
@@ -124,6 +127,7 @@ class TestAMQNodeReboot(E2ETest):
             thread.result(timeout=1800)
 
     @pytest.mark.polarion_id("OCS-1278")
+    @skipif_ibm_cloud
     def test_amq_after_shutdown_and_recovery_worker_node(self, nodes, amq_setup):
         """
         Test case to validate shutdown and recovery node
