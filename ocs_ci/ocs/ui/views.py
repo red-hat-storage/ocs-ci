@@ -311,7 +311,7 @@ page_nav = {
     "quickstarts": ('a[href="/quickstart"]', By.CSS_SELECTOR),
 }
 
-infra = {
+add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
         By.CSS_SELECTOR,
@@ -395,15 +395,15 @@ locators = {
         "bucketclass": bucketclass,
         "mcg_stores": mcg_stores,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8},
-        "infra": infra,
         "validation": {**validation, **validation_4_8},
+        "add_capacity": add_capacity,
     },
     "4.7": {
         "login": login,
         "page": page_nav,
         "deployment": {**deployment, **deployment_4_7},
         "pvc": {**pvc, **pvc_4_7},
-        "infra": infra,
+        "add_capacity": add_capacity,
         "validation": {**validation, **validation_4_7},
     },
     "4.6": {
@@ -411,6 +411,5 @@ locators = {
         "page": page_nav,
         "deployment": {**deployment, **deployment_4_6},
         "pvc": pvc,
-        "infra": infra,
     },
 }
