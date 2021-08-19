@@ -169,3 +169,34 @@ class ValidationUI(PageNavigator):
         for err in self.err_list:
             logger.error(err)
         assert len(self.err_list) == 0, f"{self.err_list}"
+
+    def check_capacity_breakdown(self, project_name, pod_name):
+        """
+        Check Capacity Breakdown
+
+        Args:
+            project_name (str): The name of the project
+            pod_name (str): The name of pod
+
+        Returns:
+            bool: True if project_name and pod_name exist on capacity_breakdown, False otherwise
+
+        """
+        self.navigate_overview_page()
+        self.choose_expanded_mode(
+            mode=True, locator=self.validation_loc["capacity_breakdown_options"]
+        )
+        self.do_click(self.validation_loc["capacity_breakdown_projects"])
+        self.take_screenshot()
+        if not self.check_element_text(expected_text=project_name):
+            logger.error(f"The project {project_name} not found on capacity_breakdown")
+            return False
+        self.choose_expanded_mode(
+            mode=True, locator=self.validation_loc["capacity_breakdown_options"]
+        )
+        self.do_click(self.validation_loc["capacity_breakdown_pods"])
+        self.take_screenshot()
+        if not self.check_element_text(expected_text=pod_name):
+            logger.error(f"The pod {pod_name} not found on capacity_breakdown")
+            return False
+        return True
