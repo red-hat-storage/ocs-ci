@@ -9,15 +9,18 @@ import pathlib
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility import templating, utils
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs import machine as machine_utils
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
+from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
 from ocs_ci.utility.utils import ocsci_log_path, ceph_health_check
 from ocs_ci.ocs import constants, cluster, machine, node
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
-from ocs_ci.ocs.node import get_nodes, get_worker_nodes
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
+from ocs_ci.ocs.node import get_nodes, get_worker_nodes, wait_for_nodes_status
 from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     UnexpectedBehaviour,
@@ -1526,3 +1529,45 @@ def validate_all_pods_and_check_state(namespace, pod_scale_list):
             f"All the expected {len(pod_running_list)} PODs are in Running state"
         )
         return True
+
+
+def validate_node_and_oc_services_are_up_after_reboot(wait_time=40):
+    """
+    Function to validation all the nodes(worker/master), pods
+    and services are up and running in the OCP cluster
+
+    Args:
+        wait_time (int): Wait time before validating nodes and services
+
+    """
+
+    try:
+        # Wait some time after rebooting node
+        logging.info(f"Waiting {wait_time} seconds...")
+        time.sleep(wait_time)
+
+        # Validate all nodes and services are in READY state and up
+        retry(
+            (
+                CommandFailed,
+                TimeoutError,
+                AssertionError,
+                ResourceWrongStatusException,
+            ),
+            tries=60,
+            delay=15,
+        )(wait_for_cluster_connectivity)(tries=400)
+        retry(
+            (
+                CommandFailed,
+                TimeoutError,
+                AssertionError,
+                ResourceWrongStatusException,
+            ),
+            tries=60,
+            delay=15,
+        )(wait_for_nodes_status)(timeout=900)
+        return True
+    except Exception as e:
+        logging.warning(f"Exception in validate_node_and_oc_services {e}")
+        return False
