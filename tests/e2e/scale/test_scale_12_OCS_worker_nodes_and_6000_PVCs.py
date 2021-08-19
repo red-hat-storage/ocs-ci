@@ -4,12 +4,13 @@ import os
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import utils, templating
-from ocs_ci.ocs import constants, scale_lib, machine
 from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.helpers import disruption_helpers
-from ocs_ci.ocs.node import get_worker_nodes
+from ocs_ci.ocs.resources.pod import wait_for_storage_pods
+from ocs_ci.ocs import constants, scale_lib, machine, platform_nodes
+from ocs_ci.ocs.node import get_worker_nodes, get_nodes
 from ocs_ci.framework.testlib import (
     scale_changed_layout,
     E2ETest,
@@ -219,6 +220,70 @@ class TestAddNode(E2ETest):
 
         # Check ceph health status
         utils.ceph_health_check(tries=20)
+
+    @ignore_leftovers
+    @pytest.mark.skipif("TestAddNode.skip_all")
+    @pytest.mark.parametrize(
+        argnames=["node_type"],
+        argvalues=[
+            pytest.param(
+                *[constants.MASTER_MACHINE], marks=pytest.mark.polarion_id("OCS-763")
+            ),
+            pytest.param(
+                *[constants.WORKER_MACHINE], marks=pytest.mark.polarion_id("OCS-754")
+            ),
+        ],
+    )
+    def test_rolling_reboot_node(self, node_type):
+        """
+        Test to rolling reboot of nodes
+        """
+
+        # Get info from SCALE_DATA_FILE for validation
+        if os.path.exists(SCALE_DATA_FILE):
+            file_data = templating.load_yaml(SCALE_DATA_FILE)
+            namespace = file_data.get("NAMESPACE")
+            pod_scale_list = file_data.get("POD_SCALE_LIST")
+            pvc_scale_list = file_data.get("PVC_SCALE_LIST")
+        else:
+            raise FileNotFoundError
+
+        node_list = list()
+
+        # Rolling reboot nodes
+        if node_type == constants.WORKER_MACHINE:
+            tmp_list = get_nodes(node_type=node_type)
+            ocs_node_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+            for tmp in tmp_list:
+                if tmp.name in ocs_node_list:
+                    node_list.append(tmp)
+        else:
+            node_list = get_nodes(node_type=node_type)
+
+        factory = platform_nodes.PlatformNodesFactory()
+        nodes = factory.get_nodes_platform()
+
+        for node in node_list:
+            nodes.restart_nodes(nodes=[node])
+            scale_lib.validate_node_and_oc_services_are_up_after_reboot()
+
+        # Validate storage pods are running
+        wait_for_storage_pods()
+
+        # Validate cluster health ok and all pods are running
+        assert utils.ceph_health_check(
+            delay=180
+        ), "Ceph health in bad state after node reboots"
+
+        # Validate all PVCs from namespace are in Bound state
+        assert scale_lib.validate_all_pvcs_and_check_state(
+            namespace=namespace, pvc_scale_list=pvc_scale_list
+        )
+
+        # Validate all PODs from namespace are up and running
+        assert scale_lib.validate_all_pods_and_check_state(
+            namespace=namespace, pod_scale_list=pod_scale_list
+        )
 
     @ignore_leftovers
     @pytest.mark.skipif("TestAddNode.skip_all")
