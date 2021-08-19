@@ -58,8 +58,32 @@ def check_node_replacement_verification_steps(
         AssertionError: If the node replacement verification steps failed.
 
     """
-    new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout=1500)
-    assert new_osd_node_name, "New osd node not found"
+    min_osd_nodes = 3
+    ocs_nodes = node.get_ocs_nodes()
+
+    if len(old_osd_node_names) <= min_osd_nodes:
+        log.info(
+            "We have the minimum number of osd nodes in the cluster. "
+            "Wait for the new created worker node to appear in the osd nodes"
+        )
+        new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout=1500)
+        assert new_osd_node_name, "New osd node not found"
+    elif len(old_osd_node_names) < len(ocs_nodes):
+        log.info(
+            "We have more OCS nodes in the cluster than osd nodes. We expect that one of the "
+            "existing OCS nodes will be picked up as the new osd node instead of the old one. "
+            "Wait for one of the existing OCS nodes to appear in the osd nodes"
+        )
+        new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout=600)
+        assert new_osd_node_name, "New osd node not found"
+    else:
+        log.info(
+            f"We have more than {min_osd_nodes} osd worker nodes in the cluster, and also we "
+            f"don't have an extra OCS node to replace the old osd node. We expect that the osd nodes "
+            f"will be distributed between the existing osd nodes. We don't need to wait for the new "
+            f"created worker node to appear in the osd nodes"
+        )
+        new_osd_node_name = None
 
     assert node.node_replacement_verification_steps_ceph_side(
         old_node_name, new_node_name, new_osd_node_name
