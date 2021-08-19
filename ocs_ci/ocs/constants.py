@@ -36,7 +36,6 @@ TEMPLATE_FIO_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fio")
 TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
 TEMPLATE_JENKINS_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "jenkins")
-TEMPLATE_VDBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "vdbench")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
 TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
 TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
@@ -385,8 +384,6 @@ JENKINS_BUILDCONFIG_YAML = os.path.join(TEMPLATE_JENKINS_DIR, "buildconfig.yaml"
 
 SMALLFILE_BENCHMARK_YAML = os.path.join(TEMPLATE_SMALLFILE_DIR, "SmallFile.yaml")
 
-VDBENCH_BENCHMARK_YAML = os.path.join(TEMPLATE_VDBENCH_DIR, "VDBench.yaml")
-
 OSD_SCALE_BENCHMARK_YAML = os.path.join(
     TEMPLATE_OSD_SCALE_DIR, "osd_scale_benchmark.yaml"
 )
@@ -677,16 +674,6 @@ OCS_OPERATOR_BUNDLE_IMAGE = "quay.io/rhceph-dev/ocs-operator-bundle"
 OPENSHIFT_UPGRADE_INFO_API = (
     "https://api.openshift.com/api/upgrades_info/v1/graph?channel={channel}"
 )
-
-# VDbench benchmark related constants
-APP_NODE_LABEL = "app-node"
-VDBENCH_NODE_LABEL = "vdbench"
-VDBENCH_RESULTS_FILE = "/tmp/Results.tar.gz"
-VDBENCH_WIDTH = 4  # the width of the directory tree  that will be created
-VDBENCH_DEPTH = 4  # the depth of the directory tree  that will be created
-VDBENCH_FILE_SIZE = 1  # the file size in MB that will be created
-VDBENCH_CAP_PER_POD = 80000  # the Maximum capacity (in MB) per pod in the test
-VDBENCH_MIN_CAPACITY = 300  # minimum storage capacity (in GB) for the test to run
 
 # Platforms
 AWS_PLATFORM = "aws"
