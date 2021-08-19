@@ -23,7 +23,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_storage_pods,
     delete_pods,
 )
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -238,11 +238,79 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         pod_obj = pod_factory(interface=interface)
         pod_obj.run_io(storage_type="fs", size="500M")
 
+    @pytest.fixture()
+    def validate_all_mon_svc_are_up_at_teardown(self, request):
+        """
+        Verifies all mon services are running
+
+        """
+
+        # Get all mon services
+        mon_svc_list = get_services_by_label(
+            label=constants.MON_APP_LABEL,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+
+        # Get all mon pods
+        mon_pods_list = get_mon_pods()
+
+        def finalizer():
+
+            # Validate all mon services are running
+            if len(mon_svc_list) != len(
+                get_services_by_label(
+                    label=constants.MON_APP_LABEL,
+                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                )
+            ):
+
+                # Restart the rook-operator pod
+                operator_pod_obj = get_operator_pods()
+                delete_pods(pod_objs=operator_pod_obj)
+                POD_OBJ.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=constants.OPERATOR_LABEL,
+                )
+
+                # Wait till all mon services are up
+                for svc_list in TimeoutSampler(
+                    1200,
+                    len(mon_svc_list),
+                    get_services_by_label,
+                    constants.MON_APP_LABEL,
+                    constants.OPENSHIFT_STORAGE_NAMESPACE,
+                ):
+                    try:
+                        if len(svc_list) == len(mon_svc_list):
+                            log.info("All expected mon services are up")
+                            break
+                    except IndexError:
+                        log.error(
+                            f"All expected mon services are not up only found :{svc_list}. "
+                            f"Expected: {mon_svc_list}"
+                        )
+
+                # Wait till all mon pods running
+                POD_OBJ.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=constants.MON_APP_LABEL,
+                    resource_count=len(mon_pods_list),
+                    timeout=600,
+                    sleep=3,
+                )
+
+                # Check the ceph health OK
+                ceph_health_check(tries=90, delay=15)
+
+        request.addfinalizer(finalizer)
+
     @bugzilla("1969733")
     @pytest.mark.polarion_id("OCS-2611")
-    def test_del_mon_svc(self, multi_pvc_factory):
+    def test_del_mon_svc(
+        self, multi_pvc_factory, validate_all_mon_svc_are_up_at_teardown
+    ):
         """
-        Test to verifies same mon comes up and running
+        Test to verify same mon comes up and running
         after deleting mon services manually and joins the quorum
 
         1. Delete the mon services
@@ -253,6 +321,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         5. Create PVC, should succeeded.
 
         """
+
         self.sanity_helpers = Sanity()
 
         # Get all mon services
