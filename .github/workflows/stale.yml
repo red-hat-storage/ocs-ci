@@ -35,4 +35,3 @@ jobs:
         stale-pr-label: 'lifecycle/stale'
         exempt-issue-labels: 'lifecycle/keepalive'
         exempt-pr-labels: 'lifecycle/keepalive'
-        debug-only: true
