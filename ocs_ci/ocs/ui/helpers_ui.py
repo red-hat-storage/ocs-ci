@@ -4,7 +4,6 @@ from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.helpers.proxy import get_cluster_proxies
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
 from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count, get_osd_size
@@ -28,8 +27,7 @@ def ui_deployment_conditions():
     is_external = config.DEPLOYMENT["external_mode"]
     is_disconnected = config.DEPLOYMENT.get("disconnected")
     is_kms = config.DEPLOYMENT.get("kms_deployment")
-    http_proxy, https_proxy, no_proxy = get_cluster_proxies()
-    is_proxy = True if http_proxy else False
+    is_proxy = config.DEPLOYMENT.get("proxy")
 
     try:
         locators[ocp_version]["deployment"]
@@ -93,8 +91,7 @@ def ui_add_capacity_conditions():
     is_external = config.DEPLOYMENT["external_mode"]
     is_disconnected = config.DEPLOYMENT.get("disconnected")
     is_lso = config.DEPLOYMENT.get("local_storage")
-    http_proxy, https_proxy, no_proxy = get_cluster_proxies()
-    is_proxy = True if http_proxy else False
+    is_proxy = config.DEPLOYMENT.get("proxy")
 
     try:
         locators[ocp_version]["add_capacity"]

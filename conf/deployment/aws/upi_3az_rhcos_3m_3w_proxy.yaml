@@ -1,4 +1,6 @@
 ---
+DEPLOYMENT:
+  proxy: true
 ENV_DATA:
   platform: 'aws'
   deployment_type: 'upi'
