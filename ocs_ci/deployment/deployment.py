@@ -505,7 +505,9 @@ class Deployment(object):
                 if not is_ibm_sa_lined:
                     logger.info("Sleeping for 30 seconds before applying SA")
                     time.sleep(30)
-                    link_all_sa_and_secret_and_delete_pods(constants.OCS_SECRET, self.namespace)
+                    link_all_sa_and_secret_and_delete_pods(
+                        constants.OCS_SECRET, self.namespace
+                    )
                     is_ibm_sa_lined = True
                     logger.info("Deleting all pods in openshift-storage namespace")
                     exec_cmd(f"oc delete pod --all -n {self.namespace}")
