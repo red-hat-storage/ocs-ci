@@ -346,21 +346,27 @@ class TestPvcSnapshotPerformance(E2ETest):
         argvalues=[
             pytest.param(
                 *[32, 125000, 8, constants.CEPHBLOCKPOOL],
+                marks=[pytest.mark.polarion_id("OCS-2624")],
             ),
             pytest.param(
                 *[16, 250000, 8, constants.CEPHBLOCKPOOL],
+                marks=[pytest.mark.polarion_id("OCS-2624")],
             ),
             pytest.param(
                 *[8, 500000, 8, constants.CEPHBLOCKPOOL],
+                marks=[pytest.mark.polarion_id("OCS-2624")],
             ),
             pytest.param(
                 *[32, 125000, 8, constants.CEPHFILESYSTEM],
+                marks=[pytest.mark.polarion_id("OCS-2625")],
             ),
             pytest.param(
                 *[16, 250000, 8, constants.CEPHFILESYSTEM],
+                marks=[pytest.mark.polarion_id("OCS-2625")],
             ),
             pytest.param(
                 *[8, 500000, 8, constants.CEPHFILESYSTEM],
+                marks=[pytest.mark.polarion_id("OCS-2625")],
             ),
         ],
     )

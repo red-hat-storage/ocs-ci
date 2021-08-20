@@ -5,6 +5,7 @@ import tempfile
 import time
 
 import yaml
+import pytest
 
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
