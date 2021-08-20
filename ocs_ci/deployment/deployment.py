@@ -560,6 +560,10 @@ class Deployment(object):
             self.DEFAULT_STORAGECLASS = custom_sc["metadata"]["name"]
             run_cmd(f"oc create -f {self.CUSTOM_STORAGE_CLASS_PATH}")
 
+        # create storage system
+        if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+            exec_cmd(f"oc create -f {constants.STORAGE_SYSTEM_ODF_YAML}")
+
         # creating StorageCluster
         if config.DEPLOYMENT.get("kms_deployment"):
             kms = KMS.get_kms_deployment()
