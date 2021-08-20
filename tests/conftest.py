@@ -365,7 +365,7 @@ def pagerduty_integration(pagerduty_service):
             "Looking if Prometheus integration for pagerduty service with id "
             f"{service_id} exists"
         )
-        pagerduty_key = None
+        integration_key = None
         for integration in pagerduty_service.get("integrations"):
             if integration["summary"] == "Prometheus":
                 log.info(
