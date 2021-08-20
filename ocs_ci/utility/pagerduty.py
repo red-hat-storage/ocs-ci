@@ -32,6 +32,7 @@ def set_pagerduty_integration_secret(integration_key):
         secret_file.write(secret_data)
         secret_file.flush()
         exec_cmd(f"oc apply --kubeconfig {kubeconfig} -f {secret_file.name}")
+    logger.info("New integration key was set.")
 
 
 class PagerDutyAPI(object):
@@ -124,7 +125,7 @@ class PagerDutyAPI(object):
         Get default account escalation policy from PagerDuty API.
 
         Returns:
-            str: Escalation policy reference
+            str: Escalation policy id
 
         """
         default = None
@@ -135,6 +136,26 @@ class PagerDutyAPI(object):
         if not default:
             logger.warning("PagerDuty default escalation policy was not found")
         return default
+
+    def get_vendor_id(self, name):
+        """
+        Get id of vendor with provided name from PagerDuty API.
+
+        Args:
+            name (str): Vendor name
+
+        Returns:
+            str: Vendor id
+
+        """
+        vendor_id = None
+        vendors = self.get("vendors").json()
+        for vendor in vendors["vendors"]:
+            if vendor["name"] == name:
+                vendor_id = vendor["id"]
+        if not vendor_id:
+            logger.warning(f"PagerDuty vendor {name} was not found")
+        return vendor_id
 
     def get_service_dict(self):
         """
@@ -158,5 +179,27 @@ class PagerDutyAPI(object):
                     "type": "escalation_policy_reference",
                 },
                 "alert_creation": "create_alerts_and_incidents",
+            }
+        }
+
+    def get_integration_dict(self, vendor_name):
+        """
+        Get a structure prepared to be a payload for integration creation via API.
+
+        Args:
+            vendor_name (str): Name of vendor that is used in integration
+
+        Returns:
+            dict: Structure containing all data required to by PagerDuty API
+                in order to create an integration
+
+        """
+
+        vendor_id = self.get_vendor_id("Prometheus")
+        return {
+            "integration": {
+                "type": "generic_events_api_inbound_integration",
+                "name": "Prometheus",
+                "vendor": {"type": "vendor_reference", "id": vendor_id},
             }
         }

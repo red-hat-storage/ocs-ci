@@ -323,7 +323,7 @@ def log_ocs_version(cluster):
     log.info("human readable ocs version info written into %s", file_name)
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def pagerduty_service():
     """
     Create a Service in PagerDuty service. The service represents a cluster instance.
@@ -334,22 +334,55 @@ def pagerduty_service():
     """
     if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
         pagerduty_api = pagerduty.PagerDutyAPI()
-        payload = pagerduty.get_service_dict()
-        service_response = pagerduty_api.create("service", payload=payload)
+        payload = pagerduty_api.get_service_dict()
+        service_response = pagerduty_api.create("services", payload=payload)
         msg = f"Request {service_response.request.url} failed"
         assert service_response.ok, msg
         return service_response.json()
+    else:
+        log.info(
+            "PagerDuty service is not created because "
+            f"{constants.OPENSHIFT_DEDICATED_PLATFORM} "
+            "is not used"
+        )
+        return None
 
 
 @pytest.fixture(scope="session", autouse=True)
-def pagerduty_integration():
+def pagerduty_integration(pagerduty_service):
     """
-    Update ocs-converged-pagerduty secret with correct integration key.
-    This is currently applicable only for ODF Managed Service.
+    Create a new Pagerduty integration for service from pagerduty_service
+    fixture if it doesn' exist. Update ocs-converged-pagerduty secret with
+    correct integration key. This is currently applicable only for ODF
+    Managed Service.
 
     """
     if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
-        integration_key = config.AUTH["pagerduty"]["integration_key"]
+        service_id = pagerduty_service["id"]
+        pagerduty_api = pagerduty.PagerDutyAPI()
+
+        log.info(
+            "Looking if Prometheus integration for pagerduty service with id "
+            f"{service_id} exists"
+        )
+        pagerduty_key = None
+        for integration in pagerduty_service.get("integrations"):
+            if integration["summary"] == "Prometheus":
+                log.info(
+                    "Prometheus integration already exists. "
+                    "Skipping creation of new one."
+                )
+                integration_key = integration["integration_key"]
+                break
+
+        if not integration_key:
+            payload = pagerduty_api.get_integration_dict("Prometheus")
+            integration_response = pagerduty_api.create(
+                f"services/{service_id}/integrations", payload=payload
+            )
+            msg = f"Request {integration_response.request.url} failed"
+            assert integration_response.ok, msg
+            integration_key = integration_response.json()["integration_key"]
         pagerduty.set_pagerduty_integration_secret(integration_key)
 
 
