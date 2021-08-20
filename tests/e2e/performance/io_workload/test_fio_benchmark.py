@@ -10,7 +10,6 @@ from ocs_ci.framework import config
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import constants
-from ocs_ci.utility.performance_dashboard import push_perf_dashboard
 from ocs_ci.framework.testlib import performance, skipif_ocs_version
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.helpers.helpers import get_full_test_logs_path
@@ -127,35 +126,6 @@ class FIOResultsAnalyse(PerfResult):
                 f"Variance - {variance}"
             )
         # Todo: Fail test if 5% deviation from benchmark value
-
-    def codespeed_push(self, dev_mode=False):
-        """
-        Pushing the results into codespeed, for random test only!
-
-        Args:
-            dev_mode (bool): does the test run in development mode, if true, don't push the results.
-        """
-
-        # do not push results in case of development run
-        if dev_mode:
-            return
-
-        # in case of io pattern is sequential - do nothing
-        if self.results["io_pattern"] == "sequential":
-            return
-
-        # in case of random test - push the results
-        reads = self.all_results["4KiB"]["randread"]["IOPS"]
-        writes = self.all_results["4KiB"]["randwrite"]["IOPS"]
-        r_bw = self.all_results["1024KiB"]["randread"]["IOPS"]
-        w_bw = self.all_results["1024KiB"]["randwrite"]["IOPS"]
-
-        # Pushing the results into codespeed
-        log.info(
-            f"Pushing to codespeed : Read={reads} ; Write={writes} ; "
-            f"R-BW={r_bw} ; W-BW={w_bw}"
-        )
-        push_perf_dashboard(self.results["storageclass"], reads, writes, r_bw, w_bw)
 
 
 @performance
