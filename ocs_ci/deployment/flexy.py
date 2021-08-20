@@ -17,6 +17,7 @@ import shutil
 
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants
+from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility.utils import (
     clone_repo,
     exec_cmd,
@@ -358,10 +359,22 @@ class FlexyBase(object):
         - configure proxy server (disconnected cluster)
         - configure ntp (if required)
         """
-        # Apply pull secrets on ocp cluster
         kubeconfig = os.path.join(
             self.cluster_path, config.RUN.get("kubeconfig_location")
         )
+
+        # Update kubeconfig with proxy-url (if client_http_proxy
+        # configured) to redirect client access through proxy server.
+        # Since flexy-dir is already copied to cluster-dir, we will update
+        # kubeconfig on both places.
+        flexy_kubeconfig = os.path.join(
+            self.flexy_host_dir,
+            constants.FLEXY_RELATIVE_CLUSTER_DIR,
+            "auth/kubeconfig",
+        )
+        update_kubeconfig_with_proxy_url_for_client(kubeconfig)
+        update_kubeconfig_with_proxy_url_for_client(flexy_kubeconfig)
+
         # load cluster info
         load_cluster_info()
 

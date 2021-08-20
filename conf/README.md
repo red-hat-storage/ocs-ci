@@ -198,6 +198,8 @@ higher priority).
 * `VAULT_BACKEND_PATH` - Vault path name used in ocs cluster
 * `VAULT_POLICY` - Vault policy name used in ocs cluster
 * `huge_pages` - True if you would like to enable HUGE PAGES.
+* `http_proxy`, `https_proxy`, `no_proxy` - proxy configuration used for accessing external resources
+* `client_http_proxy` - proxy configuration used by client to access OCP cluster
 
 #### UPGRADE
 
