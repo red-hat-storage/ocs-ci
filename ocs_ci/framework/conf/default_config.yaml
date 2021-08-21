@@ -198,6 +198,7 @@ AUTH:
 # flexy env file
 FLEXY:
   LAUNCHER_VARS: {}
+  BUSHSLICER_CONFIG: {}
 
 # Defines the configuration of external Ceph Cluster
 EXTERNAL_MODE:
