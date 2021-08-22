@@ -318,7 +318,7 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         # Wait for setup on pods to complete
         for pod_obj in pod_objs + rwx_pod_objs:
             log.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
-            for sample in TimeoutSampler(180, 2, getattr, pod_obj, "wl_setup_done"):
+            for sample in TimeoutSampler(360, 2, getattr, pod_obj, "wl_setup_done"):
                 if sample:
                     log.info(
                         f"Setup for running IO is completed on pod " f"{pod_obj.name}."
