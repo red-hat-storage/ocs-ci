@@ -188,15 +188,30 @@ class ValidationUI(PageNavigator):
         )
         self.do_click(self.validation_loc["capacity_breakdown_projects"])
         self.take_screenshot()
-        if not self.check_element_text(expected_text=project_name):
+        res = True
+        sample = TimeoutSampler(
+            timeout=30,
+            sleep=2,
+            func=self.check_element_text,
+            expected_text=project_name,
+        )
+        if not sample.wait_for_func_status(result=True):
             logger.error(f"The project {project_name} not found on capacity_breakdown")
-            return False
+            res = False
+
         self.choose_expanded_mode(
             mode=True, locator=self.validation_loc["capacity_breakdown_options"]
         )
         self.do_click(self.validation_loc["capacity_breakdown_pods"])
         self.take_screenshot()
-        if not self.check_element_text(expected_text=pod_name):
+
+        sample = TimeoutSampler(
+            timeout=30,
+            sleep=2,
+            func=self.check_element_text,
+            expected_text=pod_name,
+        )
+        if not sample.wait_for_func_status(result=True):
             logger.error(f"The pod {pod_name} not found on capacity_breakdown")
-            return False
-        return True
+            res = False
+        return res

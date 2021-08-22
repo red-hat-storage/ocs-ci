@@ -2,7 +2,13 @@ import pytest
 import logging
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import ManageTest, tier1, skipif_ui_not_support, bugzilla
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier2,
+    skipif_ui_not_support,
+    bugzilla,
+    ignore_leftovers,
+)
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs.ocp import OCP
@@ -32,6 +38,9 @@ class TestCapacityBreakdownUI(ManageTest):
             self.pvc_obj.delete()
             ocp_obj = OCP(namespace=self.project_obj.namespace)
             ocp_obj.delete_project(self.project_obj.namespace)
+            ocp_obj.wait_for_delete(
+                resource_name=self.project_obj.namespace, timeout=90
+            )
 
         request.addfinalizer(finalizer)
 
@@ -48,7 +57,8 @@ class TestCapacityBreakdownUI(ManageTest):
             ),
         ],
     )
-    @tier1
+    @tier2
+    @ignore_leftovers
     @bugzilla("1832297")
     @skipif_ui_not_support("validation")
     def test_capacity_breakdown_ui(self, setup_ui, project_name, pod_name, sc_type):
