@@ -53,6 +53,8 @@ class BaseUI:
             self.storage_class = "thin_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
             self.storage_class = "gp2_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
+            self.storage_class = "managed-premium_sc"
 
     def do_click(self, locator, timeout=30, enable_screenshot=False):
         """

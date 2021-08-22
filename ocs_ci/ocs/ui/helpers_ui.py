@@ -40,7 +40,11 @@ def ui_deployment_conditions():
         logger.error(e)
         return False
 
-    if platform not in (constants.AWS_PLATFORM, constants.VSPHERE_PLATFORM):
+    if platform not in (
+        constants.AWS_PLATFORM,
+        constants.VSPHERE_PLATFORM,
+        constants.AZURE_PLATFORM,
+    ):
         logger.info(f"OCS deployment via UI is not supported on platform {platform}")
         return False
     elif ocs_version != ocp_version or ocp_version == "4.6":
@@ -57,6 +61,9 @@ def ui_deployment_conditions():
         return False
     elif platform == constants.AWS_PLATFORM and is_lso is True:
         logger.info("OCS deployment via UI is not supported on AWS-LSO")
+        return False
+    elif platform == constants.AZURE_PLATFORM and is_lso is True:
+        logger.info("OCS deployment via UI is not supported on AZURE-LSO")
         return False
     elif ocp_version == "4.6" and is_lso is True:
         logger.info("OCS deployment via UI is not supported on LSO-OCP4.6")
@@ -105,7 +112,11 @@ def ui_add_capacity_conditions():
         logger.error(e)
         return False
 
-    if platform.lower() not in (constants.AWS_PLATFORM, constants.VSPHERE_PLATFORM):
+    if platform.lower() not in (
+        constants.AWS_PLATFORM,
+        constants.VSPHERE_PLATFORM,
+        constants.AZURE_PLATFORM,
+    ):
         logger.info(f"Add capacity via UI is not supported on platform {platform}")
         return False
     elif ocp_version not in ("4.7", "4.8"):
