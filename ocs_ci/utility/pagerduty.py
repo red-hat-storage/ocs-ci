@@ -2,6 +2,7 @@ import logging
 import os
 import requests
 import tempfile
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -33,6 +34,36 @@ def set_pagerduty_integration_secret(integration_key):
         secret_file.flush()
         exec_cmd(f"oc apply --kubeconfig {kubeconfig} -f {secret_file.name}")
     logger.info("New integration key was set.")
+
+
+def check_incident_list(summary, urgency, incidents):
+    """
+    Check list of incidents that there are incidents with requested label
+        in summary and specific urgency. If some alert is missing then this check
+    fails.
+
+    Args:
+        summary (str): String that is part of incident summary
+                urgency (str): Incident urgency
+        incidents (list): List of incidents to check
+
+        Returns:
+                list: List of alerts that match search requirements
+
+    """
+    logger.info(f"Looking for incidents with summary {summary} and urgency {urgency}")
+    target_incidents = [
+        incident
+        for incident in incidents
+        if (summary in incident.get("summary") and incident.get("urgency") == urgency)
+    ]
+    if target_incidents:
+        logger.info(f"Incidents with summary {summary} were found: {target_incidents}")
+    else:
+        logger.info(
+            f"No incidents with summary {summary} and urgency {urgency} were found"
+        )
+    return target_incidents
 
 
 class PagerDutyAPI(object):
@@ -203,3 +234,63 @@ class PagerDutyAPI(object):
                 "vendor": {"type": "vendor_reference", "id": vendor_id},
             }
         }
+
+    def wait_for_incident_cleared(self, summary, timeout=1200, sleep=5):
+        """
+        Search for incident to be cleared.
+
+        Args:
+            summary (str): Incident summary
+            sleep (int): Number of seconds to sleep in between alert search
+
+        Returns:
+            list: List of incident records
+
+        """
+        while timeout > 0:
+            incident_response = self.get(
+                "incidents",
+            )
+            msg = f"Request {incidents_response.request.url} failed"
+            assert incidents_response.ok, msg
+            incidents = [
+                incident
+                for incident in incidents_response.json()
+                if summary in incident.get("summary")
+            ]
+            logger.info(
+                f"Checking for {summary} incidents. There should be no incidents ... "
+                f"{len(incidents)} found"
+            )
+            if len(alerts) == 0:
+                break
+            time.sleep(sleep)
+            timeout -= sleep
+        return alerts
+
+    def check_alert_cleared(self, summary, measure_end_time, time_min=120):
+        """
+        Check that all incidents with provided summary are cleared.
+
+        Args:
+            summary (str): Incident summary
+            measure_end_time (int): Timestamp of measurement end
+            time_min (int): Number of seconds to wait for alert to be cleared
+                since measurement end
+
+        """
+        time_actual = time.time()
+        time_wait = int((measure_end_time + time_min) - time_actual)
+        if time_wait > 0:
+            logger.info(
+                f"Waiting for approximately {time_wait} seconds for incidents "
+                f"to be cleared ({time_min} seconds since measurement end)"
+            )
+        else:
+            time_wait = 1
+        cleared_incidents = self.wait_for_incident_cleared(
+            summary=summary, timeout=time_wait
+        )
+        logger.info(f"Cleared incidents: {cleared_incidents}")
+        assert len(cleared_incidents) == 0, f"{summary} incidents were not cleared"
+        logger.info(f"{summary} incidents were cleared")
