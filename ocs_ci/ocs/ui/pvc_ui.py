@@ -52,6 +52,8 @@ class PvcUI(PageNavigator):
         logger.info("Select Storage Class")
         self.do_click(self.pvc_loc["pvc_storage_class_selector"])
         self.do_click(format_locator(self.pvc_loc["storage_class_name"], sc_name))
+        # self.do_click(self.pvc_loc[sc_type])
+        self.do_click(format_locator(self.pvc_loc["{}"], sc_type))
 
         logger.info("Select PVC name")
         self.do_send_keys(self.pvc_loc["pvc_name"], pvc_name)
@@ -63,6 +65,12 @@ class PvcUI(PageNavigator):
         self.do_send_keys(self.pvc_loc["pvc_size"], text=pvc_size)
 
         if (
+            sc_type
+            in (
+                constants.DEFAULT_STORAGECLASS_RBD_THICK,
+                constants.DEFAULT_STORAGECLASS_RBD,
+                sc_type,
+            )
             sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS
             and access_mode == "ReadWriteOnce"
         ):
@@ -119,6 +127,13 @@ class PvcUI(PageNavigator):
         if (
             sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS
             and access_mode == "ReadWriteOnce"
+            sc_type
+            in (
+                constants.DEFAULT_STORAGECLASS_RBD_THICK,
+                constants.DEFAULT_STORAGECLASS_RBD,
+                sc_type
+            )
+            and (access_mode == "ReadWriteOnce")
         ):
             pvc_new_vol_mode = f"{vol_mode}"
             self.check_element_text(expected_text=pvc_new_vol_mode)
