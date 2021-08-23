@@ -5,6 +5,7 @@ import tempfile
 import time
 
 import yaml
+import pytest
 
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -29,6 +30,7 @@ class TestPvcMultiClonePerformance(E2ETest):
     The test is supposed to create the maximum number of clones for one PVC
     """
 
+    @pytest.mark.polarion_id("OCS-2622")
     def test_pvc_multiple_clone_performance(
         self,
         interface_iterate,

@@ -389,6 +389,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         ],
     )
     @pytest.mark.usefixtures(base_setup.__name__)
+    @pytest.mark.polarion_id("OCS-2618")
     def test_multiple_pvc_deletion_measurement_performance(self, teardown_factory):
         """
         Measuring PVC deletion time of 120 PVCs in 180 seconds
