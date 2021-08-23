@@ -70,7 +70,7 @@ def get_upgrade_image_info(old_csv_images, new_csv_images):
             _, old_image_sha = old_image.split(constants.SHA_SEPARATOR)
         if old_image_sha:
             for new_image in new_csv_images:
-                if old_image_sha in new_csv_images:
+                if old_image_sha in new_image:
                     log.info(
                         f"There is a new image: {new_image} with the same SHA "
                         f"which is the same as the old image: {old_image}. "
