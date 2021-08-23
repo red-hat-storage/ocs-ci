@@ -1,7 +1,9 @@
 import logging
+import os
 import time
 
 from pyautogui import write, press
+from ocs_ci.helpers.helpers import create_unique_resource_name
 from webdriver_manager import driver
 from selenium.webdriver.common.by import By
 from ocs_ci.ocs.ui.views import locators
@@ -102,10 +104,10 @@ def format_locator(locator, string_to_insert):
     return locator[0].format(string_to_insert), locator[1]
 
 
-def create_storage_class_ui(setup_ui, sc_name="test-storage-class", encryption=False, backend_path=None):
+def create_storage_class_ui(setup_ui, encryption=False, backend_path=None,
+                            namespace=None):
     """
-    Test to  creation and deletion of encrypted RBD PVC
-
+    Test for creation of storage class with or without encryption via UI
 
     """
     base_ui_obj = PageNavigator(setup_ui)
@@ -117,7 +119,8 @@ def create_storage_class_ui(setup_ui, sc_name="test-storage-class", encryption=F
     logger.info("Create Storage Class")
     base_ui_obj.do_click(pvc_loc["create-sc"])
     logger.info("Storage Class Name")
-    base_ui_obj.do_send_keys(pvc_loc["sc-name"], f"{sc_name}")
+    sc_type = create_unique_resource_name(resource_description="test", resource_type="storageclass")
+    base_ui_obj.do_send_keys(pvc_loc["sc-name"], f"{sc_type}")
     logger.info("Storage Class Description")
     base_ui_obj.do_send_keys(pvc_loc["sc-description"], "this is a test storage class")
     logger.info("Storage Class Reclaim Policy")
@@ -132,48 +135,62 @@ def create_storage_class_ui(setup_ui, sc_name="test-storage-class", encryption=F
     if encryption:
         logger.info("Storage Class with Encryption")
         base_ui_obj.do_click(pvc_loc["encryption"])
-        logger.info("Click on Change Connection Details")
-        base_ui_obj.do_click(pvc_loc["connections-details"])
+        logger.info("Checking if 'Change connection details' option is available")
+        conn_details = base_ui_obj.check_element_text(expected_text="Change connection details")
+        if conn_details:
+            logger.info("Click on Change Connection Details")
+            base_ui_obj.do_click(pvc_loc["connections-details"])
         logger.info("Storage Class Service Name")
         base_ui_obj.do_clear(pvc_loc["service-name"])
         base_ui_obj.do_send_keys(pvc_loc["service-name"], "vault")
         logger.info("Storage Class Address")
         base_ui_obj.do_clear(pvc_loc["kms-address"])
-        base_ui_obj.do_send_keys(pvc_loc["kms-address"], "http://vault.qe.rh-ocs.com/")
+        base_ui_obj.do_send_keys(pvc_loc["kms-address"], "https://vault.qe.rh-ocs.com/")
         logger.info("Storage Class Port")
         base_ui_obj.do_clear(pvc_loc["kms-port"])
         base_ui_obj.do_send_keys(pvc_loc["kms-port"], "8200")
         logger.info("Click on Advanced Settings")
         base_ui_obj.do_click(pvc_loc["advanced-settings"])
         logger.info("Enter Backend Path")
+        base_ui_obj.do_clear(pvc_loc["backend-path"])
         base_ui_obj.do_send_keys(pvc_loc["backend-path"], backend_path)
         logger.info("Enter TLS Server Name")
-        base_ui_obj.do_send_keys(pvc_loc["tls-server-name"], "http://vault.qe.rh-ocs.com/")
+        base_ui_obj.do_clear(pvc_loc["tls-server-name"])
+        base_ui_obj.do_send_keys(pvc_loc["tls-server-name"], "vault.qe.rh-ocs.com")
         logger.info("Enter Vault Enterprise Namespace")
-        base_ui_obj.do_send_keys(pvc_loc["vault-enterprise-namespace"], "kms-test-namespace")
+        base_ui_obj.do_clear(pvc_loc["vault-enterprise-namespace"])
+        base_ui_obj.do_send_keys(pvc_loc["vault-enterprise-namespace"], namespace)
         logger.info("Selecting CA Certificate")
         base_ui_obj.do_click(pvc_loc["browse-ca-certificate"])
-        time.sleep(2)
-        write('/home/amagrawa/kms-cert/cert.pem')
+        time.sleep(1)
+        write(os.path.abspath(constants.VAULT_CA_CERT_PEM))
+        time.sleep(1)
         press('enter')
-        logger.info("CA Certificate Selected")
+        time.sleep(1)
         logger.info("Selecting Client Certificate")
         base_ui_obj.do_click(pvc_loc["browse-client-certificate"])
-        write('/home/amagrawa/kms-cert/fullchain.pem')
-        time.sleep(2)
+        time.sleep(1)
+        write(os.path.abspath(constants.VAULT_CLIENT_CERT_PEM))
+        time.sleep(1)
         press('enter')
-        logger.info("Client Certificate Selected")
+        time.sleep(1)
         logger.info("Selecting Client Private Key")
         base_ui_obj.do_click(pvc_loc["browse-client-private-key"])
-        # write('/home/amagrawa/kms-cert/privkey.pem')
-        write("/home/amagrawa/Downloads/Work/ocs-ci/data/vault-privkey.pem")
-        time.sleep(2)
+        time.sleep(1)
+        write(os.path.abspath(constants.VAULT_PRIVKEY_PEM))
+        time.sleep(1)
         press('enter')
-        logger.info("Private Key Selected")
+        time.sleep(1)
         logger.info("Saving Key Management Service Advanced Settings")
         base_ui_obj.do_click(pvc_loc["save-advanced-settings"])
+        time.sleep(1)
+        logger.info("Save Key Management Service details")
+        base_ui_obj.do_click(pvc_loc["save-service-details"])
+        time.sleep(1)
     logger.info("Creating Storage Class with Encryption")
     base_ui_obj.do_click(pvc_loc["create"])
+
+    return sc_type
 
 def format_locator(locator, string_to_insert):
     """
@@ -285,7 +302,45 @@ def get_element_type(element_name):
 
 
 
-def delete_storage_class_with_encryption_ui(setup_ui, sc_name="test-storage-class"):
+def verify_storage_class_ui(setup_ui, sc_type):
+    """
+       Test for verifying storage class details via UI
+
+    """
+    base_ui_obj = PageNavigator(setup_ui)
+
+    ocp_version = get_ocp_version()
+    pvc_loc = locators[ocp_version]["storage_class"]
+
+    base_ui_obj.refresh_page()
+    base_ui_obj.navigate_storageclasses_page()
+    logger.info("Click on Dropdown and Select Name")
+    base_ui_obj.do_click(pvc_loc["sc-dropdown"])
+    base_ui_obj.do_click(pvc_loc["name-from-dropdown"])
+    logger.info("Search Storage Class with Name")
+    base_ui_obj.do_send_keys(pvc_loc["sc-search"], text=sc_type)
+    logger.info("Click and Select Storage Class")
+    base_ui_obj.do_click(format_locator(pvc_loc["select-sc"], sc_type))
+    # Verifying Storage Class Details via UI
+    sc_name = base_ui_obj.check_element_text(expected_text=sc_type)
+    if sc_name:
+        logger.info(f"Storage Class '{sc_type}' Found")
+    else:
+        logger.error(f"Storage Class '{sc_type}' Not Found, Verification Failed")
+
+    # provisioner_list = ["openshift-storage.rbd.csi.ceph.com"]
+    # provisioner = base_ui_obj.check_element_text(expected_text=provisioner_list[0])
+    # if provisioner:
+    #     logger.info(f"Provisioner '{provisioner[0]}' Found")
+    # else:
+    #     logger.error(f"Provisioner '{provisioner[0]}' Not Found, Verification Failed")
+
+
+def delete_storage_class_with_encryption_ui(setup_ui, sc_type):
+    """
+       Test for deletion of storage class via UI
+
+    """
     base_ui_obj = PageNavigator(setup_ui)
 
     ocp_version = get_ocp_version()
@@ -295,15 +350,11 @@ def delete_storage_class_with_encryption_ui(setup_ui, sc_name="test-storage-clas
     logger.info("Click on Dropdown and Select Name")
     base_ui_obj.do_click(pvc_loc["sc-dropdown"])
     base_ui_obj.do_click(pvc_loc["name-from-dropdown"])
-
     logger.info("Search Storage Class with Name")
-    base_ui_obj.do_send_keys(pvc_loc["sc-search"], text=sc_name)
-
-    logger.info("CLick and Select Storage Class")
-    base_ui_obj.do_click(format_locator(pvc_loc["test-project-link"], sc_name))
-
+    base_ui_obj.do_send_keys(pvc_loc["sc-search"], text=sc_type)
+    logger.info("Click and Select Storage Class")
+    base_ui_obj.do_click(format_locator(pvc_loc["select-sc"], sc_type))
     logger.info("Click on Actions")
     base_ui_obj.do_click(pvc_loc["sc-actions"])
-
     logger.info("Deleting Storage Class")
     base_ui_obj.do_click(pvc_loc["delete-storage-class"])

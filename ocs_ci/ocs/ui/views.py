@@ -315,6 +315,11 @@ pvc_4_8 = {
         By.CSS_SELECTOR,
     ),
     "search_pvc": ("input[placeholder='Search by name...']", By.CSS_SELECTOR),
+    "test-storage-class": (
+    "a[id='test-storage-class-link'] span[class='co-resource-item__resource-name']", By.CSS_SELECTOR),
+    "{}": ("//*[text()='{}']", By.XPATH),
+    "test-pvc-for-sc-1": ("a[title='test-pvc-for-sc-1']", By.CSS_SELECTOR),
+    "test-pvc-for-sc-2": ("a[title='test-pvc-for-sc-2']", By.CSS_SELECTOR),
 }
 
 storage_class = {
@@ -349,6 +354,7 @@ storage_class = {
     "browse-client-private-key":("#kms-service-key-browse-button", By.CSS_SELECTOR),
     "pvc-expansion-check": ("input[class='create-storage-class-form__checkbox']", By.CSS_SELECTOR),
     "save-advanced-settings": ("#confirm-action", By.CSS_SELECTOR),
+    "save-service-details": (".pf-c-button.pf-m-secondary[data-test='save-action']", By.CSS_SELECTOR),
     "create": ("#save-changes", By.CSS_SELECTOR),
     "sc-dropdown": ("button[data-test-id='dropdown-button']", By.CSS_SELECTOR),
     "name-from-dropdown": ("//button[@id='NAME-link']", By.XPATH),
