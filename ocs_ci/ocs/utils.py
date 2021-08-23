@@ -911,11 +911,19 @@ def collect_noobaa_db_dump(log_dir_path):
         if float(ocsci_config.ENV_DATA["ocs_version"]) < 4.7
         else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
     )
-    nb_db_pod = Pod(
-        **get_pods_having_label(
-            label=nb_db_label, namespace=defaults.ROOK_CLUSTER_NAMESPACE
-        )[0]
-    )
+    try:
+        nb_db_pod = Pod(
+            **get_pods_having_label(
+                label=nb_db_label, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            )[0]
+        )
+    except IndexError:
+        log.warning(
+            "Unable to find pod using label `%s` in namespace `%s`",
+            nb_db_label,
+            defaults.ROOK_CLUSTER_NAMESPACE,
+        )
+        return
     ocs_log_dir_path = os.path.join(log_dir_path, "noobaa_db_dump")
     create_directory_path(ocs_log_dir_path)
     ocs_log_dir_path = os.path.join(ocs_log_dir_path, "nbcore.gz")
