@@ -494,6 +494,7 @@ class TestFIOBenchmark(PASTest):
             pytest.param(*["sequential", "16KiB", 60]),
         ],
     )
+    @pytest.mark.polarion_id("OCS-2617")
     def test_fio_compressed_workload(
         self, storageclass_factory, io_pattern, bs, cmp_ratio
     ):

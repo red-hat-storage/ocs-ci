@@ -2,6 +2,8 @@ import os
 import logging
 import subprocess
 
+import pytest
+
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility.utils import ocsci_log_path
@@ -24,6 +26,7 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
     The test is trying to to take the maximum number of snapshot for one PVC
     """
 
+    @pytest.mark.polarion_id("OCS-2623")
     def test_pvc_multiple_snapshot_performance(
         self,
         interface_iterate,
