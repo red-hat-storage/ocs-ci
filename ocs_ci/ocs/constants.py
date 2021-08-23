@@ -1057,6 +1057,7 @@ SERVICE_CA_CRT = "service-ca.crt"
 SERVICE_CA_CRT_AWSCLI_PATH = f"/cert/{SERVICE_CA_CRT}"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
+AWSCLI_TEST_OBJ_DIR = "/test_objects/"
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [

@@ -12,6 +12,7 @@ from functools import partial
 
 from botocore.exceptions import ClientError
 import pytest
+from collections import namedtuple
 
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.framework import config
@@ -95,7 +96,11 @@ from ocs_ci.utility.utils import (
     skipif_ui_not_support,
 )
 from ocs_ci.helpers import helpers
-from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import (
+    create_unique_resource_name,
+    setup_pod_directories,
+    get_current_test_name,
+)
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW
@@ -1919,6 +1924,26 @@ def awscli_pod_fixture(request, scope_name):
     request.addfinalizer(_awscli_pod_cleanup)
 
     return awscli_pod_obj
+
+
+@pytest.fixture()
+def test_directory_setup(request, awscli_pod_session):
+    return test_directory_setup_fixture(request, awscli_pod_session)
+
+
+def test_directory_setup_fixture(request, awscli_pod_session):
+    origin_dir, result_dir = setup_pod_directories(
+        awscli_pod_session, ["origin", "result"]
+    )
+    SetupDirs = namedtuple("SetupDirs", "origin_dir, result_dir")
+
+    def dir_cleanup():
+        test_name = get_current_test_name()
+        awscli_pod_session.exec_cmd_on_pod(command=f"rm -rf {test_name}")
+
+    request.addfinalizer(dir_cleanup)
+
+    return SetupDirs(origin_dir=origin_dir, result_dir=result_dir)
 
 
 @pytest.fixture()
@@ -3834,7 +3859,6 @@ def load_cluster_info_file(request):
 
 @pytest.fixture(scope="function")
 def ripsaw(request):
-
     # Create benchmark Operator (formerly ripsaw)
     ripsaw = RipSaw()
 

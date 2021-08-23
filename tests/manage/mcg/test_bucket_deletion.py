@@ -10,19 +10,18 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     acceptance,
     performance,
+    skipif_openshift_dedicated,
 )
-from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
-from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
+from ocs_ci.framework.testlib import MCGTest
+from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.bucket_utils import (
-    retrieve_test_objects_to_pod,
     sync_object_directory,
     rm_object_recursive,
 )
-from ocs_ci.helpers.helpers import create_unique_resource_name
-from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD, AWSCLI_TEST_OBJ_DIR
+from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
 
 logger = logging.getLogger(__name__)
 ERRATIC_TIMEOUTS_SKIP_REASON = "Skipped because of erratic timeouts"
@@ -178,19 +177,17 @@ class TestBucketDeletion(MCGTest):
     )
     @flaky
     def test_bucket_delete_with_objects(
-        self, mcg_obj, awscli_pod, bucket_factory, interface, bucketclass_dict
+        self, mcg_obj, awscli_pod_session, bucket_factory, interface, bucketclass_dict
     ):
         """
         Negative test with deletion of bucket has objects stored in.
 
         """
-        bucket = bucket_factory(interface=interface, bucketclass=bucketclass_dict)[0]
-        bucketname = bucket.name
+        bucketname = bucket_factory(bucketclass=bucketclass_dict)[0].name
 
-        data_dir = "/data"
+        data_dir = AWSCLI_TEST_OBJ_DIR
         full_object_path = f"s3://{bucketname}"
-        retrieve_test_objects_to_pod(awscli_pod, data_dir)
-        sync_object_directory(awscli_pod, data_dir, full_object_path, mcg_obj)
+        sync_object_directory(awscli_pod_session, data_dir, full_object_path, mcg_obj)
 
         logger.info(f"Deleting bucket: {bucketname}")
         if interface == "S3":
@@ -202,10 +199,6 @@ class TestBucketDeletion(MCGTest):
                     err
                 ), "Couldn't verify delete non-empty OBC with s3"
                 logger.info(f"Delete non-empty OBC {bucketname} failed as expected")
-        # Deletion verification is performed internally as part of delete()
-        bucket.delete()
-        if bucketclass_dict:
-            bucket.bucketclass.delete()
 
     @pytest.mark.parametrize(
         argnames="interface",
@@ -250,7 +243,7 @@ class TestBucketDeletion(MCGTest):
 
     @pytest.mark.bugzilla("1753109")
     @pytest.mark.polarion_id("OCS-1924")
-    def test_s3_bucket_delete_1t_objects(self, mcg_obj, awscli_pod):
+    def test_s3_bucket_delete_1t_objects(self, mcg_obj, awscli_pod_session):
         """
         Test with deletion of bucket has 1T objects stored in.
         """
@@ -261,8 +254,7 @@ class TestBucketDeletion(MCGTest):
             bucket = MCGS3Bucket(bucketname, mcg_obj)
             logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
             logger.info(f"aws region is {mcg_obj.region}")
-            data_dir = "/data"
-            retrieve_test_objects_to_pod(awscli_pod, data_dir)
+            data_dir = AWSCLI_TEST_OBJ_DIR
 
             # Sync downloaded objects dir to the new bucket, sync to 3175
             # virtual dirs. With each dir around 315MB, and 3175 dirs will
@@ -270,13 +262,15 @@ class TestBucketDeletion(MCGTest):
             logger.info("Writing objects to bucket")
             for i in range(3175):
                 full_object_path = f"s3://{bucketname}/{i}/"
-                sync_object_directory(awscli_pod, data_dir, full_object_path, mcg_obj)
+                sync_object_directory(
+                    awscli_pod_session, data_dir, full_object_path, mcg_obj
+                )
 
             # Delete bucket content use aws rm with --recursive option.
             # The object_versions.delete function does not work with objects
             # exceeds 1000.
             start = timeit.default_timer()
-            rm_object_recursive(awscli_pod, bucketname, mcg_obj)
+            rm_object_recursive(awscli_pod_session, bucketname, mcg_obj)
             bucket.delete()
             stop = timeit.default_timer()
             gap = (stop - start) // 60 % 60
@@ -284,5 +278,5 @@ class TestBucketDeletion(MCGTest):
                 assert False, "Failed to delete s3 bucket within 10 minutes"
         finally:
             if mcg_obj.s3_verify_bucket_exists(bucketname):
-                rm_object_recursive(awscli_pod, bucketname, mcg_obj)
+                rm_object_recursive(awscli_pod_session, bucketname, mcg_obj)
                 mcg_obj.s3_resource.Bucket(bucketname).delete()
