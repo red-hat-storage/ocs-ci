@@ -4,8 +4,10 @@ import pytest
 from ocs_ci.framework.testlib import (
     E2ETest,
     skipif_ocs_version,
+    on_prem_platform_required,
     scale,
 )
+from ocs_ci.ocs import constants
 from ocs_ci.ocs import hsbench
 
 logger = logging.getLogger(__name__)
@@ -32,7 +34,6 @@ class TestScaleNamespace(E2ETest):
     """
 
     @skipif_ocs_version("<4.7")
-    @pytest.mark.polarion_id("OCS-2518")
     @pytest.mark.parametrize(
         argnames=["bucketclass_dict"],
         argvalues=[
@@ -43,8 +44,54 @@ class TestScaleNamespace(E2ETest):
                         "type": "Single",
                         "namespacestore_dict": {"aws": [(1, None)]},
                     },
-                }
+                },
+                marks=[pytest.mark.polarion_id("OCS-2518")],
             ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"azure": [(1, None)]},
+                    },
+                },
+                marks=[pytest.mark.polarion_id("OCS-2558")],
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"rgw": [(1, None)]},
+                    },
+                },
+                marks=[
+                    on_prem_platform_required,
+                    pytest.mark.polarion_id("OCS-2559"),
+                ],
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 60000,
+                        "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                    "placement_policy": {
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
+                    },
+                },
+                marks=[pytest.mark.polarion_id("OCS-2560")],
+            ),
+        ],
+        ids=[
+            "Scale-AWS-Single",
+            "Scale-Azure-Single",
+            "Scale-RGW-Single",
+            "Scale-AWS-Cache",
         ],
     )
     def test_scale_namespace_bucket_creation_crd(
@@ -60,7 +107,7 @@ class TestScaleNamespace(E2ETest):
         For each namespace resource, create namespace bucket and start hsbench benchmark
 
         """
-        num_s3_obj = 10000
+        num_s3_obj = 1000
         ns_bucket_list = []
         for _ in range(50):
             ns_bucket_list.append(

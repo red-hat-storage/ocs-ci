@@ -18,7 +18,7 @@ class TestScaleNamespace(E2ETest):
     Test creation of a namespace scale resource
     """
 
-    @skipif_ocs_version("<4.6")
+    @skipif_ocs_version("!=4.6")
     @pytest.mark.parametrize(
         argnames=["platform"],
         argvalues=[
