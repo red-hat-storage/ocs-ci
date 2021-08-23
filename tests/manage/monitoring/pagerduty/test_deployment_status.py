@@ -4,7 +4,6 @@ import pytest
 from ocs_ci.framework.testlib import tier4, tier4a
 from ocs_ci.ocs import constants
 from ocs_ci.utility import pagerduty
-from ocs_ci.ocs.ocp import OCP
 
 
 log = logging.getLogger(__name__)
@@ -26,12 +25,11 @@ def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
     target_label = constants.ALERT_MGRISABSENT
 
     # TODO(fbalak): check the whole string in summary and incident alerts
-    pagerduty.check_incident_list(
+    assert pagerduty.check_incident_list(
         summary=target_label,
-        msg=target_msg,
         incidents=incidents,
         urgency="high",
     )
-    api.check_alert_cleared(
+    api.check_incident_cleared(
         summary=target_label, measure_end_time=measure_stop_ceph_mgr.get("stop")
     )
