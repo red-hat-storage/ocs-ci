@@ -39,16 +39,16 @@ def set_pagerduty_integration_secret(integration_key):
 def check_incident_list(summary, urgency, incidents):
     """
     Check list of incidents that there are incidents with requested label
-        in summary and specific urgency. If some incident is missing then this check
+    in summary and specific urgency. If some incident is missing then this check
     fails.
 
     Args:
         summary (str): String that is part of incident summary
-                urgency (str): Incident urgency
+        urgency (str): Incident urgency
         incidents (list): List of incidents to check
 
-        Returns:
-                list: List of incidents that match search requirements
+    Returns:
+        list: List of incidents that match search requirements
 
     """
     logger.info(f"Looking for incidents with summary {summary} and urgency {urgency}")
